@@ -4,11 +4,13 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { MarkdownEditor } from '@/components/dashboard/markdown-editor'
-import { ArrowLeft, Save, Eye, Clock, History } from 'lucide-react'
+import { FileBrowser } from '@/components/dashboard/file-browser'
+import { CollapsibleDrawer } from '@/components/ui/collapsible-drawer'
+import { EditModal } from '@/components/dashboard/edit-modal'
+import { PublishToggle } from '@/components/dashboard/publish-toggle'
+import { ArrowLeft, Save, Clock, History, Files } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 
 interface PageEditorProps {
@@ -45,6 +47,36 @@ export function PageEditor({ script, chapter, page }: PageEditorProps) {
 
   const handleContentChange = (newContent: string) => {
     setContent(newContent)
+    setHasUnsavedChanges(true)
+  }
+
+  const handlePageUpdated = () => {
+    // Refresh the page data
+    window.location.reload()
+  }
+
+  const handleFileInsert = (file: any) => {
+    let insertText = ''
+    
+    // Determine the type of insert based on file extension
+    const extension = file.filename.split('.').pop()?.toLowerCase()
+    
+    if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(extension || '')) {
+      // Image
+      insertText = `![${file.originalName || file.filename}](${file.url})`
+    } else if (['mp4', 'avi', 'mov', 'wmv'].includes(extension || '')) {
+      // Video
+      insertText = `<video controls>\n  <source src="${file.url}" type="video/${extension}">\n  Your browser does not support the video tag.\n</video>`
+    } else if (['mp3', 'wav', 'ogg'].includes(extension || '')) {
+      // Audio
+      insertText = `<audio controls>\n  <source src="${file.url}" type="audio/${extension}">\n  Your browser does not support the audio tag.\n</audio>`
+    } else {
+      // Generic file/download link
+      insertText = `[${file.originalName || file.filename}](${file.url})`
+    }
+    
+    // Insert the text at the current cursor position
+    setContent((prev: string) => prev + '\n\n' + insertText)
     setHasUnsavedChanges(true)
   }
 
@@ -98,7 +130,7 @@ export function PageEditor({ script, chapter, page }: PageEditorProps) {
       }, 30000)
       return () => clearTimeout(timer)
     }
-  }, [hasUnsavedChanges, content, title, slug, isPublished])
+  }, [hasUnsavedChanges, content])
 
   // Save with Ctrl+S
   useEffect(() => {
@@ -124,22 +156,31 @@ export function PageEditor({ script, chapter, page }: PageEditorProps) {
         </Link>
         <div className="flex-1">
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              Edit Page
+            <h1 className="text-2xl font-bold text-foreground">
+              {page.title}
             </h1>
             {hasUnsavedChanges && (
-              <div className="w-2 h-2 bg-orange-500 rounded-full" title="Unsaved changes" />
+              <div className="w-2 h-2 bg-warning rounded-full" title="Unsaved changes" />
             )}
           </div>
-          <p className="text-gray-600 dark:text-gray-400">
+          <p className="text-muted-foreground">
             {script.title} → {chapter.title}
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={handlePublishToggle}>
-            <Eye className="w-4 h-4 mr-2" />
-            {isPublished ? 'Unpublish' : 'Publish'}
-          </Button>
+        <div className="flex gap-2 items-center">
+          <PublishToggle
+            type="page"
+            itemId={page.id}
+            isPublished={page.isPublished}
+            onToggle={handlePageUpdated}
+            showText={true}
+            size="md"
+          />
+          <EditModal
+            type="page"
+            item={page}
+            onItemUpdated={handlePageUpdated}
+          />
           <Button onClick={handleSave} disabled={isSaving}>
             <Save className="w-4 h-4 mr-2" />
             {isSaving ? 'Saving...' : 'Save'}
@@ -148,10 +189,10 @@ export function PageEditor({ script, chapter, page }: PageEditorProps) {
       </div>
 
       {/* Status Bar */}
-      <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
+      <div className="flex items-center justify-between text-sm text-muted-foreground bg-muted p-3 rounded-lg">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <div className={`w-2 h-2 rounded-full ${isPublished ? 'bg-green-500' : 'bg-yellow-500'}`} />
+            <div className={`w-2 h-2 rounded-full ${isPublished ? 'bg-success' : 'bg-warning'}`} />
             <span>{isPublished ? 'Published' : 'Draft'}</span>
           </div>
           {lastSaved && (
@@ -167,63 +208,24 @@ export function PageEditor({ script, chapter, page }: PageEditorProps) {
         </div>
       </div>
 
-      {/* Page Settings - Moved to top */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Page Settings</CardTitle>
-          <CardDescription>
-            Configure page metadata and settings
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="title">Page Title</Label>
-              <Input
-                id="title"
-                value={title}
-                onChange={(e) => handleTitleChange(e.target.value)}
-                placeholder="Enter page title"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="slug">URL Slug</Label>
-              <Input
-                id="slug"
-                value={slug}
-                onChange={(e) => setSlug(e.target.value)}
-                placeholder="url-friendly-name"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Publication Status</Label>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant={isPublished ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setIsPublished(true)}
-                >
-                  Published
-                </Button>
-                <Button
-                  variant={!isPublished ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setIsPublished(false)}
-                >
-                  Draft
-                </Button>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Files - Collapsible Drawer */}
+      <CollapsibleDrawer 
+        title="Files" 
+        icon={<Files className="w-5 h-5" />}
+        defaultOpen={false}
+      >
+        <FileBrowser 
+          chapterId={chapter.id}
+          onFileInsert={handleFileInsert}
+        />
+      </CollapsibleDrawer>
 
       {/* Content Editor - Full width */}
       <Card>
         <CardHeader>
           <CardTitle>Content</CardTitle>
           <CardDescription>
-            Write your content using the markdown editor. Ctrl+S to save.
+            Write your content using the markdown editor. Drag files from the Files drawer to insert them. Ctrl+S to save.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -231,6 +233,8 @@ export function PageEditor({ script, chapter, page }: PageEditorProps) {
             content={content}
             onChange={handleContentChange}
             onSave={handleSave}
+            onFileInsert={handleFileInsert}
+            chapterId={chapter.id}
           />
         </CardContent>
       </Card>

@@ -29,10 +29,10 @@ export default async function ScriptsPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+          <h1 className="text-3xl font-bold text-foreground">
             Scripts
           </h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-2">
+          <p className="text-muted-foreground mt-2">
             Manage your educational scripts and content
           </p>
         </div>
@@ -52,7 +52,7 @@ export default async function ScriptsPage() {
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
                     <Link href={`/dashboard/scripts/${script.slug}`}>
-                      <CardTitle className="text-xl hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer transition-colors">
+                      <CardTitle className="text-xl hover:text-primary cursor-pointer transition-colors">
                         {script.title}
                       </CardTitle>
                     </Link>
@@ -77,7 +77,7 @@ export default async function ScriptsPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center gap-6 text-sm text-gray-600 dark:text-gray-400">
+                <div className="flex items-center gap-6 text-sm text-muted-foreground">
                   <div className="flex items-center gap-2">
                     <BookOpen className="w-4 h-4" />
                     <span>{script.chapters.length} chapters</span>
@@ -89,7 +89,7 @@ export default async function ScriptsPage() {
                     </span>
                   </div>
                   <div>
-                    Status: <span className={script.isPublished ? 'text-green-600' : 'text-yellow-600'}>
+                    Status: <span className={script.isPublished ? 'text-success' : 'text-warning'}>
                       {script.isPublished ? 'Published' : 'Draft'}
                     </span>
                   </div>
@@ -104,11 +104,11 @@ export default async function ScriptsPage() {
       ) : (
         <Card>
           <CardContent className="text-center py-12">
-            <BookOpen className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <BookOpen className="h-12 w-12 text-icon-muted mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
               No scripts yet
             </h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-6">
+            <p className="text-muted-foreground mb-6">
               Get started by creating your first educational script.
             </p>
             <Link href="/dashboard/scripts/new">

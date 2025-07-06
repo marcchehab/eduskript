@@ -63,19 +63,19 @@ export function Comments({ pageId, pageTitle }: CommentsProps) {
       <div className="flex items-center gap-2 mb-6">
         <MessageCircle className="w-5 h-5" />
         <h3 className="text-xl font-semibold">Discussion</h3>
-        <span className="text-sm text-gray-500">({comments.length} comments)</span>
+        <span className="text-sm text-muted-foreground">({comments.length} comments)</span>
       </div>
 
       {/* Comment Form */}
-      <form onSubmit={handleSubmit} className="mb-8 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-        <h4 className="font-medium mb-3">Join the discussion</h4>
+      <form onSubmit={handleSubmit} className="mb-8 p-4 bg-muted rounded-lg">
+        <h4 className="font-medium mb-3 text-foreground">Join the discussion</h4>
         <div className="space-y-3">
           <input
             type="text"
             placeholder="Your name"
             value={authorName}
             onChange={(e) => setAuthorName(e.target.value)}
-            className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+            className="w-full p-3 border border-border rounded-lg bg-card text-foreground"
             required
           />
           <textarea
@@ -83,7 +83,7 @@ export function Comments({ pageId, pageTitle }: CommentsProps) {
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
             rows={3}
-            className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+            className="w-full p-3 border border-border rounded-lg bg-card text-foreground"
             required
           />
           <button
@@ -110,21 +110,21 @@ export function Comments({ pageId, pageTitle }: CommentsProps) {
       <div className="space-y-4">
         {comments.length > 0 ? (
           comments.map((comment) => (
-            <div key={comment.id} className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-sm">
+            <div key={comment.id} className="p-4 bg-card rounded-lg shadow-sm border border-border">
               <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-8 h-8 bg-gray-300 dark:bg-gray-600 rounded-full flex items-center justify-center">
-                  <User className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                <div className="flex-shrink-0 w-8 h-8 bg-muted rounded-full flex items-center justify-center">
+                  <User className="w-4 h-4 text-muted-foreground" />
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="font-medium text-gray-900 dark:text-white">
+                    <span className="font-medium text-foreground">
                       {comment.author}
                     </span>
-                    <span className="text-sm text-gray-500">
+                    <span className="text-sm text-muted-foreground">
                       {comment.timestamp}
                     </span>
                   </div>
-                  <p className="text-gray-700 dark:text-gray-300">
+                  <p className="text-foreground">
                     {comment.content}
                   </p>
                 </div>
@@ -132,7 +132,7 @@ export function Comments({ pageId, pageTitle }: CommentsProps) {
             </div>
           ))
         ) : (
-          <div className="text-center py-8 text-gray-500">
+          <div className="text-center py-8 text-muted-foreground">
             <MessageCircle className="w-12 h-12 mx-auto mb-3 opacity-50" />
             <p>No comments yet. Be the first to start the discussion!</p>
           </div>

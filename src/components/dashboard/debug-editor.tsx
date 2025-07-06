@@ -46,7 +46,7 @@ export default function DebugEditor({
       {/* Toolbar */}
       <div className="border-b border-gray-200 dark:border-gray-700 p-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-sm text-red-600 font-semibold">DEBUG EDITOR - CodeMirror Failed to Load</span>
+          <span className="text-sm text-destructive font-semibold">DEBUG EDITOR - CodeMirror Failed to Load</span>
         </div>
         
         {onSave && (

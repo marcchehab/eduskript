@@ -75,10 +75,10 @@ export function ScriptEditor({ script }: ScriptEditorProps) {
           </Button>
         </Link>
         <div className="flex-1">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+          <h1 className="text-3xl font-bold text-foreground">
             {currentScript.title}
           </h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-2">
+          <p className="text-muted-foreground mt-2">
             {currentScript.description || 'No description'}
           </p>
         </div>
@@ -125,7 +125,7 @@ export function ScriptEditor({ script }: ScriptEditorProps) {
             <CardTitle className="text-sm font-medium">Status</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${isPublished ? 'text-green-600' : 'text-yellow-600'}`}>
+            <div className={`text-2xl font-bold ${isPublished ? 'text-success' : 'text-warning'}`}>
               {isPublished ? 'Published' : 'Draft'}
             </div>
           </CardContent>
@@ -156,11 +156,11 @@ export function ScriptEditor({ script }: ScriptEditorProps) {
             />
           ) : (
             <div className="text-center py-8">
-              <BookOpen className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+              <BookOpen className="h-12 w-12 text-icon-muted mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-foreground mb-2">
                 No chapters yet
               </h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-4">
+              <p className="text-muted-foreground mb-4">
                 Start organizing your content by creating your first chapter.
               </p>
               <CreateChapterModal 

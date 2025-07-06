@@ -16,7 +16,7 @@ export async function PATCH(
 
     const { id } = await params
     const body = await request.json()
-    const { title, description, slug } = body
+    const { title, description, slug, isPublished } = body
 
     if (!title?.trim() || !slug?.trim()) {
       return NextResponse.json(
@@ -62,14 +62,37 @@ export async function PATCH(
         title: title.trim(),
         description: description?.trim() || null,
         slug: slug.trim(),
+        isPublished: isPublished !== undefined ? isPublished : existingChapter.isPublished,
         updatedAt: new Date()
       },
       include: {
         pages: {
           orderBy: { order: 'asc' }
+        },
+        script: {
+          select: {
+            slug: true,
+            author: {
+              select: {
+                subdomain: true
+              }
+            }
+          }
         }
       }
     })
+
+    // Revalidate public pages if publication status or content changed
+    if (chapter.script.author.subdomain) {
+      const subdomain = chapter.script.author.subdomain
+      const scriptSlug = chapter.script.slug
+      
+      // Revalidate related paths
+      revalidatePath(`/${subdomain}/${scriptSlug}/${chapter.slug}`)
+      revalidatePath(`/${subdomain}/${scriptSlug}`)
+      revalidatePath(`/${subdomain}`)
+      revalidatePath('/dashboard/scripts')
+    }
 
     return NextResponse.json(chapter)
   } catch (error) {

@@ -6,6 +6,8 @@ interface MarkdownEditorProps {
   content: string
   onChange: (content: string) => void
   onSave?: () => void
+  onFileInsert?: (file: any) => void
+  chapterId?: string
   isReadOnly?: boolean
 }
 
@@ -15,8 +17,8 @@ const CodeMirrorEditor = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900">
-        <div className="p-4 min-h-[400px] flex items-center justify-center text-gray-500">
+      <div className="border border-border rounded-lg bg-card">
+        <div className="p-4 min-h-[400px] flex items-center justify-center text-muted-foreground">
           Loading editor...
         </div>
       </div>

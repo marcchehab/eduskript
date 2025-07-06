@@ -21,6 +21,8 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { Button } from '@/components/ui/button'
+import { EditModal } from './edit-modal'
+import { PublishToggle } from './publish-toggle'
 import { GripVertical, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -38,10 +40,10 @@ interface SortablePageItemProps {
   index: number
   scriptSlug: string
   chapterSlug: string
-  onPageDeleted?: () => void
+  onPageUpdated?: () => void
 }
 
-function SortablePageItem({ page, index, scriptSlug, chapterSlug, onPageDeleted }: SortablePageItemProps) {
+function SortablePageItem({ page, index, scriptSlug, chapterSlug, onPageUpdated }: SortablePageItemProps) {
   const {
     attributes,
     listeners,
@@ -67,8 +69,8 @@ function SortablePageItem({ page, index, scriptSlug, chapterSlug, onPageDeleted 
         method: 'DELETE'
       })
 
-      if (response.ok && onPageDeleted) {
-        onPageDeleted()
+      if (response.ok && onPageUpdated) {
+        onPageUpdated()
       } else {
         alert('Failed to delete page')
       }
@@ -79,49 +81,55 @@ function SortablePageItem({ page, index, scriptSlug, chapterSlug, onPageDeleted 
   }
 
   return (
-    <div ref={setNodeRef} style={style} className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 border rounded-md">
+    <div ref={setNodeRef} style={style} className="flex items-center justify-between p-3 bg-card border rounded-md">
       <div className="flex items-center gap-3">
         <div
           {...attributes}
           {...listeners}
-          className="flex items-center gap-2 text-gray-400 cursor-grab active:cursor-grabbing"
+          className="flex items-center gap-2 text-muted-foreground cursor-grab active:cursor-grabbing"
         >
           <GripVertical className="w-4 h-4" />
-          <div className="w-6 h-6 bg-gray-100 dark:bg-gray-700 rounded flex items-center justify-center text-xs text-gray-600 dark:text-gray-400">
+          <div className="w-6 h-6 bg-muted rounded flex items-center justify-center text-xs text-muted-foreground">
             {index + 1}
           </div>
         </div>
         <div>
           <Link href={`/dashboard/scripts/${scriptSlug}/chapters/${chapterSlug}/pages/${page.slug}/edit`}>
-            <h4 className="font-medium text-gray-900 dark:text-white text-sm hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer transition-colors">
+            <h4 className="font-medium text-foreground text-sm hover:text-primary cursor-pointer transition-colors">
               {page.title}
             </h4>
           </Link>
-          <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
-            <span className={`px-2 py-1 rounded-full text-xs ${
-              page.isPublished 
-                ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' 
-                : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'
-            }`}>
-              {page.isPublished ? 'Published' : 'Draft'}
-            </span>
+          <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
             <span>
               Updated {new Date(page.updatedAt).toLocaleDateString()}
             </span>
           </div>
         </div>
       </div>
-      <div className="flex gap-2">
+      <div className="flex gap-2 items-center">
+        <PublishToggle
+          type="page"
+          itemId={page.id}
+          isPublished={page.isPublished}
+          onToggle={onPageUpdated || (() => {})}
+          showText={false}
+          size="sm"
+        />
+        <EditModal
+          type="page"
+          item={page}
+          onItemUpdated={onPageUpdated || (() => {})}
+        />
         <Button variant="outline" size="sm" asChild>
           <Link href={`/dashboard/scripts/${scriptSlug}/chapters/${chapterSlug}/pages/${page.slug}/edit`}>
-            Edit
+            Edit Content
           </Link>
         </Button>
         <Button 
           variant="outline" 
           size="sm"
           onClick={handleDeletePage}
-          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+          className="text-destructive hover:text-destructive hover:bg-destructive/10"
         >
           <Trash2 className="w-4 h-4" />
         </Button>
@@ -130,7 +138,7 @@ function SortablePageItem({ page, index, scriptSlug, chapterSlug, onPageDeleted 
   )
 }
 
-function StaticPageItem({ page, index, scriptSlug, chapterSlug, onPageDeleted }: SortablePageItemProps) {
+function StaticPageItem({ page, index, scriptSlug, chapterSlug, onPageUpdated }: SortablePageItemProps) {
   const handleDeletePage = async () => {
     if (!confirm(`Are you sure you want to delete the page "${page.title}"?`)) {
       return
@@ -141,8 +149,8 @@ function StaticPageItem({ page, index, scriptSlug, chapterSlug, onPageDeleted }:
         method: 'DELETE'
       })
 
-      if (response.ok && onPageDeleted) {
-        onPageDeleted()
+      if (response.ok && onPageUpdated) {
+        onPageUpdated()
       } else {
         alert('Failed to delete page')
       }
@@ -153,45 +161,51 @@ function StaticPageItem({ page, index, scriptSlug, chapterSlug, onPageDeleted }:
   }
 
   return (
-    <div className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 border rounded-md">
+    <div className="flex items-center justify-between p-3 bg-card border rounded-md">
       <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2 text-gray-400">
+        <div className="flex items-center gap-2 text-muted-foreground">
           <GripVertical className="w-4 h-4" />
-          <div className="w-6 h-6 bg-gray-100 dark:bg-gray-700 rounded flex items-center justify-center text-xs text-gray-600 dark:text-gray-400">
+          <div className="w-6 h-6 bg-muted rounded flex items-center justify-center text-xs text-muted-foreground">
             {index + 1}
           </div>
         </div>
         <div>
           <Link href={`/dashboard/scripts/${scriptSlug}/chapters/${chapterSlug}/pages/${page.slug}/edit`}>
-            <h4 className="font-medium text-gray-900 dark:text-white text-sm hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer transition-colors">
+            <h4 className="font-medium text-foreground text-sm hover:text-primary cursor-pointer transition-colors">
               {page.title}
             </h4>
           </Link>
-          <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
-            <span className={`px-2 py-1 rounded-full text-xs ${
-              page.isPublished 
-                ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' 
-                : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'
-            }`}>
-              {page.isPublished ? 'Published' : 'Draft'}
-            </span>
+          <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
             <span>
               Updated {new Date(page.updatedAt).toLocaleDateString()}
             </span>
           </div>
         </div>
       </div>
-      <div className="flex gap-2">
+      <div className="flex gap-2 items-center">
+        <PublishToggle
+          type="page"
+          itemId={page.id}
+          isPublished={page.isPublished}
+          onToggle={onPageUpdated || (() => {})}
+          showText={false}
+          size="sm"
+        />
+        <EditModal
+          type="page"
+          item={page}
+          onItemUpdated={onPageUpdated || (() => {})}
+        />
         <Button variant="outline" size="sm" asChild>
           <Link href={`/dashboard/scripts/${scriptSlug}/chapters/${chapterSlug}/pages/${page.slug}/edit`}>
-            Edit
+            Edit Content
           </Link>
         </Button>
         <Button 
           variant="outline" 
           size="sm"
           onClick={handleDeletePage}
-          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+          className="text-destructive hover:text-destructive hover:bg-destructive/10"
         >
           <Trash2 className="w-4 h-4" />
         </Button>
@@ -293,7 +307,7 @@ export function SortablePages({
                 index={index}
                 scriptSlug={scriptSlug}
                 chapterSlug={chapterSlug}
-                onPageDeleted={onPageDeleted}
+                onPageUpdated={onPageDeleted}
               />
             ))}
           </SortableContext>
@@ -308,13 +322,13 @@ export function SortablePages({
               index={index}
               scriptSlug={scriptSlug}
               chapterSlug={chapterSlug}
-              onPageDeleted={onPageDeleted}
+              onPageUpdated={onPageDeleted}
             />
           ))}
         </div>
       )}
       {isReordering && (
-        <div className="text-sm text-gray-500 text-center py-2">
+        <div className="text-sm text-muted-foreground text-center py-2">
           Updating page order...
         </div>
       )}

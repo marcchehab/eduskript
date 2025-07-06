@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronDown, ChevronRight, Menu, X } from 'lucide-react'
 import { ReadingProgress } from './reading-progress'
+import { PublicThemeToggle } from './theme-toggle'
 
 interface Teacher {
   name: string
@@ -166,36 +167,39 @@ export function PublicSiteLayout({ teacher, siteStructure, children, currentPath
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-background">
       <ReadingProgress />
       
       {/* Mobile menu button */}
       <div className="lg:hidden fixed top-4 left-4 z-50">
         <button
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className="p-2 bg-white dark:bg-gray-800 rounded-md shadow-md"
+          className="p-2 bg-card rounded-md shadow-md border border-border"
         >
-          {isSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          {isSidebarOpen ? <X className="w-5 h-5 text-foreground" /> : <Menu className="w-5 h-5 text-foreground" />}
         </button>
       </div>
 
       {/* Sidebar */}
-      <div className={`fixed inset-y-0 left-0 z-40 w-80 bg-white dark:bg-gray-800 shadow-lg transform transition-transform duration-300 ease-in-out ${
+      <div className={`fixed inset-y-0 left-0 z-40 w-80 bg-card shadow-lg transform transition-transform duration-300 ease-in-out ${
         isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
       } lg:translate-x-0`}>
         <div className="flex flex-col h-full">
           {/* Header */}
-          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-            <h1 className="text-xl font-bold text-gray-900 dark:text-white">
-              {teacher.name}
-            </h1>
+          <div className="p-6 border-b border-border">
+            <div className="flex items-center justify-between mb-2">
+              <h1 className="text-xl font-bold text-foreground">
+                {teacher.name}
+              </h1>
+              <PublicThemeToggle />
+            </div>
             {teacher.title && (
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+              <p className="text-sm text-muted-foreground mt-1">
                 {teacher.title}
               </p>
             )}
             {teacher.bio && (
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+              <p className="text-sm text-muted-foreground mt-2">
                 {teacher.bio}
               </p>
             )}
@@ -211,8 +215,8 @@ export function PublicSiteLayout({ teacher, siteStructure, children, currentPath
                     onClick={() => toggleScript(script.id)}
                     className={`flex items-center w-full text-left px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                       expandedScripts.includes(script.id)
-                        ? 'text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-700'
-                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                        ? 'text-foreground bg-muted'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                     }`}
                   >
                     {expandedScripts.includes(script.id) ? (
@@ -233,8 +237,8 @@ export function PublicSiteLayout({ teacher, siteStructure, children, currentPath
                             onClick={() => toggleChapter(chapter.id)}
                             className={`flex items-center w-full text-left px-3 py-1 text-sm rounded-md transition-colors ${
                               expandedChapters.includes(chapter.id)
-                                ? 'text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-600'
-                                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                                ? 'text-foreground bg-muted/50'
+                                : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                             }`}
                           >
                             {expandedChapters.includes(chapter.id) ? (
@@ -254,8 +258,8 @@ export function PublicSiteLayout({ teacher, siteStructure, children, currentPath
                                   onClick={() => navigateToPage(script.slug, chapter.slug, page.slug)}
                                   className={`block w-full text-left px-3 py-1 text-sm rounded-md truncate transition-colors ${
                                     isCurrentPage(script.slug, chapter.slug, page.slug)
-                                      ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
-                                      : 'text-gray-500 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-300'
+                                      ? 'bg-primary/10 text-primary font-medium'
+                                      : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                                   }`}
                                 >
                                   {page.title}
@@ -277,14 +281,14 @@ export function PublicSiteLayout({ teacher, siteStructure, children, currentPath
       {/* Overlay for mobile */}
       {isSidebarOpen && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-30 lg:hidden"
+          className="fixed inset-0 bg-black/50 z-30 lg:hidden"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
 
       {/* Main content */}
       <div className="lg:ml-80">
-        <main className="p-6 lg:p-8">
+        <main className="p-6 lg:p-8 bg-background min-h-screen">
           {children}
         </main>
       </div>

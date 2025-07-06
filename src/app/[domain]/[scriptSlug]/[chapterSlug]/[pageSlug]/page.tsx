@@ -185,13 +185,13 @@ export default async function PublicPage({ params }: PageProps) {
           <Breadcrumb items={breadcrumbItems} subdomain={domain} />
           
           <div className="mb-8">
-            <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-4">
+            <h1 className="text-4xl font-bold text-foreground mb-4">
               {pageData.title}
             </h1>
           </div>
           
           <div 
-            className="prose prose-lg max-w-none dark:prose-invert"
+            className="prose-theme"
             dangerouslySetInnerHTML={{ __html: pageData.content }}
           />
 

@@ -165,7 +165,7 @@ export function DomainSettings() {
                       variant="ghost"
                       size="sm"
                       onClick={() => removeDomain(domain.id)}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      className="text-destructive hover:text-destructive/80 hover:bg-destructive/10"
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>

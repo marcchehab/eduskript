@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { useTheme } from 'next-themes'
 import { processMarkdown } from '@/lib/markdown'
 import { Button } from '@/components/ui/button'
 import { Save, Eye, EyeOff } from 'lucide-react'
@@ -9,6 +10,8 @@ interface CodeMirrorEditorProps {
   content: string
   onChange: (content: string) => void
   onSave?: () => void
+  onFileInsert?: (file: any) => void
+  chapterId?: string
   isReadOnly?: boolean
 }
 
@@ -16,6 +19,8 @@ export default function CodeMirrorEditor({
   content, 
   onChange, 
   onSave,
+  onFileInsert,
+  chapterId,
   isReadOnly = false 
 }: CodeMirrorEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null)
@@ -25,6 +30,62 @@ export default function CodeMirrorEditor({
   const [isMounted, setIsMounted] = useState(false)
   const [useSimpleEditor, setUseSimpleEditor] = useState(false)
   const [textareaContent, setTextareaContent] = useState(content || '')
+  const [dragOver, setDragOver] = useState(false)
+  const { theme } = useTheme()
+  const isDark = theme === 'dark'
+
+  // Handle file drag and drop
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOver(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOver(false)
+  }
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOver(false)
+
+    // Check if it's a file from the file browser (has custom data)
+    const fileData = e.dataTransfer.getData('application/edugarden-file')
+    if (fileData) {
+      try {
+        const file = JSON.parse(fileData)
+        onFileInsert?.(file)
+        return
+      } catch (error) {
+        console.error('Error parsing file data:', error)
+      }
+    }
+
+    // Handle computer file drops
+    const files = Array.from(e.dataTransfer.files)
+    if (files.length > 0 && chapterId) {
+      try {
+        for (const file of files) {
+          const formData = new FormData()
+          formData.append('file', file)
+          formData.append('uploadType', 'chapter')
+          formData.append('chapterId', chapterId)
+
+          const response = await fetch('/api/upload', {
+            method: 'POST',
+            body: formData,
+          })
+
+          if (response.ok) {
+            const uploadedFile = await response.json()
+            onFileInsert?.(uploadedFile)
+          }
+        }
+      } catch (error) {
+        console.error('Error uploading dropped files:', error)
+      }
+    }
+  }
 
   // Fallback for content
   const editorContent = content || ''
@@ -62,6 +123,12 @@ export default function CodeMirrorEditor({
 
     const initializeCodeMirror = async () => {
       try {
+        // Clean up existing editor first
+        if (editorViewRef.current) {
+          editorViewRef.current.destroy()
+          editorViewRef.current = null
+        }
+        
         console.log('Attempting to load CodeMirror...')
         
         // Try to import CodeMirror modules one by one with better error handling
@@ -77,6 +144,10 @@ export default function CodeMirrorEditor({
         console.log('Loading @codemirror/lang-markdown...')
         const { markdown } = await import('@codemirror/lang-markdown')
         
+        // Load theme extensions
+        console.log('Loading @codemirror/theme-one-dark...')
+        const { oneDark } = await import('@codemirror/theme-one-dark')
+        
         console.log('All CodeMirror modules loaded successfully')
 
         console.log('Creating editor state...')
@@ -85,6 +156,7 @@ export default function CodeMirrorEditor({
           extensions: [
             basicSetup,
             markdown(),
+            ...(isDark ? [oneDark] : []),
             EditorView.updateListener.of((update: any) => {
               if (update.docChanged) {
                 const newContent = update.state.doc.toString()
@@ -93,22 +165,39 @@ export default function CodeMirrorEditor({
             }),
             EditorView.theme({
               '&': {
-                height: 'auto',
-                minHeight: '400px',
+                height: '100%',
+                backgroundColor: 'hsl(var(--card))',
+                color: 'hsl(var(--foreground))',
               },
               '.cm-content': {
                 padding: '12px',
                 fontSize: '14px',
                 lineHeight: '1.5',
+                backgroundColor: 'hsl(var(--card))',
+                color: 'hsl(var(--foreground))',
+                minHeight: '100%',
               },
               '.cm-focused': {
                 outline: 'none',
+              },
+              '.cm-editor': {
+                borderRadius: '8px',
+                height: '100%',
+              },
+              '.cm-scroller': {
+                backgroundColor: 'hsl(var(--card))',
+                minHeight: '100%',
               },
             }),
           ],
         })
 
         console.log('Creating editor view...')
+        // Clear the container before creating new editor
+        if (editorRef.current) {
+          editorRef.current.innerHTML = ''
+        }
+        
         const view = new EditorView({
           state: startState,
           parent: editorRef.current!,
@@ -138,8 +227,12 @@ export default function CodeMirrorEditor({
     // Cleanup function
     return () => {
       clearTimeout(fallbackTimeout)
+      if (editorViewRef.current) {
+        editorViewRef.current.destroy()
+        editorViewRef.current = null
+      }
     }
-  }, [isMounted])
+  }, [isMounted, isDark]) // Re-initialize when theme changes
 
   // Update editor content when prop changes
   useEffect(() => {
@@ -167,9 +260,16 @@ export default function CodeMirrorEditor({
   }
 
   return (
-    <div className="border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900">
+    <div 
+      className={`border border-border rounded-lg bg-card ${
+        dragOver ? 'border-primary bg-primary/10' : ''
+      }`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       {/* Toolbar */}
-      <div className="border-b border-gray-200 dark:border-gray-700 p-2 flex items-center justify-between">
+      <div className="border-b border-border p-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
@@ -180,7 +280,7 @@ export default function CodeMirrorEditor({
             {showPreview ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             {showPreview ? 'Hide Preview' : 'Show Preview'}
           </Button>
-          <span className="text-xs text-blue-600">
+          <span className="text-xs text-primary">
             {useSimpleEditor ? 'Simple Editor (CodeMirror Failed)' : 'CodeMirror Loaded'}
           </span>
         </div>
@@ -199,16 +299,31 @@ export default function CodeMirrorEditor({
       </div>
 
       {/* Editor and Preview */}
-      <div className="flex h-full min-h-[400px]">
+      <div className="flex h-[600px] min-h-[400px] relative">
+        {/* Drag overlay */}
+        {dragOver && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-primary/10 border-2 border-dashed border-primary rounded">
+            <div className="text-center">
+              <div className="text-primary text-lg font-semibold">
+                Drop files here to insert
+              </div>
+              <div className="text-primary/80 text-sm">
+                Images, documents, videos, and more
+              </div>
+            </div>
+          </div>
+        )}
+        
         {/* Editor */}
-        <div className={`${showPreview ? 'w-1/2' : 'w-full'} ${showPreview ? 'border-r border-gray-200 dark:border-gray-700' : ''}`}>
+        <div className={`${showPreview ? 'w-1/2' : 'w-full'} ${showPreview ? 'border-r border-border' : ''}`}>
           {useSimpleEditor ? (
             <textarea
               value={textareaContent}
               onChange={handleTextareaChange}
               readOnly={isReadOnly}
-              className="w-full h-full p-3 border-0 bg-transparent text-gray-900 dark:text-gray-100 font-mono text-sm resize-none focus:outline-none"
+              className="w-full h-full p-3 border-0 bg-transparent text-foreground font-mono text-sm resize-none focus:outline-none"
               placeholder="Start typing your markdown here..."
+              style={{ minHeight: '100%' }}
             />
           ) : (
             <div ref={editorRef} className="h-full" />
@@ -217,9 +332,9 @@ export default function CodeMirrorEditor({
 
         {/* Preview */}
         {showPreview && (
-          <div className="w-1/2 overflow-auto">
+          <div className="w-1/2 overflow-auto bg-card">
             <div
-              className="p-4 prose prose-sm sm:prose-base lg:prose-lg xl:prose-2xl dark:prose-invert max-w-none"
+              className="p-4 prose-theme"
               dangerouslySetInnerHTML={{ __html: previewContent }}
             />
           </div>

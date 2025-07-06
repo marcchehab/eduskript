@@ -131,7 +131,7 @@ export function CreateChapterModal({ scriptId, onChapterCreated }: CreateChapter
               />
             </div>
             {error && (
-              <div className="text-red-600 text-sm">{error}</div>
+              <div className="text-destructive text-sm">{error}</div>
             )}
           </div>
           <DialogFooter>

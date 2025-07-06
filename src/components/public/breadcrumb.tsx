@@ -13,26 +13,26 @@ interface BreadcrumbProps {
 
 export function Breadcrumb({ items, subdomain }: BreadcrumbProps) {
   return (
-    <nav className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400 mb-6">
+    <nav className="flex items-center space-x-2 text-sm text-muted-foreground mb-6">
       <Link 
         href={`/${subdomain}`}
-        className="flex items-center hover:text-gray-900 dark:hover:text-gray-200 transition-colors"
+        className="flex items-center hover:text-foreground transition-colors"
       >
         <Home className="w-4 h-4" />
       </Link>
       
       {items.map((item, index) => (
         <div key={index} className="flex items-center space-x-2">
-          <ChevronRight className="w-4 h-4 text-gray-400" />
+          <ChevronRight className="w-4 h-4 text-muted-foreground" />
           {item.href ? (
             <Link 
               href={item.href}
-              className="hover:text-gray-900 dark:hover:text-gray-200 transition-colors"
+              className="hover:text-foreground transition-colors"
             >
               {item.title}
             </Link>
           ) : (
-            <span className="text-gray-900 dark:text-gray-200 font-medium">
+            <span className="text-foreground font-medium">
               {item.title}
             </span>
           )}

@@ -42,10 +42,10 @@ export default async function DashboardPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+          <h1 className="text-3xl font-bold text-foreground">
             Dashboard
           </h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-2">
+          <p className="text-muted-foreground mt-2">
             Welcome back! Here&apos;s what&apos;s happening with your content.
           </p>
         </div>
@@ -102,13 +102,13 @@ export default async function DashboardPage() {
               {scripts.map((script: any) => (
                 <div key={script.id} className="flex items-center justify-between p-4 border rounded-lg">
                   <div>
-                    <h3 className="font-medium text-gray-900 dark:text-white">
+                    <h3 className="font-medium text-foreground">
                       {script.title}
                     </h3>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                    <p className="text-sm text-muted-foreground">
                       {script.description || 'No description'}
                     </p>
-                    <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                    <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
                       <span>{script.chapters.length} chapters</span>
                       <span>
                         {script.chapters.reduce((acc: number, ch: any) => acc + ch.pages.length, 0)} pages
@@ -128,11 +128,11 @@ export default async function DashboardPage() {
             </div>
           ) : (
             <div className="text-center py-8">
-              <BookOpen className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+              <BookOpen className="h-12 w-12 text-icon-muted mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-foreground mb-2">
                 No scripts yet
               </h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-4">
+              <p className="text-muted-foreground mb-4">
                 Get started by creating your first educational script.
               </p>
               <Link href="/dashboard/scripts/new">

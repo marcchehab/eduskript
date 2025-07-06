@@ -9,6 +9,7 @@ import rehypeStringify from 'rehype-stringify'
 import matter from 'gray-matter'
 import rehypeSlug from 'rehype-slug'
 import rehypeAutolinkHeadings from 'rehype-autolink-headings'
+import { remarkWikiLinks } from './remark-plugins/wikilinks'
 
 export interface ProcessedMarkdown {
   content: string
@@ -23,6 +24,7 @@ export async function processMarkdown(markdown: string): Promise<ProcessedMarkdo
   // Process markdown to HTML
   const processor = unified()
     .use(remarkParse)
+    .use(remarkWikiLinks) // Process wiki links first, before other transformations
     .use(remarkMath)
     .use(remarkGfm)
     .use(remarkRehype, { allowDangerousHtml: true })
@@ -34,14 +36,6 @@ export async function processMarkdown(markdown: string): Promise<ProcessedMarkdo
     .use(rehypeKatex)
     .use(rehypeHighlight)
     .use(rehypeStringify, { allowDangerousHtml: true })
-    .use(rehypeSlug)
-    .use(rehypeAutolinkHeadings, {
-      behavior: 'wrap',
-      properties: {
-        class: 'heading-anchor',
-        'aria-hidden': 'true',
-      },
-    })
   
   const processedContent = await processor.process(content)
   

@@ -18,7 +18,10 @@ export async function PATCH(
     const body = await request.json()
     const { title, slug, content, isPublished } = body
 
-    if (!title?.trim() || !slug?.trim()) {
+    // For content-only updates, title and slug are not required
+    const isContentOnlyUpdate = content !== undefined && title === undefined && slug === undefined && isPublished === undefined
+    
+    if (!isContentOnlyUpdate && (!title?.trim() || !slug?.trim())) {
       return NextResponse.json(
         { error: 'Title and slug are required' },
         { status: 400 }
@@ -32,7 +35,11 @@ export async function PATCH(
         authorId: session.user.id
       },
       include: {
-        chapter: true,
+        chapter: {
+          include: {
+            script: true
+          }
+        },
         versions: {
           orderBy: { version: 'desc' },
           take: 1
@@ -48,35 +55,42 @@ export async function PATCH(
     }
 
     // Check if slug is already used in the same chapter (but not this page)
-    const slugExists = await prisma.page.findFirst({
-      where: {
-        slug: slug.trim(),
-        chapterId: existingPage.chapterId,
-        id: { not: id }
-      }
-    })
+    // Only check slug conflict if slug is being updated
+    if (!isContentOnlyUpdate) {
+      const slugExists = await prisma.page.findFirst({
+        where: {
+          slug: slug.trim(),
+          chapterId: existingPage.chapterId,
+          id: { not: id }
+        }
+      })
 
-    if (slugExists) {
-      return NextResponse.json(
-        { error: 'Slug already exists in this chapter' },
-        { status: 400 }
-      )
+      if (slugExists) {
+        return NextResponse.json(
+          { error: 'Slug already exists in this chapter' },
+          { status: 400 }
+        )
+      }
     }
 
     // Check if content has changed to create new version
     const currentVersion = existingPage.versions[0]
-    const contentChanged = currentVersion?.content !== content
+    const contentChanged = content !== undefined && currentVersion?.content !== content
+
+    // Prepare update data - only include fields that are provided
+    const updateData: any = {
+      updatedAt: new Date()
+    }
+
+    if (title !== undefined) updateData.title = title.trim()
+    if (slug !== undefined) updateData.slug = slug.trim()
+    if (content !== undefined) updateData.content = content
+    if (isPublished !== undefined) updateData.isPublished = isPublished
 
     // Update the page
     const updatedPage = await prisma.page.update({
       where: { id },
-      data: {
-        title: title.trim(),
-        slug: slug.trim(),
-        content: content || '',
-        isPublished: isPublished || false,
-        updatedAt: new Date()
-      }
+      data: updateData
     })
 
     // Create new version if content changed
@@ -89,6 +103,29 @@ export async function PATCH(
           authorId: session.user.id
         }
       })
+    }
+
+    // Revalidate the public page cache for all relevant paths
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { subdomain: true }
+    })
+
+    if (user?.subdomain) {
+      // Revalidate the specific page
+      revalidatePath(`/${user.subdomain}/${existingPage.chapter.script?.slug}/${existingPage.chapter.slug}/${updatedPage.slug}`)
+      
+      // Revalidate the chapter page (in case it lists pages)
+      revalidatePath(`/${user.subdomain}/${existingPage.chapter.script?.slug}/${existingPage.chapter.slug}`)
+      
+      // Revalidate the script page (in case it lists chapters/pages)
+      revalidatePath(`/${user.subdomain}/${existingPage.chapter.script?.slug}`)
+      
+      // Revalidate the home page (in case it lists scripts)
+      revalidatePath(`/${user.subdomain}`)
+      
+      // Revalidate dashboard pages
+      revalidatePath('/dashboard/scripts')
     }
 
     return NextResponse.json(updatedPage)
