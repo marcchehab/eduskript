@@ -12,6 +12,7 @@ interface CodeMirrorEditorProps {
   onSave?: () => void
   onFileInsert?: (file: any) => void
   chapterId?: string
+  domain?: string
   isReadOnly?: boolean
 }
 
@@ -21,6 +22,7 @@ export default function CodeMirrorEditor({
   onSave,
   onFileInsert,
   chapterId,
+  domain,
   isReadOnly = false 
 }: CodeMirrorEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null)
@@ -102,7 +104,10 @@ export default function CodeMirrorEditor({
     
     const updatePreview = async () => {
       try {
-        const processed = await processMarkdown(useSimpleEditor ? textareaContent : editorContent)
+        const processed = await processMarkdown(
+          useSimpleEditor ? textareaContent : editorContent, 
+          { domain, chapterId }
+        )
         setPreviewContent(processed.content)
       } catch (error) {
         console.error('Error processing markdown:', error)

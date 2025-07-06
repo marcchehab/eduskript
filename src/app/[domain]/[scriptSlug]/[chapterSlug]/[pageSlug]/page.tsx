@@ -141,8 +141,11 @@ export default async function PublicPage({ params }: PageProps) {
       notFound()
     }
 
-    // Process markdown content server-side
-    const processedMarkdown = await processMarkdown(page.content || '')
+    // Process markdown content server-side with context for image path resolution
+    const processedMarkdown = await processMarkdown(page.content || '', {
+      domain: domain,
+      chapterId: chapter.id
+    })
 
     const pageData = {
       id: page.id,

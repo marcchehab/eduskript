@@ -67,6 +67,7 @@
     "unist-util-is": "^6.0.0",
     "unist-util-visit": "^5.0.0",
     "uuid": "^11.1.0",
+    "vfile": "^6.0.3",
     "zod": "^3.25.68",
     "zustand": "^5.0.6"
   },

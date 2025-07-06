@@ -8,6 +8,7 @@ interface MarkdownEditorProps {
   onSave?: () => void
   onFileInsert?: (file: any) => void
   chapterId?: string
+  domain?: string
   isReadOnly?: boolean
 }
 

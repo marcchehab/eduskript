@@ -10,6 +10,7 @@ import matter from 'gray-matter'
 import rehypeSlug from 'rehype-slug'
 import rehypeAutolinkHeadings from 'rehype-autolink-headings'
 import { remarkWikiLinks } from './remark-plugins/wikilinks'
+import { remarkPathCorrections, type PathCorrectionOptions } from './remark-plugins/path-corrections'
 
 export interface ProcessedMarkdown {
   content: string
@@ -17,7 +18,17 @@ export interface ProcessedMarkdown {
   excerpt?: string
 }
 
-export async function processMarkdown(markdown: string): Promise<ProcessedMarkdown> {
+export interface MarkdownContext {
+  /** The domain/username for the current content */
+  domain?: string
+  /** The chapter ID for chapter-specific file searches */
+  chapterId?: string
+}
+
+export async function processMarkdown(
+  markdown: string, 
+  context?: MarkdownContext
+): Promise<ProcessedMarkdown> {
   // Parse frontmatter
   const { content, data: frontmatter } = matter(markdown)
   
@@ -25,6 +36,7 @@ export async function processMarkdown(markdown: string): Promise<ProcessedMarkdo
   const processor = unified()
     .use(remarkParse)
     .use(remarkWikiLinks) // Process wiki links first, before other transformations
+    .use(remarkPathCorrections, context) // Add path corrections with context
     .use(remarkMath)
     .use(remarkGfm)
     .use(remarkRehype, { allowDangerousHtml: true })

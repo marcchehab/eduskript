@@ -62,16 +62,16 @@ export function PageEditor({ script, chapter, page }: PageEditorProps) {
     const extension = file.filename.split('.').pop()?.toLowerCase()
     
     if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(extension || '')) {
-      // Image
-      insertText = `![${file.originalName || file.filename}](${file.url})`
+      // Image - use wiki-style format with just filename for path correction
+      insertText = `![[${file.filename}]]`
     } else if (['mp4', 'avi', 'mov', 'wmv'].includes(extension || '')) {
-      // Video
+      // Video - use full URL for non-image files
       insertText = `<video controls>\n  <source src="${file.url}" type="video/${extension}">\n  Your browser does not support the video tag.\n</video>`
     } else if (['mp3', 'wav', 'ogg'].includes(extension || '')) {
-      // Audio
+      // Audio - use full URL for non-image files
       insertText = `<audio controls>\n  <source src="${file.url}" type="audio/${extension}">\n  Your browser does not support the audio tag.\n</audio>`
     } else {
-      // Generic file/download link
+      // Generic file/download link - use full URL for non-image files
       insertText = `[${file.originalName || file.filename}](${file.url})`
     }
     
@@ -235,6 +235,7 @@ export function PageEditor({ script, chapter, page }: PageEditorProps) {
             onSave={handleSave}
             onFileInsert={handleFileInsert}
             chapterId={chapter.id}
+            domain={session?.user?.subdomain || undefined}
           />
         </CardContent>
       </Card>

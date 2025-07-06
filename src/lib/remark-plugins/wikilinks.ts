@@ -12,6 +12,8 @@ import { fromMarkdown } from 'mdast-util-from-markdown'
  * - [[Chapter/Page]] -> [Page](../chapter-slug/page-slug)
  * - [[Script/Chapter/Page]] -> [Page](../../script-slug/chapter-slug/page-slug)
  * - [[Page|Custom Text]] -> [Custom Text](../page-slug)
+ * - [[/uploads/image.png]] -> [](uploads/image.png) (absolute paths preserved)
+ * - ![[/uploads/image.png]] -> ![](/uploads/image.png) (image embeds with absolute paths)
  */
 export const remarkWikiLinks: Plugin<[], Root> = () => (ast) => {
     // Handle complete wiki links in a single node
@@ -156,9 +158,32 @@ export const remarkWikiLinks: Plugin<[], Root> = () => (ast) => {
                 // Clean up the link path
                 link = link.trim();
                 
-                // Generate URL-friendly slug
+                // Check if this is an absolute path (starts with /) or a URL (contains ://)
+                if (link.startsWith('/') || link.includes('://')) {
+                    // For absolute paths and URLs, use them as-is
+                    const linkText = displayText || (isEmbed ? '' : link.split('/').pop() || link);
+                    
+                    if (isEmbed) {
+                        return `![${linkText}](${link})`;
+                    }
+                    return `[${linkText}](${link})`;
+                }
+                
+                // Check if this is just a filename (contains file extension and no path separators)
+                const isFilename = !link.includes('/') && /\.[a-zA-Z0-9]+$/.test(link);
+                
+                if (isEmbed && isFilename) {
+                    // For image embeds with just filenames, pass through unchanged
+                    // Let the path correction plugin handle the path resolution
+                    const linkText = displayText || '';
+                    return `![${linkText}](${link})`;
+                }
+                
+                // Generate URL-friendly slug (only for relative wiki links)
                 const generateSlug = (str: string) => {
-                    return str
+                    // Remove file extension for page slugs, but preserve it for file paths
+                    const withoutExt = str.replace(/\.[^/.]+$/, '');
+                    return withoutExt
                         .toLowerCase()
                         .replace(/[^\w\s-]/g, '')
                         .replace(/\s+/g, '-')
@@ -166,7 +191,7 @@ export const remarkWikiLinks: Plugin<[], Root> = () => (ast) => {
                         .trim();
                 };
 
-                // Parse the link structure
+                // Parse the link structure for wiki-style links
                 const parts = link.split('/').filter((part: string) => part.trim());
                 let url = '';
                 let linkText = displayText || '';
