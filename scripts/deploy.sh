@@ -63,6 +63,16 @@ log "🏥 Running pre-deployment checks..."
 node --version
 npm --version
 
+# Check if we're in the right directory
+log "📁 Current directory: $(pwd)"
+log "📁 Directory contents: $(ls -la | wc -l) items"
+
+# Check if package.json exists
+if [ ! -f "package.json" ]; then
+    log "❌ package.json not found in current directory!"
+    exit 1
+fi
+
 # Check if pnpm is available, install if not
 if ! command -v pnpm >/dev/null 2>&1; then
     log "📦 Installing pnpm..."
@@ -73,21 +83,28 @@ fi
 log "📦 Installing dependencies..."
 pnpm install --frozen-lockfile --prefer-offline
 
+# Verify Prisma is available
+log "🔍 Verifying Prisma installation..."
+if ! pnpm exec prisma --version >/dev/null 2>&1; then
+    log "❌ Prisma not found in node_modules. Trying to install..."
+    pnpm install @prisma/client prisma
+fi
+
 # Database operations
 log "🗃️ Generating Prisma client..."
-pnpm prisma generate
+pnpm exec prisma generate
 
 if [ "$ENVIRONMENT" = "production" ]; then
     log "🔧 Running database migrations..."
-    pnpm prisma migrate deploy
+    pnpm exec prisma migrate deploy
 else
     log "🔧 Pushing database schema..."
-    pnpm prisma db push --skip-generate
+    pnpm exec prisma db push --skip-generate
 fi
 
 # Build
 log "🏗️ Building application..."
-NODE_ENV=production pnpm build
+NODE_ENV=production pnpm run build:production
 
 # Post-build checks
 log "🔍 Post-build validation..."

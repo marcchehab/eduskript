@@ -7,7 +7,12 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "db": "pnpm prisma db push --accept-data-loss && pnpm prisma generate"
+    "db": "pnpm prisma db push --accept-data-loss && pnpm prisma generate",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "db:push": "prisma db push",
+    "build:production": "prisma generate && next build",
+    "deploy:uberspace": "git push uberspace main"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.10.0",
