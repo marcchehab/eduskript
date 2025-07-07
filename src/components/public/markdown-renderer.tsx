@@ -53,7 +53,7 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
 
   return (
     <div 
-      className="markdown-content"
+      className="prose-theme"
       dangerouslySetInnerHTML={{ __html: html }}
     />
   )

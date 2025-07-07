@@ -142,7 +142,7 @@ export default function CodeMirrorEditor({
         
         console.log('Loading @codemirror/view...')
         const { EditorView } = await import('@codemirror/view')
-        
+          
         console.log('Loading @codemirror/state...')
         const { EditorState } = await import('@codemirror/state')
         
@@ -192,6 +192,13 @@ export default function CodeMirrorEditor({
               '.cm-scroller': {
                 backgroundColor: 'hsl(var(--card))',
                 minHeight: '100%',
+              },
+              // Fix with specific selector that causes transparent selection background issues
+              '&.cm-focused .cm-line ::selection': {
+                backgroundColor: isDark ? 'rgba(59, 130, 246, 0.3) !important' : 'rgba(37, 99, 235, 0.3) !important',
+              },
+              '&.cm-focused .cm-line::selection': {
+                backgroundColor: isDark ? 'rgba(59, 130, 246, 0.3) !important' : 'rgba(37, 99, 235, 0.3) !important',
               },
             }),
           ],
