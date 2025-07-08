@@ -3,6 +3,6 @@
     "runtimes": ["node"]
   },
   "hooks": {
-    "postDeploy": "pnpm run db:push"
+    "postDeploy": "./clevercloud/post_deploy.sh"
   }
 }
