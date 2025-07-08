@@ -1,8 +1,0 @@
-{
-  "deploy": {
-    "runtimes": ["node"]
-  },
-  "hooks": {
-    "postDeploy": "./clevercloud/post_deploy.sh"
-  }
-}
