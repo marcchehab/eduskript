@@ -2,14 +2,12 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { 
-  Folder, 
   File, 
   Image, 
   FileText, 
   Video, 
   Music, 
   Archive,
-  Download,
   Trash2,
   Upload,
   Globe,
@@ -30,11 +28,10 @@ interface FileItem {
 interface FileBrowserProps {
   chapterId?: string
   onFileSelect?: (file: FileItem) => void
-  onFileInsert?: (file: FileItem) => void
   className?: string
 }
 
-export function FileBrowser({ chapterId, onFileSelect, onFileInsert, className = '' }: FileBrowserProps) {
+export function FileBrowser({ chapterId, onFileSelect, className = '' }: FileBrowserProps) {
   const [files, setFiles] = useState<FileItem[]>([])
   const [loading, setLoading] = useState(true)
   const [dragOver, setDragOver] = useState(false)

@@ -97,7 +97,7 @@ export function DomainSettings() {
           <CardTitle>Custom Domains</CardTitle>
           <CardDescription>
             Add custom domains to make your educational content available at your own URLs.
-            After adding a domain, you'll need to configure DNS settings with your domain provider.
+            After adding a domain, you&apos;ll need to configure DNS settings with your domain provider.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -198,7 +198,7 @@ export function DomainSettings() {
             </div>
           </div>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-3">
-            Replace "your-subdomain" with your actual subdomain. DNS changes may take up to 24 hours to propagate.
+            Replace &quot;your-subdomain&quot; with your actual subdomain. DNS changes may take up to 24 hours to propagate.
           </p>
         </CardContent>
       </Card>

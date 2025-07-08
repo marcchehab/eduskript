@@ -5,12 +5,18 @@ import { useTheme } from 'next-themes'
 import { processMarkdown } from '@/lib/markdown'
 import { Button } from '@/components/ui/button'
 import { Save, Eye, EyeOff } from 'lucide-react'
+import type { EditorView } from '@codemirror/view'
+import type { ViewUpdate } from '@codemirror/view'
 
 interface CodeMirrorEditorProps {
   content: string
   onChange: (content: string) => void
   onSave?: () => void
-  onFileInsert?: (file: any) => void
+  onFileInsert?: (file: {
+    filename: string
+    url: string
+    uploadType: string
+  }) => void
   chapterId?: string
   domain?: string
   isReadOnly?: boolean
@@ -26,7 +32,7 @@ export default function CodeMirrorEditor({
   isReadOnly = false 
 }: CodeMirrorEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null)
-  const editorViewRef = useRef<any>(null)
+  const editorViewRef = useRef<EditorView | null>(null)
   const [showPreview, setShowPreview] = useState(true)
   const [previewContent, setPreviewContent] = useState('')
   const [isMounted, setIsMounted] = useState(false)
@@ -116,7 +122,7 @@ export default function CodeMirrorEditor({
     }
     
     updatePreview()
-  }, [editorContent, textareaContent, useSimpleEditor, isMounted])  // Initialize CodeMirror with dynamic imports
+  }, [editorContent, textareaContent, useSimpleEditor, isMounted, domain, chapterId])  // Initialize CodeMirror with dynamic imports
   useEffect(() => {
     if (!isMounted || !editorRef.current) return
 
@@ -162,7 +168,7 @@ export default function CodeMirrorEditor({
             basicSetup,
             markdown(),
             ...(isDark ? [oneDark] : []),
-            EditorView.updateListener.of((update: any) => {
+            EditorView.updateListener.of((update: ViewUpdate) => {
               if (update.docChanged) {
                 const newContent = update.state.doc.toString()
                 onChange(newContent)
@@ -244,7 +250,7 @@ export default function CodeMirrorEditor({
         editorViewRef.current = null
       }
     }
-  }, [isMounted, isDark]) // Re-initialize when theme changes
+  }, [isMounted, isDark, editorContent, onChange]) // Re-initialize when theme changes
 
   // Update editor content when prop changes
   useEffect(() => {

@@ -43,7 +43,7 @@ export async function PATCH(
     }
 
     // Verify all chapter IDs belong to this script
-    const scriptChapterIds = script.chapters.map((c: any) => c.id)
+    const scriptChapterIds = script.chapters.map((c) => c.id)
     const allChapterIdsValid = chapterIds.every((id: string) => scriptChapterIds.includes(id))
     
     if (!allChapterIdsValid || chapterIds.length !== script.chapters.length) {

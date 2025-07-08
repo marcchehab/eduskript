@@ -43,7 +43,7 @@ export async function PATCH(
     }
 
     // Verify all page IDs belong to this chapter
-    const chapterPageIds = chapter.pages.map((p: any) => p.id)
+    const chapterPageIds = chapter.pages.map((p) => p.id)
     const allPageIdsValid = pageIds.every((id: string) => chapterPageIds.includes(id))
     
     if (!allPageIdsValid || pageIds.length !== chapter.pages.length) {

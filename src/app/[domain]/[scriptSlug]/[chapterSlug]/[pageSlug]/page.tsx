@@ -126,17 +126,17 @@ export default async function PublicPage({ params }: PageProps) {
     }
 
     // Find the specific page
-    const script = teacher.scripts.find((s: any) => s.slug === scriptSlug)
+    const script = teacher.scripts.find((s) => s.slug === scriptSlug)
     if (!script) {
       notFound()
     }
 
-    const chapter = script.chapters.find((c: any) => c.slug === chapterSlug)
+    const chapter = script.chapters.find((c) => c.slug === chapterSlug)
     if (!chapter) {
       notFound()
     }
 
-    const page = chapter.pages.find((p: any) => p.slug === pageSlug)
+    const page = chapter.pages.find((p) => p.slug === pageSlug)
     if (!page) {
       notFound()
     }

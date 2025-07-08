@@ -104,7 +104,7 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
         <div className="max-w-4xl mx-auto">
           <div className="text-center py-12">
             <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-4">
-              Welcome to {teacher.name}'s Educational Platform
+              Welcome to {teacher.name}&apos;s Educational Platform
             </h1>
             
             {teacher.bio && (
@@ -114,7 +114,7 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-12">
-              {teacher.scripts.map((script: any) => (
+              {teacher.scripts.map((script) => (
                 <div key={script.id} className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
                   <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-3">
                     {script.title}
@@ -126,7 +126,7 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
                   )}
                   <div className="text-sm text-gray-500 dark:text-gray-500">
                     {script.chapters.length} chapters • {' '}
-                    {script.chapters.reduce((acc: number, ch: any) => acc + ch.pages.length, 0)} pages
+                    {script.chapters.reduce((acc: number, ch) => acc + ch.pages.length, 0)} pages
                   </div>
                 </div>
               ))}

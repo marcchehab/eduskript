@@ -8,16 +8,38 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { CreateChapterModal } from './create-chapter-modal'
 import { ScriptSettingsModal } from './script-settings-modal'
 import { SortableChapters } from './sortable-chapters'
-import { ArrowLeft, Plus, BookOpen, FileText } from 'lucide-react'
+import { ArrowLeft, BookOpen, FileText } from 'lucide-react'
 
 interface ScriptEditorProps {
-  script: any
+  script: {
+    id: string
+    title: string
+    description: string | null
+    slug: string
+    isPublished: boolean
+    chapters: Array<{
+      id: string
+      title: string
+      slug: string
+      description: string | null
+      order: number
+      isPublished: boolean
+      updatedAt: Date
+      pages: Array<{
+        id: string
+        title: string
+        slug: string
+        order: number
+        isPublished: boolean
+        updatedAt: Date
+      }>
+    }>
+  }
 }
 
 export function ScriptEditor({ script }: ScriptEditorProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [isPublished, setIsPublished] = useState(script.isPublished)
-  const [currentScript, setCurrentScript] = useState(script)
   const router = useRouter()
 
   const handleChapterCreated = () => {
@@ -25,8 +47,13 @@ export function ScriptEditor({ script }: ScriptEditorProps) {
     window.location.reload()
   }
 
-  const handleScriptUpdated = (updatedScript?: any) => {
-    if (updatedScript && updatedScript.slug !== currentScript.slug) {
+  const handleScriptUpdated = (updatedScript?: {
+    id: string
+    title: string
+    description: string | null
+    slug: string
+  }) => {
+    if (updatedScript && updatedScript.slug !== script.slug) {
       // If slug changed, redirect to new URL
       router.push(`/dashboard/scripts/${updatedScript.slug}`)
     } else {
@@ -76,15 +103,15 @@ export function ScriptEditor({ script }: ScriptEditorProps) {
         </Link>
         <div className="flex-1">
           <h1 className="text-3xl font-bold text-foreground">
-            {currentScript.title}
+            {script.title}
           </h1>
           <p className="text-muted-foreground mt-2">
-            {currentScript.description || 'No description'}
+            {script.description || 'No description'}
           </p>
         </div>
         <div className="flex gap-2">
           <ScriptSettingsModal 
-            script={currentScript}
+            script={script}
             onScriptUpdated={handleScriptUpdated}
           />
           <Button 
@@ -115,7 +142,7 @@ export function ScriptEditor({ script }: ScriptEditorProps) {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {script.chapters.reduce((acc: number, ch: any) => acc + ch.pages.length, 0)}
+              {script.chapters.reduce((acc: number, ch) => acc + ch.pages.length, 0)}
             </div>
           </CardContent>
         </Card>

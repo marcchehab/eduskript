@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Download, FileText } from 'lucide-react'
+import { Download } from 'lucide-react'
 
 interface ExportPDFProps {
   title: string

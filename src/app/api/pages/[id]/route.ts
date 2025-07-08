@@ -78,7 +78,13 @@ export async function PATCH(
     const contentChanged = content !== undefined && currentVersion?.content !== content
 
     // Prepare update data - only include fields that are provided
-    const updateData: any = {
+    const updateData: {
+      updatedAt: Date
+      title?: string
+      slug?: string
+      content?: string
+      isPublished?: boolean
+    } = {
       updatedAt: new Date()
     }
 

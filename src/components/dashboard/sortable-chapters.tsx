@@ -34,9 +34,16 @@ interface Chapter {
   slug: string
   description: string | null
   order: number
-  updatedAt: string
+  updatedAt: Date
   isPublished: boolean
-  pages: any[]
+  pages: Array<{
+    id: string
+    title: string
+    slug: string
+    order: number
+    isPublished: boolean
+    updatedAt: Date
+  }>
 }
 
 interface SortableChapterItemProps {

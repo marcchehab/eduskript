@@ -23,7 +23,7 @@ interface VersionHistoryProps {
   onRestoreVersion: (versionId: string, content: string) => void
 }
 
-export function VersionHistory({ pageId, versions, currentContent, onRestoreVersion }: VersionHistoryProps) {
+export function VersionHistory({ versions, currentContent, onRestoreVersion }: VersionHistoryProps) {
   const [selectedVersion, setSelectedVersion] = useState<string | null>(null)
   const [showPreview, setShowPreview] = useState(false)
 
@@ -98,7 +98,7 @@ export function VersionHistory({ pageId, versions, currentContent, onRestoreVers
                 {version.changeLog && (
                   <div className="mb-3">
                     <p className="text-sm text-card-foreground italic">
-                      "{version.changeLog}"
+                      &quot;{version.changeLog}&quot;
                     </p>
                   </div>
                 )}

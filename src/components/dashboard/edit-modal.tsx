@@ -105,7 +105,7 @@ export function EditModal({ type, item, onItemUpdated, triggerClassName }: EditM
         const data = await response.json()
         setError(data.error || `Failed to update ${type}`)
       }
-    } catch (error) {
+    } catch {
       setError('An error occurred. Please try again.')
     }
 

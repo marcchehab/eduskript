@@ -99,7 +99,7 @@ export default async function DashboardPage() {
         <CardContent>
           {scripts.length > 0 ? (
             <div className="space-y-4">
-              {scripts.map((script: any) => (
+              {scripts.map((script) => (
                 <div key={script.id} className="flex items-center justify-between p-4 border rounded-lg">
                   <div>
                     <h3 className="font-medium text-foreground">
@@ -111,7 +111,7 @@ export default async function DashboardPage() {
                     <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
                       <span>{script.chapters.length} chapters</span>
                       <span>
-                        {script.chapters.reduce((acc: number, ch: any) => acc + ch.pages.length, 0)} pages
+                        {script.chapters.reduce((acc: number, ch) => acc + ch.pages.length, 0)} pages
                       </span>
                       <span>
                         Updated {new Date(script.updatedAt).toLocaleDateString()}

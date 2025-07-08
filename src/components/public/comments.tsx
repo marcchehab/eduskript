@@ -31,7 +31,7 @@ const mockComments: Comment[] = [
   }
 ]
 
-export function Comments({ pageId, pageTitle }: CommentsProps) {
+export function Comments({}: CommentsProps) {
   const [comments, setComments] = useState<Comment[]>(mockComments)
   const [newComment, setNewComment] = useState('')
   const [authorName, setAuthorName] = useState('')

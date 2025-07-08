@@ -46,7 +46,7 @@ export default async function ScriptsPage() {
 
       {scripts.length > 0 ? (
         <div className="grid gap-6">
-          {scripts.map((script: any) => (
+          {scripts.map((script) => (
             <Card key={script.id}>
               <CardHeader>
                 <div className="flex justify-between items-start">
@@ -85,7 +85,7 @@ export default async function ScriptsPage() {
                   <div className="flex items-center gap-2">
                     <Eye className="w-4 h-4" />
                     <span>
-                      {script.chapters.reduce((acc: number, ch: any) => acc + ch.pages.length, 0)} pages
+                      {script.chapters.reduce((acc: number, ch) => acc + ch.pages.length, 0)} pages
                     </span>
                   </div>
                   <div>

@@ -23,7 +23,12 @@ interface ScriptSettingsModalProps {
     description: string | null
     slug: string
   }
-  onScriptUpdated: (updatedScript?: any) => void
+  onScriptUpdated: (updatedScript?: {
+    id: string
+    title: string
+    description: string | null
+    slug: string
+  }) => void
 }
 
 export function ScriptSettingsModal({ script, onScriptUpdated }: ScriptSettingsModalProps) {
@@ -106,7 +111,7 @@ export function ScriptSettingsModal({ script, onScriptUpdated }: ScriptSettingsM
           <DialogHeader>
             <DialogTitle>Script Settings</DialogTitle>
             <DialogDescription>
-              Update your script's title and description.
+              Update your script&apos;s title and description.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">

@@ -31,7 +31,7 @@ interface Page {
   title: string
   slug: string
   isPublished: boolean
-  updatedAt: string
+  updatedAt: Date
   order: number
 }
 

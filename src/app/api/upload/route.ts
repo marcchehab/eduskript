@@ -152,7 +152,15 @@ export async function GET(request: NextRequest) {
 
 async function getDirectoryFiles(subdomain: string, chapterId?: string | null) {
   const { readdir, stat } = await import('fs/promises')
-  const files: any[] = []
+  const files: {
+    filename: string
+    size: number
+    url: string
+    uploadType: string
+    uploadedAt: string
+    isDirectory: boolean
+    chapterId?: string
+  }[] = []
 
   // Get global files
   const globalPath = path.join(UPLOAD_DIR, subdomain, 'global')
@@ -171,7 +179,7 @@ async function getDirectoryFiles(subdomain: string, chapterId?: string | null) {
           isDirectory: false
         })
       }
-    } catch (error) {
+    } catch {
       // Directory doesn't exist or is empty
     }
   }
@@ -195,7 +203,7 @@ async function getDirectoryFiles(subdomain: string, chapterId?: string | null) {
             isDirectory: false
           })
         }
-      } catch (error) {
+      } catch {
         // Directory doesn't exist or is empty
       }
     }

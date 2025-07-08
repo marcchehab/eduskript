@@ -9,12 +9,10 @@ import rehypeStringify from 'rehype-stringify'
 import matter from 'gray-matter'
 import rehypeSlug from 'rehype-slug'
 import rehypeAutolinkHeadings from 'rehype-autolink-headings'
-import { remarkWikiLinks } from './remark-plugins/wikilinks'
-import { remarkPathCorrections, type PathCorrectionOptions } from './remark-plugins/path-corrections'
 
 export interface ProcessedMarkdown {
   content: string
-  frontmatter: Record<string, any>
+  frontmatter: Record<string, unknown>
   excerpt?: string
 }
 
@@ -27,7 +25,8 @@ export interface MarkdownContext {
 
 export async function processMarkdown(
   markdown: string, 
-  context?: MarkdownContext
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  context?: MarkdownContext // Reserved for future use (e.g., image path resolution)
 ): Promise<ProcessedMarkdown> {
   // Parse frontmatter
   const { content, data: frontmatter } = matter(markdown)
@@ -35,8 +34,6 @@ export async function processMarkdown(
   // Process markdown to HTML
   const processor = unified()
     .use(remarkParse)
-    .use(remarkWikiLinks) // Process wiki links first, before other transformations
-    .use(remarkPathCorrections, context) // Add path corrections with context
     .use(remarkMath)
     .use(remarkGfm)
     .use(remarkRehype, { allowDangerousHtml: true })

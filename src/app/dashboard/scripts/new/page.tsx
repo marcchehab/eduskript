@@ -60,7 +60,7 @@ export default function NewScriptPage() {
         const data = await response.json()
         setError(data.error || 'Failed to create script')
       }
-    } catch (error) {
+    } catch {
       setError('An error occurred. Please try again.')
     }
 

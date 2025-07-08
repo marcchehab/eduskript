@@ -48,32 +48,16 @@ interface PageEditorProps {
 }
 
 export function PageEditor({ script, chapter, page }: PageEditorProps) {
-  const [title, setTitle] = useState(page.title || '')
-  const [slug, setSlug] = useState(page.slug || '')
+  const [title] = useState(page.title || '')
+  const [slug] = useState(page.slug || '')
   const [content, setContent] = useState(page.content || '')
-  const [isPublished, setIsPublished] = useState(page.isPublished || false)
+  const [isPublished] = useState(page.isPublished || false)
   const [isSaving, setIsSaving] = useState(false)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [versions, setVersions] = useState<PageVersion[]>([])
-  const [loadingVersions, setLoadingVersions] = useState(false)
   const router = useRouter()
   const { data: session } = useSession()
-
-  const generateSlug = (title: string) => {
-    return title
-      .toLowerCase()
-      .replace(/[^\w\s-]/g, '')
-      .replace(/\s+/g, '-')
-      .replace(/-+/g, '-')
-      .trim()
-  }
-
-  const handleTitleChange = (newTitle: string) => {
-    setTitle(newTitle)
-    setSlug(generateSlug(newTitle))
-    setHasUnsavedChanges(true)
-  }
 
   const handleContentChange = (newContent: string) => {
     setContent(newContent)
@@ -153,14 +137,8 @@ export function PageEditor({ script, chapter, page }: PageEditorProps) {
     setIsSaving(false)
   }
 
-  const handlePublishToggle = () => {
-    setIsPublished(!isPublished)
-    setHasUnsavedChanges(true)
-  }
-
   // Load version history
   const loadVersions = async () => {
-    setLoadingVersions(true)
     try {
       const response = await fetch(`/api/pages/${page.id}/versions`)
       if (response.ok) {
@@ -172,7 +150,6 @@ export function PageEditor({ script, chapter, page }: PageEditorProps) {
     } catch (error) {
       console.error('Error loading versions:', error)
     }
-    setLoadingVersions(false)
   }
 
   // Handle version restoration
@@ -210,7 +187,7 @@ export function PageEditor({ script, chapter, page }: PageEditorProps) {
       }, 30000)
       return () => clearTimeout(timer)
     }
-  }, [hasUnsavedChanges, content])
+  }, [hasUnsavedChanges, content, handleSave])
 
   // Save with Ctrl+S
   useEffect(() => {
@@ -222,12 +199,12 @@ export function PageEditor({ script, chapter, page }: PageEditorProps) {
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  }, [handleSave])
 
   // Load version history on mount
   useEffect(() => {
     loadVersions()
-  }, [page.id])
+  }, [page.id, loadVersions])
 
   return (
     <div className="space-y-6">
@@ -281,7 +258,6 @@ export function PageEditor({ script, chapter, page }: PageEditorProps) {
       >
         <FileBrowser 
           chapterId={chapter.id}
-          onFileInsert={handleFileInsert}
         />
       </CollapsibleDrawer>
 
@@ -300,7 +276,7 @@ export function PageEditor({ script, chapter, page }: PageEditorProps) {
             onSave={handleSave}
             onFileInsert={handleFileInsert}
             chapterId={chapter.id}
-            domain={session?.user?.subdomain || undefined}
+            domain={(session?.user as { subdomain?: string })?.subdomain || undefined}
           />
         </CardContent>
       </Card>

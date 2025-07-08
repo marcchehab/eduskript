@@ -14,8 +14,8 @@ export function ProfileSettings() {
   const [formData, setFormData] = useState({
     name: session?.user?.name || '',
     subdomain: session?.user?.subdomain || '',
-    bio: (session?.user as any)?.bio || '',
-    title: session?.user?.title || ''
+    bio: (session?.user as { bio?: string })?.bio || '',
+    title: (session?.user as { title?: string })?.title || ''
   })
 
   const handleSubmit = async (e: React.FormEvent) => {

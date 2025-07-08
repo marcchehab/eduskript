@@ -1,9 +1,9 @@
 'use client'
 
 import { useTheme } from 'next-themes'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
-import { Moon, Sun, Monitor } from 'lucide-react'
+import { Moon, Sun } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 interface ThemeToggleProps {
@@ -20,14 +20,7 @@ export function ThemeToggle({ isCollapsed = false }: ThemeToggleProps) {
     setMounted(true)
   }, [])
 
-  // Load user's theme preference when session is available
-  useEffect(() => {
-    if (session?.user?.email && mounted) {
-      loadThemePreference()
-    }
-  }, [session, mounted])
-
-  const loadThemePreference = async () => {
+  const loadThemePreference = useCallback(async () => {
     try {
       const response = await fetch('/api/user/theme')
       if (response.ok) {
@@ -39,7 +32,14 @@ export function ThemeToggle({ isCollapsed = false }: ThemeToggleProps) {
     } catch (error) {
       console.error('Failed to load theme preference:', error)
     }
-  }
+  }, [theme, setTheme])
+
+  // Load user's theme preference when session is available
+  useEffect(() => {
+    if (session?.user?.email && mounted) {
+      loadThemePreference()
+    }
+  }, [session, mounted, loadThemePreference])
 
   const saveThemePreference = async (newTheme: string) => {
     if (!session?.user?.email) return

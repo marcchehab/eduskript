@@ -79,7 +79,12 @@ export async function PATCH(
     }
 
     // Update the script
-    const updateData: any = {}
+    const updateData: {
+      isPublished?: boolean
+      title?: string
+      description?: string
+      slug?: string
+    } = {}
     
     if (typeof isPublished === 'boolean') {
       updateData.isPublished = isPublished
