@@ -2,13 +2,6 @@
   "name": "eduscript",
   "description": "Education platform built with Next.js",
   "keywords": ["nextjs", "education", "markdown"],
-  "website": "https://github.com/yourusername/eduscript",
-  "repository": "https://github.com/yourusername/eduscript",
-  "scripts": {
-    "dokku": {
-      "predeploy": "bash scripts/dokku/pre-deploy"
-    }
-  },
   "addons": ["dokku-postgres"],
   "buildpacks": [
     {

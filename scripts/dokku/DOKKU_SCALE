@@ -1,5 +1,0 @@
-#!/bin/bash
-# Dokku release script - runs database migrations
-
-echo "Running database migrations..."
-pnpx prisma migrate deploy
