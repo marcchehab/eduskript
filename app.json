@@ -1,5 +1,5 @@
 {
-  "name": "eduscript",
+  "name": "eduskript",
   "description": "Education platform built with Next.js",
   "keywords": ["nextjs", "education", "markdown"],
   "addons": ["dokku-postgres"],

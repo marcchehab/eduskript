@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# CleverCloud post-deploy hook for Eduscript
+# CleverCloud post-deploy hook for Eduskript
 # This script runs after the application is deployed
 
 set -e

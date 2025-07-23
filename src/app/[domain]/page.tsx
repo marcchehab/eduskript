@@ -30,7 +30,7 @@ export async function generateMetadata({ params }: DomainIndexProps): Promise<Me
       }
     }
 
-    const title = teacher.name || 'Eduscript'
+    const title = teacher.name || 'Eduskript'
     const description = teacher.bio || `Educational content by ${teacher.name}`
 
     return {
@@ -41,7 +41,7 @@ export async function generateMetadata({ params }: DomainIndexProps): Promise<Me
         title,
         description,
         type: 'website',
-        siteName: teacher.name || 'Eduscript',
+        siteName: teacher.name || 'Eduskript',
         url: `https://${domain}`
       },
       twitter: {
@@ -53,7 +53,7 @@ export async function generateMetadata({ params }: DomainIndexProps): Promise<Me
   } catch (error) {
     console.error('Error generating metadata:', error)
     return {
-      title: 'Eduscript',
+      title: 'Eduskript',
       description: 'Educational content platform'
     }
   }

@@ -13,7 +13,7 @@ export default function HomePage() {
             Create Beautiful Educational Content
           </h1>
           <p className="text-xl text-gray-600 dark:text-gray-300 mb-8 max-w-2xl mx-auto">
-            Eduscript is a modern platform for teachers to create, manage, and share educational content 
+            Eduskript is a modern platform for teachers to create, manage, and share educational content 
             using markdown with support for math, code, and interactive elements.
           </p>
           

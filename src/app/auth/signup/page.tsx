@@ -110,7 +110,7 @@ export default function SignUpPage() {
                 onChange={handleChange}
               />
               <p className="text-sm text-gray-500">
-                This will be your site URL: {formData.subdomain || 'your-site'}.Eduscript.com
+                This will be your site URL: {formData.subdomain || 'your-site'}.eduskript.org
               </p>
             </div>
             <div className="space-y-2">

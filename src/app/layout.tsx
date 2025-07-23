@@ -8,7 +8,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Eduscript - Education Platform",
+  title: "Eduskript - Education Platform",
   description: "Create and manage educational content with ease",
 };
 

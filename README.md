@@ -1,6 +1,6 @@
-# Eduscript - Modern Education Platform
+# Eduskript - Modern Education Platform
 
-A comprehensive, multi-tenant education platform built with Next.js, TypeScript, Prisma, and NextAuth. Eduscript allows teachers to create and manage educational content using markdown with advanced features like versioning, LaTeX math, and syntax highlighting.
+A comprehensive, multi-tenant education platform built with Next.js, TypeScript, Prisma, and NextAuth. Eduskript allows teachers to create and manage educational content using markdown with advanced features like versioning, LaTeX math, and syntax highlighting.
 
 ## 🚀 Features
 
@@ -23,7 +23,7 @@ A comprehensive, multi-tenant education platform built with Next.js, TypeScript,
 - **Hybrid Rendering**: SSG with ISR for optimal performance
 - **Authentication**: Secure authentication with NextAuth.js
 - **Database**: PostgreSQL with Prisma ORM
-- **Self-Hostable**: Deploy anywhere with Docker or traditional hosting
+- **Self-Hostable**: Deploy on CleverCloud or any Node.js hosting
 - **Modern UI**: Beautiful, responsive design with Tailwind CSS
 - **Dark Mode**: Full dark mode support
 - **TypeScript**: Fully typed codebase for better development experience
@@ -53,7 +53,7 @@ A comprehensive, multi-tenant education platform built with Next.js, TypeScript,
 1. **Clone the repository**
    ```bash
    git clone <repository-url>
-   cd Eduscript
+   cd Eduskript
    ```
 
 2. **Install dependencies**
@@ -72,7 +72,7 @@ A comprehensive, multi-tenant education platform built with Next.js, TypeScript,
    DATABASE_URL="file:./prisma/dev.db"
    
    # For production (PostgreSQL)
-   # DATABASE_URL="postgresql://username:password@localhost:5432/Eduscript"
+   # DATABASE_URL="postgresql://username:password@localhost:5432/Eduskript"
    
    NEXTAUTH_SECRET="your-secret-key"
    NEXTAUTH_URL="http://localhost:3000"
@@ -80,7 +80,8 @@ A comprehensive, multi-tenant education platform built with Next.js, TypeScript,
 
 4. **Set up the database**
    ```bash
-   pnpm prisma migrate dev
+   # For local development (uses SQLite - no setup required)
+   pnpm prisma db push
    pnpm prisma generate
    ```
 
@@ -141,23 +142,30 @@ The platform uses a multi-tenant database design:
 
 ## 🚀 Deployment
 
-### Docker Deployment
+### CleverCloud (Recommended)
 
-1. **Build the Docker image**
+The easiest way to deploy Eduskript is on CleverCloud with managed services:
+
+1. **Follow the deployment guide**
    ```bash
-   docker build -t Eduscript .
+   # See DEPLOYMENT.md for complete instructions
    ```
 
-2. **Run with docker-compose**
-   ```bash
-   docker-compose up -d
-   ```
+2. **One-click PostgreSQL**
+   - Managed database with automated backups
+   - Auto-scaling and high availability
+   - Zero maintenance required
 
-### Traditional Hosting
+3. **Environment variables**
+   - Copy from `.env.clevercloud` template
+   - Configure in CleverCloud console
+
+### Manual Hosting
 
 1. **Build the application**
    ```bash
    pnpm build
+   ```
    ```
 
 2. **Start the production server**

@@ -65,7 +65,7 @@ export default function CodeMirrorEditor({
     setDragOver(false)
 
     // Check if it's a file from the file browser (has custom data)
-    const fileData = e.dataTransfer.getData('application/Eduscript-file')
+    const fileData = e.dataTransfer.getData('application/Eduskript-file')
     if (fileData) {
       try {
         const file = JSON.parse(fileData)

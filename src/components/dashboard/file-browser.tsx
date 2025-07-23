@@ -149,7 +149,7 @@ export function FileBrowser({ chapterId, onFileSelect, className = '' }: FileBro
 
   const handleFileDragStart = (e: React.DragEvent, file: FileItem) => {
     // Set data for drag-and-drop to editor
-    e.dataTransfer.setData('application/Eduscript-file', JSON.stringify(file))
+    e.dataTransfer.setData('application/Eduskript-file', JSON.stringify(file))
     e.dataTransfer.effectAllowed = 'copy'
   }
 

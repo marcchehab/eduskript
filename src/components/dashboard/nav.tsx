@@ -13,7 +13,7 @@ export function DashboardNav() {
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-6">
           <Link href="/dashboard" className="text-xl font-bold text-foreground">
-            Eduscript
+            Eduskript
           </Link>
           <div className="text-sm text-muted-foreground">
             Welcome back, {session?.user?.name}
