@@ -10,6 +10,8 @@ import matter from 'gray-matter'
 import rehypeSlug from 'rehype-slug'
 import rehypeAutolinkHeadings from 'rehype-autolink-headings'
 import { remarkFileResolver } from './remark-plugins/file-resolver'
+import { rehypeImageOptimizer } from './remark-plugins/image-optimizer'
+import { remarkServerImageOptimizer } from './remark-plugins/server-image-optimizer'
 
 export interface ProcessedMarkdown {
   content: string
@@ -36,6 +38,11 @@ export async function processMarkdown(
   // Process markdown to HTML
   const processor = unified()
     .use(remarkParse)
+    .use(remarkServerImageOptimizer, {
+      domain: context?.domain,
+      chapterId: context?.chapterId,
+      fileList: context?.fileList
+    })
     .use(remarkFileResolver, { 
       fileList: context?.fileList
     })
@@ -47,6 +54,7 @@ export async function processMarkdown(
       behavior: 'wrap',
       properties: { className: ['heading-link'] }
     })
+    .use(rehypeImageOptimizer) // Optimize images for better loading
     .use(rehypeKatex)
     .use(rehypeHighlight)
     .use(rehypeStringify, { allowDangerousHtml: true })

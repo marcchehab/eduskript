@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { getS3Client } from '@/lib/utils'
 import { PutObjectCommand } from '@aws-sdk/client-s3'
 import { ListObjectsV2Command } from '@aws-sdk/client-s3'
+import { HeadObjectCommand } from '@aws-sdk/client-s3'
 
 const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE || '10485760') // 10MB
 const ALLOWED_TYPES = (process.env.ALLOWED_FILE_TYPES || 'jpg,jpeg,png,gif,webp,svg,pdf,doc,docx,txt,md,zip,mp4,mp3,wav').split(',')
@@ -20,6 +21,7 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file') as File
     const chapterId = formData.get('chapterId') as string
     const uploadType = formData.get('uploadType') as 'chapter' | 'global' // 'chapter' or 'global'
+    const overwrite = formData.get('overwrite') === 'true'
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
@@ -74,17 +76,35 @@ export async function POST(request: NextRequest) {
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
 
+    const s3Key = `${s3KeyPrefix}/${file.name}`
+
+    // Check if file already exists if not overwriting
+    if (!overwrite) {
+      try {
+        await s3.send(new HeadObjectCommand({
+          Bucket: bucket,
+          Key: s3Key
+        }))
+        // File exists and we're not overwriting
+        return NextResponse.json({ 
+          error: 'File already exists. Use overwrite option or rename the file.' 
+        }, { status: 409 })
+      } catch {
+        // File doesn't exist, which is what we want for new uploads
+      }
+    }
+
     // Upload to S3/Cellar
     await s3.send(new PutObjectCommand({
       Bucket: bucket,
-      Key: `${s3KeyPrefix}/${file.name}`, // Use original filename as S3 key
+      Key: s3Key, // Use original filename as S3 key
       Body: buffer,
       ContentType: file.type,
       ACL: 'public-read',
     }))
 
     // Construct S3 URL (Cellar public URL format)
-    const s3Url = `https://${bucket}.${process.env.CELLAR_ADDON_HOST}/${s3KeyPrefix}/${file.name}`
+    const s3Url = `https://${bucket}.${process.env.CELLAR_ADDON_HOST}/${s3Key}`
 
     // Return file info
     const fileInfo = {

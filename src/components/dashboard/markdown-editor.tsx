@@ -16,6 +16,7 @@ interface MarkdownEditorProps {
   isReadOnly?: boolean
   fileList?: Array<{filename: string, url: string, relativePath: string}>
   fileListLoading?: boolean
+  onFileUpload?: () => void
 }
 
 // Create a client-only version using dynamic import

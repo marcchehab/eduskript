@@ -17,6 +17,7 @@ interface CodeMirrorEditorProps {
   isReadOnly?: boolean
   fileList?: Array<{filename: string, url: string, relativePath: string}>
   fileListLoading?: boolean
+  onFileUpload?: () => void
 }
 
 const CodeMirrorEditor = function CodeMirrorEditor({
@@ -27,7 +28,8 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   domain,
   isReadOnly = false,
   fileList,
-  fileListLoading = false
+  fileListLoading = false,
+  onFileUpload
 }: CodeMirrorEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null)
   const editorViewRef = useRef<EditorView | null>(null)
@@ -109,6 +111,10 @@ const CodeMirrorEditor = function CodeMirrorEditor({
           if (response.ok) {
             const uploadedFile = await response.json()
             insertFileAtPosition(uploadedFile, dropPosition)
+            // Refresh file list after successful upload
+            if (onFileUpload) {
+              onFileUpload()
+            }
           }
         }
       } catch (error) {
@@ -429,10 +435,9 @@ const CodeMirrorEditor = function CodeMirrorEditor({
         {/* Preview */}
         {showPreview && (
           <div className="w-1/2 overflow-auto bg-card">
-            <div
-              className="p-4 prose-theme"
-              dangerouslySetInnerHTML={{ __html: previewContent }}
-            />
+            <div className="p-4">
+              <div dangerouslySetInnerHTML={{ __html: previewContent }} />
+            </div>
           </div>
         )}
       </div>

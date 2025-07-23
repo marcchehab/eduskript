@@ -125,6 +125,18 @@ export function PageEditor({ script, chapter, page }: PageEditorProps) {
     setHasUnsavedChanges(true)
   }
 
+  const handleFileRenamed = (oldFilename: string, newFilename: string) => {
+    // Update the current editor content to reflect the renamed file
+    const updatedContent = content
+      .replace(new RegExp(`!\\[([^\\]]*)\\]\\(${oldFilename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)`, 'g'), `![$1](${newFilename})`)
+      .replace(new RegExp(`\\[([^\\]]*)\\]\\(${oldFilename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)`, 'g'), `[$1](${newFilename})`)
+    
+    if (updatedContent !== content) {
+      setContent(updatedContent)
+      setHasUnsavedChanges(true)
+    }
+  }
+
   const handlePageUpdated = async () => {
     try {
       // Fetch the updated page data to check if slug changed
@@ -364,6 +376,7 @@ export function PageEditor({ script, chapter, page }: PageEditorProps) {
             refreshFileList()
           }}
           onUploadComplete={refreshFileList}
+          onFileRenamed={handleFileRenamed}
         />
       </CollapsibleDrawer>
 
@@ -385,6 +398,7 @@ export function PageEditor({ script, chapter, page }: PageEditorProps) {
             domain={(session?.user as { subdomain?: string })?.subdomain || undefined}
             fileList={fileList}
             fileListLoading={fileListLoading}
+            onFileUpload={refreshFileList}
           />
         </CardContent>
       </Card>
