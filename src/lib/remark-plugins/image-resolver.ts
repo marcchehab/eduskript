@@ -1,135 +1,125 @@
 import { visit } from 'unist-util-visit'
 import path from 'path'
-import { searchFileInSubdirectories, getChapterUploadDir, getGlobalUploadDir, filePathToUrl } from './utils'
+
+interface ImageNode {
+  type: 'image'
+  url: string
+}
+
+interface FileInfo {
+  filename: string
+  url: string
+  relativePath: string
+}
 
 interface ImageResolverOptions {
   domain?: string
   chapterId?: string
+  isClient?: boolean
+  fileList?: FileInfo[] // Pre-fetched file list for client-side resolution
 }
 
 /**
- * Remark plugin to resolve image paths and convert wikilinks to proper markdown images
+ * Remark plugin to resolve image paths using file list or filesystem
+ * Professional solution that works on both client and server
  */
 export function remarkImageResolver(options: ImageResolverOptions = {}) {
-  return function transformer(tree: any) {
-    const { domain, chapterId } = options
+  return function transformer(tree: unknown) {
+    const { domain, chapterId, isClient = false, fileList } = options
 
-    // First pass: Convert wikilinks to proper markdown images
-    visit(tree, 'text', (node: any, index: number | undefined, parent: any) => {
-      if (!node.value || !parent || index === undefined) return
-
-      // Match wikilink patterns like [[image.png]] or [[alt text|image.png]]
-      const wikiLinkRegex = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g
-      let match
-      const replacements: Array<{ start: number; end: number; replacement: any }> = []
-
-      while ((match = wikiLinkRegex.exec(node.value)) !== null) {
-        const [fullMatch, linkContent, altText] = match
-        const start = match.index
-        const end = start + fullMatch.length
-
-        // If there's altText, the first part is alt and second is filename
-        // If no altText, treat the whole thing as filename
-        let filename: string
-        let alt: string
-
-        if (altText) {
-          alt = linkContent
-          filename = altText
-        } else {
-          filename = linkContent
-          alt = ''
-        }
-
-        // Check if this looks like an image file
-        const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.bmp']
-        const isImage = imageExtensions.some(ext => 
-          filename.toLowerCase().endsWith(ext)
-        )
-
-        if (isImage) {
-          replacements.push({
-            start,
-            end,
-            replacement: {
-              type: 'image',
-              url: filename, // Will be resolved in the next pass
-              alt: alt || path.parse(filename).name
-            }
-          })
-        }
-      }
-
-      // Apply replacements in reverse order to maintain correct indices
-      if (replacements.length > 0) {
-        const children = parent.children as any[]
-        const newNodes: any[] = []
-        let lastEnd = 0
-
-        // Sort replacements by start position
-        replacements.sort((a, b) => a.start - b.start)
-
-        for (const replacement of replacements) {
-          // Add text before this replacement
-          if (replacement.start > lastEnd) {
-            const beforeText = node.value.slice(lastEnd, replacement.start)
-            if (beforeText) {
-              newNodes.push({
-                type: 'text',
-                value: beforeText
-              })
-            }
-          }
-
-          // Add the image node
-          newNodes.push(replacement.replacement)
-          lastEnd = replacement.end
-        }
-
-        // Add remaining text after last replacement
-        if (lastEnd < node.value.length) {
-          const afterText = node.value.slice(lastEnd)
-          if (afterText) {
-            newNodes.push({
-              type: 'text',
-              value: afterText
-            })
-          }
-        }
-
-        // Replace the text node with the new nodes
-        children.splice(index, 1, ...newNodes)
-      }
+    console.log('🔍 Image resolver running:', { 
+      domain, 
+      chapterId, 
+      isClient, 
+      hasFileList: !!fileList,
+      fileCount: fileList?.length || 0,
+      hasWindow: typeof window !== 'undefined' 
     })
 
-    // Second pass: Resolve image paths
-    visit(tree, 'image', (node: any) => {
+    // Resolve image paths
+    visit(tree as Parameters<typeof visit>[0], 'image', (node: ImageNode) => {
       const { url } = node
+      console.log('📸 Processing image:', url)
 
       // Skip if already a full URL or absolute path
       if (url.startsWith('http') || url.startsWith('https') || url.startsWith('/')) {
+        console.log('⏩ Skipping absolute URL:', url)
         return
       }
 
-      // Try to resolve the image path
-      const resolvedPath = resolveImagePath(url, domain, chapterId)
+      let resolvedPath: string | null = null
+
+      // Try client-side resolution first (using file list)
+      if (fileList && fileList.length > 0) {
+        resolvedPath = resolveFromFileList(url, fileList)
+        console.log('📋 File list resolution for', url, ':', resolvedPath)
+      }
+
+      // Fallback to server-side resolution if no file list or not found
+      // Allow filesystem fallback when running server-side, regardless of isClient flag
+      if (!resolvedPath && typeof window === 'undefined') {
+        console.log('🖥️ Falling back to server-side resolution')
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const { searchFileInSubdirectories, getChapterUploadDir, getGlobalUploadDir, filePathToUrl } = require('./utils')
+          resolvedPath = resolveFromFilesystem(url, domain, chapterId, { searchFileInSubdirectories, getChapterUploadDir, getGlobalUploadDir, filePathToUrl })
+          console.log('💾 Filesystem resolution for', url, ':', resolvedPath)
+        } catch (error) {
+          console.error('❌ Error in filesystem resolution:', error)
+        }
+      }
+
+      // Apply resolved path
       if (resolvedPath) {
+        console.log('✅ Resolved', url, '→', resolvedPath)
         node.url = resolvedPath
       } else {
-        console.warn(`Image not found: ${url} (domain: ${domain}, chapter: ${chapterId})`)
-        // Keep the original URL, it might be relative to the current directory
+        console.warn(`⚠️ Image not found: ${url}`)
+        // Keep the original URL - it might work as a relative path
       }
     })
   }
 }
 
 /**
- * Resolve image path by searching in chapter and global upload directories
+ * Resolve image path from pre-fetched file list (client-side)
  */
-function resolveImagePath(filename: string, domain?: string, chapterId?: string): string | null {
-  if (!domain) {
+function resolveFromFileList(filename: string, fileList: FileInfo[]): string | null {
+  // Direct filename match
+  const directMatch = fileList.find(file => file.filename === filename)
+  if (directMatch) {
+    return directMatch.url
+  }
+
+  // Try to find by basename (in case of path variations)
+  const basename = path.basename(filename)
+  const basenameMatch = fileList.find(file => path.basename(file.filename) === basename)
+  if (basenameMatch) {
+    return basenameMatch.url
+  }
+
+  return null
+}
+
+/**
+ * Resolve image path using filesystem operations (server-side)
+ */
+function resolveFromFilesystem(
+  filename: string, 
+  domain?: string, 
+  chapterId?: string,
+  utils?: {
+    searchFileInSubdirectories: (dir: string, filename: string) => string | null
+    getChapterUploadDir: (domain: string, chapterId: string) => string
+    getGlobalUploadDir: (domain: string) => string
+    filePathToUrl: (path: string) => string
+  }
+): string | null {
+  if (!domain || !utils) {
     return null
   }
+
+  const { searchFileInSubdirectories, getChapterUploadDir, getGlobalUploadDir, filePathToUrl } = utils
 
   // Search in chapter-specific directory first (if chapter is specified)
   if (chapterId) {

@@ -121,7 +121,7 @@ export default function CodeMirrorEditor({
         if (response.ok) {
           const data = await response.json()
           // Transform API response to match our FileInfo interface
-          const transformedFiles = data.files.map((file: any) => ({
+          const transformedFiles = data.files.map((file: { filename: string; url: string }) => ({
             filename: file.filename,
             url: file.url,
             relativePath: file.url // url is already the relative path we need

@@ -1,0 +1,11 @@
+{
+  "deploy": {
+    "env": "production"
+  },
+  "hooks": {
+    "postDeploy": "./clevercloud/post_deploy.sh"
+  },
+  "build": {
+    "type": "nodejs"
+  }
+}

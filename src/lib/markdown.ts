@@ -9,7 +9,7 @@ import rehypeStringify from 'rehype-stringify'
 import matter from 'gray-matter'
 import rehypeSlug from 'rehype-slug'
 import rehypeAutolinkHeadings from 'rehype-autolink-headings'
-import { remarkImageResolver } from './remark-plugins/image-resolver-safe'
+import { remarkImageResolver } from './remark-plugins/image-resolver'
 
 export interface ProcessedMarkdown {
   content: string

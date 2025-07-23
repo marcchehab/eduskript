@@ -8,7 +8,7 @@ import rehypeKatex from 'rehype-katex'
 import rehypeHighlight from 'rehype-highlight'
 import rehypeStringify from 'rehype-stringify'
 import { useEffect, useState } from 'react'
-import { remarkImageResolver } from '@/lib/remark-plugins/image-resolver-safe'
+import { remarkImageResolver } from '@/lib/remark-plugins/image-resolver'
 
 interface MarkdownRendererProps {
   content: string
