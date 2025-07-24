@@ -11,31 +11,54 @@ export function CustomDomainHandler({ children }: CustomDomainHandlerProps) {
   const [isChecking, setIsChecking] = useState(true)
   const router = useRouter()
   const pathname = usePathname()
+  
+  // Debug mode - can be enabled via URL parameter
+  const isDebugMode = typeof window !== 'undefined' && 
+    new URLSearchParams(window.location.search).has('debug_custom_domain')
 
   useEffect(() => {
     const checkCustomDomain = async () => {
       try {
         const hostname = window.location.hostname
         
-        // Skip check for localhost and known main domains
-        if (hostname === 'localhost' || 
+        // Skip check for localhost and known main domains (unless in debug mode)
+        if (!isDebugMode && (hostname === 'localhost' || 
             hostname === 'eduskript.org' || 
             hostname === 'www.eduskript.org' ||
-            hostname.endsWith('.localhost')) {
+            hostname.endsWith('.localhost'))) {
           setIsChecking(false)
           return
         }
+        
+                 // In debug mode, simulate a custom domain
+         if (isDebugMode && hostname === 'localhost') {
+           const mockData = { isCustomDomain: true, subdomain: 'subdomaintry' }
+           
+           const subdomainPrefix = `/${mockData.subdomain}`
+           
+           if (!pathname.startsWith(subdomainPrefix)) {
+             const expectedPath = `${subdomainPrefix}${pathname}`
+             router.replace(expectedPath)
+             return
+           }
+           
+           setIsChecking(false)
+           return
+         }
 
         // Check if this hostname is a custom domain
         const response = await fetch(`/api/public/resolve-domain?domain=${encodeURIComponent(hostname)}`)
         const data = await response.json()
 
         if (data.isCustomDomain && data.subdomain) {
-          // If we're not already on the correct path, redirect
-          const expectedPath = `/${data.subdomain}${pathname}`
-          if (window.location.pathname !== expectedPath) {
-            router.replace(expectedPath)
-            return
+          // Check if we're already on the correct subdomain path
+          const subdomainPrefix = `/${data.subdomain}`
+          
+          // If we're not already under the subdomain path, redirect
+          if (!pathname.startsWith(subdomainPrefix)) {
+            const expectedPath = `${subdomainPrefix}${pathname}`
+                         router.replace(expectedPath)
+             return
           }
         }
 

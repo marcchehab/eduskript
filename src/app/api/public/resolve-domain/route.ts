@@ -10,8 +10,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Domain parameter required' }, { status: 400 })
     }
 
-    // Look up the custom domain
-    const customDomain = await prisma.customDomain.findUnique({
+    // Look up the custom domain (try both with and without www)
+    let customDomain = await prisma.customDomain.findUnique({
       where: { 
         domain: hostname,
         isActive: true 
@@ -22,6 +22,22 @@ export async function GET(request: NextRequest) {
         }
       }
     })
+
+    // If not found and hostname starts with www, try without www
+    if (!customDomain && hostname.startsWith('www.')) {
+      const domainWithoutWww = hostname.substring(4)
+      customDomain = await prisma.customDomain.findUnique({
+        where: { 
+          domain: domainWithoutWww,
+          isActive: true 
+        },
+        include: {
+          user: {
+            select: { subdomain: true }
+          }
+        }
+      })
+    }
 
     if (customDomain && customDomain.user.subdomain) {
       return NextResponse.json({

@@ -3,9 +3,9 @@ import type { Metadata } from 'next'
 import { prisma } from '@/lib/prisma'
 import { PublicSiteLayout } from '@/components/public/layout'
 
-// Enable ISR with on-demand regeneration
-export const revalidate = 60 // Revalidate every 60 seconds
-export const dynamic = 'force-static' // Force static generation
+// Force dynamic rendering since we need database access
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 export const dynamicParams = true // Allow new params to be generated on-demand
 
 interface DomainIndexProps {

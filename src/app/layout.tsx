@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from '@/components/providers'
+import { CustomDomainHandler } from '@/components/CustomDomainHandler'
 
 const inter = Inter({
   subsets: ["latin"],
@@ -28,7 +29,9 @@ export default function RootLayout({
       </head>
       <body className={`${inter.className} antialiased`} suppressHydrationWarning>
         <Providers>
-          {children}
+          <CustomDomainHandler>
+            {children}
+          </CustomDomainHandler>
         </Providers>
       </body>
     </html>
