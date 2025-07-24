@@ -1,8 +1,0 @@
-{
-  "deploy": {
-    "CC_PRE_RUN_HOOK": "./clevercloud/pre_run.sh"
-  },
-  "build": {
-    "type": "nodejs"
-  }
-}
