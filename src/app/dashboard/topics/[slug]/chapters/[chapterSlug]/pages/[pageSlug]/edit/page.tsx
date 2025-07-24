@@ -11,10 +11,14 @@ interface PageParams {
 }
 
 async function getPageData(slug: string, chapterSlug: string, pageSlug: string, userId: string) {
-  const script = await prisma.script.findFirst({
+  const script = await prisma.topic.findFirst({
     where: { 
-      slug, 
-      authorId: userId 
+      slug,
+      authors: {
+        some: {
+          userId: userId
+        }
+      }
     }
   })
 
@@ -23,7 +27,7 @@ async function getPageData(slug: string, chapterSlug: string, pageSlug: string, 
   const chapter = await prisma.chapter.findFirst({
     where: { 
       slug: chapterSlug, 
-      scriptId: script.id 
+      topicId: script.id 
     }
   })
 

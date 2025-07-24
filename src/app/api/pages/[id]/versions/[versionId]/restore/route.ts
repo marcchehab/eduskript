@@ -36,17 +36,17 @@ export async function POST(
     const page = await prisma.page.findFirst({
       where: {
         id,
-        authorId: session.user.id
+        authors: {
+          some: {
+            userId: session.user.id
+          }
+        }
       },
       include: {
         chapter: {
           include: {
-            script: true
+            topic: true
           }
-        },
-        versions: {
-          orderBy: { version: 'desc' },
-          take: 1
         }
       }
     })
@@ -58,8 +58,13 @@ export async function POST(
       )
     }
 
-    const currentVersion = page.versions[0]
-    const newVersionNumber = (currentVersion?.version || 0) + 1
+    // Get the latest version number
+    const latestVersion = await prisma.pageVersion.findFirst({
+      where: { pageId: id },
+      orderBy: { version: 'desc' },
+      select: { version: true }
+    })
+    const newVersionNumber = (latestVersion?.version || 0) + 1
 
     // Update the page content
     const updatedPage = await prisma.page.update({
@@ -87,13 +92,13 @@ export async function POST(
       select: { subdomain: true }
     })
 
-    if (user?.subdomain && page.chapter.script) {
+    if (user?.subdomain && page.chapter.topic) {
       // Revalidate all relevant paths
-      revalidatePath(`/${user.subdomain}/${page.chapter.script.slug}/${page.chapter.slug}/${page.slug}`)
-      revalidatePath(`/${user.subdomain}/${page.chapter.script.slug}/${page.chapter.slug}`)
-      revalidatePath(`/${user.subdomain}/${page.chapter.script.slug}`)
+      revalidatePath(`/${user.subdomain}/${page.chapter.topic.slug}/${page.chapter.slug}/${page.slug}`)
+      revalidatePath(`/${user.subdomain}/${page.chapter.topic.slug}/${page.chapter.slug}`)
+      revalidatePath(`/${user.subdomain}/${page.chapter.topic.slug}`)
       revalidatePath(`/${user.subdomain}`)
-      revalidatePath('/dashboard/scripts')
+      revalidatePath('/dashboard/topics')
     }
 
     return NextResponse.json({ 

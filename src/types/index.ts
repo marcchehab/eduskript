@@ -1,78 +1,18 @@
-// Core database types (will be replaced with Prisma types after generation)
-export interface User {
-  id: string
-  name?: string | null
-  email: string
-  emailVerified?: Date | null
-  image?: string | null
-  hashedPassword?: string | null
-  subdomain?: string | null
-  bio?: string | null
-  title?: string | null
-  createdAt: Date
-  updatedAt: Date
-}
-
-export interface Script {
-  id: string
-  title: string
-  description?: string | null
-  slug: string
-  isPublished: boolean
-  authorId: string
-  createdAt: Date
-  updatedAt: Date
-}
-
-export interface Chapter {
-  id: string
-  title: string
-  description?: string | null
-  slug: string
-  order: number
-  isPublished: boolean
-  authorId: string
-  scriptId: string
-  createdAt: Date
-  updatedAt: Date
-}
-
-export interface Page {
-  id: string
-  title: string
-  slug: string
-  content: string
-  order: number
-  isPublished: boolean
-  authorId: string
-  chapterId: string
-  createdAt: Date
-  updatedAt: Date
-}
-
-export interface PageVersion {
-  id: string
-  content: string
-  version: number
-  changeLog?: string | null
-  authorId: string
-  pageId: string
-  createdAt: Date
-}
+import { User, Topic, Chapter, Page, PageVersion } from '@prisma/client'
 
 // Extended types with relations
-export type UserWithScripts = User & {
-  scripts: Script[]
+export type UserWithTopics = User & {
+  topics: Topic[]
 }
 
-export type ScriptWithChapters = Script & {
+export type TopicWithChapters = Topic & {
   chapters: ChapterWithPages[]
   author: User
 }
 
 export type ChapterWithPages = Chapter & {
   pages: PageWithVersions[]
-  script: Script
+  topic: Topic
 }
 
 export type PageWithVersions = Page & {
@@ -80,15 +20,15 @@ export type PageWithVersions = Page & {
   chapter: Chapter
 }
 
-export type PageWithChapterAndScript = Page & {
+export type PageWithChapterAndTopic = Page & {
   chapter: Chapter & {
-    script: Script
+    topic: Topic
   }
   versions: PageVersion[]
 }
 
 // Form types
-export interface CreateScriptData {
+export interface CreateTopicData {
   title: string
   description?: string
   slug: string
@@ -99,7 +39,7 @@ export interface CreateChapterData {
   description?: string
   slug: string
   order: number
-  scriptId: string
+  topicId: string
 }
 
 export interface CreatePageData {
@@ -124,7 +64,7 @@ export interface NavItem {
   description?: string
 }
 
-export interface SidebarScript {
+export interface SidebarTopic {
   id: string
   title: string
   slug: string
@@ -161,7 +101,7 @@ export interface ApiResponse<T = unknown> {
 
 // Search types
 export interface SearchResult {
-  type: 'script' | 'chapter' | 'page'
+  type: 'topic' | 'chapter' | 'page'
   id: string
   title: string
   slug: string

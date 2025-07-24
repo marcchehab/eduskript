@@ -19,7 +19,11 @@ export async function GET(
     const page = await prisma.page.findFirst({
       where: {
         id,
-        authorId: session.user.id
+        authors: {
+          some: {
+            userId: session.user.id
+          }
+        }
       }
     })
 

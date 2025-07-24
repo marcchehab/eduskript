@@ -145,7 +145,7 @@ export function PageEditor({ script, chapter, page }: PageEditorProps) {
         const updatedPage = await response.json()
         if (updatedPage.slug !== page.slug) {
           // Slug changed, redirect to new URL
-          const newUrl = `/dashboard/scripts/${script.slug}/chapters/${chapter.slug}/pages/${updatedPage.slug}/edit`
+          const newUrl = `/dashboard/topics/${script.slug}/chapters/${chapter.slug}/pages/${updatedPage.slug}/edit`
           router.push(newUrl)
         } else {
           // Just reload the page data
@@ -234,7 +234,7 @@ export function PageEditor({ script, chapter, page }: PageEditorProps) {
         loadVersions()
         // Update URL if slug changed
         if (slug !== originalSlug) {
-          const newUrl = `/dashboard/scripts/${script.slug}/chapters/${chapter.slug}/pages/${slug}/edit`
+          const newUrl = `/dashboard/topics/${script.slug}/chapters/${chapter.slug}/pages/${slug}/edit`
           router.push(newUrl)
           return // Don't continue with other updates since we're navigating
         }
@@ -307,7 +307,7 @@ export function PageEditor({ script, chapter, page }: PageEditorProps) {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Link href={`/dashboard/scripts/${script.slug}`}>
+        <Link href={`/dashboard/topics/${script.slug}`}>
           <Button variant="ghost" size="sm">
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to Script

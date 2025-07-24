@@ -94,7 +94,7 @@ function SortablePageItem({ page, index, scriptSlug, chapterSlug, onPageUpdated 
           </div>
         </div>
         <div>
-          <Link href={`/dashboard/scripts/${scriptSlug}/chapters/${chapterSlug}/pages/${page.slug}/edit`}>
+          <Link href={`/dashboard/topics/${scriptSlug}/chapters/${chapterSlug}/pages/${page.slug}/edit`}>
             <h4 className="font-medium text-foreground text-sm hover:text-primary cursor-pointer transition-colors">
               {page.title}
             </h4>
@@ -121,7 +121,7 @@ function SortablePageItem({ page, index, scriptSlug, chapterSlug, onPageUpdated 
           onItemUpdated={onPageUpdated || (() => {})}
         />
         <Button variant="outline" size="sm" asChild>
-          <Link href={`/dashboard/scripts/${scriptSlug}/chapters/${chapterSlug}/pages/${page.slug}/edit`}>
+          <Link href={`/dashboard/topics/${scriptSlug}/chapters/${chapterSlug}/pages/${page.slug}/edit`}>
             Edit Content
           </Link>
         </Button>
@@ -170,7 +170,7 @@ function StaticPageItem({ page, index, scriptSlug, chapterSlug, onPageUpdated }:
           </div>
         </div>
         <div>
-          <Link href={`/dashboard/scripts/${scriptSlug}/chapters/${chapterSlug}/pages/${page.slug}/edit`}>
+          <Link href={`/dashboard/topics/${scriptSlug}/chapters/${chapterSlug}/pages/${page.slug}/edit`}>
             <h4 className="font-medium text-foreground text-sm hover:text-primary cursor-pointer transition-colors">
               {page.title}
             </h4>
@@ -197,7 +197,7 @@ function StaticPageItem({ page, index, scriptSlug, chapterSlug, onPageUpdated }:
           onItemUpdated={onPageUpdated || (() => {})}
         />
         <Button variant="outline" size="sm" asChild>
-          <Link href={`/dashboard/scripts/${scriptSlug}/chapters/${chapterSlug}/pages/${page.slug}/edit`}>
+          <Link href={`/dashboard/topics/${scriptSlug}/chapters/${chapterSlug}/pages/${page.slug}/edit`}>
             Edit Content
           </Link>
         </Button>

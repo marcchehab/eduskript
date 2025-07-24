@@ -29,16 +29,20 @@ export async function PATCH(
       )
     }
 
-    // Check if page exists and user has access
+    // Check if user is an author of this page
     const existingPage = await prisma.page.findFirst({
       where: {
         id,
-        authorId: session.user.id
+        authors: {
+          some: {
+            userId: session.user.id
+          }
+        }
       },
       include: {
         chapter: {
           include: {
-            script: true
+            topic: true
           }
         },
         versions: {
@@ -120,19 +124,19 @@ export async function PATCH(
 
     if (user?.subdomain) {
       // Revalidate the specific page
-      revalidatePath(`/${user.subdomain}/${existingPage.chapter.script?.slug}/${existingPage.chapter.slug}/${updatedPage.slug}`)
+      revalidatePath(`/${user.subdomain}/${existingPage.chapter.topic?.slug}/${existingPage.chapter.slug}/${updatedPage.slug}`)
       
       // Revalidate the chapter page (in case it lists pages)
-      revalidatePath(`/${user.subdomain}/${existingPage.chapter.script?.slug}/${existingPage.chapter.slug}`)
+      revalidatePath(`/${user.subdomain}/${existingPage.chapter.topic?.slug}/${existingPage.chapter.slug}`)
       
-      // Revalidate the script page (in case it lists chapters/pages)
-      revalidatePath(`/${user.subdomain}/${existingPage.chapter.script?.slug}`)
+      // Revalidate the topic page (in case it lists chapters/pages)
+      revalidatePath(`/${user.subdomain}/${existingPage.chapter.topic?.slug}`)
       
-      // Revalidate the home page (in case it lists scripts)
+      // Revalidate the home page (in case it lists topics)
       revalidatePath(`/${user.subdomain}`)
       
       // Revalidate dashboard pages
-      revalidatePath('/dashboard/scripts')
+      revalidatePath('/dashboard')
     }
 
     return NextResponse.json(updatedPage)
@@ -161,7 +165,11 @@ export async function DELETE(
     const existingPage = await prisma.page.findFirst({
       where: {
         id,
-        authorId: session.user.id
+        authors: {
+          some: {
+            userId: session.user.id
+          }
+        }
       }
     })
 
@@ -177,8 +185,8 @@ export async function DELETE(
       where: { id }
     })
 
-    // Revalidate the scripts pages
-    revalidatePath('/dashboard/scripts')
+    // Revalidate the topics pages
+    revalidatePath('/dashboard/topics')
 
     return NextResponse.json({ success: true })
   } catch (error) {

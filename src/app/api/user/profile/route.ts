@@ -12,6 +12,7 @@ const updateProfileSchema = z.object({
     .max(50, 'Subdomain must be less than 50 characters')
     .regex(/^[a-z0-9-]+$/, 'Subdomain can only contain lowercase letters, numbers, and hyphens')
     .refine(val => !val.startsWith('-') && !val.endsWith('-'), 'Subdomain cannot start or end with a hyphen'),
+  webpageDescription: z.string().optional(), // New field for webpage description
   title: z.string().optional(),
   bio: z.string().optional()
 })
@@ -45,6 +46,7 @@ export async function PATCH(request: NextRequest) {
         data: {
           name: validatedData.name,
           subdomain: validatedData.subdomain,
+          webpageDescription: validatedData.webpageDescription || null,
           title: validatedData.title || null,
           bio: validatedData.bio || null
         },
@@ -53,6 +55,7 @@ export async function PATCH(request: NextRequest) {
           name: true,
           email: true,
           subdomain: true,
+          webpageDescription: true,
           title: true,
           bio: true
         }

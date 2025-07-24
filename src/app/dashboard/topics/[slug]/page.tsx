@@ -2,7 +2,7 @@ import { getServerSession } from 'next-auth'
 import { notFound } from 'next/navigation'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { ScriptEditor } from '@/components/dashboard/script-editor'
+import { ScriptEditor } from '@/components/dashboard/topic-editor'
 
 // Ensure the page is dynamic and not cached
 export const dynamic = 'force-dynamic'
@@ -22,11 +22,13 @@ export default async function ScriptPage({ params }: ScriptPageProps) {
     return null
   }
 
-  const script = await prisma.script.findUnique({
+  const script = await prisma.topic.findFirst({
     where: {
-      authorId_slug: {
-        authorId: session.user.id,
-        slug: slug
+      slug: slug,
+      authors: {
+        some: {
+          userId: session.user.id
+        }
       }
     },
     include: {

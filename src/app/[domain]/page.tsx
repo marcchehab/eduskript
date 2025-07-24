@@ -69,21 +69,33 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
         subdomain: domain
       },
       include: {
-        scripts: {
-          where: { isPublished: true },
-          include: {
-            chapters: {
-              where: { isPublished: true },
-              include: {
-                pages: {
-                  where: { isPublished: true },
-                  orderBy: { order: 'asc' }
-                }
-              },
-              orderBy: { order: 'asc' }
+        topicAuthors: {
+          where: {
+            topic: {
+              isPublished: true
             }
           },
-          orderBy: { createdAt: 'asc' }
+          include: {
+            topic: {
+              include: {
+                chapters: {
+                  where: { isPublished: true },
+                  include: {
+                    pages: {
+                      where: { isPublished: true },
+                      orderBy: { order: 'asc' }
+                    }
+                  },
+                  orderBy: { order: 'asc' }
+                }
+              }
+            }
+          },
+          orderBy: {
+            topic: {
+              createdAt: 'asc'
+            }
+          }
         }
       }
     })
@@ -100,7 +112,7 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
     }
 
     return (
-      <PublicSiteLayout teacher={teacherData} siteStructure={teacher.scripts}>
+              <PublicSiteLayout teacher={teacherData} siteStructure={teacher.topicAuthors.map(ta => ta.topic)}>
         <div className="max-w-4xl mx-auto">
           <div className="text-center py-12">
             <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-4">
@@ -114,25 +126,25 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-12">
-              {teacher.scripts.map((script) => (
-                <div key={script.id} className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
+              {teacher.topicAuthors.map((topicAuthor) => (
+                <div key={topicAuthor.topic.id} className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
                   <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-3">
-                    {script.title}
+                    {topicAuthor.topic.title}
                   </h3>
-                  {script.description && (
+                  {topicAuthor.topic.description && (
                     <p className="text-gray-600 dark:text-gray-400 mb-4">
-                      {script.description}
+                      {topicAuthor.topic.description}
                     </p>
                   )}
                   <div className="text-sm text-gray-500 dark:text-gray-500">
-                    {script.chapters.length} chapters • {' '}
-                    {script.chapters.reduce((acc: number, ch) => acc + ch.pages.length, 0)} pages
+                    {topicAuthor.topic.chapters.length} chapters • {' '}
+                    {topicAuthor.topic.chapters.reduce((acc: number, ch: { pages: unknown[] }) => acc + ch.pages.length, 0)} pages
                   </div>
                 </div>
               ))}
             </div>
 
-            {teacher.scripts.length === 0 && (
+            {teacher.topicAuthors.length === 0 && (
               <div className="text-center py-12">
                 <p className="text-gray-500 dark:text-gray-400">
                   No published content available yet.

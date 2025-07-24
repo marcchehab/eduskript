@@ -9,7 +9,7 @@ import { PublicSiteLayout } from '@/components/public/layout'
 export const revalidate = 0 // No caching for previews to show latest changes
 export const dynamic = 'force-dynamic' // Force dynamic rendering for auth checks
 
-interface ScriptPreviewProps {
+interface TopicPreviewProps {
   params: Promise<{
     domain: string
     scriptSlug: string
@@ -17,7 +17,7 @@ interface ScriptPreviewProps {
 }
 
 // Generate metadata for SEO
-export async function generateMetadata({ params }: ScriptPreviewProps): Promise<Metadata> {
+export async function generateMetadata({ params }: TopicPreviewProps): Promise<Metadata> {
   const { domain, scriptSlug } = await params
   
   try {
@@ -34,11 +34,13 @@ export async function generateMetadata({ params }: ScriptPreviewProps): Promise<
       }
     }
 
-    const script = await prisma.script.findUnique({
+    const script = await prisma.topic.findFirst({
       where: {
-        authorId_slug: {
-          authorId: teacher.id,
-          slug: scriptSlug
+        slug: scriptSlug,
+        authors: {
+          some: {
+            userId: teacher.id
+          }
         }
       },
       select: { title: true, description: true }
@@ -74,35 +76,39 @@ interface Teacher {
   subdomain: string | null
 }
 
-interface Script {
+interface TopicPage {
+  id: string
+  title: string
+  slug: string
+  order: number
+  isPublished: boolean
+}
+
+interface TopicChapter {
+  id: string
+  title: string
+  slug: string
+  order: number
+  isPublished: boolean
+  pages: TopicPage[]
+}
+
+interface TopicWithChapters {
   id: string
   title: string
   slug: string
   description: string | null
   isPublished: boolean
-  chapters: Array<{
-    id: string
-    title: string
-    slug: string
-    order: number
-    isPublished: boolean
-    pages: Array<{
-      id: string
-      title: string
-      slug: string
-      order: number
-      isPublished: boolean
-    }>
-  }>
+  chapters: TopicChapter[]
 }
 
-export default async function ScriptPreviewPage({ params }: ScriptPreviewProps) {
+export default async function TopicPreviewPage({ params }: TopicPreviewProps) {
   const { domain, scriptSlug } = await params
   const session = await getServerSession(authOptions)
 
   // Declare variables outside try block so they can be used in redirect logic
   let teacher: Teacher | null = null
-  let script: Script | null = null
+  let topic: TopicWithChapters | null = null
   let isAuthor = false
 
   try {
@@ -123,12 +129,14 @@ export default async function ScriptPreviewPage({ params }: ScriptPreviewProps) 
       notFound()
     }
 
-    // Find the script
-    script = await prisma.script.findUnique({
+    // Find the topic
+    topic = await prisma.topic.findFirst({
       where: {
-        authorId_slug: {
-          authorId: teacher.id,
-          slug: scriptSlug
+        slug: scriptSlug,
+        authors: {
+          some: {
+            userId: teacher.id
+          }
         }
       },
       include: {
@@ -150,14 +158,14 @@ export default async function ScriptPreviewPage({ params }: ScriptPreviewProps) 
       }
     })
 
-    if (!script) {
+    if (!topic) {
       notFound()
     }
 
-    // Authorization check: Only the author can preview unpublished scripts
+    // Authorization check: Only the author can preview unpublished topics
     isAuthor = session?.user?.email === teacher.email
     
-    if (!script.isPublished && !isAuthor) {
+    if (!topic.isPublished && !isAuthor) {
       // If script is not published and user is not the author, show access denied
       return (
         <div className="min-h-screen flex items-center justify-center bg-background">
@@ -166,7 +174,7 @@ export default async function ScriptPreviewPage({ params }: ScriptPreviewProps) 
               Access Denied
             </h1>
             <p className="text-muted-foreground mb-6">
-              This script is not published yet. Only the author can preview unpublished content.
+              This topic is not published yet. Only the author can preview unpublished content.
             </p>
             <button 
               onClick={() => window.history.back()}
@@ -180,16 +188,16 @@ export default async function ScriptPreviewPage({ params }: ScriptPreviewProps) 
     }
 
   } catch (error) {
-    console.error('Error loading script preview:', error)
+    console.error('Error loading topic preview:', error)
     notFound()
   }
 
   // Find the first available page to redirect to (outside try/catch to allow redirect to work)
-  const firstChapter = script.chapters.find(chapter => 
+  const firstChapter = topic.chapters.find((chapter: TopicChapter) => 
     isAuthor || chapter.isPublished
   )
   
-  const firstPage = firstChapter?.pages.find(page => 
+  const firstPage = firstChapter?.pages.find((page: TopicPage) => 
     isAuthor || page.isPublished
   )
 
@@ -201,16 +209,16 @@ export default async function ScriptPreviewPage({ params }: ScriptPreviewProps) 
 
   // Build site structure for navigation
   const siteStructure = [{
-    id: script.id,
-    title: script.title,
-    slug: script.slug,
-    isPublished: script.isPublished,
-    chapters: script.chapters.map(chapter => ({
+    id: topic.id,
+    title: topic.title,
+    slug: topic.slug,
+    isPublished: topic.isPublished,
+    chapters: topic.chapters.map(chapter => ({
       id: chapter.id,
       title: chapter.title,
       slug: chapter.slug,
       isPublished: chapter.isPublished,
-      pages: chapter.pages.map(page => ({
+      pages: chapter.pages.map((page: TopicPage) => ({
         id: page.id,
         title: page.title,
         slug: page.slug,
@@ -227,7 +235,7 @@ export default async function ScriptPreviewPage({ params }: ScriptPreviewProps) 
     title: teacher.title || undefined
   }
 
-    // If no pages are available, show script overview
+    // If no pages are available, show topic overview
     return (
       <PublicSiteLayout 
         teacher={teacherForLayout} 
@@ -236,7 +244,7 @@ export default async function ScriptPreviewPage({ params }: ScriptPreviewProps) 
       >
         <div className="max-w-4xl mx-auto p-6">
           <div className="mb-6">
-            {!script.isPublished && isAuthor && (
+            {!topic.isPublished && isAuthor && (
               <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-6">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
@@ -246,7 +254,7 @@ export default async function ScriptPreviewPage({ params }: ScriptPreviewProps) 
                   </div>
                   <div className="ml-3">
                     <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                      <strong>Preview Mode:</strong> This script is not published yet. Only you can see this content.
+                      <strong>Preview Mode:</strong> This topic is not published yet. Only you can see this content.
                     </p>
                   </div>
                 </div>
@@ -254,23 +262,23 @@ export default async function ScriptPreviewPage({ params }: ScriptPreviewProps) 
             )}
             
             <h1 className="text-4xl font-bold text-foreground mb-4">
-              {script.title}
+              {topic.title}
             </h1>
             
-            {script.description && (
+            {topic.description && (
               <p className="text-xl text-muted-foreground mb-8">
-                {script.description}
+                {topic.description}
               </p>
             )}
           </div>
 
-          {/* Script Overview */}
+          {/* Topic Overview */}
           <div className="space-y-8">
             <div>
               <h2 className="text-2xl font-semibold mb-4">Contents</h2>
-              {script.chapters.length > 0 ? (
+              {topic.chapters.length > 0 ? (
                 <div className="space-y-4">
-                  {script.chapters.map((chapter, chapterIndex) => {
+                  {topic.chapters.map((chapter: TopicChapter, chapterIndex: number) => {
                     const isChapterVisible = isAuthor || chapter.isPublished
                     
                     if (!isChapterVisible) return null
@@ -291,7 +299,7 @@ export default async function ScriptPreviewPage({ params }: ScriptPreviewProps) 
                         
                         {chapter.pages.length > 0 ? (
                           <ul className="space-y-1 ml-6">
-                            {chapter.pages.map((page, pageIndex) => {
+                            {chapter.pages.map((page: TopicPage, pageIndex: number) => {
                               const isPageVisible = isAuthor || page.isPublished
                               
                               if (!isPageVisible) return null
@@ -325,7 +333,7 @@ export default async function ScriptPreviewPage({ params }: ScriptPreviewProps) 
                 </div>
               ) : (
                 <p className="text-muted-foreground">
-                  This script doesn&apos;t have any chapters yet.
+                  This topic doesn&apos;t have any chapters yet.
                 </p>
               )}
             </div>

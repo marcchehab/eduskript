@@ -37,7 +37,11 @@ export async function DELETE(
     const chapter = await prisma.chapter.findFirst({
       where: {
         id: chapterId,
-        authorId: session.user.id
+        authors: {
+          some: {
+            userId: session.user.id
+          }
+        }
       }
     })
 

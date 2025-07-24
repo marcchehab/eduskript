@@ -28,7 +28,11 @@ export async function PATCH(
     const chapter = await prisma.chapter.findFirst({
       where: {
         id,
-        authorId: session.user.id
+        authors: {
+          some: {
+            userId: session.user.id
+          }
+        }
       },
       include: {
         pages: true

@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 
-export default function NewScriptPage() {
+export default function NewTopicPage() {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -47,18 +47,18 @@ export default function NewScriptPage() {
     setError('')
 
     try {
-      const response = await fetch('/api/scripts', {
+      const response = await fetch('/api/topics', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
       })
 
       if (response.ok) {
-        const script = await response.json()
-        router.push(`/dashboard/scripts/${script.slug}`)
+        const topic = await response.json()
+        router.push(`/dashboard/topics/${topic.slug}`)
       } else {
         const data = await response.json()
-        setError(data.error || 'Failed to create script')
+        setError(data.error || 'Failed to create topic')
       }
     } catch {
       setError('An error occurred. Please try again.')
@@ -82,7 +82,7 @@ export default function NewScriptPage() {
         </Link>
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-            Create New Script
+            Create New Topic
           </h1>
           <p className="text-gray-600 dark:text-gray-400 mt-2">
             Start building your educational content
@@ -92,9 +92,9 @@ export default function NewScriptPage() {
 
       <Card className="max-w-2xl">
         <CardHeader>
-          <CardTitle>Script Details</CardTitle>
+          <CardTitle>Topic Details</CardTitle>
           <CardDescription>
-            Provide basic information about your educational script
+            Provide basic information about your educational topic
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -105,7 +105,7 @@ export default function NewScriptPage() {
                 id="title"
                 name="title"
                 type="text"
-                placeholder="Enter script title"
+                placeholder="Enter topic title"
                 value={formData.title}
                 onChange={handleChange}
                 required
@@ -124,7 +124,7 @@ export default function NewScriptPage() {
                 required
               />
               <p className="text-sm text-gray-500">
-                This will be used in the URL: /scripts/{formData.slug || 'your-slug'}
+                This will be used in the URL: /topics/{formData.slug || 'your-slug'}
               </p>
             </div>
 
@@ -133,7 +133,7 @@ export default function NewScriptPage() {
               <Textarea
                 id="description"
                 name="description"
-                placeholder="Brief description of what this script covers"
+                placeholder="Brief description of what this topic covers"
                 value={formData.description}
                 onChange={handleChange}
                 rows={3}
@@ -149,7 +149,7 @@ export default function NewScriptPage() {
                 type="submit" 
                 disabled={isLoading || !formData.title.trim() || !formData.slug.trim()}
               >
-                {isLoading ? 'Creating...' : 'Create Script'}
+                {isLoading ? 'Creating...' : 'Create Topic'}
               </Button>
               <Link href="/dashboard">
                 <Button type="button" variant="outline">

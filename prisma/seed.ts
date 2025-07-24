@@ -1,48 +1,53 @@
 import { PrismaClient } from '@prisma/client'
-import bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient()
 
 async function main() {
-  // Create a test teacher
-  const hashedPassword = await bcrypt.hash('password123', 12)
-  
+  // Create a teacher user
   const teacher = await prisma.user.upsert({
     where: { email: 'teacher@example.com' },
     update: {},
     create: {
       email: 'teacher@example.com',
-      name: 'John Teacher',
-      hashedPassword,
-      subdomain: 'johnteacher',
-      bio: 'Experienced mathematics teacher with a passion for making complex concepts simple.',
-      title: 'Mathematics Professor'
+      name: 'Dr. Sarah Johnson',
+      title: 'Mathematics Teacher',
+      subdomain: 'informatikgarten'
     }
   })
 
-  // Create a test script
-  const script = await prisma.script.upsert({
-    where: { 
-      authorId_slug: {
-        authorId: teacher.id,
-        slug: 'algebra-basics'
-      }
-    },
+  // Create a test topic
+  const script = await prisma.topic.upsert({
+    where: { slug: 'algebra-basics' },
     update: {},
     create: {
       title: 'Algebra Basics',
       description: 'Introduction to fundamental algebra concepts',
       slug: 'algebra-basics',
-      isPublished: true,
-      authorId: teacher.id
+      isPublished: true
+    }
+  })
+
+  // Add the teacher as an author of the topic
+  await prisma.topicAuthor.upsert({
+    where: {
+      topicId_userId: {
+        topicId: script.id,
+        userId: teacher.id
+      }
+    },
+    update: {},
+    create: {
+      topicId: script.id,
+      userId: teacher.id,
+      role: 'author'
     }
   })
 
   // Create test chapters
   const chapter1 = await prisma.chapter.upsert({
     where: {
-      scriptId_slug: {
-        scriptId: script.id,
+      topicId_slug: {
+        topicId: script.id,
         slug: 'introduction'
       }
     },
@@ -53,15 +58,30 @@ async function main() {
       slug: 'introduction',
       order: 1,
       isPublished: true,
-      authorId: teacher.id,
-      scriptId: script.id
+      topicId: script.id
+    }
+  })
+
+  // Add the teacher as an author of chapter1
+  await prisma.chapterAuthor.upsert({
+    where: {
+      chapterId_userId: {
+        chapterId: chapter1.id,
+        userId: teacher.id
+      }
+    },
+    update: {},
+    create: {
+      chapterId: chapter1.id,
+      userId: teacher.id,
+      role: 'author'
     }
   })
 
   const chapter2 = await prisma.chapter.upsert({
     where: {
-      scriptId_slug: {
-        scriptId: script.id,
+      topicId_slug: {
+        topicId: script.id,
         slug: 'solving-equations'
       }
     },
@@ -72,13 +92,28 @@ async function main() {
       slug: 'solving-equations',
       order: 2,
       isPublished: true,
-      authorId: teacher.id,
-      scriptId: script.id
+      topicId: script.id
     }
   })
 
-  // Create test pages
-  await prisma.page.upsert({
+  // Add the teacher as an author of chapter2
+  await prisma.chapterAuthor.upsert({
+    where: {
+      chapterId_userId: {
+        chapterId: chapter2.id,
+        userId: teacher.id
+      }
+    },
+    update: {},
+    create: {
+      chapterId: chapter2.id,
+      userId: teacher.id,
+      role: 'author'
+    }
+  })
+
+  // Create test pages for chapter 1
+  const page1 = await prisma.page.upsert({
     where: {
       chapterId_slug: {
         chapterId: chapter1.id,
@@ -88,31 +123,46 @@ async function main() {
     update: {},
     create: {
       title: 'What are Variables?',
-      slug: 'what-are-variables',
       content: `# What are Variables?
 
-A variable is a symbol that represents a number or value that can change. In algebra, we typically use letters like **x**, **y**, or **z** to represent variables.
+Variables are symbols that represent unknown values in mathematics. They are typically represented by letters like x, y, or z.
+
+## Key Concepts
+
+- A variable can represent any number
+- Variables allow us to write general mathematical statements
+- We can solve for variables to find their specific values
 
 ## Examples
 
-- If **x = 5**, then **x + 3 = 8**
-- If **y = 10**, then **2y = 20**
-
-## Key Points
-
-1. Variables can represent any number
-2. We use variables to write general mathematical expressions
-3. The value of a variable can change depending on the problem
-
-> **Remember:** A variable is like a container that holds a value!`,
+If x = 5, then:
+- x + 3 = 8
+- 2x = 10
+- x² = 25`,
+      slug: 'what-are-variables',
       order: 1,
       isPublished: true,
-      authorId: teacher.id,
       chapterId: chapter1.id
     }
   })
 
-  await prisma.page.upsert({
+  // Add the teacher as an author of page1
+  await prisma.pageAuthor.upsert({
+    where: {
+      pageId_userId: {
+        pageId: page1.id,
+        userId: teacher.id
+      }
+    },
+    update: {},
+    create: {
+      pageId: page1.id,
+      userId: teacher.id,
+      role: 'author'
+    }
+  })
+
+  const page2 = await prisma.page.upsert({
     where: {
       chapterId_slug: {
         chapterId: chapter1.id,
@@ -121,39 +171,47 @@ A variable is a symbol that represents a number or value that can change. In alg
     },
     update: {},
     create: {
-      title: 'Using Variables in Expressions',
+      title: 'Using Variables in Practice',
+      content: `# Using Variables in Practice
+
+Now that we understand what variables are, let's practice using them in real scenarios.
+
+## Practice Problems
+
+1. If a = 7, what is a + 4?
+2. If b = 12, what is b - 5?
+3. If c = 3, what is 4c?
+
+## Solutions
+
+1. a + 4 = 7 + 4 = 11
+2. b - 5 = 12 - 5 = 7  
+3. 4c = 4 × 3 = 12`,
       slug: 'using-variables',
-      content: `# Using Variables in Expressions
-
-Now that we know what variables are, let's learn how to use them in mathematical expressions.
-
-## Simple Expressions
-
-- **x + 5** means "some number plus 5"
-- **2y** means "2 times some number"
-- **z - 3** means "some number minus 3"
-
-## Practice Examples
-
-If **x = 7**, what is:
-1. **x + 4** = ?
-2. **3x** = ?
-3. **x - 2** = ?
-
-### Solutions:
-1. **x + 4 = 7 + 4 = 11**
-2. **3x = 3 × 7 = 21**
-3. **x - 2 = 7 - 2 = 5**
-
-Try solving these yourself before looking at the answers!`,
       order: 2,
       isPublished: true,
-      authorId: teacher.id,
       chapterId: chapter1.id
     }
   })
 
-  await prisma.page.upsert({
+  // Add the teacher as an author of page2
+  await prisma.pageAuthor.upsert({
+    where: {
+      pageId_userId: {
+        pageId: page2.id,
+        userId: teacher.id
+      }
+    },
+    update: {},
+    create: {
+      pageId: page2.id,
+      userId: teacher.id,
+      role: 'author'
+    }
+  })
+
+  // Create test pages for chapter 2
+  const page3 = await prisma.page.upsert({
     where: {
       chapterId_slug: {
         chapterId: chapter2.id,
@@ -163,56 +221,55 @@ Try solving these yourself before looking at the answers!`,
     update: {},
     create: {
       title: 'Basic Linear Equations',
-      slug: 'basic-equations',
       content: `# Basic Linear Equations
 
-A linear equation is an equation where the variable appears only to the first power (no squares, cubes, etc.).
+A linear equation is an equation that makes a straight line when graphed.
 
-## Form of Linear Equations
+## Standard Form
 
-The general form is: **ax + b = c**
+The standard form of a linear equation is: ax + b = c
 
 Where:
-- **a**, **b**, and **c** are numbers
-- **x** is the variable we're solving for
+- a, b, and c are constants
+- x is the variable we want to solve for
 
-## Examples
+## Example
 
-1. **x + 3 = 7**
-2. **2x - 5 = 9**
-3. **4x + 1 = 13**
+Solve: 2x + 3 = 11
 
-## Steps to Solve
+Steps:
+1. Subtract 3 from both sides: 2x = 8
+2. Divide both sides by 2: x = 4
 
-1. **Isolate the variable term** (get all x terms on one side)
-2. **Isolate the variable** (get x by itself)
-3. **Check your answer** (substitute back into the original equation)
-
-Let's practice with these steps in the next section!`,
+Check: 2(4) + 3 = 8 + 3 = 11 ✓`,
+      slug: 'basic-equations',
       order: 1,
       isPublished: true,
-      authorId: teacher.id,
       chapterId: chapter2.id
     }
   })
 
-  // Create a custom domain for testing
-  await prisma.customDomain.upsert({
-    where: { domain: 'math.example.com' },
+  // Add the teacher as an author of page3
+  await prisma.pageAuthor.upsert({
+    where: {
+      pageId_userId: {
+        pageId: page3.id,
+        userId: teacher.id
+      }
+    },
     update: {},
     create: {
-      domain: 'math.example.com',
-      isActive: true,
-      userId: teacher.id
+      pageId: page3.id,
+      userId: teacher.id,
+      role: 'author'
     }
   })
 
-  console.log('✅ Seed data created successfully!')
-  console.log('👨‍🏫 Teacher:', teacher.email, '(subdomain: johnteacher)')
-  console.log('📚 Script:', script.title)
-  console.log('📖 Chapters created:', 2)
-  console.log('📄 Pages created:', 3)
-  console.log('🌐 Custom domain: math.example.com')
+  console.log('Seed data created successfully!')
+  console.log('Teacher:', teacher.email)
+  console.log('Topic:', script.title)
+  console.log('Chapters:', chapter1.title, ',', chapter2.title)
+  console.log('Pages created: 3')
 }
 
 main()

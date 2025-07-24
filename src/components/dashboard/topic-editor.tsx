@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { CreateChapterModal } from './create-chapter-modal'
-import { ScriptSettingsModal } from './script-settings-modal'
+import { ScriptSettingsModal } from './topic-settings-modal'
 import { SortableChapters } from './sortable-chapters'
 import { ArrowLeft, BookOpen, FileText } from 'lucide-react'
 
@@ -55,7 +55,7 @@ export function ScriptEditor({ script }: ScriptEditorProps) {
   }) => {
     if (updatedScript && updatedScript.slug !== script.slug) {
       // If slug changed, redirect to new URL
-      router.push(`/dashboard/scripts/${updatedScript.slug}`)
+      router.push(`/dashboard/topics/${updatedScript.slug}`)
     } else {
       // Force a complete page refresh to ensure data is updated
       window.location.reload()
@@ -65,7 +65,7 @@ export function ScriptEditor({ script }: ScriptEditorProps) {
   const handlePublish = async () => {
     setIsLoading(true)
     try {
-      const response = await fetch(`/api/scripts/${script.id}`, {
+      const response = await fetch(`/api/topics/${script.id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -95,7 +95,7 @@ export function ScriptEditor({ script }: ScriptEditorProps) {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Link href="/dashboard/scripts">
+        <Link href="/dashboard/topics">
           <Button variant="ghost" size="sm">
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to Scripts
@@ -168,7 +168,7 @@ export function ScriptEditor({ script }: ScriptEditorProps) {
               <CardDescription>Organize your content into chapters</CardDescription>
             </div>
             <CreateChapterModal 
-              scriptId={script.id} 
+              topicId={script.id} 
               onChapterCreated={handleChapterCreated}
             />
           </div>
@@ -177,7 +177,7 @@ export function ScriptEditor({ script }: ScriptEditorProps) {
           {script.chapters.length > 0 ? (
             <SortableChapters
               chapters={script.chapters}
-              scriptId={script.id}
+              topicId={script.id}
               scriptSlug={script.slug}
               onReorder={handleChapterCreated}
             />
@@ -191,7 +191,7 @@ export function ScriptEditor({ script }: ScriptEditorProps) {
                 Start organizing your content by creating your first chapter.
               </p>
               <CreateChapterModal 
-                scriptId={script.id} 
+                topicId={script.id} 
                 onChapterCreated={handleChapterCreated}
               />
             </div>

@@ -15,9 +15,15 @@ export default async function DashboardPage() {
   }
 
   // Fetch user's content statistics
-  const [scripts, totalChapters, totalPages] = await Promise.all([
-    prisma.script.findMany({
-      where: { authorId: session.user.id },
+  const [topics, totalChapters, totalPages] = await Promise.all([
+    prisma.topic.findMany({
+      where: {
+        authors: {
+          some: {
+            userId: session.user.id
+          }
+        }
+      },
       include: {
         chapters: {
           include: {
@@ -25,18 +31,29 @@ export default async function DashboardPage() {
           }
         }
       },
-      orderBy: { updatedAt: 'desc' },
-      take: 5
+      orderBy: { updatedAt: 'desc' }
     }),
     prisma.chapter.count({
-      where: { authorId: session.user.id }
+      where: {
+        authors: {
+          some: {
+            userId: session.user.id
+          }
+        }
+      }
     }),
     prisma.page.count({
-      where: { authorId: session.user.id }
+      where: {
+        authors: {
+          some: {
+            userId: session.user.id
+          }
+        }
+      }
     })
   ])
 
-  const totalScripts = scripts.length
+  const totalScripts = topics.length
 
   return (
     <div className="space-y-6">
@@ -49,7 +66,7 @@ export default async function DashboardPage() {
             Welcome back! Here&apos;s what&apos;s happening with your content.
           </p>
         </div>
-        <Link href="/dashboard/scripts/new">
+        <Link href="/dashboard/topics/new">
           <Button>
             <Plus className="w-4 h-4 mr-2" />
             New Script
@@ -97,28 +114,28 @@ export default async function DashboardPage() {
           <CardDescription>Your most recently updated scripts</CardDescription>
         </CardHeader>
         <CardContent>
-          {scripts.length > 0 ? (
+          {topics.length > 0 ? (
             <div className="space-y-4">
-              {scripts.map((script) => (
-                <div key={script.id} className="flex items-center justify-between p-4 border rounded-lg">
+              {topics.map((topic) => (
+                <div key={topic.id} className="flex items-center justify-between p-4 border rounded-lg">
                   <div>
                     <h3 className="font-medium text-foreground">
-                      {script.title}
+                      {topic.title}
                     </h3>
                     <p className="text-sm text-muted-foreground">
-                      {script.description || 'No description'}
+                      {topic.description || 'No description'}
                     </p>
                     <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                      <span>{script.chapters.length} chapters</span>
+                      <span>{topic.chapters.length} chapters</span>
                       <span>
-                        {script.chapters.reduce((acc: number, ch) => acc + ch.pages.length, 0)} pages
+                        {topic.chapters.reduce((acc: number, ch: { pages: unknown[] }) => acc + ch.pages.length, 0)} pages
                       </span>
                       <span>
-                        Updated {new Date(script.updatedAt).toLocaleDateString()}
+                        Updated {new Date(topic.updatedAt).toLocaleDateString()}
                       </span>
                     </div>
                   </div>
-                  <Link href={`/dashboard/scripts/${script.slug}`}>
+                  <Link href={`/dashboard/topics/${topic.slug}`}>
                     <Button variant="outline" size="sm">
                       Edit
                     </Button>
@@ -135,7 +152,7 @@ export default async function DashboardPage() {
               <p className="text-muted-foreground mb-4">
                 Get started by creating your first educational script.
               </p>
-              <Link href="/dashboard/scripts/new">
+              <Link href="/dashboard/topics/new">
                 <Button>
                   <Plus className="w-4 h-4 mr-2" />
                   Create Your First Script

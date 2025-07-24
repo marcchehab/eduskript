@@ -28,39 +28,47 @@ export async function POST(request: NextRequest) {
     // Normalize slug
     const normalizedSlug = generateSlug(slug)
 
-    // Check if slug is already taken by this user
-    const existingScript = await prisma.script.findUnique({
+    // Check if slug already exists (globally, since no more user-scoped slugs)
+    const existingTopic = await prisma.topic.findFirst({
       where: {
-        authorId_slug: {
-          authorId: session.user.id,
-          slug: normalizedSlug
+        slug: normalizedSlug,
+      }
+    })
+
+    if (existingTopic) {
+      return NextResponse.json(
+        { error: 'A topic with this slug already exists' },
+        { status: 409 }
+      )
+    }
+
+    // Create topic with the current user as the first author
+    const topic = await prisma.topic.create({
+      data: {
+        title,
+        description: description || null,
+        slug: normalizedSlug,
+        authors: {
+          create: {
+            userId: session.user.id,
+            role: "author"
+          }
+        }
+      },
+      include: {
+        authors: {
+          include: {
+            user: true
+          }
         }
       }
     })
 
-    if (existingScript) {
-      return NextResponse.json(
-        { error: 'A script with this slug already exists' },
-        { status: 400 }
-      )
-    }
-
-    // Create script
-    const script = await prisma.script.create({
-      data: {
-        title,
-        description,
-        slug: normalizedSlug,
-        authorId: session.user.id,
-      }
-    })
-
-    return NextResponse.json(script)
-
+    return NextResponse.json({ success: true, data: topic })
   } catch (error) {
-    console.error('Script creation error:', error)
+    console.error('Error creating topic:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Failed to create topic' },
       { status: 500 }
     )
   }
@@ -77,25 +85,36 @@ export async function GET() {
       )
     }
 
-    const scripts = await prisma.script.findMany({
-      where: { authorId: session.user.id },
+    // Get topics where the user is an author
+    const topics = await prisma.topic.findMany({
+      where: {
+        authors: {
+          some: {
+            userId: session.user.id
+          }
+        }
+      },
       include: {
         chapters: {
           include: {
             pages: true
+          }
+        },
+        authors: {
+          include: {
+            user: true
           }
         }
       },
       orderBy: { updatedAt: 'desc' }
     })
 
-    return NextResponse.json(scripts)
-
+    return NextResponse.json({ success: true, data: topics })
   } catch (error) {
-    console.error('Scripts fetch error:', error)
+    console.error('Error fetching topics:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Failed to fetch topics' },
       { status: 500 }
     )
   }
-}
+} 

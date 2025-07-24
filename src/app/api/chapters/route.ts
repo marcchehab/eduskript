@@ -16,27 +16,31 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { title, description, slug, scriptId } = await request.json()
+    const { title, description, slug, topicId } = await request.json()
 
     // Validate input
-    if (!title || !slug || !scriptId) {
+    if (!title || !slug || !topicId) {
       return NextResponse.json(
-        { error: 'Title, slug, and script ID are required' },
+        { error: 'Title, slug, and topic ID are required' },
         { status: 400 }
       )
     }
 
-    // Verify the script belongs to the user
-    const script = await prisma.script.findUnique({
+    // Verify the user is an author of the topic
+    const topic = await prisma.topic.findFirst({
       where: {
-        id: scriptId,
-        authorId: session.user.id
+        id: topicId,
+        authors: {
+          some: {
+            userId: session.user.id
+          }
+        }
       }
     })
 
-    if (!script) {
+    if (!topic) {
       return NextResponse.json(
-        { error: 'Script not found' },
+        { error: 'Topic not found or access denied' },
         { status: 404 }
       )
     }
@@ -44,54 +48,57 @@ export async function POST(request: NextRequest) {
     // Normalize slug
     const normalizedSlug = generateSlug(slug)
 
-    // Check if slug is already taken in this script
-    const existingChapter = await prisma.chapter.findUnique({
+    // Check if slug is already taken in this topic
+    const existingChapter = await prisma.chapter.findFirst({
       where: {
-        scriptId_slug: {
-          scriptId: scriptId,
-          slug: normalizedSlug
-        }
+        topicId,
+        slug: normalizedSlug
       }
     })
 
     if (existingChapter) {
       return NextResponse.json(
-        { error: 'A chapter with this slug already exists in this script' },
-        { status: 400 }
+        { error: 'A chapter with this slug already exists in this topic' },
+        { status: 409 }
       )
     }
 
     // Get the next order number
     const lastChapter = await prisma.chapter.findFirst({
-      where: { scriptId },
+      where: { topicId },
       orderBy: { order: 'desc' }
     })
 
-    const order = (lastChapter?.order || 0) + 1
+    const nextOrder = (lastChapter?.order ?? 0) + 1
 
-    // Create chapter
+    // Create chapter with the current user as the first author
     const chapter = await prisma.chapter.create({
       data: {
         title,
         description,
         slug: normalizedSlug,
-        order,
-        scriptId,
-        authorId: session.user.id,
+        order: nextOrder,
+        topicId,
+        authors: {
+          create: {
+            userId: session.user.id,
+            role: "author"
+          }
+        }
       },
       include: {
-        pages: true
+        authors: {
+          include: {
+            user: true
+          }
+        }
       }
     })
 
-    // Revalidate the script page to show the new chapter
-    revalidatePath(`/dashboard/scripts`)
-    revalidatePath(`/dashboard/scripts/${script.slug}`)
-
+    revalidatePath('/dashboard')
     return NextResponse.json(chapter)
-
   } catch (error) {
-    console.error('Chapter creation error:', error)
+    console.error('Error creating chapter:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

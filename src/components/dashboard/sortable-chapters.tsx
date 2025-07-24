@@ -112,7 +112,7 @@ function SortableChapterItem({
             </div>
           </div>
           <div>
-            <Link href={`/dashboard/scripts/${scriptSlug}/chapters/${chapter.slug}`}>
+            <Link href={`/dashboard/topics/${scriptSlug}/chapters/${chapter.slug}`}>
               <h3 className="font-medium text-foreground hover:text-primary cursor-pointer transition-colors">
                 {chapter.title}
               </h3>
@@ -215,7 +215,7 @@ function StaticChapterItem({
             </div>
           </div>
           <div>
-            <Link href={`/dashboard/scripts/${scriptSlug}/chapters/${chapter.slug}`}>
+            <Link href={`/dashboard/topics/${scriptSlug}/chapters/${chapter.slug}`}>
               <h3 className="font-medium text-foreground hover:text-primary cursor-pointer transition-colors">
                 {chapter.title}
               </h3>
@@ -281,14 +281,14 @@ function StaticChapterItem({
 
 interface SortableChaptersProps {
   chapters: Chapter[]
-  scriptId: string
+  topicId: string // Keep as topicId for now to match existing usage
   scriptSlug: string
   onReorder: () => void
 }
 
 export function SortableChapters({ 
   chapters, 
-  scriptId, 
+  topicId, 
   scriptSlug, 
   onReorder 
 }: SortableChaptersProps) {
@@ -327,7 +327,7 @@ export function SortableChapters({
       // Update order in database
       setIsReordering(true)
       try {
-        const response = await fetch(`/api/scripts/${scriptId}/reorder-chapters`, {
+        const response = await fetch(`/api/topics/${topicId}/reorder-chapters`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

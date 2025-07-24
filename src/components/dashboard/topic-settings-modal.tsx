@@ -61,7 +61,7 @@ export function ScriptSettingsModal({ script, onScriptUpdated }: ScriptSettingsM
     setIsLoading(true)
 
     try {
-      const response = await fetch(`/api/scripts/${script.id}`, {
+      const response = await fetch(`/api/topics/${script.id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

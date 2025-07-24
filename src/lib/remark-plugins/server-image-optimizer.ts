@@ -1,13 +1,6 @@
 import { visit } from 'unist-util-visit'
-import fs from 'fs'
-import path from 'path'
-import https from 'https'
-import { promisify } from 'util'
 
-const mkdir = promisify(fs.mkdir)
-const access = promisify(fs.access)
-
-interface ServerImageOptimizerOptions {
+export interface ServerImageOptimizerOptions {
   domain?: string
   chapterId?: string
   fileList?: Array<{filename: string, url: string, relativePath: string}>
@@ -19,10 +12,17 @@ interface ServerImageOptimizerOptions {
  */
 export function remarkServerImageOptimizer(options: ServerImageOptimizerOptions = {}) {
   return async function transformer(tree: unknown) {
-    // Skip if running in browser (client-side)
-    if (typeof window !== 'undefined') {
-      return
-    }
+    // Skip on client-side
+    if (typeof window !== 'undefined') return
+
+    // Dynamic imports to prevent client-side bundling
+    const fs = (await import('fs')).default
+    const path = (await import('path')).default
+    const https = (await import('https')).default
+    const { promisify } = await import('util')
+
+    const mkdir = promisify(fs.mkdir)
+    const access = promisify(fs.access)
 
     const { domain, chapterId, fileList } = options
     
@@ -50,7 +50,7 @@ export function remarkServerImageOptimizer(options: ServerImageOptimizerOptions 
       const publicPath = `/cache/images/${domain}/${chapterId}/${fileInfo.filename}`
 
       // Download and cache the image
-      const downloadPromise = downloadImage(fileInfo.url, localPath, cacheDir)
+      const downloadPromise = downloadImage(fileInfo.url, localPath, cacheDir, fs, https, mkdir, access)
         .then(() => {
           // Update the node to use the local cached image
           node.url = publicPath
@@ -68,7 +68,15 @@ export function remarkServerImageOptimizer(options: ServerImageOptimizerOptions 
   }
 }
 
-async function downloadImage(url: string, localPath: string, cacheDir: string): Promise<void> {
+async function downloadImage(
+  url: string, 
+  localPath: string, 
+  cacheDir: string,
+  fs: typeof import('fs'),
+  https: typeof import('https'),
+  mkdir: typeof import('fs').promises.mkdir,
+  access: typeof import('fs').promises.access
+): Promise<void> {
   // Check if image already exists
   try {
     await access(localPath)
@@ -83,7 +91,7 @@ async function downloadImage(url: string, localPath: string, cacheDir: string): 
   return new Promise((resolve, reject) => {
     const file = fs.createWriteStream(localPath)
     
-    https.get(url, (response) => {
+    https.get(url, (response: import('http').IncomingMessage) => {
       if (response.statusCode !== 200) {
         reject(new Error(`HTTP ${response.statusCode}: ${response.statusMessage}`))
         return
@@ -96,7 +104,7 @@ async function downloadImage(url: string, localPath: string, cacheDir: string): 
         resolve()
       })
 
-      file.on('error', (err) => {
+      file.on('error', (err: Error) => {
         fs.unlink(localPath, () => {}) // Clean up partial file
         reject(err)
       })

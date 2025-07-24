@@ -140,11 +140,11 @@ export function PublicSiteLayout({ teacher, siteStructure, children, currentPath
     localStorage.setItem(EXPANDED_CHAPTERS_KEY, JSON.stringify(expandedChapters))
   }, [expandedChapters, isInitialized, EXPANDED_CHAPTERS_KEY])
 
-  const toggleScript = (scriptId: string) => {
+  const toggleScript = (topicId: string) => {
     setExpandedScripts(prev => 
-      prev.includes(scriptId) 
-        ? prev.filter(id => id !== scriptId)
-        : [...prev, scriptId]
+      prev.includes(topicId) 
+        ? prev.filter(id => id !== topicId)
+        : [...prev, topicId]
     )
   }
 

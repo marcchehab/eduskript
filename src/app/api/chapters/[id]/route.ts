@@ -10,107 +10,101 @@ export async function PATCH(
 ) {
   try {
     const session = await getServerSession(authOptions)
+    
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      )
     }
 
     const { id } = await params
-    const body = await request.json()
-    const { title, description, slug, isPublished } = body
+    const { title, slug, description, isPublished } = await request.json()
 
-    // For publish-only updates, title and slug are not required
-    const isPublishOnlyUpdate = isPublished !== undefined && title === undefined && slug === undefined
-    
-    if (!isPublishOnlyUpdate && (!title?.trim() || !slug?.trim())) {
+    // Validate input - at least one field is required
+    if (!title && !slug && description === undefined && isPublished === undefined) {
       return NextResponse.json(
-        { error: 'Title and slug are required' },
+        { error: 'At least one field is required for update' },
         { status: 400 }
       )
     }
 
-    // Check if chapter exists and belongs to user
+    // Check if user is an author of this chapter
     const existingChapter = await prisma.chapter.findFirst({
       where: {
         id,
-        authorId: session.user.id
+        authors: {
+          some: {
+            userId: session.user.id
+          }
+        }
+      },
+      include: {
+        topic: true
       }
     })
 
     if (!existingChapter) {
       return NextResponse.json(
-        { error: 'Chapter not found' },
+        { error: 'Chapter not found or access denied' },
         { status: 404 }
       )
     }
 
-    // Check if slug is already used in the same script (but not this chapter)
-    // Only check slug conflict if slug is being updated
-    if (!isPublishOnlyUpdate && slug) {
+    // Check if slug is already used in the same topic (but not this chapter)
+    if (slug && slug !== existingChapter.slug) {
       const slugExists = await prisma.chapter.findFirst({
         where: {
+          topicId: existingChapter.topicId,
           slug,
-          scriptId: existingChapter.scriptId,
-          id: { not: id }
+          NOT: { id }
         }
       })
 
       if (slugExists) {
         return NextResponse.json(
-          { error: 'Slug already exists in this script' },
-          { status: 400 }
+          { error: 'Slug already exists in this topic' },
+          { status: 409 }
         )
       }
     }
 
-    // Prepare update data - only include fields that are provided
-    const updateData: {
-      updatedAt: Date
-      title?: string
-      description?: string | null
-      slug?: string
-      isPublished?: boolean
-    } = {
-      updatedAt: new Date()
-    }
-
-    if (title !== undefined) updateData.title = title.trim()
-    if (description !== undefined) updateData.description = description?.trim() || null
-    if (slug !== undefined) updateData.slug = slug.trim()
-    if (isPublished !== undefined) updateData.isPublished = isPublished
-
-    const chapter = await prisma.chapter.update({
+    // Update chapter
+    const updatedChapter = await prisma.chapter.update({
       where: { id },
-      data: updateData,
+      data: {
+        ...(title && { title }),
+        ...(slug && { slug }),
+        ...(description !== undefined && { description }),
+        ...(isPublished !== undefined && { isPublished })
+      },
       include: {
         pages: {
           orderBy: { order: 'asc' }
         },
-        script: {
-          select: {
-            slug: true,
-            author: {
-              select: {
-                subdomain: true
-              }
-            }
+        authors: {
+          include: {
+            user: true
           }
         }
       }
     })
 
-    // Revalidate public pages if publication status or content changed
-    if (chapter.script.author.subdomain) {
-      const subdomain = chapter.script.author.subdomain
-      const scriptSlug = chapter.script.slug
-      
-      // Revalidate related paths
-      revalidatePath(`/${subdomain}/${scriptSlug}/${chapter.slug}`)
-      revalidatePath(`/${subdomain}/${scriptSlug}`)
-      revalidatePath(`/${subdomain}`)
-      revalidatePath('/dashboard/scripts')
+    // Get user's subdomain for revalidation
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { subdomain: true }
+    })
+
+    if (user?.subdomain) {
+      // Revalidate relevant paths
+      revalidatePath(`/${user.subdomain}/${existingChapter.topic.slug}/${updatedChapter.slug}`)
+      revalidatePath(`/${user.subdomain}/${existingChapter.topic.slug}`)
+      revalidatePath(`/${user.subdomain}`)
+      revalidatePath('/dashboard')
     }
 
-    return NextResponse.json(chapter)
+    return NextResponse.json(updatedChapter)
   } catch (error) {
     console.error('Error updating chapter:', error)
     return NextResponse.json(
@@ -126,36 +120,57 @@ export async function DELETE(
 ) {
   try {
     const session = await getServerSession(authOptions)
+    
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      )
     }
 
     const { id } = await params
 
-    // Check if chapter exists and belongs to user
+    // Check if user is an author of this chapter
     const existingChapter = await prisma.chapter.findFirst({
       where: {
         id,
-        authorId: session.user.id
+        authors: {
+          some: {
+            userId: session.user.id
+          }
+        }
+      },
+      include: {
+        topic: true
       }
     })
 
     if (!existingChapter) {
       return NextResponse.json(
-        { error: 'Chapter not found' },
+        { error: 'Chapter not found or access denied' },
         { status: 404 }
       )
     }
 
-    // Delete chapter and all its pages
+    // Delete chapter (cascading delete will handle pages)
     await prisma.chapter.delete({
       where: { id }
     })
 
-    // Revalidate the scripts pages
-    revalidatePath('/dashboard/scripts')
+    // Get user's subdomain for revalidation
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { subdomain: true }
+    })
 
-    return NextResponse.json({ success: true })
+    if (user?.subdomain) {
+      // Revalidate relevant paths
+      revalidatePath(`/${user.subdomain}/${existingChapter.topic.slug}`)
+      revalidatePath(`/${user.subdomain}`)
+      revalidatePath('/dashboard')
+    }
+
+    return NextResponse.json({ message: 'Chapter deleted successfully' })
   } catch (error) {
     console.error('Error deleting chapter:', error)
     return NextResponse.json(

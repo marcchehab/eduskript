@@ -57,11 +57,13 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     const isAuthor = session?.user?.email === teacher.email
 
     // Find the script
-    const script = await prisma.script.findUnique({
+    const script = await prisma.topic.findFirst({
       where: {
-        authorId_slug: {
-          authorId: teacher.id,
-          slug: scriptSlug
+        slug: scriptSlug,
+        authors: {
+          some: {
+            userId: teacher.id
+          }
         }
       },
       select: {
@@ -91,8 +93,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     // Find the chapter
     const chapter = await prisma.chapter.findUnique({
       where: {
-        scriptId_slug: {
-          scriptId: script.id,
+        topicId_slug: {
+          topicId: script.id,
           slug: chapterSlug
         }
       },
@@ -205,11 +207,13 @@ export default async function PublicPage({ params }: PageProps) {
     const isAuthor = session?.user?.email === teacher.email
 
     // Find the script, chapter, and page
-    const script = await prisma.script.findUnique({
+    const script = await prisma.topic.findFirst({
       where: {
-        authorId_slug: {
-          authorId: teacher.id,
-          slug: scriptSlug
+        slug: scriptSlug,
+        authors: {
+          some: {
+            userId: teacher.id
+          }
         }
       },
       include: {
@@ -361,7 +365,7 @@ export default async function PublicPage({ params }: PageProps) {
             ]}
             subdomain={domain}
           ><a
-            href={`/dashboard/scripts/${script.slug}/chapters/${chapter.slug}/pages/${page.slug}/edit`}
+            href={`/dashboard/topics/${script.slug}/chapters/${chapter.slug}/pages/${page.slug}/edit`}
             className="inline-flex items-center px-2 py-1 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors shadow-md"
           >
               <Edit className="h-4 w-4 mr-2" />

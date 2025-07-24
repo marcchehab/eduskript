@@ -9,19 +9,42 @@ export async function middleware(request: NextRequest) {
   // Get the full hostname (including subdomains)
   const fullHostname = host || request.headers.get('host') || ''
   const hostname = fullHostname.split(':')[0] // Remove port if present
-  const subdomain = hostname.split('.')[0]
   
-  // TODO: Add custom domain support in a separate API route due to middleware limitations
-  // For now, we'll handle subdomain routing only
+  // Determine if this is a subdomain request
+  const isMainDomain = hostname === 'localhost' || hostname === 'eduskript.org' || hostname === 'www.eduskript.org'
+  const isLocalhost = hostname.endsWith('localhost')
   
-  // If subdomain exists and it's not 'www' or the main domain
-  // Handle both production subdomains and localhost development
-  if (subdomain && subdomain !== 'www' && subdomain !== 'localhost') {
-    // Rewrite to subdomain path
+  let subdomain: string | null = null
+  
+  if (isLocalhost && hostname !== 'localhost') {
+    // Extract subdomain from localhost (e.g., xyz.localhost:3000)
+    const parts = hostname.split('.')
+    if (parts.length >= 2 && parts[0] !== 'www') {
+      subdomain = parts[0]
+    }
+  } else if (!isMainDomain && !isLocalhost) {
+    // For production, check if it's a subdomain or custom domain
+    const parts = hostname.split('.')
+    if (parts.length >= 3 && parts[0] !== 'www') {
+      // This is a subdomain (e.g., xyz.eduskript.org)
+      subdomain = parts[0]
+    } else if (parts.length >= 2) {
+      // This might be a custom domain - we'll handle this later with a database lookup
+      // For now, we'll treat it as a potential custom domain
+      console.log('Potential custom domain detected:', hostname)
+    }
+  }
+  
+  // If we detected a subdomain, rewrite the URL
+  if (subdomain) {
     const url = request.nextUrl.clone()
     url.pathname = `/${subdomain}${pathname}`
     return NextResponse.rewrite(url)
   }
+  
+  // Custom domain handling would go here in the future
+  // We'll need to query the database to check if hostname is a custom domain
+  // and rewrite to the appropriate subdomain path
   
   // Protect dashboard routes
   if (pathname.startsWith('/dashboard')) {
@@ -33,9 +56,9 @@ export async function middleware(request: NextRequest) {
     }
   }
   
-  // Protect API routes (except auth)
-  if (pathname.startsWith('/api') && !pathname.startsWith('/api/auth')) {
-    if (!token && !pathname.startsWith('/api/public')) {
+  // Protect API routes (except auth and public)
+  if (pathname.startsWith('/api') && !pathname.startsWith('/api/auth') && !pathname.startsWith('/api/public')) {
+    if (!token) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }

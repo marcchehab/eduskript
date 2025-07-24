@@ -1,4 +1,5 @@
 import { unified } from 'unified'
+import type { PluggableList } from 'unified'
 import remarkParse from 'remark-parse'
 import remarkMath from 'remark-math'
 import remarkGfm from 'remark-gfm'
@@ -11,7 +12,6 @@ import rehypeSlug from 'rehype-slug'
 import rehypeAutolinkHeadings from 'rehype-autolink-headings'
 import { remarkFileResolver } from './remark-plugins/file-resolver'
 import { rehypeImageOptimizer } from './remark-plugins/image-optimizer'
-import { remarkServerImageOptimizer } from './remark-plugins/server-image-optimizer'
 
 export interface ProcessedMarkdown {
   content: string
@@ -25,42 +25,60 @@ export interface MarkdownContext {
   /** The chapter ID for chapter-specific file searches */
   chapterId?: string
   /** Pre-fetched file list for client-side image resolution */
-  fileList?: Array<{filename: string, url: string, relativePath: string}>
+  fileList?: Array<{ filename: string, url: string, relativePath: string }>
 }
 
 export async function processMarkdown(
-  markdown: string, 
+  markdown: string,
   context?: MarkdownContext // Now properly used for image path resolution
 ): Promise<ProcessedMarkdown> {
   // Parse frontmatter
   const { content, data: frontmatter } = matter(markdown)
-  
-  // Process markdown to HTML
-  const processor = unified()
-    .use(remarkParse)
-    .use(remarkServerImageOptimizer, {
+
+  const isServer = typeof window === 'undefined'
+
+  // Build plugin list
+  const remarkPlugins: PluggableList = [
+    remarkParse,
+    [remarkFileResolver, {
+      fileList: context?.fileList
+    }],
+    remarkMath,
+    remarkGfm,
+  ]
+
+  // Add server-only plugin dynamically
+  if (isServer) {
+    const { remarkServerImageOptimizer } = await import('./remark-plugins/server-image-optimizer')
+    remarkPlugins.push([remarkServerImageOptimizer, {
       domain: context?.domain,
       chapterId: context?.chapterId,
       fileList: context?.fileList
-    })
-    .use(remarkFileResolver, { 
-      fileList: context?.fileList
-    })
-    .use(remarkMath)
-    .use(remarkGfm)
-    .use(remarkRehype, { allowDangerousHtml: true })
-    .use(rehypeSlug) // Add IDs to headings
-    .use(rehypeAutolinkHeadings, { 
+    }])
+  }
+
+  const rehypePlugins: PluggableList = [
+    [remarkRehype, { allowDangerousHtml: true }],
+    rehypeSlug, // Add IDs to headings
+    [rehypeAutolinkHeadings, {
       behavior: 'wrap',
       properties: { className: ['heading-link'] }
-    })
-    .use(rehypeImageOptimizer) // Optimize images for better loading
-    .use(rehypeKatex)
-    .use(rehypeHighlight)
-    .use(rehypeStringify, { allowDangerousHtml: true })
-  
+    }],
+    rehypeImageOptimizer, // Optimize images for better loading
+    rehypeKatex,
+    rehypeHighlight,
+    [rehypeStringify, { allowDangerousHtml: true }]
+  ]
+
+  // Process markdown to HTML
+  const processor = unified()
+
+  // Apply plugins
+  processor.use(remarkPlugins)
+  processor.use(rehypePlugins)
+
   const processedContent = await processor.process(content)
-  
+
   return {
     content: String(processedContent),
     frontmatter,
@@ -79,14 +97,14 @@ export function generateExcerpt(content: string, maxLength: number = 160): strin
     .replace(/!\[.*?\]\(.*?\)/g, '') // Remove images
     .replace(/\n/g, ' ') // Replace newlines with spaces
     .trim()
-  
+
   if (plainText.length <= maxLength) {
     return plainText
   }
-  
+
   const truncated = plainText.substring(0, maxLength)
   const lastSpace = truncated.lastIndexOf(' ')
-  
+
   return truncated.substring(0, lastSpace) + '...'
 }
 
@@ -101,27 +119,27 @@ export function generateSlug(title: string): string {
 
 export function validateMarkdown(content: string): string[] {
   const errors: string[] = []
-  
+
   // Check for basic structure
   if (!content.trim()) {
     errors.push('Content cannot be empty')
   }
-  
+
   // Check for balanced markdown syntax
   const boldMatches = content.match(/\*\*/g)
   if (boldMatches && boldMatches.length % 2 !== 0) {
-    errors.push('Unbalanced bold syntax (**)') 
+    errors.push('Unbalanced bold syntax (**)')
   }
-  
+
   const italicMatches = content.match(/(?<!\*)\*(?!\*)/g)
   if (italicMatches && italicMatches.length % 2 !== 0) {
     errors.push('Unbalanced italic syntax (*)')
   }
-  
+
   const codeMatches = content.match(/`/g)
   if (codeMatches && codeMatches.length % 2 !== 0) {
     errors.push('Unbalanced inline code syntax (`)')
   }
-  
+
   return errors
 }

@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 
 const navigation = [
   { name: 'Overview', href: '/dashboard', icon: FileText },
-  { name: 'Scripts', href: '/dashboard/scripts', icon: BookOpen },
+  { name: 'Scripts', href: '/dashboard/topics', icon: BookOpen },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
 ]
 
@@ -40,7 +40,7 @@ export function DashboardSidebar() {
         </div>
 
         {/* New Script Button */}
-        <Link href="/dashboard/scripts/new">
+        <Link href="/dashboard/topics/new">
           <div className={cn(
             "flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg mb-6 cursor-pointer transition-all",
             isCollapsed ? "justify-center px-2" : ""

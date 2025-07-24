@@ -24,29 +24,33 @@ export async function PATCH(
       )
     }
 
-    // Check if script exists and belongs to user
-    const script = await prisma.script.findFirst({
+    // Check if topic exists and belongs to user
+    const topic = await prisma.topic.findFirst({
       where: {
         id,
-        authorId: session.user.id
+        authors: {
+          some: {
+            userId: session.user.id
+          }
+        }
       },
       include: {
         chapters: true
       }
     })
 
-    if (!script) {
+    if (!topic) {
       return NextResponse.json(
-        { error: 'Script not found' },
+        { error: 'Topic not found' },
         { status: 404 }
       )
     }
 
-    // Verify all chapter IDs belong to this script
-    const scriptChapterIds = script.chapters.map((c) => c.id)
-    const allChapterIdsValid = chapterIds.every((id: string) => scriptChapterIds.includes(id))
+    // Verify all chapter IDs belong to this topic
+    const topicChapterIds = topic.chapters.map((c) => c.id)
+    const allChapterIdsValid = chapterIds.every((id: string) => topicChapterIds.includes(id))
     
-    if (!allChapterIdsValid || chapterIds.length !== script.chapters.length) {
+    if (!allChapterIdsValid || chapterIds.length !== topic.chapters.length) {
       return NextResponse.json(
         { error: 'Invalid chapter IDs provided' },
         { status: 400 }
@@ -71,4 +75,4 @@ export async function PATCH(
       { status: 500 }
     )
   }
-}
+} 

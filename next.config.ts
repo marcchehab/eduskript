@@ -17,15 +17,6 @@ const nextConfig: NextConfig = {
       }
     ],
   },
-  env: {
-    // Construct DATABASE_URL from CleverCloud's POSTGRESQL_ADDON_URI if available
-    DATABASE_URL: process.env.DATABASE_URL || 
-      (process.env.POSTGRESQL_ADDON_URI ? 
-        `${process.env.POSTGRESQL_ADDON_URI}?connection_limit=1&pool_timeout=20` : 
-        undefined),
-    NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET,
-    NEXTAUTH_URL: process.env.NEXTAUTH_URL,
-  },
   webpack(config, { isServer }) {
     // disabling fs and path to avoid the tears
     if (!isServer) {

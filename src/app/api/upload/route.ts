@@ -61,7 +61,11 @@ export async function POST(request: NextRequest) {
     const chapter = await prisma.chapter.findFirst({
       where: {
         id: chapterId,
-        authorId: session.user.id
+        authors: {
+          some: {
+            userId: session.user.id
+          }
+        }
       }
     })
 
@@ -158,7 +162,11 @@ export async function GET(request: NextRequest) {
     const chapter = await prisma.chapter.findFirst({
       where: {
         id: chapterId,
-        authorId: session.user.id
+        authors: {
+          some: {
+            userId: session.user.id
+          }
+        }
       }
     })
 

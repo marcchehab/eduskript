@@ -1,34 +1,38 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
+// Start from scratch? 
+// pnpm prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > prisma/migrations/0_init/migration.sql
+// pnpm prisma migrate resolve --applied 0_init
+
 generator client {
   provider = "prisma-client-js"
-  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
-// NextAuth.js Models
 model Account {
   id                String  @id @default(cuid())
   userId            String
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String?
-  access_token      String?
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String?
+  id_token          String? @db.Text
   session_state     String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
+  @@map("accounts")
 }
 
 model Session {
@@ -37,6 +41,8 @@ model Session {
   userId       String
   expires      DateTime
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
 }
 
 model VerificationToken {
@@ -45,21 +51,22 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+  @@map("verificationtokens")
 }
 
-// Core Models
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String    @unique
+  id          String    @id @default(cuid())
+  name        String?
+  email       String    @unique
   emailVerified DateTime?
-  image         String?
+  image       String?
   hashedPassword String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
   
-  // Teacher-specific fields
+  // Webpage-specific fields
   subdomain     String?   @unique
+  webpageDescription String? // Description of their webpage
   bio           String?
   title         String?
   
@@ -69,11 +76,13 @@ model User {
   // Relations
   accounts      Account[]
   sessions      Session[]
-  scripts       Script[]
-  chapters      Chapter[]
-  pages         Page[]
-  pageVersions  PageVersion[]
   customDomains CustomDomain[]
+  pageVersions  PageVersion[]
+  
+  // Many-to-many relations for authoring
+  topicAuthors   TopicAuthor[]
+  chapterAuthors ChapterAuthor[]
+  pageAuthors    PageAuthor[]
   
   @@map("users")
 }
@@ -81,35 +90,47 @@ model User {
 model CustomDomain {
   id        String   @id @default(cuid())
   domain    String   @unique
-  isActive  Boolean  @default(true)
+  userId    String
+  isActive  Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
-  // Relations
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   @@map("custom_domains")
 }
 
-model Script {
+model Topic {
   id          String   @id @default(cuid())
   title       String
   description String?
-  slug        String
+  slug        String   @unique
   isPublished Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
-  // Multi-tenant
-  authorId    String
-  author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  
   // Relations
   chapters    Chapter[]
   
-  @@unique([authorId, slug])
-  @@map("scripts")
+  // Many-to-many relation for multiple authors
+  authors     TopicAuthor[]
+  
+  @@map("topics")
+}
+
+// Junction table for Topic-User many-to-many relationship
+model TopicAuthor {
+  id        String   @id @default(cuid())
+  topicId   String
+  userId    String
+  role      String   @default("author") // "author", "editor", "reviewer", etc.
+  createdAt DateTime @default(now())
+  
+  topic     Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([topicId, userId])
+  @@map("topic_authors")
 }
 
 model Chapter {
@@ -122,56 +143,81 @@ model Chapter {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
-  // Multi-tenant
-  authorId    String
-  author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  
   // Relations
-  scriptId    String
-  script      Script   @relation(fields: [scriptId], references: [id], onDelete: Cascade)
+  topicId     String
+  topic       Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
   pages       Page[]
   
-  @@unique([scriptId, slug])
+  // Many-to-many relation for multiple authors
+  authors     ChapterAuthor[]
+  
+  @@unique([topicId, slug])
   @@map("chapters")
+}
+
+// Junction table for Chapter-User many-to-many relationship
+model ChapterAuthor {
+  id        String   @id @default(cuid())
+  chapterId String
+  userId    String
+  role      String   @default("author") // "author", "editor", "reviewer", etc.
+  createdAt DateTime @default(now())
+  
+  chapter   Chapter  @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([chapterId, userId])
+  @@map("chapter_authors")
 }
 
 model Page {
   id          String   @id @default(cuid())
   title       String
   slug        String
-  content     String
+  content     String   @db.Text
   order       Int
   isPublished Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  
-  // Multi-tenant
-  authorId    String
-  author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
   
   // Relations
   chapterId   String
   chapter     Chapter  @relation(fields: [chapterId], references: [id], onDelete: Cascade)
   versions    PageVersion[]
   
+  // Many-to-many relation for multiple authors
+  authors     PageAuthor[]
+  
   @@unique([chapterId, slug])
   @@map("pages")
 }
 
-model PageVersion {
+// Junction table for Page-User many-to-many relationship
+model PageAuthor {
   id        String   @id @default(cuid())
-  content   String
-  version   Int
-  changeLog String?
+  pageId    String
+  userId    String
+  role      String   @default("author") // "author", "editor", "reviewer", etc.
   createdAt DateTime @default(now())
   
-  // Multi-tenant
-  authorId  String
-  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  
-  // Relations
-  pageId    String
   page      Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([pageId, userId])
+  @@map("page_authors")
+}
+
+model PageVersion {
+  id        String   @id @default(cuid())
+  content   String   @db.Text
+  version   Int
+  changeLog String?
+  authorId  String
+  pageId    String
+  createdAt DateTime @default(now())
+  
+  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  page   Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
   
   @@unique([pageId, version])
   @@map("page_versions")
