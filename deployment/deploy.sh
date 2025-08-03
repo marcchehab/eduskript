@@ -5,19 +5,23 @@
 
 set -e
 
-DEPLOY_DIR="/opt/eduskript"
-GITHUB_REPO=${1:-"your-username/eduskript"}
+DEPLOY_DIR="/home/fedora/eduskript"
+GITHUB_REPO=${1:-"marcchehab/eduskript"}
+DEPLOYMENT_REPO="marcchehab/eduskript-deployment"
 
 echo "🚀 Deploying Eduskript..."
 
-# Ensure we're in the right directory
-cd $DEPLOY_DIR
-
-# Pull latest deployment configuration if using git
-if [ -d ".git" ]; then
-    echo "📥 Pulling latest deployment configuration..."
+# Clone or update deployment configuration
+if [ ! -d "$DEPLOY_DIR" ]; then
+    echo "📥 Cloning deployment configuration..."
+    git clone https://github.com/$DEPLOYMENT_REPO.git $DEPLOY_DIR
+else
+    echo "📥 Updating deployment configuration..."
+    cd $DEPLOY_DIR
     git pull origin main
 fi
+
+cd $DEPLOY_DIR
 
 # Check if .env exists
 if [ ! -f ".env" ]; then
@@ -42,6 +46,12 @@ if ! groups | grep -q docker; then
     echo "sudo usermod -aG docker $USER"
     echo "Then log out and back in, or run: newgrp docker"
     exit 1
+fi
+
+# Login to GitHub Container Registry for private repos
+if [ ! -z "$GITHUB_TOKEN" ] && [ ! -z "$GITHUB_ACTOR" ]; then
+    echo "🔐 Logging into GitHub Container Registry..."
+    echo $GITHUB_TOKEN | docker login ghcr.io -u $GITHUB_ACTOR --password-stdin
 fi
 
 # Pull latest images

@@ -1,0 +1,14 @@
+# Environment files
+.env
+
+# Data directories (created at runtime)
+data/
+uploads/
+nginx/
+
+# Backup files
+*.backup
+*.bak
+
+# Logs
+*.log

@@ -31,9 +31,16 @@ nano .env  # Edit with your settings
 Required environment variables:
 - `GITHUB_REPOSITORY`: Your GitHub repository (e.g., `username/eduskript`)
 - `GITHUB_ACTOR`: Your GitHub username
-- `GITHUB_TOKEN`: GitHub Personal Access Token with `packages:read` scope
+- `GITHUB_TOKEN`: GitHub Personal Access Token with `packages:read` scope (for private repos)
 - `NEXTAUTH_SECRET`: Strong random secret for authentication
 - `NEXTAUTH_URL`: Your domain URL (e.g., `https://yourdomain.com`)
+
+### GitHub Token Setup (Private Repos)
+1. Go to GitHub Settings > Developer settings > Personal access tokens > Tokens (classic)
+2. Generate new token with scopes:
+   - `read:packages` (to pull Docker images)
+   - `repo` (if needed for repository access)
+3. Copy the token (starts with `ghp_`) to your `.env` file
 
 ### 3. Start Services
 
