@@ -40,16 +40,30 @@ export async function GET(request: NextRequest) {
     }
 
     if (customDomain && customDomain.user.subdomain) {
-      return NextResponse.json({
+      const response = NextResponse.json({
         isCustomDomain: true,
         subdomain: customDomain.user.subdomain,
         redirectPath: `/${customDomain.user.subdomain}`
       })
+
+      // Add caching headers (5 minutes cache)
+      response.headers.set('Cache-Control', 'public, max-age=300, s-maxage=300')
+      response.headers.set('CDN-Cache-Control', 'public, max-age=300')
+      response.headers.set('Vercel-CDN-Cache-Control', 'public, max-age=300')
+      
+      return response
     }
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       isCustomDomain: false
     })
+
+    // Cache negative responses for shorter time (1 minute)
+    response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=60')
+    response.headers.set('CDN-Cache-Control', 'public, max-age=60')
+    response.headers.set('Vercel-CDN-Cache-Control', 'public, max-age=60')
+    
+    return response
 
   } catch (error) {
     console.error('Error resolving custom domain:', error)

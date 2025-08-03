@@ -1,0 +1,9 @@
+RewriteEngine on
+
+# Redirect apex domain to www with HTTPS
+RewriteCond %{HTTP_HOST} ^eduskript\.org$ [NC]
+RewriteRule ^(.*)$ https://www.eduskript.org/$1 [L,R=301,NC]
+
+# Force HTTPS for all requests
+RewriteCond %{HTTPS} !=on
+RewriteRule (.*) https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]

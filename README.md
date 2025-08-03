@@ -6,8 +6,12 @@ A comprehensive, multi-tenant education platform built with Next.js, TypeScript,
 
 - [x] persistent file hosting
 - [ ] subdomain routing and custom domain routing
-   - [ ] change structure vocabulary to the following: a user has a "webpage" that they can describe in their settings (change that). on this webpage, they have several "topics" (current called "scripts", so rename that) that have "chapters" which contain "pages". 
-   - [ ] 
+   - [x] change structure vocabulary to the following: a user has a "webpage" that they can describe in their settings (change that). on this webpage, they have several "topics" (current called "scripts", so rename that) that have "chapters" which contain "pages". 
+   - [ ] subdomain dns and www not smooth
+   - [ ] custom domain appends subdomain, e.g. https://www.teachingmaterials.io/subdomaintry
+   - [ ] test speed improvements
+   - [ ] imlement creative cloud api to add domain
+   - [ ] remove "isActive" from custom domains
 - [ ] sign up for teachers using email verification
 - [ ] transfer old components
 
