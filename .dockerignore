@@ -1,0 +1,60 @@
+# Dependencies
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local env files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Testing
+coverage
+.coverage
+*.lcov
+
+# IDE
+.vscode
+.idea
+
+# Logs
+logs
+*.log
+
+# Build outputs
+.next
+out
+dist
+build
+
+# Database
+*.db
+*.sqlite
+prisma/migrations/**/migration.sql
+
+# Uploads
+public/uploads
+uploads
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git
+.gitignore
+
+# Deployment
+deployment
+.github
+
+# Documentation
+*.md
+!README.md
+
+# Cache
+.cache
+.parcel-cache
