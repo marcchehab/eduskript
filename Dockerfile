@@ -60,11 +60,10 @@ COPY --from=builder /app/prisma ./prisma
 COPY start.sh /app/start.sh
 RUN chmod +x /app/start.sh && chown nextjs:nodejs /app/start.sh
 
-USER nextjs
-
 EXPOSE 3000
 
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
+# Start as root to fix permissions, then switch to nextjs user
 CMD ["/app/start.sh"]
