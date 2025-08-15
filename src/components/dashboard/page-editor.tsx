@@ -310,7 +310,7 @@ export function PageEditor({ script, chapter, page }: PageEditorProps) {
         <Link href={`/dashboard/topics/${script.slug}`}>
           <Button variant="ghost" size="sm">
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Script
+            Back to Topics
           </Button>
         </Link>
         <div className="flex-1">

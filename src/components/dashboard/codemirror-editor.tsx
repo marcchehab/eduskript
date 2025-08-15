@@ -436,7 +436,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
         {showPreview && (
           <div className="w-1/2 overflow-auto bg-card">
             <div className="p-4">
-              <div dangerouslySetInnerHTML={{ __html: previewContent }} />
+              <div className="prose-theme" dangerouslySetInnerHTML={{ __html: previewContent }} />
             </div>
           </div>
         )}

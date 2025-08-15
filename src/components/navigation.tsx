@@ -9,10 +9,10 @@ export function Navigation() {
   const { data: session } = useSession()
 
   return (
-    <nav className="border-b border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
+    <nav className="border-b border-border bg-background/80 backdrop-blur-sm">
       <div className="container mx-auto px-4">
         <div className="flex justify-between items-center h-16">
-          <Link href="/" className="text-2xl font-bold text-gray-900 dark:text-white">
+          <Link href="/" className="text-2xl font-bold text-foreground">
             Eduskript.org
           </Link>
           

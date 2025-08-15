@@ -69,7 +69,7 @@ export default async function DashboardPage() {
         <Link href="/dashboard/topics/new">
           <Button>
             <Plus className="w-4 h-4 mr-2" />
-            New Script
+            New Topic
           </Button>
         </Link>
       </div>
@@ -78,7 +78,7 @@ export default async function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Scripts</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Topics</CardTitle>
             <BookOpen className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -119,9 +119,11 @@ export default async function DashboardPage() {
               {topics.map((topic) => (
                 <div key={topic.id} className="flex items-center justify-between p-4 border rounded-lg">
                   <div>
-                    <h3 className="font-medium text-foreground">
-                      {topic.title}
-                    </h3>
+                    <Link href={`/dashboard/topics/${topic.slug}`}>
+                      <h3 className="font-medium text-foreground">
+                        {topic.title}
+                      </h3>
+                    </Link>
                     <p className="text-sm text-muted-foreground">
                       {topic.description || 'No description'}
                     </p>
@@ -135,11 +137,6 @@ export default async function DashboardPage() {
                       </span>
                     </div>
                   </div>
-                  <Link href={`/dashboard/topics/${topic.slug}`}>
-                    <Button variant="outline" size="sm">
-                      Edit
-                    </Button>
-                  </Link>
                 </div>
               ))}
             </div>

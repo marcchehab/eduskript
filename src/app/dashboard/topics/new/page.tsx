@@ -54,8 +54,8 @@ export default function NewTopicPage() {
       })
 
       if (response.ok) {
-        const topic = await response.json()
-        router.push(`/dashboard/topics/${topic.slug}`)
+        const result = await response.json()
+        router.push(`/dashboard/topics/${result.data.slug}`)
       } else {
         const data = await response.json()
         setError(data.error || 'Failed to create topic')
