@@ -2,3 +2,4 @@
 	path = deployment
 	url = git@github.com:marcchehab/eduskript-deployment.git
 	branch = main
+	ignore = all
