@@ -14,12 +14,16 @@ export default function SignInPage() {
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+  const [showResendVerification, setShowResendVerification] = useState(false)
+  const [resendSuccess, setResendSuccess] = useState('')
   const router = useRouter()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
     setError('')
+    setResendSuccess('')
+    setShowResendVerification(false)
 
     try {
       const result = await signIn('credentials', {
@@ -29,12 +33,43 @@ export default function SignInPage() {
       })
 
       if (result?.error) {
-        setError('Invalid credentials')
+        if (result.error.includes('verify your email')) {
+          setError('Please verify your email address before signing in.')
+          setShowResendVerification(true)
+        } else {
+          setError('Invalid credentials')
+        }
       } else {
         router.push('/dashboard')
       }
     } catch {
       setError('An error occurred. Please try again.')
+    }
+
+    setIsLoading(false)
+  }
+
+  const handleResendVerification = async () => {
+    setIsLoading(true)
+    setResendSuccess('')
+    setError('')
+
+    try {
+      const response = await fetch('/api/auth/send-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      })
+
+      const data = await response.json()
+      
+      if (response.ok) {
+        setResendSuccess('Verification email sent successfully! Please check your inbox.')
+      } else {
+        setError(data.error || 'Failed to resend verification email')
+      }
+    } catch {
+      setError('Failed to resend verification email. Please try again.')
     }
 
     setIsLoading(false)
@@ -75,6 +110,21 @@ export default function SignInPage() {
             </div>
             {error && (
               <div className="text-red-600 text-sm text-center">{error}</div>
+            )}
+            {resendSuccess && (
+              <div className="text-green-600 text-sm text-center">{resendSuccess}</div>
+            )}
+            {showResendVerification && (
+              <div className="text-center">
+                <Button 
+                  onClick={handleResendVerification}
+                  variant="outline"
+                  className="w-full mb-2" 
+                  disabled={isLoading}
+                >
+                  {isLoading ? 'Sending...' : 'Resend Verification Email'}
+                </Button>
+              </div>
             )}
             <Button 
               type="submit" 
