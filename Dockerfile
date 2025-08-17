@@ -27,6 +27,15 @@ COPY --from=deps /app/node_modules ./node_modules
 # Copy source
 COPY . .
 
+# Capture git commit info during build
+RUN apk add --no-cache git
+ARG GIT_COMMIT_SHA
+ARG GIT_COMMIT_MESSAGE
+ARG BUILD_TIME
+ENV NEXT_PUBLIC_GIT_COMMIT_SHA=${GIT_COMMIT_SHA}
+ENV NEXT_PUBLIC_GIT_COMMIT_MESSAGE=${GIT_COMMIT_MESSAGE}
+ENV NEXT_PUBLIC_BUILD_TIME=${BUILD_TIME}
+
 # Dummy DATABASE_URL at build time for Prisma
 ENV DATABASE_URL="file:/app/data/dummy.db"
 

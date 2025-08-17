@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from '@/components/providers'
 import { CustomDomainHandler } from '@/components/CustomDomainHandler'
+import { GitInfo } from '@/components/GitInfo'
 
 const inter = Inter({
   subsets: ["latin"],
@@ -31,6 +32,7 @@ export default function RootLayout({
         <Providers>
           <CustomDomainHandler>
             {children}
+            <GitInfo />
           </CustomDomainHandler>
         </Providers>
       </body>

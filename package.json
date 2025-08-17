@@ -12,7 +12,7 @@
     "db:reset": "prisma migrate reset --force",
     "db:fresh": "rm -f ./data/dev.db ./prisma/data/dev.db && prisma db push",
     "db:studio": "prisma studio",
-    "docker:build": "docker build -t eduskript .",
+    "docker:build": "docker build --build-arg GIT_COMMIT_SHA=$(git rev-parse HEAD) --build-arg GIT_COMMIT_MESSAGE=\"$(git log -1 --pretty=%B)\" --build-arg BUILD_TIME=$(date -u +\"%Y-%m-%dT%H:%M:%SZ\") -t eduskript .",
     "docker:run": "docker-compose -f docker-compose.dev.yml up eduskript",
     "docker:stop": "docker-compose -f docker-compose.dev.yml down",
     "docker:logs": "docker-compose -f docker-compose.dev.yml logs -f eduskript"
