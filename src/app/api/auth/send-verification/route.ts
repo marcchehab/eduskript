@@ -53,8 +53,7 @@ export async function POST(request: NextRequest) {
 
     // Generate email content
     const { htmlContent, textContent } = generateVerificationEmailContent(
-      verificationUrl,
-      email
+      verificationUrl
     )
 
     // Send verification email

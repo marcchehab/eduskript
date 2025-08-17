@@ -48,8 +48,7 @@ export async function sendEmail({ to, subject, htmlContent, textContent }: Email
 }
 
 export function generateVerificationEmailContent(
-  verificationUrl: string,
-  userEmail: string
+  verificationUrl: string
 ): { htmlContent: string; textContent: string } {
   const htmlContent = `
     <!DOCTYPE html>

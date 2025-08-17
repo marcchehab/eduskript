@@ -78,8 +78,7 @@ export async function POST(request: NextRequest) {
     // Generate and send verification email
     try {
       const { htmlContent, textContent } = generateVerificationEmailContent(
-        verificationUrl,
-        email
+        verificationUrl
       )
 
       await sendEmail({
