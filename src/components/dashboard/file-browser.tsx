@@ -9,14 +9,19 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
 interface FileItem {
-  filename: string
+  id: string
+  name: string
+  filename?: string // For backward compatibility
   originalName?: string
-  size: number
-  url: string
-  uploadType: 'global' | 'chapter'
+  size?: number
+  url?: string
+  isDirectory?: boolean
+  contentType?: string
+  uploadType?: 'global' | 'chapter'
   chapterId?: string
-  uploadedAt: string
-  extension?: string
+  uploadedAt?: string
+  createdAt?: Date
+  updatedAt?: Date
 }
 
 interface FileBrowserProps {
@@ -29,7 +34,7 @@ interface FileBrowserProps {
   onFileRenamed?: (oldFilename: string, newFilename: string) => void
 }
 
-export function FileBrowser({ chapterId, onFileSelect, className = '', onUploadComplete, files, loading, onFileRenamed }: FileBrowserProps) {
+export function FileBrowser({ chapterId, onFileSelect, className = '', onUploadComplete, files, loading }: FileBrowserProps) {
   const [dragOver, setDragOver] = useState(false)
   const [renameFile, setRenameFile] = useState<FileItem | null>(null)
   const [newFileName, setNewFileName] = useState('')
@@ -81,7 +86,21 @@ export function FileBrowser({ chapterId, onFileSelect, className = '', onUploadC
     await uploadFiles(droppedFiles, uploadType)
   }
 
-  const isImageFile = (filename: string) => {
+  // Helper functions to handle both old and new file structures
+  const getFileName = (file: FileItem) => {
+    return file.name || file.filename || file.originalName || 'Unknown file'
+  }
+
+  const getFileUrl = (file: FileItem) => {
+    return file.url || ''
+  }
+
+  const getFileSize = (file: FileItem) => {
+    return file.size || 0
+  }
+
+  const isImageFile = (filename: string | undefined) => {
+    if (!filename) return false
     const extension = filename.split('.').pop()?.toLowerCase()
     return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(extension || '')
   }
@@ -93,14 +112,14 @@ export function FileBrowser({ chapterId, onFileSelect, className = '', onUploadC
 
   const handleRename = (file: FileItem) => {
     setRenameFile(file)
-    setNewFileName(file.originalName || file.filename)
+    setNewFileName(getFileName(file))
   }
 
   const handleDuplicateCheck = async (file: File, uploadType: 'global' | 'chapter' = 'chapter') => {
     // Check if file with same name already exists
     const existingFile = files.find(f => 
-      f.uploadType === uploadType && 
-      (f.originalName === file.name || f.filename === file.name)
+      (f.uploadType === uploadType || !f.uploadType) && 
+      getFileName(f) === file.name
     )
     
     if (existingFile) {
@@ -155,22 +174,16 @@ export function FileBrowser({ chapterId, onFileSelect, className = '', onUploadC
   }
 
   const handleFileDelete = async (file: FileItem) => {
-    if (!window.confirm(`Are you sure you want to delete "${file.originalName || file.filename}"?`)) {
+    if (!window.confirm(`Are you sure you want to delete "${getFileName(file)}"?`)) {
       return
     }
 
     try {
-      const params = new URLSearchParams({
-        uploadType: file.uploadType,
-        ...(file.chapterId && { chapterId: file.chapterId })
-      })
-
-      const response = await fetch(`/api/upload/${file.filename}?${params}`, {
+      const response = await fetch(`/api/files/${file.id}`, {
         method: 'DELETE'
       })
 
       if (response.ok) {
-        // await loadFiles() // Refresh file list // This line is removed
         if (onUploadComplete) onUploadComplete()
       } else {
         const error = await response.json()
@@ -205,24 +218,24 @@ export function FileBrowser({ chapterId, onFileSelect, className = '', onUploadC
             onDragLeave={handleDragLeave}
             onDrop={(e) => handleDrop(e, 'chapter')}
           >
-            {files.filter(f => f.uploadType === 'chapter').length === 0 ? (
+            {files.filter(f => !f.isDirectory && (f.uploadType === 'chapter' || !f.uploadType)).length === 0 ? (
               <div className="text-center py-2 text-muted-foreground text-sm">
                 No chapter files. Drop files here or click upload.
               </div>
             ) : (
               <div className="space-y-1">
-                {files.filter(f => f.uploadType === 'chapter').map((file) => (
+                {files.filter(f => !f.isDirectory && (f.uploadType === 'chapter' || !f.uploadType)).map((file) => (
                   <div
-                    key={file.url}
+                    key={file.id || file.url}
                     className="flex items-center space-x-2 p-2 rounded hover:bg-muted group"
                   >
                     {/* Image preview or file icon */}
                     <div className="flex-shrink-0">
-                      {isImageFile(file.filename) ? (
+                      {isImageFile(getFileName(file)) ? (
                         <div className="w-8 h-8 rounded overflow-hidden bg-muted">
                           <Image 
-                            src={file.url} 
-                            alt={file.originalName || file.filename}
+                            src={getFileUrl(file)} 
+                            alt={getFileName(file)}
                             width={32}
                             height={32}
                             className="w-full h-full object-cover"
@@ -231,7 +244,7 @@ export function FileBrowser({ chapterId, onFileSelect, className = '', onUploadC
                           />
                         </div>
                       ) : (
-                        getFileIcon(file.filename)
+                        getFileIcon(getFileName(file))
                       )}
                     </div>
 
@@ -244,12 +257,12 @@ export function FileBrowser({ chapterId, onFileSelect, className = '', onUploadC
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center space-x-1">
                           <p className="text-sm font-medium text-foreground truncate">
-                            {file.originalName || file.filename}
+                            {getFileName(file)}
                           </p>
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
-                              openFileLink(file.url)
+                              openFileLink(getFileUrl(file))
                             }}
                             className="flex-shrink-0 p-1 text-muted-foreground hover:text-foreground transition-colors"
                             title="Open original file"
@@ -257,7 +270,7 @@ export function FileBrowser({ chapterId, onFileSelect, className = '', onUploadC
                             <ExternalLink className="w-3 h-3" />
                           </button>
                         </div>
-                        <p className="text-xs text-muted-foreground">{formatFileSize(file.size)}</p>
+                        <p className="text-xs text-muted-foreground">{formatFileSize(getFileSize(file))}</p>
                       </div>
                     </div>
 
@@ -299,7 +312,7 @@ export function FileBrowser({ chapterId, onFileSelect, className = '', onUploadC
                 Rename File
               </h2>
               <p className="text-sm text-muted-foreground">
-                Enter a new name for &ldquo;{renameFile?.originalName || renameFile?.filename}&rdquo;
+                Enter a new name for &ldquo;{renameFile ? getFileName(renameFile) : ''}&rdquo;
               </p>
             </div>
             <div className="grid gap-4 py-4">
@@ -330,36 +343,9 @@ export function FileBrowser({ chapterId, onFileSelect, className = '', onUploadC
                 Cancel
               </Button>
               <Button onClick={async () => {
-                if (!renameFile || !newFileName.trim()) return
-                
-                try {
-                  const response = await fetch(`/api/upload/${renameFile.filename}/rename`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      newFilename: newFileName.trim(),
-                      chapterId: renameFile.chapterId,
-                      updateLinks
-                    })
-                  })
-                  
-                  if (response.ok) {
-                    // Call the callback to update live editor content
-                    if (onFileRenamed) {
-                      onFileRenamed(renameFile.filename, newFileName.trim())
-                    }
-                    
-                    setRenameFile(null)
-                    setNewFileName('')
-                    if (onUploadComplete) onUploadComplete()
-                  } else {
-                    const error = await response.json()
-                    alert(error.error || 'Failed to rename file')
-                  }
-                } catch (error) {
-                  console.error('Rename error:', error)
-                  alert('Failed to rename file')
-                }
+                // Rename functionality needs to be implemented for new file system
+                alert('Rename functionality is temporarily disabled while updating the file system.')
+                setRenameFile(null)
               }}>
                 Rename
               </Button>
@@ -378,7 +364,7 @@ export function FileBrowser({ chapterId, onFileSelect, className = '', onUploadC
                 File Already Exists
               </h2>
               <p className="text-sm text-muted-foreground">
-                A file named &ldquo;{duplicateUpload?.existingFile.originalName || duplicateUpload?.existingFile.filename}&rdquo; already exists.
+                A file named &ldquo;{duplicateUpload ? getFileName(duplicateUpload.existingFile) : ''}&rdquo; already exists.
               </p>
             </div>
             <div className="grid gap-4 py-4">
@@ -403,9 +389,8 @@ export function FileBrowser({ chapterId, onFileSelect, className = '', onUploadC
                   // Upload with overwrite
                   const formData = new FormData()
                   formData.append('file', duplicateUpload.file)
-                  formData.append('uploadType', duplicateUpload.existingFile.uploadType)
                   formData.append('overwrite', 'true')
-                  if (chapterId && duplicateUpload.existingFile.uploadType === 'chapter') {
+                  if (chapterId) {
                     formData.append('chapterId', chapterId)
                   }
 
@@ -438,8 +423,7 @@ export function FileBrowser({ chapterId, onFileSelect, className = '', onUploadC
                   // Create a new file with the new name
                   const blob = new Blob([duplicateUpload.file], { type: duplicateUpload.file.type })
                   formData.append('file', blob, newUploadName.trim())
-                  formData.append('uploadType', duplicateUpload.existingFile.uploadType)
-                  if (chapterId && duplicateUpload.existingFile.uploadType === 'chapter') {
+                  if (chapterId) {
                     formData.append('chapterId', chapterId)
                   }
 

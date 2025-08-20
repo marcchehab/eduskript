@@ -60,17 +60,16 @@ export function PageEditor({ topic, chapter, page }: PageEditorProps) {
   const router = useRouter()
   const { data: session, status: sessionStatus } = useSession()
 
-  // Shared file list state
+  // Shared file list state - updated for new file system
   const [fileList, setFileList] = useState<Array<{
-    filename: string
-    url: string
-    relativePath: string
-    size: number
-    uploadType: 'chapter' | 'global'
-    uploadedAt: string
-    chapterId?: string
-    originalName?: string
-    extension?: string
+    id: string
+    name: string
+    size?: number
+    url?: string
+    isDirectory?: boolean
+    contentType?: string
+    createdAt: Date
+    updatedAt: Date
   }>>([])
   const [fileListLoading, setFileListLoading] = useState(false)
 
@@ -81,27 +80,8 @@ export function PageEditor({ topic, chapter, page }: PageEditorProps) {
       const response = await fetch(`/api/upload?chapterId=${chapter.id}`)
       if (response.ok) {
         const data = await response.json()
-        const transformedFiles = data.files.map((file: {
-          filename: string
-          url: string
-          size?: number
-          uploadType?: string
-          uploadedAt?: string
-          chapterId?: string
-          originalName?: string
-          extension?: string
-        }) => ({
-          filename: file.filename,
-          url: file.url,
-          relativePath: file.url,
-          size: file.size || 0,
-          uploadType: file.uploadType || 'chapter',
-          uploadedAt: file.uploadedAt || '',
-          chapterId: file.chapterId || chapter.id,
-          originalName: file.originalName,
-          extension: file.extension
-        }))
-        setFileList(transformedFiles)
+        // The new API returns files directly in the new format
+        setFileList(data.files || [])
       }
     } catch (error) {
       console.error('Error fetching file list:', error)
@@ -125,17 +105,6 @@ export function PageEditor({ topic, chapter, page }: PageEditorProps) {
     setHasUnsavedChanges(true)
   }
 
-  const handleFileRenamed = (oldFilename: string, newFilename: string) => {
-    // Update the current editor content to reflect the renamed file
-    const updatedContent = content
-      .replace(new RegExp(`!\\[([^\\]]*)\\]\\(${oldFilename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)`, 'g'), `![$1](${newFilename})`)
-      .replace(new RegExp(`\\[([^\\]]*)\\]\\(${oldFilename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)`, 'g'), `[$1](${newFilename})`)
-    
-    if (updatedContent !== content) {
-      setContent(updatedContent)
-      setHasUnsavedChanges(true)
-    }
-  }
 
   const handlePageUpdated = async () => {
     try {
@@ -163,28 +132,31 @@ export function PageEditor({ topic, chapter, page }: PageEditorProps) {
   }
 
   const handleFileInsert = (file: {
-    filename: string
-    url: string
-    originalName?: string
+    id: string
+    name: string
+    url?: string
+    isDirectory?: boolean
   }) => {
+    if (file.isDirectory) return // Don't insert directories
+    
     let insertText = ''
     
     // Determine the type of insert based on file extension
-    const extension = file.filename.split('.').pop()?.toLowerCase()
+    const extension = file.name.split('.').pop()?.toLowerCase()
     
     if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(extension || '')) {
       // Image - use regular markdown syntax with just filename for path resolution
-      const altText = file.originalName ? file.originalName.replace(/\.[^/.]+$/, '') : file.filename.replace(/\.[^/.]+$/, '')
-      insertText = `![${altText}](${file.filename})`
+      const altText = file.name.replace(/\.[^/.]+$/, '')
+      insertText = `![${altText}](${file.name})`
     } else if (['mp4', 'avi', 'mov', 'wmv'].includes(extension || '')) {
       // Video - use full URL for non-image files
-      insertText = `<video controls>\n  <source src="${file.url}" type="video/${extension}">\n  Your browser does not support the video tag.\n</video>`
+      insertText = `<video controls>\n  <source src="${file.url || file.name}" type="video/${extension}">\n  Your browser does not support the video tag.\n</video>`
     } else if (['mp3', 'wav', 'ogg'].includes(extension || '')) {
       // Audio - use full URL for non-image files
-      insertText = `<audio controls>\n  <source src="${file.url}" type="audio/${extension}">\n  Your browser does not support the audio tag.\n</audio>`
+      insertText = `<audio controls>\n  <source src="${file.url || file.name}" type="audio/${extension}">\n  Your browser does not support the audio tag.\n</audio>`
     } else {
       // Generic file/download link - use full URL for non-image files
-      insertText = `[${file.originalName || file.filename}](${file.url})`
+      insertText = `[${file.name}](${file.url || file.name})`
     }
     
     // Insert the text at the current cursor position
@@ -376,7 +348,6 @@ export function PageEditor({ topic, chapter, page }: PageEditorProps) {
             refreshFileList()
           }}
           onUploadComplete={refreshFileList}
-          onFileRenamed={handleFileRenamed}
         />
       </CollapsibleDrawer>
 

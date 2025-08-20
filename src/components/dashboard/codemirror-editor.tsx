@@ -15,7 +15,7 @@ interface CodeMirrorEditorProps {
   chapterId?: string
   domain?: string
   isReadOnly?: boolean
-  fileList?: Array<{filename: string, url: string, relativePath: string}>
+  fileList?: Array<{id: string, name: string, url?: string, isDirectory?: boolean}>
   fileListLoading?: boolean
   onFileUpload?: () => void
 }
@@ -124,25 +124,27 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   }
 
   // Insert file at specific position (or cursor if no position provided)
-  const insertFileAtPosition = (file: { filename: string; url: string; originalName?: string }, position?: number | null) => {
+  const insertFileAtPosition = (file: { id: string; name: string; url?: string; isDirectory?: boolean }, position?: number | null) => {
+    if (file.isDirectory) return // Don't insert directories
+    
     let insertText = ''
     
     // Determine the type of insert based on file extension
-    const extension = file.filename.split('.').pop()?.toLowerCase()
+    const extension = file.name.split('.').pop()?.toLowerCase()
     
     if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(extension || '')) {
       // Image - use regular markdown syntax with just filename for path resolution
-      const altText = file.originalName ? file.originalName.replace(/\.[^/.]+$/, '') : file.filename.replace(/\.[^/.]+$/, '')
-      insertText = `![${altText}](${file.filename})`
+      const altText = file.name.replace(/\.[^/.]+$/, '')
+      insertText = `![${altText}](${file.name})`
     } else if (['mp4', 'avi', 'mov', 'wmv'].includes(extension || '')) {
       // Video - use full URL for non-image files
-      insertText = `<video controls>\n  <source src="${file.url}" type="video/${extension}">\n  Your browser does not support the video tag.\n</video>`
+      insertText = `<video controls>\n  <source src="${file.url || file.name}" type="video/${extension}">\n  Your browser does not support the video tag.\n</video>`
     } else if (['mp3', 'wav', 'ogg'].includes(extension || '')) {
       // Audio - use full URL for non-image files
-      insertText = `<audio controls>\n  <source src="${file.url}" type="audio/${extension}">\n  Your browser does not support the audio tag.\n</audio>`
+      insertText = `<audio controls>\n  <source src="${file.url || file.name}" type="audio/${extension}">\n  Your browser does not support the audio tag.\n</audio>`
     } else {
       // Generic file/download link - use full URL for non-image files
-      insertText = `[${file.originalName || file.filename}](${file.url})`
+      insertText = `[${file.name}](${file.url || file.name})`
     }
 
     if (editorViewRef.current && !useSimpleEditor) {

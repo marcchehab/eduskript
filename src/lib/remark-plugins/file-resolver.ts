@@ -2,9 +2,10 @@ import { visit } from 'unist-util-visit'
 import path from 'path'
 
 interface FileInfo {
-  filename: string
-  url: string
-  relativePath: string
+  id: string
+  name: string
+  url?: string
+  isDirectory?: boolean
 }
 
 interface FileResolverOptions {
@@ -13,8 +14,8 @@ interface FileResolverOptions {
 
 /**
  * Remark plugin to resolve all embedded file paths (images, pdfs, audio, video, etc.)
- * using a provided file list (from S3/Cellar API).
- * Replaces any non-absolute file reference with the correct S3 URL.
+ * using a provided file list (from local file API).
+ * Replaces any non-absolute file reference with the correct file URL.
  */
 export function remarkFileResolver(options: FileResolverOptions = {}) {
   return function transformer(tree: unknown) {
@@ -59,16 +60,16 @@ function resolveFromFileList(filename: string, fileList: FileInfo[]): string | n
   
   // Direct filename match
   for (const file of fileList) {
-    if (filename === file.filename) {
-      return file.url
+    if (!file.isDirectory && filename === file.name) {
+      return file.url || `/api/files/${file.id}`
     }
   }
 
   // Try to find by basename (in case of path variations)
   const basename = path.basename(filename)
-  const basenameMatch = fileList.find(file => path.basename(file.filename) === basename)
+  const basenameMatch = fileList.find(file => !file.isDirectory && path.basename(file.name) === basename)
   if (basenameMatch) {
-    return basenameMatch.url
+    return basenameMatch.url || `/api/files/${basenameMatch.id}`
   }
 
   return null

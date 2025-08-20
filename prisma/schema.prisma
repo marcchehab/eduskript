@@ -83,6 +83,9 @@ model User {
   chapterAuthors ChapterAuthor[]
   pageAuthors    PageAuthor[]
   
+  // File uploads
+  files          File[]
+  
   @@map("users")
 }
 
@@ -149,6 +152,9 @@ model Chapter {
   
   // Many-to-many relation for multiple authors
   authors     ChapterAuthor[]
+  
+  // Files associated with this chapter
+  files       File[]
   
   @@unique([topicId, slug])
   @@map("chapters")
@@ -220,4 +226,29 @@ model PageVersion {
   
   @@unique([pageId, version])
   @@map("page_versions")
+}
+
+model File {
+  id          String  @id @default(cuid())
+  name        String
+  parentId    String? @map("parent_id")
+  isDirectory Boolean @default(false) @map("is_directory")
+  chapterId   String  @map("chapter_id")
+  hash        String? @unique
+  contentType String? @map("content_type")
+  size        BigInt?
+  createdBy   String  @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  parent   File?    @relation("FileParent", fields: [parentId], references: [id], onDelete: Cascade)
+  children File[]   @relation("FileParent")
+  chapter  Chapter  @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  creator  User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@unique([parentId, name, chapterId], name: "unique_file_name_per_parent_chapter")
+  @@index([parentId, chapterId], name: "parent_chapter_idx")
+  @@index([hash], name: "hash_idx")
+  @@map("files")
 }

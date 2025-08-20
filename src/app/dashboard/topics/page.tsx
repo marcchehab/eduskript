@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Plus, BookOpen, Eye } from 'lucide-react'
 
 interface Topic {
@@ -22,6 +23,7 @@ interface Topic {
 
 export default function TopicsPage() {
   const { data: session } = useSession()
+  const router = useRouter()
   const [topics, setTopics] = useState<Topic[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -84,52 +86,54 @@ export default function TopicsPage() {
       {topics.length > 0 ? (
         <div className="grid gap-6">
           {topics.map((topic) => (
-            <Link key={topic.id} href={`/dashboard/topics/${topic.slug}`} className="block">
-              <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-                <CardHeader>
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <CardTitle className="text-xl hover:text-primary transition-colors">
-                        {topic.title}
-                      </CardTitle>
-                      <CardDescription className="mt-2">
-                        {topic.description || 'No description provided'}
-                      </CardDescription>
-                    </div>
-                    <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-                      <Link href={`/${session.user.subdomain || 'preview'}/${topic.slug}`}>
-                        <Button variant="outline" size="sm">
-                          <Eye className="w-4 h-4 mr-2" />
-                          Preview
-                        </Button>
-                      </Link>
-                    </div>
+            <Card 
+              key={topic.id} 
+              className="hover:shadow-lg transition-shadow cursor-pointer"
+              onClick={() => router.push(`/dashboard/topics/${topic.slug}`)}
+            >
+              <CardHeader>
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <CardTitle className="text-xl hover:text-primary transition-colors">
+                      {topic.title}
+                    </CardTitle>
+                    <CardDescription className="mt-2">
+                      {topic.description || 'No description provided'}
+                    </CardDescription>
                   </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center gap-6 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-2">
-                      <BookOpen className="w-4 h-4" />
-                      <span>{topic.chapters.length} chapters</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Eye className="w-4 h-4" />
-                      <span>
-                        {topic.chapters.reduce((acc: number, ch) => acc + ch.pages.length, 0)} pages
-                      </span>
-                    </div>
-                    <div>
-                      Status: <span className={topic.isPublished ? 'text-success' : 'text-warning'}>
-                        {topic.isPublished ? 'Published' : 'Draft'}
-                      </span>
-                    </div>
-                    <div>
-                      Updated {new Date(topic.updatedAt).toLocaleDateString()}
-                    </div>
+                  <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+                    <Link href={`/${session.user.subdomain || 'preview'}/${topic.slug}`}>
+                      <Button variant="outline" size="sm">
+                        <Eye className="w-4 h-4 mr-2" />
+                        Preview
+                      </Button>
+                    </Link>
                   </div>
-                </CardContent>
-              </Card>
-            </Link>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-6 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="w-4 h-4" />
+                    <span>{topic.chapters.length} chapters</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Eye className="w-4 h-4" />
+                    <span>
+                      {topic.chapters.reduce((acc: number, ch) => acc + ch.pages.length, 0)} pages
+                    </span>
+                  </div>
+                  <div>
+                    Status: <span className={topic.isPublished ? 'text-success' : 'text-warning'}>
+                      {topic.isPublished ? 'Published' : 'Draft'}
+                    </span>
+                  </div>
+                  <div>
+                    Updated {new Date(topic.updatedAt).toLocaleDateString()}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           ))}
         </div>
       ) : (

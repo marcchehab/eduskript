@@ -9,8 +9,7 @@ import { ExportPDF } from '@/components/public/export-pdf'
 import { Comments } from '@/components/public/comments'
 import { Edit } from 'lucide-react'
 import type { Metadata } from 'next'
-import { getS3Client } from '@/lib/utils'
-import { ListObjectsV2Command } from '@aws-sdk/client-s3'
+import { listFiles } from '@/lib/file-storage'
 import { headers } from 'next/headers'
 
 interface PageProps {
@@ -282,29 +281,27 @@ export default async function PublicPage({ params }: PageProps) {
       notFound()
     }
 
-    // Fetch chapter file list from S3
-    const bucket = process.env.CELLAR_ADDON_BUCKET!
-    const s3 = getS3Client()
-    const prefix = `${domain}/chapters/${chapter.id}/`
-    const listRes = await s3.send(new ListObjectsV2Command({
-      Bucket: bucket,
-      Prefix: prefix,
-    }))
-    const fileList = (listRes.Contents || [])
-      .filter(obj => obj.Key && !obj.Key.endsWith('/'))
-      .map(obj => {
-        const key = obj.Key!
-        const filename = key.split('/').pop()!
-        const url = `https://${bucket}.${process.env.CELLAR_ADDON_HOST}/${key}`
-        return {
-          filename,
-          url,
-          relativePath: url,
-          size: obj.Size,
-          uploadType: 'chapter',
-          uploadedAt: obj.LastModified ? obj.LastModified.toISOString() : '',
-        }
-      })
+    // Fetch chapter file list from local file system
+    let fileList: Array<{
+      id: string;
+      name: string;
+      url?: string;
+      isDirectory?: boolean;
+    }> = []
+    if (isAuthor) {
+      try {
+        const files = await listFiles({
+          chapterId: chapter.id,
+          parentId: null, // Root level files
+          userId: teacher.id
+        })
+        
+        fileList = files.filter(file => !file.isDirectory) // Only include files, not directories
+      } catch (error) {
+        console.error('Error fetching files:', error)
+        // Continue with empty file list if there's an error
+      }
+    }
 
     // Process the markdown content with proper context for image resolution
     const processedMarkdown = await processMarkdown(page.content, {

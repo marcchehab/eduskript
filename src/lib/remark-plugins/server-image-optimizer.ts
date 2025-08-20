@@ -7,7 +7,7 @@ export interface ServerImageOptimizerOptions {
 }
 
 /**
- * Server-side remark plugin that downloads S3 images locally for Next.js optimization
+ * Server-side remark plugin that downloads remote images locally for Next.js optimization
  * Only runs in Node.js environment, skips in browser
  */
 export function remarkServerImageOptimizer(options: ServerImageOptimizerOptions = {}) {

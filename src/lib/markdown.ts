@@ -25,7 +25,7 @@ export interface MarkdownContext {
   /** The chapter ID for chapter-specific file searches */
   chapterId?: string
   /** Pre-fetched file list for client-side image resolution */
-  fileList?: Array<{ filename: string, url: string, relativePath: string }>
+  fileList?: Array<{ id: string, name: string, url?: string, isDirectory?: boolean }>
 }
 
 export async function processMarkdown(

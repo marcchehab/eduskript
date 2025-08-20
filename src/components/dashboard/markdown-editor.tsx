@@ -7,14 +7,15 @@ interface MarkdownEditorProps {
   onChange: (content: string) => void
   onSave?: () => void
   onFileInsert?: (file: {
-    filename: string
-    url: string
-    uploadType: string
+    id: string
+    name: string
+    url?: string
+    isDirectory?: boolean
   }) => void
   chapterId?: string
   domain?: string
   isReadOnly?: boolean
-  fileList?: Array<{filename: string, url: string, relativePath: string}>
+  fileList?: Array<{id: string, name: string, url?: string, isDirectory?: boolean}>
   fileListLoading?: boolean
   onFileUpload?: () => void
 }
