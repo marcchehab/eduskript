@@ -100,7 +100,7 @@ export function ProfileSettings() {
                 required
               />
               <span className="px-3 py-2 bg-muted border border-l-0 border-input rounded-r-md text-muted-foreground text-sm h-10 flex items-center">
-                .localhost:3000
+                .{typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'localhost:3000' : 'eduskript.org'}
               </span>
             </div>
             <p className="text-sm text-muted-foreground mt-1">
