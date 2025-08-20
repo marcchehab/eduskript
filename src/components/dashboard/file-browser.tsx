@@ -34,7 +34,7 @@ interface FileBrowserProps {
   onFileRenamed?: (oldFilename: string, newFilename: string) => void
 }
 
-export function FileBrowser({ chapterId, onFileSelect, className = '', onUploadComplete, files, loading }: FileBrowserProps) {
+export function FileBrowser({ chapterId, onFileSelect, className = '', onUploadComplete, files, loading, onFileRenamed }: FileBrowserProps) {
   const [dragOver, setDragOver] = useState(false)
   const [renameFile, setRenameFile] = useState<FileItem | null>(null)
   const [newFileName, setNewFileName] = useState('')
@@ -343,9 +343,36 @@ export function FileBrowser({ chapterId, onFileSelect, className = '', onUploadC
                 Cancel
               </Button>
               <Button onClick={async () => {
-                // Rename functionality needs to be implemented for new file system
-                alert('Rename functionality is temporarily disabled while updating the file system.')
-                setRenameFile(null)
+                if (!renameFile || !newFileName.trim()) return
+                
+                try {
+                  const response = await fetch(`/api/files/${renameFile.id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      newFilename: newFileName.trim()
+                    })
+                  })
+                  
+                  if (response.ok) {
+                    const result = await response.json()
+                    
+                    // Call the callback to update live editor content if updateLinks is enabled
+                    if (updateLinks && onFileRenamed) {
+                      onFileRenamed(result.file.oldName, result.file.name)
+                    }
+                    
+                    setRenameFile(null)
+                    setNewFileName('')
+                    if (onUploadComplete) onUploadComplete() // Refresh the file list
+                  } else {
+                    const error = await response.json()
+                    alert(error.error || 'Failed to rename file')
+                  }
+                } catch (error) {
+                  console.error('Rename error:', error)
+                  alert('Failed to rename file')
+                }
               }}>
                 Rename
               </Button>

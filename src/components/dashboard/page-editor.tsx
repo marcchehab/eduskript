@@ -164,6 +164,31 @@ export function PageEditor({ topic, chapter, page }: PageEditorProps) {
     setHasUnsavedChanges(true)
   }
 
+  const handleFileRenamed = (oldFilename: string, newFilename: string) => {
+    // Update the current editor content to reflect the renamed file
+    const updatedContent = content
+      // Update image references: ![alt](oldname.jpg) -> ![alt](newname.jpg)
+      .replace(
+        new RegExp(`!\\[([^\\]]*)\\]\\(${oldFilename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)`, 'g'), 
+        `![$1](${newFilename})`
+      )
+      // Update link references: [text](oldname.pdf) -> [text](newname.pdf)
+      .replace(
+        new RegExp(`\\[([^\\]]*)\\]\\(${oldFilename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)`, 'g'), 
+        `[$1](${newFilename})`
+      )
+      // Update video source references
+      .replace(
+        new RegExp(`<source src="${oldFilename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`, 'g'),
+        `<source src="${newFilename}"`
+      )
+    
+    if (updatedContent !== content) {
+      setContent(updatedContent)
+      setHasUnsavedChanges(true)
+    }
+  }
+
   // Load version history
   const loadVersions = useCallback(async () => {
     try {
@@ -348,6 +373,7 @@ export function PageEditor({ topic, chapter, page }: PageEditorProps) {
             refreshFileList()
           }}
           onUploadComplete={refreshFileList}
+          onFileRenamed={handleFileRenamed}
         />
       </CollapsibleDrawer>
 
