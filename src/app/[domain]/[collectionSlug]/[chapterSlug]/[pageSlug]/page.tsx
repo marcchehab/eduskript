@@ -15,7 +15,7 @@ import { headers } from 'next/headers'
 interface PageProps {
   params: Promise<{
     domain: string
-    topicSlug: string
+    collectionSlug: string
     chapterSlug: string
     pageSlug: string
   }>
@@ -28,7 +28,7 @@ export const dynamicParams = true // Allow new params to be generated on-demand
 
 // Generate metadata for SEO
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const { domain, topicSlug, chapterSlug, pageSlug } = await params
+  const { domain, collectionSlug, chapterSlug, pageSlug } = await params
 
   try {
     const session = await getServerSession(authOptions)
@@ -56,10 +56,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     // Check if current user is the author
     const isAuthor = session?.user?.email === teacher.email
 
-    // Find the topic
-    const topic = await prisma.topic.findFirst({
+    // Find the collection
+    const collection = await prisma.collection.findFirst({
       where: {
-        slug: topicSlug,
+        slug: collectionSlug,
         authors: {
           some: {
             userId: teacher.id
@@ -75,15 +75,15 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       }
     })
 
-    if (!topic) {
+    if (!collection) {
       return {
         title: 'Page Not Found',
         description: 'The requested page could not be found.'
       }
     }
 
-    // Authorization check for topic
-    if (!topic.isPublished && !isAuthor) {
+    // Authorization check for collection
+    if (!collection.isPublished && !isAuthor) {
       return {
         title: 'Page Not Found',
         description: 'The requested page could not be found.'
@@ -93,8 +93,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     // Find the chapter
     const chapter = await prisma.chapter.findUnique({
       where: {
-        topicId_slug: {
-          topicId: topic.id,
+        collectionId_slug: {
+          collectionId: collection.id,
           slug: chapterSlug
         }
       },
@@ -153,7 +153,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     }
 
     const title = `${page.title} | ${teacher.name || 'Eduskript'}`
-    const description = topic.description || `${page.title} by ${teacher.name}`
+    const description = collection.description || `${page.title} by ${teacher.name}`
 
     return {
       title,
@@ -164,7 +164,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
         description,
         type: 'article',
         siteName: teacher.name || 'Eduskript',
-        url: `https://${domain}/${topicSlug}/${chapterSlug}/${pageSlug}`
+        url: `https://${domain}/${collectionSlug}/${chapterSlug}/${pageSlug}`
       },
       twitter: {
         card: 'summary_large_image',
@@ -182,11 +182,11 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 }
 
 export default async function PublicPage({ params }: PageProps) {
-  const { domain, topicSlug, chapterSlug, pageSlug } = await params
+  const { domain, collectionSlug, chapterSlug, pageSlug } = await params
   const session = await getServerSession(authOptions)
   
   // Debug logging
-  console.log('🔍 PublicPage Debug:', { domain, topicSlug, chapterSlug, pageSlug })
+  console.log('🔍 PublicPage Debug:', { domain, collectionSlug, chapterSlug, pageSlug })
   
   // Check if we're on a subdomain by examining the Host header
   const headersList = await headers()
@@ -221,11 +221,11 @@ export default async function PublicPage({ params }: PageProps) {
     // Check if current user is the author
     const isAuthor = session?.user?.email === teacher.email
 
-    // Find the topic, chapter, and page
-    console.log('📚 Looking for topic:', topicSlug)
-    const topic = await prisma.topic.findFirst({
+    // Find the collection, chapter, and page
+    console.log('📚 Looking for collection:', collectionSlug)
+    const collection = await prisma.collection.findFirst({
       where: {
-        slug: topicSlug,
+        slug: collectionSlug,
         authors: {
           some: {
             userId: teacher.id
@@ -252,16 +252,16 @@ export default async function PublicPage({ params }: PageProps) {
       }
     })
 
-    if (!topic) {
+    if (!collection) {
       notFound()
     }
 
-    // Authorization check for topic
-    if (!topic.isPublished && !isAuthor) {
+    // Authorization check for collection
+    if (!collection.isPublished && !isAuthor) {
       notFound()
     }
 
-    const chapter = topic.chapters.find(ch => ch.slug === chapterSlug)
+    const chapter = collection.chapters.find(ch => ch.slug === chapterSlug)
     if (!chapter) {
       notFound()
     }
@@ -313,10 +313,10 @@ export default async function PublicPage({ params }: PageProps) {
 
     // Build site structure for navigation
     const siteStructure = [{
-      id: topic.id,
-      title: topic.title,
-      slug: topic.slug,
-      chapters: topic.chapters
+      id: collection.id,
+      title: collection.title,
+      slug: collection.slug,
+      chapters: collection.chapters
         .filter(ch => isAuthor || ch.isPublished) // Show all chapters to author, only published to others
         .map(ch => ({
           id: ch.id,
@@ -340,7 +340,7 @@ export default async function PublicPage({ params }: PageProps) {
       title: teacher.title || undefined
     }
 
-    const currentPath = `/${topicSlug}/${chapterSlug}/${pageSlug}`
+    const currentPath = `/${collectionSlug}/${chapterSlug}/${pageSlug}`
 
     return (
       <PublicSiteLayout
@@ -350,7 +350,7 @@ export default async function PublicPage({ params }: PageProps) {
       >
         <div className="max-w-4xl mx-auto">
           {/* Preview mode indicator for unpublished content */}
-          {(!topic.isPublished || !chapter.isPublished || !page.isPublished) && isAuthor && (
+          {(!collection.isPublished || !chapter.isPublished || !page.isPublished) && isAuthor && (
             <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-6">
               <div className="flex items-center">
                 <div className="flex-shrink-0">
@@ -361,7 +361,7 @@ export default async function PublicPage({ params }: PageProps) {
                 <div className="ml-3">
                   <p className="text-sm text-yellow-800 dark:text-yellow-200">
                     <strong>Preview Mode:</strong>
-                    {!topic.isPublished && ' Topic is not published.'}
+                    {!collection.isPublished && ' Collection is not published.'}
                     {!chapter.isPublished && ' Chapter is not published.'}
                     {!page.isPublished && ' Page is not published.'}
                     {' Only you can see this content.'}
@@ -373,14 +373,14 @@ export default async function PublicPage({ params }: PageProps) {
 
           <Breadcrumb
             items={[
-              { title: topic.title, href: `/${domain}/${topicSlug}` },
-              { title: chapter.title, href: `/${domain}/${topicSlug}/${chapterSlug}` },
+              { title: collection.title, href: `/${domain}/${collectionSlug}` },
+              { title: chapter.title, href: `/${domain}/${collectionSlug}/${chapterSlug}` },
               { title: page.title }
             ]}
             subdomain={domain}
             isOnSubdomain={isOnSubdomain}
           ><a
-            href={`/dashboard/topics/${topic.slug}/chapters/${chapter.slug}/pages/${page.slug}/edit`}
+            href={`/dashboard/collections/${collection.slug}/chapters/${chapter.slug}/pages/${page.slug}/edit`}
             className="inline-flex items-center px-2 py-1 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors shadow-md"
           >
               <Edit className="h-4 w-4 mr-2" />

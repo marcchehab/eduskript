@@ -15,8 +15,8 @@ export default async function DashboardPage() {
   }
 
   // Fetch user's content statistics
-  const [topics, totalChapters, totalPages] = await Promise.all([
-    prisma.topic.findMany({
+  const [collections, totalChapters, totalPages] = await Promise.all([
+    prisma.collection.findMany({
       where: {
         authors: {
           some: {
@@ -53,7 +53,7 @@ export default async function DashboardPage() {
     })
   ])
 
-  const totalTopics = topics.length
+  const totalCollections = collections.length
 
   return (
     <div className="space-y-6">
@@ -66,10 +66,10 @@ export default async function DashboardPage() {
             Welcome back! Here&apos;s what&apos;s happening with your content.
           </p>
         </div>
-        <Link href="/dashboard/topics/new">
+        <Link href="/dashboard/collections/new">
           <Button>
             <Plus className="w-4 h-4 mr-2" />
-            New Topic
+            New Collection
           </Button>
         </Link>
       </div>
@@ -78,11 +78,11 @@ export default async function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Topics</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Collections</CardTitle>
             <BookOpen className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalTopics}</div>
+            <div className="text-2xl font-bold">{totalCollections}</div>
           </CardContent>
         </Card>
         
@@ -107,33 +107,33 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      {/* Recent Topics */}
+      {/* Recent Collections */}
       <Card>
         <CardHeader>
-          <CardTitle>Recent Topics</CardTitle>
-          <CardDescription>Your most recently updated topics</CardDescription>
+          <CardTitle>Recent Collections</CardTitle>
+          <CardDescription>Your most recently updated collections</CardDescription>
         </CardHeader>
         <CardContent>
-          {topics.length > 0 ? (
+          {collections.length > 0 ? (
             <div className="space-y-4">
-              {topics.map((topic) => (
-                <div key={topic.id} className="flex items-center justify-between p-4 border rounded-lg">
+              {collections.map((collection) => (
+                <div key={collection.id} className="flex items-center justify-between p-4 border rounded-lg">
                   <div>
-                    <Link href={`/dashboard/topics/${topic.slug}`}>
+                    <Link href={`/dashboard/collections/${collection.slug}`}>
                       <h3 className="font-medium text-foreground">
-                        {topic.title}
+                        {collection.title}
                       </h3>
                     </Link>
                     <p className="text-sm text-muted-foreground">
-                      {topic.description || 'No description'}
+                      {collection.description || 'No description'}
                     </p>
                     <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                      <span>{topic.chapters.length} chapters</span>
+                      <span>{collection.chapters.length} chapters</span>
                       <span>
-                        {topic.chapters.reduce((acc: number, ch: { pages: unknown[] }) => acc + ch.pages.length, 0)} pages
+                        {collection.chapters.reduce((acc: number, ch: { pages: unknown[] }) => acc + ch.pages.length, 0)} pages
                       </span>
                       <span>
-                        Updated {new Date(topic.updatedAt).toLocaleDateString()}
+                        Updated {new Date(collection.updatedAt).toLocaleDateString()}
                       </span>
                     </div>
                   </div>
@@ -144,15 +144,15 @@ export default async function DashboardPage() {
             <div className="text-center py-8">
               <BookOpen className="h-12 w-12 text-icon-muted mx-auto mb-4" />
               <h3 className="text-lg font-medium text-foreground mb-2">
-                No topics yet
+                No collections yet
               </h3>
               <p className="text-muted-foreground mb-4">
-                Get started by creating your first educational topic.
+                Get started by creating your first educational collection.
               </p>
-              <Link href="/dashboard/topics/new">
+              <Link href="/dashboard/collections/new">
                 <Button>
                   <Plus className="w-4 h-4 mr-2" />
-                  Create Your First Topic
+                  Create Your First Collection
                 </Button>
               </Link>
             </div>

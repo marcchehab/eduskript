@@ -1,18 +1,18 @@
-import { User, Topic, Chapter, Page, PageVersion } from '@prisma/client'
+import { User, Collection, Chapter, Page, PageVersion } from '@prisma/client'
 
 // Extended types with relations
-export type UserWithTopics = User & {
-  topics: Topic[]
+export type UserWithCollections = User & {
+  collections: Collection[]
 }
 
-export type TopicWithChapters = Topic & {
+export type CollectionWithChapters = Collection & {
   chapters: ChapterWithPages[]
   author: User
 }
 
 export type ChapterWithPages = Chapter & {
   pages: PageWithVersions[]
-  topic: Topic
+  collection: Collection
 }
 
 export type PageWithVersions = Page & {
@@ -20,15 +20,15 @@ export type PageWithVersions = Page & {
   chapter: Chapter
 }
 
-export type PageWithChapterAndTopic = Page & {
+export type PageWithChapterAndCollection = Page & {
   chapter: Chapter & {
-    topic: Topic
+    collection: Collection
   }
   versions: PageVersion[]
 }
 
 // Form types
-export interface CreateTopicData {
+export interface CreateCollectionData {
   title: string
   description?: string
   slug: string
@@ -39,7 +39,7 @@ export interface CreateChapterData {
   description?: string
   slug: string
   order: number
-  topicId: string
+  collectionId: string
 }
 
 export interface CreatePageData {
@@ -64,7 +64,7 @@ export interface NavItem {
   description?: string
 }
 
-export interface SidebarTopic {
+export interface SidebarCollection {
   id: string
   title: string
   slug: string
@@ -101,7 +101,7 @@ export interface ApiResponse<T = unknown> {
 
 // Search types
 export interface SearchResult {
-  type: 'topic' | 'chapter' | 'page'
+  type: 'collection' | 'chapter' | 'page'
   id: string
   title: string
   slug: string

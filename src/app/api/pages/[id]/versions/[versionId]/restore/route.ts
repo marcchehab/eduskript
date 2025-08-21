@@ -45,7 +45,7 @@ export async function POST(
       include: {
         chapter: {
           include: {
-            topic: true
+            collection: true
           }
         }
       }
@@ -92,13 +92,13 @@ export async function POST(
       select: { subdomain: true }
     })
 
-    if (user?.subdomain && page.chapter.topic) {
+    if (user?.subdomain && page.chapter.collection) {
       // Revalidate all relevant paths
-      revalidatePath(`/${user.subdomain}/${page.chapter.topic.slug}/${page.chapter.slug}/${page.slug}`)
-      revalidatePath(`/${user.subdomain}/${page.chapter.topic.slug}/${page.chapter.slug}`)
-      revalidatePath(`/${user.subdomain}/${page.chapter.topic.slug}`)
+      revalidatePath(`/${user.subdomain}/${page.chapter.collection.slug}/${page.chapter.slug}/${page.slug}`)
+      revalidatePath(`/${user.subdomain}/${page.chapter.collection.slug}/${page.chapter.slug}`)
+      revalidatePath(`/${user.subdomain}/${page.chapter.collection.slug}`)
       revalidatePath(`/${user.subdomain}`)
-      revalidatePath('/dashboard/topics')
+      revalidatePath('/dashboard/collections')
     }
 
     return NextResponse.json({ 

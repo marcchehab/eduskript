@@ -49,7 +49,7 @@ interface Chapter {
 interface SortableChapterItemProps {
   chapter: Chapter
   index: number
-  topicSlug: string
+  collectionSlug: string
   onChapterUpdated: () => void
   onChapterDeleted: () => void
 }
@@ -57,7 +57,7 @@ interface SortableChapterItemProps {
 function SortableChapterItem({ 
   chapter, 
   index, 
-  topicSlug, 
+  collectionSlug, 
   onChapterUpdated,
   onChapterDeleted 
 }: SortableChapterItemProps) {
@@ -112,7 +112,7 @@ function SortableChapterItem({
             </div>
           </div>
           <div>
-            <Link href={`/dashboard/topics/${topicSlug}/chapters/${chapter.slug}`}>
+            <Link href={`/dashboard/collections/${collectionSlug}/chapters/${chapter.slug}`}>
               <h3 className="font-medium text-foreground hover:text-primary cursor-pointer transition-colors">
                 {chapter.title}
               </h3>
@@ -164,7 +164,7 @@ function SortableChapterItem({
             <SortablePages
               pages={chapter.pages}
               chapterId={chapter.id}
-              topicSlug={topicSlug}
+              collectionSlug={collectionSlug}
               chapterSlug={chapter.slug}
               onReorder={onChapterUpdated}
               onPageDeleted={onChapterUpdated}
@@ -179,7 +179,7 @@ function SortableChapterItem({
 function StaticChapterItem({ 
   chapter, 
   index, 
-  topicSlug, 
+  collectionSlug, 
   onChapterUpdated,
   onChapterDeleted 
 }: SortableChapterItemProps) {
@@ -215,7 +215,7 @@ function StaticChapterItem({
             </div>
           </div>
           <div>
-            <Link href={`/dashboard/topics/${topicSlug}/chapters/${chapter.slug}`}>
+            <Link href={`/dashboard/collections/${collectionSlug}/chapters/${chapter.slug}`}>
               <h3 className="font-medium text-foreground hover:text-primary cursor-pointer transition-colors">
                 {chapter.title}
               </h3>
@@ -267,7 +267,7 @@ function StaticChapterItem({
             <SortablePages
               pages={chapter.pages}
               chapterId={chapter.id}
-              topicSlug={topicSlug}
+              collectionSlug={collectionSlug}
               chapterSlug={chapter.slug}
               onReorder={onChapterUpdated}
               onPageDeleted={onChapterUpdated}
@@ -281,15 +281,15 @@ function StaticChapterItem({
 
 interface SortableChaptersProps {
   chapters: Chapter[]
-  topicId: string // Keep as topicId for now to match existing usage
-  topicSlug: string
+  collectionId: string
+  collectionSlug: string
   onReorder: () => void
 }
 
 export function SortableChapters({ 
   chapters, 
-  topicId, 
-  topicSlug, 
+  collectionId, 
+  collectionSlug, 
   onReorder 
 }: SortableChaptersProps) {
   const [items, setItems] = useState(chapters)
@@ -327,7 +327,7 @@ export function SortableChapters({
       // Update order in database
       setIsReordering(true)
       try {
-        const response = await fetch(`/api/topics/${topicId}/reorder-chapters`, {
+        const response = await fetch(`/api/collections/${collectionId}/reorder-chapters`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -365,7 +365,7 @@ export function SortableChapters({
                 key={chapter.id}
                 chapter={chapter}
                 index={index}
-                topicSlug={topicSlug}
+                collectionSlug={collectionSlug}
                 onChapterUpdated={onReorder}
                 onChapterDeleted={onReorder}
               />
@@ -380,7 +380,7 @@ export function SortableChapters({
               key={chapter.id}
               chapter={chapter}
               index={index}
-              topicSlug={topicSlug}
+              collectionSlug={collectionSlug}
               onChapterUpdated={onReorder}
               onChapterDeleted={onReorder}
             />

@@ -16,20 +16,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { title, description, slug, topicId } = await request.json()
+    const { title, description, slug, collectionId } = await request.json()
 
     // Validate input
-    if (!title || !slug || !topicId) {
+    if (!title || !slug || !collectionId) {
       return NextResponse.json(
-        { error: 'Title, slug, and topic ID are required' },
+        { error: 'Title, slug, and collection ID are required' },
         { status: 400 }
       )
     }
 
-    // Verify the user is an author of the topic
-    const topic = await prisma.topic.findFirst({
+    // Verify the user is an author of the collection
+    const collection = await prisma.collection.findFirst({
       where: {
-        id: topicId,
+        id: collectionId,
         authors: {
           some: {
             userId: session.user.id
@@ -38,9 +38,9 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    if (!topic) {
+    if (!collection) {
       return NextResponse.json(
-        { error: 'Topic not found or access denied' },
+        { error: 'Collection not found or access denied' },
         { status: 404 }
       )
     }
@@ -48,24 +48,24 @@ export async function POST(request: NextRequest) {
     // Normalize slug
     const normalizedSlug = generateSlug(slug)
 
-    // Check if slug is already taken in this topic
+    // Check if slug is already taken in this collection
     const existingChapter = await prisma.chapter.findFirst({
       where: {
-        topicId,
+        collectionId,
         slug: normalizedSlug
       }
     })
 
     if (existingChapter) {
       return NextResponse.json(
-        { error: 'A chapter with this slug already exists in this topic' },
+        { error: 'A chapter with this slug already exists in this collection' },
         { status: 409 }
       )
     }
 
     // Get the next order number
     const lastChapter = await prisma.chapter.findFirst({
-      where: { topicId },
+      where: { collectionId },
       orderBy: { order: 'desc' }
     })
 
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
         description,
         slug: normalizedSlug,
         order: nextOrder,
-        topicId,
+        collectionId,
         authors: {
           create: {
             userId: session.user.id,

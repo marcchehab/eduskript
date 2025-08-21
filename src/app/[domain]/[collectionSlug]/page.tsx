@@ -10,19 +10,19 @@ import { getNavigationUrl } from '@/lib/utils'
 export const revalidate = 0 // No caching for previews to show latest changes
 export const dynamic = 'force-dynamic' // Force dynamic rendering for auth checks
 
-interface TopicPreviewProps {
+interface CollectionPreviewProps {
   params: Promise<{
     domain: string
-    topicSlug: string
+    collectionSlug: string
   }>
 }
 
 // Generate metadata for SEO
-export async function generateMetadata({ params }: TopicPreviewProps): Promise<Metadata> {
-  const { domain, topicSlug } = await params
+export async function generateMetadata({ params }: CollectionPreviewProps): Promise<Metadata> {
+  const { domain, collectionSlug } = await params
   
   try {
-    // Find the teacher and topic
+    // Find the teacher and collection
     const teacher = await prisma.user.findUnique({
       where: { subdomain: domain },
       select: { id: true, name: true, title: true }
@@ -35,9 +35,9 @@ export async function generateMetadata({ params }: TopicPreviewProps): Promise<M
       }
     }
 
-    const topic = await prisma.topic.findFirst({
+    const collection = await prisma.collection.findFirst({
       where: {
-        slug: topicSlug,
+        slug: collectionSlug,
         authors: {
           some: {
             userId: teacher.id
@@ -47,23 +47,23 @@ export async function generateMetadata({ params }: TopicPreviewProps): Promise<M
       select: { title: true, description: true }
     })
 
-    if (!topic) {
+    if (!collection) {
       return {
-        title: 'Topic Not Found',
-        description: 'The requested topic could not be found.'
+        title: 'Collection Not Found',
+        description: 'The requested collection could not be found.'
       }
     }
 
     return {
-      title: `${topic.title} - Preview | ${teacher.name || domain}`,
-      description: topic.description || `Preview of ${topic.title} by ${teacher.name || domain}`,
+      title: `${collection.title} - Preview | ${teacher.name || domain}`,
+      description: collection.description || `Preview of ${collection.title} by ${teacher.name || domain}`,
       robots: 'noindex, nofollow' // Prevent search engines from indexing previews
     }
   } catch (error) {
-    console.error('Error generating metadata for topic preview:', error)
+    console.error('Error generating metadata for collection preview:', error)
     return {
-      title: 'Topic Preview',
-      description: 'Preview mode for topic content'
+      title: 'Collection Preview',
+      description: 'Preview mode for collection content'
     }
   }
 }
@@ -77,7 +77,7 @@ interface Teacher {
   subdomain: string | null
 }
 
-interface TopicPage {
+interface CollectionPage {
   id: string
   title: string
   slug: string
@@ -85,31 +85,31 @@ interface TopicPage {
   isPublished: boolean
 }
 
-interface TopicChapter {
+interface CollectionChapter {
   id: string
   title: string
   slug: string
   order: number
   isPublished: boolean
-  pages: TopicPage[]
+  pages: CollectionPage[]
 }
 
-interface TopicWithChapters {
+interface CollectionWithChapters {
   id: string
   title: string
   slug: string
   description: string | null
   isPublished: boolean
-  chapters: TopicChapter[]
+  chapters: CollectionChapter[]
 }
 
-export default async function TopicPreviewPage({ params }: TopicPreviewProps) {
-  const { domain, topicSlug } = await params
+export default async function CollectionPreviewPage({ params }: CollectionPreviewProps) {
+  const { domain, collectionSlug } = await params
   const session = await getServerSession(authOptions)
 
   // Declare variables outside try block so they can be used in redirect logic
   let teacher: Teacher | null = null
-  let topic: TopicWithChapters | null = null
+  let collection: CollectionWithChapters | null = null
   let isAuthor = false
 
   try {
@@ -130,10 +130,10 @@ export default async function TopicPreviewPage({ params }: TopicPreviewProps) {
       notFound()
     }
 
-    // Find the topic
-    topic = await prisma.topic.findFirst({
+    // Find the collection
+    collection = await prisma.collection.findFirst({
       where: {
-        slug: topicSlug,
+        slug: collectionSlug,
         authors: {
           some: {
             userId: teacher.id
@@ -159,15 +159,15 @@ export default async function TopicPreviewPage({ params }: TopicPreviewProps) {
       }
     })
 
-    if (!topic) {
+    if (!collection) {
       notFound()
     }
 
-    // Authorization check: Only the author can preview unpublished topics
+    // Authorization check: Only the author can preview unpublished collections
     isAuthor = session?.user?.email === teacher.email
     
-    if (!topic.isPublished && !isAuthor) {
-      // If topic is not published and user is not the author, show access denied
+    if (!collection.isPublished && !isAuthor) {
+      // If collection is not published and user is not the author, show access denied
       return (
         <div className="min-h-screen flex items-center justify-center bg-background">
           <div className="text-center max-w-md mx-auto p-6">
@@ -175,7 +175,7 @@ export default async function TopicPreviewPage({ params }: TopicPreviewProps) {
               Access Denied
             </h1>
             <p className="text-muted-foreground mb-6">
-              This topic is not published yet. Only the author can preview unpublished content.
+              This collection is not published yet. Only the author can preview unpublished content.
             </p>
             <button 
               onClick={() => window.history.back()}
@@ -189,37 +189,37 @@ export default async function TopicPreviewPage({ params }: TopicPreviewProps) {
     }
 
   } catch (error) {
-    console.error('Error loading topic preview:', error)
+    console.error('Error loading collection preview:', error)
     notFound()
   }
 
   // Find the first available page to redirect to (outside try/catch to allow redirect to work)
-  const firstChapter = topic.chapters.find((chapter: TopicChapter) => 
+  const firstChapter = collection.chapters.find((chapter: CollectionChapter) => 
     isAuthor || chapter.isPublished
   )
   
-  const firstPage = firstChapter?.pages.find((page: TopicPage) => 
+  const firstPage = firstChapter?.pages.find((page: CollectionPage) => 
     isAuthor || page.isPublished
   )
 
   if (firstPage && firstChapter) {
-    console.log(`Redirecting to: /${domain}/${topicSlug}/${firstChapter.slug}/${firstPage.slug}`)
+    console.log(`Redirecting to: /${domain}/${collectionSlug}/${firstChapter.slug}/${firstPage.slug}`)
     // Redirect to the first available page
-    redirect(`/${domain}/${topicSlug}/${firstChapter.slug}/${firstPage.slug}`)
+    redirect(`/${domain}/${collectionSlug}/${firstChapter.slug}/${firstPage.slug}`)
   }
 
   // Build site structure for navigation
   const siteStructure = [{
-    id: topic.id,
-    title: topic.title,
-    slug: topic.slug,
-    isPublished: topic.isPublished,
-    chapters: topic.chapters.map(chapter => ({
+    id: collection.id,
+    title: collection.title,
+    slug: collection.slug,
+    isPublished: collection.isPublished,
+    chapters: collection.chapters.map(chapter => ({
       id: chapter.id,
       title: chapter.title,
       slug: chapter.slug,
       isPublished: chapter.isPublished,
-      pages: chapter.pages.map((page: TopicPage) => ({
+      pages: chapter.pages.map((page: CollectionPage) => ({
         id: page.id,
         title: page.title,
         slug: page.slug,
@@ -236,16 +236,16 @@ export default async function TopicPreviewPage({ params }: TopicPreviewProps) {
     title: teacher.title || undefined
   }
 
-    // If no pages are available, show topic overview
+    // If no pages are available, show collection overview
     return (
       <PublicSiteLayout 
         teacher={teacherForLayout} 
         siteStructure={siteStructure}
-        currentPath={`/${topicSlug}`}
+        currentPath={`/${collectionSlug}`}
       >
         <div className="max-w-4xl mx-auto p-6">
           <div className="mb-6">
-            {!topic.isPublished && isAuthor && (
+            {!collection.isPublished && isAuthor && (
               <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-6">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
@@ -255,7 +255,7 @@ export default async function TopicPreviewPage({ params }: TopicPreviewProps) {
                   </div>
                   <div className="ml-3">
                     <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                      <strong>Preview Mode:</strong> This topic is not published yet. Only you can see this content.
+                      <strong>Preview Mode:</strong> This collection is not published yet. Only you can see this content.
                     </p>
                   </div>
                 </div>
@@ -263,23 +263,23 @@ export default async function TopicPreviewPage({ params }: TopicPreviewProps) {
             )}
             
             <h1 className="text-4xl font-bold text-foreground mb-4">
-              {topic.title}
+              {collection.title}
             </h1>
             
-            {topic.description && (
+            {collection.description && (
               <p className="text-xl text-muted-foreground mb-8">
-                {topic.description}
+                {collection.description}
               </p>
             )}
           </div>
 
-          {/* Topic Overview */}
+          {/* Collection Overview */}
           <div className="space-y-8">
             <div>
               <h2 className="text-2xl font-semibold mb-4">Contents</h2>
-              {topic.chapters.length > 0 ? (
+              {collection.chapters.length > 0 ? (
                 <div className="space-y-4">
-                  {topic.chapters.map((chapter: TopicChapter, chapterIndex: number) => {
+                  {collection.chapters.map((chapter: CollectionChapter, chapterIndex: number) => {
                     const isChapterVisible = isAuthor || chapter.isPublished
                     
                     if (!isChapterVisible) return null
@@ -300,7 +300,7 @@ export default async function TopicPreviewPage({ params }: TopicPreviewProps) {
                         
                         {chapter.pages.length > 0 ? (
                           <ul className="space-y-1 ml-6">
-                            {chapter.pages.map((page: TopicPage, pageIndex: number) => {
+                            {chapter.pages.map((page: CollectionPage, pageIndex: number) => {
                               const isPageVisible = isAuthor || page.isPublished
                               
                               if (!isPageVisible) return null
@@ -308,7 +308,7 @@ export default async function TopicPreviewPage({ params }: TopicPreviewProps) {
                               return (
                                 <li key={page.id} className="text-muted-foreground">
                                   <a 
-                                    href={getNavigationUrl(domain, `/${topicSlug}/${chapter.slug}/${page.slug}`)}
+                                    href={getNavigationUrl(domain, `/${collectionSlug}/${chapter.slug}/${page.slug}`)}
                                     className="hover:text-foreground hover:underline flex items-center"
                                   >
                                     <span className="mr-2">
@@ -334,7 +334,7 @@ export default async function TopicPreviewPage({ params }: TopicPreviewProps) {
                 </div>
               ) : (
                 <p className="text-muted-foreground">
-                  This topic doesn&apos;t have any chapters yet.
+                  This collection doesn&apos;t have any chapters yet.
                 </p>
               )}
             </div>

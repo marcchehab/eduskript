@@ -8,7 +8,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Plus, BookOpen, Eye } from 'lucide-react'
 
-interface Topic {
+interface Collection {
   id: string
   title: string
   slug: string
@@ -21,29 +21,29 @@ interface Topic {
   }>
 }
 
-export default function TopicsPage() {
+export default function CollectionsPage() {
   const { data: session } = useSession()
   const router = useRouter()
-  const [topics, setTopics] = useState<Topic[]>([])
+  const [collections, setCollections] = useState<Collection[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const fetchTopics = async () => {
+    const fetchCollections = async () => {
       try {
-        const response = await fetch('/api/topics')
+        const response = await fetch('/api/collections')
         if (response.ok) {
           const data = await response.json()
-          setTopics(data.data || [])
+          setCollections(data.data || [])
         }
       } catch (error) {
-        console.error('Error fetching topics:', error)
+        console.error('Error fetching collections:', error)
       } finally {
         setLoading(false)
       }
     }
 
     if (session?.user?.id) {
-      fetchTopics()
+      fetchCollections()
     }
   }, [session?.user?.id])
 
@@ -56,8 +56,8 @@ export default function TopicsPage() {
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Topics</h1>
-            <p className="text-muted-foreground mt-2">Loading your topics...</p>
+            <h1 className="text-3xl font-bold text-foreground">Collections</h1>
+            <p className="text-muted-foreground mt-2">Loading your collections...</p>
           </div>
         </div>
       </div>
@@ -69,40 +69,40 @@ export default function TopicsPage() {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-foreground">
-            Topics
+            Collections
           </h1>
           <p className="text-muted-foreground mt-2">
-            Manage your educational topics and content
+            Manage your educational collections and content
           </p>
         </div>
-        <Link href="/dashboard/topics/new">
+        <Link href="/dashboard/collections/new">
           <Button>
             <Plus className="w-4 h-4 mr-2" />
-            New Topic
+            New Collection
           </Button>
         </Link>
       </div>
 
-      {topics.length > 0 ? (
+      {collections.length > 0 ? (
         <div className="grid gap-6">
-          {topics.map((topic) => (
+          {collections.map((collection) => (
             <Card 
-              key={topic.id} 
+              key={collection.id} 
               className="hover:shadow-lg transition-shadow cursor-pointer"
-              onClick={() => router.push(`/dashboard/topics/${topic.slug}`)}
+              onClick={() => router.push(`/dashboard/collections/${collection.slug}`)}
             >
               <CardHeader>
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
                     <CardTitle className="text-xl hover:text-primary transition-colors">
-                      {topic.title}
+                      {collection.title}
                     </CardTitle>
                     <CardDescription className="mt-2">
-                      {topic.description || 'No description provided'}
+                      {collection.description || 'No description provided'}
                     </CardDescription>
                   </div>
                   <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-                    <Link href={`/${session.user.subdomain || 'preview'}/${topic.slug}`}>
+                    <Link href={`/${session.user.subdomain || 'preview'}/${collection.slug}`}>
                       <Button variant="outline" size="sm">
                         <Eye className="w-4 h-4 mr-2" />
                         Preview
@@ -115,21 +115,21 @@ export default function TopicsPage() {
                 <div className="flex items-center gap-6 text-sm text-muted-foreground">
                   <div className="flex items-center gap-2">
                     <BookOpen className="w-4 h-4" />
-                    <span>{topic.chapters.length} chapters</span>
+                    <span>{collection.chapters.length} chapters</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Eye className="w-4 h-4" />
                     <span>
-                      {topic.chapters.reduce((acc: number, ch) => acc + ch.pages.length, 0)} pages
+                      {collection.chapters.reduce((acc: number, ch) => acc + ch.pages.length, 0)} pages
                     </span>
                   </div>
                   <div>
-                    Status: <span className={topic.isPublished ? 'text-success' : 'text-warning'}>
-                      {topic.isPublished ? 'Published' : 'Draft'}
+                    Status: <span className={collection.isPublished ? 'text-success' : 'text-warning'}>
+                      {collection.isPublished ? 'Published' : 'Draft'}
                     </span>
                   </div>
                   <div>
-                    Updated {new Date(topic.updatedAt).toLocaleDateString()}
+                    Updated {new Date(collection.updatedAt).toLocaleDateString()}
                   </div>
                 </div>
               </CardContent>
@@ -141,15 +141,15 @@ export default function TopicsPage() {
           <CardContent className="text-center py-12">
             <BookOpen className="h-12 w-12 text-icon-muted mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-              No topics yet
+              No collections yet
             </h3>
             <p className="text-muted-foreground mb-6">
-              Get started by creating your first educational topic.
+              Get started by creating your first educational collection.
             </p>
-            <Link href="/dashboard/topics/new">
+            <Link href="/dashboard/collections/new">
               <Button>
                 <Plus className="w-4 h-4 mr-2" />
-                Create Your First Topic
+                Create Your First Collection
               </Button>
             </Link>
           </CardContent>

@@ -16,7 +16,7 @@ export async function GET(
 
     const { id } = await params
 
-    const topic = await prisma.topic.findFirst({
+    const collection = await prisma.collection.findFirst({
       where: {
         id,
         authors: {
@@ -42,13 +42,13 @@ export async function GET(
       }
     })
 
-    if (!topic) {
-      return NextResponse.json({ error: 'Topic not found' }, { status: 404 })
+    if (!collection) {
+      return NextResponse.json({ error: 'Collection not found' }, { status: 404 })
     }
 
-    return NextResponse.json(topic)
+    return NextResponse.json(collection)
   } catch (error) {
-    console.error('Error fetching topic:', error)
+    console.error('Error fetching collection:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -67,8 +67,8 @@ export async function PATCH(
     const { id } = await params
     const { title, description, isPublished } = await request.json()
 
-    // Check if user is an author of this topic
-    const existingTopic = await prisma.topic.findFirst({
+    // Check if user is an author of this collection
+    const existingCollection = await prisma.collection.findFirst({
       where: {
         id,
         authors: {
@@ -79,11 +79,11 @@ export async function PATCH(
       }
     })
 
-    if (!existingTopic) {
-      return NextResponse.json({ error: 'Topic not found or access denied' }, { status: 404 })
+    if (!existingCollection) {
+      return NextResponse.json({ error: 'Collection not found or access denied' }, { status: 404 })
     }
 
-    const topic = await prisma.topic.update({
+    const collection = await prisma.collection.update({
       where: { id },
       data: {
         ...(title && { title }),
@@ -99,9 +99,9 @@ export async function PATCH(
       }
     })
 
-    return NextResponse.json(topic)
+    return NextResponse.json(collection)
   } catch (error) {
-    console.error('Error updating topic:', error)
+    console.error('Error updating collection:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -119,8 +119,8 @@ export async function DELETE(
 
     const { id } = await params
 
-    // Check if user is an author of this topic
-    const existingTopic = await prisma.topic.findFirst({
+    // Check if user is an author of this collection
+    const existingCollection = await prisma.collection.findFirst({
       where: {
         id,
         authors: {
@@ -131,17 +131,17 @@ export async function DELETE(
       }
     })
 
-    if (!existingTopic) {
-      return NextResponse.json({ error: 'Topic not found or access denied' }, { status: 404 })
+    if (!existingCollection) {
+      return NextResponse.json({ error: 'Collection not found or access denied' }, { status: 404 })
     }
 
-    await prisma.topic.delete({
+    await prisma.collection.delete({
       where: { id }
     })
 
-    return NextResponse.json({ message: 'Topic deleted successfully' })
+    return NextResponse.json({ message: 'Collection deleted successfully' })
   } catch (error) {
-    console.error('Error deleting topic:', error)
+    console.error('Error deleting collection:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 } 

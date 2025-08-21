@@ -41,28 +41,28 @@ export function PublicSiteLayout({ teacher, siteStructure, children, currentPath
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   
   // Storage keys for persistence
-  const EXPANDED_SCRIPTS_KEY = `expanded-topics-${teacher.subdomain}`
+  const EXPANDED_SCRIPTS_KEY = `expanded-collections-${teacher.subdomain}`
   const EXPANDED_CHAPTERS_KEY = `expanded-chapters-${teacher.subdomain}`
   
   // Initialize with persistent state or defaults
-  const [expandedTopics, setExpandedTopics] = useState<string[]>([])
+  const [expandedCollections, setExpandedCollections] = useState<string[]>([])
   const [expandedChapters, setExpandedChapters] = useState<string[]>([])
   const [isInitialized, setIsInitialized] = useState(false)
 
   // Get initial expanded state from localStorage or defaults
-  const getInitialExpandedTopics = useCallback(() => {
-    if (typeof window === 'undefined') return siteStructure.map(topic => topic.id)
+  const getInitialExpandedCollections = useCallback(() => {
+    if (typeof window === 'undefined') return siteStructure.map(collection => collection.id)
     
     const stored = localStorage.getItem(EXPANDED_SCRIPTS_KEY)
     if (stored) {
       try {
         return JSON.parse(stored)
       } catch {
-        return siteStructure.map(topic => topic.id)
+        return siteStructure.map(collection => collection.id)
       }
     }
-    // Default: all topics expanded
-    return siteStructure.map(topic => topic.id)
+    // Default: all collections expanded
+    return siteStructure.map(collection => collection.id)
   }, [siteStructure, EXPANDED_SCRIPTS_KEY])
 
   const getInitialExpandedChapters = useCallback(() => {
@@ -82,10 +82,10 @@ export function PublicSiteLayout({ teacher, siteStructure, children, currentPath
     // Auto-expand chapters that contain the current page
     const expandedFromCurrentPath: string[] = []
     if (currentPath) {
-      siteStructure.forEach(topic => {
-        topic.chapters.forEach(chapter => {
+      siteStructure.forEach(collection => {
+        collection.chapters.forEach(chapter => {
           const hasCurrentPage = chapter.pages.some(page => 
-            currentPath === `/${topic.slug}/${chapter.slug}/${page.slug}`
+            currentPath === `/${collection.slug}/${chapter.slug}/${page.slug}`
           )
           if (hasCurrentPage && !expandedFromStorage.includes(chapter.id)) {
             expandedFromCurrentPath.push(chapter.id)
@@ -99,10 +99,10 @@ export function PublicSiteLayout({ teacher, siteStructure, children, currentPath
 
   // Initialize state from localStorage on client side
   useEffect(() => {
-    setExpandedTopics(getInitialExpandedTopics())
+    setExpandedCollections(getInitialExpandedCollections())
     setExpandedChapters(getInitialExpandedChapters())
     setIsInitialized(true)
-  }, [getInitialExpandedTopics, getInitialExpandedChapters])
+  }, [getInitialExpandedCollections, getInitialExpandedChapters])
 
   // Update expanded chapters when current path changes
   useEffect(() => {
@@ -111,10 +111,10 @@ export function PublicSiteLayout({ teacher, siteStructure, children, currentPath
     const newExpandedChapters = [...expandedChapters]
     let hasChanges = false
     
-    siteStructure.forEach(topic => {
-      topic.chapters.forEach(chapter => {
+    siteStructure.forEach(collection => {
+      collection.chapters.forEach(chapter => {
         const hasCurrentPage = chapter.pages.some(page => 
-          currentPath === `/${topic.slug}/${chapter.slug}/${page.slug}`
+          currentPath === `/${collection.slug}/${chapter.slug}/${page.slug}`
         )
         if (hasCurrentPage && !newExpandedChapters.includes(chapter.id)) {
           newExpandedChapters.push(chapter.id)
@@ -128,11 +128,11 @@ export function PublicSiteLayout({ teacher, siteStructure, children, currentPath
     }
   }, [currentPath, isInitialized, expandedChapters, siteStructure])
 
-  // Persist expanded topics to localStorage
+  // Persist expanded collections to localStorage
   useEffect(() => {
     if (!isInitialized) return
-    localStorage.setItem(EXPANDED_SCRIPTS_KEY, JSON.stringify(expandedTopics))
-  }, [expandedTopics, isInitialized, EXPANDED_SCRIPTS_KEY])
+    localStorage.setItem(EXPANDED_SCRIPTS_KEY, JSON.stringify(expandedCollections))
+  }, [expandedCollections, isInitialized, EXPANDED_SCRIPTS_KEY])
 
   // Persist expanded chapters to localStorage
   useEffect(() => {
@@ -140,11 +140,11 @@ export function PublicSiteLayout({ teacher, siteStructure, children, currentPath
     localStorage.setItem(EXPANDED_CHAPTERS_KEY, JSON.stringify(expandedChapters))
   }, [expandedChapters, isInitialized, EXPANDED_CHAPTERS_KEY])
 
-  const toggleTopic = (topicId: string) => {
-    setExpandedTopics(prev => 
-      prev.includes(topicId) 
-        ? prev.filter(id => id !== topicId)
-        : [...prev, topicId]
+  const toggleCollection = (collectionId: string) => {
+    setExpandedCollections(prev => 
+      prev.includes(collectionId) 
+        ? prev.filter(id => id !== collectionId)
+        : [...prev, collectionId]
     )
   }
 
@@ -156,11 +156,11 @@ export function PublicSiteLayout({ teacher, siteStructure, children, currentPath
     )
   }
 
-  const isCurrentPage = (topicSlug: string, chapterSlug: string, pageSlug: string) => {
-    return currentPath === `/${topicSlug}/${chapterSlug}/${pageSlug}`
+  const isCurrentPage = (collectionSlug: string, chapterSlug: string, pageSlug: string) => {
+    return currentPath === `/${collectionSlug}/${chapterSlug}/${pageSlug}`
   }
 
-  const navigateToPage = (topicSlug: string, chapterSlug: string, pageSlug: string) => {
+  const navigateToPage = (collectionSlug: string, chapterSlug: string, pageSlug: string) => {
     // Check if we're on a subdomain by looking at window.location.hostname
     const hostname = typeof window !== 'undefined' ? window.location.hostname : ''
     const isMainDomain = hostname === 'localhost' || hostname === 'eduskript.org' || hostname === 'www.eduskript.org'
@@ -169,8 +169,8 @@ export function PublicSiteLayout({ teacher, siteStructure, children, currentPath
     // If on subdomain, use relative URL (middleware will handle rewrite)
     // If on main domain, use full path with subdomain
     const url = isOnSubdomain 
-      ? `/${topicSlug}/${chapterSlug}/${pageSlug}`
-      : `/${teacher.subdomain}/${topicSlug}/${chapterSlug}/${pageSlug}`
+      ? `/${collectionSlug}/${chapterSlug}/${pageSlug}`
+      : `/${teacher.subdomain}/${collectionSlug}/${chapterSlug}/${pageSlug}`
     
     router.push(url)
     setIsSidebarOpen(false)
@@ -218,29 +218,29 @@ export function PublicSiteLayout({ teacher, siteStructure, children, currentPath
           {/* Navigation */}
           <div className="flex-1 overflow-y-auto p-4">
             <nav className="space-y-2">
-              {siteStructure.map((topic) => (
-                <div key={topic.id} className="space-y-1">
-                  {/* Topic Title */}
+              {siteStructure.map((collection) => (
+                <div key={collection.id} className="space-y-1">
+                  {/* Collection Title */}
                   <button
-                    onClick={() => toggleTopic(topic.id)}
+                    onClick={() => toggleCollection(collection.id)}
                     className={`flex items-center w-full text-left px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                      expandedTopics.includes(topic.id)
+                      expandedCollections.includes(collection.id)
                         ? 'text-foreground bg-muted'
                         : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                     }`}
                   >
-                    {expandedTopics.includes(topic.id) ? (
+                    {expandedCollections.includes(collection.id) ? (
                       <ChevronDown className="w-4 h-4 mr-2 flex-shrink-0" />
                     ) : (
                       <ChevronRight className="w-4 h-4 mr-2 flex-shrink-0" />
                     )}
-                    <span className="truncate">{topic.title}</span>
+                    <span className="truncate">{collection.title}</span>
                   </button>
 
                   {/* Chapters */}
-                  {expandedTopics.includes(topic.id) && (
+                  {expandedCollections.includes(collection.id) && (
                     <div className="ml-6 space-y-1">
-                      {topic.chapters.map((chapter) => (
+                      {collection.chapters.map((chapter) => (
                         <div key={chapter.id} className="space-y-1">
                           {/* Chapter Title */}
                           <button
@@ -265,9 +265,9 @@ export function PublicSiteLayout({ teacher, siteStructure, children, currentPath
                               {chapter.pages.map((page) => (
                                 <button
                                   key={page.id}
-                                  onClick={() => navigateToPage(topic.slug, chapter.slug, page.slug)}
+                                  onClick={() => navigateToPage(collection.slug, chapter.slug, page.slug)}
                                   className={`block w-full text-left px-3 py-1 text-sm rounded-md truncate transition-colors ${
-                                    isCurrentPage(topic.slug, chapter.slug, page.slug)
+                                    isCurrentPage(collection.slug, chapter.slug, page.slug)
                                       ? 'bg-primary/10 text-primary font-medium'
                                       : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                                   }`}

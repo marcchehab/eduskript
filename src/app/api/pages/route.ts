@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
         }
       },
       include: {
-        topic: {
+        collection: {
           select: { slug: true }
         }
       }

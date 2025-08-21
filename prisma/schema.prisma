@@ -79,7 +79,7 @@ model User {
   pageVersions  PageVersion[]
   
   // Many-to-many relations for authoring
-  topicAuthors   TopicAuthor[]
+  collectionAuthors   CollectionAuthor[]
   chapterAuthors ChapterAuthor[]
   pageAuthors    PageAuthor[]
   
@@ -102,7 +102,7 @@ model CustomDomain {
   @@map("custom_domains")
 }
 
-model Topic {
+model Collection {
   id          String   @id @default(cuid())
   title       String
   description String?
@@ -115,24 +115,24 @@ model Topic {
   chapters    Chapter[]
   
   // Many-to-many relation for multiple authors
-  authors     TopicAuthor[]
+  authors     CollectionAuthor[]
   
-  @@map("topics")
+  @@map("collections")
 }
 
-// Junction table for Topic-User many-to-many relationship
-model TopicAuthor {
-  id        String   @id @default(cuid())
-  topicId   String
-  userId    String
-  role      String   @default("author") // "author", "editor", "reviewer", etc.
-  createdAt DateTime @default(now())
+// Junction table for Collection-User many-to-many relationship
+model CollectionAuthor {
+  id           String   @id @default(cuid())
+  collectionId String
+  userId       String
+  role         String   @default("author") // "author", "editor", "reviewer", etc.
+  createdAt    DateTime @default(now())
   
-  topic     Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  @@unique([topicId, userId])
-  @@map("topic_authors")
+  @@unique([collectionId, userId])
+  @@map("collection_authors")
 }
 
 model Chapter {
@@ -146,8 +146,8 @@ model Chapter {
   updatedAt   DateTime @updatedAt
   
   // Relations
-  topicId     String
-  topic       Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  collectionId String
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   pages       Page[]
   
   // Many-to-many relation for multiple authors
@@ -156,7 +156,7 @@ model Chapter {
   // Files associated with this chapter
   files       File[]
   
-  @@unique([topicId, slug])
+  @@unique([collectionId, slug])
   @@map("chapters")
 }
 

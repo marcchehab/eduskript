@@ -26,7 +26,7 @@ const mockComments: Comment[] = [
   {
     id: '2',
     author: 'Mike T.',
-    content: 'Could you add more practice problems for this topic?',
+    content: 'Could you add more practice problems for this collection?',
     timestamp: '1 day ago'
   }
 ]

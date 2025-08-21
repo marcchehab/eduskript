@@ -69,14 +69,14 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
         subdomain: domain
       },
       include: {
-        topicAuthors: {
+        collectionAuthors: {
           where: {
-            topic: {
+            collection: {
               isPublished: true
             }
           },
           include: {
-            topic: {
+            collection: {
               include: {
                 chapters: {
                   where: { isPublished: true },
@@ -92,7 +92,7 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
             }
           },
           orderBy: {
-            topic: {
+            collection: {
               createdAt: 'asc'
             }
           }
@@ -112,7 +112,7 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
     }
 
     return (
-              <PublicSiteLayout teacher={teacherData} siteStructure={teacher.topicAuthors.map(ta => ta.topic)}>
+              <PublicSiteLayout teacher={teacherData} siteStructure={teacher.collectionAuthors.map(ca => ca.collection)}>
         <div className="max-w-4xl mx-auto">
           <div className="text-center py-12">
             <h1 className="text-4xl font-bold text-foreground mb-4">
@@ -126,25 +126,25 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-12">
-              {teacher.topicAuthors.map((topicAuthor) => (
-                <div key={topicAuthor.topic.id} className="bg-card border border-border rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
+              {teacher.collectionAuthors.map((collectionAuthor) => (
+                <div key={collectionAuthor.collection.id} className="bg-card border border-border rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
                   <h3 className="text-xl font-semibold text-foreground mb-3">
-                    {topicAuthor.topic.title}
+                    {collectionAuthor.collection.title}
                   </h3>
-                  {topicAuthor.topic.description && (
+                  {collectionAuthor.collection.description && (
                     <p className="text-gray-600 dark:text-gray-400 mb-4">
-                      {topicAuthor.topic.description}
+                      {collectionAuthor.collection.description}
                     </p>
                   )}
                   <div className="text-sm text-gray-500 dark:text-gray-500">
-                    {topicAuthor.topic.chapters.length} chapters • {' '}
-                    {topicAuthor.topic.chapters.reduce((acc: number, ch: { pages: unknown[] }) => acc + ch.pages.length, 0)} pages
+                    {collectionAuthor.collection.chapters.length} chapters • {' '}
+                    {collectionAuthor.collection.chapters.reduce((acc: number, ch: { pages: unknown[] }) => acc + ch.pages.length, 0)} pages
                   </div>
                 </div>
               ))}
             </div>
 
-            {teacher.topicAuthors.length === 0 && (
+            {teacher.collectionAuthors.length === 0 && (
               <div className="text-center py-12">
                 <p className="text-gray-500 dark:text-gray-400">
                   No published content available yet.

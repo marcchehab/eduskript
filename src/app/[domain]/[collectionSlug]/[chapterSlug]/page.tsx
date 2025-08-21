@@ -12,17 +12,17 @@ export const dynamic = 'force-dynamic' // Force dynamic rendering for auth check
 interface ChapterPreviewProps {
   params: Promise<{
     domain: string
-    topicSlug: string
+    collectionSlug: string
     chapterSlug: string
   }>
 }
 
 // Generate metadata for SEO
 export async function generateMetadata({ params }: ChapterPreviewProps): Promise<Metadata> {
-  const { domain, topicSlug, chapterSlug } = await params
+  const { domain, collectionSlug, chapterSlug } = await params
   
   try {
-    // Find the teacher and topic
+    // Find the teacher and collection
     const teacher = await prisma.user.findUnique({
       where: { subdomain: domain },
       select: { id: true, name: true, title: true }
@@ -35,9 +35,9 @@ export async function generateMetadata({ params }: ChapterPreviewProps): Promise
       }
     }
 
-    const topic = await prisma.topic.findFirst({
+    const collection = await prisma.collection.findFirst({
       where: {
-        slug: topicSlug,
+        slug: collectionSlug,
         authors: {
           some: {
             userId: teacher.id
@@ -47,18 +47,18 @@ export async function generateMetadata({ params }: ChapterPreviewProps): Promise
       select: { title: true, description: true }
     })
 
-    if (!topic) {
+    if (!collection) {
       return {
-        title: 'Topic Not Found',
-        description: 'The requested topic could not be found.'
+        title: 'Collection Not Found',
+        description: 'The requested collection could not be found.'
       }
     }
 
     const chapter = await prisma.chapter.findFirst({
       where: {
         slug: chapterSlug,
-        topic: {
-          slug: topicSlug,
+        collection: {
+          slug: collectionSlug,
           authors: {
             some: {
               userId: teacher.id
@@ -77,8 +77,8 @@ export async function generateMetadata({ params }: ChapterPreviewProps): Promise
     }
 
     return {
-      title: `${chapter.title} - ${topic.title} | ${teacher.name || domain}`,
-      description: `${chapter.title} from ${topic.title} by ${teacher.name || domain}`,
+      title: `${chapter.title} - ${collection.title} | ${teacher.name || domain}`,
+      description: `${chapter.title} from ${collection.title} by ${teacher.name || domain}`,
       robots: 'noindex, nofollow' // Prevent search engines from indexing previews
     }
   } catch (error) {
@@ -90,7 +90,7 @@ export async function generateMetadata({ params }: ChapterPreviewProps): Promise
   }
 }
 
-interface TopicPage {
+interface CollectionPage {
   id: string
   title: string
   slug: string
@@ -103,7 +103,7 @@ interface TopicPage {
 
 
 export default async function ChapterPreviewPage({ params }: ChapterPreviewProps) {
-  const { domain, topicSlug, chapterSlug } = await params
+  const { domain, collectionSlug, chapterSlug } = await params
   const session = await getServerSession(authOptions)
 
   try {
@@ -127,10 +127,10 @@ export default async function ChapterPreviewPage({ params }: ChapterPreviewProps
     // Check if current user is the author
     const isAuthor = session?.user?.email === teacher.email
 
-    // Find the topic with the specific chapter
-    const topic = await prisma.topic.findFirst({
+    // Find the collection with the specific chapter
+    const collection = await prisma.collection.findFirst({
       where: {
-        slug: topicSlug,
+        slug: collectionSlug,
         authors: {
           some: {
             userId: teacher.id
@@ -158,16 +158,16 @@ export default async function ChapterPreviewPage({ params }: ChapterPreviewProps
       }
     })
 
-    if (!topic) {
+    if (!collection) {
       notFound()
     }
 
-    // Authorization check: Only the author can preview unpublished topics
-    if (!topic.isPublished && !isAuthor) {
+    // Authorization check: Only the author can preview unpublished collections
+    if (!collection.isPublished && !isAuthor) {
       notFound()
     }
 
-    const chapter = topic.chapters[0]
+    const chapter = collection.chapters[0]
     if (!chapter) {
       notFound()
     }
@@ -178,17 +178,17 @@ export default async function ChapterPreviewPage({ params }: ChapterPreviewProps
     }
 
     // Find the first available page to redirect to
-    const firstPage = chapter.pages.find((page: TopicPage) => 
+    const firstPage = chapter.pages.find((page: CollectionPage) => 
       isAuthor || page.isPublished
     )
 
     if (firstPage) {
       // Redirect to the first available page
-      return <ChapterRedirect redirectUrl={`/${domain}/${topicSlug}/${chapterSlug}/${firstPage.slug}`} />
+      return <ChapterRedirect redirectUrl={`/${domain}/${collectionSlug}/${chapterSlug}/${firstPage.slug}`} />
     }
 
-    // If no pages are available, redirect back to topic
-    return <ChapterRedirect redirectUrl={`/${domain}/${topicSlug}`} />
+    // If no pages are available, redirect back to collection
+    return <ChapterRedirect redirectUrl={`/${domain}/${collectionSlug}`} />
 
   } catch (error) {
     console.error('Error loading chapter preview:', error)

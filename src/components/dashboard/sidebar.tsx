@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 
 const navigation = [
   { name: 'Overview', href: '/dashboard', icon: FileText },
-  { name: 'Topics', href: '/dashboard/topics', icon: BookOpen },
+  { name: 'Collections', href: '/dashboard/collections', icon: BookOpen },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
 ]
 
@@ -39,14 +39,14 @@ export function DashboardSidebar() {
           </Button>
         </div>
 
-        {/* New Topic Button */}
-        <Link href="/dashboard/topics/new">
+        {/* New Collection Button */}
+        <Link href="/dashboard/collections/new">
           <div className={cn(
             "flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg mb-6 cursor-pointer transition-all",
             isCollapsed ? "justify-center px-2" : ""
           )}>
             <Plus className="w-5 h-5" />
-            {!isCollapsed && <span>New Topic</span>}
+            {!isCollapsed && <span>New Collection</span>}
           </div>
         </Link>
         

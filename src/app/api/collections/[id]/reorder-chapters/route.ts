@@ -24,8 +24,8 @@ export async function PATCH(
       )
     }
 
-    // Check if topic exists and belongs to user
-    const topic = await prisma.topic.findFirst({
+    // Check if collection exists and belongs to user
+    const collection = await prisma.collection.findFirst({
       where: {
         id,
         authors: {
@@ -39,18 +39,18 @@ export async function PATCH(
       }
     })
 
-    if (!topic) {
+    if (!collection) {
       return NextResponse.json(
-        { error: 'Topic not found' },
+        { error: 'Collection not found' },
         { status: 404 }
       )
     }
 
-    // Verify all chapter IDs belong to this topic
-    const topicChapterIds = topic.chapters.map((c) => c.id)
-    const allChapterIdsValid = chapterIds.every((id: string) => topicChapterIds.includes(id))
+    // Verify all chapter IDs belong to this collection
+    const collectionChapterIds = collection.chapters.map((c) => c.id)
+    const allChapterIdsValid = chapterIds.every((id: string) => collectionChapterIds.includes(id))
     
-    if (!allChapterIdsValid || chapterIds.length !== topic.chapters.length) {
+    if (!allChapterIdsValid || chapterIds.length !== collection.chapters.length) {
       return NextResponse.json(
         { error: 'Invalid chapter IDs provided' },
         { status: 400 }

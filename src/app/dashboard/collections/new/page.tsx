@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 
-export default function NewTopicPage() {
+export default function NewCollectionPage() {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -47,7 +47,7 @@ export default function NewTopicPage() {
     setError('')
 
     try {
-      const response = await fetch('/api/topics', {
+      const response = await fetch('/api/collections', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
@@ -55,10 +55,10 @@ export default function NewTopicPage() {
 
       if (response.ok) {
         const result = await response.json()
-        router.push(`/dashboard/topics/${result.data.slug}`)
+        router.push(`/dashboard/collections/${result.data.slug}`)
       } else {
         const data = await response.json()
-        setError(data.error || 'Failed to create topic')
+        setError(data.error || 'Failed to create collection')
       }
     } catch {
       setError('An error occurred. Please try again.')
@@ -82,7 +82,7 @@ export default function NewTopicPage() {
         </Link>
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-            Create New Topic
+            Create New Collection
           </h1>
           <p className="text-gray-600 dark:text-gray-400 mt-2">
             Start building your educational content
@@ -92,9 +92,9 @@ export default function NewTopicPage() {
 
       <Card className="max-w-2xl">
         <CardHeader>
-          <CardTitle>Topic Details</CardTitle>
+          <CardTitle>Collection Details</CardTitle>
           <CardDescription>
-            Provide basic information about your educational topic
+            Provide basic information about your educational collection
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -105,7 +105,7 @@ export default function NewTopicPage() {
                 id="title"
                 name="title"
                 type="text"
-                placeholder="Enter topic title"
+                placeholder="Enter collection title"
                 value={formData.title}
                 onChange={handleChange}
                 required
@@ -124,7 +124,7 @@ export default function NewTopicPage() {
                 required
               />
               <p className="text-sm text-gray-500">
-                This will be used in the URL: /topics/{formData.slug || 'your-slug'}
+                This will be used in the URL: /collections/{formData.slug || 'your-slug'}
               </p>
             </div>
 
@@ -133,7 +133,7 @@ export default function NewTopicPage() {
               <Textarea
                 id="description"
                 name="description"
-                placeholder="Brief description of what this topic covers"
+                placeholder="Brief description of what this collection covers"
                 value={formData.description}
                 onChange={handleChange}
                 rows={3}
@@ -149,7 +149,7 @@ export default function NewTopicPage() {
                 type="submit" 
                 disabled={isLoading || !formData.title.trim() || !formData.slug.trim()}
               >
-                {isLoading ? 'Creating...' : 'Create Topic'}
+                {isLoading ? 'Creating...' : 'Create Collection'}
               </Button>
               <Link href="/dashboard">
                 <Button type="button" variant="outline">

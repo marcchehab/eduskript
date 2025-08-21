@@ -2,19 +2,19 @@ import { getServerSession } from 'next-auth'
 import { notFound } from 'next/navigation'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { TopicEditor } from '@/components/dashboard/topic-editor'
+import { CollectionEditor } from '@/components/dashboard/collection-editor'
 
 // Ensure the page is dynamic and not cached
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-interface TopicPageProps {
+interface CollectionPageProps {
   params: Promise<{
     slug: string
   }>
 }
 
-export default async function TopicPage({ params }: TopicPageProps) {
+export default async function CollectionPage({ params }: CollectionPageProps) {
   const session = await getServerSession(authOptions)
   const { slug } = await params
   
@@ -22,7 +22,7 @@ export default async function TopicPage({ params }: TopicPageProps) {
     return null
   }
 
-  const topic = await prisma.topic.findFirst({
+  const collection = await prisma.collection.findFirst({
     where: {
       slug: slug,
       authors: {
@@ -43,9 +43,9 @@ export default async function TopicPage({ params }: TopicPageProps) {
     }
   })
 
-  if (!topic) {
+  if (!collection) {
     notFound()
   }
 
-  return <TopicEditor topic={topic} />
+  return <CollectionEditor collection={collection} />
 }

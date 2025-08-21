@@ -38,12 +38,12 @@ interface Page {
 interface SortablePageItemProps {
   page: Page
   index: number
-  topicSlug: string
+  collectionSlug: string
   chapterSlug: string
   onPageUpdated?: () => void
 }
 
-function SortablePageItem({ page, index, topicSlug, chapterSlug, onPageUpdated }: SortablePageItemProps) {
+function SortablePageItem({ page, index, collectionSlug, chapterSlug, onPageUpdated }: SortablePageItemProps) {
   const {
     attributes,
     listeners,
@@ -94,7 +94,7 @@ function SortablePageItem({ page, index, topicSlug, chapterSlug, onPageUpdated }
           </div>
         </div>
         <div>
-          <Link href={`/dashboard/topics/${topicSlug}/chapters/${chapterSlug}/pages/${page.slug}/edit`}>
+          <Link href={`/dashboard/collections/${collectionSlug}/chapters/${chapterSlug}/pages/${page.slug}/edit`}>
             <h4 className="font-medium text-foreground text-sm hover:text-primary cursor-pointer transition-colors">
               {page.title}
             </h4>
@@ -121,7 +121,7 @@ function SortablePageItem({ page, index, topicSlug, chapterSlug, onPageUpdated }
           onItemUpdated={onPageUpdated || (() => {})}
         />
         <Button variant="outline" size="sm" asChild>
-          <Link href={`/dashboard/topics/${topicSlug}/chapters/${chapterSlug}/pages/${page.slug}/edit`}>
+          <Link href={`/dashboard/collections/${collectionSlug}/chapters/${chapterSlug}/pages/${page.slug}/edit`}>
             Edit Content
           </Link>
         </Button>
@@ -138,7 +138,7 @@ function SortablePageItem({ page, index, topicSlug, chapterSlug, onPageUpdated }
   )
 }
 
-function StaticPageItem({ page, index, topicSlug, chapterSlug, onPageUpdated }: SortablePageItemProps) {
+function StaticPageItem({ page, index, collectionSlug, chapterSlug, onPageUpdated }: SortablePageItemProps) {
   const handleDeletePage = async () => {
     if (!confirm(`Are you sure you want to delete the page "${page.title}"?`)) {
       return
@@ -170,7 +170,7 @@ function StaticPageItem({ page, index, topicSlug, chapterSlug, onPageUpdated }: 
           </div>
         </div>
         <div>
-          <Link href={`/dashboard/topics/${topicSlug}/chapters/${chapterSlug}/pages/${page.slug}/edit`}>
+          <Link href={`/dashboard/collections/${collectionSlug}/chapters/${chapterSlug}/pages/${page.slug}/edit`}>
             <h4 className="font-medium text-foreground text-sm hover:text-primary cursor-pointer transition-colors">
               {page.title}
             </h4>
@@ -197,7 +197,7 @@ function StaticPageItem({ page, index, topicSlug, chapterSlug, onPageUpdated }: 
           onItemUpdated={onPageUpdated || (() => {})}
         />
         <Button variant="outline" size="sm" asChild>
-          <Link href={`/dashboard/topics/${topicSlug}/chapters/${chapterSlug}/pages/${page.slug}/edit`}>
+          <Link href={`/dashboard/collections/${collectionSlug}/chapters/${chapterSlug}/pages/${page.slug}/edit`}>
             Edit Content
           </Link>
         </Button>
@@ -217,7 +217,7 @@ function StaticPageItem({ page, index, topicSlug, chapterSlug, onPageUpdated }: 
 interface SortablePagesProps {
   pages: Page[]
   chapterId: string
-  topicSlug: string
+  collectionSlug: string
   chapterSlug: string
   onReorder: () => void
   onPageDeleted?: () => void
@@ -226,7 +226,7 @@ interface SortablePagesProps {
 export function SortablePages({ 
   pages, 
   chapterId, 
-  topicSlug, 
+  collectionSlug, 
   chapterSlug, 
   onReorder,
   onPageDeleted 
@@ -305,7 +305,7 @@ export function SortablePages({
                 key={page.id}
                 page={page}
                 index={index}
-                topicSlug={topicSlug}
+                collectionSlug={collectionSlug}
                 chapterSlug={chapterSlug}
                 onPageUpdated={onPageDeleted}
               />
@@ -320,7 +320,7 @@ export function SortablePages({
               key={page.id}
               page={page}
               index={index}
-              topicSlug={topicSlug}
+              collectionSlug={collectionSlug}
               chapterSlug={chapterSlug}
               onPageUpdated={onPageDeleted}
             />

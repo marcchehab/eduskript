@@ -16,14 +16,14 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Settings } from 'lucide-react'
 
-interface TopicSettingsModalProps {
-  topic: {
+interface CollectionSettingsModalProps {
+  collection: {
     id: string
     title: string
     description: string | null
     slug: string
   }
-  onTopicUpdated: (updatedTopic?: {
+  onCollectionUpdated: (updatedCollection?: {
     id: string
     title: string
     description: string | null
@@ -31,12 +31,12 @@ interface TopicSettingsModalProps {
   }) => void
 }
 
-export function TopicSettingsModal({ topic, onTopicUpdated }: TopicSettingsModalProps) {
+export function CollectionSettingsModal({ collection, onCollectionUpdated }: CollectionSettingsModalProps) {
   const [open, setOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [title, setTitle] = useState(topic.title)
-  const [slug, setSlug] = useState(topic.slug)
-  const [description, setDescription] = useState(topic.description || '')
+  const [title, setTitle] = useState(collection.title)
+  const [slug, setSlug] = useState(collection.slug)
+  const [description, setDescription] = useState(collection.description || '')
 
   const generateSlug = (title: string) => {
     return title
@@ -51,7 +51,7 @@ export function TopicSettingsModal({ topic, onTopicUpdated }: TopicSettingsModal
     const newTitle = e.target.value
     setTitle(newTitle)
     // Auto-generate slug from title if slug hasn't been manually edited
-    if (slug === generateSlug(topic.title) || slug === topic.slug) {
+    if (slug === generateSlug(collection.title) || slug === collection.slug) {
       setSlug(generateSlug(newTitle))
     }
   }
@@ -61,7 +61,7 @@ export function TopicSettingsModal({ topic, onTopicUpdated }: TopicSettingsModal
     setIsLoading(true)
 
     try {
-      const response = await fetch(`/api/topics/${topic.id}`, {
+      const response = await fetch(`/api/collections/${collection.id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -74,14 +74,14 @@ export function TopicSettingsModal({ topic, onTopicUpdated }: TopicSettingsModal
       })
 
       if (!response.ok) {
-        throw new Error('Failed to update topic')
+        throw new Error('Failed to update collection')
       }
 
-      const updatedTopic = await response.json()
+      const updatedCollection = await response.json()
       setOpen(false)
-      onTopicUpdated(updatedTopic)
+      onCollectionUpdated(updatedCollection)
     } catch (error) {
-      console.error('Error updating topic:', error)
+      console.error('Error updating collection:', error)
       // You might want to show an error toast here
     } finally {
       setIsLoading(false)
@@ -91,9 +91,9 @@ export function TopicSettingsModal({ topic, onTopicUpdated }: TopicSettingsModal
   const handleOpenChange = (newOpen: boolean) => {
     if (!newOpen) {
       // Reset form when closing
-      setTitle(topic.title)
-      setSlug(topic.slug)
-      setDescription(topic.description || '')
+      setTitle(collection.title)
+      setSlug(collection.slug)
+      setDescription(collection.description || '')
     }
     setOpen(newOpen)
   }
@@ -109,9 +109,9 @@ export function TopicSettingsModal({ topic, onTopicUpdated }: TopicSettingsModal
       <DialogContent className="sm:max-w-[425px]">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Topic Settings</DialogTitle>
+            <DialogTitle>Collection Settings</DialogTitle>
             <DialogDescription>
-              Update your topic&apos;s title and description.
+              Update your collection&apos;s title and description.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
@@ -121,7 +121,7 @@ export function TopicSettingsModal({ topic, onTopicUpdated }: TopicSettingsModal
                 id="title"
                 value={title}
                 onChange={handleTitleChange}
-                placeholder="Enter topic title"
+                placeholder="Enter collection title"
                 required
                 disabled={isLoading}
               />
@@ -146,7 +146,7 @@ export function TopicSettingsModal({ topic, onTopicUpdated }: TopicSettingsModal
                 id="description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Enter topic description (optional)"
+                placeholder="Enter collection description (optional)"
                 rows={3}
                 disabled={isLoading}
               />

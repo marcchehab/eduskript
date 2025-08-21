@@ -29,21 +29,21 @@ export async function POST(request: NextRequest) {
     const normalizedSlug = generateSlug(slug)
 
     // Check if slug already exists (globally, since no more user-scoped slugs)
-    const existingTopic = await prisma.topic.findFirst({
+    const existingCollection = await prisma.collection.findFirst({
       where: {
         slug: normalizedSlug,
       }
     })
 
-    if (existingTopic) {
+    if (existingCollection) {
       return NextResponse.json(
-        { error: 'A topic with this slug already exists' },
+        { error: 'A collection with this slug already exists' },
         { status: 409 }
       )
     }
 
-    // Create topic with the current user as the first author
-    const topic = await prisma.topic.create({
+    // Create collection with the current user as the first author
+    const collection = await prisma.collection.create({
       data: {
         title,
         description: description || null,
@@ -64,11 +64,11 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    return NextResponse.json({ success: true, data: topic })
+    return NextResponse.json({ success: true, data: collection })
   } catch (error) {
-    console.error('Error creating topic:', error)
+    console.error('Error creating collection:', error)
     return NextResponse.json(
-      { error: 'Failed to create topic' },
+      { error: 'Failed to create collection' },
       { status: 500 }
     )
   }
@@ -85,8 +85,8 @@ export async function GET() {
       )
     }
 
-    // Get topics where the user is an author
-    const topics = await prisma.topic.findMany({
+    // Get collections where the user is an author
+    const collections = await prisma.collection.findMany({
       where: {
         authors: {
           some: {
@@ -109,11 +109,11 @@ export async function GET() {
       orderBy: { updatedAt: 'desc' }
     })
 
-    return NextResponse.json({ success: true, data: topics })
+    return NextResponse.json({ success: true, data: collections })
   } catch (error) {
-    console.error('Error fetching topics:', error)
+    console.error('Error fetching collections:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch topics' },
+      { error: 'Failed to fetch collections' },
       { status: 500 }
     )
   }

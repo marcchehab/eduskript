@@ -40,7 +40,7 @@ export async function PATCH(
         }
       },
       include: {
-        topic: true
+        collection: true
       }
     })
 
@@ -51,11 +51,11 @@ export async function PATCH(
       )
     }
 
-    // Check if slug is already used in the same topic (but not this chapter)
+    // Check if slug is already used in the same collection (but not this chapter)
     if (slug && slug !== existingChapter.slug) {
       const slugExists = await prisma.chapter.findFirst({
         where: {
-          topicId: existingChapter.topicId,
+          collectionId: existingChapter.collectionId,
           slug,
           NOT: { id }
         }
@@ -63,7 +63,7 @@ export async function PATCH(
 
       if (slugExists) {
         return NextResponse.json(
-          { error: 'Slug already exists in this topic' },
+          { error: 'Slug already exists in this collection' },
           { status: 409 }
         )
       }
@@ -98,8 +98,8 @@ export async function PATCH(
 
     if (user?.subdomain) {
       // Revalidate relevant paths
-      revalidatePath(`/${user.subdomain}/${existingChapter.topic.slug}/${updatedChapter.slug}`)
-      revalidatePath(`/${user.subdomain}/${existingChapter.topic.slug}`)
+      revalidatePath(`/${user.subdomain}/${existingChapter.collection.slug}/${updatedChapter.slug}`)
+      revalidatePath(`/${user.subdomain}/${existingChapter.collection.slug}`)
       revalidatePath(`/${user.subdomain}`)
       revalidatePath('/dashboard')
     }
@@ -141,7 +141,7 @@ export async function DELETE(
         }
       },
       include: {
-        topic: true
+        collection: true
       }
     })
 
@@ -165,7 +165,7 @@ export async function DELETE(
 
     if (user?.subdomain) {
       // Revalidate relevant paths
-      revalidatePath(`/${user.subdomain}/${existingChapter.topic.slug}`)
+      revalidatePath(`/${user.subdomain}/${existingChapter.collection.slug}`)
       revalidatePath(`/${user.subdomain}`)
       revalidatePath('/dashboard')
     }

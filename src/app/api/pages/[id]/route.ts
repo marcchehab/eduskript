@@ -42,7 +42,7 @@ export async function PATCH(
       include: {
         chapter: {
           include: {
-            topic: true
+            collection: true
           }
         },
         versions: {
@@ -124,15 +124,15 @@ export async function PATCH(
 
     if (user?.subdomain) {
       // Revalidate the specific page
-      revalidatePath(`/${user.subdomain}/${existingPage.chapter.topic?.slug}/${existingPage.chapter.slug}/${updatedPage.slug}`)
+      revalidatePath(`/${user.subdomain}/${existingPage.chapter.collection?.slug}/${existingPage.chapter.slug}/${updatedPage.slug}`)
       
       // Revalidate the chapter page (in case it lists pages)
-      revalidatePath(`/${user.subdomain}/${existingPage.chapter.topic?.slug}/${existingPage.chapter.slug}`)
+      revalidatePath(`/${user.subdomain}/${existingPage.chapter.collection?.slug}/${existingPage.chapter.slug}`)
       
-      // Revalidate the topic page (in case it lists chapters/pages)
-      revalidatePath(`/${user.subdomain}/${existingPage.chapter.topic?.slug}`)
+      // Revalidate the collection page (in case it lists chapters/pages)
+      revalidatePath(`/${user.subdomain}/${existingPage.chapter.collection?.slug}`)
       
-      // Revalidate the home page (in case it lists topics)
+      // Revalidate the home page (in case it lists collections)
       revalidatePath(`/${user.subdomain}`)
       
       // Revalidate dashboard pages
@@ -185,8 +185,8 @@ export async function DELETE(
       where: { id }
     })
 
-    // Revalidate the topics pages
-    revalidatePath('/dashboard/topics')
+    // Revalidate the collections pages
+    revalidatePath('/dashboard/collections')
 
     return NextResponse.json({ success: true })
   } catch (error) {

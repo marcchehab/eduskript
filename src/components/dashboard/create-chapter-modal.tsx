@@ -17,11 +17,11 @@ import {
 import { Plus } from 'lucide-react'
 
 interface CreateChapterModalProps {
-  topicId: string
+  collectionId: string
   onChapterCreated: () => void
 }
 
-export function CreateChapterModal({ topicId, onChapterCreated }: CreateChapterModalProps) {
+export function CreateChapterModal({ collectionId, onChapterCreated }: CreateChapterModalProps) {
   const [open, setOpen] = useState(false)
   const [formData, setFormData] = useState({
     title: '',
@@ -61,7 +61,7 @@ export function CreateChapterModal({ topicId, onChapterCreated }: CreateChapterM
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
-          topicId
+          collectionId
         })
       })
 

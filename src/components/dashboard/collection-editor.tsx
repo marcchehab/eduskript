@@ -6,12 +6,12 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { CreateChapterModal } from './create-chapter-modal'
-import { TopicSettingsModal } from './topic-settings-modal'
+import { CollectionSettingsModal } from './collection-settings-modal'
 import { SortableChapters } from './sortable-chapters'
 import { ArrowLeft, BookOpen, FileText } from 'lucide-react'
 
-interface TopicEditorProps {
-  topic: {
+interface CollectionEditorProps {
+  collection: {
     id: string
     title: string
     description: string | null
@@ -37,9 +37,9 @@ interface TopicEditorProps {
   }
 }
 
-export function TopicEditor({ topic }: TopicEditorProps) {
+export function CollectionEditor({ collection }: CollectionEditorProps) {
   const [isLoading, setIsLoading] = useState(false)
-  const [isPublished, setIsPublished] = useState(topic.isPublished)
+  const [isPublished, setIsPublished] = useState(collection.isPublished)
   const router = useRouter()
 
   const handleChapterCreated = () => {
@@ -47,15 +47,15 @@ export function TopicEditor({ topic }: TopicEditorProps) {
     window.location.reload()
   }
 
-  const handleTopicUpdated = (updatedTopic?: {
+  const handleCollectionUpdated = (updatedCollection?: {
     id: string
     title: string
     description: string | null
     slug: string
   }) => {
-    if (updatedTopic && updatedTopic.slug !== topic.slug) {
+    if (updatedCollection && updatedCollection.slug !== collection.slug) {
       // If slug changed, redirect to new URL
-      router.push(`/dashboard/topics/${updatedTopic.slug}`)
+      router.push(`/dashboard/collections/${updatedCollection.slug}`)
     } else {
       // Force a complete page refresh to ensure data is updated
       window.location.reload()
@@ -65,7 +65,7 @@ export function TopicEditor({ topic }: TopicEditorProps) {
   const handlePublish = async () => {
     setIsLoading(true)
     try {
-      const response = await fetch(`/api/topics/${topic.id}`, {
+      const response = await fetch(`/api/collections/${collection.id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -76,16 +76,16 @@ export function TopicEditor({ topic }: TopicEditorProps) {
       })
 
       if (!response.ok) {
-        throw new Error('Failed to update topic')
+        throw new Error('Failed to update collection')
       }
 
-      const updatedTopic = await response.json()
-      setIsPublished(updatedTopic.isPublished)
+      const updatedCollection = await response.json()
+      setIsPublished(updatedCollection.isPublished)
       
       // Optionally show success message or refresh
       window.location.reload()
     } catch (error) {
-      console.error('Error publishing topic:', error)
+      console.error('Error publishing collection:', error)
       // You might want to show an error toast here
     } finally {
       setIsLoading(false)
@@ -95,24 +95,24 @@ export function TopicEditor({ topic }: TopicEditorProps) {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Link href="/dashboard/topics">
+        <Link href="/dashboard/collections">
           <Button variant="ghost" size="sm">
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Topics
+            Back to Collections
           </Button>
         </Link>
         <div className="flex-1">
           <h1 className="text-3xl font-bold text-foreground">
-            {topic.title}
+            {collection.title}
           </h1>
           <p className="text-muted-foreground mt-2">
-            {topic.description || 'No description'}
+            {collection.description || 'No description'}
           </p>
         </div>
         <div className="flex gap-2">
-          <TopicSettingsModal 
-            topic={topic}
-            onTopicUpdated={handleTopicUpdated}
+          <CollectionSettingsModal 
+            collection={collection}
+            onCollectionUpdated={handleCollectionUpdated}
           />
           <Button 
             onClick={handlePublish}
@@ -123,7 +123,7 @@ export function TopicEditor({ topic }: TopicEditorProps) {
         </div>
       </div>
 
-      {/* Topic Overview */}
+      {/* Collection Overview */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -131,7 +131,7 @@ export function TopicEditor({ topic }: TopicEditorProps) {
             <BookOpen className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{topic.chapters.length}</div>
+            <div className="text-2xl font-bold">{collection.chapters.length}</div>
           </CardContent>
         </Card>
         
@@ -142,7 +142,7 @@ export function TopicEditor({ topic }: TopicEditorProps) {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {topic.chapters.reduce((acc: number, ch) => acc + ch.pages.length, 0)}
+              {collection.chapters.reduce((acc: number, ch) => acc + ch.pages.length, 0)}
             </div>
           </CardContent>
         </Card>
@@ -168,17 +168,17 @@ export function TopicEditor({ topic }: TopicEditorProps) {
               <CardDescription>Organize your content into chapters</CardDescription>
             </div>
             <CreateChapterModal 
-              topicId={topic.id} 
+              collectionId={collection.id} 
               onChapterCreated={handleChapterCreated}
             />
           </div>
         </CardHeader>
         <CardContent>
-          {topic.chapters.length > 0 ? (
+          {collection.chapters.length > 0 ? (
             <SortableChapters
-              chapters={topic.chapters}
-              topicId={topic.id}
-              topicSlug={topic.slug}
+              chapters={collection.chapters}
+              collectionId={collection.id}
+              collectionSlug={collection.slug}
               onReorder={handleChapterCreated}
             />
           ) : (
@@ -191,7 +191,7 @@ export function TopicEditor({ topic }: TopicEditorProps) {
                 Start organizing your content by creating your first chapter.
               </p>
               <CreateChapterModal 
-                topicId={topic.id} 
+                collectionId={collection.id} 
                 onChapterCreated={handleChapterCreated}
               />
             </div>

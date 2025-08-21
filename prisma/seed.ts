@@ -15,8 +15,8 @@ async function main() {
     }
   })
 
-  // Create a test topic
-  const topic = await prisma.topic.upsert({
+  // Create a test collection
+  const collection = await prisma.collection.upsert({
     where: { slug: 'algebra-basics' },
     update: {},
     create: {
@@ -27,17 +27,17 @@ async function main() {
     }
   })
 
-  // Add the teacher as an author of the topic
-  await prisma.topicAuthor.upsert({
+  // Add the teacher as an author of the collection
+  await prisma.collectionAuthor.upsert({
     where: {
-      topicId_userId: {
-        topicId: topic.id,
+      collectionId_userId: {
+        collectionId: collection.id,
         userId: teacher.id
       }
     },
     update: {},
     create: {
-      topicId: topic.id,
+      collectionId: collection.id,
       userId: teacher.id,
       role: 'author'
     }
@@ -46,8 +46,8 @@ async function main() {
   // Create test chapters
   const chapter1 = await prisma.chapter.upsert({
     where: {
-      topicId_slug: {
-        topicId: topic.id,
+      collectionId_slug: {
+        collectionId: collection.id,
         slug: 'introduction'
       }
     },
@@ -58,7 +58,7 @@ async function main() {
       slug: 'introduction',
       order: 1,
       isPublished: true,
-      topicId: topic.id
+      collectionId: collection.id
     }
   })
 
@@ -80,8 +80,8 @@ async function main() {
 
   const chapter2 = await prisma.chapter.upsert({
     where: {
-      topicId_slug: {
-        topicId: topic.id,
+      collectionId_slug: {
+        collectionId: collection.id,
         slug: 'solving-equations'
       }
     },
@@ -92,7 +92,7 @@ async function main() {
       slug: 'solving-equations',
       order: 2,
       isPublished: true,
-      topicId: topic.id
+      collectionId: collection.id
     }
   })
 
@@ -267,7 +267,7 @@ Check: 2(4) + 3 = 8 + 3 = 11 ✓`,
 
   console.log('Seed data created successfully!')
   console.log('Teacher:', teacher.email)
-  console.log('Topic:', topic.title)
+  console.log('Collection:', collection.title)
   console.log('Chapters:', chapter1.title, ',', chapter2.title)
   console.log('Pages created: 3')
 }
