@@ -5,9 +5,9 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { CreateChapterModal } from './create-chapter-modal'
+import { CreateSkriptModal } from './create-skript-modal'
 import { CollectionSettingsModal } from './collection-settings-modal'
-import { SortableChapters } from './sortable-chapters'
+import { SortableSkripts } from './sortable-skripts'
 import { ArrowLeft, BookOpen, FileText } from 'lucide-react'
 
 interface CollectionEditorProps {
@@ -17,7 +17,7 @@ interface CollectionEditorProps {
     description: string | null
     slug: string
     isPublished: boolean
-    chapters: Array<{
+    skripts: Array<{
       id: string
       title: string
       slug: string
@@ -42,7 +42,7 @@ export function CollectionEditor({ collection }: CollectionEditorProps) {
   const [isPublished, setIsPublished] = useState(collection.isPublished)
   const router = useRouter()
 
-  const handleChapterCreated = () => {
+  const handleSkriptCreated = () => {
     // Force a complete page refresh to ensure data is updated
     window.location.reload()
   }
@@ -127,11 +127,11 @@ export function CollectionEditor({ collection }: CollectionEditorProps) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Chapters</CardTitle>
+            <CardTitle className="text-sm font-medium">Skripts</CardTitle>
             <BookOpen className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{collection.chapters.length}</div>
+            <div className="text-2xl font-bold">{collection.skripts.length}</div>
           </CardContent>
         </Card>
         
@@ -142,7 +142,7 @@ export function CollectionEditor({ collection }: CollectionEditorProps) {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {collection.chapters.reduce((acc: number, ch) => acc + ch.pages.length, 0)}
+              {collection.skripts.reduce((acc: number, ch) => acc + ch.pages.length, 0)}
             </div>
           </CardContent>
         </Card>
@@ -159,40 +159,40 @@ export function CollectionEditor({ collection }: CollectionEditorProps) {
         </Card>
       </div>
 
-      {/* Chapters */}
+      {/* Skripts */}
       <Card>
         <CardHeader>
           <div className="flex justify-between items-center">
             <div>
-              <CardTitle>Chapters</CardTitle>
-              <CardDescription>Organize your content into chapters</CardDescription>
+              <CardTitle>Skripts</CardTitle>
+              <CardDescription>Organize your content into skripts</CardDescription>
             </div>
-            <CreateChapterModal 
+            <CreateSkriptModal 
               collectionId={collection.id} 
-              onChapterCreated={handleChapterCreated}
+              onSkriptCreated={handleSkriptCreated}
             />
           </div>
         </CardHeader>
         <CardContent>
-          {collection.chapters.length > 0 ? (
-            <SortableChapters
-              chapters={collection.chapters}
+          {collection.skripts.length > 0 ? (
+            <SortableSkripts
+              skripts={collection.skripts}
               collectionId={collection.id}
               collectionSlug={collection.slug}
-              onReorder={handleChapterCreated}
+              onReorder={handleSkriptCreated}
             />
           ) : (
             <div className="text-center py-8">
               <BookOpen className="h-12 w-12 text-icon-muted mx-auto mb-4" />
               <h3 className="text-lg font-medium text-foreground mb-2">
-                No chapters yet
+                No skripts yet
               </h3>
               <p className="text-muted-foreground mb-4">
-                Start organizing your content by creating your first chapter.
+                Start organizing your content by creating your first skript.
               </p>
-              <CreateChapterModal 
+              <CreateSkriptModal 
                 collectionId={collection.id} 
-                onChapterCreated={handleChapterCreated}
+                onSkriptCreated={handleSkriptCreated}
               />
             </div>
           )}

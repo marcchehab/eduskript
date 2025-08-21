@@ -22,8 +22,8 @@ export interface ProcessedMarkdown {
 export interface MarkdownContext {
   /** The domain/username for the current content */
   domain?: string
-  /** The chapter ID for chapter-specific file searches */
-  chapterId?: string
+  /** The skript ID for skript-specific file searches */
+  skriptId?: string
   /** Pre-fetched file list for client-side image resolution */
   fileList?: Array<{ id: string, name: string, url?: string, isDirectory?: boolean }>
 }
@@ -52,7 +52,7 @@ export async function processMarkdown(
     const { remarkServerImageOptimizer } = await import('./remark-plugins/server-image-optimizer')
     remarkPlugins.push([remarkServerImageOptimizer, {
       domain: context?.domain,
-      chapterId: context?.chapterId,
+      skriptId: context?.skriptId,
       fileList: context?.fileList
     }])
   }

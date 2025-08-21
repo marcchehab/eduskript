@@ -17,7 +17,7 @@ interface SiteStructure {
   id: string
   title: string
   slug: string
-  chapters: {
+  skripts: {
     id: string
     title: string
     slug: string
@@ -42,11 +42,11 @@ export function PublicSiteLayout({ teacher, siteStructure, children, currentPath
   
   // Storage keys for persistence
   const EXPANDED_SCRIPTS_KEY = `expanded-collections-${teacher.subdomain}`
-  const EXPANDED_CHAPTERS_KEY = `expanded-chapters-${teacher.subdomain}`
+  const EXPANDED_SKRIPTS_KEY = `expanded-skripts-${teacher.subdomain}`
   
   // Initialize with persistent state or defaults
   const [expandedCollections, setExpandedCollections] = useState<string[]>([])
-  const [expandedChapters, setExpandedChapters] = useState<string[]>([])
+  const [expandedSkripts, setExpandedSkripts] = useState<string[]>([])
   const [isInitialized, setIsInitialized] = useState(false)
 
   // Get initial expanded state from localStorage or defaults
@@ -65,10 +65,10 @@ export function PublicSiteLayout({ teacher, siteStructure, children, currentPath
     return siteStructure.map(collection => collection.id)
   }, [siteStructure, EXPANDED_SCRIPTS_KEY])
 
-  const getInitialExpandedChapters = useCallback(() => {
+  const getInitialExpandedSkripts = useCallback(() => {
     if (typeof window === 'undefined') return []
     
-    const stored = localStorage.getItem(EXPANDED_CHAPTERS_KEY)
+    const stored = localStorage.getItem(EXPANDED_SKRIPTS_KEY)
     let expandedFromStorage: string[] = []
     
     if (stored) {
@@ -79,54 +79,54 @@ export function PublicSiteLayout({ teacher, siteStructure, children, currentPath
       }
     }
     
-    // Auto-expand chapters that contain the current page
+    // Auto-expand skripts that contain the current page
     const expandedFromCurrentPath: string[] = []
     if (currentPath) {
       siteStructure.forEach(collection => {
-        collection.chapters.forEach(chapter => {
-          const hasCurrentPage = chapter.pages.some(page => 
-            currentPath === `/${collection.slug}/${chapter.slug}/${page.slug}`
+        collection.skripts.forEach(skript => {
+          const hasCurrentPage = skript.pages.some(page => 
+            currentPath === `/${collection.slug}/${skript.slug}/${page.slug}`
           )
-          if (hasCurrentPage && !expandedFromStorage.includes(chapter.id)) {
-            expandedFromCurrentPath.push(chapter.id)
+          if (hasCurrentPage && !expandedFromStorage.includes(skript.id)) {
+            expandedFromCurrentPath.push(skript.id)
           }
         })
       })
     }
     
     return [...expandedFromStorage, ...expandedFromCurrentPath]
-  }, [siteStructure, currentPath, EXPANDED_CHAPTERS_KEY])
+  }, [siteStructure, currentPath, EXPANDED_SKRIPTS_KEY])
 
   // Initialize state from localStorage on client side
   useEffect(() => {
     setExpandedCollections(getInitialExpandedCollections())
-    setExpandedChapters(getInitialExpandedChapters())
+    setExpandedSkripts(getInitialExpandedSkripts())
     setIsInitialized(true)
-  }, [getInitialExpandedCollections, getInitialExpandedChapters])
+  }, [getInitialExpandedCollections, getInitialExpandedSkripts])
 
-  // Update expanded chapters when current path changes
+  // Update expanded skripts when current path changes
   useEffect(() => {
     if (!isInitialized || !currentPath) return
     
-    const newExpandedChapters = [...expandedChapters]
+    const newExpandedSkripts = [...expandedSkripts]
     let hasChanges = false
     
     siteStructure.forEach(collection => {
-      collection.chapters.forEach(chapter => {
-        const hasCurrentPage = chapter.pages.some(page => 
-          currentPath === `/${collection.slug}/${chapter.slug}/${page.slug}`
+      collection.skripts.forEach(skript => {
+        const hasCurrentPage = skript.pages.some(page => 
+          currentPath === `/${collection.slug}/${skript.slug}/${page.slug}`
         )
-        if (hasCurrentPage && !newExpandedChapters.includes(chapter.id)) {
-          newExpandedChapters.push(chapter.id)
+        if (hasCurrentPage && !newExpandedSkripts.includes(skript.id)) {
+          newExpandedSkripts.push(skript.id)
           hasChanges = true
         }
       })
     })
     
     if (hasChanges) {
-      setExpandedChapters(newExpandedChapters)
+      setExpandedSkripts(newExpandedSkripts)
     }
-  }, [currentPath, isInitialized, expandedChapters, siteStructure])
+  }, [currentPath, isInitialized, expandedSkripts, siteStructure])
 
   // Persist expanded collections to localStorage
   useEffect(() => {
@@ -134,11 +134,11 @@ export function PublicSiteLayout({ teacher, siteStructure, children, currentPath
     localStorage.setItem(EXPANDED_SCRIPTS_KEY, JSON.stringify(expandedCollections))
   }, [expandedCollections, isInitialized, EXPANDED_SCRIPTS_KEY])
 
-  // Persist expanded chapters to localStorage
+  // Persist expanded skripts to localStorage
   useEffect(() => {
     if (!isInitialized) return
-    localStorage.setItem(EXPANDED_CHAPTERS_KEY, JSON.stringify(expandedChapters))
-  }, [expandedChapters, isInitialized, EXPANDED_CHAPTERS_KEY])
+    localStorage.setItem(EXPANDED_SKRIPTS_KEY, JSON.stringify(expandedSkripts))
+  }, [expandedSkripts, isInitialized, EXPANDED_SKRIPTS_KEY])
 
   const toggleCollection = (collectionId: string) => {
     setExpandedCollections(prev => 
@@ -148,19 +148,19 @@ export function PublicSiteLayout({ teacher, siteStructure, children, currentPath
     )
   }
 
-  const toggleChapter = (chapterId: string) => {
-    setExpandedChapters(prev => 
-      prev.includes(chapterId) 
-        ? prev.filter(id => id !== chapterId)
-        : [...prev, chapterId]
+  const toggleSkript = (skriptId: string) => {
+    setExpandedSkripts(prev => 
+      prev.includes(skriptId) 
+        ? prev.filter(id => id !== skriptId)
+        : [...prev, skriptId]
     )
   }
 
-  const isCurrentPage = (collectionSlug: string, chapterSlug: string, pageSlug: string) => {
-    return currentPath === `/${collectionSlug}/${chapterSlug}/${pageSlug}`
+  const isCurrentPage = (collectionSlug: string, skriptSlug: string, pageSlug: string) => {
+    return currentPath === `/${collectionSlug}/${skriptSlug}/${pageSlug}`
   }
 
-  const navigateToPage = (collectionSlug: string, chapterSlug: string, pageSlug: string) => {
+  const navigateToPage = (collectionSlug: string, skriptSlug: string, pageSlug: string) => {
     // Check if we're on a subdomain by looking at window.location.hostname
     const hostname = typeof window !== 'undefined' ? window.location.hostname : ''
     const isMainDomain = hostname === 'localhost' || hostname === 'eduskript.org' || hostname === 'www.eduskript.org'
@@ -169,8 +169,8 @@ export function PublicSiteLayout({ teacher, siteStructure, children, currentPath
     // If on subdomain, use relative URL (middleware will handle rewrite)
     // If on main domain, use full path with subdomain
     const url = isOnSubdomain 
-      ? `/${collectionSlug}/${chapterSlug}/${pageSlug}`
-      : `/${teacher.subdomain}/${collectionSlug}/${chapterSlug}/${pageSlug}`
+      ? `/${collectionSlug}/${skriptSlug}/${pageSlug}`
+      : `/${teacher.subdomain}/${collectionSlug}/${skriptSlug}/${pageSlug}`
     
     router.push(url)
     setIsSidebarOpen(false)
@@ -237,37 +237,37 @@ export function PublicSiteLayout({ teacher, siteStructure, children, currentPath
                     <span className="truncate">{collection.title}</span>
                   </button>
 
-                  {/* Chapters */}
+                  {/* Skripts */}
                   {expandedCollections.includes(collection.id) && (
                     <div className="ml-6 space-y-1">
-                      {collection.chapters.map((chapter) => (
-                        <div key={chapter.id} className="space-y-1">
-                          {/* Chapter Title */}
+                      {collection.skripts.map((skript) => (
+                        <div key={skript.id} className="space-y-1">
+                          {/* Skript Title */}
                           <button
-                            onClick={() => toggleChapter(chapter.id)}
+                            onClick={() => toggleSkript(skript.id)}
                             className={`flex items-center w-full text-left px-3 py-1 text-sm rounded-md transition-colors ${
-                              expandedChapters.includes(chapter.id)
+                              expandedSkripts.includes(skript.id)
                                 ? 'text-foreground bg-muted/50'
                                 : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                             }`}
                           >
-                            {expandedChapters.includes(chapter.id) ? (
+                            {expandedSkripts.includes(skript.id) ? (
                               <ChevronDown className="w-3 h-3 mr-2 flex-shrink-0" />
                             ) : (
                               <ChevronRight className="w-3 h-3 mr-2 flex-shrink-0" />
                             )}
-                            <span className="truncate">{chapter.title}</span>
+                            <span className="truncate">{skript.title}</span>
                           </button>
 
                           {/* Pages */}
-                          {expandedChapters.includes(chapter.id) && (
+                          {expandedSkripts.includes(skript.id) && (
                             <div className="ml-5 space-y-1">
-                              {chapter.pages.map((page) => (
+                              {skript.pages.map((page) => (
                                 <button
                                   key={page.id}
-                                  onClick={() => navigateToPage(collection.slug, chapter.slug, page.slug)}
+                                  onClick={() => navigateToPage(collection.slug, skript.slug, page.slug)}
                                   className={`block w-full text-left px-3 py-1 text-sm rounded-md truncate transition-colors ${
-                                    isCurrentPage(collection.slug, chapter.slug, page.slug)
+                                    isCurrentPage(collection.slug, skript.slug, page.slug)
                                       ? 'bg-primary/10 text-primary font-medium'
                                       : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                                   }`}

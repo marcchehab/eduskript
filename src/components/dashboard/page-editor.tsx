@@ -32,7 +32,7 @@ interface PageEditorProps {
     slug: string
     title: string
   }
-  chapter: {
+  skript: {
     id: string
     slug: string
     title: string
@@ -47,7 +47,7 @@ interface PageEditorProps {
   }
 }
 
-export function PageEditor({ collection, chapter, page }: PageEditorProps) {
+export function PageEditor({ collection, skript, page }: PageEditorProps) {
   const [title] = useState(page.title || '')
   const [slug] = useState(page.slug || '')
   const [content, setContent] = useState(page.content || '')
@@ -77,7 +77,7 @@ export function PageEditor({ collection, chapter, page }: PageEditorProps) {
   const refreshFileList = useCallback(async () => {
     setFileListLoading(true)
     try {
-      const response = await fetch(`/api/upload?chapterId=${chapter.id}`)
+      const response = await fetch(`/api/upload?skriptId=${skript.id}`)
       if (response.ok) {
         const data = await response.json()
         // The new API returns files directly in the new format
@@ -88,9 +88,9 @@ export function PageEditor({ collection, chapter, page }: PageEditorProps) {
     } finally {
       setFileListLoading(false)
     }
-  }, [chapter.id])
+  }, [skript.id])
 
-  // Fetch file list on mount and when chapter changes
+  // Fetch file list on mount and when skript changes
   useEffect(() => {
     refreshFileList()
   }, [refreshFileList])
@@ -114,7 +114,7 @@ export function PageEditor({ collection, chapter, page }: PageEditorProps) {
         const updatedPage = await response.json()
         if (updatedPage.slug !== page.slug) {
           // Slug changed, redirect to new URL
-          const newUrl = `/dashboard/collections/${collection.slug}/chapters/${chapter.slug}/pages/${updatedPage.slug}/edit`
+          const newUrl = `/dashboard/collections/${collection.slug}/skripts/${skript.slug}/pages/${updatedPage.slug}/edit`
           router.push(newUrl)
         } else {
           // Just reload the page data
@@ -231,7 +231,7 @@ export function PageEditor({ collection, chapter, page }: PageEditorProps) {
         loadVersions()
         // Update URL if slug changed
         if (slug !== originalSlug) {
-          const newUrl = `/dashboard/collections/${collection.slug}/chapters/${chapter.slug}/pages/${slug}/edit`
+          const newUrl = `/dashboard/collections/${collection.slug}/skripts/${skript.slug}/pages/${slug}/edit`
           router.push(newUrl)
           return // Don't continue with other updates since we're navigating
         }
@@ -244,7 +244,7 @@ export function PageEditor({ collection, chapter, page }: PageEditorProps) {
       alert('Failed to save page')
     }
     setIsSaving(false)
-  }, [title, slug, isPublished, page.id, page.slug, collection.slug, chapter.slug, router, loadVersions])
+  }, [title, slug, isPublished, page.id, page.slug, collection.slug, skript.slug, router, loadVersions])
 
   // Handle version restoration
   const handleRestoreVersion = async (versionId: string, versionContent: string) => {
@@ -320,7 +320,7 @@ export function PageEditor({ collection, chapter, page }: PageEditorProps) {
             )}
           </div>
           <p className="text-muted-foreground">
-            {collection.title} → {chapter.title}
+            {collection.title} → {skript.title}
           </p>
         </div>
         <div className="flex gap-2 items-center">
@@ -340,7 +340,7 @@ export function PageEditor({ collection, chapter, page }: PageEditorProps) {
           />
           {sessionStatus === 'authenticated' && (session?.user as { subdomain?: string })?.subdomain && (
             <Link 
-              href={`/${(session?.user as { subdomain?: string })?.subdomain}/${collection.slug}/${chapter.slug}/${page.slug}`}
+              href={`/${(session?.user as { subdomain?: string })?.subdomain}/${collection.slug}/${skript.slug}/${page.slug}`}
               target="_blank"
               rel="noopener noreferrer"
               prefetch={false}
@@ -358,14 +358,14 @@ export function PageEditor({ collection, chapter, page }: PageEditorProps) {
         </div>
       </div>
 
-      {/* Chapter Files - Collapsible Drawer */}
+      {/* Skript Files - Collapsible Drawer */}
       <CollapsibleDrawer 
-        title="Chapter Files" 
+        title="Skript Files" 
         icon={<Files className="w-5 h-5" />}
         defaultOpen={false}
       >
         <FileBrowser 
-          chapterId={chapter.id}
+          skriptId={skript.id}
           files={fileList}
           loading={fileListLoading}
           onFileSelect={(file) => {
@@ -391,7 +391,7 @@ export function PageEditor({ collection, chapter, page }: PageEditorProps) {
             onChange={handleContentChange}
             onSave={handleSave}
             onFileInsert={handleFileInsert}
-            chapterId={chapter.id}
+            skriptId={skript.id}
             domain={(session?.user as { subdomain?: string })?.subdomain || undefined}
             fileList={fileList}
             fileListLoading={fileListLoading}

@@ -15,7 +15,7 @@ export default async function DashboardPage() {
   }
 
   // Fetch user's content statistics
-  const [collections, totalChapters, totalPages] = await Promise.all([
+  const [collections, totalSkripts, totalPages] = await Promise.all([
     prisma.collection.findMany({
       where: {
         authors: {
@@ -25,7 +25,7 @@ export default async function DashboardPage() {
         }
       },
       include: {
-        chapters: {
+        skripts: {
           include: {
             pages: true
           }
@@ -33,7 +33,7 @@ export default async function DashboardPage() {
       },
       orderBy: { updatedAt: 'desc' }
     }),
-    prisma.chapter.count({
+    prisma.skript.count({
       where: {
         authors: {
           some: {
@@ -88,11 +88,11 @@ export default async function DashboardPage() {
         
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Chapters</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Skripts</CardTitle>
             <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalChapters}</div>
+            <div className="text-2xl font-bold">{totalSkripts}</div>
           </CardContent>
         </Card>
         
@@ -128,9 +128,9 @@ export default async function DashboardPage() {
                       {collection.description || 'No description'}
                     </p>
                     <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                      <span>{collection.chapters.length} chapters</span>
+                      <span>{collection.skripts.length} skripts</span>
                       <span>
-                        {collection.chapters.reduce((acc: number, ch: { pages: unknown[] }) => acc + ch.pages.length, 0)} pages
+                        {collection.skripts.reduce((acc: number, ch: { pages: unknown[] }) => acc + ch.pages.length, 0)} pages
                       </span>
                       <span>
                         Updated {new Date(collection.updatedAt).toLocaleDateString()}

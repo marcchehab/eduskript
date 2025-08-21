@@ -49,30 +49,30 @@ export async function POST(request: NextRequest) {
     const normalizedSlug = generateSlug(slug)
 
     // Check if slug is already taken in this collection
-    const existingChapter = await prisma.chapter.findFirst({
+    const existingSkript = await prisma.skript.findFirst({
       where: {
         collectionId,
         slug: normalizedSlug
       }
     })
 
-    if (existingChapter) {
+    if (existingSkript) {
       return NextResponse.json(
-        { error: 'A chapter with this slug already exists in this collection' },
+        { error: 'A skript with this slug already exists in this collection' },
         { status: 409 }
       )
     }
 
     // Get the next order number
-    const lastChapter = await prisma.chapter.findFirst({
+    const lastSkript = await prisma.skript.findFirst({
       where: { collectionId },
       orderBy: { order: 'desc' }
     })
 
-    const nextOrder = (lastChapter?.order ?? 0) + 1
+    const nextOrder = (lastSkript?.order ?? 0) + 1
 
-    // Create chapter with the current user as the first author
-    const chapter = await prisma.chapter.create({
+    // Create skript with the current user as the first author
+    const skript = await prisma.skript.create({
       data: {
         title,
         description,
@@ -96,9 +96,9 @@ export async function POST(request: NextRequest) {
     })
 
     revalidatePath('/dashboard')
-    return NextResponse.json(chapter)
+    return NextResponse.json(skript)
   } catch (error) {
-    console.error('Error creating chapter:', error)
+    console.error('Error creating skript:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

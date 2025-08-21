@@ -78,7 +78,7 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
           include: {
             collection: {
               include: {
-                chapters: {
+                skripts: {
                   where: { isPublished: true },
                   include: {
                     pages: {
@@ -137,8 +137,8 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
                     </p>
                   )}
                   <div className="text-sm text-gray-500 dark:text-gray-500">
-                    {collectionAuthor.collection.chapters.length} chapters • {' '}
-                    {collectionAuthor.collection.chapters.reduce((acc: number, ch: { pages: unknown[] }) => acc + ch.pages.length, 0)} pages
+                    {collectionAuthor.collection.skripts.length} skripts • {' '}
+                    {collectionAuthor.collection.skripts.reduce((acc: number, ch: { pages: unknown[] }) => acc + ch.pages.length, 0)} pages
                   </div>
                 </div>
               ))}

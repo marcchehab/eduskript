@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     console.log('[UPLOAD] Parsing form data...')
     const formData = await request.formData()
     const file = formData.get('file') as File
-    const chapterId = formData.get('chapterId') as string
+    const skriptId = formData.get('skriptId') as string
     const parentId = formData.get('parentId') as string | null
     const overwrite = formData.get('overwrite') === 'true'
 
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
       fileName: file?.name,
       fileSize: file?.size,
       fileType: file?.type,
-      chapterId,
+      skriptId,
       parentId,
       overwrite
     })
@@ -36,16 +36,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
 
-    if (!chapterId) {
-      console.log('[UPLOAD] Error: No chapter ID provided')
-      return NextResponse.json({ error: 'Chapter ID is required for file upload' }, { status: 400 })
+    if (!skriptId) {
+      console.log('[UPLOAD] Error: No skript ID provided')
+      return NextResponse.json({ error: 'Skript ID is required for file upload' }, { status: 400 })
     }
 
-    // Verify chapter ownership
-    console.log('[UPLOAD] Checking chapter ownership for chapterId:', chapterId)
-    const chapter = await prisma.chapter.findFirst({
+    // Verify skript ownership
+    console.log('[UPLOAD] Checking skript ownership for skriptId:', skriptId)
+    const skript = await prisma.skript.findFirst({
       where: {
-        id: chapterId,
+        id: skriptId,
         authors: {
           some: {
             userId: session.user.id
@@ -53,11 +53,11 @@ export async function POST(request: NextRequest) {
         }
       }
     })
-    console.log('[UPLOAD] Chapter ownership check result:', { hasChapter: !!chapter })
+    console.log('[UPLOAD] Skript ownership check result:', { hasSkript: !!skript })
 
-    if (!chapter) {
-      console.log('[UPLOAD] Error: Chapter not found or access denied')
-      return NextResponse.json({ error: 'Chapter not found or access denied' }, { status: 403 })
+    if (!skript) {
+      console.log('[UPLOAD] Error: Skript not found or access denied')
+      return NextResponse.json({ error: 'Skript not found or access denied' }, { status: 403 })
     }
 
     // Convert file to buffer
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
     console.log('[UPLOAD] Calling saveFile with params:', {
       bufferLength: buffer.length,
       filename: file.name,
-      chapterId,
+      skriptId,
       userId: session.user.id,
       parentId: parentId || null,
       contentType: file.type,
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
     const savedFile = await saveFile({
       buffer,
       filename: file.name,
-      chapterId,
+      skriptId,
       userId: session.user.id,
       parentId: parentId || null,
       contentType: file.type,
@@ -96,8 +96,8 @@ export async function POST(request: NextRequest) {
       type: file.type,
       hash: savedFile.hash,
       url: savedFile.url,
-      uploadType: 'chapter',
-      chapterId: chapterId,
+      uploadType: 'skript',
+      skriptId: skriptId,
       parentId: parentId || null,
       uploadedAt: new Date().toISOString()
     }
@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Get files for a chapter
+// Get files for a skript
 export async function GET(request: NextRequest) {
   console.log('[UPLOAD_GET] Starting file list request')
   try {
@@ -126,19 +126,19 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url)
-    const chapterId = searchParams.get('chapterId')
+    const skriptId = searchParams.get('skriptId')
     const parentId = searchParams.get('parentId') // null for root directory
-    console.log('[UPLOAD_GET] Request params:', { chapterId, parentId })
+    console.log('[UPLOAD_GET] Request params:', { skriptId, parentId })
 
-    if (!chapterId) {
-      console.log('[UPLOAD_GET] Error: No chapter ID provided')
-      return NextResponse.json({ error: 'Chapter ID is required for file listing' }, { status: 400 })
+    if (!skriptId) {
+      console.log('[UPLOAD_GET] Error: No skript ID provided')
+      return NextResponse.json({ error: 'Skript ID is required for file listing' }, { status: 400 })
     }
 
     // List files using new file storage system
     console.log('[UPLOAD_GET] Calling listFiles...')
     const files = await listFiles({
-      chapterId,
+      skriptId,
       parentId: parentId || null,
       userId: session.user.id
     })

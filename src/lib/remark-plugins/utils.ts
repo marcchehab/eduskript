@@ -40,13 +40,13 @@ export function searchFileInSubdirectories(searchDir: string, fileName: string):
 }
 
 /**
- * Get the chapter-specific upload directory for a given domain and chapter ID
+ * Get the skript-specific upload directory for a given domain and skript ID
  * @param domain The domain/username
- * @param chapterId The chapter ID
- * @returns The path to the chapter's upload directory
+ * @param skriptId The skript ID
+ * @returns The path to the skript's upload directory
  */
-export function getChapterUploadDir(domain: string, chapterId: string): string {
-  return path.join(process.cwd(), 'public', 'uploads', domain, 'chapters', chapterId)
+export function getSkriptUploadDir(domain: string, skriptId: string): string {
+  return path.join(process.cwd(), 'public', 'uploads', domain, 'skripts', skriptId)
 }
 
 /**

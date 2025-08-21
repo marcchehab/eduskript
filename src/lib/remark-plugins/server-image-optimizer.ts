@@ -2,7 +2,7 @@ import { visit } from 'unist-util-visit'
 
 export interface ServerImageOptimizerOptions {
   domain?: string
-  chapterId?: string
+  skriptId?: string
   fileList?: Array<{filename: string, url: string, relativePath: string}>
 }
 
@@ -24,9 +24,9 @@ export function remarkServerImageOptimizer(options: ServerImageOptimizerOptions 
     const mkdir = promisify(fs.mkdir)
     const access = promisify(fs.access)
 
-    const { domain, chapterId, fileList } = options
+    const { domain, skriptId, fileList } = options
     
-    if (!domain || !chapterId) return
+    if (!domain || !skriptId) return
 
     const downloadPromises: Promise<void>[] = []
 
@@ -45,9 +45,9 @@ export function remarkServerImageOptimizer(options: ServerImageOptimizerOptions 
       if (!fileInfo) return
 
       // Create local cache path
-      const cacheDir = path.join(process.cwd(), 'public', 'cache', 'images', domain, chapterId)
+      const cacheDir = path.join(process.cwd(), 'public', 'cache', 'images', domain, skriptId)
       const localPath = path.join(cacheDir, fileInfo.filename)
-      const publicPath = `/cache/images/${domain}/${chapterId}/${fileInfo.filename}`
+      const publicPath = `/cache/images/${domain}/${skriptId}/${fileInfo.filename}`
 
       // Download and cache the image
       const downloadPromise = downloadImage(fileInfo.url, localPath, cacheDir, fs, https, mkdir, access)

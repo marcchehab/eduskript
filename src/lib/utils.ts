@@ -8,7 +8,7 @@ export function cn(...inputs: ClassValue[]) {
 /**
  * Get the correct URL for navigation based on the current context
  * @param subdomain - The user's subdomain
- * @param path - The path to navigate to (e.g., "/collection/chapter/page")
+ * @param path - The path to navigate to (e.g., "/collection/skript/page")
  * @param isClientSide - Whether this is being called from client-side code
  * @returns The correctly formatted URL
  */

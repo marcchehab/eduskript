@@ -115,11 +115,11 @@ export async function PATCH(
       return NextResponse.json({ error: 'File not found or permission denied' }, { status: 404 })
     }
 
-    // Get the file's chapter info for permission verification and conflict checking
+    // Get the file's skript info for permission verification and conflict checking
     const fileRecord = await prisma.file.findUnique({
       where: { id: fileId },
       include: {
-        chapter: {
+        skript: {
           include: {
             authors: true
           }
@@ -132,16 +132,16 @@ export async function PATCH(
     }
 
     // Double-check permissions (redundant but safer)
-    const hasPermission = fileRecord.chapter.authors.some(author => author.userId === session.user.id)
+    const hasPermission = fileRecord.skript.authors.some(author => author.userId === session.user.id)
     if (!hasPermission) {
       return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
     }
 
-    // Check if a file with the new name already exists in the same chapter/parent directory
+    // Check if a file with the new name already exists in the same skript/parent directory
     const existingFile = await prisma.file.findFirst({
       where: {
         name: trimmedFilename,
-        chapterId: fileRecord.chapterId,
+        skriptId: fileRecord.skriptId,
         parentId: fileRecord.parentId,
         id: { not: fileId } // Exclude the current file
       }

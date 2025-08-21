@@ -24,8 +24,8 @@ export async function PATCH(
       )
     }
 
-    // Check if chapter exists and belongs to user
-    const chapter = await prisma.chapter.findFirst({
+    // Check if skript exists and belongs to user
+    const skript = await prisma.skript.findFirst({
       where: {
         id,
         authors: {
@@ -39,18 +39,18 @@ export async function PATCH(
       }
     })
 
-    if (!chapter) {
+    if (!skript) {
       return NextResponse.json(
-        { error: 'Chapter not found' },
+        { error: 'Skript not found' },
         { status: 404 }
       )
     }
 
-    // Verify all page IDs belong to this chapter
-    const chapterPageIds = chapter.pages.map((p) => p.id)
-    const allPageIdsValid = pageIds.every((id: string) => chapterPageIds.includes(id))
+    // Verify all page IDs belong to this skript
+    const skriptPageIds = skript.pages.map((p) => p.id)
+    const allPageIdsValid = pageIds.every((id: string) => skriptPageIds.includes(id))
     
-    if (!allPageIdsValid || pageIds.length !== chapter.pages.length) {
+    if (!allPageIdsValid || pageIds.length !== skript.pages.length) {
       return NextResponse.json(
         { error: 'Invalid page IDs provided' },
         { status: 400 }

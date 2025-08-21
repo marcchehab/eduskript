@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
-// DELETE /api/chapters/[id]/authors/[userId] - Remove an author from a chapter
+// DELETE /api/skripts/[id]/authors/[userId] - Remove an author from a skript
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; userId: string }> }
@@ -14,12 +14,12 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { id: chapterId, userId } = await params
+    const { id: skriptId, userId } = await params
 
-    // Verify the user has access to this chapter
-    const chapter = await prisma.chapter.findFirst({
+    // Verify the user has access to this skript
+    const skript = await prisma.skript.findFirst({
       where: {
-        id: chapterId,
+        id: skriptId,
         authors: {
           some: {
             userId: session.user.id
@@ -35,30 +35,30 @@ export async function DELETE(
       }
     })
 
-    if (!chapter) {
+    if (!skript) {
       return NextResponse.json(
-        { error: 'Chapter not found or you do not have permission to remove authors' },
+        { error: 'Skript not found or you do not have permission to remove authors' },
         { status: 404 }
       )
     }
 
     // Check if the user to remove is actually an author
-    const authorToRemove = await prisma.chapterAuthor.findFirst({
+    const authorToRemove = await prisma.skriptAuthor.findFirst({
       where: {
-        chapterId,
+        skriptId,
         userId
       }
     })
 
     if (!authorToRemove) {
       return NextResponse.json(
-        { error: 'User is not an author of this chapter' },
+        { error: 'User is not an author of this skript' },
         { status: 404 }
       )
     }
 
     // Prevent removing yourself if you're the only author
-    if (userId === session.user.id && chapter.authors.length === 1) {
+    if (userId === session.user.id && skript.authors.length === 1) {
       return NextResponse.json(
         { error: 'Cannot remove yourself as the only author. Add another author first.' },
         { status: 400 }
@@ -66,7 +66,7 @@ export async function DELETE(
     }
 
     // Remove the author
-    await prisma.chapterAuthor.delete({
+    await prisma.skriptAuthor.delete({
       where: {
         id: authorToRemove.id
       }
@@ -75,7 +75,7 @@ export async function DELETE(
     return NextResponse.json({ success: true })
 
   } catch (error) {
-    console.error('Error removing chapter author:', error)
+    console.error('Error removing skript author:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

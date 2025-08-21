@@ -80,7 +80,7 @@ model User {
   
   // Many-to-many relations for authoring
   collectionAuthors   CollectionAuthor[]
-  chapterAuthors ChapterAuthor[]
+  skriptAuthors SkriptAuthor[]
   pageAuthors    PageAuthor[]
   
   // File uploads
@@ -112,7 +112,7 @@ model Collection {
   updatedAt   DateTime @updatedAt
   
   // Relations
-  chapters    Chapter[]
+  skripts    Skript[]
   
   // Many-to-many relation for multiple authors
   authors     CollectionAuthor[]
@@ -135,7 +135,7 @@ model CollectionAuthor {
   @@map("collection_authors")
 }
 
-model Chapter {
+model Skript {
   id          String   @id @default(cuid())
   title       String
   description String?
@@ -151,28 +151,28 @@ model Chapter {
   pages       Page[]
   
   // Many-to-many relation for multiple authors
-  authors     ChapterAuthor[]
+  authors     SkriptAuthor[]
   
-  // Files associated with this chapter
+  // Files associated with this skript
   files       File[]
   
   @@unique([collectionId, slug])
-  @@map("chapters")
+  @@map("skripts")
 }
 
-// Junction table for Chapter-User many-to-many relationship
-model ChapterAuthor {
+// Junction table for Skript-User many-to-many relationship
+model SkriptAuthor {
   id        String   @id @default(cuid())
-  chapterId String
+  skriptId  String
   userId    String
   role      String   @default("author") // "author", "editor", "reviewer", etc.
   createdAt DateTime @default(now())
   
-  chapter   Chapter  @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  skript    Skript   @relation(fields: [skriptId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  @@unique([chapterId, userId])
-  @@map("chapter_authors")
+  @@unique([skriptId, userId])
+  @@map("skript_authors")
 }
 
 model Page {
@@ -186,14 +186,14 @@ model Page {
   updatedAt   DateTime @updatedAt
   
   // Relations
-  chapterId   String
-  chapter     Chapter  @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  skriptId    String
+  skript      Skript   @relation(fields: [skriptId], references: [id], onDelete: Cascade)
   versions    PageVersion[]
   
   // Many-to-many relation for multiple authors
   authors     PageAuthor[]
   
-  @@unique([chapterId, slug])
+  @@unique([skriptId, slug])
   @@map("pages")
 }
 
@@ -233,7 +233,7 @@ model File {
   name        String
   parentId    String? @map("parent_id")
   isDirectory Boolean @default(false) @map("is_directory")
-  chapterId   String  @map("chapter_id")
+  skriptId    String  @map("skript_id")
   hash        String? @unique
   contentType String? @map("content_type")
   size        BigInt?
@@ -244,11 +244,11 @@ model File {
   // Relations
   parent   File?    @relation("FileParent", fields: [parentId], references: [id], onDelete: Cascade)
   children File[]   @relation("FileParent")
-  chapter  Chapter  @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  skript   Skript   @relation(fields: [skriptId], references: [id], onDelete: Cascade)
   creator  User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
 
-  @@unique([parentId, name, chapterId], name: "unique_file_name_per_parent_chapter")
-  @@index([parentId, chapterId], name: "parent_chapter_idx")
+  @@unique([parentId, name, skriptId], name: "unique_file_name_per_parent_skript")
+  @@index([parentId, skriptId], name: "parent_skript_idx")
   @@index([hash], name: "hash_idx")
   @@map("files")
 }

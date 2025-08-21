@@ -40,7 +40,7 @@ export async function PATCH(
         }
       },
       include: {
-        chapter: {
+        skript: {
           include: {
             collection: true
           }
@@ -59,20 +59,20 @@ export async function PATCH(
       )
     }
 
-    // Check if slug is already used in the same chapter (but not this page)
+    // Check if slug is already used in the same skript (but not this page)
     // Only check slug conflict if slug is being updated
     if (!isContentOnlyUpdate && !isPublishOnlyUpdate && slug) {
       const slugExists = await prisma.page.findFirst({
         where: {
           slug: slug.trim(),
-          chapterId: existingPage.chapterId,
+          skriptId: existingPage.skriptId,
           id: { not: id }
         }
       })
 
       if (slugExists) {
         return NextResponse.json(
-          { error: 'Slug already exists in this chapter' },
+          { error: 'Slug already exists in this skript' },
           { status: 400 }
         )
       }
@@ -124,13 +124,13 @@ export async function PATCH(
 
     if (user?.subdomain) {
       // Revalidate the specific page
-      revalidatePath(`/${user.subdomain}/${existingPage.chapter.collection?.slug}/${existingPage.chapter.slug}/${updatedPage.slug}`)
+      revalidatePath(`/${user.subdomain}/${existingPage.skript.collection?.slug}/${existingPage.skript.slug}/${updatedPage.slug}`)
       
-      // Revalidate the chapter page (in case it lists pages)
-      revalidatePath(`/${user.subdomain}/${existingPage.chapter.collection?.slug}/${existingPage.chapter.slug}`)
+      // Revalidate the skript page (in case it lists pages)
+      revalidatePath(`/${user.subdomain}/${existingPage.skript.collection?.slug}/${existingPage.skript.slug}`)
       
-      // Revalidate the collection page (in case it lists chapters/pages)
-      revalidatePath(`/${user.subdomain}/${existingPage.chapter.collection?.slug}`)
+      // Revalidate the collection page (in case it lists skripts/pages)
+      revalidatePath(`/${user.subdomain}/${existingPage.skript.collection?.slug}`)
       
       // Revalidate the home page (in case it lists collections)
       revalidatePath(`/${user.subdomain}`)

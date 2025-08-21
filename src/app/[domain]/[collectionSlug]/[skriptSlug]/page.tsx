@@ -3,23 +3,23 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import type { Metadata } from 'next'
 import { prisma } from '@/lib/prisma'
-import { ChapterRedirect } from '@/components/ChapterRedirect'
+import { SkriptRedirect } from '@/components/SkriptRedirect'
 
 // Enable ISR with on-demand regeneration for previews
 export const revalidate = 0 // No caching for previews to show latest changes
 export const dynamic = 'force-dynamic' // Force dynamic rendering for auth checks
 
-interface ChapterPreviewProps {
+interface SkriptPreviewProps {
   params: Promise<{
     domain: string
     collectionSlug: string
-    chapterSlug: string
+    skriptSlug: string
   }>
 }
 
 // Generate metadata for SEO
-export async function generateMetadata({ params }: ChapterPreviewProps): Promise<Metadata> {
-  const { domain, collectionSlug, chapterSlug } = await params
+export async function generateMetadata({ params }: SkriptPreviewProps): Promise<Metadata> {
+  const { domain, collectionSlug, skriptSlug } = await params
   
   try {
     // Find the teacher and collection
@@ -54,9 +54,9 @@ export async function generateMetadata({ params }: ChapterPreviewProps): Promise
       }
     }
 
-    const chapter = await prisma.chapter.findFirst({
+    const skript = await prisma.skript.findFirst({
       where: {
-        slug: chapterSlug,
+        slug: skriptSlug,
         collection: {
           slug: collectionSlug,
           authors: {
@@ -69,23 +69,23 @@ export async function generateMetadata({ params }: ChapterPreviewProps): Promise
       select: { title: true }
     })
 
-    if (!chapter) {
+    if (!skript) {
       return {
-        title: 'Chapter Not Found',
-        description: 'The requested chapter could not be found.'
+        title: 'Skript Not Found',
+        description: 'The requested skript could not be found.'
       }
     }
 
     return {
-      title: `${chapter.title} - ${collection.title} | ${teacher.name || domain}`,
-      description: `${chapter.title} from ${collection.title} by ${teacher.name || domain}`,
+      title: `${skript.title} - ${collection.title} | ${teacher.name || domain}`,
+      description: `${skript.title} from ${collection.title} by ${teacher.name || domain}`,
       robots: 'noindex, nofollow' // Prevent search engines from indexing previews
     }
   } catch (error) {
-    console.error('Error generating metadata for chapter preview:', error)
+    console.error('Error generating metadata for skript preview:', error)
     return {
-      title: 'Chapter Preview',
-      description: 'Preview mode for chapter content'
+      title: 'Skript Preview',
+      description: 'Preview mode for skript content'
     }
   }
 }
@@ -102,8 +102,8 @@ interface CollectionPage {
 
 
 
-export default async function ChapterPreviewPage({ params }: ChapterPreviewProps) {
-  const { domain, collectionSlug, chapterSlug } = await params
+export default async function SkriptPreviewPage({ params }: SkriptPreviewProps) {
+  const { domain, collectionSlug, skriptSlug } = await params
   const session = await getServerSession(authOptions)
 
   try {
@@ -127,7 +127,7 @@ export default async function ChapterPreviewPage({ params }: ChapterPreviewProps
     // Check if current user is the author
     const isAuthor = session?.user?.email === teacher.email
 
-    // Find the collection with the specific chapter
+    // Find the collection with the specific skript
     const collection = await prisma.collection.findFirst({
       where: {
         slug: collectionSlug,
@@ -138,9 +138,9 @@ export default async function ChapterPreviewPage({ params }: ChapterPreviewProps
         }
       },
       include: {
-        chapters: {
+        skripts: {
           where: {
-            slug: chapterSlug
+            slug: skriptSlug
           },
           include: {
             pages: {
@@ -167,31 +167,31 @@ export default async function ChapterPreviewPage({ params }: ChapterPreviewProps
       notFound()
     }
 
-    const chapter = collection.chapters[0]
-    if (!chapter) {
+    const skript = collection.skripts[0]
+    if (!skript) {
       notFound()
     }
 
-    // Authorization check for chapter
-    if (!chapter.isPublished && !isAuthor) {
+    // Authorization check for skript
+    if (!skript.isPublished && !isAuthor) {
       notFound()
     }
 
     // Find the first available page to redirect to
-    const firstPage = chapter.pages.find((page: CollectionPage) => 
+    const firstPage = skript.pages.find((page: CollectionPage) => 
       isAuthor || page.isPublished
     )
 
     if (firstPage) {
       // Redirect to the first available page
-      return <ChapterRedirect redirectUrl={`/${domain}/${collectionSlug}/${chapterSlug}/${firstPage.slug}`} />
+      return <SkriptRedirect redirectUrl={`/${domain}/${collectionSlug}/${skriptSlug}/${firstPage.slug}`} />
     }
 
     // If no pages are available, redirect back to collection
-    return <ChapterRedirect redirectUrl={`/${domain}/${collectionSlug}`} />
+    return <SkriptRedirect redirectUrl={`/${domain}/${collectionSlug}`} />
 
   } catch (error) {
-    console.error('Error loading chapter preview:', error)
+    console.error('Error loading skript preview:', error)
     notFound()
   }
 } 

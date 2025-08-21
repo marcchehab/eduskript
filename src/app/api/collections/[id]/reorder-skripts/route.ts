@@ -15,11 +15,11 @@ export async function PATCH(
 
     const { id } = await params
     const body = await request.json()
-    const { chapterIds } = body
+    const { skriptIds } = body
 
-    if (!Array.isArray(chapterIds)) {
+    if (!Array.isArray(skriptIds)) {
       return NextResponse.json(
-        { error: 'chapterIds must be an array' },
+        { error: 'skriptIds must be an array' },
         { status: 400 }
       )
     }
@@ -35,7 +35,7 @@ export async function PATCH(
         }
       },
       include: {
-        chapters: true
+        skripts: true
       }
     })
 
@@ -46,21 +46,21 @@ export async function PATCH(
       )
     }
 
-    // Verify all chapter IDs belong to this collection
-    const collectionChapterIds = collection.chapters.map((c) => c.id)
-    const allChapterIdsValid = chapterIds.every((id: string) => collectionChapterIds.includes(id))
+    // Verify all skript IDs belong to this collection
+    const collectionSkriptIds = collection.skripts.map((c) => c.id)
+    const allSkriptIdsValid = skriptIds.every((id: string) => collectionSkriptIds.includes(id))
     
-    if (!allChapterIdsValid || chapterIds.length !== collection.chapters.length) {
+    if (!allSkriptIdsValid || skriptIds.length !== collection.skripts.length) {
       return NextResponse.json(
-        { error: 'Invalid chapter IDs provided' },
+        { error: 'Invalid skript IDs provided' },
         { status: 400 }
       )
     }
 
-    // Update chapter orders
-    const updates = chapterIds.map((chapterId: string, index: number) => 
-      prisma.chapter.update({
-        where: { id: chapterId },
+    // Update skript orders
+    const updates = skriptIds.map((skriptId: string, index: number) => 
+      prisma.skript.update({
+        where: { id: skriptId },
         data: { order: index + 1 }
       })
     )
@@ -69,7 +69,7 @@ export async function PATCH(
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Error reordering chapters:', error)
+    console.error('Error reordering skripts:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

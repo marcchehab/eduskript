@@ -6,11 +6,11 @@ import { PageEditor } from '@/components/dashboard/page-editor'
 
 interface PageParams {
   slug: string
-  chapterSlug: string
+  skriptSlug: string
   pageSlug: string
 }
 
-async function getPageData(slug: string, chapterSlug: string, pageSlug: string, userId: string) {
+async function getPageData(slug: string, skriptSlug: string, pageSlug: string, userId: string) {
   const collection = await prisma.collection.findFirst({
     where: { 
       slug,
@@ -24,19 +24,19 @@ async function getPageData(slug: string, chapterSlug: string, pageSlug: string, 
 
   if (!collection) return null
 
-  const chapter = await prisma.chapter.findFirst({
+  const skript = await prisma.skript.findFirst({
     where: { 
-      slug: chapterSlug, 
+      slug: skriptSlug, 
       collectionId: collection.id 
     }
   })
 
-  if (!chapter) return null
+  if (!skript) return null
 
   const page = await prisma.page.findFirst({
     where: { 
       slug: pageSlug, 
-      chapterId: chapter.id 
+      skriptId: skript.id 
     },
     include: {
       versions: {
@@ -48,7 +48,7 @@ async function getPageData(slug: string, chapterSlug: string, pageSlug: string, 
 
   if (!page) return null
 
-  return { collection, chapter, page }
+  return { collection, skript, page }
 }
 
 export default async function PageEditPage({ 
@@ -62,19 +62,19 @@ export default async function PageEditPage({
     return notFound()
   }
 
-  const { slug, chapterSlug, pageSlug } = await params
-  const data = await getPageData(slug, chapterSlug, pageSlug, session.user.id)
+  const { slug, skriptSlug, pageSlug } = await params
+  const data = await getPageData(slug, skriptSlug, pageSlug, session.user.id)
 
   if (!data) {
     return notFound()
   }
 
-  const { collection, chapter, page } = data
+  const { collection, skript, page } = data
 
   return (
     <PageEditor 
       collection={collection} 
-      chapter={chapter} 
+      skript={skript} 
       page={page} 
     />
   )

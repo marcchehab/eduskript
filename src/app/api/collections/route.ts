@@ -95,7 +95,7 @@ export async function GET() {
         }
       },
       include: {
-        chapters: {
+        skripts: {
           include: {
             pages: true
           }

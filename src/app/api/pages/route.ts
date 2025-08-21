@@ -13,19 +13,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { title, slug, content, chapterId } = await request.json()
+    const { title, slug, content, skriptId } = await request.json()
 
-    if (!title || !slug || !chapterId) {
+    if (!title || !slug || !skriptId) {
       return NextResponse.json(
-        { error: 'Title, slug, and chapter ID are required' },
+        { error: 'Title, slug, and skript ID are required' },
         { status: 400 }
       )
     }
 
-    // Check if user is an author of the chapter
-    const chapter = await prisma.chapter.findFirst({
+    // Check if user is an author of the skript
+    const skript = await prisma.skript.findFirst({
       where: {
-        id: chapterId,
+        id: skriptId,
         authors: {
           some: {
             userId: session.user.id
@@ -39,31 +39,31 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    if (!chapter) {
+    if (!skript) {
       return NextResponse.json(
-        { error: 'Chapter not found or access denied' },
+        { error: 'Skript not found or access denied' },
         { status: 404 }
       )
     }
 
-    // Check if slug already exists in this chapter
+    // Check if slug already exists in this skript
     const existingPage = await prisma.page.findFirst({
       where: {
-        chapterId,
+        skriptId,
         slug: generateSlug(slug)
       }
     })
 
     if (existingPage) {
       return NextResponse.json(
-        { error: 'A page with this slug already exists in this chapter' },
+        { error: 'A page with this slug already exists in this skript' },
         { status: 409 }
       )
     }
 
     // Get next order
     const lastPage = await prisma.page.findFirst({
-      where: { chapterId },
+      where: { skriptId },
       orderBy: { order: 'desc' }
     })
 
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
         slug: generateSlug(slug),
         content: content || '',
         order: nextOrder,
-        chapterId,
+        skriptId,
         authors: {
           create: {
             userId: session.user.id,

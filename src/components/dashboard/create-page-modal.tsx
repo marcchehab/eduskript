@@ -16,11 +16,11 @@ import {
 import { Plus } from 'lucide-react'
 
 interface CreatePageModalProps {
-  chapterId: string
+  skriptId: string
   onPageCreated: () => void
 }
 
-export function CreatePageModal({ chapterId, onPageCreated }: CreatePageModalProps) {
+export function CreatePageModal({ skriptId, onPageCreated }: CreatePageModalProps) {
   const [open, setOpen] = useState(false)
   const [formData, setFormData] = useState({
     title: '',
@@ -59,7 +59,7 @@ export function CreatePageModal({ chapterId, onPageCreated }: CreatePageModalPro
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
-          chapterId
+          skriptId
         })
       })
 
@@ -90,7 +90,7 @@ export function CreatePageModal({ chapterId, onPageCreated }: CreatePageModalPro
         <DialogHeader>
           <DialogTitle>Create New Page</DialogTitle>
           <DialogDescription>
-            Add a new page to this chapter.
+            Add a new page to this skript.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit}>

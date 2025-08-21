@@ -16,12 +16,12 @@ import {
 } from '@/components/ui/dialog'
 import { Plus } from 'lucide-react'
 
-interface CreateChapterModalProps {
+interface CreateSkriptModalProps {
   collectionId: string
-  onChapterCreated: () => void
+  onSkriptCreated: () => void
 }
 
-export function CreateChapterModal({ collectionId, onChapterCreated }: CreateChapterModalProps) {
+export function CreateSkriptModal({ collectionId, onSkriptCreated }: CreateSkriptModalProps) {
   const [open, setOpen] = useState(false)
   const [formData, setFormData] = useState({
     title: '',
@@ -56,7 +56,7 @@ export function CreateChapterModal({ collectionId, onChapterCreated }: CreateCha
     setError('')
 
     try {
-      const response = await fetch('/api/chapters', {
+      const response = await fetch('/api/skripts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -68,10 +68,10 @@ export function CreateChapterModal({ collectionId, onChapterCreated }: CreateCha
       if (response.ok) {
         setFormData({ title: '', description: '', slug: '' })
         setOpen(false)
-        onChapterCreated()
+        onSkriptCreated()
       } else {
         const data = await response.json()
-        setError(data.error || 'Failed to create chapter')
+        setError(data.error || 'Failed to create skript')
       }
     } catch {
       setError('An error occurred. Please try again.')
@@ -85,24 +85,24 @@ export function CreateChapterModal({ collectionId, onChapterCreated }: CreateCha
       <DialogTrigger asChild>
         <Button>
           <Plus className="w-4 h-4 mr-2" />
-          Add Chapter
+          Add Skript
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Create New Chapter</DialogTitle>
+          <DialogTitle>Create New Skript</DialogTitle>
           <DialogDescription>
-            Add a new chapter to organize your content.
+            Add a new skript to organize your content.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="grid gap-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="title">Chapter Title *</Label>
+              <Label htmlFor="title">Skript Title *</Label>
               <Input
                 id="title"
                 name="title"
-                placeholder="Enter chapter title"
+                placeholder="Enter skript title"
                 value={formData.title}
                 onChange={handleChange}
                 required
@@ -124,7 +124,7 @@ export function CreateChapterModal({ collectionId, onChapterCreated }: CreateCha
               <Textarea
                 id="description"
                 name="description"
-                placeholder="Brief description of this chapter"
+                placeholder="Brief description of this skript"
                 value={formData.description}
                 onChange={handleChange}
                 rows={3}
@@ -146,7 +146,7 @@ export function CreateChapterModal({ collectionId, onChapterCreated }: CreateCha
               type="submit"
               disabled={isLoading || !formData.title.trim() || !formData.slug.trim()}
             >
-              {isLoading ? 'Creating...' : 'Create Chapter'}
+              {isLoading ? 'Creating...' : 'Create Skript'}
             </Button>
           </DialogFooter>
         </form>

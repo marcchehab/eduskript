@@ -15,7 +15,7 @@ interface Collection {
   description?: string
   isPublished: boolean
   updatedAt: string
-  chapters: Array<{
+  skripts: Array<{
     id: string
     pages: Array<{ id: string }>
   }>
@@ -115,12 +115,12 @@ export default function CollectionsPage() {
                 <div className="flex items-center gap-6 text-sm text-muted-foreground">
                   <div className="flex items-center gap-2">
                     <BookOpen className="w-4 h-4" />
-                    <span>{collection.chapters.length} chapters</span>
+                    <span>{collection.skripts.length} skripts</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Eye className="w-4 h-4" />
                     <span>
-                      {collection.chapters.reduce((acc: number, ch) => acc + ch.pages.length, 0)} pages
+                      {collection.skripts.reduce((acc: number, ch) => acc + ch.pages.length, 0)} pages
                     </span>
                   </div>
                   <div>

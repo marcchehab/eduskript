@@ -32,7 +32,7 @@ export default async function CollectionPage({ params }: CollectionPageProps) {
       }
     },
     include: {
-      chapters: {
+      skripts: {
         include: {
           pages: {
             orderBy: { order: 'asc' }

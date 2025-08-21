@@ -17,15 +17,15 @@ interface FileItem {
   url?: string
   isDirectory?: boolean
   contentType?: string
-  uploadType?: 'global' | 'chapter'
-  chapterId?: string
+  uploadType?: 'global' | 'skript'
+  skriptId?: string
   uploadedAt?: string
   createdAt?: Date
   updatedAt?: Date
 }
 
 interface FileBrowserProps {
-  chapterId?: string
+  skriptId?: string
   onFileSelect?: (file: FileItem) => void
   className?: string
   onUploadComplete?: () => void
@@ -34,7 +34,7 @@ interface FileBrowserProps {
   onFileRenamed?: (oldFilename: string, newFilename: string) => void
 }
 
-export function FileBrowser({ chapterId, onFileSelect, className = '', onUploadComplete, files, loading, onFileRenamed }: FileBrowserProps) {
+export function FileBrowser({ skriptId, onFileSelect, className = '', onUploadComplete, files, loading, onFileRenamed }: FileBrowserProps) {
   const [dragOver, setDragOver] = useState(false)
   const [renameFile, setRenameFile] = useState<FileItem | null>(null)
   const [newFileName, setNewFileName] = useState('')
@@ -79,7 +79,7 @@ export function FileBrowser({ chapterId, onFileSelect, className = '', onUploadC
     setDragOver(false)
   }
 
-  const handleDrop = async (e: React.DragEvent, uploadType: 'global' | 'chapter' = 'chapter') => {
+  const handleDrop = async (e: React.DragEvent, uploadType: 'global' | 'skript' = 'skript') => {
     e.preventDefault()
     setDragOver(false)
     const droppedFiles = Array.from(e.dataTransfer.files)
@@ -115,7 +115,7 @@ export function FileBrowser({ chapterId, onFileSelect, className = '', onUploadC
     setNewFileName(getFileName(file))
   }
 
-  const handleDuplicateCheck = async (file: File, uploadType: 'global' | 'chapter' = 'chapter') => {
+  const handleDuplicateCheck = async (file: File, uploadType: 'global' | 'skript' = 'skript') => {
     // Check if file with same name already exists
     const existingFile = files.find(f => 
       (f.uploadType === uploadType || !f.uploadType) && 
@@ -131,7 +131,7 @@ export function FileBrowser({ chapterId, onFileSelect, className = '', onUploadC
     return true // Proceed with upload
   }
 
-  const uploadFiles = async (fileList: File[], uploadType: 'global' | 'chapter' = 'chapter') => {
+  const uploadFiles = async (fileList: File[], uploadType: 'global' | 'skript' = 'skript') => {
     for (const file of fileList) {
       const canUpload = await handleDuplicateCheck(file, uploadType)
       if (!canUpload) {
@@ -144,8 +144,8 @@ export function FileBrowser({ chapterId, onFileSelect, className = '', onUploadC
         const formData = new FormData()
         formData.append('file', file)
         formData.append('uploadType', uploadType)
-        if (chapterId && uploadType === 'chapter') {
-          formData.append('chapterId', chapterId)
+        if (skriptId && uploadType === 'skript') {
+          formData.append('skriptId', skriptId)
         }
 
         const response = await fetch('/api/upload', {
@@ -207,8 +207,8 @@ export function FileBrowser({ chapterId, onFileSelect, className = '', onUploadC
 
   return (
     <div className={`p-4 space-y-4 ${className}`}>
-      {/* Chapter Files Section */}
-      {chapterId && (
+      {/* Skript Files Section */}
+      {skriptId && (
         <div>
           <div
             className={`border-2 border-dashed rounded-lg p-3 transition-colors ${
@@ -216,15 +216,15 @@ export function FileBrowser({ chapterId, onFileSelect, className = '', onUploadC
             }`}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
-            onDrop={(e) => handleDrop(e, 'chapter')}
+            onDrop={(e) => handleDrop(e, 'skript')}
           >
-            {files.filter(f => !f.isDirectory && (f.uploadType === 'chapter' || !f.uploadType)).length === 0 ? (
+            {files.filter(f => !f.isDirectory && (f.uploadType === 'skript' || !f.uploadType)).length === 0 ? (
               <div className="text-center py-2 text-muted-foreground text-sm">
-                No chapter files. Drop files here or click upload.
+                No skript files. Drop files here or click upload.
               </div>
             ) : (
               <div className="space-y-1">
-                {files.filter(f => !f.isDirectory && (f.uploadType === 'chapter' || !f.uploadType)).map((file) => (
+                {files.filter(f => !f.isDirectory && (f.uploadType === 'skript' || !f.uploadType)).map((file) => (
                   <div
                     key={file.id || file.url}
                     className="flex items-center space-x-2 p-2 rounded hover:bg-muted group"
@@ -334,7 +334,7 @@ export function FileBrowser({ chapterId, onFileSelect, className = '', onUploadC
                   className="rounded border-border"
                 />
                 <Label htmlFor="update-links" className="text-sm">
-                  Update all links throughout this chapter
+                  Update all links throughout this skript
                 </Label>
               </div>
             </div>
@@ -417,8 +417,8 @@ export function FileBrowser({ chapterId, onFileSelect, className = '', onUploadC
                   const formData = new FormData()
                   formData.append('file', duplicateUpload.file)
                   formData.append('overwrite', 'true')
-                  if (chapterId) {
-                    formData.append('chapterId', chapterId)
+                  if (skriptId) {
+                    formData.append('skriptId', skriptId)
                   }
 
                   const response = await fetch('/api/upload', {
@@ -450,8 +450,8 @@ export function FileBrowser({ chapterId, onFileSelect, className = '', onUploadC
                   // Create a new file with the new name
                   const blob = new Blob([duplicateUpload.file], { type: duplicateUpload.file.type })
                   formData.append('file', blob, newUploadName.trim())
-                  if (chapterId) {
-                    formData.append('chapterId', chapterId)
+                  if (skriptId) {
+                    formData.append('skriptId', skriptId)
                   }
 
                   const response = await fetch('/api/upload', {

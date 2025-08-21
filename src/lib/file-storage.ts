@@ -103,7 +103,7 @@ export function getPhysicalPath(hash: string, extension: string): string {
 export async function saveFile({
   buffer,
   filename,
-  chapterId,
+  skriptId,
   userId,
   parentId = null,
   contentType,
@@ -111,7 +111,7 @@ export async function saveFile({
 }: {
   buffer: Buffer
   filename: string
-  chapterId: string
+  skriptId: string
   userId: string
   parentId?: string | null
   contentType?: string
@@ -120,7 +120,7 @@ export async function saveFile({
   console.log('[FILE_STORAGE] saveFile called with:', {
     filename,
     bufferLength: buffer.length,
-    chapterId,
+    skriptId,
     userId,
     parentId,
     contentType,
@@ -137,13 +137,13 @@ export async function saveFile({
     throw new Error(validation.error)
   }
 
-  // Check if file with same name already exists in the same parent/chapter
+  // Check if file with same name already exists in the same parent/skript
   console.log('[FILE_STORAGE] Checking for existing file...')
   const existingFile = await prisma.file.findFirst({
     where: {
       name: filename,
       parentId,
-      chapterId,
+      skriptId,
       isDirectory: false
     }
   })
@@ -221,7 +221,7 @@ export async function saveFile({
       data: {
         name: filename,
         parentId,
-        chapterId,
+        skriptId,
         hash,
         contentType,
         size: BigInt(buffer.length),
@@ -247,12 +247,12 @@ export async function saveFile({
  */
 export async function createDirectory({
   name,
-  chapterId,
+  skriptId,
   userId,
   parentId = null
 }: {
   name: string
-  chapterId: string
+  skriptId: string
   userId: string
   parentId?: string | null
 }): Promise<{ id: string }> {
@@ -261,7 +261,7 @@ export async function createDirectory({
     where: {
       name,
       parentId,
-      chapterId,
+      skriptId,
       isDirectory: true
     }
   })
@@ -274,7 +274,7 @@ export async function createDirectory({
     data: {
       name,
       parentId,
-      chapterId,
+      skriptId,
       createdBy: userId,
       isDirectory: true
     }
@@ -291,7 +291,7 @@ export async function deleteFile(fileId: string, userId: string): Promise<void> 
   const file = await prisma.file.findUnique({
     where: { id: fileId },
     include: {
-      chapter: {
+      skript: {
         include: {
           authors: true
         }
@@ -303,8 +303,8 @@ export async function deleteFile(fileId: string, userId: string): Promise<void> 
     throw new Error('File not found')
   }
 
-  // Check permissions - user must be chapter author
-  const hasPermission = file.chapter.authors.some(author => author.userId === userId)
+  // Check permissions - user must be skript author
+  const hasPermission = file.skript.authors.some(author => author.userId === userId)
   if (!hasPermission) {
     throw new Error('Permission denied')
   }
@@ -350,11 +350,11 @@ export async function deleteFile(fileId: string, userId: string): Promise<void> 
  * List files in a directory
  */
 export async function listFiles({
-  chapterId,
+  skriptId,
   parentId = null,
   userId
 }: {
-  chapterId: string
+  skriptId: string
   parentId?: string | null
   userId: string
 }): Promise<Array<{
@@ -367,23 +367,23 @@ export async function listFiles({
   updatedAt: Date
   url?: string
 }>> {
-  // Check permissions - user must be chapter author
-  const chapter = await prisma.chapter.findFirst({
+  // Check permissions - user must be skript author
+  const skript = await prisma.skript.findFirst({
     where: {
-      id: chapterId,
+      id: skriptId,
       authors: {
         some: { userId }
       }
     }
   })
 
-  if (!chapter) {
-    throw new Error('Chapter not found or permission denied')
+  if (!skript) {
+    throw new Error('Skript not found or permission denied')
   }
 
   const files = await prisma.file.findMany({
     where: {
-      chapterId,
+      skriptId,
       parentId
     },
     orderBy: [
@@ -418,7 +418,7 @@ export async function getFileById(fileId: string, userId: string): Promise<{
   const file = await prisma.file.findUnique({
     where: { id: fileId },
     include: {
-      chapter: {
+      skript: {
         include: {
           authors: true
         }
@@ -431,7 +431,7 @@ export async function getFileById(fileId: string, userId: string): Promise<{
   }
 
   // Check permissions
-  const hasPermission = file.chapter.authors.some(author => author.userId === userId)
+  const hasPermission = file.skript.authors.some(author => author.userId === userId)
   if (!hasPermission) {
     throw new Error('Permission denied')
   }

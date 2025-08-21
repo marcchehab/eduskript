@@ -29,8 +29,8 @@ export async function PATCH(
       )
     }
 
-    // Check if user is an author of this chapter
-    const existingChapter = await prisma.chapter.findFirst({
+    // Check if user is an author of this skript
+    const existingSkript = await prisma.skript.findFirst({
       where: {
         id,
         authors: {
@@ -44,18 +44,18 @@ export async function PATCH(
       }
     })
 
-    if (!existingChapter) {
+    if (!existingSkript) {
       return NextResponse.json(
-        { error: 'Chapter not found or access denied' },
+        { error: 'Skript not found or access denied' },
         { status: 404 }
       )
     }
 
-    // Check if slug is already used in the same collection (but not this chapter)
-    if (slug && slug !== existingChapter.slug) {
-      const slugExists = await prisma.chapter.findFirst({
+    // Check if slug is already used in the same collection (but not this skript)
+    if (slug && slug !== existingSkript.slug) {
+      const slugExists = await prisma.skript.findFirst({
         where: {
-          collectionId: existingChapter.collectionId,
+          collectionId: existingSkript.collectionId,
           slug,
           NOT: { id }
         }
@@ -69,8 +69,8 @@ export async function PATCH(
       }
     }
 
-    // Update chapter
-    const updatedChapter = await prisma.chapter.update({
+    // Update skript
+    const updatedSkript = await prisma.skript.update({
       where: { id },
       data: {
         ...(title && { title }),
@@ -98,15 +98,15 @@ export async function PATCH(
 
     if (user?.subdomain) {
       // Revalidate relevant paths
-      revalidatePath(`/${user.subdomain}/${existingChapter.collection.slug}/${updatedChapter.slug}`)
-      revalidatePath(`/${user.subdomain}/${existingChapter.collection.slug}`)
+      revalidatePath(`/${user.subdomain}/${existingSkript.collection.slug}/${updatedSkript.slug}`)
+      revalidatePath(`/${user.subdomain}/${existingSkript.collection.slug}`)
       revalidatePath(`/${user.subdomain}`)
       revalidatePath('/dashboard')
     }
 
-    return NextResponse.json(updatedChapter)
+    return NextResponse.json(updatedSkript)
   } catch (error) {
-    console.error('Error updating chapter:', error)
+    console.error('Error updating skript:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -130,8 +130,8 @@ export async function DELETE(
 
     const { id } = await params
 
-    // Check if user is an author of this chapter
-    const existingChapter = await prisma.chapter.findFirst({
+    // Check if user is an author of this skript
+    const existingSkript = await prisma.skript.findFirst({
       where: {
         id,
         authors: {
@@ -145,15 +145,15 @@ export async function DELETE(
       }
     })
 
-    if (!existingChapter) {
+    if (!existingSkript) {
       return NextResponse.json(
-        { error: 'Chapter not found or access denied' },
+        { error: 'Skript not found or access denied' },
         { status: 404 }
       )
     }
 
-    // Delete chapter (cascading delete will handle pages)
-    await prisma.chapter.delete({
+    // Delete skript (cascading delete will handle pages)
+    await prisma.skript.delete({
       where: { id }
     })
 
@@ -165,14 +165,14 @@ export async function DELETE(
 
     if (user?.subdomain) {
       // Revalidate relevant paths
-      revalidatePath(`/${user.subdomain}/${existingChapter.collection.slug}`)
+      revalidatePath(`/${user.subdomain}/${existingSkript.collection.slug}`)
       revalidatePath(`/${user.subdomain}`)
       revalidatePath('/dashboard')
     }
 
-    return NextResponse.json({ message: 'Chapter deleted successfully' })
+    return NextResponse.json({ message: 'Skript deleted successfully' })
   } catch (error) {
-    console.error('Error deleting chapter:', error)
+    console.error('Error deleting skript:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

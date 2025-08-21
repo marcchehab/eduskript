@@ -26,7 +26,7 @@ export async function GET(
         }
       },
       include: {
-        chapters: {
+        skripts: {
           include: {
             pages: {
               orderBy: { order: 'asc' }

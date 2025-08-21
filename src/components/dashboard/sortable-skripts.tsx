@@ -28,7 +28,7 @@ import { CreatePageModal } from './create-page-modal'
 import { SortablePages } from './sortable-pages'
 import { GripVertical, Trash2 } from 'lucide-react'
 
-interface Chapter {
+interface Skript {
   id: string
   title: string
   slug: string
@@ -46,21 +46,21 @@ interface Chapter {
   }>
 }
 
-interface SortableChapterItemProps {
-  chapter: Chapter
+interface SortableSkriptItemProps {
+  skript: Skript
   index: number
   collectionSlug: string
-  onChapterUpdated: () => void
-  onChapterDeleted: () => void
+  onSkriptUpdated: () => void
+  onSkriptDeleted: () => void
 }
 
-function SortableChapterItem({ 
-  chapter, 
+function SortableSkriptItem({ 
+  skript, 
   index, 
   collectionSlug, 
-  onChapterUpdated,
-  onChapterDeleted 
-}: SortableChapterItemProps) {
+  onSkriptUpdated,
+  onSkriptDeleted 
+}: SortableSkriptItemProps) {
   const {
     attributes,
     listeners,
@@ -68,7 +68,7 @@ function SortableChapterItem({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: chapter.id })
+  } = useSortable({ id: skript.id })
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -76,24 +76,24 @@ function SortableChapterItem({
     opacity: isDragging ? 0.5 : 1,
   }
 
-  const handleDeleteChapter = async () => {
-    if (!confirm(`Are you sure you want to delete the chapter "${chapter.title}"? This will also delete all pages in this chapter.`)) {
+  const handleDeleteSkript = async () => {
+    if (!confirm(`Are you sure you want to delete the skript "${skript.title}"? This will also delete all pages in this skript.`)) {
       return
     }
 
     try {
-      const response = await fetch(`/api/chapters/${chapter.id}`, {
+      const response = await fetch(`/api/skripts/${skript.id}`, {
         method: 'DELETE'
       })
 
       if (response.ok) {
-        onChapterDeleted()
+        onSkriptDeleted()
       } else {
-        alert('Failed to delete chapter')
+        alert('Failed to delete skript')
       }
     } catch (error) {
-      console.error('Error deleting chapter:', error)
-      alert('Failed to delete chapter')
+      console.error('Error deleting skript:', error)
+      alert('Failed to delete skript')
     }
   }
 
@@ -112,43 +112,43 @@ function SortableChapterItem({
             </div>
           </div>
           <div>
-            <Link href={`/dashboard/collections/${collectionSlug}/chapters/${chapter.slug}`}>
+            <Link href={`/dashboard/collections/${collectionSlug}/skripts/${skript.slug}`}>
               <h3 className="font-medium text-foreground hover:text-primary cursor-pointer transition-colors">
-                {chapter.title}
+                {skript.title}
               </h3>
             </Link>
             <p className="text-sm text-muted-foreground">
-              {chapter.description || 'No description'}
+              {skript.description || 'No description'}
             </p>
             <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
-              <span>{chapter.pages.length} pages</span>
+              <span>{skript.pages.length} pages</span>
               <span>
-                Updated {new Date(chapter.updatedAt).toLocaleDateString()}
+                Updated {new Date(skript.updatedAt).toLocaleDateString()}
               </span>
             </div>
           </div>
         </div>
         <div className="flex gap-2 items-center">
           <PublishToggle
-            type="chapter"
-            itemId={chapter.id}
-            isPublished={chapter.isPublished}
-            onToggle={onChapterUpdated}
+            type="skript"
+            itemId={skript.id}
+            isPublished={skript.isPublished}
+            onToggle={onSkriptUpdated}
             showText={true}
           />
           <EditModal
-            type="chapter"
-            item={chapter}
-            onItemUpdated={onChapterUpdated}
+            type="skript"
+            item={skript}
+            onItemUpdated={onSkriptUpdated}
           />
           <CreatePageModal 
-            chapterId={chapter.id} 
-            onPageCreated={onChapterUpdated}
+            skriptId={skript.id} 
+            onPageCreated={onSkriptUpdated}
           />
           <Button 
             variant="outline" 
             size="sm"
-            onClick={handleDeleteChapter}
+            onClick={handleDeleteSkript}
             className="text-destructive hover:text-destructive/80 hover:bg-destructive/10"
           >
             <Trash2 className="w-4 h-4" />
@@ -157,17 +157,17 @@ function SortableChapterItem({
       </div>
       
       {/* Pages list */}
-      {chapter.pages.length > 0 && (
+      {skript.pages.length > 0 && (
         <div className="border-t bg-muted/50">
           <div className="p-4 space-y-2">
             <h4 className="text-sm font-medium text-muted-foreground mb-3">Pages</h4>
             <SortablePages
-              pages={chapter.pages}
-              chapterId={chapter.id}
+              pages={skript.pages}
+              skriptId={skript.id}
               collectionSlug={collectionSlug}
-              chapterSlug={chapter.slug}
-              onReorder={onChapterUpdated}
-              onPageDeleted={onChapterUpdated}
+              skriptSlug={skript.slug}
+              onReorder={onSkriptUpdated}
+              onPageDeleted={onSkriptUpdated}
             />
           </div>
         </div>
@@ -176,31 +176,31 @@ function SortableChapterItem({
   )
 }
 
-function StaticChapterItem({ 
-  chapter, 
+function StaticSkriptItem({ 
+  skript, 
   index, 
   collectionSlug, 
-  onChapterUpdated,
-  onChapterDeleted 
-}: SortableChapterItemProps) {
-  const handleDeleteChapter = async () => {
-    if (!confirm(`Are you sure you want to delete the chapter "${chapter.title}"? This will also delete all pages in this chapter.`)) {
+  onSkriptUpdated,
+  onSkriptDeleted 
+}: SortableSkriptItemProps) {
+  const handleDeleteSkript = async () => {
+    if (!confirm(`Are you sure you want to delete the skript "${skript.title}"? This will also delete all pages in this skript.`)) {
       return
     }
 
     try {
-      const response = await fetch(`/api/chapters/${chapter.id}`, {
+      const response = await fetch(`/api/skripts/${skript.id}`, {
         method: 'DELETE'
       })
 
       if (response.ok) {
-        onChapterDeleted()
+        onSkriptDeleted()
       } else {
-        alert('Failed to delete chapter')
+        alert('Failed to delete skript')
       }
     } catch (error) {
-      console.error('Error deleting chapter:', error)
-      alert('Failed to delete chapter')
+      console.error('Error deleting skript:', error)
+      alert('Failed to delete skript')
     }
   }
 
@@ -215,43 +215,43 @@ function StaticChapterItem({
             </div>
           </div>
           <div>
-            <Link href={`/dashboard/collections/${collectionSlug}/chapters/${chapter.slug}`}>
+            <Link href={`/dashboard/collections/${collectionSlug}/skripts/${skript.slug}`}>
               <h3 className="font-medium text-foreground hover:text-primary cursor-pointer transition-colors">
-                {chapter.title}
+                {skript.title}
               </h3>
             </Link>
             <p className="text-sm text-muted-foreground">
-              {chapter.description || 'No description'}
+              {skript.description || 'No description'}
             </p>
             <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
-              <span>{chapter.pages.length} pages</span>
+              <span>{skript.pages.length} pages</span>
               <span>
-                Updated {new Date(chapter.updatedAt).toLocaleDateString()}
+                Updated {new Date(skript.updatedAt).toLocaleDateString()}
               </span>
             </div>
           </div>
         </div>
         <div className="flex gap-2 items-center">
           <PublishToggle
-            type="chapter"
-            itemId={chapter.id}
-            isPublished={chapter.isPublished}
-            onToggle={onChapterUpdated}
+            type="skript"
+            itemId={skript.id}
+            isPublished={skript.isPublished}
+            onToggle={onSkriptUpdated}
             showText={true}
           />
           <EditModal
-            type="chapter"
-            item={chapter}
-            onItemUpdated={onChapterUpdated}
+            type="skript"
+            item={skript}
+            onItemUpdated={onSkriptUpdated}
           />
           <CreatePageModal 
-            chapterId={chapter.id} 
-            onPageCreated={onChapterUpdated}
+            skriptId={skript.id} 
+            onPageCreated={onSkriptUpdated}
           />
           <Button 
             variant="outline" 
             size="sm"
-            onClick={handleDeleteChapter}
+            onClick={handleDeleteSkript}
             className="text-destructive hover:text-destructive/80 hover:bg-destructive/10"
           >
             <Trash2 className="w-4 h-4" />
@@ -260,17 +260,17 @@ function StaticChapterItem({
       </div>
       
       {/* Pages list */}
-      {chapter.pages.length > 0 && (
+      {skript.pages.length > 0 && (
         <div className="border-t bg-muted/50">
           <div className="p-4 space-y-2">
             <h4 className="text-sm font-medium text-muted-foreground mb-3">Pages</h4>
             <SortablePages
-              pages={chapter.pages}
-              chapterId={chapter.id}
+              pages={skript.pages}
+              skriptId={skript.id}
               collectionSlug={collectionSlug}
-              chapterSlug={chapter.slug}
-              onReorder={onChapterUpdated}
-              onPageDeleted={onChapterUpdated}
+              skriptSlug={skript.slug}
+              onReorder={onSkriptUpdated}
+              onPageDeleted={onSkriptUpdated}
             />
           </div>
         </div>
@@ -279,28 +279,28 @@ function StaticChapterItem({
   )
 }
 
-interface SortableChaptersProps {
-  chapters: Chapter[]
+interface SortableSkriptsProps {
+  skripts: Skript[]
   collectionId: string
   collectionSlug: string
   onReorder: () => void
 }
 
-export function SortableChapters({ 
-  chapters, 
+export function SortableSkripts({ 
+  skripts, 
   collectionId, 
   collectionSlug, 
   onReorder 
-}: SortableChaptersProps) {
-  const [items, setItems] = useState(chapters)
+}: SortableSkriptsProps) {
+  const [items, setItems] = useState(skripts)
   const [isReordering, setIsReordering] = useState(false)
   const [isMounted, setIsMounted] = useState(false)
   
-  // Sync items with chapters prop and handle hydration
+  // Sync items with skripts prop and handle hydration
   useEffect(() => {
-    setItems(chapters)
+    setItems(skripts)
     setIsMounted(true)
-  }, [chapters])
+  }, [skripts])
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -327,11 +327,11 @@ export function SortableChapters({
       // Update order in database
       setIsReordering(true)
       try {
-        const response = await fetch(`/api/collections/${collectionId}/reorder-chapters`, {
+        const response = await fetch(`/api/collections/${collectionId}/reorder-skripts`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            chapterIds: newItems.map(item => item.id)
+            skriptIds: newItems.map(item => item.id)
           })
         })
 
@@ -339,13 +339,13 @@ export function SortableChapters({
           onReorder()
         } else {
           // Revert on error
-          setItems(chapters)
-          alert('Failed to reorder chapters')
+          setItems(skripts)
+          alert('Failed to reorder skripts')
         }
       } catch (error) {
-        console.error('Error reordering chapters:', error)
-        setItems(chapters)
-        alert('Failed to reorder chapters')
+        console.error('Error reordering skripts:', error)
+        setItems(skripts)
+        alert('Failed to reorder skripts')
       }
       setIsReordering(false)
     }
@@ -360,14 +360,14 @@ export function SortableChapters({
           onDragEnd={handleDragEnd}
         >
           <SortableContext items={items.map(c => c.id)} strategy={verticalListSortingStrategy}>
-            {items.map((chapter, index) => (
-              <SortableChapterItem
-                key={chapter.id}
-                chapter={chapter}
+            {items.map((skript, index) => (
+              <SortableSkriptItem
+                key={skript.id}
+                skript={skript}
                 index={index}
                 collectionSlug={collectionSlug}
-                onChapterUpdated={onReorder}
-                onChapterDeleted={onReorder}
+                onSkriptUpdated={onReorder}
+                onSkriptDeleted={onReorder}
               />
             ))}
           </SortableContext>
@@ -375,21 +375,21 @@ export function SortableChapters({
       )}
       {!isMounted && (
         <div>
-          {items.map((chapter, index) => (
-            <StaticChapterItem
-              key={chapter.id}
-              chapter={chapter}
+          {items.map((skript, index) => (
+            <StaticSkriptItem
+              key={skript.id}
+              skript={skript}
               index={index}
               collectionSlug={collectionSlug}
-              onChapterUpdated={onReorder}
-              onChapterDeleted={onReorder}
+              onSkriptUpdated={onReorder}
+              onSkriptDeleted={onReorder}
             />
           ))}
         </div>
       )}
       {isReordering && (
         <div className="text-sm text-muted-foreground text-center py-2">
-          Updating chapter order...
+          Updating skript order...
         </div>
       )}
     </div>

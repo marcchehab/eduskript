@@ -9,7 +9,7 @@ const addAuthorSchema = z.object({
   role: z.string().min(1, 'Role is required')
 })
 
-// GET /api/chapters/[id]/authors - List all authors of a chapter
+// GET /api/skripts/[id]/authors - List all authors of a skript
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -20,12 +20,12 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { id: chapterId } = await params
+    const { id: skriptId } = await params
 
-    // Verify the user has access to this chapter
-    const chapter = await prisma.chapter.findFirst({
+    // Verify the user has access to this skript
+    const skript = await prisma.skript.findFirst({
       where: {
-        id: chapterId,
+        id: skriptId,
         authors: {
           some: {
             userId: session.user.id
@@ -48,15 +48,15 @@ export async function GET(
       }
     })
 
-    if (!chapter) {
+    if (!skript) {
       return NextResponse.json(
-        { error: 'Chapter not found or access denied' },
+        { error: 'Skript not found or access denied' },
         { status: 404 }
       )
     }
 
     // Return all authors
-    const allAuthors = chapter.authors.map(ca => ({
+    const allAuthors = skript.authors.map(ca => ({
       id: ca.user.id,
       name: ca.user.name,
       email: ca.user.email,
@@ -66,7 +66,7 @@ export async function GET(
 
     return NextResponse.json(allAuthors)
   } catch (error) {
-    console.error('Error fetching chapter authors:', error)
+    console.error('Error fetching skript authors:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -74,7 +74,7 @@ export async function GET(
   }
 }
 
-// POST /api/chapters/[id]/authors - Add a new author to a chapter
+// POST /api/skripts/[id]/authors - Add a new author to a skript
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -85,15 +85,15 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { id: chapterId } = await params
+    const { id: skriptId } = await params
     const body = await request.json()
     
     const validatedData = addAuthorSchema.parse(body)
 
-    // Verify the user has access to this chapter
-    const chapter = await prisma.chapter.findFirst({
+    // Verify the user has access to this skript
+    const skript = await prisma.skript.findFirst({
       where: {
-        id: chapterId,
+        id: skriptId,
         authors: {
           some: {
             userId: session.user.id
@@ -102,9 +102,9 @@ export async function POST(
       }
     })
 
-    if (!chapter) {
+    if (!skript) {
       return NextResponse.json(
-        { error: 'Chapter not found or you do not have permission to add authors' },
+        { error: 'Skript not found or you do not have permission to add authors' },
         { status: 404 }
       )
     }
@@ -123,24 +123,24 @@ export async function POST(
     }
 
     // Check if user is already an author
-    const existingAuthor = await prisma.chapterAuthor.findFirst({
+    const existingAuthor = await prisma.skriptAuthor.findFirst({
       where: {
-        chapterId,
+        skriptId,
         userId: userToAdd.id
       }
     })
 
     if (existingAuthor) {
       return NextResponse.json(
-        { error: 'User is already an author of this chapter' },
+        { error: 'User is already an author of this skript' },
         { status: 400 }
       )
     }
 
     // Add the new author
-    const newAuthor = await prisma.chapterAuthor.create({
+    const newAuthor = await prisma.skriptAuthor.create({
       data: {
-        chapterId,
+        skriptId,
         userId: userToAdd.id,
         role: validatedData.role
       },
@@ -171,7 +171,7 @@ export async function POST(
       )
     }
 
-    console.error('Error adding chapter author:', error)
+    console.error('Error adding skript author:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

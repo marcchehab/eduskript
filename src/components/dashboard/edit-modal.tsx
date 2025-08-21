@@ -18,7 +18,7 @@ import {
 import { Edit, Save, Eye, EyeOff } from 'lucide-react'
 
 interface EditModalProps {
-  type: 'chapter' | 'page'
+  type: 'skript' | 'page'
   item: {
     id: string
     title: string
@@ -87,7 +87,7 @@ export function EditModal({ type, item, onItemUpdated, triggerClassName, buttonT
     setError('')
 
     try {
-      const endpoint = type === 'chapter' ? `/api/chapters/${item.id}` : `/api/pages/${item.id}`
+      const endpoint = type === 'skript' ? `/api/skripts/${item.id}` : `/api/pages/${item.id}`
       const response = await fetch(endpoint, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -129,7 +129,7 @@ export function EditModal({ type, item, onItemUpdated, triggerClassName, buttonT
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Edit {type === 'chapter' ? 'Chapter' : 'Page'}</DialogTitle>
+          <DialogTitle>Edit {type === 'skript' ? 'Skript' : 'Page'}</DialogTitle>
           <DialogDescription>
             Update {type} details and publication status.
           </DialogDescription>
@@ -137,7 +137,7 @@ export function EditModal({ type, item, onItemUpdated, triggerClassName, buttonT
         <form onSubmit={handleSubmit}>
           <div className="grid gap-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="title">{type === 'chapter' ? 'Chapter' : 'Page'} Title *</Label>
+              <Label htmlFor="title">{type === 'skript' ? 'Skript' : 'Page'} Title *</Label>
               <Input
                 id="title"
                 name="title"

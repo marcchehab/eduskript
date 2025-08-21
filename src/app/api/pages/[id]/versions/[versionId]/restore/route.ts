@@ -43,7 +43,7 @@ export async function POST(
         }
       },
       include: {
-        chapter: {
+        skript: {
           include: {
             collection: true
           }
@@ -92,11 +92,11 @@ export async function POST(
       select: { subdomain: true }
     })
 
-    if (user?.subdomain && page.chapter.collection) {
+    if (user?.subdomain && page.skript.collection) {
       // Revalidate all relevant paths
-      revalidatePath(`/${user.subdomain}/${page.chapter.collection.slug}/${page.chapter.slug}/${page.slug}`)
-      revalidatePath(`/${user.subdomain}/${page.chapter.collection.slug}/${page.chapter.slug}`)
-      revalidatePath(`/${user.subdomain}/${page.chapter.collection.slug}`)
+      revalidatePath(`/${user.subdomain}/${page.skript.collection.slug}/${page.skript.slug}/${page.slug}`)
+      revalidatePath(`/${user.subdomain}/${page.skript.collection.slug}/${page.skript.slug}`)
+      revalidatePath(`/${user.subdomain}/${page.skript.collection.slug}`)
       revalidatePath(`/${user.subdomain}`)
       revalidatePath('/dashboard/collections')
     }

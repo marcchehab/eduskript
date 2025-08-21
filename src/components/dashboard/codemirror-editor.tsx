@@ -12,7 +12,7 @@ interface CodeMirrorEditorProps {
   content: string
   onChange: (content: string) => void
   onSave?: () => void
-  chapterId?: string
+  skriptId?: string
   domain?: string
   isReadOnly?: boolean
   fileList?: Array<{id: string, name: string, url?: string, isDirectory?: boolean}>
@@ -24,7 +24,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   content,
   onChange,
   onSave,
-  chapterId,
+  skriptId,
   domain,
   isReadOnly = false,
   fileList,
@@ -95,13 +95,13 @@ const CodeMirrorEditor = function CodeMirrorEditor({
 
     // Handle computer file drops
     const files = Array.from(e.dataTransfer.files)
-    if (files.length > 0 && chapterId) {
+    if (files.length > 0 && skriptId) {
       try {
         for (const file of files) {
           const formData = new FormData()
           formData.append('file', file)
-          formData.append('uploadType', 'chapter')
-          formData.append('chapterId', chapterId)
+          formData.append('uploadType', 'skript')
+          formData.append('skriptId', skriptId)
 
           const response = await fetch('/api/upload', {
             method: 'POST',
@@ -192,7 +192,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
       try {
         const processed = await processMarkdown(
           useSimpleEditor ? textareaContent : editorContent, 
-          { domain, chapterId, fileList: fileList || [] }
+          { domain, skriptId, fileList: fileList || [] }
         )
         setPreviewContent(processed.content)
       } catch (error) {
@@ -202,7 +202,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
     }
     
     updatePreview()
-  }, [editorContent, textareaContent, useSimpleEditor, isMounted, domain, chapterId, fileList, fileListLoading])
+  }, [editorContent, textareaContent, useSimpleEditor, isMounted, domain, skriptId, fileList, fileListLoading])
   useEffect(() => {
     if (!isMounted || !editorRef.current) return
 

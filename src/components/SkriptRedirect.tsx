@@ -3,11 +3,11 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
-interface ChapterRedirectProps {
+interface SkriptRedirectProps {
   redirectUrl: string
 }
 
-export function ChapterRedirect({ redirectUrl }: ChapterRedirectProps) {
+export function SkriptRedirect({ redirectUrl }: SkriptRedirectProps) {
   const router = useRouter()
 
   useEffect(() => {

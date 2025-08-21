@@ -39,11 +39,11 @@ interface SortablePageItemProps {
   page: Page
   index: number
   collectionSlug: string
-  chapterSlug: string
+  skriptSlug: string
   onPageUpdated?: () => void
 }
 
-function SortablePageItem({ page, index, collectionSlug, chapterSlug, onPageUpdated }: SortablePageItemProps) {
+function SortablePageItem({ page, index, collectionSlug, skriptSlug, onPageUpdated }: SortablePageItemProps) {
   const {
     attributes,
     listeners,
@@ -94,7 +94,7 @@ function SortablePageItem({ page, index, collectionSlug, chapterSlug, onPageUpda
           </div>
         </div>
         <div>
-          <Link href={`/dashboard/collections/${collectionSlug}/chapters/${chapterSlug}/pages/${page.slug}/edit`}>
+          <Link href={`/dashboard/collections/${collectionSlug}/skripts/${skriptSlug}/pages/${page.slug}/edit`}>
             <h4 className="font-medium text-foreground text-sm hover:text-primary cursor-pointer transition-colors">
               {page.title}
             </h4>
@@ -121,7 +121,7 @@ function SortablePageItem({ page, index, collectionSlug, chapterSlug, onPageUpda
           onItemUpdated={onPageUpdated || (() => {})}
         />
         <Button variant="outline" size="sm" asChild>
-          <Link href={`/dashboard/collections/${collectionSlug}/chapters/${chapterSlug}/pages/${page.slug}/edit`}>
+          <Link href={`/dashboard/collections/${collectionSlug}/skripts/${skriptSlug}/pages/${page.slug}/edit`}>
             Edit Content
           </Link>
         </Button>
@@ -138,7 +138,7 @@ function SortablePageItem({ page, index, collectionSlug, chapterSlug, onPageUpda
   )
 }
 
-function StaticPageItem({ page, index, collectionSlug, chapterSlug, onPageUpdated }: SortablePageItemProps) {
+function StaticPageItem({ page, index, collectionSlug, skriptSlug, onPageUpdated }: SortablePageItemProps) {
   const handleDeletePage = async () => {
     if (!confirm(`Are you sure you want to delete the page "${page.title}"?`)) {
       return
@@ -170,7 +170,7 @@ function StaticPageItem({ page, index, collectionSlug, chapterSlug, onPageUpdate
           </div>
         </div>
         <div>
-          <Link href={`/dashboard/collections/${collectionSlug}/chapters/${chapterSlug}/pages/${page.slug}/edit`}>
+          <Link href={`/dashboard/collections/${collectionSlug}/skripts/${skriptSlug}/pages/${page.slug}/edit`}>
             <h4 className="font-medium text-foreground text-sm hover:text-primary cursor-pointer transition-colors">
               {page.title}
             </h4>
@@ -197,7 +197,7 @@ function StaticPageItem({ page, index, collectionSlug, chapterSlug, onPageUpdate
           onItemUpdated={onPageUpdated || (() => {})}
         />
         <Button variant="outline" size="sm" asChild>
-          <Link href={`/dashboard/collections/${collectionSlug}/chapters/${chapterSlug}/pages/${page.slug}/edit`}>
+          <Link href={`/dashboard/collections/${collectionSlug}/skripts/${skriptSlug}/pages/${page.slug}/edit`}>
             Edit Content
           </Link>
         </Button>
@@ -216,18 +216,18 @@ function StaticPageItem({ page, index, collectionSlug, chapterSlug, onPageUpdate
 
 interface SortablePagesProps {
   pages: Page[]
-  chapterId: string
+  skriptId: string
   collectionSlug: string
-  chapterSlug: string
+  skriptSlug: string
   onReorder: () => void
   onPageDeleted?: () => void
 }
 
 export function SortablePages({ 
   pages, 
-  chapterId, 
+  skriptId, 
   collectionSlug, 
-  chapterSlug, 
+  skriptSlug, 
   onReorder,
   onPageDeleted 
 }: SortablePagesProps) {
@@ -267,7 +267,7 @@ export function SortablePages({
       // Update order in database
       setIsReordering(true)
       try {
-        const response = await fetch(`/api/chapters/${chapterId}/reorder-pages`, {
+        const response = await fetch(`/api/skripts/${skriptId}/reorder-pages`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -306,7 +306,7 @@ export function SortablePages({
                 page={page}
                 index={index}
                 collectionSlug={collectionSlug}
-                chapterSlug={chapterSlug}
+                skriptSlug={skriptSlug}
                 onPageUpdated={onPageDeleted}
               />
             ))}
@@ -321,7 +321,7 @@ export function SortablePages({
               page={page}
               index={index}
               collectionSlug={collectionSlug}
-              chapterSlug={chapterSlug}
+              skriptSlug={skriptSlug}
               onPageUpdated={onPageDeleted}
             />
           ))}

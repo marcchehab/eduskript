@@ -12,10 +12,10 @@ import { useEffect, useState } from 'react'
 interface MarkdownRendererProps {
   content: string
   domain?: string
-  chapterId?: string
+  skriptId?: string
 }
 
-export function MarkdownRenderer({ content, domain, chapterId }: MarkdownRendererProps) {
+export function MarkdownRenderer({ content, domain, skriptId }: MarkdownRendererProps) {
   const [html, setHtml] = useState('')
   const [isLoading, setIsLoading] = useState(true)
 
@@ -41,7 +41,7 @@ export function MarkdownRenderer({ content, domain, chapterId }: MarkdownRendere
     }
 
     processMarkdown()
-  }, [content, domain, chapterId])
+  }, [content, domain, skriptId])
 
   if (isLoading) {
     return (

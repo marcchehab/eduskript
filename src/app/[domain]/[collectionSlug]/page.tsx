@@ -85,7 +85,7 @@ interface CollectionPage {
   isPublished: boolean
 }
 
-interface CollectionChapter {
+interface CollectionSkript {
   id: string
   title: string
   slug: string
@@ -94,13 +94,13 @@ interface CollectionChapter {
   pages: CollectionPage[]
 }
 
-interface CollectionWithChapters {
+interface CollectionWithSkripts {
   id: string
   title: string
   slug: string
   description: string | null
   isPublished: boolean
-  chapters: CollectionChapter[]
+  skripts: CollectionSkript[]
 }
 
 export default async function CollectionPreviewPage({ params }: CollectionPreviewProps) {
@@ -109,7 +109,7 @@ export default async function CollectionPreviewPage({ params }: CollectionPrevie
 
   // Declare variables outside try block so they can be used in redirect logic
   let teacher: Teacher | null = null
-  let collection: CollectionWithChapters | null = null
+  let collection: CollectionWithSkripts | null = null
   let isAuthor = false
 
   try {
@@ -141,7 +141,7 @@ export default async function CollectionPreviewPage({ params }: CollectionPrevie
         }
       },
       include: {
-        chapters: {
+        skripts: {
           include: {
             pages: {
               orderBy: { order: 'asc' },
@@ -194,18 +194,18 @@ export default async function CollectionPreviewPage({ params }: CollectionPrevie
   }
 
   // Find the first available page to redirect to (outside try/catch to allow redirect to work)
-  const firstChapter = collection.chapters.find((chapter: CollectionChapter) => 
-    isAuthor || chapter.isPublished
+  const firstSkript = collection.skripts.find((skript: CollectionSkript) => 
+    isAuthor || skript.isPublished
   )
   
-  const firstPage = firstChapter?.pages.find((page: CollectionPage) => 
+  const firstPage = firstSkript?.pages.find((page: CollectionPage) => 
     isAuthor || page.isPublished
   )
 
-  if (firstPage && firstChapter) {
-    console.log(`Redirecting to: /${domain}/${collectionSlug}/${firstChapter.slug}/${firstPage.slug}`)
+  if (firstPage && firstSkript) {
+    console.log(`Redirecting to: /${domain}/${collectionSlug}/${firstSkript.slug}/${firstPage.slug}`)
     // Redirect to the first available page
-    redirect(`/${domain}/${collectionSlug}/${firstChapter.slug}/${firstPage.slug}`)
+    redirect(`/${domain}/${collectionSlug}/${firstSkript.slug}/${firstPage.slug}`)
   }
 
   // Build site structure for navigation
@@ -214,12 +214,12 @@ export default async function CollectionPreviewPage({ params }: CollectionPrevie
     title: collection.title,
     slug: collection.slug,
     isPublished: collection.isPublished,
-    chapters: collection.chapters.map(chapter => ({
-      id: chapter.id,
-      title: chapter.title,
-      slug: chapter.slug,
-      isPublished: chapter.isPublished,
-      pages: chapter.pages.map((page: CollectionPage) => ({
+    skripts: collection.skripts.map(skript => ({
+      id: skript.id,
+      title: skript.title,
+      slug: skript.slug,
+      isPublished: skript.isPublished,
+      pages: skript.pages.map((page: CollectionPage) => ({
         id: page.id,
         title: page.title,
         slug: page.slug,
@@ -277,30 +277,30 @@ export default async function CollectionPreviewPage({ params }: CollectionPrevie
           <div className="space-y-8">
             <div>
               <h2 className="text-2xl font-semibold mb-4">Contents</h2>
-              {collection.chapters.length > 0 ? (
+              {collection.skripts.length > 0 ? (
                 <div className="space-y-4">
-                  {collection.chapters.map((chapter: CollectionChapter, chapterIndex: number) => {
-                    const isChapterVisible = isAuthor || chapter.isPublished
+                  {collection.skripts.map((skript: CollectionSkript, skriptIndex: number) => {
+                    const isSkriptVisible = isAuthor || skript.isPublished
                     
-                    if (!isChapterVisible) return null
+                    if (!isSkriptVisible) return null
                     
                     return (
-                      <div key={chapter.id} className="border border-border rounded-lg p-4">
+                      <div key={skript.id} className="border border-border rounded-lg p-4">
                         <h3 className="text-lg font-medium mb-2 flex items-center">
                           <span className="mr-2 text-muted-foreground">
-                            {chapterIndex + 1}.
+                            {skriptIndex + 1}.
                           </span>
-                          {chapter.title}
-                          {!chapter.isPublished && isAuthor && (
+                          {skript.title}
+                          {!skript.isPublished && isAuthor && (
                             <span className="ml-2 px-2 py-1 text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200 rounded">
                               Draft
                             </span>
                           )}
                         </h3>
                         
-                        {chapter.pages.length > 0 ? (
+                        {skript.pages.length > 0 ? (
                           <ul className="space-y-1 ml-6">
-                            {chapter.pages.map((page: CollectionPage, pageIndex: number) => {
+                            {skript.pages.map((page: CollectionPage, pageIndex: number) => {
                               const isPageVisible = isAuthor || page.isPublished
                               
                               if (!isPageVisible) return null
@@ -308,11 +308,11 @@ export default async function CollectionPreviewPage({ params }: CollectionPrevie
                               return (
                                 <li key={page.id} className="text-muted-foreground">
                                   <a 
-                                    href={getNavigationUrl(domain, `/${collectionSlug}/${chapter.slug}/${page.slug}`)}
+                                    href={getNavigationUrl(domain, `/${collectionSlug}/${skript.slug}/${page.slug}`)}
                                     className="hover:text-foreground hover:underline flex items-center"
                                   >
                                     <span className="mr-2">
-                                      {chapterIndex + 1}.{pageIndex + 1}
+                                      {skriptIndex + 1}.{pageIndex + 1}
                                     </span>
                                     {page.title}
                                     {!page.isPublished && isAuthor && (
@@ -334,7 +334,7 @@ export default async function CollectionPreviewPage({ params }: CollectionPrevie
                 </div>
               ) : (
                 <p className="text-muted-foreground">
-                  This collection doesn&apos;t have any chapters yet.
+                  This collection doesn&apos;t have any skripts yet.
                 </p>
               )}
             </div>

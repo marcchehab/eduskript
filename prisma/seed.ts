@@ -43,8 +43,8 @@ async function main() {
     }
   })
 
-  // Create test chapters
-  const chapter1 = await prisma.chapter.upsert({
+  // Create test skripts
+  const skript1 = await prisma.skript.upsert({
     where: {
       collectionId_slug: {
         collectionId: collection.id,
@@ -62,23 +62,23 @@ async function main() {
     }
   })
 
-  // Add the teacher as an author of chapter1
-  await prisma.chapterAuthor.upsert({
+  // Add the teacher as an author of skript1
+  await prisma.skriptAuthor.upsert({
     where: {
-      chapterId_userId: {
-        chapterId: chapter1.id,
+      skriptId_userId: {
+        skriptId: skript1.id,
         userId: teacher.id
       }
     },
     update: {},
     create: {
-      chapterId: chapter1.id,
+      skriptId: skript1.id,
       userId: teacher.id,
       role: 'author'
     }
   })
 
-  const chapter2 = await prisma.chapter.upsert({
+  const skript2 = await prisma.skript.upsert({
     where: {
       collectionId_slug: {
         collectionId: collection.id,
@@ -96,27 +96,27 @@ async function main() {
     }
   })
 
-  // Add the teacher as an author of chapter2
-  await prisma.chapterAuthor.upsert({
+  // Add the teacher as an author of skript2
+  await prisma.skriptAuthor.upsert({
     where: {
-      chapterId_userId: {
-        chapterId: chapter2.id,
+      skriptId_userId: {
+        skriptId: skript2.id,
         userId: teacher.id
       }
     },
     update: {},
     create: {
-      chapterId: chapter2.id,
+      skriptId: skript2.id,
       userId: teacher.id,
       role: 'author'
     }
   })
 
-  // Create test pages for chapter 1
+  // Create test pages for skript 1
   const page1 = await prisma.page.upsert({
     where: {
-      chapterId_slug: {
-        chapterId: chapter1.id,
+      skriptId_slug: {
+        skriptId: skript1.id,
         slug: 'what-are-variables'
       }
     },
@@ -142,7 +142,7 @@ If x = 5, then:
       slug: 'what-are-variables',
       order: 1,
       isPublished: true,
-      chapterId: chapter1.id
+      skriptId: skript1.id
     }
   })
 
@@ -164,8 +164,8 @@ If x = 5, then:
 
   const page2 = await prisma.page.upsert({
     where: {
-      chapterId_slug: {
-        chapterId: chapter1.id,
+      skriptId_slug: {
+        skriptId: skript1.id,
         slug: 'using-variables'
       }
     },
@@ -190,7 +190,7 @@ Now that we understand what variables are, let's practice using them in real sce
       slug: 'using-variables',
       order: 2,
       isPublished: true,
-      chapterId: chapter1.id
+      skriptId: skript1.id
     }
   })
 
@@ -210,11 +210,11 @@ Now that we understand what variables are, let's practice using them in real sce
     }
   })
 
-  // Create test pages for chapter 2
+  // Create test pages for skript 2
   const page3 = await prisma.page.upsert({
     where: {
-      chapterId_slug: {
-        chapterId: chapter2.id,
+      skriptId_slug: {
+        skriptId: skript2.id,
         slug: 'basic-equations'
       }
     },
@@ -245,7 +245,7 @@ Check: 2(4) + 3 = 8 + 3 = 11 ✓`,
       slug: 'basic-equations',
       order: 1,
       isPublished: true,
-      chapterId: chapter2.id
+      skriptId: skript2.id
     }
   })
 
@@ -268,7 +268,7 @@ Check: 2(4) + 3 = 8 + 3 = 11 ✓`,
   console.log('Seed data created successfully!')
   console.log('Teacher:', teacher.email)
   console.log('Collection:', collection.title)
-  console.log('Chapters:', chapter1.title, ',', chapter2.title)
+  console.log('Skripts:', skript1.title, ',', skript2.title)
   console.log('Pages created: 3')
 }
 

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Eye, EyeOff } from 'lucide-react'
 
 interface PublishToggleProps {
-  type: 'chapter' | 'page'
+  type: 'skript' | 'page'
   itemId: string
   isPublished: boolean
   onToggle: () => void
@@ -26,7 +26,7 @@ export function PublishToggle({
   const handleToggle = async () => {
     setIsLoading(true)
     try {
-      const endpoint = type === 'chapter' ? `/api/chapters/${itemId}` : `/api/pages/${itemId}`
+      const endpoint = type === 'skript' ? `/api/skripts/${itemId}` : `/api/pages/${itemId}`
       const response = await fetch(endpoint, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },

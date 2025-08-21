@@ -12,7 +12,7 @@ interface MarkdownEditorProps {
     url?: string
     isDirectory?: boolean
   }) => void
-  chapterId?: string
+  skriptId?: string
   domain?: string
   isReadOnly?: boolean
   fileList?: Array<{id: string, name: string, url?: string, isDirectory?: boolean}>
