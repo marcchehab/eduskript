@@ -19,10 +19,42 @@ export async function calculateFileHash(buffer: Buffer): Promise<string> {
  * Ensure uploads directory exists
  */
 export async function ensureUploadsDir(): Promise<void> {
+  console.log('[FILE_STORAGE] ensureUploadsDir called for:', UPLOADS_DIR)
   try {
     await fs.access(UPLOADS_DIR)
+    console.log('[FILE_STORAGE] Uploads directory exists')
+    
+    // Check permissions
+    try {
+      const stats = await fs.stat(UPLOADS_DIR)
+      console.log('[FILE_STORAGE] Directory stats:', {
+        isDirectory: stats.isDirectory(),
+        mode: stats.mode.toString(8),
+        uid: stats.uid,
+        gid: stats.gid,
+        size: stats.size
+      })
+    } catch (statError) {
+      console.warn('[FILE_STORAGE] Could not get directory stats:', statError)
+    }
   } catch {
-    await fs.mkdir(UPLOADS_DIR, { recursive: true })
+    console.log('[FILE_STORAGE] Uploads directory does not exist, creating:', UPLOADS_DIR)
+    try {
+      await fs.mkdir(UPLOADS_DIR, { recursive: true })
+      console.log('[FILE_STORAGE] Directory created successfully')
+      
+      // Verify creation
+      const stats = await fs.stat(UPLOADS_DIR)
+      console.log('[FILE_STORAGE] Created directory stats:', {
+        isDirectory: stats.isDirectory(),
+        mode: stats.mode.toString(8),
+        uid: stats.uid,
+        gid: stats.gid
+      })
+    } catch (mkdirError) {
+      console.error('[FILE_STORAGE] Failed to create uploads directory:', mkdirError)
+      throw new Error(`Failed to create uploads directory: ${mkdirError instanceof Error ? mkdirError.message : String(mkdirError)}`)
+    }
   }
 }
 
@@ -85,13 +117,28 @@ export async function saveFile({
   contentType?: string
   overwrite?: boolean
 }): Promise<{ id: string; hash: string; url: string; size: number }> {
+  console.log('[FILE_STORAGE] saveFile called with:', {
+    filename,
+    bufferLength: buffer.length,
+    chapterId,
+    userId,
+    parentId,
+    contentType,
+    overwrite,
+    uploadsDir: UPLOADS_DIR
+  })
+
   // Validate file
+  console.log('[FILE_STORAGE] Validating file...')
   const validation = validateFile(filename, buffer.length)
+  console.log('[FILE_STORAGE] Validation result:', validation)
   if (!validation.valid) {
+    console.log('[FILE_STORAGE] File validation failed:', validation.error)
     throw new Error(validation.error)
   }
 
   // Check if file with same name already exists in the same parent/chapter
+  console.log('[FILE_STORAGE] Checking for existing file...')
   const existingFile = await prisma.file.findFirst({
     where: {
       name: filename,
@@ -100,36 +147,62 @@ export async function saveFile({
       isDirectory: false
     }
   })
+  console.log('[FILE_STORAGE] Existing file check:', { hasExistingFile: !!existingFile, existingFileId: existingFile?.id })
 
   if (existingFile && !overwrite) {
+    console.log('[FILE_STORAGE] File already exists and overwrite=false')
     throw new Error('File already exists. Use overwrite option or rename the file.')
   }
 
   // Calculate hash and physical file path
+  console.log('[FILE_STORAGE] Calculating file hash...')
   const hash = await calculateFileHash(buffer)
   const extension = getFileExtension(filename)!
   const physicalPath = getPhysicalPath(hash, extension)
+  console.log('[FILE_STORAGE] File hash calculated:', { hash, extension, physicalPath })
 
   // Ensure uploads directory exists
+  console.log('[FILE_STORAGE] Ensuring uploads directory exists...')
   await ensureUploadsDir()
+  console.log('[FILE_STORAGE] Uploads directory ensured')
 
   // Check if physical file already exists (deduplication)
+  console.log('[FILE_STORAGE] Checking if physical file exists...')
   let fileExists = false
   try {
     await fs.access(physicalPath)
     fileExists = true
+    console.log('[FILE_STORAGE] Physical file already exists (deduplication)')
   } catch {
+    console.log('[FILE_STORAGE] Physical file does not exist, will create it')
     // File doesn't exist, we'll create it
   }
 
   // Write file to disk if it doesn't exist (deduplication)
   if (!fileExists) {
-    await fs.writeFile(physicalPath, buffer)
+    console.log('[FILE_STORAGE] Writing file to disk:', physicalPath)
+    try {
+      await fs.writeFile(physicalPath, buffer)
+      console.log('[FILE_STORAGE] File written successfully to disk')
+      
+      // Verify the file was written
+      const stats = await fs.stat(physicalPath)
+      console.log('[FILE_STORAGE] File written verification:', {
+        path: physicalPath,
+        size: stats.size,
+        exists: true
+      })
+    } catch (writeError) {
+      console.error('[FILE_STORAGE] Failed to write file to disk:', writeError)
+      throw new Error(`Failed to write file to disk: ${writeError instanceof Error ? writeError.message : String(writeError)}`)
+    }
   }
 
   // Create or update database record
+  console.log('[FILE_STORAGE] Creating/updating database record...')
   let file
   if (existingFile && overwrite) {
+    console.log('[FILE_STORAGE] Updating existing file record:', existingFile.id)
     // Update existing file
     file = await prisma.file.update({
       where: { id: existingFile.id },
@@ -140,7 +213,9 @@ export async function saveFile({
         updatedAt: new Date()
       }
     })
+    console.log('[FILE_STORAGE] File record updated:', { id: file.id, size: file.size })
   } else {
+    console.log('[FILE_STORAGE] Creating new file record')
     // Create new file record
     file = await prisma.file.create({
       data: {
@@ -154,14 +229,17 @@ export async function saveFile({
         isDirectory: false
       }
     })
+    console.log('[FILE_STORAGE] File record created:', { id: file.id, size: file.size })
   }
 
-  return {
+  const result = {
     id: file.id,
     hash,
     url: `/api/files/${file.id}`,
     size: buffer.length
   }
+  console.log('[FILE_STORAGE] saveFile completed successfully:', result)
+  return result
 }
 
 /**
