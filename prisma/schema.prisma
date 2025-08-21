@@ -86,6 +86,12 @@ model User {
   // File uploads
   files          File[]
   
+  // Collaboration relations
+  sentCollaborationRequests     CollaborationRequest[] @relation("SentRequests")
+  receivedCollaborationRequests CollaborationRequest[] @relation("ReceivedRequests")
+  collaborationsAsRequester     Collaboration[] @relation("RequesterCollaborations")
+  collaborationsAsReceiver      Collaboration[] @relation("ReceiverCollaborations")
+  
   @@map("users")
 }
 
@@ -251,4 +257,37 @@ model File {
   @@index([parentId, skriptId], name: "parent_skript_idx")
   @@index([hash], name: "hash_idx")
   @@map("files")
+}
+
+// Collaboration request model for pending requests
+model CollaborationRequest {
+  id          String   @id @default(cuid())
+  requesterId String   @map("requester_id")
+  receiverId  String   @map("receiver_id")
+  message     String?  // Optional message from requester
+  status      String   @default("pending") // "pending", "accepted", "rejected"
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  requester User @relation("SentRequests", fields: [requesterId], references: [id], onDelete: Cascade)
+  receiver  User @relation("ReceivedRequests", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([requesterId, receiverId])
+  @@map("collaboration_requests")
+}
+
+// Collaboration model for accepted partnerships
+model Collaboration {
+  id          String   @id @default(cuid())
+  requesterId String   @map("requester_id")  // User who sent the original request
+  receiverId  String   @map("receiver_id")   // User who accepted the request
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  requester User @relation("RequesterCollaborations", fields: [requesterId], references: [id], onDelete: Cascade)
+  receiver  User @relation("ReceiverCollaborations", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([requesterId, receiverId])
+  @@map("collaborations")
 }

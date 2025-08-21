@@ -1,4 +1,4 @@
-import { User, Collection, Skript, Page, PageVersion } from '@prisma/client'
+import { User, Collection, Skript, Page, PageVersion, CollaborationRequest, Collaboration } from '@prisma/client'
 
 // Extended types with relations
 export type UserWithCollections = User & {
@@ -120,4 +120,33 @@ export interface UploadedFile {
   url: string
   size: number
   mimeType: string
+}
+
+// Collaboration types
+export type CollaborationRequestWithUsers = CollaborationRequest & {
+  requester: User
+  receiver: User
+}
+
+export type CollaborationWithUsers = Collaboration & {
+  requester: User
+  receiver: User
+}
+
+export type UserWithCollaborations = User & {
+  sentCollaborationRequests: CollaborationRequestWithUsers[]
+  receivedCollaborationRequests: CollaborationRequestWithUsers[]
+  collaborationsAsRequester: CollaborationWithUsers[]
+  collaborationsAsReceiver: CollaborationWithUsers[]
+}
+
+// Form types for collaboration
+export interface SendCollaborationRequestData {
+  receiverId: string
+  message?: string
+}
+
+export interface CollaborationRequestResponse {
+  id: string
+  action: 'accept' | 'reject'
 }

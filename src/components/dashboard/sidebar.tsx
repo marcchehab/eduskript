@@ -4,12 +4,13 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
-import { FileText, BookOpen, Settings, Plus, ChevronLeft, ChevronRight } from 'lucide-react'
+import { FileText, BookOpen, Settings, Users, Plus, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 const navigation = [
   { name: 'Overview', href: '/dashboard', icon: FileText },
   { name: 'Collections', href: '/dashboard/collections', icon: BookOpen },
+  { name: 'Collaborate', href: '/dashboard/collaborate', icon: Users },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
 ]
 

@@ -1,17 +1,61 @@
 import { PrismaClient } from '@prisma/client'
+import bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient()
 
 async function main() {
-  // Create a teacher user
-  const teacher = await prisma.user.upsert({
-    where: { email: 'teacher@example.com' },
-    update: {},
+  // Default password for test users
+  const defaultPassword = 'test123'
+  const hashedPassword = await bcrypt.hash(defaultPassword, 12)
+
+  // Create teacher users
+  const teacher1 = await prisma.user.upsert({
+    where: { email: 'sarah@informatikgarten.ch' },
+    update: {
+      hashedPassword,
+      emailVerified: new Date()
+    },
     create: {
-      email: 'teacher@example.com',
+      email: 'sarah@informatikgarten.ch',
       name: 'Dr. Sarah Johnson',
       title: 'Mathematics Teacher',
-      subdomain: 'informatikgarten'
+      subdomain: 'sarah',
+      hashedPassword,
+      emailVerified: new Date()
+    }
+  })
+
+  const teacher2 = await prisma.user.upsert({
+    where: { email: 'michael@informatikgarten.ch' },
+    update: {
+      hashedPassword,
+      emailVerified: new Date()
+    },
+    create: {
+      email: 'michael@informatikgarten.ch',
+      name: 'Prof. Michael Chen',
+      title: 'Physics Professor',
+      bio: 'Specializing in quantum mechanics and theoretical physics',
+      subdomain: 'michael',
+      hashedPassword,
+      emailVerified: new Date()
+    }
+  })
+
+  const teacher3 = await prisma.user.upsert({
+    where: { email: 'emily@informatikgarten.ch' },
+    update: {
+      hashedPassword,
+      emailVerified: new Date()
+    },
+    create: {
+      email: 'emily@informatikgarten.ch',
+      name: 'Dr. Emily Rodriguez',
+      title: 'Computer Science Teacher',
+      bio: 'Passionate about programming education and software engineering',
+      subdomain: 'emily',
+      hashedPassword,
+      emailVerified: new Date()
     }
   })
 
@@ -32,13 +76,13 @@ async function main() {
     where: {
       collectionId_userId: {
         collectionId: collection.id,
-        userId: teacher.id
+        userId: teacher1.id
       }
     },
     update: {},
     create: {
       collectionId: collection.id,
-      userId: teacher.id,
+      userId: teacher1.id,
       role: 'author'
     }
   })
@@ -67,13 +111,13 @@ async function main() {
     where: {
       skriptId_userId: {
         skriptId: skript1.id,
-        userId: teacher.id
+        userId: teacher1.id
       }
     },
     update: {},
     create: {
       skriptId: skript1.id,
-      userId: teacher.id,
+      userId: teacher1.id,
       role: 'author'
     }
   })
@@ -101,13 +145,13 @@ async function main() {
     where: {
       skriptId_userId: {
         skriptId: skript2.id,
-        userId: teacher.id
+        userId: teacher1.id
       }
     },
     update: {},
     create: {
       skriptId: skript2.id,
-      userId: teacher.id,
+      userId: teacher1.id,
       role: 'author'
     }
   })
@@ -151,13 +195,13 @@ If x = 5, then:
     where: {
       pageId_userId: {
         pageId: page1.id,
-        userId: teacher.id
+        userId: teacher1.id
       }
     },
     update: {},
     create: {
       pageId: page1.id,
-      userId: teacher.id,
+      userId: teacher1.id,
       role: 'author'
     }
   })
@@ -199,13 +243,13 @@ Now that we understand what variables are, let's practice using them in real sce
     where: {
       pageId_userId: {
         pageId: page2.id,
-        userId: teacher.id
+        userId: teacher1.id
       }
     },
     update: {},
     create: {
       pageId: page2.id,
-      userId: teacher.id,
+      userId: teacher1.id,
       role: 'author'
     }
   })
@@ -254,19 +298,22 @@ Check: 2(4) + 3 = 8 + 3 = 11 ✓`,
     where: {
       pageId_userId: {
         pageId: page3.id,
-        userId: teacher.id
+        userId: teacher1.id
       }
     },
     update: {},
     create: {
       pageId: page3.id,
-      userId: teacher.id,
+      userId: teacher1.id,
       role: 'author'
     }
   })
 
   console.log('Seed data created successfully!')
-  console.log('Teacher:', teacher.email)
+  console.log('Teachers created with password "test123":')
+  console.log('- ', teacher1.email)
+  console.log('- ', teacher2.email) 
+  console.log('- ', teacher3.email)
   console.log('Collection:', collection.title)
   console.log('Skripts:', skript1.title, ',', skript2.title)
   console.log('Pages created: 3')
