@@ -41,9 +41,10 @@ interface SortablePageItemProps {
   collectionSlug: string
   skriptSlug: string
   onPageUpdated?: () => void
+  canEdit?: boolean
 }
 
-function SortablePageItem({ page, index, collectionSlug, skriptSlug, onPageUpdated }: SortablePageItemProps) {
+function SortablePageItem({ page, index, collectionSlug, skriptSlug, onPageUpdated, canEdit = true }: SortablePageItemProps) {
   const {
     attributes,
     listeners,
@@ -84,11 +85,11 @@ function SortablePageItem({ page, index, collectionSlug, skriptSlug, onPageUpdat
     <div ref={setNodeRef} style={style} className="flex items-center justify-between p-3 bg-card border rounded-md">
       <div className="flex items-center gap-3">
         <div
-          {...attributes}
-          {...listeners}
+          {...(canEdit ? attributes : {})}
+          {...(canEdit ? listeners : {})}
           className="flex items-center gap-2 text-muted-foreground cursor-grab active:cursor-grabbing"
         >
-          <GripVertical className="w-4 h-4" />
+          {canEdit && <GripVertical className="w-4 h-4" />}
           <div className="w-6 h-6 bg-muted rounded flex items-center justify-center text-xs text-muted-foreground">
             {index + 1}
           </div>
@@ -107,38 +108,42 @@ function SortablePageItem({ page, index, collectionSlug, skriptSlug, onPageUpdat
         </div>
       </div>
       <div className="flex gap-2 items-center">
-        <PublishToggle
-          type="page"
-          itemId={page.id}
-          isPublished={page.isPublished}
-          onToggle={onPageUpdated || (() => {})}
-          showText={false}
-          size="sm"
-        />
-        <EditModal
-          type="page"
-          item={page}
-          onItemUpdated={onPageUpdated || (() => {})}
-        />
-        <Button variant="outline" size="sm" asChild>
-          <Link href={`/dashboard/collections/${collectionSlug}/skripts/${skriptSlug}/pages/${page.slug}/edit`}>
-            Edit Content
-          </Link>
-        </Button>
-        <Button 
-          variant="outline" 
-          size="sm"
-          onClick={handleDeletePage}
-          className="text-destructive hover:text-destructive hover:bg-destructive/10"
-        >
-          <Trash2 className="w-4 h-4" />
-        </Button>
+        {canEdit && (
+          <>
+            <PublishToggle
+              type="page"
+              itemId={page.id}
+              isPublished={page.isPublished}
+              onToggle={onPageUpdated || (() => {})}
+              showText={false}
+              size="sm"
+            />
+            <EditModal
+              type="page"
+              item={page}
+              onItemUpdated={onPageUpdated || (() => {})}
+            />
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/dashboard/collections/${collectionSlug}/skripts/${skriptSlug}/pages/${page.slug}/edit`}>
+                Edit Content
+              </Link>
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={handleDeletePage}
+              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          </>
+        )}
       </div>
     </div>
   )
 }
 
-function StaticPageItem({ page, index, collectionSlug, skriptSlug, onPageUpdated }: SortablePageItemProps) {
+function StaticPageItem({ page, index, collectionSlug, skriptSlug, onPageUpdated, canEdit = true }: SortablePageItemProps) {
   const handleDeletePage = async () => {
     if (!confirm(`Are you sure you want to delete the page "${page.title}"?`)) {
       return
@@ -164,7 +169,7 @@ function StaticPageItem({ page, index, collectionSlug, skriptSlug, onPageUpdated
     <div className="flex items-center justify-between p-3 bg-card border rounded-md">
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2 text-muted-foreground">
-          <GripVertical className="w-4 h-4" />
+          {canEdit && <GripVertical className="w-4 h-4" />}
           <div className="w-6 h-6 bg-muted rounded flex items-center justify-center text-xs text-muted-foreground">
             {index + 1}
           </div>
@@ -183,32 +188,36 @@ function StaticPageItem({ page, index, collectionSlug, skriptSlug, onPageUpdated
         </div>
       </div>
       <div className="flex gap-2 items-center">
-        <PublishToggle
-          type="page"
-          itemId={page.id}
-          isPublished={page.isPublished}
-          onToggle={onPageUpdated || (() => {})}
-          showText={false}
-          size="sm"
-        />
-        <EditModal
-          type="page"
-          item={page}
-          onItemUpdated={onPageUpdated || (() => {})}
-        />
-        <Button variant="outline" size="sm" asChild>
-          <Link href={`/dashboard/collections/${collectionSlug}/skripts/${skriptSlug}/pages/${page.slug}/edit`}>
-            Edit Content
-          </Link>
-        </Button>
-        <Button 
-          variant="outline" 
-          size="sm"
-          onClick={handleDeletePage}
-          className="text-destructive hover:text-destructive hover:bg-destructive/10"
-        >
-          <Trash2 className="w-4 h-4" />
-        </Button>
+        {canEdit && (
+          <>
+            <PublishToggle
+              type="page"
+              itemId={page.id}
+              isPublished={page.isPublished}
+              onToggle={onPageUpdated || (() => {})}
+              showText={false}
+              size="sm"
+            />
+            <EditModal
+              type="page"
+              item={page}
+              onItemUpdated={onPageUpdated || (() => {})}
+            />
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/dashboard/collections/${collectionSlug}/skripts/${skriptSlug}/pages/${page.slug}/edit`}>
+                Edit Content
+              </Link>
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={handleDeletePage}
+              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          </>
+        )}
       </div>
     </div>
   )
@@ -221,6 +230,7 @@ interface SortablePagesProps {
   skriptSlug: string
   onReorder: () => void
   onPageDeleted?: () => void
+  canEdit?: boolean
 }
 
 export function SortablePages({ 
@@ -229,7 +239,8 @@ export function SortablePages({
   collectionSlug, 
   skriptSlug, 
   onReorder,
-  onPageDeleted 
+  onPageDeleted,
+  canEdit = true
 }: SortablePagesProps) {
   const [items, setItems] = useState(pages)
   const [isReordering, setIsReordering] = useState(false)
@@ -293,7 +304,7 @@ export function SortablePages({
 
   return (
     <div className="space-y-2">
-      {isMounted && (
+      {isMounted && canEdit && (
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
@@ -308,10 +319,26 @@ export function SortablePages({
                 collectionSlug={collectionSlug}
                 skriptSlug={skriptSlug}
                 onPageUpdated={onPageDeleted}
+                canEdit={canEdit}
               />
             ))}
           </SortableContext>
         </DndContext>
+      )}
+      {isMounted && !canEdit && (
+        <div>
+          {items.map((page, index) => (
+            <StaticPageItem
+              key={page.id}
+              page={page}
+              index={index}
+              collectionSlug={collectionSlug}
+              skriptSlug={skriptSlug}
+              onPageUpdated={onPageDeleted}
+              canEdit={canEdit}
+            />
+          ))}
+        </div>
       )}
       {!isMounted && (
         <div>
@@ -323,6 +350,7 @@ export function SortablePages({
               collectionSlug={collectionSlug}
               skriptSlug={skriptSlug}
               onPageUpdated={onPageDeleted}
+              canEdit={canEdit}
             />
           ))}
         </div>

@@ -13,4 +13,6 @@ Collections & Skripts:
     Zero or multiple other collaborators who can view the contents (and later also use the skript without being able to modify it or copy it - we'll implement that further down the line)
     If a teacher can view a collection, they can also view all skripts within it (without an explicit permission on those skripts)
 
-A teacher sees whatever skripts or collections they're at least allowed to view on their dashboard. And they can 
+Great let's now introduce the UI for this. 
+
+A teacher sees whatever skripts or collections they're at least allowed to view on their dashboard.

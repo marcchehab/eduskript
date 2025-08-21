@@ -5,8 +5,8 @@ import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 
 const addAuthorSchema = z.object({
-  email: z.string().email(),
-  role: z.string().min(1, 'Role is required')
+  userId: z.string().min(1, 'User ID is required'),
+  permission: z.enum(['author', 'viewer'], { required_error: 'Permission must be author or viewer' })
 })
 
 // GET /api/skripts/[id]/authors - List all authors of a skript
@@ -55,16 +55,7 @@ export async function GET(
       )
     }
 
-    // Return all authors
-    const allAuthors = skript.authors.map(ca => ({
-      id: ca.user.id,
-      name: ca.user.name,
-      email: ca.user.email,
-      role: ca.role,
-      addedAt: ca.createdAt
-    }))
-
-    return NextResponse.json(allAuthors)
+    return NextResponse.json({ success: true, data: skript.authors })
   } catch (error) {
     console.error('Error fetching skript authors:', error)
     return NextResponse.json(
@@ -109,9 +100,9 @@ export async function POST(
       )
     }
 
-    // Find the user to add
+    // Verify the user exists
     const userToAdd = await prisma.user.findUnique({
-      where: { email: validatedData.email },
+      where: { id: validatedData.userId },
       select: { id: true, name: true, email: true }
     })
 
@@ -126,7 +117,7 @@ export async function POST(
     const existingAuthor = await prisma.skriptAuthor.findFirst({
       where: {
         skriptId,
-        userId: userToAdd.id
+        userId: validatedData.userId
       }
     })
 
@@ -141,27 +132,23 @@ export async function POST(
     const newAuthor = await prisma.skriptAuthor.create({
       data: {
         skriptId,
-        userId: userToAdd.id,
-        role: validatedData.role
+        userId: validatedData.userId,
+        permission: validatedData.permission
       },
       include: {
         user: {
           select: {
             id: true,
             name: true,
-            email: true
+            email: true,
+            image: true,
+            title: true
           }
         }
       }
     })
 
-    return NextResponse.json({
-      id: newAuthor.user.id,
-      name: newAuthor.user.name,
-      email: newAuthor.user.email,
-      role: newAuthor.role,
-      addedAt: newAuthor.createdAt
-    }, { status: 201 })
+    return NextResponse.json({ success: true, data: newAuthor }, { status: 201 })
 
   } catch (error) {
     if (error instanceof z.ZodError) {

@@ -83,7 +83,7 @@ async function main() {
     create: {
       collectionId: collection.id,
       userId: teacher1.id,
-      role: 'author'
+      permission: 'author'
     }
   })
 
@@ -118,7 +118,7 @@ async function main() {
     create: {
       skriptId: skript1.id,
       userId: teacher1.id,
-      role: 'author'
+      permission: 'author'
     }
   })
 
@@ -152,7 +152,7 @@ async function main() {
     create: {
       skriptId: skript2.id,
       userId: teacher1.id,
-      role: 'author'
+      permission: 'author'
     }
   })
 
@@ -202,7 +202,7 @@ If x = 5, then:
     create: {
       pageId: page1.id,
       userId: teacher1.id,
-      role: 'author'
+      permission: 'author'
     }
   })
 
@@ -250,7 +250,7 @@ Now that we understand what variables are, let's practice using them in real sce
     create: {
       pageId: page2.id,
       userId: teacher1.id,
-      role: 'author'
+      permission: 'author'
     }
   })
 
@@ -305,7 +305,7 @@ Check: 2(4) + 3 = 8 + 3 = 11 ✓`,
     create: {
       pageId: page3.id,
       userId: teacher1.id,
-      role: 'author'
+      permission: 'author'
     }
   })
 

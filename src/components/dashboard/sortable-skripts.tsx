@@ -52,6 +52,7 @@ interface SortableSkriptItemProps {
   collectionSlug: string
   onSkriptUpdated: () => void
   onSkriptDeleted: () => void
+  canEdit?: boolean
 }
 
 function SortableSkriptItem({ 
@@ -59,7 +60,8 @@ function SortableSkriptItem({
   index, 
   collectionSlug, 
   onSkriptUpdated,
-  onSkriptDeleted 
+  onSkriptDeleted,
+  canEdit = true
 }: SortableSkriptItemProps) {
   const {
     attributes,
@@ -129,30 +131,34 @@ function SortableSkriptItem({
           </div>
         </div>
         <div className="flex gap-2 items-center">
-          <PublishToggle
-            type="skript"
-            itemId={skript.id}
-            isPublished={skript.isPublished}
-            onToggle={onSkriptUpdated}
-            showText={true}
-          />
-          <EditModal
-            type="skript"
-            item={skript}
-            onItemUpdated={onSkriptUpdated}
-          />
-          <CreatePageModal 
-            skriptId={skript.id} 
-            onPageCreated={onSkriptUpdated}
-          />
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={handleDeleteSkript}
-            className="text-destructive hover:text-destructive/80 hover:bg-destructive/10"
-          >
-            <Trash2 className="w-4 h-4" />
-          </Button>
+          {canEdit && (
+            <>
+              <PublishToggle
+                type="skript"
+                itemId={skript.id}
+                isPublished={skript.isPublished}
+                onToggle={onSkriptUpdated}
+                showText={true}
+              />
+              <EditModal
+                type="skript"
+                item={skript}
+                onItemUpdated={onSkriptUpdated}
+              />
+              <CreatePageModal 
+                skriptId={skript.id} 
+                onPageCreated={onSkriptUpdated}
+              />
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={handleDeleteSkript}
+                className="text-destructive hover:text-destructive/80 hover:bg-destructive/10"
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </>
+          )}
         </div>
       </div>
       
@@ -168,6 +174,7 @@ function SortableSkriptItem({
               skriptSlug={skript.slug}
               onReorder={onSkriptUpdated}
               onPageDeleted={onSkriptUpdated}
+              canEdit={canEdit}
             />
           </div>
         </div>
@@ -181,7 +188,8 @@ function StaticSkriptItem({
   index, 
   collectionSlug, 
   onSkriptUpdated,
-  onSkriptDeleted 
+  onSkriptDeleted,
+  canEdit = true
 }: SortableSkriptItemProps) {
   const handleDeleteSkript = async () => {
     if (!confirm(`Are you sure you want to delete the skript "${skript.title}"? This will also delete all pages in this skript.`)) {
@@ -209,7 +217,7 @@ function StaticSkriptItem({
       <div className="flex items-center justify-between p-4">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 text-muted-foreground">
-            <GripVertical className="w-4 h-4" />
+            {canEdit && <GripVertical className="w-4 h-4" />}
             <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center text-blue-600 dark:text-blue-400 font-medium">
               {index + 1}
             </div>
@@ -232,30 +240,34 @@ function StaticSkriptItem({
           </div>
         </div>
         <div className="flex gap-2 items-center">
-          <PublishToggle
-            type="skript"
-            itemId={skript.id}
-            isPublished={skript.isPublished}
-            onToggle={onSkriptUpdated}
-            showText={true}
-          />
-          <EditModal
-            type="skript"
-            item={skript}
-            onItemUpdated={onSkriptUpdated}
-          />
-          <CreatePageModal 
-            skriptId={skript.id} 
-            onPageCreated={onSkriptUpdated}
-          />
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={handleDeleteSkript}
-            className="text-destructive hover:text-destructive/80 hover:bg-destructive/10"
-          >
-            <Trash2 className="w-4 h-4" />
-          </Button>
+          {canEdit && (
+            <>
+              <PublishToggle
+                type="skript"
+                itemId={skript.id}
+                isPublished={skript.isPublished}
+                onToggle={onSkriptUpdated}
+                showText={true}
+              />
+              <EditModal
+                type="skript"
+                item={skript}
+                onItemUpdated={onSkriptUpdated}
+              />
+              <CreatePageModal 
+                skriptId={skript.id} 
+                onPageCreated={onSkriptUpdated}
+              />
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={handleDeleteSkript}
+                className="text-destructive hover:text-destructive/80 hover:bg-destructive/10"
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </>
+          )}
         </div>
       </div>
       
@@ -271,6 +283,7 @@ function StaticSkriptItem({
               skriptSlug={skript.slug}
               onReorder={onSkriptUpdated}
               onPageDeleted={onSkriptUpdated}
+              canEdit={canEdit}
             />
           </div>
         </div>
@@ -284,13 +297,15 @@ interface SortableSkriptsProps {
   collectionId: string
   collectionSlug: string
   onReorder: () => void
+  canEdit?: boolean
 }
 
 export function SortableSkripts({ 
   skripts, 
   collectionId, 
   collectionSlug, 
-  onReorder 
+  onReorder,
+  canEdit = true
 }: SortableSkriptsProps) {
   const [items, setItems] = useState(skripts)
   const [isReordering, setIsReordering] = useState(false)
@@ -353,7 +368,7 @@ export function SortableSkripts({
 
   return (
     <div className="space-y-4">
-      {isMounted && (
+      {isMounted && canEdit && (
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
@@ -368,10 +383,26 @@ export function SortableSkripts({
                 collectionSlug={collectionSlug}
                 onSkriptUpdated={onReorder}
                 onSkriptDeleted={onReorder}
+                canEdit={canEdit}
               />
             ))}
           </SortableContext>
         </DndContext>
+      )}
+      {isMounted && !canEdit && (
+        <div className="space-y-4">
+          {items.map((skript, index) => (
+            <StaticSkriptItem
+              key={skript.id}
+              skript={skript}
+              index={index}
+              collectionSlug={collectionSlug}
+              onSkriptUpdated={onReorder}
+              onSkriptDeleted={onReorder}
+              canEdit={canEdit}
+            />
+          ))}
+        </div>
       )}
       {!isMounted && (
         <div>
@@ -383,6 +414,7 @@ export function SortableSkripts({
               collectionSlug={collectionSlug}
               onSkriptUpdated={onReorder}
               onSkriptDeleted={onReorder}
+              canEdit={canEdit}
             />
           ))}
         </div>

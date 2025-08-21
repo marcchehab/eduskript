@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { checkCollectionPermissions } from '@/lib/permissions'
 
 export async function GET(
   request: NextRequest,
@@ -16,15 +17,8 @@ export async function GET(
 
     const { id } = await params
 
-    const collection = await prisma.collection.findFirst({
-      where: {
-        id,
-        authors: {
-          some: {
-            userId: session.user.id
-          }
-        }
-      },
+    const collection = await prisma.collection.findUnique({
+      where: { id },
       include: {
         skripts: {
           include: {
@@ -46,7 +40,13 @@ export async function GET(
       return NextResponse.json({ error: 'Collection not found' }, { status: 404 })
     }
 
-    return NextResponse.json(collection)
+    // Check if user has permission to view this collection
+    const permissions = checkCollectionPermissions(session.user.id, collection.authors)
+    if (!permissions.canView) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
+
+    return NextResponse.json({ success: true, data: collection, permissions })
   } catch (error) {
     console.error('Error fetching collection:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -67,20 +67,26 @@ export async function PATCH(
     const { id } = await params
     const { title, description, isPublished } = await request.json()
 
-    // Check if user is an author of this collection
-    const existingCollection = await prisma.collection.findFirst({
-      where: {
-        id,
+    // Get collection with authors to check permissions
+    const existingCollection = await prisma.collection.findUnique({
+      where: { id },
+      include: {
         authors: {
-          some: {
-            userId: session.user.id
+          include: {
+            user: true
           }
         }
       }
     })
 
     if (!existingCollection) {
-      return NextResponse.json({ error: 'Collection not found or access denied' }, { status: 404 })
+      return NextResponse.json({ error: 'Collection not found' }, { status: 404 })
+    }
+
+    // Check if user can edit this collection
+    const permissions = checkCollectionPermissions(session.user.id, existingCollection.authors)
+    if (!permissions.canEdit) {
+      return NextResponse.json({ error: 'You do not have permission to edit this collection' }, { status: 403 })
     }
 
     const collection = await prisma.collection.update({
@@ -119,20 +125,26 @@ export async function DELETE(
 
     const { id } = await params
 
-    // Check if user is an author of this collection
-    const existingCollection = await prisma.collection.findFirst({
-      where: {
-        id,
+    // Get collection with authors to check permissions
+    const existingCollection = await prisma.collection.findUnique({
+      where: { id },
+      include: {
         authors: {
-          some: {
-            userId: session.user.id
+          include: {
+            user: true
           }
         }
       }
     })
 
     if (!existingCollection) {
-      return NextResponse.json({ error: 'Collection not found or access denied' }, { status: 404 })
+      return NextResponse.json({ error: 'Collection not found' }, { status: 404 })
+    }
+
+    // Check if user can edit (delete) this collection
+    const permissions = checkCollectionPermissions(session.user.id, existingCollection.authors)
+    if (!permissions.canEdit) {
+      return NextResponse.json({ error: 'You do not have permission to delete this collection' }, { status: 403 })
     }
 
     await prisma.collection.delete({

@@ -8,7 +8,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { CreateSkriptModal } from './create-skript-modal'
 import { CollectionSettingsModal } from './collection-settings-modal'
 import { SortableSkripts } from './sortable-skripts'
+import { CollectionAccessManager } from '@/components/permissions/CollectionAccessManager'
 import { ArrowLeft, BookOpen, FileText } from 'lucide-react'
+import { UserPermissions, CollectionWithAuthors } from '@/types'
 
 interface CollectionEditorProps {
   collection: {
@@ -34,10 +36,25 @@ interface CollectionEditorProps {
         updatedAt: Date
       }>
     }>
+    authors: Array<{
+      id: string
+      collectionId: string
+      userId: string
+      permission: string
+      createdAt: Date
+      user: {
+        id: string
+        name: string | null
+        email: string
+        image: string | null
+        title: string | null
+      }
+    }>
   }
+  userPermissions: UserPermissions
 }
 
-export function CollectionEditor({ collection }: CollectionEditorProps) {
+export function CollectionEditor({ collection, userPermissions }: CollectionEditorProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [isPublished, setIsPublished] = useState(collection.isPublished)
   const router = useRouter()
@@ -110,16 +127,20 @@ export function CollectionEditor({ collection }: CollectionEditorProps) {
           </p>
         </div>
         <div className="flex gap-2">
-          <CollectionSettingsModal 
-            collection={collection}
-            onCollectionUpdated={handleCollectionUpdated}
-          />
-          <Button 
-            onClick={handlePublish}
-            disabled={isLoading}
-          >
-            {isLoading ? 'Publishing...' : (isPublished ? 'Unpublish' : 'Publish')}
-          </Button>
+          {userPermissions.canEdit && (
+            <>
+              <CollectionSettingsModal 
+                collection={collection}
+                onCollectionUpdated={handleCollectionUpdated}
+              />
+              <Button 
+                onClick={handlePublish}
+                disabled={isLoading}
+              >
+                {isLoading ? 'Publishing...' : (isPublished ? 'Unpublish' : 'Publish')}
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -159,6 +180,13 @@ export function CollectionEditor({ collection }: CollectionEditorProps) {
         </Card>
       </div>
 
+      {/* Access Management */}
+      <CollectionAccessManager 
+        collection={collection as CollectionWithAuthors}
+        userPermissions={userPermissions}
+        onPermissionChange={() => window.location.reload()}
+      />
+
       {/* Skripts */}
       <Card>
         <CardHeader>
@@ -167,10 +195,12 @@ export function CollectionEditor({ collection }: CollectionEditorProps) {
               <CardTitle>Skripts</CardTitle>
               <CardDescription>Organize your content into skripts</CardDescription>
             </div>
-            <CreateSkriptModal 
-              collectionId={collection.id} 
-              onSkriptCreated={handleSkriptCreated}
-            />
+            {userPermissions.canEdit && (
+              <CreateSkriptModal 
+                collectionId={collection.id} 
+                onSkriptCreated={handleSkriptCreated}
+              />
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -180,6 +210,7 @@ export function CollectionEditor({ collection }: CollectionEditorProps) {
               collectionId={collection.id}
               collectionSlug={collection.slug}
               onReorder={handleSkriptCreated}
+              canEdit={userPermissions.canEdit}
             />
           ) : (
             <div className="text-center py-8">

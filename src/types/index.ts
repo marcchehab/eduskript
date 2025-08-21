@@ -1,4 +1,4 @@
-import { User, Collection, Skript, Page, PageVersion, CollaborationRequest, Collaboration } from '@prisma/client'
+import { User, Collection, Skript, Page, PageVersion, CollaborationRequest, Collaboration, CollectionAuthor, SkriptAuthor, PageAuthor } from '@prisma/client'
 
 // Extended types with relations
 export type UserWithCollections = User & {
@@ -149,4 +149,56 @@ export interface SendCollaborationRequestData {
 export interface CollaborationRequestResponse {
   id: string
   action: 'accept' | 'reject'
+}
+
+// Permission types
+export type Permission = 'author' | 'viewer'
+
+export type CollectionWithAuthors = Collection & {
+  authors: (CollectionAuthor & { user: User })[]
+  skripts?: Array<{
+    id: string
+    title: string
+    slug: string
+    description: string | null
+    order: number
+    isPublished: boolean
+    updatedAt: Date
+    pages?: Array<{
+      id: string
+      title: string
+      slug: string
+      order: number
+      isPublished: boolean
+      updatedAt: Date
+    }>
+  }>
+}
+
+export type SkriptWithAuthors = Skript & {
+  authors: (SkriptAuthor & { user: User })[]
+  collection: Collection
+}
+
+export type PageWithAuthors = Page & {
+  authors: (PageAuthor & { user: User })[]
+  skript: Skript & { collection: Collection }
+}
+
+// Permission check types
+export interface UserPermissions {
+  canEdit: boolean
+  canView: boolean
+  canManageAuthors: boolean
+  permission?: Permission
+}
+
+// Author management types
+export interface AddAuthorData {
+  userId: string
+  permission: Permission
+}
+
+export interface UpdateAuthorData {
+  permission: Permission
 }

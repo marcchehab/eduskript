@@ -6,7 +6,7 @@ import { z } from 'zod'
 
 const addAuthorSchema = z.object({
   email: z.string().email(),
-  role: z.string().min(1, 'Role is required')
+  permission: z.string().min(1, 'Role is required')
 })
 
 // GET /api/pages/[id]/authors - List all authors of a page
@@ -60,7 +60,7 @@ export async function GET(
       id: pa.user.id,
       name: pa.user.name,
       email: pa.user.email,
-      role: pa.role,
+      permission: pa.permission,
       addedAt: pa.createdAt
     }))
 
@@ -142,7 +142,7 @@ export async function POST(
       data: {
         pageId,
         userId: userToAdd.id,
-        role: validatedData.role
+        permission: validatedData.permission
       },
       include: {
         user: {
@@ -159,7 +159,7 @@ export async function POST(
       id: newAuthor.user.id,
       name: newAuthor.user.name,
       email: newAuthor.user.email,
-      role: newAuthor.role,
+      permission: newAuthor.permission,
       addedAt: newAuthor.createdAt
     }, { status: 201 })
 

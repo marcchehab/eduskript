@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { CollectionEditor } from '@/components/dashboard/collection-editor'
+import { checkCollectionPermissions } from '@/lib/permissions'
 
 // Ensure the page is dynamic and not cached
 export const dynamic = 'force-dynamic'
@@ -39,6 +40,19 @@ export default async function CollectionPage({ params }: CollectionPageProps) {
           }
         },
         orderBy: { order: 'asc' }
+      },
+      authors: {
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              image: true,
+              title: true
+            }
+          }
+        }
       }
     }
   })
@@ -47,5 +61,8 @@ export default async function CollectionPage({ params }: CollectionPageProps) {
     notFound()
   }
 
-  return <CollectionEditor collection={collection} />
+  // Check user permissions for this collection
+  const userPermissions = checkCollectionPermissions(session.user.id, collection.authors)
+
+  return <CollectionEditor collection={collection} userPermissions={userPermissions} />
 }

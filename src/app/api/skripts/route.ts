@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { generateSlug } from '@/lib/markdown'
+import { checkCollectionPermissions } from '@/lib/permissions'
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,13 +27,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verify the user is an author of the collection
-    const collection = await prisma.collection.findFirst({
-      where: {
-        id: collectionId,
+    // Verify the user can edit the collection
+    const collection = await prisma.collection.findUnique({
+      where: { id: collectionId },
+      include: {
         authors: {
-          some: {
-            userId: session.user.id
+          include: {
+            user: true
           }
         }
       }
@@ -40,8 +41,16 @@ export async function POST(request: NextRequest) {
 
     if (!collection) {
       return NextResponse.json(
-        { error: 'Collection not found or access denied' },
+        { error: 'Collection not found' },
         { status: 404 }
+      )
+    }
+
+    const permissions = checkCollectionPermissions(session.user.id, collection.authors)
+    if (!permissions.canEdit) {
+      return NextResponse.json(
+        { error: 'You do not have permission to create skripts in this collection' },
+        { status: 403 }
       )
     }
 
@@ -82,7 +91,7 @@ export async function POST(request: NextRequest) {
         authors: {
           create: {
             userId: session.user.id,
-            role: "author"
+            permission: "author"
           }
         }
       },

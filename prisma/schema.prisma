@@ -131,7 +131,7 @@ model CollectionAuthor {
   id           String   @id @default(cuid())
   collectionId String
   userId       String
-  role         String   @default("author") // "author", "editor", "reviewer", etc.
+  permission   String   @default("author") // "author" (can edit & manage), "viewer" (can only view)
   createdAt    DateTime @default(now())
   
   collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
@@ -171,7 +171,7 @@ model SkriptAuthor {
   id        String   @id @default(cuid())
   skriptId  String
   userId    String
-  role      String   @default("author") // "author", "editor", "reviewer", etc.
+  permission String  @default("author") // "author" (can edit & manage), "viewer" (can only view)
   createdAt DateTime @default(now())
   
   skript    Skript   @relation(fields: [skriptId], references: [id], onDelete: Cascade)
@@ -208,7 +208,7 @@ model PageAuthor {
   id        String   @id @default(cuid())
   pageId    String
   userId    String
-  role      String   @default("author") // "author", "editor", "reviewer", etc.
+  permission String  @default("author") // "author" (can edit & manage), "viewer" (can only view)
   createdAt DateTime @default(now())
   
   page      Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)

@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
         authors: {
           create: {
             userId: session.user.id,
-            role: "author"
+            permission: "author"
           }
         }
       },
