@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
     
@@ -85,15 +85,33 @@ export async function GET() {
       )
     }
 
-    // Get collections where the user is an author
-    const collections = await prisma.collection.findMany({
-      where: {
+    const { searchParams } = new URL(request.url)
+    const includeShared = searchParams.get('includeShared') === 'true'
+
+    let whereClause
+    
+    if (includeShared) {
+      // Get collections where user is an author OR can view through any permission level
+      whereClause = {
         authors: {
           some: {
             userId: session.user.id
           }
         }
-      },
+      }
+    } else {
+      // Get only collections where the user is an author
+      whereClause = {
+        authors: {
+          some: {
+            userId: session.user.id
+          }
+        }
+      }
+    }
+
+    const collections = await prisma.collection.findMany({
+      where: whereClause,
       include: {
         skripts: {
           include: {
@@ -102,7 +120,13 @@ export async function GET() {
         },
         authors: {
           include: {
-            user: true
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true
+              }
+            }
           }
         }
       },

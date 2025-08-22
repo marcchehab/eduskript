@@ -29,14 +29,24 @@ interface SiteStructure {
   }[]
 }
 
+interface RootSkript {
+  id: string
+  title: string
+  description: string | null
+  slug: string
+  collection: { title: string, slug: string }
+  pages: Array<{ id: string, title: string, slug: string }>
+}
+
 interface PublicSiteLayoutProps {
   teacher: Teacher
   siteStructure: SiteStructure[]
+  rootSkripts?: RootSkript[]
   children: React.ReactNode
   currentPath?: string
 }
 
-export function PublicSiteLayout({ teacher, siteStructure, children, currentPath }: PublicSiteLayoutProps) {
+export function PublicSiteLayout({ teacher, siteStructure, rootSkripts = [], children, currentPath }: PublicSiteLayoutProps) {
   const router = useRouter()
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   
@@ -283,6 +293,57 @@ export function PublicSiteLayout({ teacher, siteStructure, children, currentPath
                   )}
                 </div>
               ))}
+              
+              {/* Root-level skripts */}
+              {rootSkripts.length > 0 && (
+                <div className="mt-4 space-y-1">
+                  <h3 className="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Individual Skripts
+                  </h3>
+                  {rootSkripts.map((skript) => (
+                    <div key={skript.id} className="space-y-1">
+                      {/* Root Skript Title */}
+                      <button
+                        onClick={() => toggleSkript(skript.id)}
+                        className={`flex items-center w-full text-left px-3 py-1 text-sm rounded-md transition-colors ${
+                          expandedSkripts.includes(skript.id)
+                            ? 'text-foreground bg-muted/50'
+                            : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                        }`}
+                      >
+                        {expandedSkripts.includes(skript.id) ? (
+                          <ChevronDown className="w-3 h-3 mr-2 flex-shrink-0" />
+                        ) : (
+                          <ChevronRight className="w-3 h-3 mr-2 flex-shrink-0" />
+                        )}
+                        <span className="truncate">{skript.title}</span>
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          ({skript.collection.title})
+                        </span>
+                      </button>
+
+                      {/* Root Skript Pages */}
+                      {expandedSkripts.includes(skript.id) && (
+                        <div className="ml-5 space-y-1">
+                          {skript.pages.map((page) => (
+                            <button
+                              key={page.id}
+                              onClick={() => navigateToPage(skript.collection.slug, skript.slug, page.slug)}
+                              className={`block w-full text-left px-3 py-1 text-sm rounded-md truncate transition-colors ${
+                                isCurrentPage(skript.collection.slug, skript.slug, page.slug)
+                                  ? 'bg-primary/10 text-primary font-medium'
+                                  : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                              }`}
+                            >
+                              {page.title}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </nav>
           </div>
         </div>

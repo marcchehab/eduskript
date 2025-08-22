@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Image from 'next/image'
 import { X, Eye, Edit, Users, AlertCircle } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
@@ -185,7 +186,7 @@ export function PermissionMatrix({
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
                       {collaborator.image ? (
-                        <img src={collaborator.image} alt={collaborator.name || ''} className="w-8 h-8 rounded-full" />
+                        <Image src={collaborator.image} alt={collaborator.name || ''} width={32} height={32} className="w-8 h-8 rounded-full" />
                       ) : (
                         <Users className="w-4 h-4 text-gray-500" />
                       )}

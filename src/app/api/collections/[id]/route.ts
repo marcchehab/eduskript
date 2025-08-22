@@ -46,7 +46,13 @@ export async function GET(
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
-    return NextResponse.json({ success: true, data: collection, permissions })
+    return NextResponse.json({ 
+      success: true, 
+      data: collection, 
+      permissions,
+      title: collection.title,
+      description: collection.description
+    })
   } catch (error) {
     console.error('Error fetching collection:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

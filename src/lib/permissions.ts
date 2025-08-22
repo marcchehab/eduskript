@@ -34,7 +34,7 @@ export function checkCollectionPermissions(
 export function checkSkriptPermissions(
   userId: string,
   skriptAuthors: (SkriptAuthor & { user: Partial<User> })[],
-  collectionAuthors: (CollectionAuthor & { user: Partial<User> })[]
+  collectionAuthors?: (CollectionAuthor & { user: Partial<User> })[]
 ): UserPermissions {
   // Check direct skript permissions first
   const userSkriptAuthor = skriptAuthors.find(author => author.userId === userId)
@@ -50,7 +50,7 @@ export function checkSkriptPermissions(
   }
   
   // Check collection permissions (inherited)
-  const userCollectionAuthor = collectionAuthors.find(author => author.userId === userId)
+  const userCollectionAuthor = collectionAuthors?.find(author => author.userId === userId)
   
   if (userCollectionAuthor) {
     return {

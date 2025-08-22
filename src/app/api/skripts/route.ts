@@ -114,3 +114,102 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
+export async function GET(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions)
+    
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
+    const { searchParams } = new URL(request.url)
+    const includeShared = searchParams.get('includeShared') === 'true'
+
+    let whereClause
+    
+    if (includeShared) {
+      // Get skripts where user is an author OR can view through collection/skript permissions
+      whereClause = {
+        OR: [
+          {
+            // Direct skript authorship
+            authors: {
+              some: {
+                userId: session.user.id
+              }
+            }
+          },
+          {
+            // Collection authorship (inherited permissions)
+            collection: {
+              authors: {
+                some: {
+                  userId: session.user.id
+                }
+              }
+            }
+          }
+        ]
+      }
+    } else {
+      // Get only skripts where the user is a direct author
+      whereClause = {
+        authors: {
+          some: {
+            userId: session.user.id
+          }
+        }
+      }
+    }
+
+    const skripts = await prisma.skript.findMany({
+      where: whereClause,
+      include: {
+        pages: {
+          select: {
+            id: true
+          }
+        },
+        authors: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true
+              }
+            }
+          }
+        },
+        collection: {
+          include: {
+            authors: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      orderBy: { updatedAt: 'desc' }
+    })
+
+    return NextResponse.json({ success: true, data: skripts })
+  } catch (error) {
+    console.error('Error fetching skripts:', error)
+    return NextResponse.json(
+      { error: 'Failed to fetch skripts' },
+      { status: 500 }
+    )
+  }
+}

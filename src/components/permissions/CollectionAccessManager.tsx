@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import Image from 'next/image'
 import { Users, Plus, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -191,7 +192,7 @@ export function CollectionAccessManager({
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
                           {collaborator.image ? (
-                            <img src={collaborator.image} alt={collaborator.name || ''} className="w-8 h-8 rounded-full" />
+                            <Image src={collaborator.image} alt={collaborator.name || ''} width={32} height={32} className="w-8 h-8 rounded-full" />
                           ) : (
                             <Users className="w-4 h-4 text-gray-500" />
                           )}
@@ -236,7 +237,7 @@ export function CollectionAccessManager({
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
                             {collaborator.image ? (
-                              <img src={collaborator.image} alt={collaborator.name || ''} className="w-8 h-8 rounded-full" />
+                              <Image src={collaborator.image} alt={collaborator.name || ''} width={32} height={32} className="w-8 h-8 rounded-full" />
                             ) : (
                               <Users className="w-4 h-4 text-gray-500" />
                             )}

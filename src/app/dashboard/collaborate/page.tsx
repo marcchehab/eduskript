@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import Image from 'next/image'
 import { Search, UserPlus, Users, Clock, Check, X, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -217,7 +218,7 @@ export default function CollaboratePage() {
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
                     {user.image ? (
-                      <img src={user.image} alt={user.name || ''} className="w-10 h-10 rounded-full" />
+                      <Image src={user.image} alt={user.name || ''} width={40} height={40} className="w-10 h-10 rounded-full" />
                     ) : (
                       <User className="w-5 h-5 text-gray-500" />
                     )}
@@ -261,7 +262,7 @@ export default function CollaboratePage() {
                 <div className="flex items-center gap-2 mb-2">
                   <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
                     {request.requester?.image ? (
-                      <img src={request.requester.image} alt={request.requester.name || ''} className="w-8 h-8 rounded-full" />
+                      <Image src={request.requester.image} alt={request.requester.name || ''} width={32} height={32} className="w-8 h-8 rounded-full" />
                     ) : (
                       <User className="w-4 h-4 text-gray-500" />
                     )}
@@ -313,7 +314,7 @@ export default function CollaboratePage() {
                 <div className="flex items-center gap-2 mb-2">
                   <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
                     {request.receiver?.image ? (
-                      <img src={request.receiver.image} alt={request.receiver.name || ''} className="w-8 h-8 rounded-full" />
+                      <Image src={request.receiver.image} alt={request.receiver.name || ''} width={32} height={32} className="w-8 h-8 rounded-full" />
                     ) : (
                       <User className="w-4 h-4 text-gray-500" />
                     )}
@@ -356,7 +357,7 @@ export default function CollaboratePage() {
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
                       {otherUser.image ? (
-                        <img src={otherUser.image} alt={otherUser.name || ''} className="w-8 h-8 rounded-full" />
+                        <Image src={otherUser.image} alt={otherUser.name || ''} width={32} height={32} className="w-8 h-8 rounded-full" />
                       ) : (
                         <User className="w-4 h-4 text-gray-500" />
                       )}

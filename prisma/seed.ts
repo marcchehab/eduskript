@@ -309,14 +309,600 @@ Check: 2(4) + 3 = 8 + 3 = 11 ✓`,
     }
   })
 
-  console.log('Seed data created successfully!')
-  console.log('Teachers created with password "test123":')
-  console.log('- ', teacher1.email)
-  console.log('- ', teacher2.email) 
-  console.log('- ', teacher3.email)
-  console.log('Collection:', collection.title)
-  console.log('Skripts:', skript1.title, ',', skript2.title)
-  console.log('Pages created: 3')
+  // CREATE MORE COLLECTIONS FOR DIFFERENT TEACHERS
+
+  // Physics collection for Michael
+  const physicsCollection = await prisma.collection.upsert({
+    where: { slug: 'quantum-physics-101' },
+    update: {},
+    create: {
+      title: 'Quantum Physics 101',
+      description: 'Introduction to quantum mechanics and its applications',
+      slug: 'quantum-physics-101',
+      isPublished: true
+    }
+  })
+
+  await prisma.collectionAuthor.upsert({
+    where: {
+      collectionId_userId: {
+        collectionId: physicsCollection.id,
+        userId: teacher2.id
+      }
+    },
+    update: {},
+    create: {
+      collectionId: physicsCollection.id,
+      userId: teacher2.id,
+      permission: 'author'
+    }
+  })
+
+  // Computer Science collection for Emily
+  const csCollection = await prisma.collection.upsert({
+    where: { slug: 'programming-fundamentals' },
+    update: {},
+    create: {
+      title: 'Programming Fundamentals',
+      description: 'Learn the basics of programming with JavaScript',
+      slug: 'programming-fundamentals',
+      isPublished: true
+    }
+  })
+
+  await prisma.collectionAuthor.upsert({
+    where: {
+      collectionId_userId: {
+        collectionId: csCollection.id,
+        userId: teacher3.id
+      }
+    },
+    update: {},
+    create: {
+      collectionId: csCollection.id,
+      userId: teacher3.id,
+      permission: 'author'
+    }
+  })
+
+  // Advanced Math collection for Sarah
+  const advMathCollection = await prisma.collection.upsert({
+    where: { slug: 'calculus-essentials' },
+    update: {},
+    create: {
+      title: 'Calculus Essentials',
+      description: 'Master the fundamentals of differential and integral calculus',
+      slug: 'calculus-essentials',
+      isPublished: true
+    }
+  })
+
+  await prisma.collectionAuthor.upsert({
+    where: {
+      collectionId_userId: {
+        collectionId: advMathCollection.id,
+        userId: teacher1.id
+      }
+    },
+    update: {},
+    create: {
+      collectionId: advMathCollection.id,
+      userId: teacher1.id,
+      permission: 'author'
+    }
+  })
+
+  // CREATE PHYSICS SKRIPTS
+  const quantumSkript1 = await prisma.skript.upsert({
+    where: {
+      collectionId_slug: {
+        collectionId: physicsCollection.id,
+        slug: 'wave-particle-duality'
+      }
+    },
+    update: {},
+    create: {
+      title: 'Wave-Particle Duality',
+      description: 'Understanding the dual nature of light and matter',
+      slug: 'wave-particle-duality',
+      order: 1,
+      isPublished: true,
+      collectionId: physicsCollection.id
+    }
+  })
+
+  await prisma.skriptAuthor.upsert({
+    where: {
+      skriptId_userId: {
+        skriptId: quantumSkript1.id,
+        userId: teacher2.id
+      }
+    },
+    update: {},
+    create: {
+      skriptId: quantumSkript1.id,
+      userId: teacher2.id,
+      permission: 'author'
+    }
+  })
+
+  const quantumSkript2 = await prisma.skript.upsert({
+    where: {
+      collectionId_slug: {
+        collectionId: physicsCollection.id,
+        slug: 'heisenberg-principle'
+      }
+    },
+    update: {},
+    create: {
+      title: 'Heisenberg Uncertainty Principle',
+      description: 'Exploring the limits of measurement in quantum mechanics',
+      slug: 'heisenberg-principle',
+      order: 2,
+      isPublished: true,
+      collectionId: physicsCollection.id
+    }
+  })
+
+  await prisma.skriptAuthor.upsert({
+    where: {
+      skriptId_userId: {
+        skriptId: quantumSkript2.id,
+        userId: teacher2.id
+      }
+    },
+    update: {},
+    create: {
+      skriptId: quantumSkript2.id,
+      userId: teacher2.id,
+      permission: 'author'
+    }
+  })
+
+  // CREATE PROGRAMMING SKRIPTS
+  const progSkript1 = await prisma.skript.upsert({
+    where: {
+      collectionId_slug: {
+        collectionId: csCollection.id,
+        slug: 'variables-and-data-types'
+      }
+    },
+    update: {},
+    create: {
+      title: 'Variables and Data Types',
+      description: 'Learn about different data types and how to work with variables',
+      slug: 'variables-and-data-types',
+      order: 1,
+      isPublished: true,
+      collectionId: csCollection.id
+    }
+  })
+
+  await prisma.skriptAuthor.upsert({
+    where: {
+      skriptId_userId: {
+        skriptId: progSkript1.id,
+        userId: teacher3.id
+      }
+    },
+    update: {},
+    create: {
+      skriptId: progSkript1.id,
+      userId: teacher3.id,
+      permission: 'author'
+    }
+  })
+
+  const progSkript2 = await prisma.skript.upsert({
+    where: {
+      collectionId_slug: {
+        collectionId: csCollection.id,
+        slug: 'functions-and-scope'
+      }
+    },
+    update: {},
+    create: {
+      title: 'Functions and Scope',
+      description: 'Understanding function declarations and variable scope',
+      slug: 'functions-and-scope',
+      order: 2,
+      isPublished: true,
+      collectionId: csCollection.id
+    }
+  })
+
+  await prisma.skriptAuthor.upsert({
+    where: {
+      skriptId_userId: {
+        skriptId: progSkript2.id,
+        userId: teacher3.id
+      }
+    },
+    update: {},
+    create: {
+      skriptId: progSkript2.id,
+      userId: teacher3.id,
+      permission: 'author'
+    }
+  })
+
+  // CREATE CALCULUS SKRIPTS
+  const calcSkript1 = await prisma.skript.upsert({
+    where: {
+      collectionId_slug: {
+        collectionId: advMathCollection.id,
+        slug: 'limits-and-continuity'
+      }
+    },
+    update: {},
+    create: {
+      title: 'Limits and Continuity',
+      description: 'Understanding limits as the foundation of calculus',
+      slug: 'limits-and-continuity',
+      order: 1,
+      isPublished: true,
+      collectionId: advMathCollection.id
+    }
+  })
+
+  await prisma.skriptAuthor.upsert({
+    where: {
+      skriptId_userId: {
+        skriptId: calcSkript1.id,
+        userId: teacher1.id
+      }
+    },
+    update: {},
+    create: {
+      skriptId: calcSkript1.id,
+      userId: teacher1.id,
+      permission: 'author'
+    }
+  })
+
+  const calcSkript2 = await prisma.skript.upsert({
+    where: {
+      collectionId_slug: {
+        collectionId: advMathCollection.id,
+        slug: 'derivatives'
+      }
+    },
+    update: {},
+    create: {
+      title: 'Introduction to Derivatives',
+      description: 'Learn how to find rates of change using derivatives',
+      slug: 'derivatives',
+      order: 2,
+      isPublished: true,
+      collectionId: advMathCollection.id
+    }
+  })
+
+  await prisma.skriptAuthor.upsert({
+    where: {
+      skriptId_userId: {
+        skriptId: calcSkript2.id,
+        userId: teacher1.id
+      }
+    },
+    update: {},
+    create: {
+      skriptId: calcSkript2.id,
+      userId: teacher1.id,
+      permission: 'author'
+    }
+  })
+
+  // CREATE PHYSICS PAGES
+  const physicsPage1 = await prisma.page.upsert({
+    where: {
+      skriptId_slug: {
+        skriptId: quantumSkript1.id,
+        slug: 'double-slit-experiment'
+      }
+    },
+    update: {},
+    create: {
+      title: 'The Double-Slit Experiment',
+      content: `# The Double-Slit Experiment
+
+The double-slit experiment demonstrates the wave-particle duality of light and matter.
+
+## The Setup
+
+- Light source shines through two parallel slits
+- Screen placed behind the slits to observe the pattern
+
+## What We Observe
+
+When light passes through both slits:
+- **Wave behavior**: Creates an interference pattern with bright and dark bands
+- **Particle behavior**: Individual photons can be detected
+
+## The Mystery
+
+The particle somehow "knows" about both slits and interferes with itself!
+
+## Key Insight
+
+> "The quantum world behaves differently when we're not observing it."
+
+This experiment revolutionized our understanding of quantum mechanics.`,
+      slug: 'double-slit-experiment',
+      order: 1,
+      isPublished: true,
+      skriptId: quantumSkript1.id
+    }
+  })
+
+  await prisma.pageAuthor.upsert({
+    where: {
+      pageId_userId: {
+        pageId: physicsPage1.id,
+        userId: teacher2.id
+      }
+    },
+    update: {},
+    create: {
+      pageId: physicsPage1.id,
+      userId: teacher2.id,
+      permission: 'author'
+    }
+  })
+
+  // CREATE PROGRAMMING PAGES
+  const progPage1 = await prisma.page.upsert({
+    where: {
+      skriptId_slug: {
+        skriptId: progSkript1.id,
+        slug: 'javascript-variables'
+      }
+    },
+    update: {},
+    create: {
+      title: 'JavaScript Variables',
+      content: `# JavaScript Variables
+
+Variables are containers for storing data values.
+
+## Declaring Variables
+
+\`\`\`javascript
+let name = "John";
+const age = 25;
+var city = "New York";
+\`\`\`
+
+## Data Types
+
+### Primitive Types
+- **String**: \`"Hello World"\`
+- **Number**: \`42\`, \`3.14\`
+- **Boolean**: \`true\`, \`false\`
+- **Undefined**: \`undefined\`
+- **Null**: \`null\`
+
+### Complex Types
+- **Object**: \`{ name: "John", age: 25 }\`
+- **Array**: \`[1, 2, 3, 4, 5]\`
+
+## Variable Rules
+
+1. Names can contain letters, digits, underscores, and dollar signs
+2. Names must begin with a letter, underscore, or dollar sign
+3. Names are case-sensitive
+4. Reserved words cannot be used as names
+
+## Best Practices
+
+- Use \`const\` for values that won't change
+- Use \`let\` for values that will change
+- Avoid \`var\` in modern JavaScript
+- Use descriptive names: \`userAge\` instead of \`a\``,
+      slug: 'javascript-variables',
+      order: 1,
+      isPublished: true,
+      skriptId: progSkript1.id
+    }
+  })
+
+  await prisma.pageAuthor.upsert({
+    where: {
+      pageId_userId: {
+        pageId: progPage1.id,
+        userId: teacher3.id
+      }
+    },
+    update: {},
+    create: {
+      pageId: progPage1.id,
+      userId: teacher3.id,
+      permission: 'author'
+    }
+  })
+
+  // CREATE CALCULUS PAGES
+  const calcPage1 = await prisma.page.upsert({
+    where: {
+      skriptId_slug: {
+        skriptId: calcSkript1.id,
+        slug: 'understanding-limits'
+      }
+    },
+    update: {},
+    create: {
+      title: 'Understanding Limits',
+      content: `# Understanding Limits
+
+A limit describes the value a function approaches as the input approaches some value.
+
+## Notation
+
+$$\\lim_{x \\to a} f(x) = L$$
+
+This reads: "The limit of f(x) as x approaches a equals L"
+
+## Intuitive Understanding
+
+Imagine you're walking toward a door:
+- You get closer and closer
+- But maybe never actually reach it
+- The door represents the limit
+
+## Example
+
+Consider: $$\\lim_{x \\to 2} (x^2 - 1)$$
+
+As x gets closer to 2:
+- When x = 1.9: f(x) = 2.61
+- When x = 1.99: f(x) = 2.9601
+- When x = 1.999: f(x) = 2.996001
+
+The limit is 3, even though we never actually plug in x = 2.
+
+## Types of Limits
+
+1. **Finite Limits**: Function approaches a specific value
+2. **Infinite Limits**: Function grows without bound
+3. **Limits at Infinity**: What happens as x gets very large
+
+## Why Limits Matter
+
+Limits are the foundation for:
+- Derivatives (rate of change)
+- Integrals (area under curves)
+- Continuity (smooth functions)`,
+      slug: 'understanding-limits',
+      order: 1,
+      isPublished: true,
+      skriptId: calcSkript1.id
+    }
+  })
+
+  await prisma.pageAuthor.upsert({
+    where: {
+      pageId_userId: {
+        pageId: calcPage1.id,
+        userId: teacher1.id
+      }
+    },
+    update: {},
+    create: {
+      pageId: calcPage1.id,
+      userId: teacher1.id,
+      permission: 'author'
+    }
+  })
+
+  // CREATE SOME COLLABORATION RELATIONSHIPS
+  await prisma.collaboration.upsert({
+    where: {
+      requesterId_receiverId: {
+        requesterId: teacher1.id,
+        receiverId: teacher2.id
+      }
+    },
+    update: {},
+    create: {
+      requesterId: teacher1.id,
+      receiverId: teacher2.id
+    }
+  })
+
+  await prisma.collaboration.upsert({
+    where: {
+      requesterId_receiverId: {
+        requesterId: teacher2.id,
+        receiverId: teacher3.id
+      }
+    },
+    update: {},
+    create: {
+      requesterId: teacher2.id,
+      receiverId: teacher3.id
+    }
+  })
+
+  // GIVE SARAH ACCESS TO VIEW MICHAEL'S PHYSICS CONTENT
+  await prisma.collectionAuthor.upsert({
+    where: {
+      collectionId_userId: {
+        collectionId: physicsCollection.id,
+        userId: teacher1.id
+      }
+    },
+    update: {},
+    create: {
+      collectionId: physicsCollection.id,
+      userId: teacher1.id,
+      permission: 'viewer'
+    }
+  })
+
+  // GIVE EMILY ACCESS TO EDIT SARAH'S CALCULUS CONTENT
+  await prisma.collectionAuthor.upsert({
+    where: {
+      collectionId_userId: {
+        collectionId: advMathCollection.id,
+        userId: teacher3.id
+      }
+    },
+    update: {},
+    create: {
+      collectionId: advMathCollection.id,
+      userId: teacher3.id,
+      permission: 'author'
+    }
+  })
+
+  // CREATE A SAMPLE PAGE LAYOUT FOR SARAH
+  const sarahLayout = await prisma.pageLayout.upsert({
+    where: { userId: teacher1.id },
+    update: {},
+    create: {
+      userId: teacher1.id,
+      items: {
+        create: [
+          {
+            type: 'collection',
+            contentId: collection.id,
+            order: 0
+          },
+          {
+            type: 'collection', 
+            contentId: advMathCollection.id,
+            order: 1
+          }
+        ]
+      }
+    }
+  })
+
+  console.log('🎉 EXPANDED SEED DATA CREATED SUCCESSFULLY!')
+  console.log('')
+  console.log('👩‍🏫 Teachers created (password: "test123"):')
+  console.log('- Sarah Johnson (sarah@informatikgarten.ch) - Mathematics')
+  console.log('  → Subdomain: sarah.localhost:3000 or http://localhost:3000/sarah')
+  console.log('- Michael Chen (michael@informatikgarten.ch) - Physics') 
+  console.log('  → Subdomain: michael.localhost:3000 or http://localhost:3000/michael')
+  console.log('- Emily Rodriguez (emily@informatikgarten.ch) - Computer Science')
+  console.log('  → Subdomain: emily.localhost:3000 or http://localhost:3000/emily')
+  console.log('')
+  console.log('📚 Collections created:')
+  console.log('- Algebra Basics (Sarah) - 2 skripts, 3 pages')
+  console.log('- Quantum Physics 101 (Michael) - 2 skripts, 1 page')
+  console.log('- Programming Fundamentals (Emily) - 2 skripts, 1 page')
+  console.log('- Calculus Essentials (Sarah) - 2 skripts, 1 page')
+  console.log('')
+  console.log('🤝 Collaborations set up:')
+  console.log('- Sarah ↔ Michael (collaborators)')
+  console.log('- Michael ↔ Emily (collaborators)')
+  console.log('- Sarah can VIEW Michael\'s Physics content')
+  console.log('- Emily can EDIT Sarah\'s Calculus content')
+  console.log('')
+  console.log('📄 Sarah has a sample page layout configured!')
+  console.log('')
+  console.log('🚀 Ready to test the page builder!')
 }
 
 main()

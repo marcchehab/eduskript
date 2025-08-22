@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Image from 'next/image'
 import { Users, Share2, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -163,7 +164,7 @@ export function ShareContentModal({
                     <div className="flex items-center gap-2">
                       <div className="w-6 h-6 bg-gray-200 rounded-full flex items-center justify-center">
                         {collaborator.image ? (
-                          <img src={collaborator.image} alt={collaborator.name || ''} className="w-6 h-6 rounded-full" />
+                          <Image src={collaborator.image} alt={collaborator.name || ''} width={24} height={24} className="w-6 h-6 rounded-full" />
                         ) : (
                           <Users className="w-3 h-3 text-gray-500" />
                         )}

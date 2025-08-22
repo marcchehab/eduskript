@@ -3,6 +3,58 @@ import { getServerSession } from 'next-auth'
 import { revalidatePath } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { checkSkriptPermissions } from '@/lib/permissions'
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await getServerSession(authOptions)
+    
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { id } = await params
+
+    const skript = await prisma.skript.findUnique({
+      where: { id },
+      include: {
+        collection: true,
+        pages: {
+          orderBy: { order: 'asc' }
+        },
+        authors: {
+          include: {
+            user: true
+          }
+        }
+      }
+    })
+
+    if (!skript) {
+      return NextResponse.json({ error: 'Skript not found' }, { status: 404 })
+    }
+
+    // Check if user has permission to view this skript
+    const permissions = checkSkriptPermissions(session.user.id, skript.authors)
+    if (!permissions.canView) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
+
+    return NextResponse.json({ 
+      success: true, 
+      data: skript, 
+      permissions,
+      title: skript.title,
+      description: skript.description
+    })
+  } catch (error) {
+    console.error('Error fetching skript:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
 
 export async function PATCH(
   request: NextRequest,

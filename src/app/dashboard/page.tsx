@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
-import { FileText, BookOpen, Eye, Plus } from 'lucide-react'
+import { FileText, BookOpen, Eye, Layout } from 'lucide-react'
 import { AnalyticsDashboard } from '@/components/dashboard/analytics'
 
 export default async function DashboardPage() {
@@ -66,10 +66,10 @@ export default async function DashboardPage() {
             Welcome back! Here&apos;s what&apos;s happening with your content.
           </p>
         </div>
-        <Link href="/dashboard/collections/new">
+        <Link href="/dashboard/page-builder">
           <Button>
-            <Plus className="w-4 h-4 mr-2" />
-            New Collection
+            <Layout className="w-4 h-4 mr-2" />
+            Build Your Page
           </Button>
         </Link>
       </div>
@@ -149,10 +149,10 @@ export default async function DashboardPage() {
               <p className="text-muted-foreground mb-4">
                 Get started by creating your first educational collection.
               </p>
-              <Link href="/dashboard/collections/new">
+              <Link href="/dashboard/page-builder">
                 <Button>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Create Your First Collection
+                  <Layout className="w-4 h-4 mr-2" />
+                  Start Building Your Page
                 </Button>
               </Link>
             </div>

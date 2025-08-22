@@ -92,6 +92,9 @@ model User {
   collaborationsAsRequester     Collaboration[] @relation("RequesterCollaborations")
   collaborationsAsReceiver      Collaboration[] @relation("ReceiverCollaborations")
   
+  // Page layout
+  pageLayout PageLayout?
+  
   @@map("users")
 }
 
@@ -290,4 +293,32 @@ model Collaboration {
 
   @@unique([requesterId, receiverId])
   @@map("collaborations")
+}
+
+// Page layout for user's public page
+model PageLayout {
+  id        String   @id @default(cuid())
+  userId    String   @unique @map("user_id")
+  items     PageLayoutItem[]
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("page_layouts")
+}
+
+// Individual items in a page layout
+model PageLayoutItem {
+  id           String @id @default(cuid())
+  pageLayoutId String @map("page_layout_id")
+  type         String // "collection" or "skript"
+  contentId    String @map("content_id") // ID of the collection or skript
+  order        Int
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  pageLayout PageLayout @relation(fields: [pageLayoutId], references: [id], onDelete: Cascade)
+
+  @@unique([pageLayoutId, contentId, type])
+  @@map("page_layout_items")
 }
