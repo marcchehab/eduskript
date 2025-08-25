@@ -30,6 +30,10 @@ interface DragData {
   description?: string
   fromLibrary?: boolean
   parentId?: string
+  permissions?: {
+    canEdit: boolean
+    canView: boolean
+  }
 }
 
 export function PageBuilderInterface() {
@@ -60,23 +64,42 @@ export function PageBuilderInterface() {
                     const contentData = await contentResponse.json()
                     const collection = contentData.data || contentData
                     
-                    // Get skripts from the junction table (CollectionSkript)
-                    const collectionSkripts = (collection.collectionSkripts || [])
-                      .filter((cs: { skript: { isPublished: boolean } }) => cs.skript.isPublished) // Only published skripts
-                      .map((cs: { skript: { id: string; title: string; description?: string; slug: string; isPublished: boolean }, order: number }) => {
-                        return {
-                          id: cs.skript.id,
-                          type: 'skript' as const,
-                          title: cs.skript.title || `skript ${cs.skript.id}`,
-                          description: cs.skript.description,
-                          order: cs.order, // Use order from junction table
-                          slug: cs.skript.slug,
-                          collectionSlug: collection.slug,
-                          parentId: item.contentId,
-                          permissions: contentData.permissions || { canEdit: false, canView: true }, // Use collection permissions for nested skripts
-                          isInLayout: true // All skripts in CollectionSkript are part of the layout
-                        }
-                      })
+                    // Get skripts from the junction table (CollectionSkript) and fetch their individual permissions
+                    const collectionSkripts = await Promise.all(
+                      (collection.collectionSkripts || [])
+                        .filter((cs: { skript: { isPublished: boolean } }) => cs.skript.isPublished) // Only published skripts
+                        .map(async (cs: { skript: { id: string; title: string; description?: string; slug: string; isPublished: boolean }, order: number }) => {
+                          // Fetch individual skript permissions
+                          let skriptPermissions = { canEdit: false, canView: true }
+                          try {
+                            const skriptResponse = await fetch(`/api/skripts/${cs.skript.id}`)
+                            if (skriptResponse.ok) {
+                              const skriptData = await skriptResponse.json()
+                              skriptPermissions = skriptData.permissions || skriptPermissions
+                            } else if (skriptResponse.status === 403) {
+                              // User doesn't have access to this skript - set as view-only
+                              skriptPermissions = { canEdit: false, canView: false }
+                            } else {
+                              console.warn(`Failed to fetch permissions for skript ${cs.skript.id}: ${skriptResponse.status}`)
+                            }
+                          } catch (error) {
+                            console.error(`Error fetching permissions for skript ${cs.skript.id}:`, error)
+                          }
+
+                          return {
+                            id: cs.skript.id,
+                            type: 'skript' as const,
+                            title: cs.skript.title || `skript ${cs.skript.id}`,
+                            description: cs.skript.description,
+                            order: cs.order, // Use order from junction table
+                            slug: cs.skript.slug,
+                            collectionSlug: collection.slug,
+                            parentId: item.contentId,
+                            permissions: skriptPermissions, // Use individual skript permissions
+                            isInLayout: true // All skripts in CollectionSkript are part of the layout
+                          }
+                        })
+                    )
                     
                     return {
                       id: item.contentId,
@@ -273,7 +296,8 @@ export function PageBuilderInterface() {
           id: skriptId, 
           title: skript.title, 
           description: skript.description,
-          parentId 
+          parentId,
+          permissions: skript.permissions
         }
       }
     }
@@ -342,7 +366,8 @@ export function PageBuilderInterface() {
           id: skriptId, 
           title: skript.title, 
           description: skript.description,
-          parentId 
+          parentId,
+          permissions: skript.permissions
         }
       }
     }
@@ -447,7 +472,8 @@ export function PageBuilderInterface() {
               title: dragData.title,
               description: dragData.description,
               order: 0, // Place at beginning when dropping on header
-              parentId: collectionId
+              parentId: collectionId,
+              permissions: dragData.permissions
             }
             targetCollection.skripts.unshift(newSkript) // Add at beginning
             changedCollectionIds.add(collectionId)
@@ -493,7 +519,8 @@ export function PageBuilderInterface() {
           title: dragData.title,
           description: dragData.description,
           order: 0,
-          parentId: collectionId
+          parentId: collectionId,
+          permissions: dragData.permissions
         }
         targetCollection.skripts.push(newSkript)
         changedCollectionIds.add(collectionId)
@@ -516,39 +543,60 @@ export function PageBuilderInterface() {
         
         if (!targetCollection.skripts) targetCollection.skripts = []
         
-        // Remove from source if moving
-        if (isMovingExistingSkript) {
-          const sourceCollectionIndex = updatedItems.findIndex(item => item.id === dragData.parentId)
-          if (sourceCollectionIndex !== -1) {
-            const sourceCollection = updatedItems[sourceCollectionIndex]
-            if (sourceCollection.skripts) {
-              sourceCollection.skripts = sourceCollection.skripts.filter(s => s.id !== dragData.id)
-              sourceCollection.skripts = sourceCollection.skripts.map((s, idx) => ({
-                ...s,
-                order: idx
-              }))
-              if (dragData.parentId) changedCollectionIds.add(dragData.parentId)
+        // Check if we're moving within the same collection
+        const isMovingWithinSameCollection = isMovingExistingSkript && dragData.parentId === collectionId
+        
+        if (isMovingWithinSameCollection) {
+          // Special handling for reordering within the same collection
+          const skriptIndex = targetCollection.skripts!.findIndex(s => s.id === dragData.id)
+          if (skriptIndex !== -1) {
+            // Remove the skript from its current position
+            const [movedSkript] = targetCollection.skripts!.splice(skriptIndex, 1)
+            // Insert it at the new position
+            targetCollection.skripts!.splice(destination.index, 0, movedSkript)
+            // Update order for all skripts
+            targetCollection.skripts = targetCollection.skripts!.map((s, idx) => ({
+              ...s,
+              order: idx
+            }))
+            changedCollectionIds.add(collectionId)
+          }
+        } else {
+          // Remove from source if moving from a different collection
+          if (isMovingExistingSkript) {
+            const sourceCollectionIndex = updatedItems.findIndex(item => item.id === dragData.parentId)
+            if (sourceCollectionIndex !== -1) {
+              const sourceCollection = updatedItems[sourceCollectionIndex]
+              if (sourceCollection.skripts) {
+                sourceCollection.skripts = sourceCollection.skripts.filter(s => s.id !== dragData.id)
+                sourceCollection.skripts = sourceCollection.skripts.map((s, idx) => ({
+                  ...s,
+                  order: idx
+                }))
+                if (dragData.parentId) changedCollectionIds.add(dragData.parentId)
+              }
             }
           }
+          
+          const newSkript = {
+            id: dragData.id,
+            type: 'skript' as const,
+            title: dragData.title,
+            description: dragData.description,
+            order: destination.index,
+            parentId: collectionId,
+            permissions: dragData.permissions
+          }
+          
+          // Insert at the specified position
+          targetCollection.skripts.splice(destination.index, 0, newSkript)
+          
+          // Reorder all skripts in the collection
+          targetCollection.skripts = targetCollection.skripts.map((s, idx) => ({
+            ...s,
+            order: idx
+          }))
         }
-        
-        const newSkript = {
-          id: dragData.id,
-          type: 'skript' as const,
-          title: dragData.title,
-          description: dragData.description,
-          order: destination.index,
-          parentId: collectionId
-        }
-        
-        // Insert at the specified position
-        targetCollection.skripts.splice(destination.index, 0, newSkript)
-        
-        // Reorder all skripts in the collection
-        targetCollection.skripts = targetCollection.skripts.map((s, idx) => ({
-          ...s,
-          order: idx
-        }))
         
         changedCollectionIds.add(collectionId)
         hasChanges = true
@@ -577,14 +625,19 @@ export function PageBuilderInterface() {
 
   if (loading) {
     return (
-      <div className="flex gap-6 h-[calc(100vh-120px)]">
-        <div className="flex-1 flex items-center justify-center">
-          <p className="text-muted-foreground">Loading page builder...</p>
+      <DragDropContext 
+        onDragStart={handleDragStart} 
+        onDragEnd={handleDragEnd}
+      >
+        <div className="flex gap-6 h-[calc(100vh-120px)]">
+          <div className="flex-1 flex items-center justify-center">
+            <p className="text-muted-foreground">Loading page builder...</p>
+          </div>
+          <div className="w-80 flex-shrink-0">
+            <ContentLibrary onDataLoad={setLibraryData} />
+          </div>
         </div>
-        <div className="w-80 flex-shrink-0">
-          <ContentLibrary onDataLoad={setLibraryData} />
-        </div>
-      </div>
+      </DragDropContext>
     )
   }
 

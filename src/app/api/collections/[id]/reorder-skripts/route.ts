@@ -91,6 +91,30 @@ export async function PATCH(
 
     await prisma.$transaction(updates)
     console.log('Transaction completed successfully')
+    
+    // Verify the update worked
+    const verifyCollection = await prisma.collection.findFirst({
+      where: { id },
+      include: {
+        collectionSkripts: {
+          orderBy: { order: 'asc' },
+          include: {
+            skript: {
+              select: {
+                id: true,
+                title: true
+              }
+            }
+          }
+        }
+      }
+    })
+    
+    console.log('Verification - Updated orders:', verifyCollection?.collectionSkripts.map(cs => ({
+      skriptId: cs.skriptId,
+      title: cs.skript.title,
+      order: cs.order
+    })))
 
     return NextResponse.json({ success: true })
   } catch (error) {

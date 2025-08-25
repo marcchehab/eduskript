@@ -2,25 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent,
-} from '@dnd-kit/core'
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable'
-import {
-  useSortable,
-} from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
+import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
 import { Button } from '@/components/ui/button'
 import { EditModal } from './edit-modal'
 import { PublishToggle } from './publish-toggle'
@@ -63,21 +45,6 @@ function SortableSkriptItem({
   onSkriptDeleted,
   canEdit = true
 }: SortableSkriptItemProps) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: skript.id })
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  }
-
   const handleDeleteSkript = async () => {
     if (!confirm(`Are you sure you want to delete the skript "${skript.title}"? This will also delete all pages in this skript.`)) {
       return
@@ -100,86 +67,97 @@ function SortableSkriptItem({
   }
 
   return (
-    <div ref={setNodeRef} style={style} className="border rounded-lg bg-card">
-      <div className="flex items-center justify-between p-4">
-        <div className="flex items-center gap-4">
-          <div
-            {...attributes}
-            {...listeners}
-            className="flex items-center gap-2 text-muted-foreground cursor-grab active:cursor-grabbing"
-          >
-            <GripVertical className="w-4 h-4" />
-            <div className="w-8 h-8 bg-primary/10 text-primary rounded-full flex items-center justify-center font-medium">
-              {index + 1}
-            </div>
-          </div>
-          <div>
-            <Link href={`/dashboard/collections/${collectionSlug}/skripts/${skript.slug}`}>
-              <h3 className="font-medium text-foreground hover:text-primary cursor-pointer transition-colors">
-                {skript.title}
-              </h3>
-            </Link>
-            <p className="text-sm text-muted-foreground">
-              {skript.description || 'No description'}
-            </p>
-            <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
-              <span>{skript.pages.length} pages</span>
-              <span>
-                Updated {new Date(skript.updatedAt).toLocaleDateString()}
-              </span>
-            </div>
-          </div>
-        </div>
-        <div className="flex gap-2 items-center">
-          {canEdit && (
-            <>
-              <PublishToggle
-                type="skript"
-                itemId={skript.id}
-                isPublished={skript.isPublished}
-                onToggle={onSkriptUpdated}
-                showText={true}
-              />
-              <EditModal
-                type="skript"
-                item={skript}
-                onItemUpdated={onSkriptUpdated}
-              />
-              <CreatePageModal 
-                skriptId={skript.id} 
-                onPageCreated={onSkriptUpdated}
-              />
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={handleDeleteSkript}
-                className="text-destructive hover:text-destructive/80 hover:bg-destructive/10"
+    <Draggable draggableId={skript.id} index={index}>
+      {(provided, snapshot) => (
+        <div 
+          ref={provided.innerRef} 
+          {...provided.draggableProps}
+          className="border rounded-lg bg-card"
+          style={{
+            ...provided.draggableProps.style,
+            opacity: snapshot.isDragging ? 0.5 : 1,
+          }}
+        >
+          <div className="flex items-center justify-between p-4">
+            <div className="flex items-center gap-4">
+              <div
+                {...provided.dragHandleProps}
+                className="flex items-center gap-2 text-muted-foreground cursor-grab active:cursor-grabbing"
               >
-                <Trash2 className="w-4 h-4" />
-              </Button>
-            </>
+                <GripVertical className="w-4 h-4" />
+                <div className="w-8 h-8 bg-primary/10 text-primary rounded-full flex items-center justify-center font-medium">
+                  {index + 1}
+                </div>
+              </div>
+              <div>
+                <Link href={`/dashboard/collections/${collectionSlug}/skripts/${skript.slug}`}>
+                  <h3 className="font-medium text-foreground hover:text-primary cursor-pointer transition-colors">
+                    {skript.title}
+                  </h3>
+                </Link>
+                <p className="text-sm text-muted-foreground">
+                  {skript.description || 'No description'}
+                </p>
+                <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
+                  <span>{skript.pages.length} pages</span>
+                  <span>
+                    Updated {new Date(skript.updatedAt).toLocaleDateString()}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2 items-center">
+              {canEdit && (
+                <>
+                  <PublishToggle
+                    type="skript"
+                    itemId={skript.id}
+                    isPublished={skript.isPublished}
+                    onToggle={onSkriptUpdated}
+                    showText={true}
+                  />
+                  <EditModal
+                    type="skript"
+                    item={skript}
+                    onItemUpdated={onSkriptUpdated}
+                  />
+                  <CreatePageModal 
+                    skriptId={skript.id} 
+                    onPageCreated={onSkriptUpdated}
+                  />
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={handleDeleteSkript}
+                    className="text-destructive hover:text-destructive/80 hover:bg-destructive/10"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+          
+          {/* Pages list */}
+          {skript.pages.length > 0 && (
+            <div className="border-t bg-muted/50">
+              <div className="p-4 space-y-2">
+                <h4 className="text-sm font-medium text-muted-foreground mb-3">Pages</h4>
+                <SortablePages
+                  pages={skript.pages}
+                  skriptId={skript.id}
+                  collectionSlug={collectionSlug}
+                  skriptSlug={skript.slug}
+                  onReorder={onSkriptUpdated}
+                  onPageDeleted={onSkriptUpdated}
+                  canEdit={canEdit}
+                />
+              </div>
+            </div>
           )}
         </div>
-      </div>
-      
-      {/* Pages list */}
-      {skript.pages.length > 0 && (
-        <div className="border-t bg-muted/50">
-          <div className="p-4 space-y-2">
-            <h4 className="text-sm font-medium text-muted-foreground mb-3">Pages</h4>
-            <SortablePages
-              pages={skript.pages}
-              skriptId={skript.id}
-              collectionSlug={collectionSlug}
-              skriptSlug={skript.slug}
-              onReorder={onSkriptUpdated}
-              onPageDeleted={onSkriptUpdated}
-              canEdit={canEdit}
-            />
-          </div>
-        </div>
       )}
-    </div>
+    </Draggable>
   )
 }
 
@@ -313,81 +291,88 @@ export function SortableSkripts({
   
   // Sync items with skripts prop and handle hydration
   useEffect(() => {
+    console.log('SortableSkripts received skripts:', skripts.map(s => ({ id: s.id, title: s.title, order: s.order })))
     setItems(skripts)
     setIsMounted(true)
   }, [skripts])
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  )
 
-  const handleDragEnd = async (event: DragEndEvent) => {
+  const handleDragEnd = async (result: DropResult) => {
     if (!isMounted) return
     
-    const { active, over } = event
+    const { destination, source } = result
+    console.log('Drag end event:', { sourceIndex: source.index, destIndex: destination?.index })
 
-    if (over && active.id !== over.id) {
-      const oldIndex = items.findIndex((item) => item.id === active.id)
-      const newIndex = items.findIndex((item) => item.id === over.id)
-      
-      const newItems = arrayMove(items, oldIndex, newIndex)
-      setItems(newItems)
-      
-      // Update order in database
-      setIsReordering(true)
-      try {
-        const response = await fetch(`/api/collections/${collectionId}/reorder-skripts`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            skriptIds: newItems.map(item => item.id)
-          })
+    if (!destination || destination.index === source.index) return
+
+    const newItems = Array.from(items)
+    const [reorderedItem] = newItems.splice(source.index, 1)
+    newItems.splice(destination.index, 0, reorderedItem)
+    
+    console.log('Reordering:', { oldIndex: source.index, newIndex: destination.index })
+    setItems(newItems)
+    
+    const skriptIds = newItems.map(item => item.id)
+    console.log('Sending reorder request:', { collectionId, skriptIds })
+    
+    // Update order in database
+    setIsReordering(true)
+    try {
+      const response = await fetch(`/api/collections/${collectionId}/reorder-skripts`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          skriptIds: skriptIds
         })
+      })
 
-        if (response.ok) {
-          onReorder()
-        } else {
-          // Revert on error
-          setItems(skripts)
-          alert('Failed to reorder skripts')
-        }
-      } catch (error) {
-        console.error('Error reordering skripts:', error)
+      console.log('Reorder response:', response.status, response.ok)
+      
+      if (response.ok) {
+        const data = await response.json()
+        console.log('Reorder successful:', data)
+        onReorder()
+      } else {
+        const errorData = await response.text()
+        console.error('Reorder failed:', response.status, errorData)
+        // Revert on error
         setItems(skripts)
-        alert('Failed to reorder skripts')
+        alert('Failed to reorder skripts: ' + errorData)
       }
-      setIsReordering(false)
+    } catch (error) {
+      console.error('Error reordering skripts:', error)
+      setItems(skripts)
+      alert('Failed to reorder skripts')
     }
+    setIsReordering(false)
   }
 
   return (
     <div className="space-y-4">
       {isMounted && canEdit && (
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
-        >
-          <SortableContext items={items.map(c => c.id)} strategy={verticalListSortingStrategy}>
-            {items.map((skript, index) => (
-              <SortableSkriptItem
-                key={skript.id}
-                skript={skript}
-                index={index}
-                collectionSlug={collectionSlug}
-                onSkriptUpdated={onReorder}
-                onSkriptDeleted={onReorder}
-                canEdit={canEdit}
-              />
-            ))}
-          </SortableContext>
-        </DndContext>
+        <DragDropContext onDragEnd={handleDragEnd}>
+          <Droppable droppableId="skripts">
+            {(provided) => (
+              <div
+                {...provided.droppableProps}
+                ref={provided.innerRef}
+                className="space-y-4"
+              >
+                {items.map((skript, index) => (
+                  <SortableSkriptItem
+                    key={skript.id}
+                    skript={skript}
+                    index={index}
+                    collectionSlug={collectionSlug}
+                    onSkriptUpdated={onReorder}
+                    onSkriptDeleted={onReorder}
+                    canEdit={canEdit}
+                  />
+                ))}
+                {provided.placeholder}
+              </div>
+            )}
+          </Droppable>
+        </DragDropContext>
       )}
       {isMounted && !canEdit && (
         <div className="space-y-4">

@@ -21,7 +21,11 @@ export async function GET(
     const skript = await prisma.skript.findUnique({
       where: { id },
       include: {
-        collection: true,
+        collectionSkripts: {
+          include: {
+            collection: true
+          }
+        },
         pages: {
           orderBy: { order: 'asc' }
         },

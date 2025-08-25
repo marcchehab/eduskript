@@ -53,34 +53,44 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if user can edit this skript
+    // Check if user has edit permission (author) on the skript directly
     const skriptPermissions = checkSkriptPermissions(
       session.user.id, 
       skript.authors
     )
 
-    // Check permissions on current collections (if any)
-    let hasCurrentCollectionPermission = false
-    if (skript.collectionSkripts.length > 0) {
-      // Check if user has permission to edit any of the current collections
-      for (const collectionSkript of skript.collectionSkripts) {
-        const collectionPermissions = checkCollectionPermissions(
-          session.user.id, 
-          collectionSkript.collection.authors
-        )
-        if (collectionPermissions.canEdit) {
-          hasCurrentCollectionPermission = true
-          break
-        }
+    // Check if user has edit permission on the current collection(s)
+    let hasSourceCollectionEditPermission = false
+    let sourceCollectionId: string | null = null
+    
+    for (const collectionSkript of skript.collectionSkripts) {
+      // Skip root-level entries (where collection is null)
+      if (!collectionSkript.collection) continue
+      
+      const collectionPermissions = checkCollectionPermissions(
+        session.user.id, 
+        collectionSkript.collection.authors
+      )
+      
+      if (collectionPermissions.canEdit) {
+        hasSourceCollectionEditPermission = true
+        sourceCollectionId = collectionSkript.collection.id
+        break
       }
     }
 
-    // Allow move if user has skript edit permissions OR collection edit permissions
-    const canMoveSkript = skriptPermissions.canEdit || hasCurrentCollectionPermission
+    // User needs edit permission on EITHER the skript OR its current collection
+    const canMoveSkript = skriptPermissions.canEdit || hasSourceCollectionEditPermission
 
     if (!canMoveSkript) {
       return NextResponse.json(
-        { error: 'You do not have permission to move this skript' },
+        { 
+          error: 'You need edit permissions on this skript or its collection to move it',
+          details: {
+            hasSkriptEditPermission: skriptPermissions.canEdit,
+            hasCollectionEditPermission: hasSourceCollectionEditPermission
+          }
+        },
         { status: 403 }
       )
     }
@@ -110,7 +120,13 @@ export async function POST(request: NextRequest) {
 
       if (!targetPermissions.canEdit) {
         return NextResponse.json(
-          { error: 'You do not have permission to add skripts to the target collection' },
+          { 
+            error: 'You need edit permissions on the target collection to add skripts to it',
+            details: {
+              targetCollectionId,
+              hasEditPermission: false
+            }
+          },
           { status: 403 }
         )
       }
@@ -118,7 +134,40 @@ export async function POST(request: NextRequest) {
 
     // Handle the move operation with junction table management
     const result = await prisma.$transaction(async (tx) => {
-      const newOrder = order || 0
+      const newOrder = order ?? 0
+      
+      // First, ensure the user has edit permission on the skript
+      // If they don't have it but can move it (via collection permission), grant it
+      if (!skriptPermissions.canEdit) {
+        // Check if user already has any permission entry
+        const existingPermission = await tx.skriptAuthor.findUnique({
+          where: {
+            skriptId_userId: {
+              skriptId: skriptId,
+              userId: session.user.id
+            }
+          }
+        })
+        
+        if (existingPermission) {
+          // Upgrade to edit permission
+          await tx.skriptAuthor.update({
+            where: { id: existingPermission.id },
+            data: { permission: 'author' }
+          })
+        } else {
+          // Grant new edit permission
+          await tx.skriptAuthor.create({
+            data: {
+              skriptId: skriptId,
+              userId: session.user.id,
+              permission: 'author'
+            }
+          })
+        }
+        
+        console.log(`Granted edit permission to user ${session.user.id} for skript ${skriptId}`)
+      }
       
       // Get current collection relationships
       const currentCollectionSkripts = await tx.collectionSkript.findMany({

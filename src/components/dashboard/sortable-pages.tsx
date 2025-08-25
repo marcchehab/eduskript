@@ -1,25 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent,
-} from '@dnd-kit/core'
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable'
-import {
-  useSortable,
-} from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
+import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
 import { Button } from '@/components/ui/button'
 import { EditModal } from './edit-modal'
 import { PublishToggle } from './publish-toggle'
@@ -45,21 +27,6 @@ interface SortablePageItemProps {
 }
 
 function SortablePageItem({ page, index, collectionSlug, skriptSlug, onPageUpdated, canEdit = true }: SortablePageItemProps) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: page.id })
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  }
-
   const handleDeletePage = async () => {
     if (!confirm(`Are you sure you want to delete the page "${page.title}"?`)) {
       return
@@ -70,8 +37,8 @@ function SortablePageItem({ page, index, collectionSlug, skriptSlug, onPageUpdat
         method: 'DELETE'
       })
 
-      if (response.ok && onPageUpdated) {
-        onPageUpdated()
+      if (response.ok) {
+        onPageUpdated?.()
       } else {
         alert('Failed to delete page')
       }
@@ -82,64 +49,67 @@ function SortablePageItem({ page, index, collectionSlug, skriptSlug, onPageUpdat
   }
 
   return (
-    <div ref={setNodeRef} style={style} className="flex items-center justify-between p-3 bg-card border rounded-md">
-      <div className="flex items-center gap-3">
-        <div
-          {...(canEdit ? attributes : {})}
-          {...(canEdit ? listeners : {})}
-          className="flex items-center gap-2 text-muted-foreground cursor-grab active:cursor-grabbing"
+    <Draggable draggableId={page.id} index={index}>
+      {(provided, snapshot) => (
+        <div 
+          ref={provided.innerRef}
+          {...provided.draggableProps}
+          className="flex items-center justify-between p-3 border rounded-md bg-background"
+          style={{
+            ...provided.draggableProps.style,
+            opacity: snapshot.isDragging ? 0.5 : 1,
+          }}
         >
-          {canEdit && <GripVertical className="w-4 h-4" />}
-          <div className="w-6 h-6 bg-muted rounded flex items-center justify-center text-xs text-muted-foreground">
-            {index + 1}
-          </div>
-        </div>
-        <div>
-          <Link href={`/dashboard/collections/${collectionSlug}/skripts/${skriptSlug}/pages/${page.slug}/edit`}>
-            <h4 className="font-medium text-foreground text-sm hover:text-primary cursor-pointer transition-colors">
-              {page.title}
-            </h4>
-          </Link>
-          <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-            <span>
-              Updated {new Date(page.updatedAt).toLocaleDateString()}
-            </span>
-          </div>
-        </div>
-      </div>
-      <div className="flex gap-2 items-center">
-        {canEdit && (
-          <>
-            <PublishToggle
-              type="page"
-              itemId={page.id}
-              isPublished={page.isPublished}
-              onToggle={onPageUpdated || (() => {})}
-              showText={false}
-              size="sm"
-            />
-            <EditModal
-              type="page"
-              item={page}
-              onItemUpdated={onPageUpdated || (() => {})}
-            />
-            <Button variant="outline" size="sm" asChild>
-              <Link href={`/dashboard/collections/${collectionSlug}/skripts/${skriptSlug}/pages/${page.slug}/edit`}>
-                Edit Content
-              </Link>
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={handleDeletePage}
-              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+          <div className="flex items-center gap-3">
+            <div
+              {...provided.dragHandleProps}
+              className="flex items-center gap-2 text-muted-foreground cursor-grab active:cursor-grabbing"
             >
-              <Trash2 className="w-4 h-4" />
-            </Button>
-          </>
-        )}
-      </div>
-    </div>
+              <GripVertical className="w-4 h-4" />
+              <span className="text-xs font-mono w-6 text-center">
+                {index + 1}
+              </span>
+            </div>
+            <div>
+              <Link href={`/dashboard/collections/${collectionSlug}/skripts/${skriptSlug}/pages/${page.slug}`}>
+                <h4 className="text-sm font-medium hover:text-primary cursor-pointer transition-colors">
+                  {page.title}
+                </h4>
+              </Link>
+              <p className="text-xs text-muted-foreground">
+                Updated {new Date(page.updatedAt).toLocaleDateString()}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1">
+            {canEdit && (
+              <>
+                <PublishToggle
+                  type="page"
+                  itemId={page.id}
+                  isPublished={page.isPublished}
+                  onToggle={onPageUpdated}
+                  showText={false}
+                />
+                <EditModal
+                  type="page"
+                  item={page}
+                  onItemUpdated={onPageUpdated}
+                />
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={handleDeletePage}
+                  className="text-destructive hover:text-destructive/80 hover:bg-destructive/10 h-8 w-8 p-0"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </Draggable>
   )
 }
 
@@ -154,8 +124,8 @@ function StaticPageItem({ page, index, collectionSlug, skriptSlug, onPageUpdated
         method: 'DELETE'
       })
 
-      if (response.ok && onPageUpdated) {
-        onPageUpdated()
+      if (response.ok) {
+        onPageUpdated?.()
       } else {
         alert('Failed to delete page')
       }
@@ -166,55 +136,47 @@ function StaticPageItem({ page, index, collectionSlug, skriptSlug, onPageUpdated
   }
 
   return (
-    <div className="flex items-center justify-between p-3 bg-card border rounded-md">
+    <div className="flex items-center justify-between p-3 border rounded-md bg-background">
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2 text-muted-foreground">
           {canEdit && <GripVertical className="w-4 h-4" />}
-          <div className="w-6 h-6 bg-muted rounded flex items-center justify-center text-xs text-muted-foreground">
+          <span className="text-xs font-mono w-6 text-center">
             {index + 1}
-          </div>
+          </span>
         </div>
         <div>
-          <Link href={`/dashboard/collections/${collectionSlug}/skripts/${skriptSlug}/pages/${page.slug}/edit`}>
-            <h4 className="font-medium text-foreground text-sm hover:text-primary cursor-pointer transition-colors">
+          <Link href={`/dashboard/collections/${collectionSlug}/skripts/${skriptSlug}/pages/${page.slug}`}>
+            <h4 className="text-sm font-medium hover:text-primary cursor-pointer transition-colors">
               {page.title}
             </h4>
           </Link>
-          <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-            <span>
-              Updated {new Date(page.updatedAt).toLocaleDateString()}
-            </span>
-          </div>
+          <p className="text-xs text-muted-foreground">
+            Updated {new Date(page.updatedAt).toLocaleDateString()}
+          </p>
         </div>
       </div>
-      <div className="flex gap-2 items-center">
+      <div className="flex items-center gap-1">
         {canEdit && (
           <>
             <PublishToggle
               type="page"
               itemId={page.id}
               isPublished={page.isPublished}
-              onToggle={onPageUpdated || (() => {})}
+              onToggle={onPageUpdated}
               showText={false}
-              size="sm"
             />
             <EditModal
               type="page"
               item={page}
-              onItemUpdated={onPageUpdated || (() => {})}
+              onItemUpdated={onPageUpdated}
             />
-            <Button variant="outline" size="sm" asChild>
-              <Link href={`/dashboard/collections/${collectionSlug}/skripts/${skriptSlug}/pages/${page.slug}/edit`}>
-                Edit Content
-              </Link>
-            </Button>
             <Button 
-              variant="outline" 
+              variant="ghost" 
               size="sm"
               onClick={handleDeletePage}
-              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+              className="text-destructive hover:text-destructive/80 hover:bg-destructive/10 h-8 w-8 p-0"
             >
-              <Trash2 className="w-4 h-4" />
+              <Trash2 className="w-3 h-3" />
             </Button>
           </>
         )}
@@ -248,85 +210,96 @@ export function SortablePages({
   
   // Sync items with pages prop and handle hydration
   useEffect(() => {
+    console.log('SortablePages received pages:', pages.map(p => ({ id: p.id, title: p.title, order: p.order })))
     setItems(pages)
     setIsMounted(true)
   }, [pages])
-  
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  )
 
-  const handleDragEnd = async (event: DragEndEvent) => {
+  const handleDragEnd = async (result: DropResult) => {
     if (!isMounted) return
     
-    const { active, over } = event
+    const { destination, source } = result
+    console.log('Page drag end event:', { sourceIndex: source.index, destIndex: destination?.index })
 
-    if (over && active.id !== over.id) {
-      const oldIndex = items.findIndex((item) => item.id === active.id)
-      const newIndex = items.findIndex((item) => item.id === over.id)
-      
-      const newItems = arrayMove(items, oldIndex, newIndex)
-      setItems(newItems)
-      
-      // Update order in database
-      setIsReordering(true)
-      try {
-        const response = await fetch(`/api/skripts/${skriptId}/reorder-pages`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            pageIds: newItems.map(item => item.id)
-          })
+    if (!destination || destination.index === source.index) return
+
+    const newItems = Array.from(items)
+    const [reorderedItem] = newItems.splice(source.index, 1)
+    newItems.splice(destination.index, 0, reorderedItem)
+    
+    console.log('Reordering pages:', { oldIndex: source.index, newIndex: destination.index })
+    setItems(newItems)
+    
+    const pageIds = newItems.map(item => item.id)
+    console.log('Sending page reorder request:', { skriptId, pageIds })
+    
+    // Update order in database
+    setIsReordering(true)
+    try {
+      const response = await fetch(`/api/skripts/${skriptId}/reorder-pages`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pageIds: pageIds
         })
+      })
 
-        if (response.ok) {
-          onReorder()
-        } else {
-          // Revert on error
-          setItems(pages)
-          alert('Failed to reorder pages')
-        }
-      } catch (error) {
-        console.error('Error reordering pages:', error)
+      console.log('Page reorder response:', response.status, response.ok)
+      
+      if (response.ok) {
+        const data = await response.json()
+        console.log('Page reorder successful:', data)
+        onReorder()
+      } else {
+        const errorData = await response.text()
+        console.error('Page reorder failed:', response.status, errorData)
+        // Revert on error
         setItems(pages)
-        alert('Failed to reorder pages')
+        alert('Failed to reorder pages: ' + errorData)
       }
-      setIsReordering(false)
+    } catch (error) {
+      console.error('Error reordering pages:', error)
+      setItems(pages)
+      alert('Failed to reorder pages')
     }
+    setIsReordering(false)
+  }
+
+  const handlePageUpdated = () => {
+    onReorder() // This will refresh the data
+    onPageDeleted?.() // Call both callbacks
   }
 
   return (
     <div className="space-y-2">
       {isMounted && canEdit && (
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
-        >
-          <SortableContext items={items.map(p => p.id)} strategy={verticalListSortingStrategy}>
-            {items.map((page, index) => (
-              <SortablePageItem
-                key={page.id}
-                page={page}
-                index={index}
-                collectionSlug={collectionSlug}
-                skriptSlug={skriptSlug}
-                onPageUpdated={onPageDeleted}
-                canEdit={canEdit}
-              />
-            ))}
-          </SortableContext>
-        </DndContext>
+        <DragDropContext onDragEnd={handleDragEnd}>
+          <Droppable droppableId="pages">
+            {(provided) => (
+              <div
+                {...provided.droppableProps}
+                ref={provided.innerRef}
+                className="space-y-2"
+              >
+                {items.map((page, index) => (
+                  <SortablePageItem
+                    key={page.id}
+                    page={page}
+                    index={index}
+                    collectionSlug={collectionSlug}
+                    skriptSlug={skriptSlug}
+                    onPageUpdated={handlePageUpdated}
+                    canEdit={canEdit}
+                  />
+                ))}
+                {provided.placeholder}
+              </div>
+            )}
+          </Droppable>
+        </DragDropContext>
       )}
       {isMounted && !canEdit && (
-        <div>
+        <div className="space-y-2">
           {items.map((page, index) => (
             <StaticPageItem
               key={page.id}
@@ -334,14 +307,14 @@ export function SortablePages({
               index={index}
               collectionSlug={collectionSlug}
               skriptSlug={skriptSlug}
-              onPageUpdated={onPageDeleted}
+              onPageUpdated={handlePageUpdated}
               canEdit={canEdit}
             />
           ))}
         </div>
       )}
       {!isMounted && (
-        <div>
+        <div className="space-y-2">
           {items.map((page, index) => (
             <StaticPageItem
               key={page.id}
@@ -349,14 +322,14 @@ export function SortablePages({
               index={index}
               collectionSlug={collectionSlug}
               skriptSlug={skriptSlug}
-              onPageUpdated={onPageDeleted}
+              onPageUpdated={handlePageUpdated}
               canEdit={canEdit}
             />
           ))}
         </div>
       )}
       {isReordering && (
-        <div className="text-sm text-muted-foreground text-center py-2">
+        <div className="text-xs text-muted-foreground text-center py-1">
           Updating page order...
         </div>
       )}

@@ -62,15 +62,28 @@ Eduskript is a multi-tenant education platform where teachers create educational
 ### Permission Model
 **No-access-by-default**: Being a collaborator doesn't grant content access automatically. Content must be explicitly shared.
 
+**Permission Structure:**
+- Junction tables manage all permissions: `CollectionAuthor`, `SkriptAuthor`, `PageAuthor`
+- `permission = "author"` means **edit rights** (can modify content)
+- `permission = "viewer"` means **view rights** (read-only access)
+
 **Inheritance Hierarchy:**
 1. Collection authors can view all skripts in their collections
 2. Skript authors can edit all pages in their skripts  
 3. Page-level permissions override skript-level permissions
 
+**Drag-and-Drop Permission Model:**
+- **"Ownership Transfer" approach**: Moving requires edit permissions on BOTH source and target
+- Users need `permission = "author"` on either the skript OR its current collection to move it
+- Users need `permission = "author"` on target collection to drop into it
+- When moving, users automatically get edit rights on the skript if they don't have them
+- View-only content cannot be dragged (prevents "stealing" content)
+
 **Current Implementation:**
 - Collections, Skripts, and Pages each have their own author tables
 - Authors can add/remove other authors (but can't remove themselves if they're the last author)
 - Permissions are checked in `src/lib/permissions.ts`
+- Move operations handled by `/api/skripts/move` with automatic permission granting
 
 ### Key Files & Directories
 
@@ -95,6 +108,12 @@ Eduskript is a multi-tenant education platform where teachers create educational
 
 **Core Components:**
 - `src/components/dashboard/` - Dashboard UI components (editors, modals, settings)
+  - `page-builder-interface.tsx` - Main drag-and-drop page builder with permission checks and state management
+  - `page-builder.tsx` - Visual page builder with drop zones, permission indicators, and nested skript support
+  - `content-library.tsx` - Draggable content browser with permission filtering
+  - `draggable-content.tsx` - Draggable items with eye icon indicators for view-only content
+  - `skript-editor.tsx` - Dedicated skript editing interface with page management
+  - `collection-editor.tsx` - Collection management interface with skript organization
 - `src/components/public/` - Public-facing components (markdown renderer, TOC)
 - `src/components/permissions/` - Permission management UI components
 - `src/components/ui/` - Reusable UI components (buttons, dialogs, etc.)
@@ -103,6 +122,8 @@ Eduskript is a multi-tenant education platform where teachers create educational
 - `src/app/api/auth/[...nextauth]/route.ts` - NextAuth authentication
 - `src/app/api/collections/route.ts` - Collections CRUD
 - `src/app/api/skripts/route.ts` - Skripts CRUD  
+- `src/app/api/skripts/move/route.ts` - Skript movement with permission enforcement
+- `src/app/api/collections/[id]/reorder-skripts/route.ts` - Bulk skript reordering
 - `src/app/api/pages/route.ts` - Pages CRUD
 - `src/app/api/upload/route.ts` - File upload handling
 - `src/app/api/collaboration-requests/route.ts` - Teacher collaboration system
@@ -129,4 +150,11 @@ Eduskript is a multi-tenant education platform where teachers create educational
 - Test database operations using `pnpm db:studio` for inspection
 
 ## Current Development Focus
-Working on enhanced permission management UI and collaboration features. See `PERMISSIONS_ROADMAP.md` for planned improvements to content sharing and access management.
+Page builder with drag-and-drop functionality is now complete. Features include:
+- Full drag-and-drop interface for organizing collections and skripts
+- Permission-aware UI with visual indicators (eye icons) for view-only content
+- Proper permission preservation during reordering operations
+- Individual skript editing pages with dedicated routes
+- Seamless integration with existing permission system
+
+Next focus areas: Enhanced collaboration features and public page customization.

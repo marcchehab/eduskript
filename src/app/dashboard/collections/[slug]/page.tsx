@@ -33,10 +33,14 @@ export default async function CollectionPage({ params }: CollectionPageProps) {
       }
     },
     include: {
-      skripts: {
+      collectionSkripts: {
         include: {
-          pages: {
-            orderBy: { order: 'asc' }
+          skript: {
+            include: {
+              pages: {
+                orderBy: { order: 'asc' }
+              }
+            }
           }
         },
         orderBy: { order: 'asc' }
@@ -64,5 +68,25 @@ export default async function CollectionPage({ params }: CollectionPageProps) {
   // Check user permissions for this collection
   const userPermissions = checkCollectionPermissions(session.user.id, collection.authors)
 
-  return <CollectionEditor collection={collection} userPermissions={userPermissions} />
+  // Transform the data structure to match what CollectionEditor expects
+  const transformedCollection = {
+    ...collection,
+    skripts: collection.collectionSkripts
+      .sort((a, b) => a.order - b.order) // Ensure they're sorted by order
+      .map(cs => ({
+        ...cs.skript,
+        order: cs.order // Add the order from the junction table to the skript
+      }))
+  }
+  
+  console.log('Collection data:', {
+    collectionId: collection.id,
+    skriptsWithOrder: transformedCollection.skripts.map(s => ({ 
+      id: s.id, 
+      title: s.title, 
+      order: s.order 
+    }))
+  })
+
+  return <CollectionEditor collection={transformedCollection} userPermissions={userPermissions} />
 }

@@ -217,7 +217,12 @@ function PageBuilderItem({ item, index, onRemove, expandedCollections, onToggleC
           </span>
           
           <div className="flex items-center gap-2">
-            <Icon className="w-5 h-5 text-primary flex-shrink-0" />
+            <div className="relative">
+              <Icon className="w-5 h-5 text-primary flex-shrink-0" />
+              {!item.permissions?.canEdit && (
+                <Eye className="w-3 h-3 text-muted-foreground absolute -bottom-1 -right-1 bg-background rounded-full" />
+              )}
+            </div>
             {item.type === 'collection' && (
               <button
                 onClick={() => onToggleCollection?.(item.id)}
@@ -251,29 +256,17 @@ function PageBuilderItem({ item, index, onRemove, expandedCollections, onToggleC
           </div>
           
           <div className="flex gap-1 flex-shrink-0">
-            {item.permissions?.canEdit ? (
-              item.slug && (
-                <Link href={item.type === 'collection' ? `/dashboard/collections/${item.slug}` : `/dashboard/collections/${item.collectionSlug}/skripts/${item.slug}`}>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="h-8 w-8 p-0 text-primary hover:text-primary"
-                    title={`Edit ${item.type}`}
-                  >
-                    <Edit className="w-4 h-4" />
-                  </Button>
-                </Link>
-              )
-            ) : (
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                disabled
-                className="h-8 w-8 p-0 text-muted-foreground/50"
-                title="View only - no edit permissions"
-              >
-                <Eye className="w-4 h-4" />
-              </Button>
+            {item.permissions?.canEdit && item.slug && (
+              <Link href={item.type === 'collection' ? `/dashboard/collections/${item.slug}` : `/dashboard/collections/${item.collectionSlug}/skripts/${item.slug}`}>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="h-8 w-8 p-0 text-primary hover:text-primary"
+                  title={`Edit ${item.type}`}
+                >
+                  <Edit className="w-4 h-4" />
+                </Button>
+              </Link>
             )}
             <Button 
               variant="ghost" 
@@ -310,6 +303,7 @@ function PageBuilderItem({ item, index, onRemove, expandedCollections, onToggleC
                             item={skript}
                             index={skriptIndex}
                             parentId={item.id}
+                            parentCanEdit={item.permissions?.canEdit}
                             onRemove={onRemove}
                             hoveredElement={hoveredElement}
                             draggedItem={draggedItem}
@@ -350,6 +344,7 @@ interface SimpleSkriptItemProps {
   item: PageItem
   index: number
   parentId: string
+  parentCanEdit?: boolean
   onRemove: (id: string, parentId?: string) => void
   hoveredElement?: {
     id: string | null
@@ -363,7 +358,7 @@ interface SimpleSkriptItemProps {
   } | null
 }
 
-function SimpleSkriptItem({ item, index, parentId, onRemove, hoveredElement, draggedItem }: SimpleSkriptItemProps) {
+function SimpleSkriptItem({ item, index, parentId, parentCanEdit = true, onRemove, hoveredElement, draggedItem }: SimpleSkriptItemProps) {
 
   return (
     <Draggable draggableId={`${parentId}-skript-${item.id}`} index={index}>
@@ -374,26 +369,38 @@ function SimpleSkriptItem({ item, index, parentId, onRemove, hoveredElement, dra
           {...provided.dragHandleProps}
           className={cn(
             "bg-muted/30 border border-border rounded-lg hover:shadow-sm transition-shadow cursor-grab",
-            snapshot.isDragging && "opacity-50"
+            snapshot.isDragging && "opacity-50",
+            !item.permissions?.canEdit && "opacity-70 bg-muted/50"
           )}
         >
           <div className="flex items-center gap-3 p-2">
-            <FileText className="w-4 h-4 text-primary flex-shrink-0" />
+            <div className="relative">
+              <FileText className={cn(
+                "w-4 h-4 flex-shrink-0",
+                !item.permissions?.canEdit ? "text-muted-foreground" : "text-primary"
+              )} />
+              {!item.permissions?.canEdit && (
+                <Eye className="w-3 h-3 text-muted-foreground absolute -bottom-1 -right-1 bg-background rounded-full" />
+              )}
+            </div>
             
             <div className="flex-1 min-w-0">
-              <h5 className="font-medium text-xs truncate">{item.title}</h5>
+              <h5 className={cn(
+                "font-medium text-xs truncate",
+                !item.permissions?.canEdit ? "text-muted-foreground" : "text-foreground"
+              )}>{item.title}</h5>
               {item.description && (
                 <p className="text-xs text-muted-foreground truncate">{item.description}</p>
               )}
             </div>
             
-            <div className="flex gap-1 flex-shrink-0">
-              {item.permissions?.canEdit ? (
-                item.slug && (
+            {parentCanEdit && (
+              <div className="flex gap-1 flex-shrink-0">
+                {item.permissions?.canEdit && item.slug && (
                   <Link href={
-                    item.collectionSlug 
+                    item.collectionSlug && item.slug
                       ? `/dashboard/collections/${item.collectionSlug}/skripts/${item.slug}`
-                      : `/dashboard/collections/${item.id}` // fallback
+                      : `/dashboard/collections/${item.collectionSlug || item.id}` // fallback to collection
                   }>
                     <Button 
                       variant="ghost" 
@@ -404,28 +411,18 @@ function SimpleSkriptItem({ item, index, parentId, onRemove, hoveredElement, dra
                       <Edit className="w-3 h-3" />
                     </Button>
                   </Link>
-                )
-              ) : (
+                )}
                 <Button 
                   variant="ghost" 
                   size="sm" 
-                  disabled
-                  className="h-6 w-6 p-0 text-muted-foreground/50"
-                  title="View only - no edit permissions"
+                  onClick={() => onRemove(item.id, parentId)}
+                  className="text-destructive hover:text-destructive h-6 w-6 p-0"
+                  title="Remove from collection"
                 >
-                  <Eye className="w-3 h-3" />
+                  <Trash2 className="w-3 h-3" />
                 </Button>
-              )}
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={() => onRemove(item.id, parentId)}
-                className="text-destructive hover:text-destructive h-6 w-6 p-0"
-                title="Remove from collection"
-              >
-                <Trash2 className="w-3 h-3" />
-              </Button>
-            </div>
+              </div>
+            )}
           </div>
         </div>
       )}

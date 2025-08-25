@@ -1,6 +1,6 @@
 'use client'
 
-import { Edit, Eye } from 'lucide-react'
+import { Edit } from 'lucide-react'
 import { User } from '@prisma/client'
 import { cn } from '@/lib/utils'
 
@@ -21,7 +21,7 @@ export function PermissionIndicator({
   const hasViewableBy = viewableBy.length > 0
   
   // Don't show anything if no special permissions
-  if (!hasEditableBy && !hasViewableBy && !isViewOnly) {
+  if (!hasEditableBy && !hasViewableBy) {
     return null
   }
 
@@ -40,13 +40,6 @@ export function PermissionIndicator({
 
   return (
     <div className={cn("flex items-center gap-2 text-xs text-muted-foreground", className)}>
-      {/* View-only indicator */}
-      {isViewOnly && (
-        <div className="flex items-center text-muted-foreground/50" title="View only - no edit permissions">
-          <Eye className="w-3 h-3" />
-        </div>
-      )}
-      
       {/* Editable by others */}
       {hasEditableBy && (
         <div className="flex items-center gap-1">
@@ -55,10 +48,9 @@ export function PermissionIndicator({
         </div>
       )}
       
-      {/* Viewable by others */}
+      {/* Viewable by others (text only, no icon) */}
       {hasViewableBy && (
         <div className="flex items-center gap-1">
-          <Eye className="w-3 h-3" />
           <span>{formatUserNames(viewableBy)}</span>
         </div>
       )}

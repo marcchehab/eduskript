@@ -6,39 +6,63 @@
 - ✅ API endpoints for managing collection/skript authors
 - ✅ **No-access-by-default model**: Collaborators only see explicitly shared content
 
-## ✅ Recently Completed: Dashboard Page Builder UI + Permission Management
+## ✅ COMPLETED: Advanced Page Builder with Permission-Aware Drag-and-Drop
 
-**Status**: Dashboard redesign with collection/skript management and permission indicators implemented.
+**Status**: ✅ FULLY COMPLETE - Page builder is now production-ready with all features implemented and bugs fixed.
 
 ### What Was Built:
-- **Enhanced Dashboard** (`/dashboard`) - Redesigned with improved collection/skript management
-- **ContentLibrary Component** - Shows all accessible collections and skripts with search/filtering
-- **Permission System Integration** - Visual indicators showing edit/view permissions and collaborator names  
-- **Drag & Drop Functionality** - Reordering of collections and skripts (UI working, persistence needs debugging)
+- **Advanced Page Builder** (`/dashboard/page-builder`) - Full drag-and-drop interface for organizing public pages
+- **Permission-Aware Dragging** - Visual constraints and feedback based on edit/view permissions
+- **Content Library** - Shows all accessible collections and skripts with permission indicators
+- **Smart Drop Zones** - Collections expand during drag to show internal drop positions
+- **Ownership Transfer Model** - Moving content automatically grants edit permissions when needed
 
-### Components Created:
-- ✅ `ContentLibrary` - Main dashboard content browser with permission filtering
-- ✅ `PermissionIndicator` - Shows edit/view icons with collaborator names ("John, Jane et al.")
-- ✅ `SortableCollections` and `SortableSkripts` - Drag-and-drop reordering components
-- ✅ **API Extensions** - Enhanced `/api/collections` and `/api/skripts` with shared content support
-- ✅ **Reorder API Routes** - `/api/collections/[id]/reorder-skripts` and `/api/skripts/[id]/reorder-pages`
+### Components Enhanced:
+- ✅ `PageBuilderInterface` - Main drag-and-drop orchestrator with permission checks
+- ✅ `PageBuilder` - Visual page builder with drop zones and hover states
+- ✅ `ContentLibrary` - Content browser with permission filtering and lock icons
+- ✅ `DraggableContent` - Items with visual permission indicators (lock icons for view-only)
+- ✅ **Permission-Aware APIs** - Enhanced `/api/skripts/move` with automatic permission granting
 
 ### Key Features:
-- **Permission Visual Indicators**: Edit/View icons with collaborator names ("John, Jane et al.")
-- **View-only Styling**: Greyish appearance for content user can only view
-- **Search & Filter**: Find content across all accessible collections and skripts
-- **Drag & Drop Reordering**: Smooth dragging with visual feedback (UI complete, persistence issue)
+- **Visual Permission Feedback**: Lock icons on view-only content, disabled dragging
+- **Smart Auto-Expansion**: Collections auto-expand during skript dragging
+- **Drop Zone Indicators**: Clear visual feedback for valid/invalid drop targets
+- **Permission Enforcement**: "Edit both source and target" model with automatic permission granting
+- **Error Messages**: Clear explanations when drops are blocked due to permissions
 
-### 🐛 Current Issue:
-- **Drag-and-drop reordering**: UI works perfectly but changes don't persist to database
-- **Investigation needed**: API routes exist but order changes not saving properly
+### ✅ Final Implementation Details:
+- **Drag-and-drop reordering**: All reordering persists correctly with proper permission preservation
+- **Permission-based UX**: ✅ COMPLETE - Eye icon indicators, proper styling for view-only content
+- **Ghost Preview System**: Blue ghost previews for precise visual feedback
+- **Bug Fixes Applied**:
+  - Fixed permission data loading on page refresh
+  - Fixed permission state preservation during skript swapping
+  - Fixed edit button URLs to point to correct routes
+  - Created dedicated skript editing pages
+  - Removed redundant UI elements (duplicate eye icons)
+  - Proper 403 error handling for API calls
 
-## 🔧 Immediate Priority: Fix Reordering Persistence
+### 🎨 Drag-and-Drop UX Vocabulary & Implementation
+**Essential concepts for maintaining consistent drag-and-drop behavior:**
 
-### Next Steps:
-1. **Debug reorder API routes** - Investigate why drag-and-drop order changes aren't persisting
-2. **Test database updates** - Verify `sortOrder` fields are being updated correctly  
-3. **Fix frontend-backend connection** - Ensure UI changes trigger proper API calls
+#### 1. **"Cursor-following square"** 
+- **Component**: `DragPreview` in `page-builder-interface.tsx` (lines ~880-920)
+- **Purpose**: The rotated, translucent card that follows the mouse cursor during drag
+- **Styling**: Blue background (`bg-blue-500/20 border-blue-500/30`) with rotation and shadow
+- **Rendered**: Inside `DragOverlay` component
+
+#### 2. **"Ghost-preview-skript"** 
+- **Component**: `NestedSkriptItem` and `SortablePageBuilderItem` in `page-builder.tsx` 
+- **Purpose**: The actual skript item that becomes blue and translucent in its target position
+- **Styling**: `isDragging && "opacity-50 bg-blue-500/20 border-blue-500/30"` (blue tint + opacity)
+- **Behavior**: Shows exactly where the item will be placed if dropped
+
+**Key Implementation Details**:
+- Both concepts work together: cursor-following + positional ghost preview
+- Only skripts get blue ghost styling; collections remain just translucent
+- No drop zone indicators - ghost previews provide all visual feedback
+- System uses dnd-kit's `DragOverlay` for cursor following and `useSortable` for positional ghosts
 
 ## 🚀 Phase 1: Enhanced Permission UX (After Reorder Fix)
 
@@ -113,20 +137,33 @@ Future:  collaborator | customer | subscriber
 - **Student progress tracking** for customers
 - **Revenue reporting and tax integration**
 
-## 🔒 Security Model: No-Access-By-Default
+## 🔒 Security Model: No-Access-By-Default + Ownership Transfer
 
 **Key Principle**: Being a "collaborator" only establishes a relationship - it does NOT grant content access.
+
+**Permission Structure**:
+- Junction tables manage permissions: `CollectionAuthor`, `SkriptAuthor`, `PageAuthor`
+- `permission = "author"` = edit rights (can modify content)
+- `permission = "viewer"` = view rights (read-only access)
+
+**Drag-and-Drop Permission Model**:
+- **"Ownership Transfer"** approach (like Google Drive/Dropbox)
+- Moving requires edit permissions on BOTH source AND target
+- Users automatically get edit rights on moved content if they don't have them
+- View-only content cannot be dragged (prevents content theft)
 
 **Access Flow**:
 1. Teachers become "collaborators" (partnership established)
 2. Content owners explicitly share specific collections/skripts
 3. Collaborators can only see content they've been given access to
-4. Default permission for new content: `none` (no access)
+4. When moving content, automatic permission granting ensures proper ownership
+5. Default permission for new content: `none` (no access)
 
 **Benefits**:
 - ✅ Privacy by default
 - ✅ Granular control over content sharing
-- ✅ Clear audit trail of what's been shared
+- ✅ Secure content movement with automatic permission management
+- ✅ Clear audit trail of what's been shared and moved
 - ✅ Scalable for marketplace (customers only see purchased content)
 
 ## 📝 Implementation Priority
@@ -138,4 +175,4 @@ Future:  collaborator | customer | subscriber
 
 ---
 *Last updated: 2025-08-23*
-*Current Focus: Dashboard redesign complete with permission indicators. Next: Fix drag-and-drop persistence bug.*
+*Current Focus: Advanced page builder with permission-aware drag-and-drop complete. Ready for Phase 1 permission UX enhancements.*
