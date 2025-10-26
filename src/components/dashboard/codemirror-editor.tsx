@@ -6,6 +6,7 @@ import { processMarkdown } from '@/lib/markdown'
 import { Button } from '@/components/ui/button'
 import { Save, Eye, EyeOff, Pencil } from 'lucide-react'
 import { ExcalidrawEditor } from './excalidraw-editor'
+import { InteractivePreview } from './interactive-preview'
 import type { EditorView } from '@codemirror/view'
 import type { ViewUpdate } from '@codemirror/view'
 
@@ -556,7 +557,11 @@ const CodeMirrorEditor = function CodeMirrorEditor({
         {showPreview && (
           <div className="w-1/2 overflow-auto bg-card">
             <div className="p-4">
-              <div className="prose-theme" dangerouslySetInnerHTML={{ __html: previewContent }} />
+              <InteractivePreview
+                html={previewContent}
+                onContentChange={onChange}
+                originalMarkdown={useSimpleEditor ? textareaContent : editorContent}
+              />
             </div>
           </div>
         )}

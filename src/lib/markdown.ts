@@ -13,6 +13,7 @@ import rehypeAutolinkHeadings from 'rehype-autolink-headings'
 import { remarkFileResolver } from './remark-plugins/file-resolver'
 import { rehypeImageOptimizer } from './remark-plugins/image-optimizer'
 import { remarkExcalidrawResolver } from './remark-plugins/excalidraw-resolver'
+import { rehypeInteractiveElements } from './rehype-plugins/interactive-elements'
 
 export interface ProcessedMarkdown {
   content: string
@@ -72,6 +73,7 @@ export async function processMarkdown(
       properties: { className: ['heading-link'] }
     }],
     rehypeImageOptimizer, // Optimize images for better loading
+    rehypeInteractiveElements, // Add data attributes for interactive controls
     rehypeKatex,
     rehypeHighlight,
     [rehypeStringify, { allowDangerousHtml: true }]
