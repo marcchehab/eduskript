@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { unified } from 'unified'
 import remarkParse from 'remark-parse'
 import remarkMath from 'remark-math'
@@ -16,8 +16,10 @@ import { Heading } from './heading'
 import { MathBlock } from './math-block'
 import { remarkFileResolver } from '@/lib/remark-plugins/file-resolver'
 import { remarkImageAttributes } from '@/lib/remark-plugins/image-attributes'
+import { rehypeShikiHighlight } from '@/lib/rehype-plugins/shiki-highlight'
 import { visit } from 'unist-util-visit'
 import type { Node, Parent } from 'unist'
+import { useTheme } from 'next-themes'
 
 interface MarkdownRendererProps {
   content: string
@@ -25,56 +27,88 @@ interface MarkdownRendererProps {
 }
 
 export function MarkdownRenderer({ content, context }: MarkdownRendererProps) {
-  const renderedContent = useMemo(() => {
-    try {
-      // Build the processing pipeline
-      const processor = unified()
-        .use(remarkParse)
-        .use(remarkGfm)
-        .use(remarkMath)
-        .use([remarkFileResolver, { fileList: context?.fileList }])
-        .use(remarkImageAttributes)
-        // Custom transformer for Excalidraw
-        .use(() => (tree) => {
-          // Process Excalidraw references
-          processExcalidrawNodes(tree, context)
-        })
-        .use(remarkRehype, { allowDangerousHtml: false })
-        // Convert to React
-        .use(rehypeReact, {
-          // @ts-expect-error - rehype-react types are complex
-          jsx: prod.jsx,
-          jsxs: prod.jsxs,
-          Fragment: prod.Fragment,
-          components: {
-            // Custom components
-            pre: PreComponent,
-            code: CodeComponent,
-            img: ImageComponent,
-            h1: (props: React.HTMLAttributes<HTMLHeadingElement>) => <Heading level={1} {...props} />,
-            h2: (props: React.HTMLAttributes<HTMLHeadingElement>) => <Heading level={2} {...props} />,
-            h3: (props: React.HTMLAttributes<HTMLHeadingElement>) => <Heading level={3} {...props} />,
-            h4: (props: React.HTMLAttributes<HTMLHeadingElement>) => <Heading level={4} {...props} />,
-            h5: (props: React.HTMLAttributes<HTMLHeadingElement>) => <Heading level={5} {...props} />,
-            h6: (props: React.HTMLAttributes<HTMLHeadingElement>) => <Heading level={6} {...props} />,
-            // Math components
-            span: MathSpanComponent,
-            div: MathDivComponent,
-          },
-        })
+  const [renderedContent, setRenderedContent] = useState<React.ReactNode>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const { resolvedTheme } = useTheme()
 
-      const result = processor.processSync(content)
-      return result.result
-    } catch (error) {
-      console.error('Markdown rendering error:', error)
-      return (
-        <div className="text-destructive p-4 border border-destructive rounded-md">
-          <p className="font-semibold">Markdown Rendering Error</p>
-          <p className="text-sm mt-2">{String(error)}</p>
-        </div>
-      )
+  useEffect(() => {
+    const processContent = async () => {
+      try {
+        setIsLoading(true)
+        setError(null)
+
+        // Build the processing pipeline
+        const processor = unified()
+          .use(remarkParse)
+          .use(remarkGfm)
+          .use(remarkMath)
+          .use(remarkFileResolver, { fileList: context?.fileList })
+          .use(remarkImageAttributes)
+          // Custom transformer for Excalidraw
+          .use(() => (tree) => {
+            // Process Excalidraw references
+            processExcalidrawNodes(tree, context)
+          })
+          .use(remarkRehype, { allowDangerousHtml: false })
+          // Add Shiki syntax highlighting
+          .use(rehypeShikiHighlight, { theme: (resolvedTheme as 'light' | 'dark') || 'light' })
+          // Convert to React
+          .use(rehypeReact, {
+            // @ts-expect-error - rehype-react types are complex
+            jsx: prod.jsx,
+            jsxs: prod.jsxs,
+            Fragment: prod.Fragment,
+            components: {
+              // Custom components
+              pre: PreComponent,
+              code: CodeComponent,
+              img: ImageComponent,
+              h1: (props: React.HTMLAttributes<HTMLHeadingElement>) => <Heading level={1} {...props} />,
+              h2: (props: React.HTMLAttributes<HTMLHeadingElement>) => <Heading level={2} {...props} />,
+              h3: (props: React.HTMLAttributes<HTMLHeadingElement>) => <Heading level={3} {...props} />,
+              h4: (props: React.HTMLAttributes<HTMLHeadingElement>) => <Heading level={4} {...props} />,
+              h5: (props: React.HTMLAttributes<HTMLHeadingElement>) => <Heading level={5} {...props} />,
+              h6: (props: React.HTMLAttributes<HTMLHeadingElement>) => <Heading level={6} {...props} />,
+              // Math components
+              span: MathSpanComponent,
+              div: MathDivComponent,
+            },
+          })
+
+        const result = await processor.process(content)
+        setRenderedContent(result.result)
+      } catch (err) {
+        console.error('Markdown rendering error:', err)
+        setError(String(err))
+      } finally {
+        setIsLoading(false)
+      }
     }
-  }, [content, context])
+
+    processContent()
+  }, [content, context, resolvedTheme])
+
+  if (isLoading) {
+    return (
+      <div className="markdown-content prose dark:prose-invert max-w-none">
+        <div className="animate-pulse space-y-4">
+          <div className="h-4 bg-muted rounded w-3/4"></div>
+          <div className="h-4 bg-muted rounded w-1/2"></div>
+          <div className="h-4 bg-muted rounded w-5/6"></div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="text-destructive p-4 border border-destructive rounded-md">
+        <p className="font-semibold">Markdown Rendering Error</p>
+        <p className="text-sm mt-2">{error}</p>
+      </div>
+    )
+  }
 
   return <div className="markdown-content prose dark:prose-invert max-w-none">{renderedContent}</div>
 }
