@@ -50,7 +50,7 @@ export function MarkdownRenderer({ content, context }: MarkdownRendererProps) {
             // Process Excalidraw references
             processExcalidrawNodes(tree, context)
           })
-          .use(remarkRehype, { allowDangerousHtml: false })
+          .use(remarkRehype, { allowDangerousHtml: true })
           // Add Shiki syntax highlighting
           .use(rehypeShikiHighlight, { theme: (resolvedTheme as 'light' | 'dark') || 'light' })
           // Convert to React
@@ -72,7 +72,7 @@ export function MarkdownRenderer({ content, context }: MarkdownRendererProps) {
               h6: (props: React.HTMLAttributes<HTMLHeadingElement>) => <Heading level={6} {...props} />,
               // Math components
               span: MathSpanComponent,
-              div: MathDivComponent,
+              div: DivComponent,
             },
           })
 
@@ -175,10 +175,26 @@ function MathSpanComponent({ className, children, ...props }: React.HTMLAttribut
   return <span className={className} {...props}>{children}</span>
 }
 
-function MathDivComponent({ className, children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+function DivComponent({ className, children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+  const divProps = props as Record<string, unknown>
+
+  // Handle math blocks
   if (className === 'math math-display') {
     return <MathBlock>{String(children)}</MathBlock>
   }
+
+  // Handle Shiki-highlighted code blocks
+  if (divProps['data-highlighted'] === 'true' || divProps['data-highlighted'] === true) {
+    // Shiki-highlighted code - just render the div with its children (the HTML is already there)
+    return (
+      <div className="relative group my-4">
+        <div className={className} {...props}>
+          {children}
+        </div>
+      </div>
+    )
+  }
+
   return <div className={className} {...props}>{children}</div>
 }
 
