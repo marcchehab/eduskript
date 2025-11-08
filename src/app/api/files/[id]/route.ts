@@ -36,12 +36,6 @@ export async function GET(
     // If requesting an SVG variant, find the corresponding SVG file
     if (svgVariant) {
       const svgFileName = `${file.name}.${svgVariant}.svg`
-      console.log('[API Files] Looking for SVG variant:', {
-        originalFile: file.name,
-        svgFileName,
-        skriptId: file.skriptId,
-        parentId: file.parentId
-      })
 
       const svgFile = await prisma.file.findFirst({
         where: {
@@ -50,8 +44,6 @@ export async function GET(
           parentId: file.parentId
         }
       })
-
-      console.log('[API Files] SVG file lookup result:', svgFile ? { id: svgFile.id, name: svgFile.name, hash: svgFile.hash } : 'not found')
 
       if (!svgFile || !svgFile.hash) {
         return NextResponse.json({ error: 'SVG variant not found' }, { status: 404 })

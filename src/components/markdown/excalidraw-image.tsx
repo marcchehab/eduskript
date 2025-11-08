@@ -37,12 +37,9 @@ export function ExcalidrawImage({ lightSrc, darkSrc, alt, filename, style, onWid
 
   // Update width when style prop changes (e.g., when markdown is edited)
   useEffect(() => {
-    console.log('[ExcalidrawImage] Style changed:', { style, type: typeof style })
-
     // Handle style as object (React CSSProperties)
     if (style && typeof style === 'object' && style.width) {
       const widthStr = String(style.width)
-      console.log('[ExcalidrawImage] Width from object:', widthStr)
       if (widthStr.includes('%')) {
         setCurrentWidth(parseFloat(widthStr))
       } else {
@@ -53,7 +50,6 @@ export function ExcalidrawImage({ lightSrc, darkSrc, alt, filename, style, onWid
     // Handle style as string (from markdown processor)
     else if (typeof style === 'string' && style.includes('width:')) {
       const widthMatch = style.match(/width:\s*([^;]+)/)
-      console.log('[ExcalidrawImage] Width from string:', widthMatch?.[1])
       if (widthMatch) {
         const widthValue = widthMatch[1].trim()
         if (widthValue.includes('%')) {
@@ -65,7 +61,6 @@ export function ExcalidrawImage({ lightSrc, darkSrc, alt, filename, style, onWid
       }
     }
     else if (!style || (typeof style === 'object' && !style.width)) {
-      console.log('[ExcalidrawImage] Resetting to 100%')
       setCurrentWidth(100)
     }
   }, [style])
@@ -81,13 +76,6 @@ export function ExcalidrawImage({ lightSrc, darkSrc, alt, filename, style, onWid
 
   // Use dark src if theme is dark, otherwise use light
   const src = resolvedTheme === 'dark' ? darkSrc : lightSrc
-
-  console.log('[ExcalidrawImage] Theme and sources:', {
-    resolvedTheme,
-    lightSrc,
-    darkSrc,
-    selectedSrc: src
-  })
 
   const caption = alt || ''
 

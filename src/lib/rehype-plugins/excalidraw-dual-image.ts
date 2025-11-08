@@ -26,13 +26,6 @@ export function rehypeExcalidrawDualImage() {
       const dataAlign = props['dataAlign'] || props['data-align'] || 'center'
       const dataWrap = props['dataWrap'] || props['data-wrap']
 
-      console.log('[ExcalidrawDualImage] Processing:', {
-        dataExcalidraw,
-        hasStyle: !!style,
-        style,
-        allProps: props
-      })
-
       // Determine alignment classes
       const alignmentClasses = dataWrap === 'true'
         ? dataAlign === 'left'

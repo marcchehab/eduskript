@@ -88,7 +88,6 @@ export function MarkdownRenderer({ content, context, onContentChange }: Markdown
           })
 
         const result = await processor.process(content)
-        console.log('[MarkdownRenderer] Processed result:', result.result)
         setRenderedContent(result.result)
         setIsInitialLoad(false)
         hasRestoredScroll.current = false
@@ -178,14 +177,6 @@ function ImageComponent({ src, alt, title, style, ...props }: React.ImgHTMLAttri
   const originalSrc = ((props as Record<string, unknown>)['data-original-src'] as string) ||
                       ((props as Record<string, unknown>)['dataOriginalSrc'] as string)
 
-  console.log('[ImageComponent] Called with:', {
-    src,
-    originalSrc,
-    alt,
-    props,
-    hasOnContentChange: !!onContentChange
-  })
-
   // Handler for width changes from resize (defined before use)
   const handleWidthChange = (newMarkdown: string) => {
     if (!onContentChange) return
@@ -194,37 +185,15 @@ function ImageComponent({ src, alt, title, style, ...props }: React.ImgHTMLAttri
     const srcForMatching = originalSrc || src
     if (!srcForMatching) return
 
-    console.log('[ImageComponent] Width change:', {
-      newMarkdown,
-      srcForMatching,
-      resolvedSrc: src,
-      contentPreview: content.substring(0, 200)
-    })
-
     // Find the image markdown in the content and replace it
     // Look for ![alt](src) or ![alt](src){width=X%}
     const escapedSrc = srcForMatching.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     const imagePattern = new RegExp(`!\\[([^\\]]*)\\]\\(${escapedSrc}\\)(\\{[^}]*\\})?`, 'g')
 
-    console.log('[ImageComponent] Pattern:', imagePattern.toString())
-    console.log('[ImageComponent] Testing pattern:', imagePattern.test(content))
-
-    // Reset lastIndex after test
-    imagePattern.lastIndex = 0
-
     const newContent = content.replace(imagePattern, newMarkdown)
 
-    console.log('[ImageComponent] Replace result:', {
-      contentChanged: newContent !== content,
-      oldLength: content.length,
-      newLength: newContent.length
-    })
-
     if (newContent !== content) {
-      console.log('[ImageComponent] Updating content')
       onContentChange(newContent)
-    } else {
-      console.log('[ImageComponent] Content did not change - pattern might not match')
     }
   }
 
@@ -242,8 +211,6 @@ function ImageComponent({ src, alt, title, style, ...props }: React.ImgHTMLAttri
     // Get wrap from data attributes
     const dataWrapExcalidraw = ((props as Record<string, unknown>)['data-wrap'] as string) ||
                                ((props as Record<string, unknown>)['dataWrap'] as string)
-
-    console.log('[ImageComponent] Rendering Excalidraw:', { dataExcalidraw, lightSrc, darkSrc })
 
     return (
       <ExcalidrawImage

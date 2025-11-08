@@ -140,7 +140,6 @@ export function FileBrowser({ skriptId, onFileSelect, className = '', onUploadCo
   }
 
   const openFileLink = (url: string) => {
-    console.log('Opening file URL:', url)
     window.open(url, '_blank', 'noopener,noreferrer')
   }
 
