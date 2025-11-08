@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { useTheme } from 'next-themes'
 
 interface FileItem {
   id: string
@@ -42,6 +43,7 @@ export function FileBrowser({ skriptId, onFileSelect, className = '', onUploadCo
   const [updateLinks, setUpdateLinks] = useState(true)
   const [duplicateUpload, setDuplicateUpload] = useState<{file: File, existingFile: FileItem} | null>(null)
   const [newUploadName, setNewUploadName] = useState('')
+  const { resolvedTheme } = useTheme()
 
   const getFileIcon = (filename: string) => {
     // Check if it's an Excalidraw file
@@ -126,6 +128,15 @@ export function FileBrowser({ skriptId, onFileSelect, className = '', onUploadCo
     if (!filename) return false
     const extension = filename.split('.').pop()?.toLowerCase()
     return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(extension || '')
+  }
+
+  const getExcalidrawPreviewUrl = (file: FileItem) => {
+    // Get the theme-appropriate SVG variant for the preview
+    // The file URL is like /api/files/[fileId]
+    // We need /api/files/[fileId].light.svg or .dark.svg
+    const fileUrl = getFileUrl(file)
+    const variant = resolvedTheme === 'dark' ? 'dark' : 'light'
+    return `${fileUrl}.${variant}.svg`
   }
 
   const openFileLink = (url: string) => {
@@ -256,14 +267,21 @@ export function FileBrowser({ skriptId, onFileSelect, className = '', onUploadCo
                     <div className="flex-shrink-0">
                       {isImageFile(getFileName(file)) ? (
                         <div className="w-8 h-8 rounded overflow-hidden bg-muted">
-                          <Image 
-                            src={getFileUrl(file)} 
+                          {/* Use regular img tag to avoid Next.js Image optimization issues */}
+                          <img
+                            src={getFileUrl(file)}
+                            alt={getFileName(file)}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      ) : isExcalidrawFile(getFileName(file)) ? (
+                        <div className="w-8 h-8 rounded overflow-hidden bg-muted flex items-center justify-center">
+                          <Image
+                            src={getExcalidrawPreviewUrl(file)}
                             alt={getFileName(file)}
                             width={32}
                             height={32}
-                            className="w-full h-full object-cover"
-                            placeholder="blur"
-                            blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bVl+6V3BcBv09f/Z"
+                            className="w-full h-full object-contain p-0.5"
                           />
                         </div>
                       ) : (

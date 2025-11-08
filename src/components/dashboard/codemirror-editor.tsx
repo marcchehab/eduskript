@@ -158,6 +158,9 @@ const CodeMirrorEditor = function CodeMirrorEditor({
       // Image - use regular markdown syntax with just filename for path resolution
       const altText = fileName.replace(/\.[^/.]+$/, '')
       insertText = `![${altText}](${fileName})`
+    } else if (extension === 'excalidraw') {
+      // Excalidraw drawing - use image syntax with just filename
+      insertText = `![](${fileName})`
     } else if (['mp4', 'avi', 'mov', 'wmv'].includes(extension || '')) {
       // Video - use full URL for non-image files
       insertText = `<video controls>\n  <source src="${file.url || fileName}" type="video/${extension}">\n  Your browser does not support the video tag.\n</video>`

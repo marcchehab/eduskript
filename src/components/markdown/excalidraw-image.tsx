@@ -43,7 +43,7 @@ export function ExcalidrawImage({ lightSrc, darkSrc, alt, filename, style, onWid
     selectedSrc: src
   })
 
-  const caption = alt || filename.replace('.excalidraw', '')
+  const caption = alt || ''
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault()

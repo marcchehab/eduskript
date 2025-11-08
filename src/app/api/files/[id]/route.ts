@@ -15,12 +15,65 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { id: fileId } = await params
+    let { id: fileId } = await params
+
+    // Check if this is requesting an Excalidraw SVG variant
+    let svgVariant: 'light' | 'dark' | null = null
+    if (fileId.endsWith('.light.svg')) {
+      svgVariant = 'light'
+      fileId = fileId.replace('.light.svg', '')
+    } else if (fileId.endsWith('.dark.svg')) {
+      svgVariant = 'dark'
+      fileId = fileId.replace('.dark.svg', '')
+    }
 
     // Get file info with permission check
     const file = await getFileById(fileId, session.user.id)
     if (!file) {
       return NextResponse.json({ error: 'File not found' }, { status: 404 })
+    }
+
+    // If requesting an SVG variant, find the corresponding SVG file
+    if (svgVariant) {
+      const svgFileName = `${file.name}.${svgVariant}.svg`
+      console.log('[API Files] Looking for SVG variant:', {
+        originalFile: file.name,
+        svgFileName,
+        skriptId: file.skriptId,
+        parentId: file.parentId
+      })
+
+      const svgFile = await prisma.file.findFirst({
+        where: {
+          name: svgFileName,
+          skriptId: file.skriptId,
+          parentId: file.parentId
+        }
+      })
+
+      console.log('[API Files] SVG file lookup result:', svgFile ? { id: svgFile.id, name: svgFile.name, hash: svgFile.hash } : 'not found')
+
+      if (!svgFile || !svgFile.hash) {
+        return NextResponse.json({ error: 'SVG variant not found' }, { status: 404 })
+      }
+
+      // Construct physical path from hash (same logic as in file-storage.ts)
+      const { getPhysicalPath, getFileExtension } = await import('@/lib/file-storage')
+      const extension = getFileExtension(svgFile.name)!
+      const physicalPath = getPhysicalPath(svgFile.hash, extension)
+
+      // Read and serve the SVG file
+      const svgBuffer = await fs.readFile(physicalPath)
+      return new NextResponse(svgBuffer, {
+        status: 200,
+        headers: {
+          'Content-Type': 'image/svg+xml',
+          'Content-Length': svgBuffer.length.toString(),
+          'Content-Disposition': `inline; filename="${encodeURIComponent(svgFile.name)}"`,
+          'Cache-Control': 'public, max-age=31536000, immutable',
+          'ETag': `"${svgFile.hash}"`
+        }
+      })
     }
 
     // Directories can't be served directly
