@@ -12,7 +12,7 @@ export async function POST(request: Request) {
     // Check if admin already has content
     const existingCollections = await prisma.collection.findFirst({
       where: {
-        collectionAuthors: {
+        authors: {
           some: {
             userId: session!.user.id,
           },
@@ -62,7 +62,7 @@ export async function POST(request: Request) {
         title: 'Introduction to Algebra',
         slug: 'intro-to-algebra',
         description: 'A comprehensive introduction to algebraic concepts',
-        collectionAuthors: {
+        authors: {
           create: {
             userId: session!.user.id,
             permission: 'author',
@@ -77,7 +77,7 @@ export async function POST(request: Request) {
         title: 'Linear Equations',
         slug: 'linear-equations',
         description: 'Understanding and solving linear equations',
-        skriptAuthors: {
+        authors: {
           create: {
             userId: session!.user.id,
             permission: 'author',
@@ -91,7 +91,7 @@ export async function POST(request: Request) {
         title: 'Quadratic Equations',
         slug: 'quadratic-equations',
         description: 'Mastering quadratic equations and their graphs',
-        skriptAuthors: {
+        authors: {
           create: {
             userId: session!.user.id,
             permission: 'author',
@@ -153,7 +153,7 @@ Where:
 - The solution represents the x-intercept of the line
 `,
         sidebarBehavior: 'contextual',
-        pageAuthors: {
+        authors: {
           create: {
             userId: session!.user.id,
             permission: 'author',
@@ -218,7 +218,7 @@ console.log(solveLinearEquation(3, -15)); // Output: 5
 \`\`\`
 `,
         sidebarBehavior: 'contextual',
-        pageAuthors: {
+        authors: {
           create: {
             userId: session!.user.id,
             permission: 'author',
@@ -269,7 +269,7 @@ The vertex is at $x = -\\frac{b}{2a}$
 3. $-x^2 + 4x - 4 = 0$
 `,
         sidebarBehavior: 'contextual',
-        pageAuthors: {
+        authors: {
           create: {
             userId: session!.user.id,
             permission: 'author',
@@ -340,7 +340,7 @@ print(solve_quadratic(2, 5, -3))  # Output: (0.5, -3.0)
 \`\`\`
 `,
         sidebarBehavior: 'contextual',
-        pageAuthors: {
+        authors: {
           create: {
             userId: session!.user.id,
             permission: 'author',
@@ -355,7 +355,7 @@ print(solve_quadratic(2, 5, -3))  # Output: (0.5, -3.0)
         title: 'Newton\'s Laws of Motion',
         slug: 'newtons-laws',
         description: 'Understanding the fundamental laws of classical mechanics',
-        collectionAuthors: {
+        authors: {
           create: {
             userId: teacher1.id,
             permission: 'author',
@@ -369,7 +369,7 @@ print(solve_quadratic(2, 5, -3))  # Output: (0.5, -3.0)
         title: 'First Law: Inertia',
         slug: 'first-law-inertia',
         description: 'An object at rest stays at rest, an object in motion stays in motion',
-        skriptAuthors: {
+        authors: {
           create: {
             userId: teacher1.id,
             permission: 'author',
@@ -413,7 +413,7 @@ print(solve_quadratic(2, 5, -3))  # Output: (0.5, -3.0)
 - Mass is a measure of inertia
 `,
         sidebarBehavior: 'contextual',
-        pageAuthors: {
+        authors: {
           create: {
             userId: teacher1.id,
             permission: 'author',
