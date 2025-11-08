@@ -6,14 +6,16 @@ import bcrypt from 'bcryptjs'
 // GET /api/admin/users/[id] - Get single user
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const { error, session } = await requireAdmin()
   if (error) return error
 
+  const { id } = await params
+
   try {
     const user = await prisma.user.findUnique({
-      where: { id: params.id },
+      where: { id },
       select: {
         id: true,
         email: true,
@@ -48,17 +50,19 @@ export async function GET(
 // PATCH /api/admin/users/[id] - Update user
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const { error, session } = await requireAdmin()
   if (error) return error
+
+  const { id } = await params
 
   try {
     const { email, name, subdomain, title, isAdmin, requirePasswordReset } = await request.json()
 
     // Check if user exists
     const existingUser = await prisma.user.findUnique({
-      where: { id: params.id },
+      where: { id },
     })
 
     if (!existingUser) {
@@ -82,7 +86,7 @@ export async function PATCH(
       const emailTaken = await prisma.user.findFirst({
         where: {
           email,
-          id: { not: params.id },
+          id: { not: id },
         },
       })
 
@@ -99,7 +103,7 @@ export async function PATCH(
       const subdomainTaken = await prisma.user.findFirst({
         where: {
           subdomain,
-          id: { not: params.id },
+          id: { not: id },
         },
       })
 
@@ -113,7 +117,7 @@ export async function PATCH(
 
     // Update user
     const updatedUser = await prisma.user.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         ...(email && { email }),
         ...(name && { name }),
@@ -149,14 +153,16 @@ export async function PATCH(
 // DELETE /api/admin/users/[id] - Delete user
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const { error, session } = await requireAdmin()
   if (error) return error
 
+  const { id } = await params
+
   try {
     // Prevent deleting yourself
-    if (session?.user?.id === params.id) {
+    if (session?.user?.id === id) {
       return NextResponse.json(
         { error: 'Cannot delete your own account' },
         { status: 400 }
@@ -165,7 +171,7 @@ export async function DELETE(
 
     // Check if user exists
     const user = await prisma.user.findUnique({
-      where: { id: params.id },
+      where: { id },
     })
 
     if (!user) {
@@ -177,7 +183,7 @@ export async function DELETE(
 
     // Delete user (this will cascade delete related records based on schema)
     await prisma.user.delete({
-      where: { id: params.id },
+      where: { id },
     })
 
     return NextResponse.json({ success: true, message: 'User deleted successfully' })

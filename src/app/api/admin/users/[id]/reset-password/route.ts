@@ -6,10 +6,12 @@ import bcrypt from 'bcryptjs'
 // POST /api/admin/users/[id]/reset-password - Admin resets user password
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const { error, session } = await requireAdmin()
   if (error) return error
+
+  const { id } = await params
 
   try {
     const { newPassword, requirePasswordReset } = await request.json()
@@ -30,7 +32,7 @@ export async function POST(
 
     // Check if user exists
     const user = await prisma.user.findUnique({
-      where: { id: params.id },
+      where: { id },
     })
 
     if (!user) {
@@ -45,7 +47,7 @@ export async function POST(
 
     // Update user's password and optionally set requirePasswordReset flag
     await prisma.user.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         hashedPassword,
         requirePasswordReset: requirePasswordReset !== undefined ? requirePasswordReset : true,
