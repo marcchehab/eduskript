@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card } from '@/components/ui/card'
-import { Dialog } from '@/components/ui/dialog'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Tabs } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -380,9 +380,8 @@ export default function AdminPanelPage() {
 
       {/* Create User Dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="w-full max-w-md rounded-lg bg-background p-6">
-            <h2 className="mb-4 text-xl font-semibold">Create User</h2>
+        <DialogContent className="max-w-md">
+          <h2 className="mb-4 text-xl font-semibold">Create User</h2>
             <form onSubmit={handleCreateUser} className="space-y-4">
               <div>
                 <Label htmlFor="create-email">Email</Label>
@@ -458,15 +457,13 @@ export default function AdminPanelPage() {
                 <Button type="submit">Create User</Button>
               </div>
             </form>
-          </div>
-        </div>
+        </DialogContent>
       </Dialog>
 
       {/* Edit User Dialog */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="w-full max-w-md rounded-lg bg-background p-6">
-            <h2 className="mb-4 text-xl font-semibold">Edit User</h2>
+        <DialogContent className="max-w-md">
+          <h2 className="mb-4 text-xl font-semibold">Edit User</h2>
             <form onSubmit={handleUpdateUser} className="space-y-4">
               <div>
                 <Label htmlFor="edit-email">Email</Label>
@@ -531,15 +528,13 @@ export default function AdminPanelPage() {
                 <Button type="submit">Update User</Button>
               </div>
             </form>
-          </div>
-        </div>
+        </DialogContent>
       </Dialog>
 
       {/* Reset Password Dialog */}
       <Dialog open={showResetPasswordDialog} onOpenChange={setShowResetPasswordDialog}>
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="w-full max-w-md rounded-lg bg-background p-6">
-            <h2 className="mb-4 text-xl font-semibold">Reset Password</h2>
+        <DialogContent className="max-w-md">
+          <h2 className="mb-4 text-xl font-semibold">Reset Password</h2>
             <form onSubmit={handleResetPassword} className="space-y-4">
               <div>
                 <Label htmlFor="reset-newPassword">New Password</Label>
@@ -593,8 +588,7 @@ export default function AdminPanelPage() {
                 <Button type="submit">Reset Password</Button>
               </div>
             </form>
-          </div>
-        </div>
+        </DialogContent>
       </Dialog>
     </div>
   )
