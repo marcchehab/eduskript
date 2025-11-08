@@ -161,6 +161,9 @@ export function PageEditor({ collection, skript, page }: PageEditorProps) {
       // Image - use regular markdown syntax with just filename for path resolution
       const altText = file.name.replace(/\.[^/.]+$/, '')
       insertText = `![${altText}](${file.name})`
+    } else if (extension === 'excalidraw') {
+      // Excalidraw drawing - use image syntax with just filename
+      insertText = `![](${file.name})`
     } else if (['mp4', 'avi', 'mov', 'wmv'].includes(extension || '')) {
       // Video - use full URL for non-image files
       insertText = `<video controls>\n  <source src="${file.url || file.name}" type="video/${extension}">\n  Your browser does not support the video tag.\n</video>`

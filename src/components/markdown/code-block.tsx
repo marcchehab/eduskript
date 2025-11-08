@@ -50,9 +50,9 @@ export function CodeBlock({ children, className, language: propLanguage, highlig
   }
 
   return (
-    <div className="relative group my-4">
+    <div className="relative group my-4 overflow-auto">
       {/* Control bar */}
-      <div className="absolute top-0 right-0 left-0 flex items-center justify-between px-3 py-1.5 bg-muted/50 border-b border-border rounded-t-md opacity-0 group-hover:opacity-100 transition-opacity z-10">
+      <div className="absolute top-0 right-0 flex items-center justify-between gap-2 px-3 py-1.5 bg-muted/50 border border-border rounded-md opacity-0 group-hover:opacity-100 transition-opacity z-10">
         {/* Language selector */}
         <div className="relative" ref={dropdownRef}>
           <button

@@ -32,7 +32,9 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   const editorRef = useRef<HTMLDivElement>(null)
   const editorViewRef = useRef<EditorView | null>(null)
   const onChangeRef = useRef(onChange)
-  const [showPreview, setShowPreview] = useState(true)
+  const [editorWidth, setEditorWidth] = useState(50) // Percentage
+  const [isDragging, setIsDragging] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
   // Removed previewContent state - React renderer handles markdown directly
   const [isMounted, setIsMounted] = useState(false)
   const [useSimpleEditor, setUseSimpleEditor] = useState(false)
@@ -41,6 +43,11 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   const [excalidrawOpen, setExcalidrawOpen] = useState(false)
   const { theme } = useTheme()
   const isDark = theme === 'dark'
+
+  // Calculate visibility based on width
+  const MIN_VISIBLE_WIDTH = 100 // pixels
+  const showEditor = containerRef.current ? (editorWidth / 100) * containerRef.current.offsetWidth >= MIN_VISIBLE_WIDTH : true
+  const showPreview = containerRef.current ? ((100 - editorWidth) / 100) * containerRef.current.offsetWidth >= MIN_VISIBLE_WIDTH : true
 
   // Update the onChange ref when it changes
   useEffect(() => {
@@ -189,6 +196,38 @@ const CodeMirrorEditor = function CodeMirrorEditor({
       }
     }
   }
+
+  // Handle splitter drag
+  const handleSplitterMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  useEffect(() => {
+    if (!isDragging) return
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!containerRef.current) return
+
+      const containerRect = containerRef.current.getBoundingClientRect()
+      const newEditorWidth = ((e.clientX - containerRect.left) / containerRect.width) * 100
+
+      // Clamp between 5% and 95%
+      setEditorWidth(Math.max(5, Math.min(95, newEditorWidth)))
+    }
+
+    const handleMouseUp = () => {
+      setIsDragging(false)
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [isDragging])
 
   // Fallback for content
   const editorContent = content || ''
@@ -393,6 +432,21 @@ const CodeMirrorEditor = function CodeMirrorEditor({
     }
   }, [editorContent])
 
+  // Refresh CodeMirror when editor becomes visible
+  useEffect(() => {
+    if (showEditor && editorViewRef.current && !useSimpleEditor) {
+      // Use setTimeout to ensure DOM has updated
+      setTimeout(() => {
+        if (editorViewRef.current) {
+          // Force a full layout recalculation
+          editorViewRef.current.requestMeasure()
+          // Also dispatch an empty transaction to force a redraw
+          editorViewRef.current.dispatch({})
+        }
+      }, 0)
+    }
+  }, [showEditor, useSimpleEditor])
+
   // Handle textarea change for simple editor
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newContent = e.target.value
@@ -427,7 +481,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
       }
 
       // Insert reference to the drawing in the editor
-      const insertText = `![[${name}.excalidraw]]\n`
+      const insertText = `![](${name}.excalidraw)\n`
 
       if (editorViewRef.current && !useSimpleEditor) {
         const view = editorViewRef.current
@@ -472,15 +526,6 @@ const CodeMirrorEditor = function CodeMirrorEditor({
       {/* Toolbar */}
       <div className="border-b border-border p-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowPreview(!showPreview)}
-            className="flex items-center gap-2"
-          >
-            {showPreview ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            {showPreview ? 'Hide Preview' : 'Show Preview'}
-          </Button>
           {skriptId && (
             <Button
               variant="ghost"
@@ -490,14 +535,38 @@ const CodeMirrorEditor = function CodeMirrorEditor({
               title="Create Drawing"
             >
               <Pencil className="w-4 h-4" />
-              Drawing
+              Add Drawing
+            </Button>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {!showEditor && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setEditorWidth(50)}
+              className="flex items-center gap-2"
+            >
+              <Pencil className="w-4 h-4" />
+              Show Editor
+            </Button>
+          )}
+          {!showPreview && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setEditorWidth(50)}
+              className="flex items-center gap-2"
+            >
+              <Eye className="w-4 h-4" />
+              Show Preview
             </Button>
           )}
         </div>
       </div>
 
       {/* Editor and Preview */}
-      <div className="flex h-[600px] min-h-[400px] relative">
+      <div ref={containerRef} className="flex h-[600px] min-h-[400px] relative">
         {/* Drag overlay */}
         {dragOver && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-primary/10 border-2 border-dashed border-primary rounded">
@@ -511,9 +580,14 @@ const CodeMirrorEditor = function CodeMirrorEditor({
             </div>
           </div>
         )}
-        
+
         {/* Editor */}
-        <div className={`${showPreview ? 'w-1/2' : 'w-full'} ${showPreview ? 'border-r border-border' : ''}`}>
+        <div
+          style={{
+            width: showEditor ? (showPreview ? `${editorWidth}%` : '100%') : '0',
+            display: showEditor ? 'block' : 'none'
+          }}
+        >
           {useSimpleEditor ? (
             <textarea
               value={textareaContent}
@@ -528,9 +602,24 @@ const CodeMirrorEditor = function CodeMirrorEditor({
           )}
         </div>
 
+        {/* Draggable Splitter */}
+        {showEditor && showPreview && (
+          <div
+            onMouseDown={handleSplitterMouseDown}
+            className={`w-2 bg-border hover:bg-primary/20 cursor-col-resize flex-shrink-0 transition-colors relative flex items-center justify-center ${
+              isDragging ? 'bg-primary/30' : ''
+            }`}
+          >
+            {/* Drag indicator */}
+            <div className="text-muted-foreground/40 text-xs select-none pointer-events-none">
+              ⋮
+            </div>
+          </div>
+        )}
+
         {/* Preview */}
         {showPreview && (
-          <div className="w-1/2 overflow-auto bg-card" id="markdown-preview-scroll-container">
+          <div style={{ width: showEditor ? `${100 - editorWidth}%` : '100%' }} className="overflow-auto bg-card" id="markdown-preview-scroll-container">
             <div className="p-4">
               <InteractivePreview
                 markdown={useSimpleEditor ? textareaContent : editorContent}

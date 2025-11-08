@@ -234,6 +234,15 @@ function ImageComponent({ src, alt, title, style, ...props }: React.ImgHTMLAttri
     const lightSrc = (props as Record<string, unknown>)['data-light-src'] as string
     const darkSrc = (props as Record<string, unknown>)['data-dark-src'] as string
 
+    // Get alignment from data attributes
+    const dataAlignExcalidraw = ((props as Record<string, unknown>)['data-align'] as string) ||
+                                ((props as Record<string, unknown>)['dataAlign'] as string) ||
+                                'center'
+
+    // Get wrap from data attributes
+    const dataWrapExcalidraw = ((props as Record<string, unknown>)['data-wrap'] as string) ||
+                               ((props as Record<string, unknown>)['dataWrap'] as string)
+
     console.log('[ImageComponent] Rendering Excalidraw:', { dataExcalidraw, lightSrc, darkSrc })
 
     return (
@@ -243,10 +252,21 @@ function ImageComponent({ src, alt, title, style, ...props }: React.ImgHTMLAttri
         alt={alt}
         filename={dataExcalidraw}
         style={style}
+        align={dataAlignExcalidraw as 'left' | 'center' | 'right'}
+        wrap={dataWrapExcalidraw === 'true'}
         onWidthChange={onContentChange ? handleWidthChange : undefined}
       />
     )
   }
+
+  // Get alignment from data attributes
+  const dataAlign = ((props as Record<string, unknown>)['data-align'] as string) ||
+                    ((props as Record<string, unknown>)['dataAlign'] as string) ||
+                    'center'
+
+  // Get wrap from data attributes
+  const dataWrap = ((props as Record<string, unknown>)['data-wrap'] as string) ||
+                   ((props as Record<string, unknown>)['dataWrap'] as string)
 
   // Regular image with resize
   return (
@@ -256,6 +276,8 @@ function ImageComponent({ src, alt, title, style, ...props }: React.ImgHTMLAttri
       title={title}
       style={style}
       originalSrc={originalSrc}
+      align={dataAlign as 'left' | 'center' | 'right'}
+      wrap={dataWrap === 'true'}
       onWidthChange={onContentChange ? handleWidthChange : undefined}
     />
   )

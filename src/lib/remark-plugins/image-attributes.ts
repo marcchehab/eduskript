@@ -33,19 +33,39 @@ export function remarkImageAttributes() {
           const nextChild = node.children[i + 1] as TextNode
 
           if (nextChild.type === 'text') {
-            // Match {width=X%} pattern
-            const attrMatch = nextChild.value.match(/^\{width=(\d+)%\}/)
+            // Match {width=X%;align=left|center|right} pattern
+            const attrMatch = nextChild.value.match(/^\{([^}]+)\}/)
 
             if (attrMatch) {
-              const widthPercent = attrMatch[1]
+              const attrsString = attrMatch[1]
+              const attrs = attrsString.split(';').reduce((acc, attr) => {
+                const [key, value] = attr.split('=').map(s => s.trim())
+                if (key && value) acc[key] = value
+                return acc
+              }, {} as Record<string, string>)
 
-              // Apply width as inline style
+              // Apply attributes
               child.data = child.data || {}
               child.data.hProperties = child.data.hProperties || {}
-              child.data.hProperties.style = `width: ${widthPercent}%; height: auto;`
+
+              // Width
+              if (attrs.width) {
+                const widthPercent = attrs.width.replace('%', '')
+                child.data.hProperties.style = `width: ${widthPercent}%; height: auto;`
+              }
+
+              // Alignment
+              if (attrs.align) {
+                child.data.hProperties['data-align'] = attrs.align
+              }
+
+              // Wrap
+              if (attrs.wrap) {
+                child.data.hProperties['data-wrap'] = attrs.wrap
+              }
 
               // Remove the attribute text from the markdown
-              nextChild.value = nextChild.value.replace(/^\{width=\d+%\}/, '').trim()
+              nextChild.value = nextChild.value.replace(/^\{[^}]+\}/, '').trim()
 
               // If the text node is now empty, remove it
               if (!nextChild.value) {
