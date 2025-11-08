@@ -22,7 +22,9 @@ export function ExcalidrawImage({ lightSrc, darkSrc, alt, filename, style, onWid
   const [isDragging, setIsDragging] = useState(false)
   const [currentAlign, setCurrentAlign] = useState<'left' | 'center' | 'right'>(align)
   const [currentWrap, setCurrentWrap] = useState(wrap)
-  const [currentWidth, setCurrentWidth] = useState<number>(() => {
+
+  // Track width - can be either a percentage number (for UI controls) or null (use style prop directly)
+  const [currentWidth, setCurrentWidth] = useState<number | null>(() => {
     // Parse initial width from style
     if (style?.width && typeof style.width === 'string' && style.width.includes('%')) {
       return parseFloat(style.width)
@@ -32,6 +34,50 @@ export function ExcalidrawImage({ lightSrc, darkSrc, alt, filename, style, onWid
 
   // Track initial drag state
   const dragStartRef = useRef<{ startX: number; startWidth: number; parentWidth: number } | null>(null)
+
+  // Update width when style prop changes (e.g., when markdown is edited)
+  useEffect(() => {
+    console.log('[ExcalidrawImage] Style changed:', { style, type: typeof style })
+
+    // Handle style as object (React CSSProperties)
+    if (style && typeof style === 'object' && style.width) {
+      const widthStr = String(style.width)
+      console.log('[ExcalidrawImage] Width from object:', widthStr)
+      if (widthStr.includes('%')) {
+        setCurrentWidth(parseFloat(widthStr))
+      } else {
+        // For non-percentage values (px, rem, etc), set to null so we use style prop directly
+        setCurrentWidth(null)
+      }
+    }
+    // Handle style as string (from markdown processor)
+    else if (typeof style === 'string' && style.includes('width:')) {
+      const widthMatch = style.match(/width:\s*([^;]+)/)
+      console.log('[ExcalidrawImage] Width from string:', widthMatch?.[1])
+      if (widthMatch) {
+        const widthValue = widthMatch[1].trim()
+        if (widthValue.includes('%')) {
+          setCurrentWidth(parseFloat(widthValue))
+        } else {
+          // For non-percentage values, set to null so we use style prop directly
+          setCurrentWidth(null)
+        }
+      }
+    }
+    else if (!style || (typeof style === 'object' && !style.width)) {
+      console.log('[ExcalidrawImage] Resetting to 100%')
+      setCurrentWidth(100)
+    }
+  }, [style])
+
+  // Update align and wrap when props change
+  useEffect(() => {
+    setCurrentAlign(align)
+  }, [align])
+
+  useEffect(() => {
+    setCurrentWrap(wrap)
+  }, [wrap])
 
   // Use dark src if theme is dark, otherwise use light
   const src = resolvedTheme === 'dark' ? darkSrc : lightSrc
@@ -81,6 +127,9 @@ export function ExcalidrawImage({ lightSrc, darkSrc, alt, filename, style, onWid
     setCurrentWidth(Math.round(newWidthPercent))
   }, [isDragging, currentAlign])
 
+  // Get the effective width for display (convert null to 100 for percentage display)
+  const effectiveWidth = currentWidth ?? 100
+
   const updateMarkdown = useCallback((width: number, alignment: 'left' | 'center' | 'right', wrapEnabled: boolean) => {
     if (!onWidthChange) return
 
@@ -98,22 +147,22 @@ export function ExcalidrawImage({ lightSrc, darkSrc, alt, filename, style, onWid
 
   const handleMouseUp = useCallback(() => {
     if (isDragging && onWidthChange) {
-      updateMarkdown(currentWidth, currentAlign, currentWrap)
+      updateMarkdown(effectiveWidth, currentAlign, currentWrap)
     }
     setIsDragging(false)
     dragStartRef.current = null // Clear drag state
-  }, [isDragging, currentWidth, currentAlign, currentWrap, onWidthChange, updateMarkdown])
+  }, [isDragging, effectiveWidth, currentAlign, currentWrap, onWidthChange, updateMarkdown])
 
   const handleAlignChange = useCallback((alignment: 'left' | 'center' | 'right') => {
     setCurrentAlign(alignment)
-    updateMarkdown(currentWidth, alignment, currentWrap)
-  }, [currentWidth, currentWrap, updateMarkdown])
+    updateMarkdown(effectiveWidth, alignment, currentWrap)
+  }, [effectiveWidth, currentWrap, updateMarkdown])
 
   const handleWrapToggle = useCallback(() => {
     const newWrap = !currentWrap
     setCurrentWrap(newWrap)
-    updateMarkdown(currentWidth, currentAlign, newWrap)
-  }, [currentWrap, currentWidth, currentAlign, updateMarkdown])
+    updateMarkdown(effectiveWidth, currentAlign, newWrap)
+  }, [currentWrap, effectiveWidth, currentAlign, updateMarkdown])
 
   // Attach mouse listeners when dragging
   useEffect(() => {
@@ -145,7 +194,7 @@ export function ExcalidrawImage({ lightSrc, darkSrc, alt, filename, style, onWid
       ref={containerRef}
       className={`excalidraw-wrapper relative my-4 group ${alignmentClasses}`}
       data-excalidraw={filename}
-      style={{ ...style, width: `${currentWidth}%` }}
+      style={currentWidth !== null ? { ...style, width: `${currentWidth}%` } : style}
     >
       <img
         src={src}
@@ -177,11 +226,11 @@ export function ExcalidrawImage({ lightSrc, darkSrc, alt, filename, style, onWid
           </div>
 
           {/* Width indicator - centered above image, shown on hover or when dragging */}
-          {(isDragging || currentWidth < 100) && (
+          {(isDragging || effectiveWidth < 100) && (
             <div className={`absolute -top-8 left-1/2 -translate-x-1/2 bg-background/95 backdrop-blur border border-border/50 px-2 py-1 rounded text-[10px] font-mono text-foreground z-10 pointer-events-none transition-opacity ${
               isDragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
             }`}>
-              {Math.round(currentWidth)}%
+              {Math.round(effectiveWidth)}%
             </div>
           )}
 

@@ -18,11 +18,13 @@ export function rehypeExcalidrawDualImage() {
       // Only process images that have Excalidraw data attributes
       if (!dataExcalidraw || !darkSrc) return
 
-      const alt = (props.alt as string) || String(dataExcalidraw).replace('.excalidraw', '')
-      const caption = alt || String(dataExcalidraw).replace('.excalidraw', '')
+      const alt = (props.alt as string) || ''
+      const caption = alt // Only show caption if alt text is provided
 
-      // Extract style information from the original image node
+      // Extract style and attributes from the original image node
       const style = props.style as string | undefined
+      const dataAlign = props['dataAlign'] || props['data-align'] || 'center'
+      const dataWrap = props['dataWrap'] || props['data-wrap']
 
       console.log('[ExcalidrawDualImage] Processing:', {
         dataExcalidraw,
@@ -31,12 +33,25 @@ export function rehypeExcalidrawDualImage() {
         allProps: props
       })
 
+      // Determine alignment classes
+      const alignmentClasses = dataWrap === 'true'
+        ? dataAlign === 'left'
+          ? ['float-left', 'mr-4', 'mb-4']
+          : dataAlign === 'right'
+          ? ['float-right', 'ml-4', 'mb-4']
+          : ['mx-auto'] // center doesn't make sense with wrap
+        : dataAlign === 'left'
+        ? ['mr-auto']
+        : dataAlign === 'right'
+        ? ['ml-auto']
+        : ['mx-auto']
+
       // Create figure wrapper with both light and dark images, plus caption
       const figure: Element = {
         type: 'element',
         tagName: 'figure',
         properties: {
-          className: ['excalidraw-wrapper', 'my-4', 'mx-auto'],
+          className: ['excalidraw-wrapper', 'my-4', ...alignmentClasses],
           ...(style ? { style } : {})
         },
         children: [

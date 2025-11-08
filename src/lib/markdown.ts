@@ -15,6 +15,7 @@ import { rehypeImageOptimizer } from './remark-plugins/image-optimizer'
 import { remarkImageAttributes } from './remark-plugins/image-attributes'
 import { rehypeInteractiveElements } from './rehype-plugins/interactive-elements'
 import { rehypeExcalidrawDualImage } from './rehype-plugins/excalidraw-dual-image'
+import { rehypeImageWrapper } from './rehype-plugins/image-wrapper'
 
 export interface ProcessedMarkdown {
   content: string
@@ -71,6 +72,7 @@ export async function processMarkdown(
       properties: { className: ['heading-link'] }
     }],
     rehypeExcalidrawDualImage, // Convert Excalidraw images to dual light/dark variants
+    rehypeImageWrapper, // Wrap regular images with alignment and caption support
     rehypeImageOptimizer, // Optimize images for better loading
     rehypeInteractiveElements, // Add data attributes for interactive controls
     rehypeKatex,

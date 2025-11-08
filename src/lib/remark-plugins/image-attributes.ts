@@ -48,10 +48,11 @@ export function remarkImageAttributes() {
               child.data = child.data || {}
               child.data.hProperties = child.data.hProperties || {}
 
-              // Width
+              // Width - trust the user's value as-is
+              // If they used the UI, it will be a percentage (e.g., "50%")
+              // If they manually typed it, respect their choice (e.g., "500px", "20rem", etc.)
               if (attrs.width) {
-                const widthPercent = attrs.width.replace('%', '')
-                child.data.hProperties.style = `width: ${widthPercent}%; height: auto;`
+                child.data.hProperties.style = `width: ${attrs.width}; height: auto;`
               }
 
               // Alignment
