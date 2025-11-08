@@ -21,6 +21,11 @@ export function DashboardNav() {
         </div>
         
         <div className="flex items-center gap-4">
+          {session?.user?.isAdmin && (
+            <Link href="/dashboard/admin">
+              <Button variant="outline">Admin Panel</Button>
+            </Link>
+          )}
           <ThemeToggle />
           <Button
             variant="outline"
