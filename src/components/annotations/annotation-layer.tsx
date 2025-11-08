@@ -1,24 +1,16 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { SimpleCanvas, type SimpleCanvasHandle, type DrawMode } from './simple-canvas'
 import { AnnotationToolbar, type AnnotationMode } from './annotation-toolbar'
-import { SectionCanvas, type SectionCanvasHandle } from './section-canvas'
 import {
   getPageAnnotations,
-  updateSectionAnnotation,
+  savePageAnnotations,
   clearPageAnnotations,
   generateContentHash,
   checkVersionMismatch,
   type SectionAnnotation
 } from '@/lib/indexeddb/annotations'
-
-interface ContentSection {
-  id: string
-  headingText: string
-  element: Element
-  top: number
-  height: number
-}
 
 interface AnnotationLayerProps {
   pageId: string
@@ -28,13 +20,14 @@ interface AnnotationLayerProps {
 
 export function AnnotationLayer({ pageId, content, children }: AnnotationLayerProps) {
   const [mode, setMode] = useState<AnnotationMode>('view')
-  const [sections, setSections] = useState<ContentSection[]>([])
-  const [annotations, setAnnotations] = useState<Map<string, string>>(new Map())
   const [pageVersion, setPageVersion] = useState<string>('')
   const [versionMismatch, setVersionMismatch] = useState(false)
+  const [hasAnnotations, setHasAnnotations] = useState(false)
+  const [canvasSize, setCanvasSize] = useState<{ width: number; height: number } | null>(null)
   const contentRef = useRef<HTMLDivElement>(null)
-  const canvasRefs = useRef<Map<string, React.RefObject<SectionCanvasHandle | null>>>(new Map())
-  const observerRef = useRef<ResizeObserver | null>(null)
+  const canvasRef = useRef<SimpleCanvasHandle>(null)
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const initialDataRef = useRef<string | undefined>(undefined)
 
   // Generate page version hash
   useEffect(() => {
@@ -52,127 +45,88 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
     }
   }, [pageId, pageVersion])
 
-  // Load annotations from IndexedDB
+  // Load annotations from IndexedDB (once)
   useEffect(() => {
     if (!pageId) return
 
     getPageAnnotations(pageId).then(pageAnnotation => {
-      if (pageAnnotation) {
-        const annotationMap = new Map<string, string>()
-        pageAnnotation.sections.forEach(section => {
-          annotationMap.set(section.sectionId, section.canvasData)
-        })
-        setAnnotations(annotationMap)
+      if (pageAnnotation && pageAnnotation.sections.length > 0) {
+        setHasAnnotations(true)
+        const firstSection = pageAnnotation.sections[0]
+        if (firstSection && firstSection.canvasData) {
+          initialDataRef.current = firstSection.canvasData
+        }
       }
     })
   }, [pageId])
 
-  // Parse content into sections based on headings
-  const parseContentSections = useCallback(() => {
-    if (!contentRef.current) return
-
-    const headings = contentRef.current.querySelectorAll('h1, h2, h3, h4')
-    const newSections: ContentSection[] = []
-    const containerRect = contentRef.current.getBoundingClientRect()
-
-    headings.forEach((heading, index) => {
-      const headingRect = heading.getBoundingClientRect()
-      const nextHeading = headings[index + 1]
-
-      // Calculate section boundaries
-      const top = headingRect.top - containerRect.top
-      let height: number
-
-      if (nextHeading) {
-        const nextRect = nextHeading.getBoundingClientRect()
-        height = nextRect.top - headingRect.top
-      } else {
-        // Last section: extend to end of content
-        const contentBottom = containerRect.bottom
-        height = contentBottom - headingRect.top
-      }
-
-      // Generate stable section ID from heading text
-      const headingText = heading.textContent || `section-${index}`
-      const sectionId = `${heading.tagName.toLowerCase()}-${slugify(headingText)}-${index}`
-
-      newSections.push({
-        id: sectionId,
-        headingText,
-        element: heading,
-        top,
-        height: Math.max(height, 100) // Minimum height
-      })
-
-      // Create canvas ref if it doesn't exist
-      if (!canvasRefs.current.has(sectionId)) {
-        canvasRefs.current.set(sectionId, { current: null })
-      }
-    })
-
-    setSections(newSections)
-  }, [])
-
-  // Set up ResizeObserver to update sections when content changes
+  // Measure content size once after mount
   useEffect(() => {
     if (!contentRef.current) return
 
-    parseContentSections()
-
-    observerRef.current = new ResizeObserver(() => {
-      parseContentSections()
-    })
-
-    observerRef.current.observe(contentRef.current)
-
-    return () => {
-      if (observerRef.current) {
-        observerRef.current.disconnect()
+    // Wait for content to render
+    const timer = setTimeout(() => {
+      if (contentRef.current) {
+        const rect = contentRef.current.getBoundingClientRect()
+        setCanvasSize({
+          width: Math.ceil(rect.width),
+          height: Math.ceil(contentRef.current.scrollHeight)
+        })
       }
+    }, 100)
+
+    return () => clearTimeout(timer)
+  }, []) // Only run once on mount
+
+  // Handle canvas updates with debounced save
+  const handleCanvasUpdate = useCallback((data: string) => {
+    // Clear existing timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current)
     }
-  }, [parseContentSections])
 
-  // Handle section annotation update
-  const handleSectionUpdate = useCallback(async (sectionId: string, canvasData: string) => {
-    const section = sections.find(s => s.id === sectionId)
-    if (!section) return
-
+    // Check if there's actual data
     try {
-      await updateSectionAnnotation(
-        pageId,
-        pageVersion,
-        sectionId,
-        section.headingText,
-        canvasData
-      )
+      const paths = JSON.parse(data)
+      if (!paths || paths.length === 0) {
+        setHasAnnotations(false)
+        return
+      }
 
-      // Update local state
-      setAnnotations(prev => new Map(prev).set(sectionId, canvasData))
+      setHasAnnotations(true)
+
+      // Debounce save by 2 seconds
+      saveTimeoutRef.current = setTimeout(async () => {
+        try {
+          const section: SectionAnnotation = {
+            sectionId: 'full-page',
+            headingText: 'Full Page',
+            canvasData: data,
+            createdAt: Date.now(),
+            updatedAt: Date.now()
+          }
+
+          await savePageAnnotations(pageId, pageVersion, [section])
+        } catch (error) {
+          console.error('Error saving annotations:', error)
+        }
+      }, 2000)
     } catch (error) {
-      console.error('Error updating section annotation:', error)
+      console.error('Error parsing canvas data:', error)
     }
-  }, [pageId, pageVersion, sections])
+  }, [pageId, pageVersion])
 
   // Handle clear all annotations
   const handleClearAll = useCallback(async () => {
     try {
       await clearPageAnnotations(pageId)
-
-      // Clear all canvases
-      for (const [sectionId, canvasRef] of canvasRefs.current.entries()) {
-        if (canvasRef.current) {
-          await canvasRef.current.clear()
-        }
-      }
-
-      setAnnotations(new Map())
+      canvasRef.current?.clear()
+      setHasAnnotations(false)
       setVersionMismatch(false)
     } catch (error) {
       console.error('Error clearing annotations:', error)
     }
   }, [pageId])
-
-  const hasAnnotations = annotations.size > 0
 
   return (
     <>
@@ -187,7 +141,7 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
             </div>
             <div className="ml-3 flex-1">
               <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                <strong>Content Updated:</strong> This page has been modified since you last annotated it. Your annotations may no longer align perfectly with the content.
+                <strong>Content Updated:</strong> This page has been modified. Your annotations may no longer align with the content.
               </p>
               <button
                 onClick={handleClearAll}
@@ -200,35 +154,21 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
         </div>
       )}
 
-      {/* Content with annotation overlay */}
+      {/* Content with canvas overlay */}
       <div ref={contentRef} className="relative">
         {children}
 
-        {/* Canvas overlays for each section */}
-        {sections.map(section => {
-          const canvasRef = canvasRefs.current.get(section.id) || { current: null }
-
-          return (
-            <div
-              key={section.id}
-              className="absolute left-0 right-0"
-              style={{
-                top: `${section.top}px`,
-                height: `${section.height}px`,
-                pointerEvents: mode === 'view' ? 'none' : 'auto'
-              }}
-            >
-              <SectionCanvas
-                ref={canvasRef as React.RefObject<SectionCanvasHandle | null>}
-                sectionId={section.id}
-                mode={mode}
-                initialData={annotations.get(section.id)}
-                onUpdate={handleSectionUpdate}
-                height={section.height}
-              />
-            </div>
-          )
-        })}
+        {/* Canvas overlay */}
+        {canvasSize && (
+          <SimpleCanvas
+            ref={canvasRef}
+            width={canvasSize.width}
+            height={canvasSize.height}
+            mode={mode === 'view' ? 'view' : (mode as DrawMode)}
+            onUpdate={handleCanvasUpdate}
+            initialData={initialDataRef.current}
+          />
+        )}
       </div>
 
       {/* Toolbar */}
@@ -240,14 +180,4 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
       />
     </>
   )
-}
-
-// Helper function to slugify heading text
-function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .trim()
-    .replace(/[^\w\s-]/g, '')
-    .replace(/[\s_-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
 }
