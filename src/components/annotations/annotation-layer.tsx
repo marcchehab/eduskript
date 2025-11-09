@@ -78,6 +78,7 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
     return [2, 3, 4]
   })
   const contentRef = useRef<HTMLDivElement>(null)
+  const mainRef = useRef<HTMLElement | null>(null)
   const canvasRefs = useRef<Map<string, React.MutableRefObject<SimpleCanvasHandle | null>>>(new Map())
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const isClearingRef = useRef(false)
@@ -552,6 +553,22 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
     }
   }, [zoom, panX, panY])
 
+  // Find and store reference to parent <main> element
+  useEffect(() => {
+    if (contentRef.current) {
+      mainRef.current = contentRef.current.closest('main')
+    }
+  }, [])
+
+  // Apply zoom/pan transform to <main> element
+  useEffect(() => {
+    if (mainRef.current) {
+      mainRef.current.style.transform = `scale(${zoom}) translate(${panX}px, ${panY}px)`
+      mainRef.current.style.transformOrigin = 'top center'
+      mainRef.current.style.transition = 'none'
+    }
+  }, [zoom, panX, panY])
+
   // Set up event listeners on document to capture ALL events (sidebar, main, etc.)
   useEffect(() => {
     // Touch events for touchscreen pinch zoom
@@ -605,17 +622,13 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
         </div>
       )}
 
-      {/* Content with section canvas portals - fixed width box with zoom/pan */}
+      {/* Fixed-width centered container for all content */}
       <div
         ref={contentRef}
         style={{
-          touchAction: 'none',
-          transform: `scale(${zoom}) translate(${panX}px, ${panY}px)`,
-          transformOrigin: 'top center',
-          transition: 'none', // Instant updates for smooth pinch
-          position: 'relative',
           width: '72rem', // Canvas width (1152px)
           margin: '0 auto', // Center on page
+          position: 'relative',
           boxShadow: zoom !== 1.0 ? '0 0 60px rgba(0, 0, 0, 0.15)' : 'none', // Shadow when zoomed
         }}
       >
