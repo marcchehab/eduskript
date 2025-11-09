@@ -436,8 +436,10 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
       console.log('Single touch start for pan')
     }
 
-    // Two touches - start pinch zoom
+    // Two touches - start pinch zoom and prevent browser zoom
     if (e.touches.length === 2) {
+      e.preventDefault() // Prevent browser zoom
+
       // Clear single touch pan
       singleTouchStartRef.current = null
 
@@ -477,6 +479,8 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
 
     // Handle pinch zoom and pan (2 fingers)
     if (e.touches.length === 2 && initialPinchDistanceRef.current !== null && initialPinchCenterRef.current !== null) {
+      e.preventDefault() // Prevent browser zoom during pinch
+
       const touch1 = e.touches[0]
       const touch2 = e.touches[1]
       const currentDistance = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY)
