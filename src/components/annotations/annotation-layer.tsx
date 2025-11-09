@@ -50,6 +50,23 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
     }
     return ['#000000', '#FF0000', '#0000FF']
   })
+  const [penSizes, setPenSizes] = useState<[number, number, number]>(() => {
+    // Load pen sizes from localStorage
+    if (typeof window !== 'undefined') {
+      const savedSizes = localStorage.getItem('annotation-pen-sizes')
+      if (savedSizes) {
+        try {
+          const parsed = JSON.parse(savedSizes)
+          if (Array.isArray(parsed) && parsed.length === 3) {
+            return parsed as [number, number, number]
+          }
+        } catch (e) {
+          console.error('Error loading pen sizes:', e)
+        }
+      }
+    }
+    return [2, 3, 4]
+  })
   const contentRef = useRef<HTMLDivElement>(null)
   const canvasRefs = useRef<Map<string, React.MutableRefObject<SimpleCanvasHandle | null>>>(new Map())
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -68,6 +85,13 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
       localStorage.setItem('annotation-pen-colors', JSON.stringify(penColors))
     }
   }, [penColors])
+
+  // Save pen sizes to localStorage whenever they change
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('annotation-pen-sizes', JSON.stringify(penSizes))
+    }
+  }, [penSizes])
 
   // Generate page version hash
   useEffect(() => {
@@ -312,6 +336,15 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
     })
   }, [])
 
+  // Handle pen size change
+  const handlePenSizeChange = useCallback((penIndex: number, size: number) => {
+    setPenSizes(prev => {
+      const newSizes: [number, number, number] = [...prev] as [number, number, number]
+      newSizes[penIndex] = size
+      return newSizes
+    })
+  }, [])
+
   return (
     <>
       {/* Version mismatch warning */}
@@ -371,6 +404,7 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
                 onUpdate={(data) => handleSectionUpdate(section.id, data)}
                 initialData={initialData}
                 strokeColor={penColors[activePen]}
+                strokeWidth={penSizes[activePen]}
               />
             </div>,
             section.element
@@ -388,6 +422,8 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
         onPenChange={handlePenChange}
         penColors={penColors}
         onPenColorChange={handlePenColorChange}
+        penSizes={penSizes}
+        onPenSizeChange={handlePenSizeChange}
       />
     </>
   )

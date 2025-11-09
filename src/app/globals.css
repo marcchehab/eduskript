@@ -525,6 +525,72 @@ html.dark {
   filter: invert(1) hue-rotate(180deg);
 }
 
+/* Material UI style vertical slider */
+.slider-vertical {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  outline: none;
+}
+
+.slider-vertical::-webkit-slider-runnable-track {
+  width: 2px;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 1px;
+}
+
+.dark .slider-vertical::-webkit-slider-runnable-track {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.slider-vertical::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: hsl(var(--primary));
+  cursor: pointer;
+  margin-left: -6px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: background 0.2s, transform 0.2s;
+}
+
+.slider-vertical::-webkit-slider-thumb:hover {
+  background: hsl(var(--primary));
+  transform: scale(1.1);
+}
+
+.slider-vertical::-moz-range-track {
+  width: 2px;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 1px;
+  border: none;
+}
+
+.dark .slider-vertical::-moz-range-track {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.slider-vertical::-moz-range-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: hsl(var(--primary));
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: background 0.2s, transform 0.2s;
+}
+
+.slider-vertical::-moz-range-thumb:hover {
+  background: hsl(var(--primary));
+  transform: scale(1.1);
+}
+
 /* Vertical shadow overlay for entire annotation area */
 .annotation-vertical-shadows {
   position: fixed;

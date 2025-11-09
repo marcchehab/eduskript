@@ -3,6 +3,9 @@
 import { useState, useRef } from 'react'
 import { Pen, Eraser, Trash2, Eye, EyeOff } from 'lucide-react'
 import { Circle } from '@uiw/react-color'
+import Image from 'next/image'
+import brushThickIcon from './brush_thick.png'
+import brushThinIcon from './brush_thin.png'
 
 export type AnnotationMode = 'view' | 'draw' | 'erase'
 
@@ -15,6 +18,8 @@ interface AnnotationToolbarProps {
   onPenChange: (penIndex: number) => void
   penColors: [string, string, string]
   onPenColorChange: (penIndex: number, color: string) => void
+  penSizes: [number, number, number]
+  onPenSizeChange: (penIndex: number, size: number) => void
 }
 
 export function AnnotationToolbar({
@@ -25,7 +30,9 @@ export function AnnotationToolbar({
   activePen,
   onPenChange,
   penColors,
-  onPenColorChange
+  onPenColorChange,
+  penSizes,
+  onPenSizeChange
 }: AnnotationToolbarProps) {
   const handleColorChange = (penIndex: number, color: string) => {
     onPenColorChange(penIndex, color)
@@ -34,7 +41,16 @@ export function AnnotationToolbar({
       onModeChange('draw')
     }
   }
-  const [showColorPicker, setShowColorPicker] = useState<number | null>(null)
+
+  const handleSizeChange = (penIndex: number, size: number) => {
+    onPenSizeChange(penIndex, size)
+    onPenChange(penIndex)
+    if (mode !== 'draw') {
+      onModeChange('draw')
+    }
+  }
+
+  const [showPenControls, setShowPenControls] = useState<number | null>(null)
   const hoverTimerRef = useRef<NodeJS.Timeout | null>(null)
   const hideTimerRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -45,8 +61,9 @@ export function AnnotationToolbar({
       hideTimerRef.current = null
     }
 
+    // Set timer to show pen controls
     hoverTimerRef.current = setTimeout(() => {
-      setShowColorPicker(penIndex)
+      setShowPenControls(penIndex)
     }, 300)
   }
 
@@ -56,10 +73,10 @@ export function AnnotationToolbar({
       hoverTimerRef.current = null
     }
 
-    // If color picker is showing, delay hiding it to give user time to move into it
-    if (showColorPicker !== null) {
+    // If pen controls are showing, delay hiding them to give user time to move into them
+    if (showPenControls !== null) {
       hideTimerRef.current = setTimeout(() => {
-        setShowColorPicker(null)
+        setShowPenControls(null)
       }, 200)
     }
   }
@@ -69,7 +86,7 @@ export function AnnotationToolbar({
       clearTimeout(hoverTimerRef.current)
       hoverTimerRef.current = null
     }
-    setShowColorPicker(null)
+    setShowPenControls(null)
     onPenChange(penIndex)
     if (mode !== 'draw') {
       onModeChange('draw')
@@ -101,10 +118,10 @@ export function AnnotationToolbar({
             />
           </button>
 
-          {/* Color picker popover */}
-          {showColorPicker === penIndex && (
+          {/* Pen controls popover (size slider + color picker) */}
+          {showPenControls === penIndex && (
             <div
-              className="absolute right-full mr-2 bottom-0 bg-background border border-border rounded-full shadow-lg p-3 annotation-color-picker"
+              className="absolute right-full mr-2 bottom-0 flex gap-2"
               onMouseEnter={() => {
                 if (hoverTimerRef.current) {
                   clearTimeout(hoverTimerRef.current)
@@ -114,13 +131,48 @@ export function AnnotationToolbar({
                   hideTimerRef.current = null
                 }
               }}
-              onMouseLeave={() => setShowColorPicker(null)}
+              onMouseLeave={() => setShowPenControls(null)}
             >
-              <Circle
-                colors={['#000000', '#808080', '#DD5555', '#EE8844', '#44AA66', '#5577DD', '#9966DD']}
-                color={penColors[penIndex]}
-                onChange={(color) => handleColorChange(penIndex, color.hex)}
-              />
+              {/* Size slider */}
+              <div className="bg-background border border-border rounded-full shadow-lg p-3 flex flex-col items-center gap-3 h-full min-h-[200px]">
+                {/* Thick brush icon (top) */}
+                <Image
+                  src={brushThickIcon}
+                  alt="Thick brush"
+                  width={16}
+                  height={16}
+                  className="flex-shrink-0 opacity-60"
+                />
+
+                {/* Vertical slider */}
+                <input
+                  type="range"
+                  min="1"
+                  max="10"
+                  step="0.5"
+                  value={penSizes[penIndex]}
+                  onChange={(e) => handleSizeChange(penIndex, parseFloat(e.target.value))}
+                  className="flex-grow cursor-pointer [writing-mode:vertical-lr] [direction:rtl] slider-vertical"
+                />
+
+                {/* Thin brush icon (bottom) */}
+                <Image
+                  src={brushThinIcon}
+                  alt="Thin brush"
+                  width={16}
+                  height={16}
+                  className="flex-shrink-0 opacity-60"
+                />
+              </div>
+
+              {/* Color picker */}
+              <div className="bg-background border border-border rounded-full shadow-lg p-3 annotation-color-picker">
+                <Circle
+                  colors={['#000000', '#808080', '#DD5555', '#EE8844', '#44AA66', '#5577DD', '#9966DD']}
+                  color={penColors[penIndex]}
+                  onChange={(color) => handleColorChange(penIndex, color.hex)}
+                />
+              </div>
             </div>
           )}
         </div>
