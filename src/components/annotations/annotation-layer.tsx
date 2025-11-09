@@ -521,21 +521,19 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
     }
   }, [])
 
-  // Set up touch event listeners
+  // Set up touch event listeners on document to capture ALL touch events (sidebar, main, etc.)
   useEffect(() => {
-    const content = contentRef.current
-    if (!content) return
-
-    content.addEventListener('touchstart', handleTouchStart, { passive: false })
-    content.addEventListener('touchmove', handleTouchMove, { passive: false })
-    content.addEventListener('touchend', handleTouchEnd, { passive: false })
-    content.addEventListener('touchcancel', handleTouchEnd, { passive: false })
+    // Attach to document to prevent browser zoom everywhere
+    document.addEventListener('touchstart', handleTouchStart, { passive: false })
+    document.addEventListener('touchmove', handleTouchMove, { passive: false })
+    document.addEventListener('touchend', handleTouchEnd, { passive: false })
+    document.addEventListener('touchcancel', handleTouchEnd, { passive: false })
 
     return () => {
-      content.removeEventListener('touchstart', handleTouchStart)
-      content.removeEventListener('touchmove', handleTouchMove)
-      content.removeEventListener('touchend', handleTouchEnd)
-      content.removeEventListener('touchcancel', handleTouchEnd)
+      document.removeEventListener('touchstart', handleTouchStart)
+      document.removeEventListener('touchmove', handleTouchMove)
+      document.removeEventListener('touchend', handleTouchEnd)
+      document.removeEventListener('touchcancel', handleTouchEnd)
     }
   }, [handleTouchStart, handleTouchMove, handleTouchEnd])
 
@@ -580,8 +578,12 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
           transform: `scale(${zoom}) translate(${panX}px, ${panY}px)`,
           transformOrigin: '0 0',
           transition: 'none', // Instant updates for smooth pinch
+          position: 'relative', // For absolute positioned shadows
         }}
       >
+        {/* Annotation shadow overlay - moves with zoom */}
+        <div className="annotation-vertical-shadows" />
+
         {children}
 
         {/* Render canvases into section elements using portals */}

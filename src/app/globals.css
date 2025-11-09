@@ -628,11 +628,11 @@ html.dark {
 
 /* Vertical shadow overlay for entire annotation area */
 .annotation-vertical-shadows {
-  position: fixed;
+  position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  height: 100vh;
+  height: 100%;
   pointer-events: none;
   z-index: 15;
   /* Two gradients positioned at canvas edges (72rem centered) */

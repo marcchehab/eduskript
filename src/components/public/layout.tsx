@@ -460,10 +460,6 @@ export function PublicSiteLayout({
       <div className={`transition-all duration-300 ${
         isSidebarCollapsed ? 'lg:ml-16' : 'lg:ml-80'
       }`}>
-        {/* Annotation shadow overlay - positioned within main content */}
-        <div className={`annotation-vertical-shadows ${
-          isSidebarCollapsed ? 'lg:ml-16' : 'lg:ml-80'
-        }`} />
         <main className="p-6 lg:p-8 bg-background min-h-screen">
           {children}
         </main>
