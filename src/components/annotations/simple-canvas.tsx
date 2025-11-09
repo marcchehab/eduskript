@@ -24,8 +24,8 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
   ({ width, height, mode, onUpdate, initialData, strokeWidth = 2, strokeColor = '#000000', eraserWidth = 10 }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const isDrawingRef = useRef(false)
-    const pathsRef = useRef<Array<{ points: Array<{ x: number; y: number }>; mode: DrawMode; color: string; width: number }>>([])
-    const currentPathRef = useRef<Array<{ x: number; y: number }>>([])
+    const pathsRef = useRef<Array<{ points: Array<{ x: number; y: number; pressure: number }>; mode: DrawMode; color: string; width: number }>>([])
+    const currentPathRef = useRef<Array<{ x: number; y: number; pressure: number }>>([])
 
     const redrawCanvas = useCallback(() => {
       const canvas = canvasRef.current
@@ -37,22 +37,30 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       // Clear canvas
       ctx.clearRect(0, 0, canvas.width, canvas.height)
 
-      // Redraw all paths
+      // Redraw all paths with pressure-sensitive line width
       pathsRef.current.forEach(path => {
         if (path.points.length < 2) return
 
-        ctx.beginPath()
         ctx.strokeStyle = path.mode === 'erase' ? '#FFFFFF' : path.color
-        ctx.lineWidth = path.mode === 'erase' ? eraserWidth : path.width
         ctx.lineCap = 'round'
         ctx.lineJoin = 'round'
         ctx.globalCompositeOperation = path.mode === 'erase' ? 'destination-out' : 'source-over'
 
-        ctx.moveTo(path.points[0].x, path.points[0].y)
+        // Draw path with variable width based on pressure
         for (let i = 1; i < path.points.length; i++) {
-          ctx.lineTo(path.points[i].x, path.points[i].y)
+          const prevPoint = path.points[i - 1]
+          const currPoint = path.points[i]
+
+          // Calculate line width based on pressure
+          const baseWidth = path.mode === 'erase' ? eraserWidth : path.width
+          const lineWidth = baseWidth * (currPoint.pressure || 0.5)
+
+          ctx.beginPath()
+          ctx.lineWidth = lineWidth
+          ctx.moveTo(prevPoint.x, prevPoint.y)
+          ctx.lineTo(currPoint.x, currPoint.y)
+          ctx.stroke()
         }
-        ctx.stroke()
       })
     }, [eraserWidth])
 
@@ -85,8 +93,9 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       const rect = canvas.getBoundingClientRect()
       const x = e.clientX - rect.left
       const y = e.clientY - rect.top
+      const pressure = e.pressure || 0.5 // Default to 0.5 for mouse
 
-      currentPathRef.current = [{ x, y }]
+      currentPathRef.current = [{ x, y, pressure }]
     }, [mode])
 
     const draw = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -101,13 +110,17 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       const rect = canvas.getBoundingClientRect()
       const x = e.clientX - rect.left
       const y = e.clientY - rect.top
+      const pressure = e.pressure || 0.5 // Default to 0.5 for mouse
 
-      currentPathRef.current.push({ x, y })
+      currentPathRef.current.push({ x, y, pressure })
 
-      // Draw current segment
+      // Draw current segment with pressure-sensitive width
+      const baseWidth = mode === 'erase' ? eraserWidth : strokeWidth
+      const lineWidth = baseWidth * pressure
+
       ctx.beginPath()
       ctx.strokeStyle = mode === 'erase' ? '#FFFFFF' : strokeColor
-      ctx.lineWidth = mode === 'erase' ? eraserWidth : strokeWidth
+      ctx.lineWidth = lineWidth
       ctx.lineCap = 'round'
       ctx.lineJoin = 'round'
       ctx.globalCompositeOperation = mode === 'erase' ? 'destination-out' : 'source-over'
