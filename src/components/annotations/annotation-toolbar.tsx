@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { Pen, Eraser, Trash2, Eye, EyeOff } from 'lucide-react'
 import { Circle } from '@uiw/react-color'
 import Image from 'next/image'
@@ -93,8 +94,8 @@ export function AnnotationToolbar({
     }
   }
 
-  return (
-    <div className="fixed bottom-6 right-6 z-50 bg-background/95 backdrop-blur border border-border rounded-lg shadow-lg p-2 flex flex-col gap-1">
+  const toolbarContent = (
+    <div className="fixed bottom-6 right-6 z-50 bg-background/95 backdrop-blur border border-border rounded-lg shadow-lg p-2 flex flex-col gap-1" style={{ isolation: 'isolate' }}>
       {/* Three Pen Tools */}
       {[0, 1, 2].map((penIndex) => (
         <div key={penIndex} className="relative">
@@ -227,4 +228,7 @@ export function AnnotationToolbar({
 
     </div>
   )
+
+  // Render to document.body to avoid zoom transforms
+  return typeof window !== 'undefined' ? createPortal(toolbarContent, document.body) : toolbarContent
 }
