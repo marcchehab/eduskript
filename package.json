@@ -17,7 +17,8 @@
     "docker:build": "docker build --build-arg GIT_COMMIT_SHA=$(git rev-parse HEAD) --build-arg GIT_COMMIT_MESSAGE=\"$(git log -1 --pretty=%B)\" --build-arg BUILD_TIME=$(date -u +\"%Y-%m-%dT%H:%M:%SZ\") -t eduskript .",
     "docker:run": "docker-compose -f docker-compose.dev.yml up eduskript",
     "docker:stop": "docker-compose -f docker-compose.dev.yml down",
-    "docker:logs": "docker-compose -f docker-compose.dev.yml logs -f eduskript"
+    "docker:logs": "docker-compose -f docker-compose.dev.yml logs -f eduskript",
+    "docker:deploy": "./scripts/deploy.sh"
   },
   "prisma": {
     "seed": "npx tsx prisma/seed.ts"
