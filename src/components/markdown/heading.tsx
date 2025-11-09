@@ -15,8 +15,8 @@ export function Heading({ level, id, children }: HeadingProps) {
   // Generate ID from children text if not provided
   const headingId = id || generateSlug(childrenToString(children))
 
-  // Generate section ID for annotation system (h1-h4 only)
-  const sectionId = level <= 4 ? `${Tag}-${headingId}` : undefined
+  // Generate section ID for annotation system (h1-h2 only)
+  const sectionId = level <= 2 ? `${Tag}-${headingId}` : undefined
 
   const className = {
     1: 'text-4xl font-bold mb-4',

@@ -100,7 +100,6 @@ export function MarkdownRenderer({ content, context, onContentChange }: Markdown
                   }}
                 >
                   {props.children}
-                  <hr className="border-t border-border/30 my-0" />
                 </section>
               ),
               // Div component for Shiki code blocks (rehypeKatex handles math automatically)

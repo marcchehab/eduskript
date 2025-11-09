@@ -2,14 +2,14 @@ import { visit } from 'unist-util-visit'
 import type { Root, Element } from 'hast'
 
 /**
- * Rehype plugin to add data-section-id and data-heading-text attributes to h1-h4 headings
+ * Rehype plugin to add data-section-id and data-heading-text attributes to h1-h2 headings
  * for the annotation system
  */
 export function rehypeHeadingSectionIds() {
   return (tree: Root) => {
     visit(tree, 'element', (node: Element) => {
-      // Only process h1-h4 headings
-      if (!['h1', 'h2', 'h3', 'h4'].includes(node.tagName)) {
+      // Only process h1-h2 headings
+      if (!['h1', 'h2'].includes(node.tagName)) {
         return
       }
 

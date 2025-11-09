@@ -352,13 +352,58 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
       console.log('Stylus detected - activating stylus mode')
       setStylusModeActive(true)
     }
+    // Always switch to draw mode when stylus is detected
+    if (mode !== 'draw') {
+      console.log('Stylus detected - switching to draw mode')
+      setMode('draw')
+    }
+  }, [stylusModeActive, mode])
+
+  // Document-level stylus detection when not in stylus mode
+  useEffect(() => {
+    if (stylusModeActive) return // Only listen when stylus mode is not active
+
+    const handleDocumentPointer = (e: PointerEvent) => {
+      if (e.pointerType === 'pen') {
+        console.log('Stylus detected on document (hover or touch) - activating stylus mode')
+        handleStylusDetected()
+      }
+    }
+
+    // Listen for both hover (pointermove) and touch (pointerdown)
+    document.addEventListener('pointermove', handleDocumentPointer)
+    document.addEventListener('pointerdown', handleDocumentPointer)
+    return () => {
+      document.removeEventListener('pointermove', handleDocumentPointer)
+      document.removeEventListener('pointerdown', handleDocumentPointer)
+    }
+  }, [stylusModeActive, handleStylusDetected])
+
+  // Document-level mouse detection when stylus mode is active
+  useEffect(() => {
+    if (!stylusModeActive) return // Only listen when stylus mode IS active
+
+    const handleDocumentMouseMove = (e: PointerEvent) => {
+      if (e.pointerType === 'mouse') {
+        console.log('Mouse detected on document - deactivating stylus mode')
+        setStylusModeActive(false)
+        setMode('view')
+      }
+    }
+
+    // Listen for mouse movement
+    document.addEventListener('pointermove', handleDocumentMouseMove)
+    return () => {
+      document.removeEventListener('pointermove', handleDocumentMouseMove)
+    }
   }, [stylusModeActive])
 
-  // Handle non-stylus input in stylus mode (switch to view mode)
+  // Handle non-stylus input in stylus mode (switch to view mode and deactivate stylus mode)
   const handleNonStylusInput = useCallback(() => {
     if (stylusModeActive && mode !== 'view') {
-      console.log('Non-stylus input detected in stylus mode - switching to view mode')
+      console.log('Non-stylus input detected in stylus mode - switching to view mode and deactivating stylus mode')
       setMode('view')
+      setStylusModeActive(false)
     }
   }, [stylusModeActive, mode])
 
@@ -409,7 +454,7 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
                 left: `-${MARGIN_EXTENSION_REM}rem`,
                 width: `${CANVAS_WIDTH_REM}rem`,
                 height: '100%',
-                pointerEvents: mode === 'view' ? 'none' : 'auto',
+                pointerEvents: 'none', // Always allow events to pass through to canvas
                 zIndex: 10
               }}
             >

@@ -83,21 +83,24 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
     }, [initialData])
 
     const startDrawing = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-      if (mode === 'view') {
-        return
-      }
-
-      // Detect stylus input
-      if (e.pointerType === 'pen' && onStylusDetected) {
+      // Detect stylus input first, before any other checks
+      const isStylusInput = e.pointerType === 'pen'
+      if (isStylusInput && onStylusDetected) {
         onStylusDetected()
       }
 
       // In stylus mode, only allow pen input for drawing
-      if (stylusModeActive && e.pointerType !== 'pen') {
+      if (stylusModeActive && !isStylusInput) {
         // Switch to view mode when non-stylus input is detected
         if (onNonStylusInput) {
           onNonStylusInput()
         }
+        return
+      }
+
+      // If we're in view mode but just detected stylus, allow it to proceed
+      // (the mode will switch to draw, but that happens asynchronously)
+      if (mode === 'view' && !isStylusInput) {
         return
       }
 
@@ -204,9 +207,13 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
           position: 'absolute',
           top: 0,
           left: 0,
-          touchAction: stylusModeActive ? 'pan-x pan-y pinch-zoom' : 'none',
+          // Always allow touch pan/zoom/pinch in view mode or stylus mode
+          // This allows touch gestures to pass through for scrolling
+          touchAction: (mode === 'view' || stylusModeActive) ? 'pan-x pan-y pinch-zoom' : 'none',
           cursor: mode === 'draw' ? 'crosshair' : mode === 'erase' ? 'pointer' : 'default',
-          pointerEvents: mode === 'view' ? 'none' : 'auto'
+          // Only receive events when in draw/erase mode OR when stylus mode is active
+          // This allows text selection in view mode without stylus mode
+          pointerEvents: (mode !== 'view' || stylusModeActive) ? 'auto' : 'none'
         }}
       />
     )

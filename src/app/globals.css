@@ -506,6 +506,27 @@ html.dark {
   position: relative;
 }
 
+/* Annotation section with subtle gradient border */
+.annotation-section {
+  position: relative;
+  margin-bottom: 1rem;
+}
+
+.annotation-section::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.15) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.dark .annotation-section::after {
+  background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.15) 0%, transparent 70%);
+}
+
 /* Invert annotation canvas and color picker in dark mode */
 .dark .annotation-canvas {
   filter: invert(1) hue-rotate(180deg);
@@ -603,6 +624,14 @@ html.dark {
   /* Two gradients positioned at canvas edges (72rem centered) */
   background:
     linear-gradient(to left, #0000000f 0%, #0000 100%), linear-gradient(to right, #0000000f 0%, #0000 100%);
+  background-position: calc(49.8% - 36rem) 0, calc(49.2% + 36rem) 0;
+  background-size: 16px 100%, 16px 100%;
+  background-repeat: no-repeat;
+}
+
+.dark .annotation-vertical-shadows {
+  background:
+    linear-gradient(to left, #ffffff1a 0%, #0000 100%), linear-gradient(to right, #ffffff1a 0%, #0000 100%);
   background-position: calc(49.8% - 36rem) 0, calc(49.2% + 36rem) 0;
   background-size: 16px 100%, 16px 100%;
   background-repeat: no-repeat;

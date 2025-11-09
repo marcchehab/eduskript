@@ -1,11 +1,11 @@
 import type { Root, Element, ElementContent, RootContent } from 'hast'
 
 /**
- * Rehype plugin to wrap h1-h4 headings and their content into section elements
+ * Rehype plugin to wrap h1-h2 headings and their content into section elements
  * for the annotation system.
  *
  * This creates a proper DOM structure where each section contains:
- * - The heading element (h1-h4)
+ * - The heading element (h1-h2)
  * - All content until the next heading of equal or higher level
  *
  * Sections get:
@@ -54,8 +54,8 @@ export function rehypeWrapSections() {
       if (child.type === 'element' && isHeading(child.tagName)) {
         const level = getHeadingLevel(child.tagName)
 
-        // h1-h4 starts a new section
-        if (level >= 1 && level <= 4) {
+        // h1-h2 starts a new section
+        if (level >= 1 && level <= 2) {
           // Finalize previous section
           finalizeSection()
 
@@ -66,7 +66,7 @@ export function rehypeWrapSections() {
             level
           }
         } else {
-          // h5-h6 or other elements - add to current section or top level
+          // h3-h6 or other elements - add to current section or top level
           if (currentSection) {
             currentSection.content.push(child)
           } else {
