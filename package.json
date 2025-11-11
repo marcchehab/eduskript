@@ -6,6 +6,10 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "devdb:push": "prisma db push",
@@ -115,6 +119,9 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/hast": "^3.0.4",
     "@types/mdast": "^4.0.4",
@@ -124,10 +131,16 @@
     "@types/react-katex": "^3.0.4",
     "@types/unist": "^3.0.3",
     "@types/uuid": "^10.0.0",
+    "@vitejs/plugin-react": "^5.1.0",
+    "@vitest/ui": "^4.0.8",
     "dotenv-cli": "^8.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.0.1",
-    "typescript": "^5"
+    "happy-dom": "^20.0.10",
+    "jsdom": "^27.1.0",
+    "msw": "^2.12.1",
+    "typescript": "^5",
+    "vitest": "^4.0.8"
   },
   "packageManager": "pnpm@10.20.0+sha512.cf9998222162dd85864d0a8102e7892e7ba4ceadebbf5a31f9c2fce48dfce317a9c53b9f6464d1ef9042cba2e02ae02a9f7c143a2b438cd93c91840f0192b9dd"
 }
