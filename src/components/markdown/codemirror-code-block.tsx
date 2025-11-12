@@ -250,36 +250,38 @@ export function CodeMirrorCodeBlock({
     <div className="relative group my-4">
       {/* Control bar */}
       <div className="absolute top-0 right-0 flex items-center justify-between gap-2 px-3 py-1.5 bg-muted/50 border border-border rounded-md opacity-0 group-hover:opacity-100 transition-opacity z-10">
-        {/* Language selector */}
-        <div className="relative" ref={dropdownRef}>
-          <button
-            onClick={() => setIsOpen(!isOpen)}
-            className="flex items-center gap-1.5 px-2 py-1 text-xs font-mono text-muted-foreground hover:text-foreground transition-colors rounded bg-background/50 hover:bg-background"
-          >
-            {language}
-            <ChevronDown className="w-3 h-3" />
-          </button>
+        {/* Language selector - only show when editable */}
+        {onLanguageChange && (
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={() => setIsOpen(!isOpen)}
+              className="flex items-center gap-1.5 px-2 py-1 text-xs font-mono text-muted-foreground hover:text-foreground transition-colors rounded bg-background/50 hover:bg-background"
+            >
+              {language}
+              <ChevronDown className="w-3 h-3" />
+            </button>
 
-          {isOpen && (
-            <div className="absolute top-full right-0 mt-1 w-36 max-h-48 overflow-y-auto bg-popover border border-border rounded-md shadow-lg z-20">
-              {languages.map((lang) => (
-                <button
-                  key={lang}
-                  onClick={() => {
-                    setLanguage(lang)
-                    setIsOpen(false)
-                    onLanguageChange?.(lang)
-                  }}
-                  className={`block w-full text-left px-3 py-1.5 text-xs font-mono hover:bg-accent transition-colors ${
-                    language === lang ? 'bg-accent text-accent-foreground' : 'text-foreground'
-                  }`}
-                >
-                  {lang}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+            {isOpen && (
+              <div className="absolute top-full right-0 mt-1 w-36 max-h-48 overflow-y-auto bg-popover border border-border rounded-md shadow-lg z-20">
+                {languages.map((lang) => (
+                  <button
+                    key={lang}
+                    onClick={() => {
+                      setLanguage(lang)
+                      setIsOpen(false)
+                      onLanguageChange?.(lang)
+                    }}
+                    className={`block w-full text-left px-3 py-1.5 text-xs font-mono hover:bg-accent transition-colors ${
+                      language === lang ? 'bg-accent text-accent-foreground' : 'text-foreground'
+                    }`}
+                  >
+                    {lang}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Copy button */}
         <button

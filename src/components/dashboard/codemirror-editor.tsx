@@ -42,8 +42,8 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   const [textareaContent, setTextareaContent] = useState(content || '')
   const [dragOver, setDragOver] = useState(false)
   const [excalidrawOpen, setExcalidrawOpen] = useState(false)
-  const { theme } = useTheme()
-  const isDark = theme === 'dark'
+  const { resolvedTheme } = useTheme()
+  const isDark = resolvedTheme === 'dark'
 
   // Calculate visibility based on width
   const MIN_VISIBLE_WIDTH = 100 // pixels
