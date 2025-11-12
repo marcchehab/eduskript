@@ -55,10 +55,13 @@ export function CodeEditor({
   const [renamingIndex, setRenamingIndex] = useState<number | null>(null)
   const [renameValue, setRenameValue] = useState('')
 
-  // Calculate visibility based on width and detect turtle module
-  const hasTurtleModule = language === 'python' && /import\s+turtle|from\s+turtle/.test(files[activeFileIndex]?.content || initialCode)
+  // Calculate visibility based on width and detect graphics modules (turtle or matplotlib)
+  const currentCode = files[activeFileIndex]?.content || initialCode
+  const hasTurtleModule = language === 'python' && /import\s+turtle|from\s+turtle/.test(currentCode)
+  const hasMatplotlib = language === 'python' && /import\s+matplotlib|from\s+matplotlib/.test(currentCode)
+  const hasGraphics = hasTurtleModule || hasMatplotlib
   const showEditor = containerRef.current ? (editorWidth / 100) * containerRef.current.offsetWidth >= MIN_VISIBLE_WIDTH : true
-  const showTurtle = containerRef.current ? ((100 - editorWidth) / 100) * containerRef.current.offsetWidth >= MIN_VISIBLE_WIDTH : true
+  const showGraphics = containerRef.current ? ((100 - editorWidth) / 100) * containerRef.current.offsetWidth >= MIN_VISIBLE_WIDTH : true
   const [canvasVisible, setCanvasVisible] = useState(showCanvas)
 
   // Canvas pan and zoom state
@@ -74,12 +77,12 @@ export function CodeEditor({
   const wrapperRef = useRef<HTMLDivElement>(null)
   const outputPanelRef = useRef<HTMLDivElement>(null)
 
-  // Update canvas visibility when turtle module is detected
+  // Update canvas visibility when graphics modules are detected
   useEffect(() => {
-    if (hasTurtleModule && !canvasVisible) {
+    if (hasGraphics && !canvasVisible) {
       setCanvasVisible(true)
     }
-  }, [hasTurtleModule])
+  }, [hasGraphics, canvasVisible])
 
   // Handle splitter dragging
   const handleSplitterMouseDown = (e: React.MouseEvent) => {
@@ -569,6 +572,11 @@ export function CodeEditor({
     setRunState(RunState.RUNNING)
     setOutput([]) // Clear previous output
 
+    // Clear previous matplotlib plots
+    if (canvasRef.current) {
+      canvasRef.current.querySelectorAll('.matplotlib-plot').forEach(el => el.remove())
+    }
+
     try {
       const pyodide = await (window as any).__pyodidePromise
 
@@ -658,18 +666,25 @@ plots
 `
         const plotsData = await pyodide.runPythonAsync(plotScript)
 
-        // Display plots as images in output
-        if (plotsData && plotsData.length > 0) {
+        // Display plots in the graphics pane
+        if (plotsData && plotsData.length > 0 && canvasRef.current) {
+          // Clear previous matplotlib plots (but keep turtle graphics)
+          const canvas = canvasRef.current
+          // Remove existing matplotlib images
+          canvas.querySelectorAll('.matplotlib-plot').forEach(el => el.remove())
+
+          // Add new plots
           for (let i = 0; i < plotsData.length; i++) {
             const imgData = plotsData[i]
-            // Create a special output entry for images
-            setOutput(prev => [...prev, {
-              message: `<img src="${imgData}" alt="Plot ${i + 1}" style="max-width: 100%; height: auto; margin: 8px 0; border-radius: 4px;" />`,
-              level: OutputLevel.OUTPUT,
-              timestamp: Date.now(),
-              isHtml: true
-            }])
+            const img = document.createElement('img')
+            img.src = imgData
+            img.alt = `Plot ${i + 1}`
+            img.className = 'matplotlib-plot'
+            img.style.cssText = 'max-width: 100%; height: auto; display: block; margin: 8px auto; border-radius: 4px;'
+            canvas.appendChild(img)
           }
+
+          addOutput(`✓ ${plotsData.length} plot${plotsData.length > 1 ? 's' : ''} displayed in Graphics panel`, OutputLevel.OUTPUT)
         }
       } catch (plotError) {
         console.error('[Pyodide] Error capturing plots:', plotError)
@@ -777,7 +792,7 @@ plots
           <div
             className="flex flex-col border-r"
             style={{
-              width: canvasVisible && showTurtle ? `${editorWidth}%` : '100%',
+              width: canvasVisible && showGraphics ? `${editorWidth}%` : '100%',
               display: showEditor ? 'flex' : 'none'
             }}
           >
@@ -801,12 +816,12 @@ plots
                 </Button>
               </div>
               <div className="flex items-center gap-2">
-                {!showTurtle && canvasVisible && language === 'python' && (
+                {!showGraphics && canvasVisible && language === 'python' && (
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => setEditorWidth(50)}
-                    title="Show Turtle Canvas"
+                    title="Show Graphics Panel"
                     className="text-primary hover:text-primary"
                   >
                     <Bug className="w-4 h-4" />
@@ -886,7 +901,7 @@ plots
         )}
 
         {/* Draggable Splitter */}
-        {showEditor && showTurtle && canvasVisible && (
+        {showEditor && showGraphics && canvasVisible && (
           <div
             onMouseDown={handleSplitterMouseDown}
             className={`w-2 bg-border hover:bg-primary/20 cursor-col-resize flex-shrink-0 transition-colors relative flex items-center justify-center ${
@@ -900,15 +915,15 @@ plots
           </div>
         )}
 
-        {/* Canvas Panel (Turtle Graphics for Python) */}
-        {canvasVisible && showTurtle && (
+        {/* Graphics Panel (Turtle Graphics & Matplotlib for Python) */}
+        {canvasVisible && showGraphics && (
           <div
             className="flex flex-col relative"
             style={{ width: showEditor ? `${100 - editorWidth}%` : '100%' }}
           >
             <div className="flex items-center justify-between gap-2 p-2 border-b bg-muted/30">
               <div className="text-sm font-medium">
-                {language === 'python' ? 'Turtle Graphics' : 'Canvas'}
+                {language === 'python' ? 'Graphics' : 'Canvas'}
               </div>
               <div className="flex items-center gap-1">
                 <Button onClick={resetCanvasView} size="sm" variant="ghost" title="Reset View">
