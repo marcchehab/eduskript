@@ -447,22 +447,6 @@ html, body {
 /* Annotation section with subtle gradient border */
 .annotation-section {
   position: relative;
-  margin-bottom: 1rem;
-}
-
-.annotation-section::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.15) 0%, transparent 70%);
-  pointer-events: none;
-}
-
-.dark .annotation-section::after {
-  background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.15) 0%, transparent 70%);
 }
 
 /* Invert annotation canvas and color picker in dark mode */

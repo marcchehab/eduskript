@@ -8,6 +8,7 @@
 import { PrismaClient } from '@prisma/client'
 import { execSync } from 'child_process'
 import { randomBytes } from 'crypto'
+import { vi } from 'vitest'
 import fs from 'fs'
 import path from 'path'
 
@@ -102,7 +103,7 @@ export async function seedTestData(prisma: PrismaClient) {
       email: 'test1@example.com',
       hashedPassword: 'hashed_password_1',
       subdomain: 'test1',
-      verified: true,
+      emailVerified: new Date(),
     },
   })
 
@@ -111,7 +112,7 @@ export async function seedTestData(prisma: PrismaClient) {
       email: 'test2@example.com',
       hashedPassword: 'hashed_password_2',
       subdomain: 'test2',
-      verified: true,
+      emailVerified: new Date(),
     },
   })
 
@@ -120,7 +121,7 @@ export async function seedTestData(prisma: PrismaClient) {
       email: 'test3@example.com',
       hashedPassword: 'hashed_password_3',
       subdomain: 'test3',
-      verified: false, // Unverified user for auth tests
+      // emailVerified: null (unverified user for auth tests)
     },
   })
 
@@ -130,7 +131,7 @@ export async function seedTestData(prisma: PrismaClient) {
       title: 'Test Collection',
       slug: 'test-collection',
       description: 'A test collection',
-      published: true,
+      isPublished: true,
       authors: {
         create: [
           {
@@ -152,9 +153,13 @@ export async function seedTestData(prisma: PrismaClient) {
       title: 'Test Skript',
       slug: 'test-skript',
       description: 'A test skript',
-      published: true,
-      collectionId: collection.id,
-      order: 0,
+      isPublished: true,
+      collectionSkripts: {
+        create: {
+          collectionId: collection.id,
+          order: 0,
+        },
+      },
       authors: {
         create: [
           {
@@ -171,7 +176,8 @@ export async function seedTestData(prisma: PrismaClient) {
     data: {
       title: 'Test Page',
       slug: 'test-page',
-      published: true,
+      content: '# Test Page\n\nThis is a test page.',
+      isPublished: true,
       skriptId: skript.id,
       order: 0,
       authors: {
@@ -191,7 +197,7 @@ export async function seedTestData(prisma: PrismaClient) {
       pageId: page.id,
       content: '# Test Page\n\nThis is test content.',
       version: 1,
-      userId: user1.id,
+      authorId: user1.id,
     },
   })
 
