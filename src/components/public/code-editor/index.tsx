@@ -12,7 +12,7 @@ import { basicSetup } from 'codemirror'
 import { autocompletion } from '@codemirror/autocomplete'
 import { pythonCompletions } from './python-completions'
 import { Button } from '@/components/ui/button'
-import { Play, Square, RotateCcw, Maximize2, Minimize2, Camera, X, Plus, FileText, Palette } from 'lucide-react'
+import { Play, Square, RotateCcw, Maximize2, Minimize2, Camera, X, Plus, FileText, Palette, ZoomIn, ZoomOut } from 'lucide-react'
 import {
   RunState,
   OutputLevel,
@@ -63,6 +63,9 @@ export function CodeEditor({
   const showEditor = containerRef.current ? (editorWidth / 100) * containerRef.current.offsetWidth >= MIN_VISIBLE_WIDTH : true
   const showGraphics = containerRef.current ? ((100 - editorWidth) / 100) * containerRef.current.offsetWidth >= MIN_VISIBLE_WIDTH : true
   const [canvasVisible, setCanvasVisible] = useState(false) // Start hidden, show only when graphics detected
+
+  // Font size state
+  const [fontSize, setFontSize] = useState(14) // Default 14px
 
   // Canvas pan and zoom state
   const [canvasTransform, setCanvasTransform] = useState({ x: 0, y: 0, scale: 1 })
@@ -237,6 +240,9 @@ export function CodeEditor({
         },
         '.cm-scroller': {
           overflow: 'auto'
+        },
+        '.cm-content': {
+          fontSize: `${fontSize}px`
         }
       }, { dark: isDark }),
     ]
@@ -281,7 +287,7 @@ export function CodeEditor({
         editorViewRef.current = null
       }
     }
-  }, [mounted, resolvedTheme, language, initialCode])
+  }, [mounted, resolvedTheme, language, initialCode, fontSize])
 
   // Attach non-passive wheel event listener to prevent page scroll
   useEffect(() => {
@@ -449,6 +455,15 @@ export function CodeEditor({
   const cancelRename = () => {
     setRenamingIndex(null)
     setRenameValue('')
+  }
+
+  // Font size controls
+  const increaseFontSize = () => {
+    setFontSize(prev => Math.min(prev + 2, 32)) // Max 32px
+  }
+
+  const decreaseFontSize = () => {
+    setFontSize(prev => Math.max(prev - 2, 8)) // Min 8px
   }
 
   // Update editor when active file changes
@@ -856,66 +871,88 @@ plots
           >
             {/* File Tabs */}
             {language === 'python' && (
-              <div className="flex items-center gap-1 px-2 py-1 border-b bg-muted/10 overflow-x-auto">
-                {files.map((file, index) => (
-                  <div key={index} className="flex items-center">
-                    {renamingIndex === index ? (
-                      <input
-                        type="text"
-                        value={renameValue}
-                        onChange={(e) => setRenameValue(e.target.value)}
-                        onBlur={() => confirmRename(index)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            confirmRename(index)
-                          } else if (e.key === 'Escape') {
-                            cancelRename()
-                          }
-                        }}
-                        autoFocus
-                        className="h-7 px-2 text-xs border rounded bg-background"
-                        style={{ width: '120px' }}
-                      />
-                    ) : (
-                      <>
-                        <Button
-                          size="sm"
-                          variant={activeFileIndex === index ? 'secondary' : 'ghost'}
-                          onClick={() => switchToFile(index)}
-                          onDoubleClick={() => startRename(index)}
-                          className="h-7 px-2 text-xs gap-1"
-                          title="Double-click to rename"
-                        >
-                          <FileText className="w-3 h-3" />
-                          {file.name}
-                        </Button>
-                        {files.length > 1 && (
+              <div className="flex items-center justify-between gap-1 px-2 py-1 border-b bg-muted/10">
+                <div className="flex items-center gap-1 overflow-x-auto flex-1">
+                  {files.map((file, index) => (
+                    <div key={index} className="flex items-center">
+                      {renamingIndex === index ? (
+                        <input
+                          type="text"
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onBlur={() => confirmRename(index)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              confirmRename(index)
+                            } else if (e.key === 'Escape') {
+                              cancelRename()
+                            }
+                          }}
+                          autoFocus
+                          className="h-7 px-2 text-xs border rounded bg-background"
+                          style={{ width: '120px' }}
+                        />
+                      ) : (
+                        <>
                           <Button
                             size="sm"
-                            variant="ghost"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              removeFile(index)
-                            }}
-                            className="h-6 w-6 p-0 ml-1"
-                            title="Remove file"
+                            variant={activeFileIndex === index ? 'secondary' : 'ghost'}
+                            onClick={() => switchToFile(index)}
+                            onDoubleClick={() => startRename(index)}
+                            className="h-7 px-2 text-xs gap-1"
+                            title="Double-click to rename"
                           >
-                            <X className="w-3 h-3" />
+                            <FileText className="w-3 h-3" />
+                            {file.name}
                           </Button>
-                        )}
-                      </>
-                    )}
-                  </div>
-                ))}
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={addNewFile}
-                  className="h-7 px-2 text-xs"
-                  title="Add new file"
-                >
-                  <Plus className="w-4 h-4" />
-                </Button>
+                          {files.length > 1 && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                removeFile(index)
+                              }}
+                              className="h-6 w-6 p-0 ml-1"
+                              title="Remove file"
+                            >
+                              <X className="w-3 h-3" />
+                            </Button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  ))}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={addNewFile}
+                    className="h-7 px-2 text-xs"
+                    title="Add new file"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={decreaseFontSize}
+                    className="h-6 w-6 p-0"
+                    title="Decrease font size"
+                  >
+                    <ZoomOut className="w-3 h-3" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={increaseFontSize}
+                    className="h-6 w-6 p-0"
+                    title="Increase font size"
+                  >
+                    <ZoomIn className="w-3 h-3" />
+                  </Button>
+                </div>
               </div>
             )}
 
