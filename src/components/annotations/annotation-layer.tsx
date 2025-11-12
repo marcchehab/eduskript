@@ -43,6 +43,7 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
   const initialPinchCenterRef = useRef<{ x: number; y: number } | null>(null)
   const initialPanRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
   const singleTouchStartRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null)
+  const middleMouseDragRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null)
   const [penColors, setPenColors] = useState<[string, string, string]>(() => {
     // Load pen colors from localStorage
     if (typeof window !== 'undefined') {
@@ -467,6 +468,36 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
     }
   }, [stylusModeActive, mode])
 
+  // Calculate scroll limits based on main content bounds
+  const calculateScrollLimits = useCallback((newPanY: number, newZoom: number = zoom) => {
+    if (!mainRef.current) return newPanY
+
+    // Remove current transform temporarily to get natural dimensions
+    const currentTransform = mainRef.current.style.transform
+    mainRef.current.style.transform = 'none'
+
+    // Get the main content element bounds (includes article + everything below it)
+    const mainRect = mainRef.current.getBoundingClientRect()
+    const mainTop = mainRect.top
+    const mainHeight = mainRect.height
+
+    // Restore transform
+    mainRef.current.style.transform = currentTransform
+
+    const viewportHeight = window.innerHeight
+
+    // Calculate limits in pan space
+    // Top limit: content top should not go below viewport top
+    const maxPanY = -mainTop / newZoom
+
+    // Bottom limit: content bottom should not go above viewport bottom
+    // Allow scrolling to see all content including comments, export buttons, etc.
+    const minPanY = (viewportHeight - mainTop - mainHeight * newZoom) / newZoom
+
+    // Clamp panY between limits
+    return Math.max(minPanY, Math.min(maxPanY, newPanY))
+  }, [zoom])
+
   // Custom pinch-zoom and pan handling
   const handleTouchStart = useCallback((e: TouchEvent) => {
     // Track all touches
@@ -522,7 +553,10 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
       const deltaX = touch.clientX - singleTouchStartRef.current.x
       const deltaY = touch.clientY - singleTouchStartRef.current.y
       const newPanX = singleTouchStartRef.current.panX + deltaX / zoom
-      const newPanY = singleTouchStartRef.current.panY + deltaY / zoom
+      let newPanY = singleTouchStartRef.current.panY + deltaY / zoom
+
+      // Apply scroll limits
+      newPanY = calculateScrollLimits(newPanY)
 
       setPanX(newPanX)
       setPanY(newPanY)
@@ -554,14 +588,17 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
       const deltaCenterX = currentCenterX - initialCenterX
       const deltaCenterY = currentCenterY - initialCenterY
       const newPanX = zoomPanX + deltaCenterX / newZoom
-      const newPanY = zoomPanY + deltaCenterY / newZoom
+      let newPanY = zoomPanY + deltaCenterY / newZoom
+
+      // Apply scroll limits
+      newPanY = calculateScrollLimits(newPanY, newZoom)
 
       console.log('Pinch move - zoom:', newZoom, 'pan:', newPanX, newPanY)
       setZoom(newZoom)
       setPanX(newPanX)
       setPanY(newPanY)
     }
-  }, [zoom])
+  }, [zoom, calculateScrollLimits])
 
   const handleTouchEnd = useCallback((e: TouchEvent) => {
     // Remove ended touches
@@ -600,7 +637,10 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
       const mouseX = e.clientX
       const mouseY = e.clientY
       const newPanX = (mouseX - originX) * (1 / newZoom - 1 / zoom) + panX
-      const newPanY = (mouseY - originY) * (1 / newZoom - 1 / zoom) + panY
+      let newPanY = (mouseY - originY) * (1 / newZoom - 1 / zoom) + panY
+
+      // Apply scroll limits
+      newPanY = calculateScrollLimits(newPanY, newZoom)
 
       console.log('Trackpad zoom:', newZoom)
       setZoom(newZoom)
@@ -614,13 +654,55 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
       // Convert scroll to pan (deltaX and deltaY are in pixels)
       // This handles both trackpad pan and regular mousewheel scroll
       const newPanX = panX - e.deltaX / zoom
-      const newPanY = panY - e.deltaY / zoom
+      let newPanY = panY - e.deltaY / zoom
+
+      // Apply scroll limits
+      newPanY = calculateScrollLimits(newPanY)
 
       console.log('Wheel pan/scroll:', newPanX, newPanY)
       setPanX(newPanX)
       setPanY(newPanY)
     }
-  }, [zoom, panX, panY])
+  }, [zoom, panX, panY, calculateScrollLimits])
+
+  // Handle middle mouse button drag for desktop
+  const handleMouseDown = useCallback((e: MouseEvent) => {
+    // Middle mouse button (button = 1)
+    if (e.button === 1) {
+      e.preventDefault()
+      middleMouseDragRef.current = {
+        x: e.clientX,
+        y: e.clientY,
+        panX,
+        panY
+      }
+      document.body.style.cursor = 'grabbing'
+      console.log('Middle mouse drag start')
+    }
+  }, [panX, panY])
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (middleMouseDragRef.current) {
+      const deltaX = e.clientX - middleMouseDragRef.current.x
+      const deltaY = e.clientY - middleMouseDragRef.current.y
+      const newPanX = middleMouseDragRef.current.panX + deltaX / zoom
+      let newPanY = middleMouseDragRef.current.panY + deltaY / zoom
+
+      // Apply scroll limits
+      newPanY = calculateScrollLimits(newPanY)
+
+      setPanX(newPanX)
+      setPanY(newPanY)
+    }
+  }, [zoom, calculateScrollLimits])
+
+  const handleMouseUp = useCallback((e: MouseEvent) => {
+    if (middleMouseDragRef.current && e.button === 1) {
+      middleMouseDragRef.current = null
+      document.body.style.cursor = ''
+      console.log('Middle mouse drag end')
+    }
+  }, [])
 
   // Find and store reference to parent <main> element
   useEffect(() => {
@@ -649,14 +731,22 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
     // Wheel events for trackpad/mousepad pinch zoom
     document.addEventListener('wheel', handleWheel, { passive: false })
 
+    // Mouse events for middle button drag
+    document.addEventListener('mousedown', handleMouseDown)
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+
     return () => {
       document.removeEventListener('touchstart', handleTouchStart)
       document.removeEventListener('touchmove', handleTouchMove)
       document.removeEventListener('touchend', handleTouchEnd)
       document.removeEventListener('touchcancel', handleTouchEnd)
       document.removeEventListener('wheel', handleWheel)
+      document.removeEventListener('mousedown', handleMouseDown)
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
     }
-  }, [handleTouchStart, handleTouchMove, handleTouchEnd, handleWheel])
+  }, [handleTouchStart, handleTouchMove, handleTouchEnd, handleWheel, handleMouseDown, handleMouseMove, handleMouseUp])
 
   return (
     <>

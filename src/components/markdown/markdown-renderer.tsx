@@ -10,7 +10,7 @@ import rehypeKatex from 'rehype-katex'
 import rehypeReact from 'rehype-react'
 import * as prod from 'react/jsx-runtime'
 import type { MarkdownContext } from '@/lib/markdown'
-import { CodeBlock } from './code-block'
+import { CodeMirrorCodeBlock } from './codemirror-code-block'
 import { ImageWithResize } from './image-with-resize'
 import { ExcalidrawImage } from './excalidraw-image'
 import { Heading } from './heading'
@@ -19,7 +19,7 @@ import { CodeEditor } from '@/components/public/code-editor'
 import { remarkFileResolver } from '@/lib/remark-plugins/file-resolver'
 import { remarkImageAttributes } from '@/lib/remark-plugins/image-attributes'
 import { remarkCodeEditor } from '@/lib/remark-plugins/code-editor'
-import { rehypeShikiHighlight } from '@/lib/rehype-plugins/shiki-highlight'
+import { rehypeCodemirrorHighlight } from '@/lib/rehype-plugins/codemirror-highlight'
 import { rehypeWrapSections } from '@/lib/rehype-plugins/wrap-sections'
 import rehypeSlug from 'rehype-slug'
 import { useTheme } from 'next-themes'
@@ -73,8 +73,8 @@ export function MarkdownRenderer({ content, context, onContentChange }: Markdown
           .use(rehypeWrapSections)
           // Add KaTeX math rendering
           .use(rehypeKatex)
-          // Add Shiki syntax highlighting
-          .use(rehypeShikiHighlight, { theme: (resolvedTheme as 'light' | 'dark') || 'light' })
+          // Add CodeMirror syntax highlighting
+          .use(rehypeCodemirrorHighlight)
           // Convert to React
           .use(rehypeReact, {
             jsx: prod.jsx,
@@ -102,12 +102,10 @@ export function MarkdownRenderer({ content, context, onContentChange }: Markdown
                     ...props.style
                   }}
                 >
-                  <div className="px-36">
-                    {props.children}
-                  </div>
+                  {props.children}
                 </section>
               ),
-              // Div component for Shiki code blocks (rehypeKatex handles math automatically)
+              // Div component for CodeMirror code blocks (rehypeKatex handles math automatically)
               div: DivComponent,
             },
           })
@@ -192,7 +190,7 @@ function CodeComponent({ children, className, ...props }: React.HTMLAttributes<H
 
   // Block code
   const code = String(children).replace(/\n$/, '')
-  return <CodeBlock language={language} className={className}>{code}</CodeBlock>
+  return <CodeMirrorCodeBlock language={language} className={className}>{code}</CodeMirrorCodeBlock>
 }
 
 function ImageComponent({ src, alt, title, style, ...props }: React.ImgHTMLAttributes<HTMLImageElement>) {
@@ -279,39 +277,44 @@ function DivComponent({ className, children, ...props }: React.HTMLAttributes<HT
   const divProps = props as Record<string, unknown>
   const { content, onContentChange } = useContext(MarkdownEditContext)
 
-  // Handle Shiki-highlighted code blocks
-  if (divProps['data-highlighted'] === 'true' || divProps['data-highlighted'] === true) {
-    const shikiHtml = divProps['data-shiki-html'] as string
+  // Handle CodeMirror-highlighted code blocks
+  if (divProps['data-codemirror'] === 'true' || divProps['data-codemirror'] === true) {
     const language = (divProps['data-language'] as string) || 'text'
     const rawCode = (divProps['data-raw-code'] as string) || ''
+    const annotationsJson = (divProps['data-annotations'] as string) || '[]'
 
-    if (shikiHtml) {
-      // Handler for language change
-      const handleLanguageChange = (newLanguage: string) => {
-        if (!onContentChange) return
-
-        // Simple fallback: just replace the language tag
-        const newContent = content.replace(
-          new RegExp(`\`\`\`${language}\\b`, 'g'),
-          `\`\`\`${newLanguage}`
-        )
-
-        if (newContent !== content) {
-          onContentChange(newContent)
-        }
-      }
-
-      // Use the CodeBlock component with the Shiki HTML
-      return (
-        <CodeBlock
-          language={language}
-          highlighted={shikiHtml}
-          onLanguageChange={onContentChange ? handleLanguageChange : undefined}
-        >
-          {rawCode}
-        </CodeBlock>
-      )
+    let lineAnnotations: any[] = []
+    try {
+      lineAnnotations = JSON.parse(annotationsJson)
+    } catch (e) {
+      console.error('Failed to parse line annotations:', e)
     }
+
+    // Handler for language change
+    const handleLanguageChange = (newLanguage: string) => {
+      if (!onContentChange) return
+
+      // Simple fallback: just replace the language tag
+      const newContent = content.replace(
+        new RegExp(`\`\`\`${language}\\b`, 'g'),
+        `\`\`\`${newLanguage}`
+      )
+
+      if (newContent !== content) {
+        onContentChange(newContent)
+      }
+    }
+
+    // Use the CodeMirrorCodeBlock component
+    return (
+      <CodeMirrorCodeBlock
+        language={language}
+        lineAnnotations={lineAnnotations}
+        onLanguageChange={onContentChange ? handleLanguageChange : undefined}
+      >
+        {rawCode}
+      </CodeMirrorCodeBlock>
+    )
   }
 
   return <div className={className} {...props}>{children}</div>

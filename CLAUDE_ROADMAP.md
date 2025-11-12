@@ -7,9 +7,11 @@
 
 ---
 
+
 ## 🎯 Priority List (drag to reorder)
 
 **Currently working on: Code Editor** - a code editor for students to learn python with turtle using codemirror
+merge code reivew
 **Plugin System** - Extensible component architecture, MDX
 **Video Hosting** - Swiss-compliant video upload and embedding
 **Marketplace** - Content selling and customer relationships
@@ -124,7 +126,19 @@ LMS stuff later
 **Future Improvements**:
 - Enhanced autocomplete with cross-file import awareness
 - Better static analysis to know function signatures from imported modules
-- Shiki theme matching (closer color alignment with CodeMirror's oneDark)
+
+**Recent Updates (2025-01-12)**:
+- ✅ **Unified VSCode color scheme across all code editors** - Complete syntax highlighting consistency
+  - Replaced Shiki with CodeMirror for static code blocks
+  - Updated interactive Python/JS editor to use VSCode themes (was using oneDark)
+  - All three editors now use identical VSCode Light/Dark themes:
+    - Interactive code editor (public): `vsCodeDark` / `vsCodeLight`
+    - Backend markdown editor: `vsCodeDark` / `vsCodeLight`
+    - Static code blocks: `vsCodeDark` / `vsCodeLight`
+  - VSCode color scheme features: functions (yellow), strings (brown-reddish), comments (green)
+  - Support for `[!code ++]`, `[!code --]`, `[!code highlight]`, and `[!code focus]` annotations
+  - Implemented via `rehypeCodemirrorHighlight` plugin and `CodeMirrorCodeBlock` component
+  - Files: `src/components/markdown/codemirror-code-block.tsx`, `src/lib/rehype-plugins/codemirror-highlight.ts`, `src/components/public/code-editor/index.tsx`
 
 **Implemented Architecture:**
 - **Editor**: CodeMirror 6 with Python language support

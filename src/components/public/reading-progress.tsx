@@ -14,14 +14,19 @@ export function ReadingProgress() {
       // Get the article's position in screen space (after transform)
       const rect = article.getBoundingClientRect()
 
-      // Calculate progress based on where the middle of the viewport is
-      // relative to the article's content
-      const viewportMiddle = window.innerHeight / 2
+      // Calculate progress:
+      // - 0%: top of viewport at top of article (rect.top = 0)
+      // - 100%: middle of viewport at bottom of article (rect.top = window.innerHeight/2 - rect.height)
+      const viewportHalfHeight = window.innerHeight / 2
       const articleTop = rect.top
       const articleHeight = rect.height
 
-      // Progress: 0% when viewport middle is at article top, 100% when at article bottom
-      const scrollPercent = ((viewportMiddle - articleTop) / articleHeight) * 100
+      // Distance scrolled from 0% position
+      const scrolled = -articleTop
+      // Total scroll range (from 0% to 100%)
+      const totalRange = articleHeight - viewportHalfHeight
+      // Progress percentage
+      const scrollPercent = (scrolled / totalRange) * 100
 
       // Clamp between 0 and 100
       const clampedProgress = Math.max(0, Math.min(100, scrollPercent))

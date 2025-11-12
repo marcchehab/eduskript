@@ -7,7 +7,8 @@ import { EditorState } from '@codemirror/state'
 import { indentWithTab } from '@codemirror/commands'
 import { python } from '@codemirror/lang-python'
 import { javascript } from '@codemirror/lang-javascript'
-import { oneDark } from '@codemirror/theme-one-dark'
+import { vsCodeDark } from '@fsegurai/codemirror-theme-vscode-dark'
+import { vsCodeLight } from '@fsegurai/codemirror-theme-vscode-light'
 import { basicSetup } from 'codemirror'
 import { autocompletion } from '@codemirror/autocomplete'
 import { pythonCompletions } from './python-completions'
@@ -260,9 +261,8 @@ export function CodeEditor({
       )
     }
 
-    if (isDark) {
-      extensions.push(oneDark)
-    }
+    // Add VSCode theme (light or dark)
+    extensions.push(isDark ? vsCodeDark : vsCodeLight)
 
     // Clean up previous editor
     if (editorViewRef.current) {
@@ -572,6 +572,21 @@ export function CodeEditor({
           width: canvas.clientWidth || 500,
           height: canvas.clientHeight || 400,
         }).target = canvas
+
+        // Center the canvas after Skulpt creates it
+        // Wait for the canvas element to be created
+        setTimeout(() => {
+          const turtleCanvas = canvas.querySelector('canvas')
+          const container = canvasContainerRef.current
+          if (turtleCanvas && container) {
+            const containerRect = container.getBoundingClientRect()
+            const canvasWidth = turtleCanvas.width
+            const canvasHeight = turtleCanvas.height
+            const centerX = (containerRect.width - canvasWidth) / 2
+            const centerY = (containerRect.height - canvasHeight) / 2
+            setCanvasTransform({ x: centerX, y: centerY, scale: 1 })
+          }
+        }, 100)
       }
 
       const promise = Sk.misceval.asyncToPromise(() => {
@@ -800,7 +815,8 @@ plots
     if (canvasRef.current) {
       canvasRef.current.innerHTML = ''
     }
-    setCanvasTransform({ x: 0, y: 0, scale: 1 })
+    // Reset to center position
+    resetCanvasView()
   }
 
   // Canvas pan and zoom handlers
@@ -827,6 +843,22 @@ plots
   }
 
   const resetCanvasView = () => {
+    // Reset to centered position
+    const canvas = canvasRef.current
+    const container = canvasContainerRef.current
+    if (canvas && container) {
+      const turtleCanvas = canvas.querySelector('canvas')
+      if (turtleCanvas) {
+        const containerRect = container.getBoundingClientRect()
+        const canvasWidth = turtleCanvas.width
+        const canvasHeight = turtleCanvas.height
+        const centerX = (containerRect.width - canvasWidth) / 2
+        const centerY = (containerRect.height - canvasHeight) / 2
+        setCanvasTransform({ x: centerX, y: centerY, scale: 1 })
+        return
+      }
+    }
+    // Fallback if canvas not found
     setCanvasTransform({ x: 0, y: 0, scale: 1 })
   }
 

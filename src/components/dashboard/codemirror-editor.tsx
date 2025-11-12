@@ -233,29 +233,9 @@ const CodeMirrorEditor = function CodeMirrorEditor({
     }
   }, [isDragging])
 
-  // Prevent preview scroll from propagating to page
-  useEffect(() => {
-    const preview = previewRef.current
-    if (!preview) return
-
-    const handleWheel = (e: WheelEvent) => {
-      // Only stop propagation if we're not at the scroll boundary
-      const { scrollTop, scrollHeight, clientHeight } = preview
-      const isAtTop = scrollTop === 0 && e.deltaY < 0
-      const isAtBottom = scrollTop + clientHeight >= scrollHeight && e.deltaY > 0
-
-      // Stop propagation unless we're at a boundary and trying to scroll further
-      if (!isAtTop && !isAtBottom) {
-        e.stopPropagation()
-      }
-    }
-
-    preview.addEventListener('wheel', handleWheel, { passive: true })
-
-    return () => {
-      preview.removeEventListener('wheel', handleWheel)
-    }
-  }, [])
+  // Allow natural scrolling - browser handles it correctly
+  // CodeMirror's .cm-scroller has overflow, so it scrolls internally when needed
+  // When content doesn't overflow, the wheel event naturally bubbles to page scroll
 
   // Fallback for content
   const editorContent = content || ''

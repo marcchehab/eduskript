@@ -242,7 +242,7 @@ html, body {
     --warning: 35.5 91.7% 32.9%;
     --warning-foreground: 0 0% 100%;
     --icon-muted: 215.4 16.3% 46.9%;
-    --turtle-color: 221.2 83.2% 53.3%;
+    --turtle-color: hsl(221.2 83.2% 53.3%);
   }
 
   .dark {
@@ -272,7 +272,7 @@ html, body {
     --warning: 35.5 84.7% 55.9%;
     --warning-foreground: 20.9 83.2% 11.8%;
     --icon-muted: 215 20.2% 65.1%;
-    --turtle-color: 217.2 91.2% 59.8%;
+    --turtle-color: hsl(217.2 91.2% 59.8%);
   }
 }
 
