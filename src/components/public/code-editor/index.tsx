@@ -737,7 +737,8 @@ plots
             img.src = imgData
             img.alt = `Plot ${i + 1}`
             img.className = 'matplotlib-plot'
-            img.style.cssText = 'max-width: 100%; height: auto; display: block; margin: 8px auto; border-radius: 4px;'
+            img.draggable = false // Prevent browser image drag behavior
+            img.style.cssText = 'max-width: 100%; height: auto; display: block; margin: 8px auto; border-radius: 4px; user-select: none;'
             canvas.appendChild(img)
           }
 
