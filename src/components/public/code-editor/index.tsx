@@ -119,15 +119,19 @@ export function CodeEditor({
     setMounted(true)
   }, [])
 
-  // Load Pyodide for Python (excluding turtle)
-  useEffect(() => {
-    if (language !== 'python') return
+  // Lazy load Pyodide on first run
+  const ensurePyodideLoaded = async () => {
+    // Return existing promise if already loading/loaded
+    if ((window as any).__pyodidePromise) {
+      return (window as any).__pyodidePromise
+    }
 
-    // Global promise cache to prevent loading Pyodide multiple times
-    if ((window as any).__pyodidePromise) return
+    // Start loading
+    addOutput('Loading Python runtime (Pyodide)...', OutputLevel.OUTPUT)
 
-    const loadPyodideScript = async () => {
-      try {
+    try {
+      // Load Pyodide script if not already present
+      if (!document.querySelector('script[src*="pyodide.js"]')) {
         const script = document.createElement('script')
         script.src = 'https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pyodide.js'
 
@@ -136,26 +140,32 @@ export function CodeEditor({
           script.onerror = () => reject(new Error('Failed to load Pyodide'))
           document.body.appendChild(script)
         })
+      }
 
-        // Initialize Pyodide
+      // Initialize Pyodide
+      if (!(window as any).__pyodidePromise) {
         ;(window as any).__pyodidePromise = (window as any).loadPyodide({
           indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.29.0/full/'
         })
-
-        const pyodide = await (window as any).__pyodidePromise
-        console.log('[Pyodide] Loaded successfully', pyodide.version)
-      } catch (error) {
-        console.error('[Pyodide] Failed to load:', error)
-        addOutput('Failed to load Python runtime (Pyodide)', OutputLevel.ERROR)
       }
+
+      const pyodide = await (window as any).__pyodidePromise
+      console.log('[Pyodide] Loaded successfully', pyodide.version)
+      addOutput('✓ Python runtime ready\n', OutputLevel.OUTPUT)
+      return pyodide
+    } catch (error) {
+      console.error('[Pyodide] Failed to load:', error)
+      addOutput('Failed to load Python runtime (Pyodide)', OutputLevel.ERROR)
+      throw error
     }
+  }
 
-    loadPyodideScript()
-  }, [language])
-
-  // Load Skulpt scripts for Python (turtle support)
-  useEffect(() => {
-    if (language !== 'python') return
+  // Lazy load Skulpt on first run
+  const ensureSkulptLoaded = async () => {
+    // Check if already loaded
+    if (window.Sk) {
+      return
+    }
 
     // Global promise cache to prevent loading scripts multiple times
     const scriptPromises = (window as any).__skulptPromises || {}
@@ -175,7 +185,6 @@ export function CodeEditor({
         const existing = document.querySelector(`script[src="${src}"]`)
         if (existing) {
           // Script tag exists, assume it's loaded (or will be)
-          // Wait a tiny bit for it to execute
           setTimeout(() => resolve(), 10)
           return
         }
@@ -194,13 +203,19 @@ export function CodeEditor({
       return scriptPromises[src]
     }
 
-    loadScript('/js/skulpt.min.js')
-      .then(() => loadScript('/js/skulpt-stdlib.js'))
-      .catch((error) => {
-        console.error('Failed to load Skulpt:', error)
-        addOutput('Failed to load Python runtime', OutputLevel.ERROR)
-      })
-  }, [])
+    addOutput('Loading Python runtime (Skulpt)...', OutputLevel.OUTPUT)
+
+    try {
+      await loadScript('/js/skulpt.min.js')
+      await loadScript('/js/skulpt-stdlib.js')
+      console.log('[Skulpt] Loaded successfully')
+      addOutput('✓ Python runtime ready\n', OutputLevel.OUTPUT)
+    } catch (error) {
+      console.error('[Skulpt] Failed to load:', error)
+      addOutput('Failed to load Python runtime (Skulpt)', OutputLevel.ERROR)
+      throw error
+    }
+  }
 
   // Initialize CodeMirror
   useEffect(() => {
@@ -475,21 +490,25 @@ export function CodeEditor({
   }
 
   // Run Python code with Skulpt
-  const runPythonCode = (code: string) => {
-    if (!window.Sk) {
-      addOutput('Python runtime not loaded yet', OutputLevel.ERROR)
-      return
-    }
-
+  const runPythonCode = async (code: string) => {
     setRunState(RunState.RUNNING)
     setOutput([]) // Clear previous output
 
-    const canvas = canvasRef.current
-    if (canvas) {
-      canvas.innerHTML = '' // Clear previous turtle graphics
-    }
-
     try {
+      // Ensure Skulpt is loaded
+      await ensureSkulptLoaded()
+
+      if (!window.Sk) {
+        addOutput('Python runtime not loaded yet', OutputLevel.ERROR)
+        setRunState(RunState.STOPPED)
+        return
+      }
+
+      const canvas = canvasRef.current
+      if (canvas) {
+        canvas.innerHTML = '' // Clear previous turtle graphics
+      }
+
       const Sk = window.Sk
 
       Sk.configure({
@@ -566,11 +585,6 @@ export function CodeEditor({
 
   // Run Python code with Pyodide (for matplotlib, numpy, etc.)
   const runPyodideCode = async (code: string) => {
-    if (!(window as any).__pyodidePromise) {
-      addOutput('Pyodide runtime not loaded yet', OutputLevel.ERROR)
-      return
-    }
-
     setRunState(RunState.RUNNING)
     setOutput([]) // Clear previous output
 
@@ -580,7 +594,14 @@ export function CodeEditor({
     }
 
     try {
-      const pyodide = await (window as any).__pyodidePromise
+      // Ensure Pyodide is loaded
+      const pyodide = await ensurePyodideLoaded()
+
+      if (!pyodide) {
+        addOutput('Pyodide runtime not loaded yet', OutputLevel.ERROR)
+        setRunState(RunState.STOPPED)
+        return
+      }
 
       // Detect and load required packages
       const packagesToLoad: string[] = []
