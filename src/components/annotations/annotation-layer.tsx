@@ -253,25 +253,28 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
     return () => clearTimeout(timer)
   }, [children, recalculateHeadingPositions]) // Re-run when children change (markdown re-renders)
 
-  // EXPERIMENTAL: Track heading positions on window resize
-  // This allows live repositioning when window width changes and text reflows
+  // EXPERIMENTAL: Track heading positions on window resize for live repositioning
+  // This allows real-time annotation repositioning when window width changes and text reflows
   useEffect(() => {
-    let resizeTimer: NodeJS.Timeout | null = null
+    let rafId: number | null = null
+    let isScheduled = false
 
     const handleResize = () => {
-      // Debounce resize events
-      if (resizeTimer) clearTimeout(resizeTimer)
-
-      resizeTimer = setTimeout(() => {
-        console.log('Window resized - recalculating heading positions')
-        recalculateHeadingPositions()
-      }, 150) // Debounce by 150ms
+      // Use requestAnimationFrame for smooth updates
+      if (!isScheduled) {
+        isScheduled = true
+        rafId = requestAnimationFrame(() => {
+          console.log('Window resized - recalculating heading positions')
+          recalculateHeadingPositions()
+          isScheduled = false
+        })
+      }
     }
 
     window.addEventListener('resize', handleResize)
     return () => {
       window.removeEventListener('resize', handleResize)
-      if (resizeTimer) clearTimeout(resizeTimer)
+      if (rafId !== null) cancelAnimationFrame(rafId)
     }
   }, [recalculateHeadingPositions])
 
