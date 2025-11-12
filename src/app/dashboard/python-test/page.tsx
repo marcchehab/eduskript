@@ -1,6 +1,10 @@
 import { CodeEditor } from '@/components/public/code-editor'
 
 const turtleExample = `import turtle
+import sys
+
+print("🐢 Running with Skulpt (turtle graphics)")
+print(f"Python version: {sys.version}")
 
 # Create a turtle
 t = turtle.Turtle()
@@ -13,8 +17,15 @@ for i in range(4):
 print("Square drawn!")
 `
 
-const matplotlibExample = `import matplotlib.pyplot as plt
+const matplotlibExample = `import sys
+import matplotlib.pyplot as plt
 import numpy as np
+
+print("🚀 Running with Pyodide (full Python + scientific stack)")
+print(f"Python version: {sys.version}")
+print(f"NumPy version: {np.__version__}")
+print(f"Matplotlib version: {plt.matplotlib.__version__}")
+print()
 
 # Create some data
 x = np.linspace(0, 10, 100)
@@ -43,7 +54,7 @@ ax2.legend()
 plt.tight_layout()
 plt.show()
 
-print("Plot generated!")
+print("✓ Plot generated!")
 `
 
 export default function PythonTestPage() {
@@ -67,7 +78,13 @@ export default function PythonTestPage() {
           <CodeEditor
             id="simple-example"
             language="python"
-            initialCode={`# Simple Python example
+            initialCode={`import sys
+
+print("🚀 Running with Pyodide (full Python)")
+print(f"Python version: {sys.version}")
+print()
+
+# Simple Python example
 for i in range(10):
     print(f"Count: {i}")
 
