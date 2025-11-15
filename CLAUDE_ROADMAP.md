@@ -1,7 +1,7 @@
 **IMPORTANT: Do not mark items as complete in this roadmap unless explicitly instructed by the user.**
 
 *Last updated: 2025-01-15*
-*Current Status: Python Code Editor COMPLETED! Infrastructure fixes and subdomain routing improvements completed.*
+*Current Status: User Data Service COMPLETED! Local persistence for annotations and code editor state now available.*
 
 > **Note**: Completed features have been moved to `COMPLETED_FEATURES.md`
 
@@ -32,6 +32,16 @@
   - Kept GitInfo component in bottom right (expandable git commit info)
   - Removed full-width VersionFooter from main page
 
+**User Data Service**:
+- ✅ **IndexedDB Persistence Layer** - Created comprehensive local storage system
+  - Dexie-based database with compound primary key [pageId, componentId]
+  - Singleton service pattern with debounced saves (1 second default)
+  - React hook (useUserData) for component integration
+  - Type-safe data structures for annotations and code editor state
+  - Migrated annotations from old implementation to new service
+  - Added code editor persistence (files, settings, canvas transform)
+  - Foundation for future remote sync when student accounts exist
+
 **Files Modified**:
 - `.github/workflows/ci.yml` - Removed hardcoded pnpm version
 - `package.json` - Updated lint script to use eslint directly
@@ -40,6 +50,16 @@
 - `src/components/CustomDomainHandler.tsx` - Added native subdomain detection
 - `src/components/dashboard/page-builder-interface.tsx` - Fixed preview URL logic
 - `src/app/page.tsx` - Removed duplicate footer
+- `src/lib/userdata/` - New user data service directory
+  - `types.ts` - TypeScript interfaces for user data
+  - `schema.ts` - Dexie database schema
+  - `userDataService.ts` - Singleton service with CRUD operations
+  - `hooks.ts` - useUserData React hook
+- `src/lib/markdown.ts` - Added pageId to MarkdownContext
+- `src/components/public/annotatable-content.tsx` - Pass pageId through context
+- `src/components/markdown/markdown-renderer.tsx` - Pass pageId to CodeEditor
+- `src/components/annotations/annotation-layer.tsx` - Migrated to use new service
+- `src/components/public/code-editor/index.tsx` - Added persistence support
 
 ---
 
@@ -47,7 +67,6 @@
 ## 🎯 Priority List (drag to reorder)
 
 **Next up:**
-- **IndexDB User Data Service** - Create a user data service 
 - **Improvements to page editor**: add buttons on top and a indicator that shows which paragraph we're on. sync scroll.
 - **Plugin System** - Extensible component architecture, MDX
 - **Video Hosting** - Swiss-compliant video upload and embedding
