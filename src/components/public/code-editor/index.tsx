@@ -92,9 +92,18 @@ export function CodeEditor({
   // Restore saved data when it loads
   const hasLoadedData = useRef(false)
   useEffect(() => {
+    console.log('[CodeEditor] Restore effect:', {
+      isLoading,
+      hasSavedData: !!savedData,
+      hasLoadedData: hasLoadedData.current,
+      componentId,
+      pageId
+    })
+
     // Only restore once when data first loads
     if (!isLoading && savedData && !hasLoadedData.current) {
       hasLoadedData.current = true
+      console.log('[CodeEditor] Restoring saved data:', savedData)
 
       if (savedData.files) setFiles(savedData.files)
       if (savedData.activeFileIndex !== undefined) setActiveFileIndex(savedData.activeFileIndex)
@@ -102,7 +111,7 @@ export function CodeEditor({
       if (savedData.editorWidth !== undefined) setEditorWidth(savedData.editorWidth)
       if (savedData.canvasTransform) setCanvasTransform(savedData.canvasTransform)
     }
-  }, [isLoading, savedData])
+  }, [isLoading, savedData, componentId, pageId])
   const [isDragging, setIsDragging] = useState(false)
   const dragStartRef = useRef({ x: 0, y: 0 })
 
@@ -126,10 +135,15 @@ export function CodeEditor({
     if (!editorViewRef.current) return
 
     const content = editorViewRef.current.state.doc.toString()
+    console.log('[CodeEditor] Debounced save - updating file content:', {
+      activeFileIndex,
+      contentLength: content.length,
+      componentId
+    })
     setFiles(prev => prev.map((file, idx) =>
       idx === activeFileIndex ? { ...file, content } : file
     ))
-  }, [activeFileIndex])
+  }, [activeFileIndex, componentId])
 
   // Save settings changes immediately (fontSize, editorWidth, canvasTransform, activeFileIndex)
   // Don't include files here - those are saved via the debounced content listener above
@@ -145,9 +159,11 @@ export function CodeEditor({
       canvasTransform,
     }
 
+    console.log('[CodeEditor] Saving data:', { componentId, pageId, dataToSave })
+
     // Save immediately for settings changes
     savePersistentData(dataToSave, { immediate: true })
-  }, [activeFileIndex, fontSize, editorWidth, canvasTransform, pageId, savePersistentData, files])
+  }, [activeFileIndex, fontSize, editorWidth, canvasTransform, pageId, savePersistentData, files, componentId])
 
   // Handle splitter dragging
   const handleSplitterMouseDown = (e: React.MouseEvent) => {
@@ -331,6 +347,8 @@ export function CodeEditor({
     extensions.push(
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
+          console.log('[CodeEditor] Document changed, scheduling save in 2 seconds')
+
           // Clear existing timeout
           if (contentSaveTimeoutRef.current) {
             clearTimeout(contentSaveTimeoutRef.current)
@@ -338,6 +356,7 @@ export function CodeEditor({
 
           // Debounce save by 2 seconds after typing stops
           contentSaveTimeoutRef.current = setTimeout(() => {
+            console.log('[CodeEditor] 2 seconds elapsed, triggering debounced save')
             debouncedSaveContent()
           }, 2000)
         }
@@ -554,6 +573,11 @@ export function CodeEditor({
   useEffect(() => {
     if (editorViewRef.current && files[activeFileIndex]) {
       const content = files[activeFileIndex].content
+      console.log('[CodeEditor] Updating editor content:', {
+        activeFileIndex,
+        fileName: files[activeFileIndex].name,
+        contentLength: content.length
+      })
       const view = editorViewRef.current
       const transaction = view.state.update({
         changes: {
