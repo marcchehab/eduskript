@@ -32,6 +32,9 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
   const [hasAnnotations, setHasAnnotations] = useState(false)
   const [canvasData, setCanvasData] = useState<string>('')
   const [headingPositions, setHeadingPositions] = useState<HeadingPosition[]>([])
+
+  // Save state tracking
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [stylusModeActive, setStylusModeActive] = useState(false)
   const [activePen, setActivePen] = useState(0)
   const [zoom, setZoom] = useState(1.0)
@@ -330,9 +333,21 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
         pageVersion
       }
 
-      await updateAnnotationData(data, { debounce: 2000 })
+      setSaveState('saving')
+
+      // Use immediate: true since we're already debouncing at component level
+      await updateAnnotationData(data, { immediate: true })
+
+      setSaveState('saved')
+
+      // Reset to idle after showing success briefly
+      setTimeout(() => setSaveState('idle'), 2000)
     } catch (error) {
       console.error('Error saving annotations:', error)
+      setSaveState('error')
+
+      // Reset to idle after showing error briefly
+      setTimeout(() => setSaveState('idle'), 3000)
     }
   }, [canvasData, pageVersion, headingPositions, updateAnnotationData])
 
@@ -993,6 +1008,32 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
         eraserSize={eraserSize}
         onEraserSizeChange={handleEraserSizeChange}
       />
+
+      {/* Save state indicator - subtle, fixed to viewport, left of toolbar */}
+      {saveState !== 'idle' && (
+        <div
+          className="fixed bottom-6 right-24 z-50 opacity-50 hover:opacity-100 transition-opacity"
+          title={
+            saveState === 'saving' ? 'Saving annotations...' :
+            saveState === 'saved' ? 'Annotations saved' :
+            'Error saving annotations'
+          }
+        >
+          {saveState === 'saving' && (
+            <div className="w-5 h-5 border-2 border-gray-400 dark:border-gray-500 border-t-transparent rounded-full animate-spin" />
+          )}
+          {saveState === 'saved' && (
+            <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          )}
+          {saveState === 'error' && (
+            <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          )}
+        </div>
+      )}
     </>
   )
 }

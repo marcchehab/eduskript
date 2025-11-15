@@ -167,3 +167,4 @@ Eduskript is a multi-tenant education platform where teachers create educational
 - Bulk permission assignment tools
 - Visual permission matrix showing users vs. content permissions
 - "Share with Collaborators" quick actions and workflows
+- Don't mark tasks as complete unless I say so
