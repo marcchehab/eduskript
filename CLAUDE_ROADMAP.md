@@ -1,5 +1,3 @@
-annotations: delete button doesn't work anymore with new data service
-
 **IMPORTANT: Do not mark items as complete in this roadmap unless explicitly instructed by the user.**
 
 *Last updated: 2025-01-15*
