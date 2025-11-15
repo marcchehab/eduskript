@@ -169,6 +169,9 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
   // Load annotations from user data service
   // Only load if we don't have local data yet (prevents overwriting active drawing)
   useEffect(() => {
+    // Don't reload if we're in the middle of clearing
+    if (isClearingRef.current) return
+
     // Don't reload if we already have canvas data (user is drawing)
     if (canvasData) return
 
@@ -221,7 +224,7 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
     } catch (error) {
       console.error('Error checking repositioning:', error)
     }
-  }, [headingPositions, storedHeadingOffsets])
+  }, [headingPositions, storedHeadingOffsets, canvasData])
 
   // Helper function to recalculate heading positions
   const recalculateHeadingPositions = useCallback(() => {
@@ -364,11 +367,28 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
 
   // Handle canvas annotation update with debounced save
   const handleCanvasUpdate = useCallback((data: string) => {
-    // Reset clearing flag when user starts drawing again
-    isClearingRef.current = false
-
     // Update local state immediately
     setCanvasData(data)
+
+    // Check if there's actual data
+    let hasData = false
+    try {
+      const strokes = JSON.parse(data) as StrokeData[]
+      hasData = strokes && strokes.length > 0
+
+      setHasAnnotations(hasData)
+
+      // Reset clearing flag only when user actually draws something with content
+      // Don't reset when canvas is cleared (empty data)
+      if (hasData) {
+        isClearingRef.current = false
+      }
+
+      if (!hasData) return
+    } catch (error) {
+      console.error('Error parsing canvas data:', error)
+      return
+    }
 
     // Update stored heading offsets to current positions when drawing new strokes
     // This prevents newly drawn strokes from being repositioned when content changes
@@ -377,19 +397,6 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
         headingPositions.map(h => [h.sectionId, h.offsetY])
       )
       setStoredHeadingOffsets(currentOffsets)
-    }
-
-    // Check if there's actual data
-    try {
-      const strokes = JSON.parse(data) as StrokeData[]
-      const hasData = strokes && strokes.length > 0
-
-      setHasAnnotations(hasData)
-
-      if (!hasData) return
-    } catch (error) {
-      console.error('Error parsing canvas data:', error)
-      return
     }
 
     // Clear existing timeout
