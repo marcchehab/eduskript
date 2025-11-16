@@ -587,3 +587,18 @@ div[style*="resize: both"] > canvas.mpl-canvas {
 body > div[style*="display: inline-block"] > div[style*="resize: both"] {
   display: none !important;
 }
+
+/* Highlight current paragraph in markdown editor preview */
+.editor-current-paragraph {
+  position: relative;
+  background: hsl(var(--primary) / 0.05);
+  border-left: 3px solid hsl(var(--primary));
+  padding-left: 1rem !important;
+  margin-left: -1rem;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.dark .editor-current-paragraph {
+  background: hsl(var(--primary) / 0.1);
+  border-left-color: hsl(var(--primary) / 0.7);
+}

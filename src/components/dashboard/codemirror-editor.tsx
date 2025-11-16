@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTheme } from 'next-themes'
 import { Button } from '@/components/ui/button'
-import { Eye, EyeOff, Pencil, Code } from 'lucide-react'
+import { Eye, EyeOff, Pencil, Code, Bold, Italic, Heading, List, ListOrdered, Link } from 'lucide-react'
 import { ExcalidrawEditor } from './excalidraw-editor'
 import { InteractivePreview } from './interactive-preview'
 import type { EditorView } from '@codemirror/view'
@@ -44,6 +44,15 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   const [excalidrawOpen, setExcalidrawOpen] = useState(false)
   const { resolvedTheme } = useTheme()
   const isDark = resolvedTheme === 'dark'
+
+  // Track current heading/paragraph
+  const [currentHeading, setCurrentHeading] = useState<string>('')
+  const [cursorLine, setCursorLine] = useState<number>(1)
+  const [totalLines, setTotalLines] = useState<number>(1)
+
+  // Scroll sync
+  const scrollSyncTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const isScrollingSyncRef = useRef(false)
 
   // Calculate visibility based on width
   const MIN_VISIBLE_WIDTH = 100 // pixels
@@ -323,6 +332,52 @@ const CodeMirrorEditor = function CodeMirrorEditor({
                 const newContent = update.state.doc.toString()
                 onChange(newContent)
               }
+
+              // Track cursor position and current heading
+              if (update.selectionSet || update.docChanged) {
+                const { state } = update
+                const cursorPos = state.selection.main.head
+                const lineNum = state.doc.lineAt(cursorPos).number
+                const numLines = state.doc.lines
+                setCursorLine(lineNum)
+                setTotalLines(numLines)
+
+                // Find the current heading by searching backwards from cursor
+                const text = state.doc.toString()
+                const lines = text.split('\n')
+                let heading = ''
+
+                for (let i = lineNum - 1; i >= 0; i--) {
+                  const line = lines[i]
+                  const match = line.match(/^(#{1,6})\s+(.+)/)
+                  if (match) {
+                    heading = match[2] // Extract heading text without the #
+                    break
+                  }
+                }
+
+                setCurrentHeading(heading || 'Top of document')
+
+                // Highlight corresponding element in preview
+                if (previewRef.current) {
+                  // Calculate rough position percentage
+                  const percentage = lineNum / Math.max(numLines, 1)
+
+                  // Find all block elements in preview
+                  const blocks = previewRef.current.querySelectorAll('h1, h2, h3, h4, h5, h6, p, pre, ul, ol, blockquote, table, div.code-editor')
+
+                  // Remove previous highlights
+                  blocks.forEach(block => {
+                    block.classList.remove('editor-current-paragraph')
+                  })
+
+                  // Find and highlight the element at this position
+                  const targetIndex = Math.floor(percentage * blocks.length)
+                  if (blocks[targetIndex]) {
+                    blocks[targetIndex].classList.add('editor-current-paragraph')
+                  }
+                }
+              }
             }),
             EditorView.theme({
               '&': {
@@ -427,6 +482,53 @@ const CodeMirrorEditor = function CodeMirrorEditor({
     }
   }, [showEditor, useSimpleEditor])
 
+  // Scroll synchronization between editor and preview
+  useEffect(() => {
+    if (!isMounted || (!showEditor || !showPreview)) return
+
+    const editorScroller = editorRef.current?.querySelector('.cm-scroller')
+    const previewScroller = previewRef.current
+
+    if (!editorScroller || !previewScroller) return
+
+    const syncScroll = (source: Element, target: Element) => {
+      if (isScrollingSyncRef.current) return
+
+      isScrollingSyncRef.current = true
+
+      // Clear existing timeout
+      if (scrollSyncTimeoutRef.current) {
+        clearTimeout(scrollSyncTimeoutRef.current)
+      }
+
+      // Calculate scroll percentage
+      const scrollPercentage = source.scrollTop / (source.scrollHeight - source.clientHeight)
+
+      // Apply to target
+      const targetScrollTop = scrollPercentage * (target.scrollHeight - target.clientHeight)
+      target.scrollTo({ top: targetScrollTop, behavior: 'auto' })
+
+      // Reset flag after a short delay
+      scrollSyncTimeoutRef.current = setTimeout(() => {
+        isScrollingSyncRef.current = false
+      }, 100)
+    }
+
+    const handleEditorScroll = () => syncScroll(editorScroller, previewScroller)
+    const handlePreviewScroll = () => syncScroll(previewScroller, editorScroller)
+
+    editorScroller.addEventListener('scroll', handleEditorScroll, { passive: true })
+    previewScroller.addEventListener('scroll', handlePreviewScroll, { passive: true })
+
+    return () => {
+      editorScroller.removeEventListener('scroll', handleEditorScroll)
+      previewScroller.removeEventListener('scroll', handlePreviewScroll)
+      if (scrollSyncTimeoutRef.current) {
+        clearTimeout(scrollSyncTimeoutRef.current)
+      }
+    }
+  }, [isMounted, showEditor, showPreview, useSimpleEditor])
+
   // Handle textarea change for simple editor
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newContent = e.target.value
@@ -522,6 +624,55 @@ const CodeMirrorEditor = function CodeMirrorEditor({
     }
   }
 
+  // Formatting helpers
+  const wrapSelection = (prefix: string, suffix: string = prefix) => {
+    if (editorViewRef.current && !useSimpleEditor) {
+      const view = editorViewRef.current
+      const { from, to } = view.state.selection.main
+      const selectedText = view.state.doc.sliceString(from, to)
+      const wrappedText = `${prefix}${selectedText}${suffix}`
+
+      view.dispatch({
+        changes: { from, to, insert: wrappedText },
+        selection: { anchor: from + prefix.length, head: to + prefix.length }
+      })
+      view.focus()
+    }
+  }
+
+  const insertAtCursor = (text: string) => {
+    if (editorViewRef.current && !useSimpleEditor) {
+      const view = editorViewRef.current
+      const pos = view.state.selection.main.head
+
+      view.dispatch({
+        changes: { from: pos, insert: text },
+        selection: { anchor: pos + text.length }
+      })
+      view.focus()
+    }
+  }
+
+  const insertBold = () => wrapSelection('**')
+  const insertItalic = () => wrapSelection('*')
+  const insertHeading = () => {
+    if (editorViewRef.current && !useSimpleEditor) {
+      const view = editorViewRef.current
+      const pos = view.state.selection.main.head
+      const line = view.state.doc.lineAt(pos)
+      const lineStart = line.from
+
+      view.dispatch({
+        changes: { from: lineStart, insert: '## ' },
+        selection: { anchor: lineStart + 3 }
+      })
+      view.focus()
+    }
+  }
+  const insertBulletList = () => insertAtCursor('\n- ')
+  const insertNumberedList = () => insertAtCursor('\n1. ')
+  const insertLink = () => wrapSelection('[', '](url)')
+
   return (
     <div 
       className={`border border-border rounded-lg bg-card ${
@@ -534,6 +685,68 @@ const CodeMirrorEditor = function CodeMirrorEditor({
       {/* Toolbar */}
       <div className="border-b border-border p-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
+          {/* Formatting buttons */}
+          {!useSimpleEditor && (
+            <>
+              <div className="h-4 w-px bg-border" />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={insertBold}
+                title="Bold (Ctrl+B)"
+                className="px-2"
+              >
+                <Bold className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={insertItalic}
+                title="Italic (Ctrl+I)"
+                className="px-2"
+              >
+                <Italic className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={insertHeading}
+                title="Heading"
+                className="px-2"
+              >
+                <Heading className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={insertBulletList}
+                title="Bullet List"
+                className="px-2"
+              >
+                <List className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={insertNumberedList}
+                title="Numbered List"
+                className="px-2"
+              >
+                <ListOrdered className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={insertLink}
+                title="Link"
+                className="px-2"
+              >
+                <Link className="w-4 h-4" />
+              </Button>
+              <div className="h-4 w-px bg-border" />
+            </>
+          )}
+
           <Button
             variant="ghost"
             size="sm"
