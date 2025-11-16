@@ -47,8 +47,8 @@ const CodeMirrorEditor = function CodeMirrorEditor({
 
   // Track current heading/paragraph
   const [currentHeading, setCurrentHeading] = useState<string>('')
-  const [cursorLine, setCursorLine] = useState<number>(1)
-  const [totalLines, setTotalLines] = useState<number>(1)
+  const [selectionStartLine, setSelectionStartLine] = useState<number>(1)
+  const [selectionEndLine, setSelectionEndLine] = useState<number>(1)
 
   // Scroll sync
   const scrollSyncTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -333,21 +333,24 @@ const CodeMirrorEditor = function CodeMirrorEditor({
                 onChange(newContent)
               }
 
-              // Track cursor position and current heading
+              // Track selection range and current heading
               if (update.selectionSet || update.docChanged) {
                 const { state } = update
-                const cursorPos = state.selection.main.head
-                const lineNum = state.doc.lineAt(cursorPos).number
-                const numLines = state.doc.lines
-                setCursorLine(lineNum)
-                setTotalLines(numLines)
+                const selection = state.selection.main
+
+                // Get start and end lines of selection
+                const startLine = state.doc.lineAt(selection.from).number
+                const endLine = state.doc.lineAt(selection.to).number
+
+                setSelectionStartLine(startLine)
+                setSelectionEndLine(endLine)
 
                 // Find the current heading by searching backwards from cursor
                 const text = state.doc.toString()
                 const lines = text.split('\n')
                 let heading = ''
 
-                for (let i = lineNum - 1; i >= 0; i--) {
+                for (let i = startLine - 1; i >= 0; i--) {
                   const line = lines[i]
                   const match = line.match(/^(#{1,6})\s+(.+)/)
                   if (match) {
@@ -357,26 +360,6 @@ const CodeMirrorEditor = function CodeMirrorEditor({
                 }
 
                 setCurrentHeading(heading || 'Top of document')
-
-                // Highlight corresponding element in preview
-                if (previewRef.current) {
-                  // Calculate rough position percentage
-                  const percentage = lineNum / Math.max(numLines, 1)
-
-                  // Find all block elements in preview
-                  const blocks = previewRef.current.querySelectorAll('h1, h2, h3, h4, h5, h6, p, pre, ul, ol, blockquote, table, div.code-editor')
-
-                  // Remove previous highlights
-                  blocks.forEach(block => {
-                    block.classList.remove('editor-current-paragraph')
-                  })
-
-                  // Find and highlight the element at this position
-                  const targetIndex = Math.floor(percentage * blocks.length)
-                  if (blocks[targetIndex]) {
-                    blocks[targetIndex].classList.add('editor-current-paragraph')
-                  }
-                }
               }
             }),
             EditorView.theme({
@@ -528,6 +511,54 @@ const CodeMirrorEditor = function CodeMirrorEditor({
       }
     }
   }, [isMounted, showEditor, showPreview, useSimpleEditor])
+
+  // Highlight current paragraph(s) in preview
+  useEffect(() => {
+    if (!previewRef.current || !showPreview) return
+
+    // Use requestAnimationFrame to ensure DOM is updated
+    requestAnimationFrame(() => {
+      if (!previewRef.current) return
+
+      // Find all elements with source line data
+      const allElements = previewRef.current.querySelectorAll('[data-source-line-start]')
+
+      // Remove previous highlights
+      allElements.forEach(element => {
+        element.classList.remove('editor-current-paragraph')
+      })
+
+      // Find all elements that overlap with the selection range
+      const matchingElements: Element[] = []
+      allElements.forEach(element => {
+        const elementStart = parseInt(element.getAttribute('data-source-line-start') || '0', 10)
+        const elementEnd = parseInt(element.getAttribute('data-source-line-end') || '0', 10)
+
+        // Check if ranges overlap: elementStart <= selectionEnd && elementEnd >= selectionStart
+        if (elementStart <= selectionEndLine && elementEnd >= selectionStartLine) {
+          matchingElements.push(element)
+        }
+      })
+
+      // Highlight all matching elements
+      matchingElements.forEach(element => {
+        element.classList.add('editor-current-paragraph')
+      })
+
+      // Scroll first matching element into view if it's not visible
+      if (matchingElements.length > 0) {
+        const firstElement = matchingElements[0] as HTMLElement
+        const container = previewRef.current
+        const containerRect = container.getBoundingClientRect()
+        const elementRect = firstElement.getBoundingClientRect()
+
+        // Check if element is outside viewport
+        if (elementRect.top < containerRect.top || elementRect.bottom > containerRect.bottom) {
+          firstElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+      }
+    })
+  }, [selectionStartLine, selectionEndLine, showPreview, content])
 
   // Handle textarea change for simple editor
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {

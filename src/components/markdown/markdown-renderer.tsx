@@ -21,6 +21,7 @@ import { remarkImageAttributes } from '@/lib/remark-plugins/image-attributes'
 import { remarkCodeEditor } from '@/lib/remark-plugins/code-editor'
 import { rehypeCodemirrorHighlight } from '@/lib/rehype-plugins/codemirror-highlight'
 import { rehypeWrapSections } from '@/lib/rehype-plugins/wrap-sections'
+import { rehypeSourceLine } from '@/lib/rehype-plugins/source-line'
 import rehypeSlug from 'rehype-slug'
 import { useTheme } from 'next-themes'
 
@@ -158,13 +159,15 @@ function DivComponent({ className, children, ...props }: React.HTMLAttributes<HT
     }
 
     return (
-      <CodeMirrorCodeBlock
-        language={language}
-        lineAnnotations={lineAnnotations}
-        onLanguageChange={onContentChange ? handleLanguageChange : undefined}
-      >
-        {rawCode}
-      </CodeMirrorCodeBlock>
+      <div {...props}>
+        <CodeMirrorCodeBlock
+          language={language}
+          lineAnnotations={lineAnnotations}
+          onLanguageChange={onContentChange ? handleLanguageChange : undefined}
+        >
+          {rawCode}
+        </CodeMirrorCodeBlock>
+      </div>
     )
   }
 
@@ -188,14 +191,16 @@ function CodeEditorComponent({ children, ...props }: React.HTMLAttributes<HTMLEl
   const decodedCode = decodeHtmlEntities(code)
 
   return (
-    <CodeEditor
-      key={`${id}-${resolvedTheme}`}
-      id={id}
-      pageId={markdownContext?.pageId}
-      language={language as 'python' | 'javascript'}
-      initialCode={decodedCode}
-      showCanvas={showCanvas !== 'false'}
-    />
+    <div {...props}>
+      <CodeEditor
+        key={`${id}-${resolvedTheme}`}
+        id={id}
+        pageId={markdownContext?.pageId}
+        language={language as 'python' | 'javascript'}
+        initialCode={decodedCode}
+        showCanvas={showCanvas !== 'false'}
+      />
+    </div>
   )
 }
 
@@ -286,7 +291,9 @@ export function MarkdownRenderer({ content, context, onContentChange }: Markdown
           .use(rehypeWrapSections)
           // Add KaTeX math rendering
           .use(rehypeKatex)
-          // Add CodeMirror syntax highlighting
+          // Add source line markers BEFORE transformations happen
+          .use(rehypeSourceLine)
+          // Add CodeMirror syntax highlighting (transforms pre -> div, preserves properties)
           .use(rehypeCodemirrorHighlight)
           // Convert to React
           .use(rehypeReact, {
