@@ -192,7 +192,6 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       if (initialData && canvasRef.current) {
         try {
           const paths = JSON.parse(initialData)
-          console.log('Loading initial data:', paths.length, 'paths')
           pathsRef.current = paths
           // Only trigger fade-in animation on the FIRST load, not on subsequent updates
           if (paths.length > 0 && !hasLoadedInitialDataRef.current) {
@@ -358,7 +357,6 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         // Log storage statistics
         const totalPoints = pathsRef.current.reduce((sum, path) => sum + path.points.length, 0)
         const sizeKB = (new Blob([data]).size / 1024).toFixed(2)
-        console.log(`Canvas data: ${pathsRef.current.length} paths, ${totalPoints} points, ${sizeKB} KB (section: ${sectionId})`)
 
         onUpdate(data)
       }
@@ -376,10 +374,8 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
 
     // Expose methods
     useImperativeHandle(ref, () => {
-      console.log('SimpleCanvas ref attached')
       return {
         clear: () => {
-          console.log('Clear called on SimpleCanvas')
           pathsRef.current = []
           redrawCanvas()
           onUpdate(JSON.stringify([]))

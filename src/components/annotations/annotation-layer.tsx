@@ -122,7 +122,7 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
   // Track paper padding for canvas alignment
   const [paperPaddingLeft, setPaperPaddingLeft] = useState(0)
 
-  // Measure paper padding when it mounts
+  // Measure paper padding when it mounts and when viewport changes
   useEffect(() => {
     const paperElement = document.getElementById('paper')
     if (paperElement) {
@@ -131,7 +131,7 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setPaperPaddingLeft(padding)
     }
-  }, [])
+  }, [viewportWidth])
 
   // Save pen colors to localStorage whenever they change
   useEffect(() => {
@@ -1079,7 +1079,7 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
 
       {/* Version Actions - Quick undo and history buttons */}
       {hasAnnotations && (
-        <div className="fixed bottom-6 right-32 z-50">
+        <div className="fixed bottom-6 right-16 z-50">
           <VersionActions
             pageId={pageId}
             componentId="annotations"
