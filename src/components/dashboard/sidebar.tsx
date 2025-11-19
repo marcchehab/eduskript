@@ -16,9 +16,9 @@ const navigation = [
 
 const teacherNavigation = [
   { name: 'Page Builder', href: '/dashboard/page-builder', icon: BookOpen },
-  { name: 'Classes', href: '/dashboard/classes', icon: GraduationCap },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
   { name: 'Collaborate', href: '/dashboard/collaborate', icon: Users },
+  { name: 'Classes', href: '/dashboard/classes', icon: GraduationCap },
 ]
 
 const studentNavigation = [
