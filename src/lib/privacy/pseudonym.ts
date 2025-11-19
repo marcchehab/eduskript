@@ -1,4 +1,4 @@
-import { createHmac } from 'crypto'
+import { createHmac, timingSafeEqual } from 'crypto'
 
 /**
  * Generates a stable pseudonymous identifier from an email address.
@@ -22,6 +22,20 @@ export function generatePseudonym(email: string): string {
     throw new Error('STUDENT_PSEUDONYM_SECRET environment variable is not set')
   }
 
+  // Validate secret strength
+  if (secret.length < 32) {
+    throw new Error('STUDENT_PSEUDONYM_SECRET must be at least 32 characters for security')
+  }
+
+  // Check for weak/default values
+  const weakSecrets = [
+    'change-this-to-a-random-secret-in-production',
+    'your-secret-key-here',
+  ]
+  if (weakSecrets.some(weak => secret.toLowerCase().includes(weak.toLowerCase()))) {
+    throw new Error('STUDENT_PSEUDONYM_SECRET contains a weak or default value. Please use a strong random secret.')
+  }
+
   // Normalize email to lowercase to ensure consistent pseudonyms
   const normalizedEmail = email.toLowerCase().trim()
 
@@ -30,8 +44,9 @@ export function generatePseudonym(email: string): string {
   hmac.update(normalizedEmail)
   const hash = hmac.digest('hex')
 
-  // Return first 16 characters for brevity while maintaining uniqueness
-  return hash.substring(0, 16)
+  // Return full 64-character hash for maximum security
+  // Using the full hash eliminates collision risks
+  return hash
 }
 
 /**
@@ -53,7 +68,22 @@ export function generatePseudonym(email: string): string {
 export function verifyStudentEmail(pseudonym: string, email: string): boolean {
   try {
     const generatedPseudonym = generatePseudonym(email)
-    return generatedPseudonym === pseudonym
+
+    // Use constant-time comparison to prevent timing attacks
+    // This ensures that the comparison time doesn't reveal information
+    // about how many characters match
+
+    // Convert strings to buffers for constant-time comparison
+    const pseudonymBuffer = Buffer.from(pseudonym)
+    const generatedBuffer = Buffer.from(generatedPseudonym)
+
+    // If lengths don't match, return false (but still use constant-time)
+    if (pseudonymBuffer.length !== generatedBuffer.length) {
+      return false
+    }
+
+    // Use crypto.timingSafeEqual for constant-time comparison
+    return timingSafeEqual(pseudonymBuffer, generatedBuffer)
   } catch (error) {
     console.error('Error verifying student email:', error)
     return false
@@ -96,10 +126,10 @@ export function isStudentEmail(email: string): boolean {
  * @returns A user-friendly display name
  *
  * @example
- * getStudentDisplayName('a3f5b9c2d8e1f4a7') // => 'Student a3f5'
+ * getStudentDisplayName('a3f5b9c2d8e1f4a7...') // => 'Student a3f5b9c2'
  */
 export function getStudentDisplayName(pseudonym: string): string {
-  // Use first 4 characters for brevity
-  const shortId = pseudonym.substring(0, 4)
+  // Use first 8 characters for better uniqueness while keeping brevity
+  const shortId = pseudonym.substring(0, 8)
   return `Student ${shortId}`
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { inviteCodeRateLimiter, getClientIdentifier } from '@/lib/rate-limit'
 
 interface RouteParams {
   params: Promise<{
@@ -12,6 +13,20 @@ interface RouteParams {
 // POST /api/classes/join/[inviteCode] - Student joins a class
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
+    // Rate limiting to prevent invite code enumeration
+    const identifier = getClientIdentifier(request)
+    const rateLimit = inviteCodeRateLimiter.check(identifier)
+
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        {
+          error: `Too many attempts. Please try again in ${rateLimit.retryAfter} seconds.`,
+          retryAfter: rateLimit.retryAfter
+        },
+        { status: 429 }
+      )
+    }
+
     const { inviteCode } = await params
     const session = await getServerSession(authOptions)
 
@@ -134,7 +149,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 // GET /api/classes/join/[inviteCode] - Preview class info before joining
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const { inviteCode } = await params
+    // Rate limiting to prevent invite code enumeration
+    const identifier = getClientIdentifier(request)
+    const rateLimit = inviteCodeRateLimiter.check(identifier)
+
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        {
+          error: `Too many attempts. Please try again in ${rateLimit.retryAfter} seconds.`,
+          retryAfter: rateLimit.retryAfter
+        },
+        { status: 429 }
+      )
+    }
+
+    const { inviteCode} = await params
 
     // Find the class by invite code
     const classRecord = await prisma.class.findUnique({

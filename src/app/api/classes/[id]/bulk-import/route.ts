@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { generatePseudonym } from '@/lib/privacy/pseudonym'
+import { bulkImportRateLimiter } from '@/lib/rate-limit'
 
 interface RouteParams {
   params: Promise<{
@@ -18,6 +19,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Rate limiting (per user, not IP)
+    const rateLimit = bulkImportRateLimiter.check(session.user.id)
+
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        {
+          error: `Too many bulk imports. Please try again in ${Math.ceil((rateLimit.retryAfter || 0) / 60)} minutes.`,
+          retryAfter: rateLimit.retryAfter
+        },
+        { status: 429 }
+      )
     }
 
     // Verify class exists and user owns it
@@ -133,14 +147,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       })
     }
 
-    // Return the mapping so client can store it
+    // Return statistics only (never expose email->pseudonym mappings)
     return NextResponse.json({
       imported: pseudonymsToAdd.length,
       alreadyMembers: existingPseudonyms.size,
       alreadyPreAuthorized: preAuthPseudonyms.size,
       total: normalizedEmails.length,
-      // Return email->pseudonym mapping for client-side storage
-      mappings: emailPseudonymMap
+      // Security: Mappings are stored server-side only
+      // Use the verification endpoint to check individual emails
     })
   } catch (error) {
     console.error('[API] Error bulk importing students:', error)

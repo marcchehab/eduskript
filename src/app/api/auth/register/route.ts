@@ -4,15 +4,52 @@ import { prisma } from '@/lib/prisma'
 import { generateSlug } from '@/lib/markdown'
 import { sendEmail, generateVerificationEmailContent } from '@/lib/email'
 import { randomBytes } from 'crypto'
+import { registrationRateLimiter, getClientIdentifier } from '@/lib/rate-limit'
+import { validatePassword } from '@/lib/password-validation'
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limiting
+    const identifier = getClientIdentifier(request)
+    const rateLimit = registrationRateLimiter.check(identifier)
+
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        {
+          error: `Too many registration attempts. Please try again in ${rateLimit.retryAfter} seconds.`,
+          retryAfter: rateLimit.retryAfter
+        },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': rateLimit.retryAfter?.toString() || '3600',
+            'X-RateLimit-Limit': '3',
+            'X-RateLimit-Remaining': '0',
+            'X-RateLimit-Reset': new Date(rateLimit.resetAt).toISOString()
+          }
+        }
+      )
+    }
+
     const { name, email, password, subdomain } = await request.json()
 
     // Validate input
     if (!name || !email || !password) {
       return NextResponse.json(
         { error: 'Name, email, and password are required' },
+        { status: 400 }
+      )
+    }
+
+    // Validate password strength
+    const passwordValidation = validatePassword(password)
+    if (!passwordValidation.valid) {
+      return NextResponse.json(
+        {
+          error: 'Password does not meet security requirements',
+          details: passwordValidation.errors,
+          strength: passwordValidation.strength
+        },
         { status: 400 }
       )
     }
