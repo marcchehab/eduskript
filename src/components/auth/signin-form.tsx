@@ -211,7 +211,7 @@ export function SignInForm({ accountType, callbackUrl = '/dashboard' }: SignInFo
 
               <div className="mt-4 text-center text-sm">
                 <span className="text-muted-foreground">Don&apos;t have an account? </span>
-                <Link href="/auth/signup" className="text-primary hover:underline">
+                <Link href="/auth/signup?type=teacher" className="text-primary hover:underline">
                   Sign up
                 </Link>
               </div>

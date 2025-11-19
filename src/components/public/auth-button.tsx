@@ -13,13 +13,11 @@ export function AuthButton() {
   const { data: session } = useSession()
 
   const handleSignIn = () => {
-    // Detect account type and redirect to the appropriate signin page
+    // Detect account type based on domain
     const accountType = getAccountTypeFromWindow()
-    const signinPath = accountType === 'student'
-      ? '/auth/signin/student'
-      : '/auth/signin/teacher'
+    const accountTypeParam = accountType === 'student' ? 'student' : 'teacher'
 
-    router.push(`${signinPath}?callbackUrl=${encodeURIComponent(pathname)}`)
+    router.push(`/auth/signin?type=${accountTypeParam}&callbackUrl=${encodeURIComponent(pathname)}`)
   }
 
   if (!session) {

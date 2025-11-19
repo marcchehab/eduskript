@@ -101,6 +101,10 @@ export const authOptions: NextAuthOptions = {
           AzureADProvider({
             clientId: process.env.AZURE_AD_CLIENT_ID,
             clientSecret: process.env.AZURE_AD_CLIENT_SECRET,
+            // Use 'common' to allow any Microsoft account (personal or work/school)
+            // Use 'organizations' for work/school only, or 'consumers' for personal only
+            // Or use specific AZURE_AD_TENANT_ID for single-tenant
+            tenantId: process.env.AZURE_AD_TENANT_ID || 'common',
             authorization: {
               params: {
                 scope: 'openid profile email offline_access'

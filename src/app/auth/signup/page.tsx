@@ -139,8 +139,8 @@ export default function SignUpPage() {
                   {isLoading ? 'Sending...' : 'Resend Verification Email'}
                 </Button>
                 
-                <Link 
-                  href="/auth/signin"
+                <Link
+                  href="/auth/signin?type=teacher"
                   className="inline-flex items-center justify-center w-full px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-500 dark:text-blue-400"
                 >
                   Back to Sign In
@@ -228,8 +228,8 @@ export default function SignUpPage() {
             <span className="text-gray-600 dark:text-gray-400">
               Already have an account?{' '}
             </span>
-            <Link 
-              href="/auth/signin" 
+            <Link
+              href="/auth/signin?type=teacher"
               className="text-blue-600 hover:text-blue-500 dark:text-blue-400"
             >
               Sign in

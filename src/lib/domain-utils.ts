@@ -12,11 +12,13 @@ export function isMainDomain(hostname: string): boolean {
   const cleanHostname = hostname.split(':')[0]
 
   // Check if it's exactly eduskript.org (not a subdomain)
-  // Also handle localhost for development
+  // Also handle localhost and IP addresses for development
   return (
     cleanHostname === 'eduskript.org' ||
     cleanHostname === 'localhost' ||
-    cleanHostname === '127.0.0.1'
+    cleanHostname === '127.0.0.1' ||
+    // Match any IP address (IPv4)
+    /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(cleanHostname)
   )
 }
 
