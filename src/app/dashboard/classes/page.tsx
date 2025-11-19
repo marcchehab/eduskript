@@ -16,8 +16,18 @@ import {
   ChevronDown,
   ChevronRight,
   Upload,
+  AlertCircle,
+  CheckCircle,
 } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 interface Student {
   id: string
@@ -59,6 +69,12 @@ export default function ClassesPage() {
   const [newClassName, setNewClassName] = useState('')
   const [newClassDescription, setNewClassDescription] = useState('')
   const [copiedCode, setCopiedCode] = useState<string | null>(null)
+
+  // Dialog state
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [dialogType, setDialogType] = useState<'success' | 'error'>('success')
+  const [dialogTitle, setDialogTitle] = useState('')
+  const [dialogMessage, setDialogMessage] = useState('')
 
   // Per-class state for bulk import
   const [emailInputs, setEmailInputs] = useState<Record<string, string>>({})
@@ -168,7 +184,10 @@ export default function ClassesPage() {
       setShowCreateForm(false)
     } catch (error) {
       console.error('Error creating class:', error)
-      alert('Failed to create class. Please try again.')
+      setDialogType('error')
+      setDialogTitle('Failed to Create Class')
+      setDialogMessage('An error occurred while creating the class. Please try again.')
+      setDialogOpen(true)
     } finally {
       setCreating(false)
     }
@@ -195,7 +214,10 @@ export default function ClassesPage() {
         .filter((e) => e.length > 0 && e.includes('@'))
 
       if (emails.length === 0) {
-        alert('No valid emails found')
+        setDialogType('error')
+        setDialogTitle('No Valid Emails')
+        setDialogMessage('Please enter at least one valid email address.')
+        setDialogOpen(true)
         return
       }
 
@@ -206,10 +228,13 @@ export default function ClassesPage() {
       })
 
       if (!response.ok) {
-        throw new Error('Failed to add students')
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+        console.error('Bulk import failed:', errorData)
+        throw new Error(errorData.error || 'Failed to add students')
       }
 
       const data = await response.json()
+      console.log('Bulk import response:', data)
 
       // Save the email-to-pseudonym mapping to localStorage
       const stored = localStorage.getItem(`class_email_mapping_${classId}`)
@@ -217,19 +242,24 @@ export default function ClassesPage() {
       const newMapping = { ...existingMapping, ...data.mappings }
       localStorage.setItem(`class_email_mapping_${classId}`, JSON.stringify(newMapping))
 
-      alert(
-        `Successfully added!\n\n` +
-          `- ${data.imported} new pre-authorizations added\n` +
-          `- ${data.alreadyMembers} already enrolled\n` +
-          `- ${data.alreadyPreAuthorized} already pre-authorized`
+      setDialogType('success')
+      setDialogTitle('Students Added Successfully')
+      setDialogMessage(
+        `${data.imported} new pre-authorization${data.imported !== 1 ? 's' : ''} added\n` +
+        `${data.alreadyMembers} already enrolled\n` +
+        `${data.alreadyPreAuthorized} already pre-authorized`
       )
+      setDialogOpen(true)
 
       setEmailInputs({ ...emailInputs, [classId]: '' })
       await loadClassDetails(classId)
       await loadClasses()
     } catch (error) {
       console.error('Error adding students:', error)
-      alert('Failed to add students. Please try again.')
+      setDialogType('error')
+      setDialogTitle('Failed to Add Students')
+      setDialogMessage(error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.')
+      setDialogOpen(true)
     } finally {
       setImporting({ ...importing, [classId]: false })
     }
@@ -259,7 +289,34 @@ export default function ClassesPage() {
 
   return (
     <TooltipProvider>
-      <div className="container mx-auto p-6">
+      <>
+        {/* Result Dialog */}
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <div className="flex items-center gap-3">
+                {dialogType === 'success' ? (
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/20">
+                    <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
+                  </div>
+                ) : (
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/20">
+                    <AlertCircle className="h-6 w-6 text-red-600 dark:text-red-400" />
+                  </div>
+                )}
+                <DialogTitle>{dialogTitle}</DialogTitle>
+              </div>
+              <DialogDescription className="whitespace-pre-line pt-2">
+                {dialogMessage}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button onClick={() => setDialogOpen(false)}>OK</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <div className="container mx-auto p-6">
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center justify-between mb-6">
             <div>
@@ -507,6 +564,7 @@ export default function ClassesPage() {
           )}
         </div>
       </div>
+      </>
     </TooltipProvider>
   )
 }
