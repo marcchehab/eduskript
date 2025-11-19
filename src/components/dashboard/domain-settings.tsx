@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
+import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { Trash2, Plus, ExternalLink } from 'lucide-react'
 
 interface CustomDomain {
@@ -19,6 +21,7 @@ export function DomainSettings() {
   const [newDomain, setNewDomain] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const alert = useAlertDialog()
 
   useEffect(() => {
     fetchDomains()
@@ -61,11 +64,11 @@ export function DomainSettings() {
         setNewDomain('')
       } else {
         const error = await response.json()
-        alert(error.error || 'Failed to add domain')
+        alert.showError(error.error || 'Failed to add domain')
       }
     } catch (error) {
       console.error('Error adding domain:', error)
-      alert('Failed to add domain')
+      alert.showError('Failed to add domain')
     } finally {
       setIsSubmitting(false)
     }
@@ -82,11 +85,11 @@ export function DomainSettings() {
       if (response.ok) {
         setDomains(prev => prev.filter(d => d.id !== id))
       } else {
-        alert('Failed to remove domain')
+        alert.showError('Failed to remove domain')
       }
     } catch (error) {
       console.error('Error removing domain:', error)
-      alert('Failed to remove domain')
+      alert.showError('Failed to remove domain')
     }
   }
 
@@ -202,6 +205,13 @@ export function DomainSettings() {
           </p>
         </CardContent>
       </Card>
+      <AlertDialogModal
+        open={alert.open}
+        onOpenChange={alert.setOpen}
+        type={alert.type}
+        title={alert.title}
+        message={alert.message}
+      />
     </div>
   )
 }

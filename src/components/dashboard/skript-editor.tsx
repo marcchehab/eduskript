@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
+import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { ArrowLeft, FileText } from 'lucide-react'
 import { SortablePages } from './sortable-pages'
 import { EditModal } from './edit-modal'
@@ -33,6 +35,7 @@ interface SkriptEditorProps {
 export function SkriptEditor({ skript, collectionSlug, canEdit, userPermissions, currentUserId }: SkriptEditorProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
+  const alert = useAlertDialog()
 
   const handleSkriptUpdated = () => {
     router.refresh()
@@ -52,11 +55,11 @@ export function SkriptEditor({ skript, collectionSlug, canEdit, userPermissions,
       if (response.ok) {
         router.push(`/dashboard/collections/${collectionSlug}`)
       } else {
-        alert('Failed to delete skript')
+        alert.showError('Failed to delete skript')
       }
     } catch (error) {
       console.error('Error deleting skript:', error)
-      alert('Failed to delete skript')
+      alert.showError('Failed to delete skript')
     } finally {
       setIsLoading(false)
     }
@@ -178,6 +181,13 @@ export function SkriptEditor({ skript, collectionSlug, canEdit, userPermissions,
           onPermissionChange={handleSkriptUpdated}
         />
       )}
+      <AlertDialogModal
+        open={alert.open}
+        onOpenChange={alert.setOpen}
+        type={alert.type}
+        title={alert.title}
+        message={alert.message}
+      />
     </div>
   )
 }

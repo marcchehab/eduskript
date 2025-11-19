@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
+import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { User, Save, Loader2 } from 'lucide-react'
 
 export function ProfileSettings() {
@@ -19,6 +21,7 @@ export function ProfileSettings() {
     bio: (session?.user as { bio?: string })?.bio || '',
     title: (session?.user as { title?: string })?.title || ''
   })
+  const alert = useAlertDialog()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -40,14 +43,14 @@ export function ProfileSettings() {
 
       // Update the session with new data
       await update()
-      
+
       // Refresh the page to reflect changes
       router.refresh()
-      
-      alert('Profile updated successfully!')
+
+      alert.showSuccess('Profile updated successfully!')
     } catch (error) {
       console.error('Error updating profile:', error)
-      alert(error instanceof Error ? error.message : 'Failed to update profile')
+      alert.showError(error instanceof Error ? error.message : 'Failed to update profile')
     } finally {
       setIsLoading(false)
     }
@@ -135,6 +138,13 @@ export function ProfileSettings() {
           </div>
         </form>
       </CardContent>
+      <AlertDialogModal
+        open={alert.open}
+        onOpenChange={alert.setOpen}
+        type={alert.type}
+        title={alert.title}
+        message={alert.message}
+      />
     </Card>
   )
 }

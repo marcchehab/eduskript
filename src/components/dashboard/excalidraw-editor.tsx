@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
+import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Save } from 'lucide-react'
 import dynamic from 'next/dynamic'
@@ -54,6 +56,7 @@ export function ExcalidrawEditor({
   const { theme, systemTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
   const [editorKey, setEditorKey] = useState(Date.now()) // Force remount on open
+  const alert = useAlertDialog()
 
   // Get the actual theme (resolve 'system' to actual theme)
   const resolvedTheme = theme === 'system' ? systemTheme : theme
@@ -74,7 +77,7 @@ export function ExcalidrawEditor({
 
   const handleSave = async () => {
     if (!excalidrawAPI || !drawingName.trim()) {
-      alert('Please enter a drawing name')
+      alert.showError('Please enter a drawing name')
       return
     }
 
@@ -134,7 +137,7 @@ export function ExcalidrawEditor({
       onClose()
     } catch (error) {
       console.error('Error saving drawing:', error)
-      alert('Failed to save drawing. Please try again.')
+      alert.showError('Failed to save drawing. Please try again.')
     } finally {
       setIsSaving(false)
     }
@@ -188,6 +191,13 @@ export function ExcalidrawEditor({
           )}
         </div>
       </DialogContent>
+      <AlertDialogModal
+        open={alert.open}
+        onOpenChange={alert.setOpen}
+        type={alert.type}
+        title={alert.title}
+        message={alert.message}
+      />
     </Dialog>
   )
 }

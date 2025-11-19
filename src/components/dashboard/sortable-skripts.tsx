@@ -4,6 +4,8 @@ import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
 import { Button } from '@/components/ui/button'
+import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
+import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { EditModal } from './edit-modal'
 import { PublishToggle } from './publish-toggle'
 import { CreatePageModal } from './create-page-modal'
@@ -52,19 +54,21 @@ interface SortableSkriptItemProps {
   canEdit?: boolean
 }
 
-function SortableSkriptItem({ 
-  skript, 
-  index, 
-  collectionSlug, 
+function SortableSkriptItem({
+  skript,
+  index,
+  collectionSlug,
   onSkriptUpdated,
   onSkriptDeleted,
   canEdit = true,
   currentUserId
 }: SortableSkriptItemProps & { currentUserId?: string }) {
   // Check if current user can edit this specific skript
-  const canEditSkript = canEdit && (!skript.authors || skript.authors.length === 0 || 
+  const canEditSkript = canEdit && (!skript.authors || skript.authors.length === 0 ||
     skript.authors.some(a => a.userId === currentUserId && a.permission === 'author'))
   const isViewOnly = !canEditSkript
+  const alert = useAlertDialog()
+
   const handleDeleteSkript = async () => {
     if (!confirm(`Are you sure you want to delete the skript "${skript.title}"? This will also delete all pages in this skript.`)) {
       return
@@ -78,11 +82,11 @@ function SortableSkriptItem({
       if (response.ok) {
         onSkriptDeleted()
       } else {
-        alert('Failed to delete skript')
+        alert.showError('Failed to delete skript')
       }
     } catch (error) {
       console.error('Error deleting skript:', error)
-      alert('Failed to delete skript')
+      alert.showError('Failed to delete skript')
     }
   }
 
@@ -197,26 +201,34 @@ function SortableSkriptItem({
               </div>
             </div>
           )}
+          <AlertDialogModal
+            open={alert.open}
+            onOpenChange={alert.setOpen}
+            type={alert.type}
+            title={alert.title}
+            message={alert.message}
+          />
         </div>
       )}
     </Draggable>
   )
 }
 
-function StaticSkriptItem({ 
-  skript, 
-  index, 
-  collectionSlug, 
+function StaticSkriptItem({
+  skript,
+  index,
+  collectionSlug,
   onSkriptUpdated,
   onSkriptDeleted,
   canEdit = true,
   currentUserId
 }: SortableSkriptItemProps & { currentUserId?: string }) {
   // Check if current user can edit this specific skript
-  const canEditSkript = canEdit && (!skript.authors || skript.authors.length === 0 || 
+  const canEditSkript = canEdit && (!skript.authors || skript.authors.length === 0 ||
     skript.authors.some(a => a.userId === currentUserId && a.permission === 'author'))
   const isViewOnly = !canEditSkript
-  
+  const alert = useAlertDialog()
+
   const handleDeleteSkript = async () => {
     if (!confirm(`Are you sure you want to delete the skript "${skript.title}"? This will also delete all pages in this skript.`)) {
       return
@@ -230,11 +242,11 @@ function StaticSkriptItem({
       if (response.ok) {
         onSkriptDeleted()
       } else {
-        alert('Failed to delete skript')
+        alert.showError('Failed to delete skript')
       }
     } catch (error) {
       console.error('Error deleting skript:', error)
-      alert('Failed to delete skript')
+      alert.showError('Failed to delete skript')
     }
   }
 
@@ -336,6 +348,13 @@ function StaticSkriptItem({
           </div>
         </div>
       )}
+      <AlertDialogModal
+        open={alert.open}
+        onOpenChange={alert.setOpen}
+        type={alert.type}
+        title={alert.title}
+        message={alert.message}
+      />
     </div>
   )
 }
@@ -351,10 +370,10 @@ interface SortableSkriptsProps {
   currentUserId?: string
 }
 
-export function SortableSkripts({ 
-  skripts, 
-  collectionId, 
-  collectionSlug, 
+export function SortableSkripts({
+  skripts,
+  collectionId,
+  collectionSlug,
   onReorder,
   onSkriptUpdated,
   onSkriptDeleted,
@@ -364,6 +383,7 @@ export function SortableSkripts({
   const [items, setItems] = useState(skripts)
   const [isReordering, setIsReordering] = useState(false)
   const [isMounted, setIsMounted] = useState(false)
+  const alert = useAlertDialog()
   
   // Sync items with skripts prop and handle hydration
   useEffect(() => {
@@ -414,12 +434,12 @@ export function SortableSkripts({
         console.error('Reorder failed:', response.status, errorData)
         // Revert on error
         setItems(skripts)
-        alert('Failed to reorder skripts: ' + errorData)
+        alert.showError('Failed to reorder skripts: ' + errorData)
       }
     } catch (error) {
       console.error('Error reordering skripts:', error)
       setItems(skripts)
-      alert('Failed to reorder skripts')
+      alert.showError('Failed to reorder skripts')
     }
     setIsReordering(false)
   }
@@ -490,6 +510,13 @@ export function SortableSkripts({
           Updating skript order...
         </div>
       )}
+      <AlertDialogModal
+        open={alert.open}
+        onOpenChange={alert.setOpen}
+        type={alert.type}
+        title={alert.title}
+        message={alert.message}
+      />
     </div>
   )
 }

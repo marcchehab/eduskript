@@ -1,6 +1,8 @@
 'use client'
 
 import { useState } from 'react'
+import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
+import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { Download } from 'lucide-react'
 
 interface ExportPDFProps {
@@ -11,6 +13,7 @@ interface ExportPDFProps {
 
 export function ExportPDF({ title, content, author }: ExportPDFProps) {
   const [isExporting, setIsExporting] = useState(false)
+  const alert = useAlertDialog()
 
   const handleExport = async () => {
     setIsExporting(true)
@@ -89,13 +92,14 @@ export function ExportPDF({ title, content, author }: ExportPDFProps) {
       }
     } catch (error) {
       console.error('Error exporting PDF:', error)
-      alert('Unable to export PDF. Please try again.')
+      alert.showError('Unable to export PDF. Please try again.')
       setIsExporting(false)
     }
   }
 
   return (
-    <button
+    <>
+      <button
       onClick={handleExport}
       disabled={isExporting}
       className="inline-flex items-center gap-2 px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -111,6 +115,14 @@ export function ExportPDF({ title, content, author }: ExportPDFProps) {
           Export as PDF
         </>
       )}
-    </button>
+      </button>
+      <AlertDialogModal
+        open={alert.open}
+        onOpenChange={alert.setOpen}
+        type={alert.type}
+        title={alert.title}
+        message={alert.message}
+      />
+    </>
   )
 }

@@ -6,6 +6,8 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
+import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { MarkdownEditor } from '@/components/dashboard/markdown-editor'
 import { FileBrowser } from '@/components/dashboard/file-browser'
 import { CollapsibleDrawer } from '@/components/ui/collapsible-drawer'
@@ -61,6 +63,7 @@ export function PageEditor({ collection, skript, page }: PageEditorProps) {
   const contentRef = useRef(content)
   const router = useRouter()
   const { data: session, status: sessionStatus } = useSession()
+  const alert = useAlertDialog()
 
   // Shared file list state - updated for new file system
   const [fileList, setFileList] = useState<Array<{
@@ -225,7 +228,7 @@ export function PageEditor({ collection, skript, page }: PageEditorProps) {
       }
     } catch (error) {
       console.error('Error loading Excalidraw file:', error)
-      alert('Failed to load drawing for editing')
+      alert.showError('Failed to load drawing for editing')
     }
   }
 
@@ -283,7 +286,7 @@ export function PageEditor({ collection, skript, page }: PageEditorProps) {
 
   const handleSave = useCallback(async () => {
     if (!title.trim() || !slug.trim()) {
-      alert('Title and slug are required')
+      alert.showError('Title and slug are required')
       return
     }
 
@@ -315,14 +318,14 @@ export function PageEditor({ collection, skript, page }: PageEditorProps) {
         }
       } else {
         const data = await response.json()
-        alert(data.error || 'Failed to save page')
+        alert.showError(data.error || 'Failed to save page')
       }
     } catch (error) {
       console.error('Error saving page:', error)
-      alert('Failed to save page')
+      alert.showError('Failed to save page')
     }
     setIsSaving(false)
-  }, [title, slug, description, isPublished, page.id, page.slug, collection.slug, skript.slug, router, loadVersions])
+  }, [title, slug, description, isPublished, page.id, page.slug, collection.slug, skript.slug, router, loadVersions, alert])
 
   // Handle version restoration
   const handleRestoreVersion = async (versionId: string, versionContent: string) => {
@@ -340,14 +343,14 @@ export function PageEditor({ collection, skript, page }: PageEditorProps) {
         setLastSaved(new Date())
         // Reload versions to show the new restoration entry
         loadVersions()
-        alert(`Successfully restored to version ${data.restoredFromVersion}`)
+        alert.showSuccess(`Successfully restored to version ${data.restoredFromVersion}`)
       } else {
         const data = await response.json()
-        alert(data.error || 'Failed to restore version')
+        alert.showError(data.error || 'Failed to restore version')
       }
     } catch (error) {
       console.error('Error restoring version:', error)
-      alert('Failed to restore version')
+      alert.showError('Failed to restore version')
     }
   }
 
@@ -549,6 +552,13 @@ export function PageEditor({ collection, skript, page }: PageEditorProps) {
           }}
         />
       )}
+      <AlertDialogModal
+        open={alert.open}
+        onOpenChange={alert.setOpen}
+        type={alert.type}
+        title={alert.title}
+        message={alert.message}
+      />
     </div>
   )
 }

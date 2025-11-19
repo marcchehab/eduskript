@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTheme } from 'next-themes'
 import { Button } from '@/components/ui/button'
+import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
+import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { Eye, EyeOff, Pencil, Code, Bold, Italic, Heading, List, ListOrdered, Link } from 'lucide-react'
 import { ExcalidrawEditor } from './excalidraw-editor'
 import { InteractivePreview } from './interactive-preview'
@@ -44,6 +46,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   const [excalidrawOpen, setExcalidrawOpen] = useState(false)
   const { resolvedTheme } = useTheme()
   const isDark = resolvedTheme === 'dark'
+  const alert = useAlertDialog()
 
   // Track current heading/paragraph
   const [currentHeading, setCurrentHeading] = useState<string>('')
@@ -136,15 +139,15 @@ const CodeMirrorEditor = function CodeMirrorEditor({
             try {
               const errorData = await response.json()
               const errorMessage = errorData.error || 'Upload failed'
-              alert(`Failed to upload file: ${errorMessage}`)
+              alert.showError(`Failed to upload file: ${errorMessage}`)
             } catch {
-              alert(`Failed to upload file (status ${response.status})`)
+              alert.showError(`Failed to upload file (status ${response.status})`)
             }
           }
         }
       } catch (error) {
         console.error('Error uploading dropped files:', error)
-        alert('Failed to upload file. Please try again.')
+        alert.showError('Failed to upload file. Please try again.')
       }
     }
   }
@@ -598,7 +601,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   // Handle Excalidraw save
   const handleExcalidrawSave = async (name: string, excalidrawData: string, lightSvg: string, darkSvg: string) => {
     if (!skriptId) {
-      alert('Skript ID is required to save drawings')
+      alert.showError('Skript ID is required to save drawings')
       return
     }
 
@@ -648,10 +651,10 @@ const CodeMirrorEditor = function CodeMirrorEditor({
         onFileUpload()
       }
 
-      alert('Drawing saved successfully!')
+      alert.showSuccess('Drawing saved successfully!')
     } catch (error) {
       console.error('Error saving drawing:', error)
-      alert('Failed to save drawing. Please try again.')
+      alert.showError('Failed to save drawing. Please try again.')
     }
   }
 
@@ -903,6 +906,13 @@ const CodeMirrorEditor = function CodeMirrorEditor({
           skriptId={skriptId}
         />
       )}
+      <AlertDialogModal
+        open={alert.open}
+        onOpenChange={alert.setOpen}
+        type={alert.type}
+        title={alert.title}
+        message={alert.message}
+      />
     </div>
   )
 }

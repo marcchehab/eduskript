@@ -4,6 +4,8 @@ import { useState } from 'react'
 import Image from 'next/image'
 import { Image as ImageIcon, Video, Music, FileText, Archive, File, Trash2, ExternalLink, Paintbrush, TextCursor } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
+import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { Dialog } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -44,6 +46,7 @@ export function FileBrowser({ skriptId, onFileSelect, className = '', onUploadCo
   const [duplicateUpload, setDuplicateUpload] = useState<{file: File, existingFile: FileItem} | null>(null)
   const [newUploadName, setNewUploadName] = useState('')
   const { resolvedTheme } = useTheme()
+  const alert = useAlertDialog()
 
   const getFileIcon = (filename: string) => {
     // Check if it's an Excalidraw file
@@ -408,22 +411,22 @@ export function FileBrowser({ skriptId, onFileSelect, className = '', onUploadCo
                   
                   if (response.ok) {
                     const result = await response.json()
-                    
+
                     // Call the callback to update live editor content if updateLinks is enabled
                     if (updateLinks && onFileRenamed) {
                       onFileRenamed(result.file.oldName, result.file.name)
                     }
-                    
+
                     setRenameFile(null)
                     setNewFileName('')
                     if (onUploadComplete) onUploadComplete() // Refresh the file list
                   } else {
                     const error = await response.json()
-                    alert(error.error || 'Failed to rename file')
+                    alert.showError(error.error || 'Failed to rename file')
                   }
                 } catch (error) {
                   console.error('Rename error:', error)
-                  alert('Failed to rename file')
+                  alert.showError('Failed to rename file')
                 }
               }}>
                 Rename
@@ -484,11 +487,11 @@ export function FileBrowser({ skriptId, onFileSelect, className = '', onUploadCo
                     if (onUploadComplete) onUploadComplete()
                   } else {
                     const error = await response.json()
-                    alert(error.error || 'Failed to overwrite file')
+                    alert.showError(error.error || 'Failed to overwrite file')
                   }
                 } catch (error) {
                   console.error('Overwrite error:', error)
-                  alert('Failed to overwrite file')
+                  alert.showError('Failed to overwrite file')
                 }
               }}>
                 Overwrite Existing
@@ -517,11 +520,11 @@ export function FileBrowser({ skriptId, onFileSelect, className = '', onUploadCo
                     if (onUploadComplete) onUploadComplete()
                   } else {
                     const error = await response.json()
-                    alert(error.error || 'Failed to upload file with new name')
+                    alert.showError(error.error || 'Failed to upload file with new name')
                   }
                 } catch (error) {
                   console.error('Rename upload error:', error)
-                  alert('Failed to upload file with new name')
+                  alert.showError('Failed to upload file with new name')
                 }
               }}>
                 Rename & Upload
@@ -530,6 +533,13 @@ export function FileBrowser({ skriptId, onFileSelect, className = '', onUploadCo
           </div>
         </Dialog>
       )}
+      <AlertDialogModal
+        open={alert.open}
+        onOpenChange={alert.setOpen}
+        type={alert.type}
+        title={alert.title}
+        message={alert.message}
+      />
     </div>
   )
 }

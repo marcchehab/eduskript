@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react'
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
 import { Button } from '@/components/ui/button'
+import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
+import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { EditModal } from './edit-modal'
 import { PublishToggle } from './publish-toggle'
 import {
@@ -33,6 +35,8 @@ interface SortablePageItemProps {
 }
 
 function SortablePageItem({ page, index, collectionSlug, skriptSlug, onPageUpdated, canEdit = true }: SortablePageItemProps) {
+  const alert = useAlertDialog()
+
   const handleDeletePage = async () => {
     if (!confirm(`Are you sure you want to delete the page "${page.title}"?`)) {
       return
@@ -46,11 +50,11 @@ function SortablePageItem({ page, index, collectionSlug, skriptSlug, onPageUpdat
       if (response.ok) {
         onPageUpdated?.()
       } else {
-        alert('Failed to delete page')
+        alert.showError('Failed to delete page')
       }
     } catch (error) {
       console.error('Error deleting page:', error)
-      alert('Failed to delete page')
+      alert.showError('Failed to delete page')
     }
   }
 
@@ -123,6 +127,13 @@ function SortablePageItem({ page, index, collectionSlug, skriptSlug, onPageUpdat
               </>
             )}
           </div>
+          <AlertDialogModal
+            open={alert.open}
+            onOpenChange={alert.setOpen}
+            type={alert.type}
+            title={alert.title}
+            message={alert.message}
+          />
         </div>
       )}
     </Draggable>
@@ -130,6 +141,8 @@ function SortablePageItem({ page, index, collectionSlug, skriptSlug, onPageUpdat
 }
 
 function StaticPageItem({ page, index, collectionSlug, skriptSlug, onPageUpdated, canEdit = true }: SortablePageItemProps) {
+  const alert = useAlertDialog()
+
   const handleDeletePage = async () => {
     if (!confirm(`Are you sure you want to delete the page "${page.title}"?`)) {
       return
@@ -143,11 +156,11 @@ function StaticPageItem({ page, index, collectionSlug, skriptSlug, onPageUpdated
       if (response.ok) {
         onPageUpdated?.()
       } else {
-        alert('Failed to delete page')
+        alert.showError('Failed to delete page')
       }
     } catch (error) {
       console.error('Error deleting page:', error)
-      alert('Failed to delete page')
+      alert.showError('Failed to delete page')
     }
   }
 
@@ -207,6 +220,13 @@ function StaticPageItem({ page, index, collectionSlug, skriptSlug, onPageUpdated
           </>
         )}
       </div>
+      <AlertDialogModal
+        open={alert.open}
+        onOpenChange={alert.setOpen}
+        type={alert.type}
+        title={alert.title}
+        message={alert.message}
+      />
     </div>
   )
 }
@@ -221,11 +241,11 @@ interface SortablePagesProps {
   canEdit?: boolean
 }
 
-export function SortablePages({ 
-  pages, 
-  skriptId, 
-  collectionSlug, 
-  skriptSlug, 
+export function SortablePages({
+  pages,
+  skriptId,
+  collectionSlug,
+  skriptSlug,
   onReorder,
   onPageDeleted,
   canEdit = true
@@ -233,6 +253,7 @@ export function SortablePages({
   const [items, setItems] = useState(pages)
   const [isReordering, setIsReordering] = useState(false)
   const [isMounted, setIsMounted] = useState(false)
+  const alert = useAlertDialog()
   
   // Sync items with pages prop and handle hydration
   useEffect(() => {
@@ -283,12 +304,12 @@ export function SortablePages({
         console.error('Page reorder failed:', response.status, errorData)
         // Revert on error
         setItems(pages)
-        alert('Failed to reorder pages: ' + errorData)
+        alert.showError('Failed to reorder pages: ' + errorData)
       }
     } catch (error) {
       console.error('Error reordering pages:', error)
       setItems(pages)
-      alert('Failed to reorder pages')
+      alert.showError('Failed to reorder pages')
     }
     setIsReordering(false)
   }
@@ -361,6 +382,13 @@ export function SortablePages({
           Updating page order...
         </div>
       )}
+      <AlertDialogModal
+        open={alert.open}
+        onOpenChange={alert.setOpen}
+        type={alert.type}
+        title={alert.title}
+        message={alert.message}
+      />
     </div>
   )
 }
