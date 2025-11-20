@@ -197,15 +197,19 @@ export function PublicSiteLayout({
   const navigateToPage = (collectionSlug: string, skriptSlug: string, pageSlug: string) => {
     // Check if we're on a subdomain by looking at window.location.hostname
     const hostname = typeof window !== 'undefined' ? window.location.hostname : ''
-    const isMainDomain = hostname === 'localhost' || hostname === 'eduskript.org' || hostname === 'www.eduskript.org'
-    const isOnSubdomain = !isMainDomain && (hostname.endsWith('.localhost') || hostname.endsWith('.eduskript.org'))
-    
+    const hostWithoutPort = hostname.split(':')[0]
+
+    // Check if we're on a subdomain
+    const parts = hostWithoutPort.split('.')
+    const hasSubdomain = (parts.length > 1 && parts[parts.length - 1] === 'localhost') ||  // subdomain.localhost
+                        (parts.length > 2 && parts[parts.length - 2] === 'eduskript')      // subdomain.eduskript.org
+
     // If on subdomain, use relative URL (middleware will handle rewrite)
     // If on main domain, use full path with subdomain
-    const url = isOnSubdomain 
+    const url = hasSubdomain
       ? `/${collectionSlug}/${skriptSlug}/${pageSlug}`
       : `/${teacher.subdomain}/${collectionSlug}/${skriptSlug}/${pageSlug}`
-    
+
     router.push(url)
     setIsSidebarOpen(false)
   }
@@ -301,10 +305,12 @@ export function PublicSiteLayout({
                         <button
                           onClick={() => {
                             const hostname = typeof window !== 'undefined' ? window.location.hostname : ''
-                            const isMainDomain = hostname === 'localhost' || hostname === 'eduskript.org' || hostname === 'www.eduskript.org'
-                            const isOnSubdomain = !isMainDomain && (hostname.endsWith('.localhost') || hostname.endsWith('.eduskript.org'))
-                            
-                            const url = isOnSubdomain ? '/' : `/${teacher.subdomain}`
+                            const hostWithoutPort = hostname.split(':')[0]
+                            const parts = hostWithoutPort.split('.')
+                            const hasSubdomain = (parts.length > 1 && parts[parts.length - 1] === 'localhost') ||
+                                                (parts.length > 2 && parts[parts.length - 2] === 'eduskript')
+
+                            const url = hasSubdomain ? '/' : `/${teacher.subdomain}`
                             router.push(url)
                             setIsSidebarOpen(false)
                           }}
@@ -337,10 +343,12 @@ export function PublicSiteLayout({
                         onClick={() => {
                           // Navigate to teacher's root page
                           const hostname = typeof window !== 'undefined' ? window.location.hostname : ''
-                          const isMainDomain = hostname === 'localhost' || hostname === 'eduskript.org' || hostname === 'www.eduskript.org'
-                          const isOnSubdomain = !isMainDomain && (hostname.endsWith('.localhost') || hostname.endsWith('.eduskript.org'))
-                          
-                          const url = isOnSubdomain ? '/' : `/${teacher.subdomain}`
+                          const hostWithoutPort = hostname.split(':')[0]
+                          const parts = hostWithoutPort.split('.')
+                          const hasSubdomain = (parts.length > 1 && parts[parts.length - 1] === 'localhost') ||
+                                              (parts.length > 2 && parts[parts.length - 2] === 'eduskript')
+
+                          const url = hasSubdomain ? '/' : `/${teacher.subdomain}`
                           router.push(url)
                           setIsSidebarOpen(false)
                         }}

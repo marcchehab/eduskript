@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import type { Metadata } from 'next'
 import { prisma } from '@/lib/prisma'
 import { SkriptRedirect } from '@/components/SkriptRedirect'
+import { headers } from 'next/headers'
 
 // Enable ISR with on-demand regeneration for previews
 export const revalidate = 0 // No caching for previews to show latest changes
@@ -110,6 +111,14 @@ export default async function SkriptPreviewPage({ params }: SkriptPreviewProps) 
   const { domain, collectionSlug, skriptSlug } = await params
   const session = await getServerSession(authOptions)
 
+  // Check if request came through subdomain by examining headers
+  const headersList = await headers()
+  const hostname = headersList.get('host') || ''
+  const hostWithoutPort = hostname.split(':')[0]
+  const parts = hostWithoutPort.split('.')
+  const hasSubdomain = (parts.length > 1 && parts[parts.length - 1] === 'localhost') ||
+                      (parts.length > 2 && parts[parts.length - 2] === 'eduskript')
+
   try {
     // Find the teacher
     const teacher = await prisma.user.findUnique({
@@ -196,11 +205,19 @@ export default async function SkriptPreviewPage({ params }: SkriptPreviewProps) 
 
     if (firstPage) {
       // Redirect to the first available page
-      return <SkriptRedirect redirectUrl={`/${domain}/${collectionSlug}/${skriptSlug}/${firstPage.slug}`} />
+      const redirectUrl = hasSubdomain
+        ? `/${collectionSlug}/${skriptSlug}/${firstPage.slug}`
+        : `/${domain}/${collectionSlug}/${skriptSlug}/${firstPage.slug}`
+      console.log('Redirecting to:', redirectUrl)
+      return <SkriptRedirect redirectUrl={redirectUrl} />
     }
 
     // If no pages are available, redirect back to collection
-    return <SkriptRedirect redirectUrl={`/${domain}/${collectionSlug}`} />
+    const redirectUrl = hasSubdomain
+      ? `/${collectionSlug}`
+      : `/${domain}/${collectionSlug}`
+    console.log('Redirecting to:', redirectUrl)
+    return <SkriptRedirect redirectUrl={redirectUrl} />
 
   } catch (error) {
     console.error('Error loading skript preview:', error)

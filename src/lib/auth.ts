@@ -118,6 +118,19 @@ export const authOptions: NextAuthOptions = {
   session: {
     strategy: 'jwt',
   },
+  cookies: process.env.NODE_ENV === 'production' ? {
+    sessionToken: {
+      name: '__Secure-next-auth.session-token',
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: true,
+        // Set domain to allow cookies across subdomains in production
+        domain: '.eduskript.org',
+      },
+    },
+  } : undefined, // In development, use default NextAuth cookies (no cross-subdomain support)
   callbacks: {
     async signIn({ user, account, profile }) {
       // No need to clean up cookies anymore since we use global variable

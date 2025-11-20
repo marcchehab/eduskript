@@ -89,41 +89,17 @@ export function CustomDomainHandler({ children }: CustomDomainHandlerProps) {
         }
 
         // Check if this is a native subdomain (e.g., eduadmin.eduskript.org)
+        // The proxy middleware handles the rewriting for these, so no client-side redirect needed
         if (!isDebugMode && hostname.endsWith('.eduskript.org')) {
-          const subdomain = hostname.replace('.eduskript.org', '')
-
-          // Make sure it's not www
-          if (subdomain && subdomain !== 'www') {
-            const subdomainPrefix = `/${subdomain}`
-
-            // If we're not already under the subdomain path, redirect
-            if (!pathname.startsWith(subdomainPrefix)) {
-              const expectedPath = `${subdomainPrefix}${pathname}`
-              router.replace(expectedPath)
-              return
-            }
-
-            setIsChecking(false)
-            return
-          }
+          setIsChecking(false)
+          return
         }
 
         // Skip localhost subdomains (e.g., eduadmin.localhost) for development
+        // The proxy middleware handles the rewriting for these, so no client-side redirect needed
         if (!isDebugMode && hostname.endsWith('.localhost')) {
-          const subdomain = hostname.replace('.localhost', '')
-
-          if (subdomain && subdomain !== 'www') {
-            const subdomainPrefix = `/${subdomain}`
-
-            if (!pathname.startsWith(subdomainPrefix)) {
-              const expectedPath = `${subdomainPrefix}${pathname}`
-              router.replace(expectedPath)
-              return
-            }
-
-            setIsChecking(false)
-            return
-          }
+          setIsChecking(false)
+          return
         }
         
         // In debug mode, simulate a custom domain

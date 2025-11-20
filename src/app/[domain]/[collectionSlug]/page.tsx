@@ -5,6 +5,7 @@ import type { Metadata } from 'next'
 import { prisma } from '@/lib/prisma'
 import { PublicSiteLayout } from '@/components/public/layout'
 import { getNavigationUrl } from '@/lib/utils'
+import { headers } from 'next/headers'
 
 // Enable ISR with on-demand regeneration for previews
 export const revalidate = 0 // No caching for previews to show latest changes
@@ -110,6 +111,14 @@ interface CollectionWithSkripts {
 export default async function CollectionPreviewPage({ params }: CollectionPreviewProps) {
   const { domain, collectionSlug } = await params
   const session = await getServerSession(authOptions)
+
+  // Check if request came through subdomain by examining headers
+  const headersList = await headers()
+  const hostname = headersList.get('host') || ''
+  const hostWithoutPort = hostname.split(':')[0]
+  const parts = hostWithoutPort.split('.')
+  const hasSubdomain = (parts.length > 1 && parts[parts.length - 1] === 'localhost') ||
+                      (parts.length > 2 && parts[parts.length - 2] === 'eduskript')
 
   // Declare variables outside try block so they can be used in redirect logic
   let teacher: Teacher | null = null
@@ -217,9 +226,12 @@ export default async function CollectionPreviewPage({ params }: CollectionPrevie
   )
 
   if (firstPage && firstSkript) {
-    console.log(`Redirecting to: /${domain}/${collectionSlug}/${firstSkript.slug}/${firstPage.slug}`)
+    const redirectUrl = hasSubdomain
+      ? `/${collectionSlug}/${firstSkript.slug}/${firstPage.slug}`
+      : `/${domain}/${collectionSlug}/${firstSkript.slug}/${firstPage.slug}`
+    console.log(`Redirecting to: ${redirectUrl}`)
     // Redirect to the first available page
-    redirect(`/${domain}/${collectionSlug}/${firstSkript.slug}/${firstPage.slug}`)
+    redirect(redirectUrl)
   }
 
   // Build site structure for navigation

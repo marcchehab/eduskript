@@ -47,20 +47,7 @@ export function proxy(request: NextRequest) {
     return NextResponse.rewrite(url)
   }
 
-  // If not on a subdomain and path doesn't match protected routes,
-  // check if it looks like a domain route (single path segment)
-  const pathSegments = pathname.split('/').filter(Boolean)
-
-  // In development (localhost), block single-segment paths from being treated as domain routes
-  // These paths should return 404 unless they match a specific app route
-  if (hostname.includes('localhost') || hostname.includes('127.0.0.1')) {
-    if (pathSegments.length === 1 && !PROTECTED_PATHS.some(path => pathname.startsWith(path))) {
-      // Return 404 for paths like /eduadmin in development
-      // In production, these would be accessed via subdomain (eduadmin.eduskript.org)
-      return new NextResponse(null, { status: 404 })
-    }
-  }
-
+  // Allow all other routes to proceed
   return NextResponse.next()
 }
 
@@ -68,15 +55,24 @@ function getSubdomain(hostname: string): string | null {
   // Remove port if present
   const host = hostname.split(':')[0]
 
-  // For localhost, no subdomain
-  if (host === 'localhost' || host === '127.0.0.1' || host.startsWith('192.168.') || host.startsWith('10.')) {
-    return null
-  }
-
   // Split hostname and check for subdomain
   const parts = host.split('.')
 
-  // Need at least 3 parts for a subdomain (e.g., teacher.eduskript.org)
+  // For localhost development, check for subdomain.localhost pattern
+  if (parts.length >= 2 && parts[parts.length - 1] === 'localhost') {
+    // If we have more than just 'localhost', the first part is the subdomain
+    if (parts.length > 1) {
+      return parts[0]
+    }
+    return null
+  }
+
+  // For IP addresses (127.0.0.1, 192.168.x.x, 10.x.x.x), no subdomain
+  if (host === '127.0.0.1' || host.startsWith('192.168.') || host.startsWith('10.')) {
+    return null
+  }
+
+  // For production domains, need at least 3 parts for a subdomain (e.g., teacher.eduskript.org)
   if (parts.length < 3) {
     return null
   }
