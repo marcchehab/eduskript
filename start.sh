@@ -1,4 +1,5 @@
 #!/bin/bash
+# Force rebuild to invalidate incorrect Docker cache
 set -e
 
 echo "=== Eduskript Docker Container Starting ==="
