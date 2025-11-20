@@ -27,6 +27,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Create .env file
+        run: |
+          cat > .env << EOF
+          DATABASE_URL="file:./test.db"
+          NEXTAUTH_URL="http://localhost:3000"
+          NEXTAUTH_SECRET="test-secret-for-ci"
+          EOF
+
       - name: Run linter
         run: pnpm lint
 
