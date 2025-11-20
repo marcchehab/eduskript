@@ -38,7 +38,7 @@ Eduskript is a multi-tenant education platform where teachers create educational
 - **Collaboration**: Teachers can partner and share content with granular permissions
 
 ### Technology Stack
-- **Framework**: Next.js 15 with App Router and TypeScript
+- **Framework**: Next.js 16 with App Router and TypeScript
 - **Database**: SQLite with Prisma ORM (6.11.0)
 - **Authentication**: NextAuth.js with JWT strategy, supporting credentials + OAuth (GitHub/Google)
 - **Styling**: TailwindCSS with Radix UI components
@@ -54,7 +54,7 @@ Eduskript is a multi-tenant education platform where teachers create educational
 - **Collaboration**: Request-based partnership system between teachers
 
 ### Routing Architecture
-- **Multi-tenant routing**: Middleware handles subdomain detection and URL rewriting
+- **Multi-tenant routing**: Proxy handles subdomain detection and URL rewriting (Next.js 16 convention)
 - **Dynamic routes**: `[domain]/[collectionSlug]/[skriptSlug]/[pageSlug]` for public content
 - **Dashboard**: Protected routes under `/dashboard` for content management
 - **API**: RESTful endpoints under `/api` with authentication middleware
@@ -92,7 +92,7 @@ Eduskript is a multi-tenant education platform where teachers create educational
 
 **Configuration:**
 - `prisma/schema.prisma` - Database schema definition
-- `src/middleware.ts` - Handles subdomain routing and auth protection
+- `src/proxy.ts` - Handles subdomain routing and request proxying (Next.js 16 proxy convention)
 - `src/lib/auth.ts` - NextAuth configuration with multiple providers
 - `src/lib/permissions.ts` - Permission checking logic
 - `src/lib/prisma.ts` - Prisma client setup
