@@ -211,7 +211,7 @@ export function PublicSiteLayout({
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background overflow-visible">
       <ReadingProgress />
 
       {/* Top-right controls - only visible on mobile when sidebar is closed */}
@@ -231,7 +231,7 @@ export function PublicSiteLayout({
       </div>
 
       {/* Sidebar */}
-      <div className={`fixed inset-y-0 left-0 z-40 bg-card shadow-lg transform transition-all duration-300 ease-in-out ${
+      <div className={`fixed inset-y-0 left-0 z-40 bg-card paper-shadow transform transition-all duration-300 ease-in-out ${
         isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
       } lg:translate-x-0 ${
         isSidebarCollapsed ? 'w-16 min-w-16' : 'w-80'
@@ -485,10 +485,10 @@ export function PublicSiteLayout({
       )}
 
       {/* Main content */}
-      <div className={`transition-all duration-300 ${
+      <div className={`transition-all duration-300 overflow-visible ${
         isSidebarCollapsed ? 'lg:ml-16' : 'lg:ml-80'
       }`}>
-        <main className="p-6 lg:p-8 bg-background min-h-screen">
+        <main className="p-6 lg:p-8 bg-background min-h-screen overflow-visible">
           {children}
         </main>
       </div>

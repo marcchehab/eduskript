@@ -27,7 +27,8 @@ html.dark {
 }
 
 /* Disable native scroll for custom pan/zoom */
-html, body {
+html,
+body {
   overflow: hidden;
   height: 100vh;
   width: 100%;
@@ -235,7 +236,7 @@ html, body {
     --input: 214.3 31.8% 91.4%;
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.5rem;
-    
+
     /* Custom theme variables */
     --success: 142.1 76.2% 36.3%;
     --success-foreground: 355.7 100% 97.3%;
@@ -265,7 +266,7 @@ html, body {
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 224.3 76.3% 94.1%;
-    
+
     /* Custom theme variables for dark mode */
     --success: 142.1 70.6% 45.3%;
     --success-foreground: 144.9 80.4% 10%;
@@ -280,6 +281,7 @@ html, body {
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
   }
@@ -369,7 +371,7 @@ html, body {
 
 .prose-theme blockquote {
   @apply border-l-4 border-border text-muted-foreground italic my-6 pl-4;
-  quotes: "\201C""\201D""\2018""\2019";
+  quotes: "\201C" "\201D" "\2018" "\2019";
 }
 
 .prose-theme ul,
@@ -459,6 +461,7 @@ html, body {
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -578,13 +581,13 @@ html, body {
 .mpl-toolbar,
 .mpl-message,
 .mpl-canvas,
-div > .ui-dialog-titlebar,
-div[style*="resize: both"] > canvas.mpl-canvas {
+div>.ui-dialog-titlebar,
+div[style*="resize: both"]>canvas.mpl-canvas {
   display: none !important;
 }
 
 /* Hide any matplotlib figure containers that escape to body */
-body > div[style*="display: inline-block"] > div[style*="resize: both"] {
+body>div[style*="display: inline-block"]>div[style*="resize: both"] {
   display: none !important;
 }
 
@@ -606,4 +609,13 @@ body > div[style*="display: inline-block"] > div[style*="resize: both"] {
 /* Force hide cursor for eraser mode */
 .eraser-cursor-hidden {
   cursor: none !important;
+}
+
+/* Paper shadow that works in both light and dark mode */
+.paper-shadow {
+  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+}
+
+.dark .paper-shadow {
+  box-shadow: 0 20px 25px -5px rgb(255 255 255 / 0.1), 0 8px 10px -6px rgb(255 255 255 / 0.05);
 }
