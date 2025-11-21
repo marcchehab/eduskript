@@ -9,8 +9,6 @@ const nextConfig: NextConfig = {
   ],
   // Allow local network access for development
   allowedDevOrigins: ['192.168.1.112'],
-  // Empty turbopack config to acknowledge webpack fallback for client-side fs/path resolution
-  turbopack: {},
   webpack(config, { isServer }) {
     // disabling fs and path to avoid the tears
     if (!isServer) {
