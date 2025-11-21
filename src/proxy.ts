@@ -72,6 +72,12 @@ function getSubdomain(hostname: string): string | null {
     return null
   }
 
+  // For *.koyeb.app domains (eduskript.koyeb.app), there's no subdomain
+  // Only eduskript.koyeb.app is the base domain, anything like teacher.eduskript.koyeb.app would be a subdomain
+  if (parts.length === 3 && parts[parts.length - 2] === 'koyeb' && parts[parts.length - 1] === 'app') {
+    return null
+  }
+
   // For production domains, need at least 3 parts for a subdomain (e.g., teacher.eduskript.org)
   if (parts.length < 3) {
     return null
