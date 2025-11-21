@@ -127,7 +127,10 @@ export const authOptions: NextAuthOptions = {
         path: '/',
         secure: true,
         // Set domain to allow cookies across subdomains in production
-        domain: '.eduskript.org',
+        // Extract root domain from NEXTAUTH_URL (e.g., .eduskript.org or .koyeb.app)
+        domain: process.env.NEXTAUTH_URL
+          ? '.' + new URL(process.env.NEXTAUTH_URL).hostname.split('.').slice(-2).join('.')
+          : '.eduskript.org',
       },
     },
   } : undefined, // In development, use default NextAuth cookies (no cross-subdomain support)
