@@ -2,10 +2,12 @@
 // Direct SQL seeding script for admin user
 // This bypasses Prisma client and uses raw SQL to avoid connection issues
 import { Pool } from 'pg'
+import 'dotenv/config'
 
+const isLocal = process.env.DATABASE_URL?.includes('localhost')
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
+  ssl: isLocal ? false : { rejectUnauthorized: false },
   connectionTimeoutMillis: 10000,
 })
 

@@ -14,9 +14,10 @@ if (!process.env.DATABASE_URL) {
   throw new Error('DATABASE_URL environment variable is required')
 }
 
+const isLocal = process.env.DATABASE_URL?.includes('localhost')
 const pool = globalForPrisma.pool ?? new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined,
+  ssl: isLocal ? false : { rejectUnauthorized: false },
   connectionTimeoutMillis: 10000, // 10 seconds for Neon cold starts
 })
 if (process.env.NODE_ENV !== 'production') globalForPrisma.pool = pool
@@ -27,7 +28,7 @@ const adapter = new PrismaPg(pool)
 
 export const prisma = globalForPrisma.prisma ?? new PrismaClient({
   adapter,
-  log: process.env.NODE_ENV === 'development' ? ['error'] : [],
+  log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : [],
 })
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma

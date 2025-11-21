@@ -60,3 +60,6 @@ next-env.d.ts
 data/.env
 /dev-scripts/
 /coverage/
+
+# Dev scripts (temporary)
+dev-scripts/
