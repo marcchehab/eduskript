@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next'
+import path from 'path'
 
 const nextConfig: NextConfig = {
   output: 'standalone',
@@ -10,8 +11,9 @@ const nextConfig: NextConfig = {
   // Allow local network access for development
   allowedDevOrigins: ['192.168.1.112'],
   // Set explicit root directory for Turbopack to find next/package.json
+  // Use __dirname to get the directory containing next.config.ts (project root)
   turbopack: {
-    root: '/workspace',
+    root: path.resolve(__dirname),
   },
   webpack(config, { isServer }) {
     // disabling fs and path to avoid the tears
