@@ -2,15 +2,14 @@ import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
   output: 'standalone',
-  // Empty turbopack config to silence Next.js 16 warning
-  // (Turbopack doesn't need the fs/path fallback that webpack required)
-  turbopack: {},
-  // Configure server external packages for Prisma 7.x with LibSQL adapter
+  // Configure Turbopack root for production builds
+  turbopack: {
+    root: process.cwd(),
+  },
+  // Configure server external packages for Prisma
   // These packages contain native bindings and must not be bundled
   serverExternalPackages: [
     '@prisma/client',
-    '@prisma/adapter-libsql',
-    '@libsql/client',
   ],
   // Allow local network access for development
   allowedDevOrigins: ['192.168.1.112'],
