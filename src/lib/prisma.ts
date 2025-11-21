@@ -8,8 +8,15 @@ const globalForPrisma = globalThis as unknown as {
 }
 
 // Create connection pool if not exists
+if (!process.env.DATABASE_URL) {
+  console.error('FATAL: DATABASE_URL environment variable is not set!')
+  console.error('Available env vars:', Object.keys(process.env).filter(k => k.includes('DB') || k.includes('DATA')))
+  throw new Error('DATABASE_URL environment variable is required')
+}
+
 const pool = globalForPrisma.pool ?? new Pool({ connectionString: process.env.DATABASE_URL })
 if (process.env.NODE_ENV !== 'production') globalForPrisma.pool = pool
+console.log('✓ Prisma initialized with PostgreSQL adapter')
 
 // Create Prisma adapter
 const adapter = new PrismaPg(pool)
