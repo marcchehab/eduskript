@@ -2,6 +2,75 @@
 
 This file tracks features that have been fully implemented and deployed.
 
+*Last updated: 2025-11-22*
+
+---
+
+## 🔄 Subdomain Routing Removal (2025-11-22)
+
+**Goal**: Simplify architecture by removing complex subdomain routing in favor of username-based path routing.
+
+**Completed:**
+- ✅ **Database Migration** - Renamed `User.subdomain` → `User.username`
+- ✅ **Removed Custom Domain Model** - Dropped `CustomDomain` table and all related functionality
+- ✅ **Simplified Proxy** - Removed all subdomain detection and rewriting logic
+- ✅ **Path-Based Routing** - All public pages now use `eduskript.org/username/...` structure
+- ✅ **Updated 56+ Files** - Complete migration across database, API, UI, tests, and documentation
+- ✅ **All Tests Passing** - 256 tests validated after migration
+- ✅ **Production Build** - Fixed Suspense boundaries for Next.js 16 static generation
+- ✅ **Enhanced Seed Data** - No longer creates dummy users, auto-refresh after seeding
+
+**Files Removed:**
+- `/src/app/api/domains/**` - Custom domain endpoints
+- `/src/app/api/user/custom-domains/**` - User domain management
+- `/src/app/dashboard/settings/domains/**` - Domain settings UI
+- `/src/components/CustomDomainHandler.tsx` - Subdomain detection component
+- `/src/components/dashboard/custom-domains.tsx` - Domain management UI
+- `/src/components/dashboard/domain-settings.tsx` - Domain settings form
+
+**Benefits:**
+- Simpler architecture without complex subdomain handling
+- Works reliably on all hosting platforms (especially Koyeb)
+- Easier to understand and maintain
+- Cleaner URL structure
+- No DNS configuration needed for new users
+
+---
+
+## ✅ Privacy-Preserving Class Management (Phase 0.5)
+
+**Completed: 2025-01-XX**
+
+**Class Management System:**
+- ✅ Created Class model with invite codes and teacher ownership
+- ✅ Created ClassMembership junction table for many-to-many relationships
+- ✅ Created PreAuthorizedStudent model for bulk import before signup
+- ✅ Teacher-facing UI: `/dashboard/classes` for class list and creation
+- ✅ Teacher-facing UI: `/dashboard/classes/[id]` for class details with:
+  - Bulk email import (CSV/paste) that hashes emails to pseudonyms
+  - Client-side localStorage mapping (email → pseudonym) for teacher verification
+  - Student lookup tool to check enrollment status
+  - Invite link generation and sharing
+- ✅ Student-facing UI: `/classes/join/[inviteCode]` for joining classes
+- ✅ Student-facing UI: `/dashboard/my-classes` for viewing enrolled classes
+- ✅ Auto-enrollment via PrivacyAdapter during student signup
+- ✅ API endpoints:
+  - `GET/POST /api/classes` - List and create classes
+  - `POST /api/classes/[id]/bulk-import` - Bulk import student emails
+  - `GET /api/classes/[id]/students` - Get class roster
+  - `GET/POST /api/classes/join/[inviteCode]` - Preview and join class
+  - `GET /api/classes/my-classes` - Student's enrolled classes
+- ✅ Cryptographically random 16-character invite codes (2^64 combinations)
+- ✅ Server-side email hashing (HMAC-SHA256) - emails never stored in cleartext
+- ✅ Client-side localStorage for email-to-pseudonym mapping
+- ✅ Role-based sidebar navigation (Teachers see "Classes", Students see "My Classes")
+
+---
+
+## ✅ Microsoft Authentication & GDPR Privacy Infrastructure (Phase 0)
+
+**Completed: 2025-01-XX**
+
 **Microsoft OAuth Integration:**
 - ✅ Added AzureADProvider to NextAuth configuration
 - ✅ Transferred Azure AD credentials from informatikgarten.ch
@@ -9,9 +78,32 @@ This file tracks features that have been fully implemented and deployed.
 - ✅ Configured OAuth scopes: `openid profile email offline_access`
 - ✅ Enabled PrismaAdapter for OAuth providers
 
+**Privacy-Preserving Student Data Model:**
+- ✅ Created pseudonym generation utilities (`src/lib/privacy/pseudonym.ts`)
+  - HMAC-SHA256 hashing for stable, verifiable pseudonyms
+  - Teacher verification without storing student PII
+- ✅ Updated User schema with privacy fields:
+  - `accountType` (teacher/student)
+  - `studentPseudonym` (hashed identifier)
+  - `gdprConsentAt` (consent timestamp)
+  - `lastSeenAt` (for inactive account cleanup)
+- ✅ Created StudentProgress model (page completion tracking)
+- ✅ Created StudentSubmission model (assignments, grades, feedback)
+- ✅ Updated auth callbacks to generate pseudonyms automatically
+- ✅ Updated TypeScript types for session/JWT
 
+**GDPR Compliance Endpoints:**
+- ✅ Data export endpoint: `GET /api/user/data-export`
+  - GDPR Article 15 - Right to Access
+  - Exports all user data as downloadable JSON
+- ✅ Account deletion endpoint: `DELETE /api/user/account`
+  - GDPR Article 17 - Right to Erasure
+  - Anonymizes student submissions (preserves teacher records)
+  - Cascade deletes all other user data
+- ✅ Account info endpoint: `GET /api/user/account`
+  - Shows user stats and data counts
 
-*Last updated: 2025-01-15*
+---
 
 ## 🔧 Recent Infrastructure Improvements (2025-01-15)
 

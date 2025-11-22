@@ -1,119 +1,40 @@
 **IMPORTANT: Do not mark items as complete in this roadmap unless explicitly instructed by the user.**
 
 *Last updated: 2025-11-22*
-*Current Status: Simplified Architecture - Subdomain Routing Removed*
+*Current Status: Simplified Architecture - Username-Based Routing*
 
 > **Note**: Completed features have been moved to `COMPLETED_FEATURES.md`
 
 ---
 
-## Recent Updates (2025-11-22)
+## 🎯 Priority List
 
-### ✅ Simplified Routing Architecture
-- **Removed subdomain routing completely** - Now using path-based routing only (`eduskript.org/username/...`)
-- **Database migration** - `User.subdomain` renamed to `User.username`
-- **Removed custom domain support** - Cleaner architecture focused on core functionality
-- **56+ files updated** - Complete migration across all layers
-- **All tests passing** - 256 tests validated after migration
-
-### ✅ Enhanced Seed Data System
-- **User-focused seeding** - No longer creates dummy users, only content for current user
-- **Auto-refresh** - Content library updates automatically after seeding (no manual reload)
-- **Simplified content** - 1 collection (algebra), 2 skripts, 4 pages
-
----
-
-- Consider carefully if there is a way to identify students not only without storing emails, but without the emails even leaving the teacher's computer. (then again, is that necessary? oauth sends around emails all the time)
-
-
-
-## 📋 Current Implementation Status
-
-### ✅ Phase 0: Microsoft Authentication & GDPR Privacy Infrastructure (COMPLETED)
-
-**Privacy-Preserving Student Data Model:**
-- ✅ Created pseudonym generation utilities (`src/lib/privacy/pseudonym.ts`)
-  - HMAC-SHA256 hashing for stable, verifiable pseudonyms
-  - Teacher verification without storing student PII
-- ✅ Updated User schema with privacy fields:
-  - `accountType` (teacher/student)
-  - `studentPseudonym` (hashed identifier)
-  - `gdprConsentAt` (consent timestamp)
-  - `lastSeenAt` (for inactive account cleanup)
-- ✅ Created StudentProgress model (page completion tracking)
-- ✅ Created StudentSubmission model (assignments, grades, feedback)
-- ✅ Updated auth callbacks to generate pseudonyms automatically
-- ✅ Updated TypeScript types for session/JWT
-
-**GDPR Compliance Endpoints:**
-- ✅ Data export endpoint: `GET /api/user/data-export`
-  - GDPR Article 15 - Right to Access
-  - Exports all user data as downloadable JSON
-- ✅ Account deletion endpoint: `DELETE /api/user/account`
-  - GDPR Article 17 - Right to Erasure
-  - Anonymizes student submissions (preserves teacher records)
-  - Cascade deletes all other user data
-- ✅ Account info endpoint: `GET /api/user/account`
-  - Shows user stats and data counts
-
-**Database & Testing:**
-- ✅ Generated Prisma client with new schema
-- ✅ Pushed schema changes to database
-- ✅ Verified dev server starts successfully
-- ✅ No TypeScript errors
-
-### ✅ Phase 0.5: Privacy-Preserving Class Management (COMPLETED)
-
-**Class Management System:**
-- ✅ Created Class model with invite codes and teacher ownership
-- ✅ Created ClassMembership junction table for many-to-many relationships
-- ✅ Created PreAuthorizedStudent model for bulk import before signup
-- ✅ Teacher-facing UI: `/dashboard/classes` for class list and creation
-- ✅ Teacher-facing UI: `/dashboard/classes/[id]` for class details with:
-  - Bulk email import (CSV/paste) that hashes emails to pseudonyms
-  - Client-side localStorage mapping (email → pseudonym) for teacher verification
-  - Student lookup tool to check enrollment status
-  - Invite link generation and sharing
-- ✅ Student-facing UI: `/classes/join/[inviteCode]` for joining classes
-- ✅ Student-facing UI: `/dashboard/my-classes` for viewing enrolled classes
-- ✅ Auto-enrollment via PrivacyAdapter during student signup
-- ✅ API endpoints:
-  - `GET/POST /api/classes` - List and create classes
-  - `POST /api/classes/[id]/bulk-import` - Bulk import student emails
-  - `GET /api/classes/[id]/students` - Get class roster
-  - `GET/POST /api/classes/join/[inviteCode]` - Preview and join class
-  - `GET /api/classes/my-classes` - Student's enrolled classes
-- ✅ Cryptographically random 16-character invite codes (2^64 combinations)
-- ✅ Server-side email hashing (HMAC-SHA256) - emails never stored in cleartext
-- ✅ Client-side localStorage for email-to-pseudonym mapping
-- ✅ Role-based sidebar navigation (Teachers see "Classes", Students see "My Classes")
-
-**What's Next:**
-- 🔲 UI for consent flow (first-time student login)
-- 🔲 Gradebook interface (view progress, grade submissions)
-- 🔲 Student progress tracking API endpoints
-- 🔲 Submission management UI
-
----
-
-## 🎯 Priority List (drag to reorder)
-
-**LMS features:**
-- **Student Accounts** - ✅ Core infrastructure complete, 🔲 UI implementation pending
+**Core LMS Features:**
+- **Allow toggle on classes 
+- **Student Progress Tracking** - Gradebook interface, view progress, grade submissions
 - **Interactive Quizzes** - In-lesson quizzes with progress tracking
-
-**Next up:**
 - **Video Hosting** - Swiss-compliant video upload and embedding
-- **Backup System** - Easy to use database exports and UI to restore database if necessary
-- **Plugin System** - Extensible component architecture, MDX
-- **Marketplace / Sharing** - Content sharing (unsure: selling?)
+- **SQL** - port sql.js component to our editor.
 
+**Infrastructure:**
+- **Backup System** - Easy database exports and UI to restore if necessary
+- **Plugin System** - Extensible component architecture, MDX support
+- **Marketplace / Sharing** - Content sharing and selling platform
+
+**Pending iPad Improvements:**
+- **Excalidraw Touch Support** - Implement long-press for pen/eraser toolbox (hover doesn't work on iPad)
 
 ---
 
-# Enhanced Lesson Editor & Student Analytics Roadmap
+## 📝 Notes & Considerations
 
-## 🎨 Phase 1: Enhanced Lesson Editor
+**Privacy-Preserving Student Identification:**
+- Consider if there's a way to identify students without emails leaving the teacher's computer
+- (OAuth sends emails all the time, so may not be necessary)
+
+---
+
+## 🔲 Phase 1: Enhanced Lesson Editor
 
 ### 1.1 Video Hosting Integration
 **Goal**: Professional video hosting with Swiss data privacy compliance
@@ -121,9 +42,9 @@
 **Phase 1.1.1: Provider Research**
 - [ ] Evaluate Mux Video
   - [ ] Pricing and storage limits
-  - [ ] Data residency (can data stay in EU/Switzerland?)
-  - [ ] Video processing capabilities (adaptive streaming, thumbnails)
-  - [ ] Privacy compliance (GDPR, Swiss data protection laws)
+  - [ ] Data residency (EU/Switzerland?)
+  - [ ] Video processing (adaptive streaming, thumbnails)
+  - [ ] Privacy compliance (GDPR, Swiss laws)
 - [ ] Research Infomaniak kDrive/kVideo
   - [ ] Available APIs for video upload/streaming
   - [ ] Data residency (Swiss-hosted)
@@ -131,7 +52,7 @@
   - [ ] Features comparison with Mux
 - [ ] Research alternative Swiss/EU providers
   - [ ] Swisscom, Cloudflare Stream (EU), bunny.net
-  - [ ] Compare features, pricing, and data residency
+  - [ ] Compare features, pricing, data residency
 - [ ] **Decision criteria**:
   - ✅ Data stored in Switzerland or EU
   - ✅ GDPR compliant
@@ -191,7 +112,7 @@
   - [ ] Add/remove/reorder questions
   - [ ] Set correct answers and point values
 - [ ] Integrate with markdown pipeline
-  - [ ] Custom component plugin (uses plugin system from 1.2)
+  - [ ] Custom component plugin (uses plugin system from 1.3)
   - [ ] Syntax: ` ```quiz` block with JSON config
   - [ ] Render quiz in public pages
 - [ ] Connect to user data service (depends on Phase 2)
@@ -205,9 +126,9 @@
 **Phase 1.3.1: Architecture Planning**
 - [ ] Brainstorm plugin architecture approaches
   - [ ] Sandboxed iframe approach vs. React component registration
-  - [ ] Security model (XSS prevention, content security policy)
-  - [ ] API surface for plugins (what can they access?)
-  - [ ] Plugin manifest format (metadata, permissions, dependencies)
+  - [ ] Security model (XSS prevention, CSP)
+  - [ ] API surface for plugins
+  - [ ] Plugin manifest format
 - [ ] Design plugin lifecycle
   - [ ] Discovery and loading mechanism
   - [ ] Registration and validation
@@ -215,9 +136,9 @@
   - [ ] Hot reloading for development
 - [ ] Consider marketplace implications
   - [ ] Plugin versioning and updates
-  - [ ] Review/approval process for shared plugins
-  - [ ] Licensing model (free vs. paid plugins)
-  - [ ] Plugin dependencies and compatibility
+  - [ ] Review/approval process
+  - [ ] Licensing model (free vs. paid)
+  - [ ] Plugin dependencies
 
 **Phase 1.3.2: Core Plugin Infrastructure**
 - [ ] Implement plugin loader system
@@ -248,51 +169,19 @@
 - [ ] Rating and review system
 - [ ] Revenue sharing for paid plugins
 
-## 👥 Phase 2: Student Analytics & User Data Service
+---
 
-**Goal**: Enable teachers to create classes, track student progress, while maintaining strict data privacy (zero-knowledge architecture where possible)
+## 🔲 Phase 2: Student Analytics & Progress Tracking
 
-### 2.1 Architecture & Privacy Planning
-**Critical**: Design for data minimization and privacy by default
+**Goal**: Enable teachers to track student progress while maintaining strict data privacy
 
-- [ ] Research zero-knowledge architectures
-  - [ ] Client-side encryption for sensitive student data
-  - [ ] What data can be end-to-end encrypted vs. needs server-side access?
-  - [ ] Key management (teacher-held keys vs. user-held keys)
-- [ ] Define data collection boundaries
-  - [ ] **Minimal data**: Progress percentages, completion status, timestamps
-  - [ ] **No PII by default**: Anonymous student IDs, no names/emails unless opted-in
-  - [ ] **Opt-in for detailed analytics**: Teachers must explicitly request detailed tracking
-- [ ] GDPR & Swiss DPA compliance
-  - [ ] Data processing agreement (DPA) for schools
-  - [ ] Right to deletion (easy data export and purge)
-  - [ ] Parental consent workflow for students under 16
-  - [ ] Transparent data usage policy
-- [ ] Design database schema
-  - [ ] `Class` table (teacher-owned groups)
-  - [ ] `Student` table (anonymous by default, optional name)
-  - [ ] `ClassMembership` junction table
-  - [ ] `Progress` table (student, page, completion, score, timestamp)
-  - [ ] Encryption at rest for sensitive fields
+### 2.1 Gradebook & Progress UI
+- [ ] UI for consent flow (first-time student login)
+- [ ] Gradebook interface (view progress, grade submissions)
+- [ ] Student progress tracking API endpoints
+- [ ] Submission management UI
 
-### 2.2 Class Management System
-- [ ] Create class management UI
-  - [ ] Dashboard section: `/dashboard/classes`
-  - [ ] Create/edit/delete classes
-  - [ ] Generate unique join codes for students
-  - [ ] Class roster view (anonymized by default)
-- [ ] Student enrollment flow
-  - [ ] Public join page: `/join/[code]`
-  - [ ] Optional: Student creates account vs. anonymous tracking
-  - [ ] Parental consent form for minors
-  - [ ] Link student to class without storing PII
-- [ ] Privacy controls for teachers
-  - [ ] Toggle anonymous vs. identified students
-  - [ ] Data retention settings (auto-delete after X months)
-  - [ ] Export student data (for teacher records)
-  - [ ] Bulk delete student data
-
-### 2.3 Progress Tracking System
+### 2.2 Progress Tracking System
 - [ ] Implement progress tracking API
   - [ ] Endpoint: `/api/progress/track`
   - [ ] Track page views, time spent, completion
@@ -309,7 +198,7 @@
   - [ ] Quiz scores and review wrong answers
   - [ ] No comparison to other students (avoid competition)
 
-### 2.4 Zero-Knowledge Implementation (Optional Enhancement)
+### 2.3 Zero-Knowledge Implementation (Optional Enhancement)
 **Future**: If full zero-knowledge is desired
 - [ ] Client-side encryption for progress data
   - [ ] Teacher generates encryption key on class creation
@@ -324,47 +213,51 @@
   - [ ] Key loss = data loss (need backup mechanism)
   - [ ] More complex UX for teachers
 
-## 🚀 Phase 3: Marketplace Foundation
+---
+
+## 🔲 Phase 3: Marketplace Foundation
 
 ### Extended Permission Model
 Customers are basically a viewer with a different name and symbol.
 
 ```
-Current: editor | viewer
-Future:  editor | viewer | customer
+Current: author | viewer
+Future:  author | viewer | customer
 ```
 
-Editors can mark their skripts or collections as "for sale" and set a price, or give them for free.
+**Features to implement:**
+- [ ] Editors can mark skripts/collections as "for sale" and set a price (or give for free)
+- [ ] Viewers/customers can create editable copies of shared content
+- [ ] Cyclical tracking: notify users when original content is updated
+- [ ] Diff-editor to compare changes and merge updates
+- [ ] Payment provider integration for purchased content
+- [ ] License agreement ensuring uploaders have rights to sell content
 
-We'll need to implement a new feature for viewers and customers to be able to create a copy of the skript or collection they have access to that they can edit. We'll then need a cyclical tracking of whether the original has been updated / edited and a mechanism to offer users who copied it a diff-editor to compare changes and merge updates.
+---
 
-We'll integrate a payment provider that handles transactions for purchased content.
-
-We'll need a license agreement that clearly states the uploader must have the right to sell their content.
-
-## 🔒 Security Model: No-Access-By-Default + Ownership Transfer
+## 🔒 Security Model: No-Access-By-Default
 
 **Key Principle**: Being a "collaborator" only establishes a relationship - it does NOT grant content access.
 
-**Permission Structure**:
+**Permission Structure:**
 - Junction tables manage permissions: `CollectionAuthor`, `SkriptAuthor`, `PageAuthor`
 - `permission = "author"` = edit rights (can modify content)
 - `permission = "viewer"` = view rights (read-only access)
 
-**Drag-and-Drop Permission Model**:
+**Drag-and-Drop Permission Model:**
 - **"Ownership Transfer"** approach (like Google Drive/Dropbox)
 - Moving requires edit permissions on BOTH source AND target
 - Users automatically get edit rights on moved content if they don't have them
 - View-only content cannot be dragged (prevents content theft)
 
-**Access Flow**:
+**Access Flow:**
 1. Teachers become "collaborators" (partnership established)
 2. Content owners explicitly share specific collections/skripts
 3. Collaborators can only see content they've been given access to
 4. When moving content, automatic permission granting ensures proper ownership
 5. Default permission for new content: `none` (no access)
 
-**Benefits**:
+**Benefits:**
 - ✅ Privacy by default
 - ✅ Granular control over content sharing
 - ✅ Secure content movement with automatic permission management
