@@ -11,6 +11,8 @@ import { repositionStrokes } from '@/lib/annotations/reposition-strokes'
 import { useLayout } from '@/contexts/layout-context'
 import { VersionBrowser } from '@/components/userdata/version-browser'
 import { VersionActions } from '@/components/userdata/quick-undo'
+import { SnapOverlay, type Snap } from './snap-overlay'
+import { SnapsDisplay } from './snaps-display'
 
 interface AnnotationLayerProps {
   pageId: string
@@ -96,6 +98,7 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
   const [pageHeight, setPageHeight] = useState(0)
   const [orphanedStrokesCount, setOrphanedStrokesCount] = useState(0)
   const [storedHeadingOffsets, setStoredHeadingOffsets] = useState<Record<string, number>>({})
+  const [snaps, setSnaps] = useState<Snap[]>([])
 
   // Canvas width matches paper width exactly
   // Paper is max-w-5xl (64rem = 1024px)
@@ -518,6 +521,28 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
     })
   }, [])
 
+  // Handle snap capture
+  const handleSnapCapture = useCallback((snap: Snap) => {
+    setSnaps(prev => [...prev, snap])
+    setMode('view') // Return to view mode after capturing
+  }, [])
+
+  // Handle snap removal
+  const handleRemoveSnap = useCallback((id: string) => {
+    setSnaps(prev => prev.filter(snap => snap.id !== id))
+  }, [])
+
+  // Handle snap rename
+  const handleRenameSnap = useCallback((id: string, newName: string) => {
+    setSnaps(prev => prev.map(snap =>
+      snap.id === id ? { ...snap, name: newName } : snap
+    ))
+  }, [])
+
+  // Handle snap reorder
+  const handleReorderSnaps = useCallback((reorderedSnaps: Snap[]) => {
+    setSnaps(reorderedSnaps)
+  }, [])
 
   // Handle stylus detection
   const handleStylusDetected = useCallback(() => {
@@ -1019,6 +1044,8 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
         onPenColorChange={handlePenColorChange}
         penSizes={penSizes}
         onPenSizeChange={handlePenSizeChange}
+        zoom={zoom}
+        onResetZoom={() => setZoom(1.0)}
       />
 
       {/* Save state indicator - subtle, fixed to viewport, left of toolbar */}
@@ -1064,6 +1091,25 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
         componentId="annotations"
         open={showVersionBrowser}
         onOpenChange={setShowVersionBrowser}
+      />
+
+      {/* Snap overlay - shown when in snap mode */}
+      {mode === 'snap' && (
+        <SnapOverlay
+          onCapture={handleSnapCapture}
+          onCancel={() => setMode('view')}
+          nextSnapNumber={snaps.length + 1}
+          zoom={zoom}
+        />
+      )}
+
+      {/* Snaps display - shows all captured snaps */}
+      <SnapsDisplay
+        snaps={snaps}
+        onRemoveSnap={handleRemoveSnap}
+        onRenameSnap={handleRenameSnap}
+        onReorderSnaps={handleReorderSnaps}
+        zoom={zoom}
       />
     </>
   )

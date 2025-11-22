@@ -95,6 +95,7 @@ Eduskript is a multi-tenant education platform where teachers create educational
 
 **Project planning:**
 - `CLAUDE_ROADMAP.md` - The current planning and roadmap, keep this up to date!
+- `POSITIONING.md` - Guide to positioning and coordinate systems with zoom/pan transforms
 
 **Configuration:**
 - `prisma/schema.prisma` - Database schema definition

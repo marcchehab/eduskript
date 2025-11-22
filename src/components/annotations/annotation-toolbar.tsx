@@ -2,13 +2,13 @@
 
 import { useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { Pen, Eraser, Trash2, Eye, EyeOff } from 'lucide-react'
+import { Pen, Eraser, Trash2, Eye, EyeOff, Camera } from 'lucide-react'
 import { Circle } from '@uiw/react-color'
 import Image from 'next/image'
 import brushThickIcon from './brush_thick.png'
 import brushThinIcon from './brush_thin.png'
 
-export type AnnotationMode = 'view' | 'draw' | 'erase'
+export type AnnotationMode = 'view' | 'draw' | 'erase' | 'snap'
 
 interface AnnotationToolbarProps {
   mode: AnnotationMode
@@ -21,6 +21,8 @@ interface AnnotationToolbarProps {
   onPenColorChange: (penIndex: number, color: string) => void
   penSizes: [number, number, number]
   onPenSizeChange: (penIndex: number, size: number) => void
+  zoom: number
+  onResetZoom: () => void
 }
 
 export function AnnotationToolbar({
@@ -33,7 +35,9 @@ export function AnnotationToolbar({
   penColors,
   onPenColorChange,
   penSizes,
-  onPenSizeChange
+  onPenSizeChange,
+  zoom,
+  onResetZoom
 }: AnnotationToolbarProps) {
   // Save confirm preference to localStorage
   const handleToggleConfirm = (value: boolean) => {
@@ -77,6 +81,13 @@ export function AnnotationToolbar({
     }
     return false
   })
+
+  const [showSnapControls, setShowSnapControls] = useState(false)
+  const snapHoverTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const snapHideTimerRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Allow snapping at any zoom level
+  const snapDisabled = false
 
   const handlePenMouseEnter = (penIndex: number) => {
     // Clear any pending hide timer
@@ -162,6 +173,40 @@ export function AnnotationToolbar({
     } else {
       onClear()
     }
+  }
+
+  const handleSnapMouseEnter = () => {
+    if (!snapDisabled) return
+
+    // Clear any pending hide timer
+    if (snapHideTimerRef.current) {
+      clearTimeout(snapHideTimerRef.current)
+      snapHideTimerRef.current = null
+    }
+
+    // Set timer to show snap controls
+    snapHoverTimerRef.current = setTimeout(() => {
+      setShowSnapControls(true)
+    }, 300)
+  }
+
+  const handleSnapMouseLeave = () => {
+    if (snapHoverTimerRef.current) {
+      clearTimeout(snapHoverTimerRef.current)
+      snapHoverTimerRef.current = null
+    }
+
+    // If snap controls are showing, delay hiding them
+    if (showSnapControls) {
+      snapHideTimerRef.current = setTimeout(() => {
+        setShowSnapControls(false)
+      }, 200)
+    }
+  }
+
+  const handleSnapClick = () => {
+    if (snapDisabled) return
+    onModeChange(mode === 'snap' ? 'view' : 'snap')
   }
 
   const toolbarContent = (
@@ -262,6 +307,68 @@ export function AnnotationToolbar({
       >
         <Eraser className="w-5 h-5" />
       </button>
+
+      {/* Snap Tool */}
+      <div
+        className="relative"
+        onMouseEnter={handleSnapMouseEnter}
+        onMouseLeave={handleSnapMouseLeave}
+      >
+        <button
+          onClick={handleSnapClick}
+          disabled={snapDisabled}
+          className={`p-3 rounded-md transition-colors relative ${
+            snapDisabled
+              ? 'opacity-50 cursor-not-allowed text-muted-foreground'
+              : mode === 'snap'
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+          }`}
+          title={snapDisabled ? "Zoom must be at 1.0 to capture snaps" : "Capture screenshot"}
+          aria-label="Toggle snap mode"
+        >
+          <Camera className="w-5 h-5" />
+          {snapDisabled && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <svg className="w-6 h-6 text-destructive" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                <line x1="18" y1="6" x2="6" y2="18" />
+              </svg>
+            </div>
+          )}
+        </button>
+
+        {/* Snap controls popup */}
+        {showSnapControls && snapDisabled && (
+          <div
+            className="absolute right-full mr-2 bottom-0"
+            onMouseEnter={() => {
+              if (snapHoverTimerRef.current) {
+                clearTimeout(snapHoverTimerRef.current)
+              }
+              if (snapHideTimerRef.current) {
+                clearTimeout(snapHideTimerRef.current)
+                snapHideTimerRef.current = null
+              }
+            }}
+            onMouseLeave={() => setShowSnapControls(false)}
+          >
+            <div className="bg-background border border-border rounded-lg shadow-lg p-3 whitespace-nowrap">
+              <div className="text-xs text-foreground mb-2">
+                Snapping only works without zoom
+              </div>
+              <button
+                onClick={() => {
+                  onResetZoom()
+                  setShowSnapControls(false)
+                }}
+                className="w-full px-3 py-1.5 bg-primary text-primary-foreground rounded hover:bg-primary/90 text-xs transition-colors"
+              >
+                Reset zoom
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* View/Hide Annotations */}
       <button
