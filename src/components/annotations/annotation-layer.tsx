@@ -39,8 +39,8 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [stylusModeActive, setStylusModeActive] = useState(false)
   const [activePen, setActivePen] = useState(0)
-  const [zoom, setZoom] = useState(1.0)
-  // Use refs for pan to avoid re-renders on every mouse move
+  // Use refs for zoom and pan to avoid re-renders on every gesture
+  const zoomRef = useRef(1.0)
   const panXRef = useRef(0)
   const panYRef = useRef(0)
   const rafIdRef = useRef<number | null>(null)
@@ -51,6 +51,8 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
   const initialPanRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
   const singleTouchStartRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null)
   const middleMouseDragRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null)
+  // Display-only zoom state (updated on gesture end, not during gesture)
+  const [zoom, setZoom] = useState(1.0)
   const [penColors, setPenColors] = useState<[string, string, string]>(() => {
     // Load pen colors from localStorage
     if (typeof window !== 'undefined') {
@@ -563,8 +565,10 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
   }, [stylusModeActive, mode])
 
   // Calculate scroll limits based on main content bounds
-  const calculateScrollLimits = useCallback((newPanY: number, newZoom: number = zoom) => {
+  const calculateScrollLimits = useCallback((newPanY: number, newZoom?: number) => {
     if (!mainRef.current) return newPanY
+
+    const currentZoom = newZoom ?? zoomRef.current
 
     // Remove current transform temporarily to get natural dimensions
     const currentTransform = mainRef.current.style.transform
@@ -580,19 +584,21 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
 
     // Calculate limits in pan space
     // Top limit: content top should not go below viewport top
-    const maxPanY = -mainTop / newZoom
+    const maxPanY = -mainTop / currentZoom
 
     // Bottom limit: content bottom should not go above viewport bottom
     // Allow scrolling to see all content including comments, export buttons, etc.
-    const minPanY = (viewportHeight - mainTop - mainHeight * newZoom) / newZoom
+    const minPanY = (viewportHeight - mainTop - mainHeight * currentZoom) / currentZoom
 
     // Clamp panY between limits
     return Math.max(minPanY, Math.min(maxPanY, newPanY))
-  }, [zoom, viewportHeight])
+  }, [viewportHeight])
 
   // Calculate horizontal pan limits - measures on-demand for accuracy
-  const calculateHorizontalLimit = useCallback((newPanX: number, newZoom: number = zoom) => {
+  const calculateHorizontalLimit = useCallback((newPanX: number, newZoom?: number) => {
     if (!mainRef.current) return newPanX
+
+    const currentZoom = newZoom ?? zoomRef.current
 
     const paperElement = document.getElementById('paper')
     if (!paperElement) return newPanX
@@ -617,8 +623,8 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
     // Calculate where the paper edges WILL BE after zoom transformation
     // With transform-origin at center (originX), edges transform as:
     // transformedPos = originX + (naturalPos - originX) * zoom
-    const transformedLeft = originX + (naturalLeft - originX) * newZoom
-    const transformedRight = originX + (naturalRight - originX) * newZoom
+    const transformedLeft = originX + (naturalLeft - originX) * currentZoom
+    const transformedRight = originX + (naturalRight - originX) * currentZoom
     const transformedWidth = transformedRight - transformedLeft
 
     const availableWidth = viewportWidth - leftBoundary
@@ -629,7 +635,7 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
       const desiredCenter = leftBoundary + availableWidth / 2
       // How much do we need to pan to move transformedCenter to desiredCenter?
       // Pan is applied after zoom, so: screenPos = transformedPos + panX * zoom
-      const centerPanX = (desiredCenter - transformedCenter) / newZoom
+      const centerPanX = (desiredCenter - transformedCenter) / currentZoom
       return centerPanX
     }
 
@@ -640,22 +646,25 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
     // Left constraint: Paper left edge should be visible with a small buffer from sidebar
     const leftTarget = leftBoundary + leftBuffer
     // We want: transformedLeft + panX * zoom = leftTarget
-    const maxPanX = (leftTarget - transformedLeft) / newZoom
+    const maxPanX = (leftTarget - transformedLeft) / currentZoom
 
     // Right constraint: Paper right edge should be visible with a small buffer from viewport edge
     const rightTarget = viewportWidth - rightBuffer
     // We want: transformedRight + panX * zoom = rightTarget
-    const minPanX = (rightTarget - transformedRight) / newZoom
+    const minPanX = (rightTarget - transformedRight) / currentZoom
 
     return Math.max(minPanX, Math.min(maxPanX, newPanX))
-  }, [zoom, viewportWidth, sidebarWidth])
+  }, [viewportWidth, sidebarWidth])
 
-  // Helper function to apply pan transform using RAF (no re-renders)
-  const applyPanTransform = useCallback((newPanX: number, newPanY: number) => {
+  // Helper function to apply pan and zoom transform using RAF (no re-renders)
+  const applyTransform = useCallback((newPanX: number, newPanY: number, newZoom?: number) => {
     performance.mark('apply-pan-transform-start')
 
     panXRef.current = newPanX
     panYRef.current = newPanY
+    if (newZoom !== undefined) {
+      zoomRef.current = newZoom
+    }
 
     // Cancel any pending RAF
     if (rafIdRef.current !== null) {
@@ -667,7 +676,7 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
       performance.mark('apply-pan-transform-raf')
 
       if (mainRef.current) {
-        mainRef.current.style.transform = `scale(${zoom}) translate(${newPanX}px, ${newPanY}px)`
+        mainRef.current.style.transform = `scale(${zoomRef.current}) translate(${newPanX}px, ${newPanY}px)`
       }
       rafIdRef.current = null
 
@@ -675,7 +684,16 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
       performance.measure('Apply Pan Transform (RAF)', 'apply-pan-transform-raf', 'apply-pan-transform-end')
       performance.measure('Apply Pan Transform (Total)', 'apply-pan-transform-start', 'apply-pan-transform-end')
     })
-  }, [zoom])
+  }, [])
+
+  // Handle zoom reset
+  const handleResetZoom = useCallback(() => {
+    // Reset pan to 0,0 and zoom to 1.0
+    const newPanX = calculateHorizontalLimit(0, 1.0)
+    const newPanY = calculateScrollLimits(0, 1.0)
+    applyTransform(newPanX, newPanY, 1.0)
+    setZoom(1.0)
+  }, [calculateHorizontalLimit, calculateScrollLimits, applyTransform])
 
   // Custom pinch-zoom and pan handling
   const handleTouchStart = useCallback((e: TouchEvent) => {
@@ -713,10 +731,10 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
 
       initialPinchDistanceRef.current = distance
       initialPinchCenterRef.current = { x: centerX, y: centerY }
-      initialZoomRef.current = zoom
+      initialZoomRef.current = zoomRef.current
       initialPanRef.current = { x: panXRef.current, y: panYRef.current }
     }
-  }, [zoom, mode])
+  }, [mode])
 
   const handleTouchMove = useCallback((e: TouchEvent) => {
     performance.mark('annotation-touch-move-start')
@@ -732,14 +750,14 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
       const touch = e.touches[0]
       const deltaX = touch.clientX - singleTouchStartRef.current.x
       const deltaY = touch.clientY - singleTouchStartRef.current.y
-      let newPanX = singleTouchStartRef.current.panX + deltaX / zoom
-      let newPanY = singleTouchStartRef.current.panY + deltaY / zoom
+      let newPanX = singleTouchStartRef.current.panX + deltaX / zoomRef.current
+      let newPanY = singleTouchStartRef.current.panY + deltaY / zoomRef.current
 
       // Apply limits
       newPanX = calculateHorizontalLimit(newPanX)
       newPanY = calculateScrollLimits(newPanY)
 
-      applyPanTransform(newPanX, newPanY)
+      applyTransform(newPanX, newPanY)
     }
 
     // Handle pinch zoom and pan (2 fingers)
@@ -784,15 +802,13 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
       newPanX = calculateHorizontalLimit(newPanX, newZoom)
       newPanY = calculateScrollLimits(newPanY, newZoom)
 
-      // Update refs (transform will be applied by zoom useEffect)
-      panXRef.current = newPanX
-      panYRef.current = newPanY
-      setZoom(newZoom)
+      // Apply transform directly (no React re-render)
+      applyTransform(newPanX, newPanY, newZoom)
     }
 
     performance.mark('annotation-touch-move-end')
     performance.measure('Annotation Touch Move', 'annotation-touch-move-start', 'annotation-touch-move-end')
-  }, [zoom, calculateScrollLimits, calculateHorizontalLimit, applyPanTransform])
+  }, [calculateScrollLimits, calculateHorizontalLimit, applyTransform])
 
   const handleTouchEnd = useCallback((e: TouchEvent) => {
     // Remove ended touches
@@ -808,6 +824,10 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
 
     // Reset pinch state when less than 2 touches remain
     if (e.touches.length < 2) {
+      // Update display zoom state when pinch gesture ends
+      if (initialPinchDistanceRef.current !== null) {
+        setZoom(zoomRef.current)
+      }
       initialPinchDistanceRef.current = null
       initialPinchCenterRef.current = null
     }
@@ -825,7 +845,7 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
 
       // Calculate zoom delta (negative deltaY means zoom in)
       const delta = -e.deltaY * 0.01
-      const newZoom = Math.max(0.5, Math.min(3.0, zoom * (1 + delta)))
+      const newZoom = Math.max(0.5, Math.min(3.0, zoomRef.current * (1 + delta)))
 
       // Get natural (untransformed) position of main element
       const currentTransform = mainRef.current.style.transform
@@ -839,16 +859,17 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
 
       const mouseX = e.clientX
       const mouseY = e.clientY
-      let newPanX = (mouseX - originX) * (1 / newZoom - 1 / zoom) + panXRef.current
-      let newPanY = (mouseY - originY) * (1 / newZoom - 1 / zoom) + panYRef.current
+      let newPanX = (mouseX - originX) * (1 / newZoom - 1 / zoomRef.current) + panXRef.current
+      let newPanY = (mouseY - originY) * (1 / newZoom - 1 / zoomRef.current) + panYRef.current
 
       // Apply limits
       newPanX = calculateHorizontalLimit(newPanX, newZoom)
       newPanY = calculateScrollLimits(newPanY, newZoom)
 
-      // Update refs (transform will be applied by zoom useEffect)
-      panXRef.current = newPanX
-      panYRef.current = newPanY
+      // Apply transform directly (no React re-render during zoom)
+      applyTransform(newPanX, newPanY, newZoom)
+
+      // Update display state for child components (debounced via RAF)
       setZoom(newZoom)
     }
     // Trackpad two-finger pan / mousewheel scroll (no ctrl key)
@@ -857,19 +878,19 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
 
       // Convert scroll to pan (deltaX and deltaY are in pixels)
       // This handles both trackpad pan and regular mousewheel scroll
-      let newPanX = panXRef.current - e.deltaX / zoom
-      let newPanY = panYRef.current - e.deltaY / zoom
+      let newPanX = panXRef.current - e.deltaX / zoomRef.current
+      let newPanY = panYRef.current - e.deltaY / zoomRef.current
 
       // Apply limits
       newPanX = calculateHorizontalLimit(newPanX)
       newPanY = calculateScrollLimits(newPanY)
 
-      applyPanTransform(newPanX, newPanY)
+      applyTransform(newPanX, newPanY)
     }
 
     performance.mark('annotation-wheel-end')
     performance.measure('Annotation Wheel', 'annotation-wheel-start', 'annotation-wheel-end')
-  }, [zoom, calculateScrollLimits, calculateHorizontalLimit, applyPanTransform])
+  }, [calculateScrollLimits, calculateHorizontalLimit, applyTransform])
 
   // Handle middle mouse button drag for desktop
   const handleMouseDown = useCallback((e: MouseEvent) => {
@@ -892,19 +913,19 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
 
       const deltaX = e.clientX - middleMouseDragRef.current.x
       const deltaY = e.clientY - middleMouseDragRef.current.y
-      let newPanX = middleMouseDragRef.current.panX + deltaX / zoom
-      let newPanY = middleMouseDragRef.current.panY + deltaY / zoom
+      let newPanX = middleMouseDragRef.current.panX + deltaX / zoomRef.current
+      let newPanY = middleMouseDragRef.current.panY + deltaY / zoomRef.current
 
       // Apply limits
       newPanX = calculateHorizontalLimit(newPanX)
       newPanY = calculateScrollLimits(newPanY)
 
-      applyPanTransform(newPanX, newPanY)
+      applyTransform(newPanX, newPanY)
 
       performance.mark('annotation-mouse-move-end')
       performance.measure('Annotation Mouse Move', 'annotation-mouse-move-start', 'annotation-mouse-move-end')
     }
-  }, [zoom, calculateScrollLimits, calculateHorizontalLimit, applyPanTransform])
+  }, [calculateScrollLimits, calculateHorizontalLimit, applyTransform])
 
   const handleMouseUp = useCallback((e: MouseEvent) => {
     if (middleMouseDragRef.current && e.button === 1) {
@@ -913,21 +934,19 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
     }
   }, [])
 
-  // Find and store reference to parent <main> element
+  // Find and store reference to parent <main> element and initialize transform
   useEffect(() => {
     if (contentRef.current) {
       mainRef.current = contentRef.current.closest('main')
+      if (mainRef.current) {
+        // Set transform properties once
+        mainRef.current.style.transformOrigin = 'top center'
+        mainRef.current.style.transition = 'none'
+        // Apply initial transform
+        mainRef.current.style.transform = `scale(${zoomRef.current}) translate(${panXRef.current}px, ${panYRef.current}px)`
+      }
     }
   }, [])
-
-  // Apply zoom transform to <main> element (pan is handled via applyPanTransform)
-  useEffect(() => {
-    if (mainRef.current) {
-      mainRef.current.style.transform = `scale(${zoom}) translate(${panXRef.current}px, ${panYRef.current}px)`
-      mainRef.current.style.transformOrigin = 'top center'
-      mainRef.current.style.transition = 'none'
-    }
-  }, [zoom])
 
   // Set up event listeners on document to capture ALL events (sidebar, main, etc.)
   useEffect(() => {
@@ -1050,7 +1069,7 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
         penSizes={penSizes}
         onPenSizeChange={handlePenSizeChange}
         zoom={zoom}
-        onResetZoom={() => setZoom(1.0)}
+        onResetZoom={handleResetZoom}
       />
 
       {/* Save state indicator - subtle, fixed to viewport, left of toolbar */}
