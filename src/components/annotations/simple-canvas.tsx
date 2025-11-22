@@ -46,6 +46,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
     const hasLoadedInitialDataRef = useRef(false)
     const activePointersRef = useRef<Set<number>>(new Set())
     const activeTouchPointersRef = useRef<Set<number>>(new Set()) // Track only touch/mouse (not pen) for multi-touch detection
+    const eraserRedrawRafRef = useRef<number | null>(null) // RAF ID for throttling eraser redraws
 
     // Update eraser cursor state and apply styles directly (no React re-render)
     const updateEraserCursor = useCallback((isActive: boolean) => {
@@ -65,6 +66,16 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         canvas.classList.remove('eraser-cursor-hidden')
       }
     }, [mode])
+
+    // Throttled redraw for eraser using RAF to avoid redrawing every single move
+    const scheduleEraserRedraw = useCallback(() => {
+      if (eraserRedrawRafRef.current === null) {
+        eraserRedrawRafRef.current = requestAnimationFrame(() => {
+          redrawCanvas()
+          eraserRedrawRafRef.current = null
+        })
+      }
+    }, [redrawCanvas])
 
     // Check if a point is near a stroke (for eraser collision detection)
     const isPointNearStroke = useCallback((px: number, py: number, stroke: typeof pathsRef.current[0], threshold: number = 20): boolean => {
@@ -437,8 +448,8 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
               strokesMarkedForDeletionRef.current.add(index)
             }
           })
-          // Redraw to show marked strokes as transparent and eraser cursor
-          redrawCanvas()
+          // Schedule redraw to show marked strokes as transparent and eraser cursor (throttled via RAF)
+          scheduleEraserRedraw()
         } else {
           // Draw segment with pressure-sensitive width for draw mode
           const points = currentPathRef.current
@@ -461,7 +472,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
           }
         }
       })
-    }, [mode, strokeColor, strokeWidth, width, height, isPointNearStroke, redrawCanvas, updateEraserCursor])
+    }, [mode, strokeColor, strokeWidth, width, height, isPointNearStroke, scheduleEraserRedraw, updateEraserCursor])
 
     const stopDrawing = useCallback((e?: React.PointerEvent<HTMLCanvasElement>) => {
       // Remove pointer from tracking
@@ -498,6 +509,11 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         // Always clear eraser trail and redraw when lifting eraser
         eraserTrailRef.current = []
         updateEraserCursor(false)
+        // Cancel any pending eraser redraw and do final redraw immediately
+        if (eraserRedrawRafRef.current !== null) {
+          cancelAnimationFrame(eraserRedrawRafRef.current)
+          eraserRedrawRafRef.current = null
+        }
         redrawCanvas()
         return
       }
@@ -564,6 +580,15 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         updateEraserCursor(true)
       }
     }, [updateEraserCursor])
+
+    // Cleanup RAF on unmount
+    useEffect(() => {
+      return () => {
+        if (eraserRedrawRafRef.current !== null) {
+          cancelAnimationFrame(eraserRedrawRafRef.current)
+        }
+      }
+    }, [])
 
     return (
       <canvas
