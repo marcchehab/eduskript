@@ -1,4 +1,4 @@
-// TypeScript types for Python Editor with Skulpt
+// TypeScript types for Code Editor (Python, JavaScript, SQL)
 
 export enum RunState {
   STOPPED = 'stopped',
@@ -12,11 +12,17 @@ export enum OutputLevel {
   WARNING = 'warning',
 }
 
+export interface SqlResultSet {
+  columns: string[]
+  values: any[][]
+}
+
 export interface OutputEntry {
   message: string
   level: OutputLevel
   timestamp: number
   isHtml?: boolean // For rendering matplotlib plots and rich output
+  sqlResults?: SqlResultSet[] // For SQL query results
 }
 
 export interface PythonFile {

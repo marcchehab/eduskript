@@ -7,6 +7,7 @@ import { EditorState, Annotation } from '@codemirror/state'
 import { indentWithTab, undo } from '@codemirror/commands'
 import { python } from '@codemirror/lang-python'
 import { javascript } from '@codemirror/lang-javascript'
+import { sql } from '@codemirror/lang-sql'
 import { vsCodeDark } from '@fsegurai/codemirror-theme-vscode-dark'
 import { vsCodeLight } from '@fsegurai/codemirror-theme-vscode-light'
 import { basicSetup } from 'codemirror'
@@ -22,15 +23,19 @@ import {
   OutputEntry,
   PythonFile,
   SkulptError,
-  SkulptConfig
+  SkulptConfig,
+  SqlResultSet
 } from './types'
+import { executeSqlQuery, loadDatabase, AVAILABLE_DATABASES, getCurrentDatabasePath } from '@/lib/sql-executor'
 
 interface CodeEditorProps {
   id?: string
   pageId?: string
-  language?: 'python' | 'javascript'
+  language?: 'python' | 'javascript' | 'sql'
   initialCode?: string
   showCanvas?: boolean
+  sqlDatabase?: string // Path to SQL database for SQL language
+  schemaImage?: string // Optional schema image for SQL
 }
 
 // Custom annotation to mark programmatic changes (defined once outside component)
@@ -41,7 +46,9 @@ export function CodeEditor({
   pageId,
   language = 'python',
   initialCode = '# Write your code here\nprint("Hello, World!")',
-  showCanvas = true
+  showCanvas = true,
+  sqlDatabase = '/sql/netflixdb.sqlite',
+  schemaImage
 }: CodeEditorProps) {
   const { resolvedTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
@@ -247,6 +254,15 @@ export function CodeEditor({
     setMounted(true)
   }, [])
 
+  // Load SQL database when in SQL mode
+  useEffect(() => {
+    if (language === 'sql' && sqlDatabase && mounted) {
+      loadDatabase(sqlDatabase).catch((error) => {
+        addOutput(`Failed to load database: ${error.message}`, OutputLevel.ERROR)
+      })
+    }
+  }, [language, sqlDatabase, mounted])
+
   // Lazy load Pyodide on first run
   const ensurePyodideLoaded = async () => {
     // Return existing promise if already loading/loaded
@@ -352,7 +368,11 @@ export function CodeEditor({
     const isDark = resolvedTheme === 'dark'
 
     // Select language extension
-    const langExtension = language === 'python' ? python() : javascript()
+    const langExtension = language === 'python'
+      ? python()
+      : language === 'sql'
+      ? sql()
+      : javascript()
 
     const extensions = [
       basicSetup,
@@ -664,9 +684,38 @@ export function CodeEditor({
       } else {
         runPyodideCode(code) // Use Pyodide for everything else (including matplotlib)
       }
+    } else if (language === 'sql') {
+      runSqlQuery(code)
     } else if (language === 'javascript') {
       // TODO: Implement JavaScript execution
       addOutput('JavaScript execution not yet implemented', OutputLevel.ERROR)
+    }
+  }
+
+  // Run SQL query
+  const runSqlQuery = async (query: string) => {
+    setRunState(RunState.RUNNING)
+    setOutput([]) // Clear previous output
+
+    try {
+      const result = await executeSqlQuery(query)
+
+      if (result.success && result.results) {
+        // Add output with SQL results
+        const message = `Query executed successfully in ${result.executionTime?.toFixed(2)}ms`
+        setOutput([{
+          message,
+          level: OutputLevel.OUTPUT,
+          timestamp: Date.now(),
+          sqlResults: result.results
+        }])
+      } else {
+        addOutput(result.error || 'Unknown error occurred', OutputLevel.ERROR)
+      }
+    } catch (error: any) {
+      addOutput(error.message || 'Failed to execute SQL query', OutputLevel.ERROR)
+    } finally {
+      setRunState(RunState.STOPPED)
     }
   }
 
@@ -1293,20 +1342,67 @@ plots
               <div className="text-muted-foreground italic">No output yet. Run your code to see results here.</div>
             ) : (
               output.map((entry, index) => (
-                <div
-                  key={index}
-                  className={`${entry.isHtml ? '' : 'whitespace-pre-wrap'} ${
-                    entry.level === OutputLevel.ERROR
-                      ? 'text-red-600 dark:text-red-400'
-                      : entry.level === OutputLevel.WARNING
-                      ? 'text-yellow-600 dark:text-yellow-400'
-                      : 'text-foreground'
-                  }`}
-                >
-                  {entry.isHtml ? (
-                    <div dangerouslySetInnerHTML={{ __html: entry.message }} />
-                  ) : (
-                    entry.message
+                <div key={index} className="mb-2">
+                  {/* Text message */}
+                  <div
+                    className={`${entry.isHtml ? '' : 'whitespace-pre-wrap'} ${
+                      entry.level === OutputLevel.ERROR
+                        ? 'text-red-600 dark:text-red-400'
+                        : entry.level === OutputLevel.WARNING
+                        ? 'text-yellow-600 dark:text-yellow-400'
+                        : 'text-foreground'
+                    }`}
+                  >
+                    {entry.isHtml ? (
+                      <div dangerouslySetInnerHTML={{ __html: entry.message }} />
+                    ) : (
+                      entry.message
+                    )}
+                  </div>
+
+                  {/* SQL Results Table */}
+                  {entry.sqlResults && entry.sqlResults.length > 0 && (
+                    <div className="mt-2 overflow-x-auto">
+                      {entry.sqlResults.map((resultSet, rsIndex) => (
+                        <div key={rsIndex} className="mb-4">
+                          <div className="text-xs text-muted-foreground mb-1">
+                            {resultSet.values.length} row{resultSet.values.length !== 1 ? 's' : ''}
+                          </div>
+                          <table className="min-w-full border-collapse border border-border text-xs">
+                            <thead className="bg-muted">
+                              <tr>
+                                {resultSet.columns.map((column, colIdx) => (
+                                  <th
+                                    key={colIdx}
+                                    className="border border-border px-2 py-1 text-left font-semibold"
+                                  >
+                                    {column}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {resultSet.values.map((row, rowIdx) => (
+                                <tr key={rowIdx} className="hover:bg-muted/50">
+                                  {row.map((cell, cellIdx) => (
+                                    <td
+                                      key={cellIdx}
+                                      className="border border-border px-2 py-1"
+                                    >
+                                      {cell === null ? (
+                                        <span className="text-muted-foreground italic">NULL</span>
+                                      ) : (
+                                        String(cell)
+                                      )}
+                                    </td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
               ))
