@@ -2,13 +2,13 @@
 
 import { useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { Pen, Eraser, Trash2, Eye, EyeOff } from 'lucide-react'
+import { Pen, Eraser, Trash2, Eye, EyeOff, Camera } from 'lucide-react'
 import { Circle } from '@uiw/react-color'
 import Image from 'next/image'
 import brushThickIcon from './brush_thick.png'
 import brushThinIcon from './brush_thin.png'
 
-export type AnnotationMode = 'view' | 'draw' | 'erase'
+export type AnnotationMode = 'view' | 'draw' | 'erase' | 'snap'
 
 interface AnnotationToolbarProps {
   mode: AnnotationMode
@@ -261,6 +261,20 @@ export function AnnotationToolbar({
         aria-label="Toggle eraser mode"
       >
         <Eraser className="w-5 h-5" />
+      </button>
+
+      {/* Snap Tool */}
+      <button
+        onClick={() => onModeChange(mode === 'snap' ? 'view' : 'snap')}
+        className={`p-3 rounded-md transition-colors ${
+          mode === 'snap'
+            ? 'bg-primary text-primary-foreground'
+            : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+        }`}
+        title="Capture screenshot"
+        aria-label="Toggle snap mode"
+      >
+        <Camera className="w-5 h-5" />
       </button>
 
       {/* View/Hide Annotations */}

@@ -11,6 +11,8 @@ import { repositionStrokes } from '@/lib/annotations/reposition-strokes'
 import { useLayout } from '@/contexts/layout-context'
 import { VersionBrowser } from '@/components/userdata/version-browser'
 import { VersionActions } from '@/components/userdata/quick-undo'
+import { SnapOverlay, type Snap } from './snap-overlay'
+import { SnapsDisplay } from './snaps-display'
 
 interface AnnotationLayerProps {
   pageId: string
@@ -96,6 +98,7 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
   const [pageHeight, setPageHeight] = useState(0)
   const [orphanedStrokesCount, setOrphanedStrokesCount] = useState(0)
   const [storedHeadingOffsets, setStoredHeadingOffsets] = useState<Record<string, number>>({})
+  const [snaps, setSnaps] = useState<Snap[]>([])
 
   // Canvas width matches paper width exactly
   // Paper is max-w-5xl (64rem = 1024px)
@@ -516,6 +519,17 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
       newSizes[penIndex] = size
       return newSizes
     })
+  }, [])
+
+  // Handle snap capture
+  const handleSnapCapture = useCallback((snap: Snap) => {
+    setSnaps(prev => [...prev, snap])
+    setMode('view') // Return to view mode after capturing
+  }, [])
+
+  // Handle snap removal
+  const handleRemoveSnap = useCallback((id: string) => {
+    setSnaps(prev => prev.filter(snap => snap.id !== id))
   }, [])
 
 
@@ -1064,6 +1078,20 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
         componentId="annotations"
         open={showVersionBrowser}
         onOpenChange={setShowVersionBrowser}
+      />
+
+      {/* Snap overlay - shown when in snap mode */}
+      {mode === 'snap' && (
+        <SnapOverlay
+          onCapture={handleSnapCapture}
+          onCancel={() => setMode('view')}
+        />
+      )}
+
+      {/* Snaps display - shows all captured snaps */}
+      <SnapsDisplay
+        snaps={snaps}
+        onRemoveSnap={handleRemoveSnap}
       />
     </>
   )
