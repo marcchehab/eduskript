@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useLayoutEffect, useRef, createContext, useContext } from 'react'
+import React, { useState, useEffect, useLayoutEffect, useRef, createContext, useContext } from 'react'
 import { unified } from 'unified'
 import remarkParse from 'remark-parse'
 import remarkMath from 'remark-math'
@@ -19,11 +19,27 @@ import { CodeEditor } from '@/components/public/code-editor'
 import { remarkFileResolver } from '@/lib/remark-plugins/file-resolver'
 import { remarkImageAttributes } from '@/lib/remark-plugins/image-attributes'
 import { remarkCodeEditor } from '@/lib/remark-plugins/code-editor'
+import { remarkCallouts } from '@/lib/remark-plugins/callouts'
 import { rehypeCodemirrorHighlight } from '@/lib/rehype-plugins/codemirror-highlight'
 import { rehypeWrapSections } from '@/lib/rehype-plugins/wrap-sections'
 import { rehypeSourceLine } from '@/lib/rehype-plugins/source-line'
 import rehypeSlug from 'rehype-slug'
 import { useTheme } from 'next-themes'
+import {
+  CheckCircle2,
+  Info,
+  AlertTriangle,
+  AlertCircle,
+  Lightbulb,
+  HelpCircle,
+  X,
+  Bug,
+  FileText,
+  Quote,
+  Sparkles,
+  MessageCircle,
+  ListTodo,
+} from 'lucide-react'
 
 // Context for passing content, callback, and markdown context down to components
 const MarkdownEditContext = createContext<{
@@ -254,11 +270,86 @@ function decodeHtmlEntities(text: string): string {
   return result
 }
 
+// Icon mapping for callout types
+const calloutIcons: Record<string, React.ComponentType<{ className?: string }>> = {
+  note: FileText,
+  abstract: FileText,
+  info: Info,
+  tip: Lightbulb,
+  success: CheckCircle2,
+  question: HelpCircle,
+  warning: AlertTriangle,
+  failure: X,
+  danger: AlertCircle,
+  bug: Bug,
+  example: Sparkles,
+  quote: Quote,
+  solution: CheckCircle2,
+  discuss: MessageCircle,
+  todo: ListTodo,
+}
+
+// Blockquote component with callout support
+function BlockquoteComponent({ children, className, ...props }: React.HTMLAttributes<HTMLQuoteElement>) {
+  // Check if this is a callout blockquote
+  const isCallout = className?.includes('callout')
+
+  if (!isCallout) {
+    return <blockquote className={className} {...props}>{children}</blockquote>
+  }
+
+  // Extract callout type from className
+  const calloutTypeMatch = className?.match(/callout-(\w+)/)
+  const calloutType = calloutTypeMatch?.[1]
+  const Icon = calloutType ? calloutIcons[calloutType] : null
+
+  // Check if it's foldable
+  const isFoldable = className?.includes('callout-foldable')
+  const [isOpen, setIsOpen] = useState(!className?.includes('callout-folded'))
+
+  const handleToggle = (e: React.MouseEvent) => {
+    if (!isFoldable) return
+
+    // Don't toggle if clicking inside content
+    const target = e.target as HTMLElement
+    if (target.closest('.callout-content')) return
+
+    setIsOpen(!isOpen)
+  }
+
+  return (
+    <blockquote
+      className={`${className} ${!isOpen && isFoldable ? 'callout-folded' : ''}`}
+      onClick={handleToggle}
+      {...props}
+    >
+      {React.Children.map(children, (child) => {
+        // Add icon to the callout-title div
+        if (React.isValidElement(child)) {
+          const childProps = child.props as { className?: string; children?: React.ReactNode }
+          if (childProps.className?.includes('callout-title')) {
+            return React.cloneElement(child, {
+              children: (
+                <div className="flex items-center gap-2">
+                  {Icon && <Icon className="w-5 h-5 flex-shrink-0" />}
+                  {childProps.children}
+                </div>
+              )
+            } as Partial<typeof childProps>)
+          }
+        }
+        return child
+      })}
+    </blockquote>
+  )
+}
+
 // Stable components object for rehype-react
 const rehypeReactComponents = {
   pre: PreComponent,
   code: CodeComponent,
   img: ImageComponent,
+  blockquote: BlockquoteComponent,
   'code-editor': CodeEditorComponent,
   h1: (props: React.HTMLAttributes<HTMLHeadingElement>) => <Heading level={1} {...props} />,
   h2: (props: React.HTMLAttributes<HTMLHeadingElement>) => <Heading level={2} {...props} />,
@@ -319,6 +410,7 @@ export function MarkdownRenderer({ content, context, onContentChange }: Markdown
           .use(remarkFileResolver, { fileList: context?.fileList })
           .use(remarkImageAttributes)
           .use(remarkCodeEditor) // Convert code blocks with "editor" meta to interactive editors
+          .use(remarkCallouts) // Transform Obsidian-style callouts
           .use(remarkRehype, { allowDangerousHtml: true }) // Need allowDangerousHtml for custom elements
           // Add IDs to headings (needed for sections)
           .use(rehypeSlug)

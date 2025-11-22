@@ -149,6 +149,322 @@ Eduskript is a multi-tenant education platform where teachers create educational
 - **Interactive SQL**: Client-side SQL execution using SQL.js with database file management
 - **Schema Visualization**: Automatic Excalidraw schema detection with theme-aware rendering
 
+## Markdown Transformation Pipeline
+
+### Overview
+**IMPORTANT**: Eduskript has TWO different markdown processors. Understanding which one to modify is critical:
+
+1. **PRIMARY: Client-Side React Processor** (`src/components/markdown/markdown-renderer.tsx`)
+   - **Used by**: Public pages, dashboard, interactive preview
+   - **Output**: React components via `rehype-react`
+   - **When to modify**: For all remark/rehype plugin additions
+
+2. **LEGACY: Server-Side HTML Processor** (`src/lib/markdown.ts`)
+   - **Used by**: Only `src/components/public/markdown-renderer.tsx` (rarely used component)
+   - **Output**: HTML string via `rehype-stringify`
+   - **Status**: Keep for compatibility but not actively used for main content
+
+### Primary Processor Architecture (src/components/markdown/markdown-renderer.tsx)
+
+**File:** `/home/chris/git/eduskript/src/components/markdown/markdown-renderer.tsx`
+
+**Processing Flow:**
+- Entry point: React component renders markdown via `unified()` pipeline
+- Transforms: Markdown String → MDAST → HAST → React JSX
+- Uses `rehype-react` to convert HTML AST to React components
+- Renders directly as React JSX (no HTML string intermediate)
+- Custom components: `<CodeMirrorCodeBlock>`, `<ImageWithResize>`, `<Heading>`, etc.
+
+**Used By:**
+- `src/app/[domain]/[collectionSlug]/[skriptSlug]/[pageSlug]/page.tsx` - Public pages
+- `src/components/public/annotatable-content.tsx` - Annotatable content
+- `src/components/dashboard/interactive-preview.tsx` - Dashboard preview
+
+### Legacy Processor (src/lib/markdown.ts)
+
+**File:** `/home/chris/git/eduskript/src/lib/markdown.ts`
+
+**Processing Flow:**
+- Entry point: `processMarkdown(markdown, context)`
+- Transforms: Markdown String → MDAST → HAST → HTML String
+- Uses `rehype-stringify` to output HTML
+- Returns serialized HTML + frontmatter + excerpt
+
+**Used By:**
+- `src/components/public/markdown-renderer.tsx` - Dynamically imports processMarkdown (rarely used)
+
+### Plugin Execution Order (Primary Processor)
+
+**Note:** This plugin order is for `src/components/markdown/markdown-renderer.tsx` (the primary processor used by public pages).
+
+The markdown transformation follows this **exact plugin order** (critical for proper rendering):
+
+#### Remark Plugins (Operate on Markdown AST)
+
+1. **`remarkParse`** - Parse markdown string into MDAST (Markdown Abstract Syntax Tree)
+
+2. **`remarkFileResolver`** (`src/lib/remark-plugins/file-resolver.ts`)
+   - Resolves file paths using pre-fetched `fileList`
+   - Special handling for Excalidraw files (`.excalidraw` → finds light/dark SVG variants)
+   - Sets `data-light-src`, `data-dark-src`, `data-excalidraw` attributes
+
+3. **`remarkImageAttributes`** (`src/lib/remark-plugins/image-attributes.ts`)
+   - Parses image attribute syntax: `![alt](image.png){width=50%;align=center}`
+   - Applies inline styles and `data-align`, `data-wrap` attributes
+   - Removes attribute syntax from markdown
+
+4. **`remarkCodeEditor`** (`src/lib/remark-plugins/code-editor.ts`)
+   - Converts code blocks with `editor` keyword to interactive editors
+   - Syntax: ` ```python editor``` ` or ` ```sql editor db="database.db"``` `
+   - Transforms to custom `<code-editor>` element with `data-*` attributes
+   - Supports multi-file syntax, IDs, and database references
+
+5. **`remarkCallouts`** (`src/lib/remark-plugins/callouts.ts`)
+   - Transforms Obsidian-style callouts: `> [!type]` syntax
+   - **41 callout types** with aliases:
+     - Base types: note, tip, warning, abstract, info, todo, success, question, failure, danger, bug, example, quote, solution, discuss
+     - Aliases: `lernziele`→`success`, `hint`→`tip`, `exercise`→`abstract`, etc.
+   - Foldable syntax: `> [!note]-` (folded) or `> [!note]+` (open)
+   - Generates structure:
+     ```html
+     <blockquote class="callout callout-{type} [callout-foldable] [callout-folded]">
+       <div class="callout-title {type}"></div>
+       <div class="callout-content">...</div>
+     </blockquote>
+     ```
+
+6. **`remarkMath`** - Parse LaTeX math (`$...$` or `$$...$$`)
+
+7. **`remarkGfm`** - GitHub-Flavored Markdown (tables, strikethrough, task lists)
+
+8. **`remarkServerImageOptimizer`** (Server-only, dynamically added)
+   - Downloads remote images and caches in `/public/cache/images/[domain]/[skriptId]/`
+   - Only runs in Node.js environment
+
+#### Rehype Plugins (Operate on HTML AST)
+
+1. **`remarkRehype`** - Convert MDAST → HAST (HTML AST)
+   - `allowDangerousHtml: true` preserves custom elements
+
+2. **`rehypeSlug`** - Add IDs to headings
+   - `# My Heading` → `<h1 id="my-heading">My Heading</h1>`
+
+3. **`rehypeHeadingSectionIds`** (`src/lib/rehype-plugins/heading-section-ids.ts`)
+   - Adds `data-section-id` (e.g., "h1-my-heading")
+   - Adds `data-heading-text` (extracted text content)
+   - Used by annotation system for precise targeting
+
+4. **`rehypeAutolinkHeadings`** - Add anchor links to headings
+   - Creates `<a class="heading-link" href="#...">` inside headings
+   - `behavior: 'wrap'` wraps entire heading content
+
+5. **`rehypeExcalidrawDualImage`** (`src/lib/rehype-plugins/excalidraw-dual-image.ts`)
+   - Handles theme-aware Excalidraw drawings
+   - Wraps in `<figure>` with both light/dark SVG variants
+   - CSS shows appropriate variant based on theme class
+   - Structure:
+     ```html
+     <figure>
+       <span data-excalidraw="name.excalidraw">
+         <img class="excalidraw-light" src="...light.svg"/>
+         <img class="excalidraw-dark" src="...dark.svg"/>
+       </span>
+       <figcaption>...</figcaption>
+     </figure>
+     ```
+
+6. **`rehypeImageWrapper`** (`src/lib/rehype-plugins/image-wrapper.ts`)
+   - Wraps regular images (non-Excalidraw) in `<figure>` tags
+   - Adds alignment classes: `mx-auto` (center), `mr-auto` (left), `ml-auto` (right)
+   - Supports floated layout: `float-left`, `float-right` when `data-wrap="true"`
+   - Adds captions from alt text
+
+7. **`rehypeImageOptimizer`** (`src/lib/rehype-plugins/image-optimizer.ts`)
+   - Adds `loading="lazy"` and `decoding="async"` to all images
+   - Improves page load performance
+
+8. **`rehypeInteractiveElements`** (`src/lib/rehype-plugins/interactive-elements.ts`)
+   - Adds metadata to interactive elements
+   - Adds `data-interactive`, `data-block-id` to code blocks
+   - Adds `data-image-id` to images
+   - Enables UI controls in preview mode
+
+9. **`rehypeKatex`** - Process LaTeX math to HTML
+   - Converts math blocks to styled HTML using KaTeX library
+
+10. **`rehypeHighlight`** - Syntax highlighting
+    - Adds `<span class="hljs-*">` for syntax-highlighted code
+    - Only applies to non-editor code blocks
+
+11. **`rehypeStringify`** - Convert HAST → HTML string
+    - Final serialization step
+    - `allowDangerousHtml: true` preserves custom elements
+
+### Client-Side Hydration Process
+
+After server-side processing, the client performs selective hydration:
+
+**1. Code Editors (markdown-renderer.tsx, lines 93-169)**
+```typescript
+// Find all <code-editor> custom elements
+const codeEditorElements = contentRef.current.querySelectorAll('code-editor')
+
+// For each element:
+// - Extract data-* attributes (language, code, id, db)
+// - Decode HTML entities in code content
+// - Look up database file URL from fileList (for SQL editors)
+// - Create wrapper div and React root
+// - Render <CodeEditor {...props} />
+// - Replace custom element with React component
+```
+
+**2. Callout Interactivity (markdown-renderer.tsx, lines 172-196)**
+```typescript
+// Find all collapsible callouts
+const callouts = contentRef.current.querySelectorAll('blockquote.callout-foldable')
+
+// Attach click handlers
+// - Toggle .callout-folded class
+// - Prevent toggle if clicking inside .callout-content
+```
+
+**3. Theme Updates (markdown-renderer.tsx, lines 199-205)**
+```typescript
+// Re-render all code editors when theme changes
+// Preserves user state while updating theme-dependent rendering
+rootsRef.current.forEach(({ root, props }) => {
+  root.render(<CodeEditor {...props} key={resolvedTheme} />)
+})
+```
+
+### Markdown Context Flow
+
+The `MarkdownContext` object flows through the pipeline:
+
+```typescript
+interface MarkdownContext {
+  pageId?: string              // For user data persistence
+  domain?: string              // Username for file resolution
+  skriptId?: string            // For file API lookups
+  fileList?: Array<{           // Pre-fetched files for this skript
+    id: string
+    name: string
+    url?: string
+    isDirectory?: boolean
+  }>
+  theme?: 'light' | 'dark'     // For Excalidraw theme selection
+}
+```
+
+**File List Usage:**
+1. Server: Passed to `remarkFileResolver` and `remarkImageAttributes`
+2. Client: Fetched via `/api/upload?skriptId={id}` during hydration
+3. Used to resolve filenames → URLs for images and databases
+
+### Example: Callout Transformation
+
+**Input Markdown:**
+```markdown
+> [!success]- ✅ **Learning Goals**
+> - Understand markdown syntax
+> - Learn about callouts
+```
+
+**After remarkCallouts (MDAST):**
+```javascript
+{
+  type: 'blockquote',
+  data: {
+    hProperties: {
+      className: ['callout', 'callout-success', 'callout-foldable', 'callout-folded']
+    }
+  },
+  children: [
+    {
+      type: 'element',
+      data: {
+        hName: 'div',
+        hProperties: { className: 'callout-title success' }
+      },
+      children: [{ type: 'paragraph', children: [] }] // Empty, title removed
+    },
+    {
+      type: 'element',
+      data: {
+        hName: 'div',
+        hProperties: { className: 'callout-content' }
+      },
+      children: [/* list items */]
+    }
+  ]
+}
+```
+
+**Final HTML Output:**
+```html
+<blockquote class="callout callout-success callout-foldable callout-folded">
+  <div class="callout-title success"></div>
+  <div class="callout-content">
+    <ul>
+      <li>Understand markdown syntax</li>
+      <li>Learn about callouts</li>
+    </ul>
+  </div>
+</blockquote>
+```
+
+**Client-Side Enhancement:**
+- Click handler attached to `<blockquote>`
+- Toggles `.callout-folded` class on click
+- CSS animations handle expand/collapse
+
+### Key Design Patterns
+
+1. **Data Attributes for Hydration**
+   - Plugins store metadata in `node.data.hProperties` (becomes HTML attributes)
+   - Attributes survive HTML serialization
+   - Client reads via `getAttribute()` and `querySelectorAll()`
+
+2. **HTML Entity Escaping**
+   - Code content escaped by plugins to prevent XSS
+   - Client decodes: `textarea.innerHTML = text; return textarea.value`
+   - Safe for client-side execution in sandboxed environments
+
+3. **Lazy Hydration Strategy**
+   - Full HTML rendered immediately (no JavaScript required)
+   - React components loaded on-demand for interactive elements only
+   - Fast first paint, progressive enhancement
+
+4. **Theme-Aware Rendering**
+   - Excalidraw: Both light/dark variants rendered, CSS controls visibility
+   - Code editors: Re-rendered on theme change with preserved state
+   - CSS classes: `.dark .excalidraw-light { display: none; }`
+
+5. **Plugin Composition**
+   - Each plugin handles one concern (single responsibility)
+   - Runs in dependency order (file resolution before image processing)
+   - AST passes through unchanged if plugin conditions not met
+
+### Debugging Tips
+
+**To verify plugin execution:**
+1. Check TypeScript types are correct (especially `tree: Root` parameter)
+2. Add `console.log()` in plugin to verify it runs
+3. Inspect `node.type` and `node.data` in AST visitors
+4. Use `visit()` callback return values to control traversal
+
+**To verify HTML output:**
+1. Check browser inspector for expected HTML structure
+2. Look for correct CSS classes and `data-*` attributes
+3. Verify custom elements are present before hydration
+4. Check React DevTools for hydrated components
+
+**Common issues:**
+- **Plugin not running**: Type errors prevent compilation
+- **Wrong output**: Plugin order matters (e.g., file resolver must run before image processing)
+- **Hydration fails**: Custom element attributes missing or HTML entities not decoded
+- **Theme not switching**: CSS classes not applied or images not duplicated
+
 ### Deployment Configuration
 - **Docker**: Clean multi-stage build with Prisma 7.x and PostgreSQL adapter
 - **Next.js**: Configured for standalone output with ES Modules

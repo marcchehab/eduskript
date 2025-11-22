@@ -18,6 +18,7 @@ import { rehypeExcalidrawDualImage } from './rehype-plugins/excalidraw-dual-imag
 import { rehypeImageWrapper } from './rehype-plugins/image-wrapper'
 import { rehypeHeadingSectionIds } from './rehype-plugins/heading-section-ids'
 import { remarkCodeEditor } from './remark-plugins/code-editor'
+import { remarkCallouts } from './remark-plugins/callouts'
 
 export interface ProcessedMarkdown {
   content: string
@@ -55,6 +56,7 @@ export async function processMarkdown(
     }],
     remarkImageAttributes, // Parse image width attributes
     remarkCodeEditor, // Convert code blocks with "editor" meta to interactive editors
+    remarkCallouts, // Transform Obsidian-style callouts
     remarkMath,
     remarkGfm,
   ]

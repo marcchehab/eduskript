@@ -168,6 +168,33 @@ export function MarkdownRenderer({ content, domain, skriptId }: MarkdownRenderer
     }
   }, [html])
 
+  // Add click handlers for collapsible callouts
+  useEffect(() => {
+    if (!contentRef.current || !html) return
+
+    const callouts = contentRef.current.querySelectorAll('blockquote.callout-foldable')
+
+    const handleClick = (e: MouseEvent) => {
+      const blockquote = e.currentTarget as HTMLElement
+      const target = e.target as HTMLElement
+
+      // Prevent toggle if clicking inside content
+      if (target.closest('.callout-content')) return
+
+      blockquote.classList.toggle('callout-folded')
+    }
+
+    callouts.forEach((callout) => {
+      callout.addEventListener('click', handleClick as EventListener)
+    })
+
+    return () => {
+      callouts.forEach((callout) => {
+        callout.removeEventListener('click', handleClick as EventListener)
+      })
+    }
+  }, [html])
+
   // Re-render all code editors when theme changes
   useEffect(() => {
     if (!mounted) return
