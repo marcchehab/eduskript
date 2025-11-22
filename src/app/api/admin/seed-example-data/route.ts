@@ -553,12 +553,179 @@ Try modifying the code above to:
       },
     })
 
+    const numpyMatplotlibPage = await prisma.page.create({
+      data: {
+        title: 'NumPy & Matplotlib',
+        slug: 'numpy-matplotlib',
+        skriptId: codeSkript.id,
+        order: 1,
+        isPublished: true,
+        content: `# NumPy & Matplotlib - Data Science in Your Browser!
+
+Eduskript supports **NumPy** for numerical computing and **Matplotlib** for data visualization - all running directly in your browser using Pyodide!
+
+## NumPy Arrays
+
+NumPy provides powerful array operations:
+
+\`\`\`python editor
+import numpy as np
+
+# Create arrays
+arr = np.array([1, 2, 3, 4, 5])
+print("Array:", arr)
+print("Mean:", np.mean(arr))
+print("Standard deviation:", np.std(arr))
+
+# 2D array operations
+matrix = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+print("\\nMatrix:")
+print(matrix)
+print("Sum of all elements:", np.sum(matrix))
+print("Sum of each column:", np.sum(matrix, axis=0))
+\`\`\`
+
+## Linear Algebra
+
+\`\`\`python editor
+import numpy as np
+
+# Matrix multiplication
+A = np.array([[1, 2], [3, 4]])
+B = np.array([[5, 6], [7, 8]])
+
+print("Matrix A:")
+print(A)
+print("\\nMatrix B:")
+print(B)
+
+# Dot product
+C = np.dot(A, B)
+print("\\nA · B:")
+print(C)
+
+# Determinant
+det = np.linalg.det(A)
+print(f"\\nDeterminant of A: {det}")
+\`\`\`
+
+## Creating Visualizations with Matplotlib
+
+Plot beautiful graphs directly in your pages:
+
+\`\`\`python editor
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Generate data
+x = np.linspace(0, 2*np.pi, 100)
+y1 = np.sin(x)
+y2 = np.cos(x)
+
+# Create plot
+plt.figure(figsize=(10, 6))
+plt.plot(x, y1, label='sin(x)', linewidth=2)
+plt.plot(x, y2, label='cos(x)', linewidth=2)
+plt.xlabel('x')
+plt.ylabel('y')
+plt.title('Sine and Cosine Functions')
+plt.legend()
+plt.grid(True, alpha=0.3)
+plt.show()
+
+print("Graph generated successfully!")
+\`\`\`
+
+## Statistical Distributions
+
+\`\`\`python editor
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Generate random data from different distributions
+normal = np.random.normal(0, 1, 1000)
+uniform = np.random.uniform(-3, 3, 1000)
+
+# Create histogram
+plt.figure(figsize=(12, 5))
+
+plt.subplot(1, 2, 1)
+plt.hist(normal, bins=30, edgecolor='black', alpha=0.7)
+plt.title('Normal Distribution')
+plt.xlabel('Value')
+plt.ylabel('Frequency')
+
+plt.subplot(1, 2, 2)
+plt.hist(uniform, bins=30, edgecolor='black', alpha=0.7, color='orange')
+plt.title('Uniform Distribution')
+plt.xlabel('Value')
+plt.ylabel('Frequency')
+
+plt.tight_layout()
+plt.show()
+
+print(f"Normal distribution - Mean: {np.mean(normal):.2f}, Std: {np.std(normal):.2f}")
+print(f"Uniform distribution - Mean: {np.mean(uniform):.2f}, Std: {np.std(uniform):.2f}")
+\`\`\`
+
+## Polynomial Fitting
+
+\`\`\`python editor
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Generate sample data with noise
+x = np.linspace(0, 10, 50)
+y = 2*x**2 + 3*x + 1 + np.random.normal(0, 10, 50)
+
+# Fit polynomial
+coefficients = np.polyfit(x, y, 2)
+polynomial = np.poly1d(coefficients)
+
+# Generate smooth curve for plotting
+x_smooth = np.linspace(0, 10, 200)
+y_smooth = polynomial(x_smooth)
+
+# Plot
+plt.figure(figsize=(10, 6))
+plt.scatter(x, y, alpha=0.5, label='Data points')
+plt.plot(x_smooth, y_smooth, 'r-', linewidth=2, label='Fitted curve')
+plt.xlabel('x')
+plt.ylabel('y')
+plt.title('Polynomial Fitting')
+plt.legend()
+plt.grid(True, alpha=0.3)
+plt.show()
+
+print(f"Fitted polynomial: y = {coefficients[0]:.2f}x² + {coefficients[1]:.2f}x + {coefficients[2]:.2f}")
+\`\`\`
+
+## Explore Further!
+
+Try modifying the examples to:
+
+1. Plot other functions like $\\tan(x)$ or $e^x$
+2. Create a bar chart or scatter plot
+3. Experiment with different distributions (exponential, binomial)
+4. Fit polynomials of different degrees
+
+**Note:** Matplotlib code may take a few seconds to run as it loads the plotting library. Be patient!
+`,
+        authors: {
+          create: {
+            userId: session!.user.id,
+            permission: 'author',
+          },
+        },
+      },
+    })
+
     const javascriptEditorPage = await prisma.page.create({
       data: {
         title: 'Interactive JavaScript Editor',
         slug: 'javascript-editor',
         skriptId: codeSkript.id,
-        order: 1,
+        order: 2,
         isPublished: true,
         content: `# Interactive JavaScript Editor
 
@@ -695,7 +862,7 @@ Try these challenges:
           { title: tutorialCollection.title, slug: tutorialCollection.slug },
         ],
         skripts: 3,
-        pages: 6,
+        pages: 7,
       },
     })
   } catch (error) {
