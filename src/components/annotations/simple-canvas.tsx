@@ -47,6 +47,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
     const activePointersRef = useRef<Set<number>>(new Set())
     const activeTouchPointersRef = useRef<Set<number>>(new Set()) // Track only touch/mouse (not pen) for multi-touch detection
     const eraserRedrawRafRef = useRef<number | null>(null) // RAF ID for throttling eraser redraws
+    const eraserCursorRef = useRef<HTMLDivElement>(null) // Ref to eraser cursor element for direct DOM manipulation
 
     // Update eraser cursor state and apply styles directly (no React re-render)
     const updateEraserCursor = useCallback((isActive: boolean) => {
@@ -67,15 +68,24 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       }
     }, [mode])
 
-    // Throttled redraw for eraser using RAF to avoid redrawing every single move
-    const scheduleEraserRedraw = useCallback(() => {
-      if (eraserRedrawRafRef.current === null) {
-        eraserRedrawRafRef.current = requestAnimationFrame(() => {
-          redrawCanvas()
-          eraserRedrawRafRef.current = null
-        })
+    // Update eraser cursor position directly (no React re-render, no canvas redraw)
+    const updateEraserCursorPosition = useCallback((x: number, y: number) => {
+      const cursor = eraserCursorRef.current
+      if (!cursor) return
+
+      // Position the cursor at the eraser location
+      cursor.style.left = `${x}px`
+      cursor.style.top = `${y}px`
+      cursor.style.display = 'block'
+    }, [])
+
+    // Hide eraser cursor
+    const hideEraserCursor = useCallback(() => {
+      const cursor = eraserCursorRef.current
+      if (cursor) {
+        cursor.style.display = 'none'
       }
-    }, [redrawCanvas])
+    }, [])
 
     // Check if a point is near a stroke (for eraser collision detection)
     const isPointNearStroke = useCallback((px: number, py: number, stroke: typeof pathsRef.current[0], threshold: number = 20): boolean => {
@@ -228,39 +238,17 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
 
       // Reset globalAlpha
       ctx.globalAlpha = 1.0
-
-      // Draw eraser cursor with tail if in erase mode and we have trail points
-      if (currentModeRef.current === 'erase' && eraserTrailRef.current.length > 0) {
-        const trail = eraserTrailRef.current
-        const trailLength = trail.length
-
-        // Draw tail as progressively smaller circles with fading opacity
-        for (let i = 0; i < trailLength; i++) {
-          const pos = trail[i]
-          const progress = i / (trailLength - 1) // 0 to 1 from oldest to newest
-
-          // Circle size: from 1.5px to 4px
-          const radius = 1.5 + progress * 2.5
-
-          // Opacity: from 0.2 to 1.0
-          ctx.globalAlpha = 0.2 + progress * 0.8
-
-          ctx.beginPath()
-          ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2)
-          ctx.fillStyle = '#888888'
-          ctx.fill()
-
-          // Add subtle outline only on the current (last) circle
-          if (i === trailLength - 1) {
-            ctx.strokeStyle = '#666666'
-            ctx.lineWidth = 1
-            ctx.stroke()
-          }
-        }
-
-        ctx.globalAlpha = 1.0
-      }
     }, [smoothPoints])
+
+    // Throttled redraw for eraser using RAF to avoid redrawing every single move
+    const scheduleEraserRedraw = useCallback(() => {
+      if (eraserRedrawRafRef.current === null) {
+        eraserRedrawRafRef.current = requestAnimationFrame(() => {
+          redrawCanvas()
+          eraserRedrawRafRef.current = null
+        })
+      }
+    }, [redrawCanvas])
 
     // Set up high-DPI canvas scaling with zoom support
     useEffect(() => {
@@ -437,19 +425,24 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
 
         // For eraser mode, check for collisions with existing strokes
         if (currentModeRef.current === 'erase') {
-          // Update eraser trail (keep last 10 points for tail effect)
-          eraserTrailRef.current.push({ x, y })
-          if (eraserTrailRef.current.length > 10) {
-            eraserTrailRef.current.shift()
-          }
+          // Update eraser cursor position (direct DOM manipulation, no re-render)
+          updateEraserCursorPosition(x, y)
 
+          // Check for stroke collisions and only redraw when marking NEW strokes
+          let markedNewStroke = false
           pathsRef.current.forEach((stroke, index) => {
             if (stroke.mode !== 'erase' && isPointNearStroke(x, y, stroke)) {
-              strokesMarkedForDeletionRef.current.add(index)
+              // Only mark as new if it wasn't already marked
+              if (!strokesMarkedForDeletionRef.current.has(index)) {
+                strokesMarkedForDeletionRef.current.add(index)
+                markedNewStroke = true
+              }
             }
           })
-          // Schedule redraw to show marked strokes as transparent and eraser cursor (throttled via RAF)
-          scheduleEraserRedraw()
+          // Only redraw canvas when we mark a NEW stroke (to show it as transparent)
+          if (markedNewStroke) {
+            scheduleEraserRedraw()
+          }
         } else {
           // Draw segment with pressure-sensitive width for draw mode
           const points = currentPathRef.current
@@ -472,7 +465,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
           }
         }
       })
-    }, [mode, strokeColor, strokeWidth, width, height, isPointNearStroke, scheduleEraserRedraw, updateEraserCursor])
+    }, [mode, strokeColor, strokeWidth, width, height, isPointNearStroke, scheduleEraserRedraw, updateEraserCursorPosition])
 
     const stopDrawing = useCallback((e?: React.PointerEvent<HTMLCanvasElement>) => {
       // Remove pointer from tracking
@@ -506,8 +499,8 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
           currentPathRef.current = []
         }
 
-        // Always clear eraser trail and redraw when lifting eraser
-        eraserTrailRef.current = []
+        // Hide eraser cursor and do final redraw when lifting eraser
+        hideEraserCursor()
         updateEraserCursor(false)
         // Cancel any pending eraser redraw and do final redraw immediately
         if (eraserRedrawRafRef.current !== null) {
@@ -546,7 +539,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
 
         onUpdate(data)
       }
-    }, [mode, strokeColor, strokeWidth, onUpdate, headingPositions, redrawCanvas, updateEraserCursor])
+    }, [mode, strokeColor, strokeWidth, onUpdate, headingPositions, redrawCanvas, updateEraserCursor, hideEraserCursor])
 
     const handlePointerCancel = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
       // Clean up when pointer is cancelled
@@ -591,31 +584,50 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
     }, [])
 
     return (
-      <canvas
-        ref={canvasRef}
-        onPointerDown={startDrawing}
-        onPointerMove={draw}
-        onPointerUp={stopDrawing}
-        onPointerLeave={stopDrawing}
-        onPointerCancel={handlePointerCancel}
-        onPointerEnter={handlePointerEnter}
-        className={`annotation-canvas ${shouldFadeIn ? 'annotation-fade-in' : ''} ${mode === 'erase' ? 'eraser-cursor-hidden' : ''}`}
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          // Fixed width and height to match canvas internal dimensions
-          width: `${width}px`,
-          height: `${height}px`,
-          // Always allow pinch-zoom for crisp annotation rendering at any zoom level
-          // Multi-touch detection prevents drawing during pinch gestures
-          touchAction: 'pan-x pan-y pinch-zoom',
-          cursor: mode === 'erase' ? 'none' : (mode === 'draw' ? 'crosshair' : 'default'),
-          // Only receive events when in draw/erase mode OR when stylus mode is active
-          // This allows text selection in view mode without stylus mode
-          pointerEvents: (mode !== 'view' || stylusModeActive) ? 'auto' : 'none'
-        }}
-      />
+      <>
+        <canvas
+          ref={canvasRef}
+          onPointerDown={startDrawing}
+          onPointerMove={draw}
+          onPointerUp={stopDrawing}
+          onPointerLeave={stopDrawing}
+          onPointerCancel={handlePointerCancel}
+          onPointerEnter={handlePointerEnter}
+          className={`annotation-canvas ${shouldFadeIn ? 'annotation-fade-in' : ''} ${mode === 'erase' ? 'eraser-cursor-hidden' : ''}`}
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            // Fixed width and height to match canvas internal dimensions
+            width: `${width}px`,
+            height: `${height}px`,
+            // Always allow pinch-zoom for crisp annotation rendering at any zoom level
+            // Multi-touch detection prevents drawing during pinch gestures
+            touchAction: 'pan-x pan-y pinch-zoom',
+            cursor: mode === 'erase' ? 'none' : (mode === 'draw' ? 'crosshair' : 'default'),
+            // Only receive events when in draw/erase mode OR when stylus mode is active
+            // This allows text selection in view mode without stylus mode
+            pointerEvents: (mode !== 'view' || stylusModeActive) ? 'auto' : 'none'
+          }}
+        />
+        {/* Eraser cursor element - positioned via direct DOM manipulation */}
+        <div
+          ref={eraserCursorRef}
+          className="eraser-cursor"
+          style={{
+            position: 'absolute',
+            display: 'none',
+            width: '20px',
+            height: '20px',
+            borderRadius: '50%',
+            backgroundColor: 'rgba(136, 136, 136, 0.8)',
+            border: '2px solid rgba(102, 102, 102, 0.8)',
+            pointerEvents: 'none',
+            transform: 'translate(-50%, -50%)',
+            zIndex: 1000
+          }}
+        />
+      </>
     )
   }
 )
