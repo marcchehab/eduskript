@@ -260,7 +260,9 @@ export function SnapsDisplay({ snaps, onRemoveSnap, onRenameSnap, onReorderSnaps
               onClick={() => handleToggleExpand(snap.id)}
               title="Click to expand"
             >
-              <Image
+              {/* Use regular img tag for SVG data URLs to avoid Next.js processing */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
                 src={snap.imageUrl}
                 alt={snap.name}
                 width={displayWidth}
@@ -270,7 +272,6 @@ export function SnapsDisplay({ snaps, onRemoveSnap, onRenameSnap, onReorderSnaps
                   border: 'none',
                   display: 'block',
                 }}
-                unoptimized
               />
             </div>
 
