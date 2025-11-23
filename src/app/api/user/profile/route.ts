@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { withDatabaseConnection } from '@/lib/db-connection'
 import { z } from 'zod'
 
+// Base schema for non-admin users
 const updateProfileSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   username: z.optional(
@@ -19,16 +20,40 @@ const updateProfileSchema = z.object({
   bio: z.string().optional()
 })
 
+// Admin schema allows shorter usernames (minimum 1 character)
+const adminUpdateProfileSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  username: z.optional(
+    z.string()
+      .min(1, 'Username must be at least 1 character')
+      .max(50, 'Username must be less than 50 characters')
+      .regex(/^[a-z0-9-]+$/, 'Username can only contain lowercase letters, numbers, and hyphens')
+      .refine(val => !val.startsWith('-') && !val.endsWith('-'), 'Username cannot start or end with a hyphen')
+  ),
+  webpageDescription: z.string().optional(),
+  title: z.string().optional(),
+  bio: z.string().optional()
+})
+
 export async function PATCH(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-    
+
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Fetch user's admin status to determine which validation schema to use
+    const currentUser = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { isAdmin: true }
+    })
+
     const body = await request.json()
-    const validatedData = updateProfileSchema.parse(body)
+
+    // Use admin schema if user is admin, otherwise use regular schema
+    const schema = currentUser?.isAdmin ? adminUpdateProfileSchema : updateProfileSchema
+    const validatedData = schema.parse(body)
 
     const result = await withDatabaseConnection(async () => {
       // Check if username is already taken by another user
