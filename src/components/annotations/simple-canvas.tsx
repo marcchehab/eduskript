@@ -437,6 +437,11 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       // But always allow stylus to proceed regardless of touch count
       const isStylusInput = e.pointerType === 'pen'
 
+      // Keep pen timestamp fresh during drawing for priority system
+      if (isStylusInput && isDrawingRef.current && onStylusDetected) {
+        onStylusDetected()
+      }
+
       if (!isStylusInput && activeTouchPointersRef.current.size > 1) {
         return
       }
@@ -517,7 +522,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       if (currentModeRef.current === 'draw' && pendingPointsRef.current > 0) {
         scheduleIncrementalDraw()
       }
-    }, [mode, width, height, isPointNearStroke, scheduleEraserRedraw, scheduleIncrementalDraw, updateEraserCursorPosition, updateEraserCursor])
+    }, [mode, width, height, isPointNearStroke, scheduleEraserRedraw, scheduleIncrementalDraw, updateEraserCursorPosition, updateEraserCursor, onStylusDetected])
 
     const stopDrawing = useCallback((e?: React.PointerEvent<HTMLCanvasElement>) => {
       // Remove pointer from tracking

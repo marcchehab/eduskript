@@ -599,6 +599,9 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
 
   // Handle stylus detection
   const handleStylusDetected = useCallback(() => {
+    // Update pen timestamp for priority system
+    lastPenEventTimeRef.current = Date.now()
+
     if (!stylusModeActive) {
       setStylusModeActive(true)
     }
@@ -629,23 +632,8 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
   }, [stylusModeActive, handleStylusDetected])
 
   // Keep updating pen timestamp while drawing (stylus mode active)
-  useEffect(() => {
-    if (!stylusModeActive) return // Only listen when stylus mode IS active
-
-    const handlePenEvents = (e: PointerEvent) => {
-      if (e.pointerType === 'pen') {
-        lastPenEventTimeRef.current = Date.now()
-      }
-    }
-
-    // Listen for pen events to keep timestamp fresh during drawing
-    document.addEventListener('pointermove', handlePenEvents)
-    document.addEventListener('pointerdown', handlePenEvents)
-    return () => {
-      document.removeEventListener('pointermove', handlePenEvents)
-      document.removeEventListener('pointerdown', handlePenEvents)
-    }
-  }, [stylusModeActive])
+  // This is handled directly in the canvas event handlers for better performance
+  // Removed document-level listener to avoid overhead on every pointermove event
 
   // Document-level mouse detection when stylus mode is active
   useEffect(() => {
