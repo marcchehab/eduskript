@@ -19,19 +19,6 @@ export function FontSizeControls() {
   const [fontSize, setFontSize] = useState(DEFAULT_SIZE)
   const [mounted, setMounted] = useState(false)
 
-  // Load saved font size from localStorage on mount
-  useEffect(() => {
-    setMounted(true)
-    const saved = localStorage.getItem(FONT_SIZE_KEY)
-    if (saved) {
-      const size = parseInt(saved, 10)
-      if (size >= MIN_SIZE && size <= MAX_SIZE) {
-        setFontSize(size)
-        applyFontSize(size)
-      }
-    }
-  }, [])
-
   // Apply font size to the document
   const applyFontSize = (size: number) => {
     // Apply to prose content specifically
@@ -41,6 +28,27 @@ export function FontSizeControls() {
     const scaleFactor = size / DEFAULT_SIZE
     document.documentElement.style.setProperty('--user-font-scale', scaleFactor.toString())
   }
+
+  // Set mounted state
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMounted(true)
+  }, [])
+
+  // Load saved font size from localStorage after mount
+  useEffect(() => {
+    if (!mounted) return
+
+    const saved = localStorage.getItem(FONT_SIZE_KEY)
+    if (saved) {
+      const size = parseInt(saved, 10)
+      if (size >= MIN_SIZE && size <= MAX_SIZE) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setFontSize(size)
+        applyFontSize(size)
+      }
+    }
+  }, [mounted])
 
   const handleIncrease = () => {
     const newSize = Math.min(fontSize + STEP, MAX_SIZE)

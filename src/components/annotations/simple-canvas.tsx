@@ -517,7 +517,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       if (currentModeRef.current === 'draw' && pendingPointsRef.current > 0) {
         scheduleIncrementalDraw()
       }
-    }, [mode, width, height, isPointNearStroke, scheduleEraserRedraw, scheduleIncrementalDraw, updateEraserCursorPosition])
+    }, [mode, width, height, isPointNearStroke, scheduleEraserRedraw, scheduleIncrementalDraw, updateEraserCursorPosition, updateEraserCursor])
 
     const stopDrawing = useCallback((e?: React.PointerEvent<HTMLCanvasElement>) => {
       // Remove pointer from tracking

@@ -64,10 +64,14 @@ export function AnnotationToolbar({
   const [showPenControls, setShowPenControls] = useState<number | null>(null)
   const hoverTimerRef = useRef<NodeJS.Timeout | null>(null)
   const hideTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const longPressStartPos = useRef<{ x: number; y: number } | null>(null)
 
   const [showDeleteControls, setShowDeleteControls] = useState(false)
   const deleteHoverTimerRef = useRef<NodeJS.Timeout | null>(null)
   const deleteHideTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const deleteLongPressTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const deleteLongPressStartPos = useRef<{ x: number; y: number } | null>(null)
 
   const [confirmBeforeDelete, setConfirmBeforeDelete] = useState<boolean>(() => {
     // Load preference from localStorage - default is false (no popup)
@@ -83,6 +87,8 @@ export function AnnotationToolbar({
   const [showSnapControls, setShowSnapControls] = useState(false)
   const snapHoverTimerRef = useRef<NodeJS.Timeout | null>(null)
   const snapHideTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const snapLongPressTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const snapLongPressStartPos = useRef<{ x: number; y: number } | null>(null)
 
   // Allow snapping at any zoom level
   const snapDisabled = false
@@ -124,6 +130,41 @@ export function AnnotationToolbar({
     if (mode !== 'draw') {
       onModeChange('draw')
     }
+  }
+
+  // Long-press handlers for pen tools (stylus/touch support)
+  const handlePenPointerDown = (e: React.PointerEvent, penIndex: number) => {
+    // Only handle touch/pen, not mouse (mouse uses hover)
+    if (e.pointerType === 'mouse') return
+
+    longPressStartPos.current = { x: e.clientX, y: e.clientY }
+    longPressTimerRef.current = setTimeout(() => {
+      setShowPenControls(penIndex)
+      longPressTimerRef.current = null
+    }, 500)
+  }
+
+  const handlePenPointerMove = (e: React.PointerEvent) => {
+    if (!longPressStartPos.current || !longPressTimerRef.current) return
+
+    const dx = e.clientX - longPressStartPos.current.x
+    const dy = e.clientY - longPressStartPos.current.y
+    const distance = Math.sqrt(dx * dx + dy * dy)
+
+    // Cancel long-press if moved more than 10px
+    if (distance > 10) {
+      clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+      longPressStartPos.current = null
+    }
+  }
+
+  const handlePenPointerUp = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+    }
+    longPressStartPos.current = null
   }
 
   const handleEraserClick = () => {
@@ -173,6 +214,41 @@ export function AnnotationToolbar({
     }
   }
 
+  // Long-press handlers for delete button (stylus/touch support)
+  const handleDeletePointerDown = (e: React.PointerEvent) => {
+    // Only handle touch/pen, not mouse (mouse uses hover)
+    if (e.pointerType === 'mouse') return
+
+    deleteLongPressStartPos.current = { x: e.clientX, y: e.clientY }
+    deleteLongPressTimerRef.current = setTimeout(() => {
+      setShowDeleteControls(true)
+      deleteLongPressTimerRef.current = null
+    }, 500)
+  }
+
+  const handleDeletePointerMove = (e: React.PointerEvent) => {
+    if (!deleteLongPressStartPos.current || !deleteLongPressTimerRef.current) return
+
+    const dx = e.clientX - deleteLongPressStartPos.current.x
+    const dy = e.clientY - deleteLongPressStartPos.current.y
+    const distance = Math.sqrt(dx * dx + dy * dy)
+
+    // Cancel long-press if moved more than 10px
+    if (distance > 10) {
+      clearTimeout(deleteLongPressTimerRef.current)
+      deleteLongPressTimerRef.current = null
+      deleteLongPressStartPos.current = null
+    }
+  }
+
+  const handleDeletePointerUp = () => {
+    if (deleteLongPressTimerRef.current) {
+      clearTimeout(deleteLongPressTimerRef.current)
+      deleteLongPressTimerRef.current = null
+    }
+    deleteLongPressStartPos.current = null
+  }
+
   const handleSnapMouseEnter = () => {
     if (!snapDisabled) return
 
@@ -207,6 +283,41 @@ export function AnnotationToolbar({
     onModeChange(mode === 'snap' ? 'view' : 'snap')
   }
 
+  // Long-press handlers for snap button (stylus/touch support)
+  const handleSnapPointerDown = (e: React.PointerEvent) => {
+    // Only handle touch/pen, not mouse (mouse uses hover)
+    if (e.pointerType === 'mouse' || !snapDisabled) return
+
+    snapLongPressStartPos.current = { x: e.clientX, y: e.clientY }
+    snapLongPressTimerRef.current = setTimeout(() => {
+      setShowSnapControls(true)
+      snapLongPressTimerRef.current = null
+    }, 500)
+  }
+
+  const handleSnapPointerMove = (e: React.PointerEvent) => {
+    if (!snapLongPressStartPos.current || !snapLongPressTimerRef.current) return
+
+    const dx = e.clientX - snapLongPressStartPos.current.x
+    const dy = e.clientY - snapLongPressStartPos.current.y
+    const distance = Math.sqrt(dx * dx + dy * dy)
+
+    // Cancel long-press if moved more than 10px
+    if (distance > 10) {
+      clearTimeout(snapLongPressTimerRef.current)
+      snapLongPressTimerRef.current = null
+      snapLongPressStartPos.current = null
+    }
+  }
+
+  const handleSnapPointerUp = () => {
+    if (snapLongPressTimerRef.current) {
+      clearTimeout(snapLongPressTimerRef.current)
+      snapLongPressTimerRef.current = null
+    }
+    snapLongPressStartPos.current = null
+  }
+
   const toolbarContent = (
     <div className="fixed bottom-6 right-6 z-50 bg-background/95 backdrop-blur border border-border rounded-lg shadow-lg p-2 flex flex-col gap-1" style={{ isolation: 'isolate' }}>
       {/* Three Pen Tools */}
@@ -216,6 +327,10 @@ export function AnnotationToolbar({
             onClick={() => handlePenClick(penIndex)}
             onMouseEnter={() => handlePenMouseEnter(penIndex)}
             onMouseLeave={handlePenMouseLeave}
+            onPointerDown={(e) => handlePenPointerDown(e, penIndex)}
+            onPointerMove={handlePenPointerMove}
+            onPointerUp={handlePenPointerUp}
+            onPointerCancel={handlePenPointerUp}
             className={`p-3 rounded-md transition-colors relative ${
               mode === 'draw' && activePen === penIndex
                 ? 'bg-primary text-primary-foreground'
@@ -314,6 +429,10 @@ export function AnnotationToolbar({
       >
         <button
           onClick={handleSnapClick}
+          onPointerDown={handleSnapPointerDown}
+          onPointerMove={handleSnapPointerMove}
+          onPointerUp={handleSnapPointerUp}
+          onPointerCancel={handleSnapPointerUp}
           disabled={snapDisabled}
           className={`p-3 rounded-md transition-colors relative ${
             snapDisabled
@@ -392,6 +511,10 @@ export function AnnotationToolbar({
             onClick={handleDeleteClick}
             onMouseEnter={handleDeleteMouseEnter}
             onMouseLeave={handleDeleteMouseLeave}
+            onPointerDown={handleDeletePointerDown}
+            onPointerMove={handleDeletePointerMove}
+            onPointerUp={handleDeletePointerUp}
+            onPointerCancel={handleDeletePointerUp}
             className="p-3 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
             title="Clear all annotations"
             aria-label="Clear all annotations"

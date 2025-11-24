@@ -1141,7 +1141,6 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
           onCancel={() => setMode('view')}
           nextSnapNumber={snaps.length + 1}
           zoom={zoom}
-          strokeData={canvasData}
         />
       )}
 

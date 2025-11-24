@@ -9,10 +9,12 @@
 
 ## 🎯 Priority List
 
+press hold toolbox pen
+
 Typography:
 - can we get html-to-image with font to work on firefox?
 
-make paper bigger
+- make paper bigger, increase padding. currently px-24, at least px-36. adapt all calculations. make canvas fill entire paper, so far padding-y areas are missing
 
 Editor: 
 - our editor shouldn't have a fixed height, there are sometimes two lines of programming and that's all.

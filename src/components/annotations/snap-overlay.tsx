@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useRef } from 'react'
-import { toSvg, getFontEmbedCSS } from 'html-to-image'
+import { toJpeg } from 'html-to-image'
 
 export interface Snap {
   id: string
@@ -18,68 +18,9 @@ interface SnapOverlayProps {
   onCancel: () => void
   nextSnapNumber: number
   zoom: number
-  strokeData?: string
 }
 
-// Helper function to create a variable-width stroke as a filled path
-function createVariableWidthPath(
-  points: Array<{ x: number; y: number; pressure: number }>,
-  baseWidth: number
-): string {
-  if (points.length < 2) return ''
-
-  // Calculate perpendicular offsets for each point based on pressure
-  const leftPoints: Array<{ x: number; y: number }> = []
-  const rightPoints: Array<{ x: number; y: number }> = []
-
-  for (let i = 0; i < points.length; i++) {
-    const point = points[i]
-    const width = baseWidth * (point.pressure || 0.5)
-
-    // Calculate direction vector
-    let dx: number, dy: number
-    if (i === 0) {
-      // First point: use direction to next point
-      dx = points[i + 1].x - point.x
-      dy = points[i + 1].y - point.y
-    } else if (i === points.length - 1) {
-      // Last point: use direction from previous point
-      dx = point.x - points[i - 1].x
-      dy = point.y - points[i - 1].y
-    } else {
-      // Middle points: average of directions
-      dx = points[i + 1].x - points[i - 1].x
-      dy = points[i + 1].y - points[i - 1].y
-    }
-
-    // Normalize and calculate perpendicular
-    const len = Math.sqrt(dx * dx + dy * dy) || 1
-    const perpX = -dy / len * width / 2
-    const perpY = dx / len * width / 2
-
-    leftPoints.push({ x: point.x + perpX, y: point.y + perpY })
-    rightPoints.push({ x: point.x - perpX, y: point.y - perpY })
-  }
-
-  // Build the path: left side forward, then right side backward
-  let path = `M ${leftPoints[0].x} ${leftPoints[0].y}`
-
-  // Draw left side with curves
-  for (let i = 1; i < leftPoints.length; i++) {
-    path += ` L ${leftPoints[i].x} ${leftPoints[i].y}`
-  }
-
-  // Draw right side backward with curves
-  for (let i = rightPoints.length - 1; i >= 0; i--) {
-    path += ` L ${rightPoints[i].x} ${rightPoints[i].y}`
-  }
-
-  path += ' Z' // Close the path
-
-  return path
-}
-
-export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom, strokeData }: SnapOverlayProps) {
+export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom }: SnapOverlayProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [startPos, setStartPos] = useState<{ x: number; y: number } | null>(null)
   const [currentPos, setCurrentPos] = useState<{ x: number; y: number } | null>(null)
@@ -162,9 +103,6 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom, strokeD
       const naturalWidth = paperElement.offsetWidth
       const naturalHeight = paperElement.offsetHeight
 
-      // Calculate the selection relative to the paper element
-      const scrollTop = window.scrollY || document.documentElement.scrollTop
-
       // Convert overlay coordinates to paper coordinates
       const overlayRect = overlayRef.current?.getBoundingClientRect()
       if (!overlayRect) {
@@ -195,7 +133,110 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom, strokeD
       const bodyClasses = document.body.className
       wrapper.className = `${htmlClasses} ${bodyClasses}`
 
-      // Clone the paper element
+      // Extract and inject font-face rules to ensure fonts render correctly
+      const styleElement = document.createElement('style')
+      const fontFaceRules: string[] = []
+
+      // Font hash mappings
+      const fontMap: Record<string, { family: string; weight: string }> = {
+        '4cfd7524de14b24d': { family: 'Roboto Slab', weight: '300' },
+        'd9b5d46d9a89ffe6': { family: 'Barlow Condensed', weight: '700' },
+        '83afe278b6a6bb3c': { family: 'EB Garamond', weight: '400' },
+        'e4505858a30c79c2': { family: 'EB Garamond', weight: '500' }
+      }
+
+      // Get font URLs from preload links and convert to base64 for all browsers
+      const preloadLinks = document.querySelectorAll('link[rel="preload"][as="font"]')
+
+      for (const link of Array.from(preloadLinks)) {
+        const href = link.getAttribute('href')
+        if (!href) continue
+
+        // Get full URL
+        const fullUrl = href.startsWith('http') ? href : `${window.location.origin}${href}`
+
+        // Find font family from hash
+        let fontInfo: { family: string; weight: string } | null = null
+        for (const [hash, info] of Object.entries(fontMap)) {
+          if (href.includes(hash)) {
+            fontInfo = info
+            break
+          }
+        }
+
+        if (fontInfo) {
+          try {
+            // Always use base64 embedding for reliability
+            const response = await fetch(fullUrl)
+            const blob = await response.blob()
+            const reader = new FileReader()
+            const base64 = await new Promise<string>((resolve) => {
+              reader.onloadend = () => resolve(reader.result as string)
+              reader.readAsDataURL(blob)
+            })
+
+            const fontFace = `
+              @font-face {
+                font-family: '${fontInfo.family}';
+                src: url('${base64}') format('woff2');
+                font-weight: ${fontInfo.weight};
+                font-style: normal;
+              }
+            `
+            fontFaceRules.push(fontFace)
+            console.log(`Embedded ${fontInfo.family} (${fontInfo.weight}) as base64`)
+          } catch (err) {
+            console.warn(`Failed to embed ${fontInfo.family}:`, err)
+            // Fallback to URL if base64 fails
+            const fontFace = `
+              @font-face {
+                font-family: '${fontInfo.family}';
+                src: url('${fullUrl}') format('woff2');
+                font-weight: ${fontInfo.weight};
+                font-style: normal;
+              }
+            `
+            fontFaceRules.push(fontFace)
+          }
+        }
+      }
+
+      console.log('Font CSS length:', fontFaceRules.join('\n').length, 'characters')
+
+      // Also add CSS variable mappings that Next.js uses
+      const cssVariables = `
+        :root {
+          --font-roboto-slab: 'Roboto Slab', serif;
+          --font-eb-garamond: 'EB Garamond', serif;
+          --font-barlow-condensed: 'Barlow Condensed', sans-serif;
+        }
+        * {
+          font-synthesis: none !important;
+        }
+      `
+
+      styleElement.textContent = fontFaceRules.join('\n') + cssVariables
+      wrapper.appendChild(styleElement)
+
+      // First, collect computed font styles from original elements
+      const fontStyleMap = new Map<Element, string>()
+      const allOriginalElements = paperElement.querySelectorAll('*')
+
+      // Store computed font for paper element itself
+      const paperComputedStyle = window.getComputedStyle(paperElement)
+      const paperFontFamily = paperComputedStyle.fontFamily
+
+      // Store computed fonts for all descendants
+      allOriginalElements.forEach((el) => {
+        if (el instanceof HTMLElement) {
+          const style = window.getComputedStyle(el)
+          if (style.fontFamily) {
+            fontStyleMap.set(el, style.fontFamily)
+          }
+        }
+      })
+
+      // Clone the paper element with annotations canvas included
       const paperClone = paperElement.cloneNode(true) as HTMLElement
       paperClone.style.position = 'absolute'
       paperClone.style.left = `${-logicalLeft}px`
@@ -206,193 +247,171 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom, strokeD
       paperClone.style.minWidth = `${naturalWidth}px`
       paperClone.style.minHeight = `${naturalHeight}px`
 
-      // Append paper clone to wrapper
-      wrapper.appendChild(paperClone)
+      // Apply the stored font to the clone
+      if (paperFontFamily) {
+        paperClone.style.fontFamily = paperFontFamily
+      }
 
-      // Apply inline font-family styles to ensure fonts are rendered correctly in the SVG
-      // This is needed because @font-face rules don't always work reliably in SVG context
-      const typography = document.querySelector('[data-typography]')?.getAttribute('data-typography') || 'modern'
-      const bodyFont = typography === 'modern' ? 'Roboto Slab' : 'EB Garamond'
-      const headingFont = 'Barlow Condensed'
-
-      // Apply base font to the paper clone itself to cascade
-      paperClone.style.fontFamily = `"${bodyFont}", serif`
-
-      // Apply to all text-containing elements, using more specific selectors
-      // Include all possible text containers
-      const textSelectors = 'p, li, td, th, span, div, blockquote, pre, code, em, strong, b, i, u, a, label, button, figcaption'
-      paperClone.querySelectorAll(textSelectors).forEach(el => {
-        const htmlEl = el as HTMLElement
-        // Only set if not already set and not a heading
-        if (!htmlEl.style.fontFamily && !htmlEl.closest('h1, h2, h3, h4, h5, h6')) {
-          htmlEl.style.fontFamily = `"${bodyFont}", serif`
-        }
-      })
-
-      // Apply heading font to all headings
-      paperClone.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach(el => {
-        const htmlEl = el as HTMLElement
-        htmlEl.style.fontFamily = `"${headingFont}", sans-serif`
-      })
-
-      // Also apply to any elements inside headings (like links)
-      paperClone.querySelectorAll('h1 *, h2 *, h3 *, h4 *, h5 *, h6 *').forEach(el => {
-        const htmlEl = el as HTMLElement
-        htmlEl.style.fontFamily = `"${headingFont}", sans-serif`
-      })
-
-      console.log(`Applied inline fonts - Body: ${bodyFont}, Heading: ${headingFont}`)
-
-      // Add pen annotations as SVG paths if we have stroke data
-      if (strokeData) {
-        try {
-          const strokes = JSON.parse(strokeData) as Array<{
-            points: Array<{ x: number; y: number; pressure: number }>
-            mode: 'draw' | 'erase'
-            color: string
-            width: number
-            sectionId: string
-            sectionOffsetY: number
-          }>
-
-          // Get paper's padding values
-          const paperStyle = window.getComputedStyle(paperElement)
-          const paperPaddingLeft = parseFloat(paperStyle.paddingLeft) || 0
-          const paperPaddingTop = parseFloat(paperStyle.paddingTop) || 0
-
-          // Create SVG element for annotations
-          const annotationSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
-          annotationSvg.style.position = 'absolute'
-          annotationSvg.style.left = '0'
-          annotationSvg.style.top = '0'
-          annotationSvg.style.width = `${width}px`
-          annotationSvg.style.height = `${height}px`
-          annotationSvg.style.pointerEvents = 'none'
-          annotationSvg.style.zIndex = '10'
-          annotationSvg.setAttribute('width', String(width))
-          annotationSvg.setAttribute('height', String(height))
-          annotationSvg.setAttribute('viewBox', `0 0 ${width} ${height}`)
-
-          // Apply dark mode filter if in dark theme
-          const isDarkMode = document.documentElement.classList.contains('dark')
-          if (isDarkMode) {
-            // Same filter as applied to the canvas in dark mode
-            annotationSvg.style.filter = 'invert(1) hue-rotate(180deg)'
+      // Apply stored fonts to all cloned descendants
+      const allClonedElements = paperClone.querySelectorAll('*')
+      allClonedElements.forEach((el, index) => {
+        if (el instanceof HTMLElement && index < allOriginalElements.length) {
+          const originalEl = allOriginalElements[index]
+          const storedFont = fontStyleMap.get(originalEl)
+          if (storedFont) {
+            el.style.fontFamily = storedFont
           }
-
-          // Add each stroke as a path
-          strokes.forEach((stroke) => {
-            if (stroke.mode === 'draw' && stroke.points.length >= 2) {
-              const pathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path')
-
-              // Adjust points to be relative to the selection
-              // The selection coordinates (logicalLeft/Top) are relative to the paper element (including padding)
-              // But canvas coordinates are relative to the content inside the padding
-              // So we subtract the padding from the logical coordinates
-              const adjustedPoints = stroke.points.map(p => ({
-                x: p.x - (logicalLeft - paperPaddingLeft),
-                y: p.y + stroke.sectionOffsetY - (logicalTop - paperPaddingTop),
-                pressure: p.pressure
-              }))
-
-              // Check if any points are within the selection area
-              const hasVisiblePoints = adjustedPoints.some(p =>
-                p.x >= 0 && p.x <= width && p.y >= 0 && p.y <= height
-              )
-
-              if (hasVisiblePoints) {
-                // Create a variable-width path that respects pressure at each point
-                const pathData = createVariableWidthPath(adjustedPoints, stroke.width)
-
-                pathElement.setAttribute('d', pathData)
-                pathElement.setAttribute('fill', stroke.color)
-                pathElement.setAttribute('stroke', 'none') // No stroke, just fill
-
-                annotationSvg.appendChild(pathElement)
-              }
-            }
-          })
-
-          // Append SVG to wrapper
-          wrapper.appendChild(annotationSvg)
-        } catch (error) {
-          console.error('Error adding annotation paths to snap:', error)
         }
-      }
+      })
 
-      // Append wrapper to body
-      document.body.appendChild(wrapper)
+      // For Firefox: Ensure fonts are applied by adding explicit font-family
+      // Firefox sometimes needs more explicit font application
+      const needsExplicitFonts = navigator.userAgent.toLowerCase().includes('firefox')
+      if (needsExplicitFonts) {
+        console.log('Firefox detected, applying explicit font styles')
 
-      // Try to get font CSS, but fall back to skipFonts if it fails
-      let captureOptions: any = {
-        quality: 1.0,
-        pixelRatio: 2,
-        preferredFontFormat: 'woff2'
-      }
+        // Get the typography mode from data attribute
+        const typography = document.querySelector('[data-typography]')?.getAttribute('data-typography') || 'modern'
+        const bodyFont = typography === 'modern' ? 'Roboto Slab' : 'EB Garamond'
+        const headingFont = 'Barlow Condensed'
 
-      // Try to embed fonts
-      try {
-        const fontEmbedCSS = await getFontEmbedCSS(paperElement)
-        captureOptions.fontEmbedCSS = fontEmbedCSS
-      } catch (fontError) {
-        // getFontEmbedCSS fails in Firefox - use our fallback
-        console.warn('Using fallback font embedding:', fontError)
+        // Apply heading font to all heading elements
+        paperClone.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach(el => {
+          const htmlEl = el as HTMLElement
+          if (!htmlEl.style.fontFamily || htmlEl.style.fontFamily === 'inherit') {
+            htmlEl.style.fontFamily = `"${headingFont}", sans-serif`
+            htmlEl.style.fontWeight = '700'
+          }
+        })
 
-        // Map font hashes to font names (from next-font-manifest.json)
-        const fontMap = {
-          '4cfd7524de14b24d': { family: 'Roboto Slab', weight: '300' },
-          'd9b5d46d9a89ffe6': { family: 'Barlow Condensed', weight: '700' },
-          '83afe278b6a6bb3c': { family: 'EB Garamond', weight: '400' },
-          'e4505858a30c79c2': { family: 'EB Garamond', weight: '500' },
-          // Add weight 600 if it exists
-          'a039f99e6e8cf559': { family: 'EB Garamond', weight: '600' }
-        }
-
-        let fontFaceRules = ''
-        const foundFonts: string[] = []
-
-        document.querySelectorAll('link[rel="preload"][as="font"]').forEach(link => {
-          const href = link.getAttribute('href')
-          if (href) {
-            // Find which font this is by checking the hash
-            for (const [hash, font] of Object.entries(fontMap)) {
-              if (href.includes(hash)) {
-                const url = new URL(href, window.location.origin).href
-                foundFonts.push(`${font.family} (${font.weight})`)
-                fontFaceRules += `
-@font-face {
-  font-family: "${font.family}";
-  src: url("${url}") format("woff2");
-  font-weight: ${font.weight};
-  font-style: normal;
-  font-display: swap;
-}
-`
-                break
-              }
+        // Apply body font to all text elements
+        paperClone.querySelectorAll('p, li, td, span, div').forEach(el => {
+          const htmlEl = el as HTMLElement
+          // Skip if it already has a specific font set or is a code element
+          if (!htmlEl.style.fontFamily || htmlEl.style.fontFamily === 'inherit') {
+            // Don't override code blocks or syntax highlighting
+            const className = htmlEl.className
+            if (!htmlEl.closest('pre') && !htmlEl.closest('code') && !className.includes('hljs')) {
+              htmlEl.style.fontFamily = `"${bodyFont}", serif`
             }
           }
         })
 
-        console.log('Found fonts for embedding:', foundFonts)
-        console.log('Font CSS length:', fontFaceRules.length)
+        // Ensure code blocks keep their monospace font
+        paperClone.querySelectorAll('pre, code, .hljs').forEach(el => {
+          const htmlEl = el as HTMLElement
+          htmlEl.style.fontFamily = 'monospace'
+        })
+      }
 
-        if (fontFaceRules) {
-          captureOptions.fontEmbedCSS = fontFaceRules
+      // Append the paper clone to the wrapper
+      wrapper.appendChild(paperClone)
+
+      // Find and include the annotation canvas
+      const annotationCanvas = document.querySelector('.annotation-canvas') as HTMLCanvasElement
+      if (annotationCanvas) {
+        const canvasParent = annotationCanvas.parentElement
+        if (canvasParent) {
+          const canvasClone = document.createElement('canvas')
+          canvasClone.width = annotationCanvas.width
+          canvasClone.height = annotationCanvas.height
+          canvasClone.style.width = annotationCanvas.style.width
+          canvasClone.style.height = annotationCanvas.style.height
+          canvasClone.className = annotationCanvas.className
+
+          // Copy canvas content
+          const ctx = canvasClone.getContext('2d')
+          if (ctx) {
+            ctx.drawImage(annotationCanvas, 0, 0)
+          }
+
+          // Position canvas correctly in the wrapper
+          const canvasRect = canvasParent.getBoundingClientRect()
+          const canvasOffsetLeft = (canvasRect.left - paperRect.left) / zoom
+          const canvasOffsetTop = (canvasRect.top - paperRect.top) / zoom
+
+          canvasClone.style.position = 'absolute'
+          canvasClone.style.left = `${canvasOffsetLeft - logicalLeft}px`
+          canvasClone.style.top = `${canvasOffsetTop - logicalTop}px`
+          canvasClone.style.zIndex = '10'
+
+          wrapper.appendChild(canvasClone)
         }
       }
 
-      // Capture the wrapper (which shows only the selected region)
-      const svgDataUrl = await toSvg(wrapper, captureOptions)
+      // Append wrapper to body temporarily for capture
+      document.body.appendChild(wrapper)
 
-      // Clean up: remove the temporary wrapper
-      document.body.removeChild(wrapper)
+      // DEBUG MODE: Keep wrapper visible for inspection
+      const DEBUG_MODE = false  // Set to true for debugging
+
+      if (DEBUG_MODE) {
+        // Style wrapper for visibility
+        wrapper.style.position = 'fixed'
+        wrapper.style.left = '10px'
+        wrapper.style.top = '10px'
+        wrapper.style.zIndex = '9999'
+        wrapper.style.border = '2px solid red'
+        wrapper.style.backgroundColor = 'white'
+
+        // Add a label to identify it
+        const debugLabel = document.createElement('div')
+        debugLabel.style.position = 'absolute'
+        debugLabel.style.top = '-25px'
+        debugLabel.style.left = '0'
+        debugLabel.style.background = 'red'
+        debugLabel.style.color = 'white'
+        debugLabel.style.padding = '2px 5px'
+        debugLabel.style.fontSize = '12px'
+        debugLabel.style.fontFamily = 'monospace'
+        debugLabel.textContent = 'DEBUG: Snap Preview (click X to remove)'
+        wrapper.appendChild(debugLabel)
+
+        // Add close button
+        const closeBtn = document.createElement('button')
+        closeBtn.textContent = 'X'
+        closeBtn.style.position = 'absolute'
+        closeBtn.style.top = '-25px'
+        closeBtn.style.right = '0'
+        closeBtn.style.background = 'red'
+        closeBtn.style.color = 'white'
+        closeBtn.style.border = 'none'
+        closeBtn.style.padding = '2px 8px'
+        closeBtn.style.cursor = 'pointer'
+        closeBtn.style.fontSize = '12px'
+        closeBtn.onclick = () => document.body.removeChild(wrapper)
+        wrapper.appendChild(closeBtn)
+      }
+
+      // Wait for fonts to load
+      await document.fonts.ready
+
+      // Force a reflow to ensure fonts are applied
+      wrapper.offsetHeight
+
+      // Additional wait for rendering to ensure base64 fonts are applied
+      await new Promise(resolve => setTimeout(resolve, 300))
+
+      // Capture as JPEG with quality compression
+      // Works with SVG, PNG
+      const imageUrl = await toJpeg(wrapper, {
+        quality: 0.3,  
+        skipFonts: true
+      } as any)
+
+      // Clean up: remove the temporary wrapper (only if not in debug mode)
+      if (!DEBUG_MODE) {
+        document.body.removeChild(wrapper)
+      }
 
       // Restore the selection rectangle
       setCurrentPos(savedCurrentPos)
 
-      // Use the cropped SVG
-      const imageUrl = svgDataUrl
+      if (!imageUrl) {
+        console.error('Failed to capture image')
+        onCancel()
+        return
+      }
 
       // Create snap with auto-generated name
       const snap: Snap = {
