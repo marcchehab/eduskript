@@ -100,22 +100,30 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
   // Pen priority: pen always wins, ignore other inputs for 200ms after last pen event
   const lastPenEventTimeRef = useRef<number>(0)
 
-  // Canvas width matches paper width exactly
-  // Paper is max-w-5xl (64rem = 1024px)
-  const PAPER_WIDTH_REM = 64
-  const CANVAS_WIDTH_PX = PAPER_WIDTH_REM * 16 // 1024px
+  // Canvas width matches paper width exactly including padding
+  // Paper is max-w-7xl (80rem = 1280px)
+  const PAPER_WIDTH_REM = 80
 
-  // Track paper padding for canvas alignment
+  // Track full paper dimensions (including padding)
+  const [paperWidth, setPaperWidth] = useState(PAPER_WIDTH_REM * 16) // Default to max width
   const [paperPaddingLeft, setPaperPaddingLeft] = useState(0)
+  const [paperPaddingTop, setPaperPaddingTop] = useState(0)
 
-  // Measure paper padding when it mounts and when viewport changes
+  // Measure full paper dimensions when it mounts and when viewport changes
   useEffect(() => {
     const paperElement = document.getElementById('paper')
     if (paperElement) {
+      const rect = paperElement.getBoundingClientRect()
       const style = window.getComputedStyle(paperElement)
-      const padding = parseFloat(style.paddingLeft) || 0
+      const paddingLeft = parseFloat(style.paddingLeft) || 0
+      const paddingTop = parseFloat(style.paddingTop) || 0
+
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setPaperPaddingLeft(padding)
+      setPaperWidth(rect.width)
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPaperPaddingLeft(paddingLeft)
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPaperPaddingTop(paddingTop)
     }
   }, [viewportWidth])
 
@@ -224,12 +232,89 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
     }
   }, [headingPositions, storedHeadingOffsets, canvasData])
 
-  // Helper function to recalculate heading positions
+  // Helper function to recalculate heading positions and paper dimensions
   const recalculateHeadingPositions = useCallback(() => {
     if (!contentRef.current) return
 
-    // Get page dimensions
-    setPageHeight(contentRef.current.scrollHeight)
+    // Get full paper dimensions including padding
+    const paperElement = document.getElementById('paper')
+    if (paperElement) {
+      setPageHeight(paperElement.offsetHeight)
+
+      // Also recalculate paper dimensions when content changes
+      const paperRect = paperElement.getBoundingClientRect()
+      const style = window.getComputedStyle(paperElement)
+
+      console.log('=== DOM ELEMENTS ===')
+      console.log('Paper element:', paperElement)
+      console.log('ContentRef element:', contentRef.current)
+
+      console.log('\n=== Paper element computed style ===', {
+        paddingTop: style.paddingTop,
+        paddingLeft: style.paddingLeft,
+        paddingBottom: style.paddingBottom,
+        paddingRight: style.paddingRight,
+        marginTop: style.marginTop,
+        marginBottom: style.marginBottom
+      })
+
+      const paddingLeft = parseFloat(style.paddingLeft) || 0
+      const paddingTop = parseFloat(style.paddingTop) || 0
+
+      // Get article element (parent of contentRef)
+      const articleElement = contentRef.current.parentElement
+      let articleMarginTop = 0
+      let articleMarginBottom = 0
+      if (articleElement) {
+        console.log('Article element:', articleElement)
+        const articleStyle = window.getComputedStyle(articleElement)
+        articleMarginTop = parseFloat(articleStyle.marginTop) || 0
+        articleMarginBottom = parseFloat(articleStyle.marginBottom) || 0
+
+        console.log('Article element computed style:', {
+          tagName: articleElement.tagName,
+          marginTop: articleStyle.marginTop,
+          marginBottom: articleStyle.marginBottom,
+          paddingTop: articleStyle.paddingTop,
+          paddingBottom: articleStyle.paddingBottom
+        })
+      }
+
+      // Check if there's a preview banner before the article
+      const previewBanner = paperElement.querySelector('.bg-yellow-50')
+      let previewBannerHeight = 0
+      if (previewBanner) {
+        console.log('Preview banner element:', previewBanner)
+        const bannerRect = previewBanner.getBoundingClientRect()
+        previewBannerHeight = bannerRect.height
+        const bannerStyle = window.getComputedStyle(previewBanner)
+        console.log('Preview banner:', {
+          height: bannerRect.height,
+          marginBottom: bannerStyle.marginBottom
+        })
+      }
+
+      // Calculate actual offset using getBoundingClientRect
+      const contentRect = contentRef.current.getBoundingClientRect()
+      const actualOffsetTop = contentRect.top - paperRect.top
+      const actualOffsetLeft = contentRect.left - paperRect.left
+
+      setPaperWidth(paperRect.width)
+      setPaperPaddingLeft(paddingLeft)
+      setPaperPaddingTop(paddingTop)
+
+      console.log('\n=== Canvas offset summary ===', {
+        paddingTopParsed: paddingTop,
+        paddingLeftParsed: paddingLeft,
+        articleMarginTop,
+        previewBannerHeight,
+        calculatedTotal: paddingTop + articleMarginTop + previewBannerHeight,
+        actualOffsetTop,
+        actualOffsetLeft,
+        difference: actualOffsetTop - paddingTop,
+        paperWidth: paperRect.width
+      })
+    }
 
     // Query for all headings with data-section-id (from h1, h2, h3 elements)
     const headingElements = contentRef.current.querySelectorAll<HTMLElement>('[data-section-id]')
@@ -240,10 +325,11 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
       const headingText = element.getAttribute('data-heading-text')
 
       if (sectionId) {
-        // Get the heading element's position relative to contentRef
+        // Get the heading element's position relative to paper element (not contentRef)
         const rect = element.getBoundingClientRect()
-        const parentRect = contentRef.current!.getBoundingClientRect()
-        const offsetY = rect.top - parentRect.top + contentRef.current!.scrollTop
+        const paperRect = paperElement!.getBoundingClientRect()
+        // Offset from top of paper (including top padding)
+        const offsetY = rect.top - paperRect.top
 
         positions.push({
           sectionId,
@@ -1061,14 +1147,14 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
       <div ref={contentRef} style={{ position: 'relative' }}>
         {children}
 
-        {/* Single canvas overlay for entire page */}
+        {/* Single canvas overlay for entire paper (including padding) */}
         {pageHeight > 0 && (
           <div
             style={{
               position: 'absolute',
-              top: 0,
+              top: `-${paperPaddingTop}px`,
               left: `-${paperPaddingLeft}px`,
-              width: `${CANVAS_WIDTH_PX}px`,
+              width: `${paperWidth}px`,
               height: pageHeight,
               pointerEvents: mode === 'view' && !stylusModeActive ? 'none' : 'auto',
               zIndex: 10
@@ -1076,7 +1162,7 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
           >
             <SimpleCanvas
               ref={canvasRef}
-              width={CANVAS_WIDTH_PX}
+              width={paperWidth}
               height={pageHeight}
               mode={mode === 'view' ? 'view' : (mode as DrawMode)}
               onUpdate={handleCanvasUpdate}

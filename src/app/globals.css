@@ -301,6 +301,15 @@ body {
   color: hsl(var(--prose-text));
 }
 
+/* Remove top margin from first content element to align canvas properly */
+article.prose-theme {
+  margin-top: 0 !important;
+}
+
+article.prose-theme > div > :first-child {
+  margin-top: 0 !important;
+}
+
 .prose-theme h1,
 .prose-theme h2,
 .prose-theme h3,

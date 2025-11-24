@@ -9,16 +9,16 @@
 
 ## 🎯 Priority List
 
-press hold toolbox pen
 
 Typography:
-- can we get html-to-image with font to work on firefox?
-
 - make paper bigger, increase padding. currently px-24, at least px-36. adapt all calculations. make canvas fill entire paper, so far padding-y areas are missing
 
+annotations:
+- press hold toolbox pen
+
 Editor: 
-- our editor shouldn't have a fixed height, there are sometimes two lines of programming and that's all.
-- our editor generally should be resizable (that is the entire container with editor, graphics pane and output)
+- our editor shouldn't have a fixed height, there are sometimes two lines of programming... can we make its heigh adjust automatically up to a max-heigh?
+- our editor generally should be resizable (that is the entire container with editor, graphics pane and output), with a handle on the bottom right.
 - our editor's horizontal divider between editor and output pane should be draggable to adjust the size of them. it's also too thick
 - we should be able to hide the files selection for very small example programs, e.g. with ```python editor single or something like this
 - in the preview, when i write stuff our editor is probably being redrawn each time (even if i write in a different paragraph). this results in flashing.
