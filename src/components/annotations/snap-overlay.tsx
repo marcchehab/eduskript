@@ -125,6 +125,7 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom }: SnapO
       const snapTop = logicalTop + height + 20
 
       // Create a temporary wrapper to capture only the selected region
+      // html-to-image requires element to be visible in viewport - off-screen breaks it
       const wrapper = document.createElement('div')
       wrapper.style.position = 'absolute'
       wrapper.style.left = '0'
@@ -207,14 +208,15 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom }: SnapO
       }
 
       // Also add CSS variable mappings that Next.js uses
+      // Note: We allow font-synthesis so browser can synthesize bold/italic
       const cssVariables = `
         :root {
           --font-roboto-slab: 'Roboto Slab', serif;
           --font-eb-garamond: 'EB Garamond', serif;
           --font-barlow-condensed: 'Barlow Condensed', sans-serif;
         }
-        * {
-          font-synthesis: none !important;
+        strong, b {
+          font-weight: 600 !important;
         }
       `
 
@@ -305,6 +307,23 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom }: SnapO
           htmlEl.style.fontFamily = 'monospace'
         })
       }
+
+      // Ensure strong/bold elements have proper font-weight and color
+      // CSS uses font-weight: 600 and color: hsl(var(--foreground))
+      const foregroundColor = getComputedStyle(document.documentElement).getPropertyValue('--foreground').trim()
+      paperClone.querySelectorAll('strong, b').forEach(el => {
+        const htmlEl = el as HTMLElement
+        htmlEl.style.fontWeight = '600'
+        if (foregroundColor) {
+          htmlEl.style.color = `hsl(${foregroundColor})`
+        }
+      })
+
+      // Ensure em/italic elements have proper font-style
+      paperClone.querySelectorAll('em, i').forEach(el => {
+        const htmlEl = el as HTMLElement
+        htmlEl.style.fontStyle = 'italic'
+      })
 
       // Remove or replace broken images to prevent capture failure
       // html-to-image fails if ANY image resource fails to load

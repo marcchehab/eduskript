@@ -107,6 +107,8 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
   // Canvas width matches paper width exactly including padding
   // Paper element for portal (canvas renders directly into #paper)
   const [paperElement, setPaperElement] = useState<HTMLElement | null>(null)
+  // Main element for snaps portal (snaps need to overflow paper boundaries)
+  const [mainElement, setMainElement] = useState<HTMLElement | null>(null)
   const [paperWidth, setPaperWidth] = useState(1280) // Fixed paper width
 
   // Get paper element for portal and measure its width
@@ -120,6 +122,14 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
 
       // Ensure paper has position:relative for absolute canvas positioning
       paper.style.position = 'relative'
+
+      // Also get main element for snaps portal (snaps need to overflow paper)
+      const main = paper.closest('main')
+      if (main) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- Getting DOM element
+        setMainElement(main)
+        main.style.position = 'relative'
+      }
     }
   }, [viewportWidth])
 
@@ -1158,8 +1168,8 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
         />
       )}
 
-      {/* Snaps display - portaled into paper for correct absolute positioning */}
-      {paperElement && createPortal(
+      {/* Snaps display - portaled into main so snaps can overflow paper boundaries */}
+      {mainElement && createPortal(
         <SnapsDisplay
           snaps={snaps}
           onRemoveSnap={handleRemoveSnap}
@@ -1167,7 +1177,7 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
           onReorderSnaps={handleReorderSnaps}
           zoom={zoom}
         />,
-        paperElement
+        mainElement
       )}
     </>
   )

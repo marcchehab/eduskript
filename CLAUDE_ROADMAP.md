@@ -9,9 +9,13 @@
 
 ## 🎯 Priority List
 
-
-Editor:
-- [ ] when output is long enough to scroll, scroll events on it should scroll the output. currently they still scroll the page thus making scrolling with e.g. trackpad gesture impossible. (maybe fixed by new scroll system)
+todo: 
+- fix snaps
+- progress bar doesn't update properly
+- add edit link for teachers
+- bigger handles for things when using touch (editor)
+- ux of annotations (when to activate / deactivate)
+- weird on chrome for android
 
 Migration stuff:
 - add the strong element from informatikgarten.ch
@@ -19,18 +23,13 @@ Migration stuff:
 - **SQL** - port sql.js component to our editor. already done, just check again if it works
 - Implement long-press for pen/eraser toolbox (hover doesn't work on iPad). already done, just check again if it works well.
 
-consider going back to sqlite (cost & speed)
-- security implications? 
-- backup?
-- full text search implications, which we'll definitely need in the future!
-- the main reason i now switched to postgres is because i thought we need a "real" database. but i notice now, maybe sqlite is better for the time being until we have many many customers. it's probably cheaper to run and easy to backup.
-- lets consider pros and cons! remember we can still delete all data without worrying.
-
-
 **LMS Features:**
 - **Add toggle to classes for teachers to not allow anonymous students**
 - **Student Progress Tracking** - Gradebook interface, view progress, grade submissions
 - **Interactive Quizzes** - In-lesson quizzes with progress tracking
+- **Randomized questions** maybe through special skripts?
+- **Teacher abilit to publish annotations**
+- **Teacher ability to publsih snaps**
 - **Video Hosting** - Swiss-compliant video upload and embedding
 
 **Infrastructure:**
