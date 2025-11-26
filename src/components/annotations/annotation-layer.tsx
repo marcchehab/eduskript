@@ -13,50 +13,6 @@ import { useLayout } from '@/contexts/layout-context'
 import { SnapOverlay, type Snap } from './snap-overlay'
 import { SnapsDisplay } from './snaps-display'
 
-// DEBUG: Temporary component to show layout measurements
-function DebugOverlay({
-  viewportWidth,
-  viewportHeight,
-  paperWidth,
-  paperElement,
-  mainRef,
-  scrollContainerRef
-}: {
-  viewportWidth: number
-  viewportHeight: number
-  paperWidth: number
-  paperElement: HTMLElement | null
-  mainRef: React.RefObject<HTMLElement | null>
-  scrollContainerRef: React.RefObject<HTMLElement | null>
-}) {
-  const [tick, setTick] = useState(0)
-
-  useEffect(() => {
-    const interval = setInterval(() => setTick(t => t + 1), 500)
-    return () => clearInterval(interval)
-  }, [])
-
-  const paper = paperElement?.getBoundingClientRect()
-  const main = mainRef.current?.getBoundingClientRect()
-  const scroll = scrollContainerRef.current
-
-  return (
-    <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[99999] bg-red-900/95 text-white text-sm p-4 rounded-lg font-mono shadow-2xl border-4 border-yellow-400">
-      <div className="font-bold mb-2">Layout Debug (tick {tick})</div>
-      <div>viewport: {viewportWidth}x{viewportHeight}</div>
-      <div>window.innerWidth: {typeof window !== 'undefined' ? window.innerWidth : 'n/a'}px</div>
-      <div className="mt-1 text-cyan-300">paperWidth (state): {paperWidth}px</div>
-      <div className="text-cyan-300">paper (actual): {paper?.width.toFixed(0) ?? 'n/a'}px</div>
-      <div className="mt-1 text-green-300">main width: {main?.width.toFixed(0) ?? 'n/a'}px</div>
-      <div className="text-green-300">main left: {main?.left.toFixed(0) ?? 'n/a'}px</div>
-      <div className="mt-1 text-yellow-300">scroll clientWidth: {scroll?.clientWidth.toFixed(0) ?? 'n/a'}</div>
-      <div className="text-yellow-300">scroll scrollWidth: {scroll?.scrollWidth.toFixed(0) ?? 'n/a'}</div>
-      <div className="text-yellow-300">scrollLeft: {scroll?.scrollLeft.toFixed(0) ?? 0}</div>
-      <div className="mt-1 text-red-300">overflow: {scroll && scroll.scrollWidth > scroll.clientWidth ? `YES (+${(scroll.scrollWidth - scroll.clientWidth).toFixed(0)}px)` : 'no'}</div>
-    </div>
-  )
-}
-
 interface AnnotationLayerProps {
   pageId: string
   content: string
@@ -84,6 +40,8 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [stylusModeActive, setStylusModeActive] = useState(false)
   const [activePen, setActivePen] = useState(0)
+  // Track if pen is currently hovering or drawing - controls pointer-events on canvas
+  const [penActive, setPenActive] = useState(false)
   // Use refs for zoom to avoid re-renders on every gesture
   const zoomRef = useRef(1.0)
   const rafIdRef = useRef<number | null>(null)
@@ -198,9 +156,19 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
       }
     }
 
-    // Prevent default on ALL touch/pointer events in capture phase to stop Safari selection
-    const preventDefault = (e: PointerEvent | TouchEvent) => {
+    // Track pen events to block associated touch events
+    // On iOS Safari, pen input triggers BOTH pointer AND touch events
+    // We need to block the touch events that occur immediately after pen events
+    const preventDefaultForPen = (e: PointerEvent) => {
       if (!isAnnotatingRef.current) return
+
+      // Update pen timestamp when pen is used
+      if (e.pointerType === 'pen') {
+        lastPenEventTimeRef.current = Date.now()
+      }
+
+      // Only prevent for pen/stylus, allow touch/mouse through for scrolling
+      if (e.pointerType !== 'pen') return
 
       const target = e.target as Element
       // Only prevent on canvas or when target is inside paper
@@ -209,19 +177,44 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
       }
     }
 
+    // Block touch events that occur immediately after pen events
+    // This prevents the "phantom scroll" when pen touches the screen
+    const preventTouchDuringPen = (e: TouchEvent) => {
+      if (!isAnnotatingRef.current) return
+
+      const timeSinceLastPen = Date.now() - lastPenEventTimeRef.current
+      // If a touch event happens within 300ms of pen activity, block it
+      // This is likely a touch event triggered by the pen itself, not a finger
+      if (timeSinceLastPen < 300) {
+        const target = e.target as Element
+        if (target?.tagName === 'CANVAS' || target?.closest('#paper')) {
+          e.preventDefault()
+        }
+      }
+    }
+
     document.addEventListener('selectstart', preventSelection, true)
-    document.addEventListener('pointerdown', preventDefault, { capture: true, passive: false })
-    document.addEventListener('pointerup', preventDefault, { capture: true, passive: false })
-    document.addEventListener('touchstart', preventDefault, { capture: true, passive: false })
-    document.addEventListener('touchend', preventDefault, { capture: true, passive: false })
+    document.addEventListener('pointerdown', preventDefaultForPen, { capture: true, passive: false })
+    document.addEventListener('pointermove', preventDefaultForPen, { capture: true, passive: false })
+    document.addEventListener('pointerup', preventDefaultForPen, { capture: true, passive: false })
+    // Block touch events that occur during/after pen events to prevent scroll
+    document.addEventListener('touchstart', preventTouchDuringPen, { capture: true, passive: false })
+    document.addEventListener('touchmove', preventTouchDuringPen, { capture: true, passive: false })
 
     return () => {
       document.removeEventListener('selectstart', preventSelection, true)
-      document.removeEventListener('pointerdown', preventDefault, true)
-      document.removeEventListener('pointerup', preventDefault, true)
-      document.removeEventListener('touchstart', preventDefault, true)
-      document.removeEventListener('touchend', preventDefault, true)
+      document.removeEventListener('pointerdown', preventDefaultForPen, true)
+      document.removeEventListener('pointermove', preventDefaultForPen, true)
+      document.removeEventListener('pointerup', preventDefaultForPen, true)
+      document.removeEventListener('touchstart', preventTouchDuringPen, true)
+      document.removeEventListener('touchmove', preventTouchDuringPen, true)
     }
+  }, [])
+
+  // Handle pen state changes from canvas - this is more reliable than document-level listeners
+  // because pen events are captured by the canvas via setPointerCapture
+  const handlePenStateChange = useCallback((active: boolean) => {
+    setPenActive(active)
   }, [])
 
 
@@ -1038,16 +1031,6 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
         </div>
       )}
 
-      {/* DEBUG: Layout measurements */}
-      <DebugOverlay
-        viewportWidth={viewportWidth}
-        viewportHeight={viewportHeight}
-        paperWidth={paperWidth}
-        paperElement={paperElement}
-        mainRef={mainRef}
-        scrollContainerRef={scrollContainerRef}
-      />
-
       {/* Content wrapper */}
       <div ref={contentRef} style={{ position: 'relative' }}>
         {children}
@@ -1064,7 +1047,11 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
             bottom: 0,
             // Width is determined by left:0 + right:0, not explicit value
             height: pageHeight,
-            pointerEvents: mode === 'view' && !stylusModeActive ? 'none' : 'auto',
+            // Always capture events when in draw/erase mode or stylus mode
+            pointerEvents: (mode !== 'view' || stylusModeActive) ? 'auto' : 'none',
+            // CRITICAL: When pen is actively drawing, disable touch actions to prevent scroll
+            // When pen is not drawing, allow touch scrolling
+            touchAction: penActive ? 'none' : 'auto',
             zIndex: 10
           }}
         >
@@ -1080,6 +1067,7 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
             stylusModeActive={stylusModeActive}
             onStylusDetected={handleStylusDetected}
             onNonStylusInput={handleNonStylusInput}
+            onPenStateChange={handlePenStateChange}
             zoom={zoom}
             headingPositions={headingPositions}
           />

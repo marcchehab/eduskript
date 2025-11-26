@@ -16,6 +16,7 @@ interface SimpleCanvasProps {
   stylusModeActive?: boolean
   onStylusDetected?: () => void
   onNonStylusInput?: () => void
+  onPenStateChange?: (active: boolean) => void  // Notify parent when pen is actively drawing
   zoom?: number
   headingPositions?: HeadingPosition[]
 }
@@ -26,9 +27,10 @@ export interface SimpleCanvasHandle {
 }
 
 export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
-  ({ width, height, mode, onUpdate, initialData, strokeWidth = 2, strokeColor = '#000000', stylusModeActive = false, onStylusDetected, onNonStylusInput, zoom = 1.0, headingPositions = [] }, ref) => {
+  ({ width, height, mode, onUpdate, initialData, strokeWidth = 2, strokeColor = '#000000', stylusModeActive = false, onStylusDetected, onNonStylusInput, onPenStateChange, zoom = 1.0, headingPositions = [] }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const isDrawingRef = useRef(false)
+    const [isPenDrawing, setIsPenDrawing] = useState(false) // Track if pen is actively drawing
     const pathsRef = useRef<Array<{
       points: Array<{ x: number; y: number; pressure: number }>
       mode: DrawMode
@@ -367,8 +369,9 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       // Detect eraser button (button 5 = 32 in bitmask)
       const isEraserButton = isStylusInput && (e.buttons & 32) !== 0
 
-      // Prevent default to stop iOS Safari from initiating text selection
-      if (isStylusInput || mode !== 'view') {
+      // Prevent default only for stylus to stop iOS Safari from initiating text selection
+      // Don't prevent for finger touches - let them scroll
+      if (isStylusInput) {
         e.preventDefault()
       }
 
@@ -429,6 +432,12 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
 
       isDrawingRef.current = true
 
+      // Track pen drawing state for touch-action control
+      if (isStylusInput) {
+        setIsPenDrawing(true)
+        onPenStateChange?.(true)
+      }
+
       // Cache bounding rect on pointer down to avoid layout recalculations during move
       const rect = canvas.getBoundingClientRect()
       canvasRectRef.current = rect
@@ -440,15 +449,16 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       const pressure = e.pressure || 0.5 // Default to 0.5 for mouse
 
       currentPathRef.current = [{ x, y, pressure }]
-    }, [mode, stylusModeActive, onStylusDetected, onNonStylusInput, width, height, updateEraserCursor])
+    }, [mode, stylusModeActive, onStylusDetected, onNonStylusInput, onPenStateChange, width, height, updateEraserCursor])
 
     const draw = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
       // Don't draw if multiple touch/mouse pointers are active (pinch gesture)
       // But always allow stylus to proceed regardless of touch count
       const isStylusInput = e.pointerType === 'pen'
 
-      // Prevent default to stop iOS Safari from initiating text selection during drawing
-      if (isStylusInput || isDrawingRef.current) {
+      // Prevent default only for stylus to stop iOS Safari from initiating text selection during drawing
+      // Don't prevent for finger touches - let them scroll
+      if (isStylusInput) {
         e.preventDefault()
       }
 
@@ -553,6 +563,13 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
           } catch (err) {
             // Ignore errors if pointer wasn't captured
           }
+
+          // Clear pen drawing state after a brief delay to allow final stroke to complete
+          // The delay gives the browser time to process the pen-up before allowing touch scrolling
+          setTimeout(() => {
+            setIsPenDrawing(false)
+            onPenStateChange?.(false)
+          }, 100)
         }
       }
 
@@ -632,7 +649,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
 
         onUpdate(data)
       }
-    }, [mode, strokeColor, strokeWidth, onUpdate, headingPositions, redrawCanvas, updateEraserCursor, hideEraserCursor])
+    }, [mode, strokeColor, strokeWidth, onUpdate, onPenStateChange, headingPositions, redrawCanvas, updateEraserCursor, hideEraserCursor])
 
     const handlePointerCancel = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
       // Clean up when pointer is cancelled
@@ -708,8 +725,9 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
             right: 0,
             // Width determined by left:0 + right:0; height from prop
             height: `${height}px`,
-            // Chrome fix: touchAction must be 'none' for pen input to work properly
-            touchAction: 'none',
+            // CRITICAL: When pen is actively drawing, use 'none' to prevent scroll
+            // When pen is not drawing, use 'auto' to allow finger scrolling
+            touchAction: isPenDrawing ? 'none' : 'auto',
             cursor: mode === 'erase' ? 'none' : (mode === 'draw' ? 'crosshair' : 'default'),
             // Capture events in draw/erase mode OR stylus mode (to prevent selection)
             pointerEvents: (mode !== 'view' || stylusModeActive) ? 'auto' : 'none'

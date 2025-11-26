@@ -558,12 +558,13 @@ article.prose-theme > div > :first-child {
 
 
 /* Prevent text selection when annotating (iOS Safari long-press fix) */
+/* Note: touch-action: none is only on the canvas element, not globally */
+/* This allows finger scrolling while in annotation mode */
 .annotation-active,
 .annotation-active * {
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
-  touch-action: none;
 }
 
 /* Invert annotation canvas and color picker in dark mode */

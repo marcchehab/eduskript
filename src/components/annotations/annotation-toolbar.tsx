@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { Pen, Eraser, Trash2, Pointer, Camera } from 'lucide-react'
+import { Pen, Eraser, Trash2, Camera } from 'lucide-react'
 import { Circle } from '@uiw/react-color'
 import Image from 'next/image'
 import brushThickIcon from './brush_thick.png'
@@ -546,27 +546,6 @@ export function AnnotationToolbar({
           </div>
         )}
       </div>
-
-      {/* View/Hide Annotations */}
-      <button
-        onClick={() => onModeChange('view')}
-        className={`p-3 rounded-md transition-colors relative ${
-          mode === 'view'
-            ? 'text-foreground bg-accent'
-            : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-        }`}
-        title={mode === 'view' ? 'Pan/scroll mode' : 'Switch to pan mode'}
-        aria-label="Toggle pan mode"
-      >
-        <Pointer className="w-5 h-5" />
-        {mode !== 'view' && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <svg className="w-6 h-6 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18" />
-            </svg>
-          </div>
-        )}
-      </button>
 
       {/* Divider */}
       {hasAnnotations && <div className="h-px bg-border my-1" />}
