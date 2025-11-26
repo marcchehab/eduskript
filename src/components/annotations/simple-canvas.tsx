@@ -5,6 +5,21 @@ import { determineSectionFromY, type HeadingPosition } from '@/lib/annotations/r
 
 export type DrawMode = 'draw' | 'erase'
 
+// Real-time smoothing window size for drawing
+// Higher = smoother but more lag, Lower = more responsive but jittery
+// Set to 1 to disable real-time smoothing (raw points)
+// 2 = light smoothing (average of current + previous point)
+// 3 = moderate smoothing (average of last 3 points)
+const REALTIME_SMOOTHING_WINDOW = 3
+
+// A/B testing mode - set to true to cycle through smoothing levels with colors
+const SMOOTHING_TEST_MODE = false
+const SMOOTHING_TEST_LEVELS = [
+  { window: 1, color: '#000000' }, // Black = raw (no smoothing)
+  { window: 2, color: '#0066ff' }, // Blue = light smoothing
+  { window: 3, color: '#ff0000' }, // Red = moderate smoothing
+]
+
 interface SimpleCanvasProps {
   width: number
   height: number
@@ -40,6 +55,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       sectionOffsetY: number
     }>>([])
     const currentPathRef = useRef<Array<{ x: number; y: number; pressure: number }>>([])
+    const strokeStartTimeRef = useRef<number>(0) // Track when current stroke started for telemetry
     const currentModeRef = useRef<DrawMode>('draw') // Track the effective mode for current stroke
     const strokesMarkedForDeletionRef = useRef<Set<number>>(new Set()) // Track strokes to delete when eraser lifts
     const eraserTrailRef = useRef<Array<{ x: number; y: number }>>([]) // Track eraser position history for tail effect
@@ -53,6 +69,9 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
     const canvasRectRef = useRef<DOMRect | null>(null) // Cache canvas bounding rect to avoid layout thrashing
     const drawRafRef = useRef<number | null>(null) // RAF ID for throttling draw operations
     const pendingPointsRef = useRef<number>(0) // Track number of points added since last RAF draw
+    const lastSmoothedPointRef = useRef<{ x: number; y: number } | null>(null) // Track last rendered smoothed position for real-time smoothing
+    const smoothingTestIndexRef = useRef(0) // TEMPORARY: Track which smoothing level we're testing
+    const currentStrokeSmoothingRef = useRef({ window: REALTIME_SMOOTHING_WINDOW, color: '#000000' }) // Current stroke's smoothing settings
 
     // Update eraser cursor state and apply styles directly (no React re-render)
     const updateEraserCursor = useCallback((isActive: boolean) => {
@@ -145,6 +164,29 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         })
       }
       return smoothed
+    }, [])
+
+    // Get smoothed position for real-time rendering using last N points
+    // Optimized to avoid array allocation - just direct index access
+    const getSmoothedPosition = useCallback((points: Array<{ x: number; y: number; pressure: number }>, windowSize: number = REALTIME_SMOOTHING_WINDOW): { x: number; y: number; pressure: number } => {
+      const len = points.length
+      if (len === 0) return { x: 0, y: 0, pressure: 0.5 }
+      if (len === 1 || windowSize <= 1) return points[len - 1]
+
+      // Average last windowSize points without allocating arrays
+      const start = Math.max(0, len - windowSize)
+      const count = len - start
+      let sumX = 0, sumY = 0
+      for (let i = start; i < len; i++) {
+        sumX += points[i].x
+        sumY += points[i].y
+      }
+
+      return {
+        x: sumX / count,
+        y: sumY / count,
+        pressure: points[len - 1].pressure
+      }
     }, [])
 
     const redrawCanvas = useCallback(() => {
@@ -431,6 +473,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       }
 
       isDrawingRef.current = true
+      strokeStartTimeRef.current = Date.now() // Track start time for telemetry
 
       // Track pen drawing state for touch-action control
       if (isStylusInput) {
@@ -449,7 +492,17 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       const pressure = e.pressure || 0.5 // Default to 0.5 for mouse
 
       currentPathRef.current = [{ x, y, pressure }]
-    }, [mode, stylusModeActive, onStylusDetected, onNonStylusInput, onPenStateChange, width, height, updateEraserCursor])
+      lastSmoothedPointRef.current = { x, y } // Initialize with first point for smooth rendering
+
+      // TEMPORARY: Set smoothing level for this stroke and cycle for next
+      if (SMOOTHING_TEST_MODE && currentModeRef.current === 'draw') {
+        currentStrokeSmoothingRef.current = SMOOTHING_TEST_LEVELS[smoothingTestIndexRef.current]
+        smoothingTestIndexRef.current = (smoothingTestIndexRef.current + 1) % SMOOTHING_TEST_LEVELS.length
+        console.log(`[Smoothing Test] Using window=${currentStrokeSmoothingRef.current.window}, color=${currentStrokeSmoothingRef.current.color}`)
+      } else {
+        currentStrokeSmoothingRef.current = { window: REALTIME_SMOOTHING_WINDOW, color: strokeColor }
+      }
+    }, [mode, stylusModeActive, onStylusDetected, onNonStylusInput, onPenStateChange, width, height, updateEraserCursor, strokeColor])
 
     const draw = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
       // Don't draw if multiple touch/mouse pointers are active (pinch gesture)
@@ -462,10 +515,8 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         e.preventDefault()
       }
 
-      // Keep pen timestamp fresh during drawing for priority system
-      if (isStylusInput && isDrawingRef.current && onStylusDetected) {
-        onStylusDetected()
-      }
+      // Note: We no longer call onStylusDetected here on every move event
+      // It's only called once in startDrawing, reducing React re-render overhead
 
       if (!isStylusInput && activeTouchPointersRef.current.size > 1) {
         return
@@ -536,18 +587,29 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
             scheduleEraserRedraw()
           }
         } else {
-          // For draw mode: Add to pending for RAF rendering
-          // This smooths out Chrome's batched coalesced events
-          pendingPointsRef.current++
+          // For draw mode: Draw with real-time smoothing
+          // Raw points are stored in currentPathRef, but we render smoothed positions
+          const { window: smoothingWindow, color: testColor } = currentStrokeSmoothingRef.current
+          const smoothedPoint = getSmoothedPosition(currentPathRef.current, smoothingWindow)
+          const fromPoint = lastSmoothedPointRef.current
+
+          if (fromPoint) {
+            const lineWidth = strokeWidth * applyPressureFloor(smoothedPoint.pressure)
+            ctx.strokeStyle = SMOOTHING_TEST_MODE ? testColor : strokeColor
+            ctx.lineCap = 'round'
+            ctx.lineJoin = 'round'
+            ctx.lineWidth = lineWidth
+            ctx.beginPath()
+            ctx.moveTo(fromPoint.x, fromPoint.y)
+            ctx.lineTo(smoothedPoint.x, smoothedPoint.y)
+            ctx.stroke()
+          }
+
+          // Update last smoothed position for next segment
+          lastSmoothedPointRef.current = { x: smoothedPoint.x, y: smoothedPoint.y }
         }
       })
-
-      // For draw mode, schedule RAF-based drawing for pending points
-      // This smooths out Chrome's batched coalesced events
-      if (currentModeRef.current === 'draw' && pendingPointsRef.current > 0) {
-        scheduleIncrementalDraw()
-      }
-    }, [mode, width, height, isPointNearStroke, scheduleEraserRedraw, scheduleIncrementalDraw, updateEraserCursorPosition, updateEraserCursor, onStylusDetected])
+    }, [mode, width, height, strokeColor, strokeWidth, isPointNearStroke, applyPressureFloor, scheduleEraserRedraw, updateEraserCursorPosition, updateEraserCursor, getSmoothedPosition])
 
     const stopDrawing = useCallback((e?: React.PointerEvent<HTMLCanvasElement>) => {
       // Remove pointer from tracking
@@ -614,12 +676,52 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       }
 
       if (currentPathRef.current.length > 0 && mode !== 'view') {
-        // Log stroke statistics
-        const strokePointCount = currentPathRef.current.length
+        // Calculate stroke telemetry for analysis
+        const points = currentPathRef.current
+        const pointCount = points.length
+
+        // Calculate total stroke length (sum of distances between consecutive points)
+        let totalLength = 0
+        for (let i = 1; i < points.length; i++) {
+          const dx = points[i].x - points[i-1].x
+          const dy = points[i].y - points[i-1].y
+          totalLength += Math.sqrt(dx * dx + dy * dy)
+        }
+
+        // Calculate stroke duration using tracked start time
+        const strokeEndTime = Date.now()
+        const durationMs = strokeEndTime - strokeStartTimeRef.current
+
+        const lengthPerPoint = pointCount > 1 ? totalLength / (pointCount - 1) : 0
+        const durationPerPoint = pointCount > 1 ? durationMs / (pointCount - 1) : 0
+
+        // Send telemetry to debug API
+        fetch('/api/debug', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            measurements: {
+              event: 'stroke_complete',
+              pointCount: String(pointCount),
+              totalLengthPx: totalLength.toFixed(1),
+              lengthPerPoint: lengthPerPoint.toFixed(2),
+              durationMs: String(durationMs),
+              durationPerPoint: durationPerPoint.toFixed(2),
+              // iPad Safari reports as "Macintosh" - detect via touch + Mac combo
+              device: /iPad|iPhone/.test(navigator.userAgent) ? 'iOS' :
+                      (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1) ? 'iPad' :
+                      /Android/.test(navigator.userAgent) ? 'Android' : 'Desktop',
+              pointerType: e?.pointerType || 'unknown'
+            }
+          })
+        }).catch(() => {})
+
         console.log('[Canvas] Stroke completed', {
-          points: strokePointCount,
-          pointerType: e?.pointerType,
-          browser: navigator.userAgent.includes('Firefox') ? 'Firefox' : 'Chrome'
+          pointCount,
+          totalLengthPx: totalLength.toFixed(1),
+          lengthPerPoint: lengthPerPoint.toFixed(2),
+          durationMs,
+          durationPerPoint: durationPerPoint.toFixed(2)
         })
 
         // Determine which section this stroke belongs to based on first point
