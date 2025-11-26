@@ -932,24 +932,60 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
     }
   }, [])
 
-  // Handle trackpad pinch zoom (Ctrl+wheel) - regular scroll is handled by browser
-  const handleWheel = useCallback((e: WheelEvent) => {
-    // Only intercept Ctrl/Cmd+wheel for zoom - let browser handle regular scroll
-    if (e.ctrlKey || e.metaKey) {
-      e.preventDefault()
+  // Track whether Ctrl/Cmd is pressed for conditional wheel capture
+  const ctrlPressedRef = useRef(false)
 
-      // Calculate zoom delta (negative deltaY means zoom in)
-      const delta = -e.deltaY * 0.01
-      const newZoom = Math.max(0.5, Math.min(2.5, zoomRef.current * (1 + delta)))
+  // Handle trackpad pinch zoom (Ctrl+wheel) - only active when Ctrl is pressed
+  const handleZoomWheel = useCallback((e: WheelEvent) => {
+    e.preventDefault()
 
-      // Apply zoom with focal point at cursor position
-      applyZoom(newZoom, e.clientX, e.clientY)
+    // Calculate zoom delta (negative deltaY means zoom in)
+    const delta = -e.deltaY * 0.01
+    const newZoom = Math.max(0.5, Math.min(2.5, zoomRef.current * (1 + delta)))
 
-      // Update display state for child components
-      setZoom(newZoom)
-    }
-    // Let browser handle regular wheel scroll naturally
+    // Apply zoom with focal point at cursor position
+    applyZoom(newZoom, e.clientX, e.clientY)
+
+    // Update display state for child components
+    setZoom(newZoom)
   }, [applyZoom])
+
+  // Dynamically attach/detach wheel handler based on Ctrl key state
+  // This allows normal scroll to be completely passive (no jank)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !ctrlPressedRef.current) {
+        ctrlPressedRef.current = true
+        document.addEventListener('wheel', handleZoomWheel, { passive: false })
+      }
+    }
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (!e.ctrlKey && !e.metaKey && ctrlPressedRef.current) {
+        ctrlPressedRef.current = false
+        document.removeEventListener('wheel', handleZoomWheel)
+      }
+    }
+
+    // Also handle blur (user switches windows while Ctrl pressed)
+    const handleBlur = () => {
+      if (ctrlPressedRef.current) {
+        ctrlPressedRef.current = false
+        document.removeEventListener('wheel', handleZoomWheel)
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    document.addEventListener('keyup', handleKeyUp)
+    window.addEventListener('blur', handleBlur)
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      document.removeEventListener('keyup', handleKeyUp)
+      window.removeEventListener('blur', handleBlur)
+      document.removeEventListener('wheel', handleZoomWheel)
+    }
+  }, [handleZoomWheel])
 
   // Find and store reference to parent <main> element, scroll container, and initialize transform
   useEffect(() => {
@@ -967,7 +1003,7 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
   }, [])
 
 
-  // Set up event listeners for zoom gestures (scroll is handled natively by browser)
+  // Set up event listeners for touch pinch zoom (wheel zoom is handled via Ctrl key listener)
   useEffect(() => {
     // Touch events for touchscreen pinch zoom
     document.addEventListener('touchstart', handleTouchStart, { passive: false })
@@ -975,17 +1011,13 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
     document.addEventListener('touchend', handleTouchEnd, { passive: false })
     document.addEventListener('touchcancel', handleTouchEnd, { passive: false })
 
-    // Wheel events for trackpad pinch zoom (Ctrl+wheel only, regular scroll is passive)
-    document.addEventListener('wheel', handleWheel, { passive: false })
-
     return () => {
       document.removeEventListener('touchstart', handleTouchStart)
       document.removeEventListener('touchmove', handleTouchMove)
       document.removeEventListener('touchend', handleTouchEnd)
       document.removeEventListener('touchcancel', handleTouchEnd)
-      document.removeEventListener('wheel', handleWheel)
     }
-  }, [handleTouchStart, handleTouchMove, handleTouchEnd, handleWheel])
+  }, [handleTouchStart, handleTouchMove, handleTouchEnd])
 
   return (
     <>

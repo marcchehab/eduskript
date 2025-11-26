@@ -15,7 +15,7 @@ import { basicSetup } from 'codemirror'
 import { autocompletion } from '@codemirror/autocomplete'
 import { pythonCompletions } from './python-completions'
 import { Button } from '@/components/ui/button'
-import { Play, Square, RotateCcw, Maximize2, Minimize2, Camera, X, Plus, FileText, ZoomIn, ZoomOut, Save } from 'lucide-react'
+import { Play, Square, RotateCcw, Maximize2, Minimize2, Camera, X, Plus, FileText, ZoomIn, ZoomOut, Save, History } from 'lucide-react'
 import { useUserData, useCreateVersion, useVersionHistory, useRestoreVersion, useDeleteVersion, useUpdateVersionLabel } from '@/lib/userdata/hooks'
 import type { CodeEditorData } from '@/lib/userdata/types'
 import {
@@ -75,6 +75,7 @@ export const CodeEditor = memo(function CodeEditor({
 
   // Output/History panel state
   const [activePanel, setActivePanel] = useState<'output' | 'history'>('output')
+  const [panelVisible, setPanelVisible] = useState(false)
   const [highlightedVersion, setHighlightedVersion] = useState<number | null>(null)
   const [editingVersion, setEditingVersion] = useState<number | null>(null)
   const [editingLabel, setEditingLabel] = useState<string>('')
@@ -108,7 +109,7 @@ export const CodeEditor = memo(function CodeEditor({
   const MIN_VISIBLE_WIDTH = 100 // pixels
 
   // Resizable output panel state (vertical splitter between main content and output)
-  const [outputPanelHeight, setOutputPanelHeight] = useState(160) // default height in pixels
+  const [outputPanelHeight, setOutputPanelHeight] = useState(220) // default height in pixels
   const [isDraggingHorizontalSplitter, setIsDraggingHorizontalSplitter] = useState(false)
   const MIN_OUTPUT_HEIGHT = 0 // allow collapsing completely
   const MAX_OUTPUT_HEIGHT = 400 // maximum output panel height
@@ -171,9 +172,11 @@ export const CodeEditor = memo(function CodeEditor({
     MIN_EDITOR_HEIGHT,
     Math.min(MAX_EDITOR_HEIGHT, lineCount * LINE_HEIGHT + fileTabsHeight + 60) // 60px for controls
   )
+  // User-adjusted editor height (set when dragging horizontal splitter, keeps total constant)
+  const [userEditorHeight, setUserEditorHeight] = useState<number | null>(null)
+  const editorHeight = userEditorHeight ?? calculatedEditorHeight
   // Output panel adds to total height when visible
-  const hasOutputVisible = output.length > 0 || activePanel === 'history'
-  const totalHeight = calculatedEditorHeight + (hasOutputVisible ? outputPanelHeight + 4 : 0) // +4 for horizontal splitter
+  const totalHeight = editorHeight + (panelVisible ? outputPanelHeight + 4 : 0) // +4 for horizontal splitter
 
   // Font size state
   const [fontSize, setFontSize] = useState<number>(defaultData.fontSize ?? 14)
@@ -350,11 +353,20 @@ export const CodeEditor = memo(function CodeEditor({
       if (!wrapperRef.current) return
 
       const wrapperRect = wrapperRef.current.getBoundingClientRect()
-      // Calculate distance from bottom of wrapper
-      const newOutputHeight = wrapperRect.bottom - e.clientY
+      const currentTotalHeight = wrapperRect.height
 
-      // Clamp between min and max
-      setOutputPanelHeight(Math.max(MIN_OUTPUT_HEIGHT, Math.min(MAX_OUTPUT_HEIGHT, newOutputHeight)))
+      // Calculate new output height from cursor position
+      const newOutputHeight = Math.max(MIN_OUTPUT_HEIGHT, Math.min(MAX_OUTPUT_HEIGHT, wrapperRect.bottom - e.clientY))
+
+      // Calculate new editor height to keep total constant
+      const splitterHeight = 4
+      const newEditorHeight = currentTotalHeight - newOutputHeight - splitterHeight
+
+      // Only apply if editor height is reasonable
+      if (newEditorHeight >= MIN_EDITOR_HEIGHT) {
+        setOutputPanelHeight(newOutputHeight)
+        setUserEditorHeight(newEditorHeight)
+      }
     }
 
     const handleMouseUp = () => {
@@ -446,9 +458,14 @@ export const CodeEditor = memo(function CodeEditor({
 
         canvas.appendChild(schemaImg)
 
-        // Make the graphics pane visible and ensure proper split
-        setCanvasVisible(true)
-        setEditorWidth(50) // Set 50/50 split to show both editor and schema
+        // Make the graphics pane visible (only set width on first show)
+        setCanvasVisible(prev => {
+          if (!prev) {
+            // First time showing canvas - set 50/50 split
+            setEditorWidth(50)
+          }
+          return true
+        })
       }
 
       img.onerror = () => {
@@ -739,7 +756,8 @@ export const CodeEditor = memo(function CodeEditor({
     }
   }, [mounted])
 
-  // Prevent output panel scroll from propagating to page
+  // Handle output panel wheel scroll explicitly
+  // CSS overscroll-behavior alone doesn't work when parent handlers use passive: false
   useEffect(() => {
     const outputPanel = outputPanelRef.current
     if (!outputPanel) return
@@ -750,27 +768,26 @@ export const CodeEditor = memo(function CodeEditor({
 
       if (!isScrollable) return // Let page scroll if content doesn't need scrolling
 
-      const isAtTop = scrollTop === 0 && e.deltaY < 0
-      const isAtBottom = scrollTop + clientHeight >= scrollHeight && e.deltaY > 0
+      // Manually scroll the output panel
+      outputPanel.scrollTop += e.deltaY
 
-      // Prevent page scroll unless we're at a boundary trying to scroll further
-      if (!isAtTop && !isAtBottom) {
-        e.preventDefault()
-        e.stopPropagation()
-      }
+      // Prevent page scroll when output is scrollable
+      e.preventDefault()
+      e.stopPropagation()
     }
 
-    // Must use passive: false to allow preventDefault
     outputPanel.addEventListener('wheel', handleWheel, { passive: false })
 
     return () => {
       outputPanel.removeEventListener('wheel', handleWheel)
     }
-  }, [hasOutputVisible]) // Re-attach when panel visibility changes
+  }, [output.length, activePanel]) // Re-attach when output changes or panel switches
 
   // Add output helper
   const addOutput = (message: string, level: OutputLevel = OutputLevel.OUTPUT) => {
     setOutput((prev) => [...prev, { message, level, timestamp: Date.now() }])
+    setPanelVisible(true)
+    setActivePanel('output')
   }
 
   // Save current file content
@@ -1607,13 +1624,16 @@ plots
                     <RotateCcw className="w-3 h-3" />
                   </Button>
                   <Button
-                    onClick={() => createVersionSnapshot(true)}
+                    onClick={() => {
+                      setActivePanel('history')
+                      setPanelVisible(true)
+                    }}
                     size="sm"
                     variant="outline"
                     className="h-7 px-2 shadow-lg"
-                    title="Save version"
+                    title="Version history"
                   >
-                    <Save className="w-3 h-3" />
+                    <History className="w-3 h-3" />
                   </Button>
                 </div>
               )}
@@ -1679,16 +1699,16 @@ plots
         )}
       </div>
 
-      {/* Horizontal Divider (between main content and output) - only show when there's output or in history mode */}
-      {(output.length > 0 || activePanel === 'history') && (
+      {/* Horizontal Divider (between main content and output) */}
+      {panelVisible && (
         <div
           onMouseDown={handleHorizontalSplitterMouseDown}
           className="h-1 bg-border hover:bg-primary/20 cursor-row-resize flex-shrink-0 transition-colors"
         />
       )}
 
-      {/* Output/History Panel - collapse when no output */}
-      {(output.length > 0 || activePanel === 'history') && (
+      {/* Output/History Panel - fixed height */}
+      {panelVisible && (
         <div
           className="flex flex-col overflow-hidden"
           style={{ height: `${outputPanelHeight}px` }}
@@ -1713,11 +1733,23 @@ plots
               History
             </Button>
           )}
+          {/* Spacer */}
+          <div className="flex-1" />
+          {/* Close button */}
+          <Button
+            onClick={() => setPanelVisible(false)}
+            size="sm"
+            variant="ghost"
+            className="h-7 w-7 p-0"
+            title="Close panel"
+          >
+            <X className="w-3 h-3" />
+          </Button>
         </div>
 
         {/* Panel Content */}
         {activePanel === 'output' ? (
-          <div ref={outputPanelRef} className="flex-1 overflow-auto p-2 font-mono text-sm">
+          <div ref={outputPanelRef} className="flex-1 overflow-auto p-2 font-mono text-sm" style={{ overscrollBehaviorY: 'contain' }}>
             {output.map((entry, index) => (
                 <div key={index} className="mb-2">
                   {/* Text message */}
@@ -1786,13 +1818,63 @@ plots
           </div>
         ) : (
           <div className="flex-1 overflow-x-auto overflow-y-hidden p-2">
+            {/* Controls row: Save button + toggles */}
+            <div className="flex items-center gap-4 px-2 pb-2 text-xs border-b mb-2">
+              <Button
+                onClick={() => createVersionSnapshot(true)}
+                size="sm"
+                variant="outline"
+                className="h-7 px-2"
+                title="Save version"
+              >
+                <Save className="w-3 h-3 mr-1" />
+                Save
+              </Button>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <span className="text-foreground">Confirm deletion</span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={confirmDeletion}
+                  onClick={() => setConfirmDeletion(!confirmDeletion)}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                    confirmDeletion ? 'bg-primary' : 'bg-muted'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      confirmDeletion ? 'translate-x-4' : 'translate-x-0.5'
+                    }`}
+                  />
+                </button>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <span className="text-foreground">Show autosaves</span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={showAutosaves}
+                  onClick={() => setShowAutosaves(!showAutosaves)}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                    showAutosaves ? 'bg-primary' : 'bg-muted'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      showAutosaves ? 'translate-x-4' : 'translate-x-0.5'
+                    }`}
+                  />
+                </button>
+              </label>
+            </div>
+
             {versionsLoading ? (
               <div className="flex items-center justify-center py-8 text-muted-foreground">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-current" />
                 <span className="ml-2">Loading versions...</span>
               </div>
             ) : versions.length === 0 ? (
-              <div className="text-muted-foreground italic">No version history available</div>
+              <div className="text-muted-foreground italic px-2">No saved versions yet. Click "Save" to create one.</div>
             ) : (
               <>
                 {/* Version timeline */}
@@ -1908,46 +1990,6 @@ plots
                     </div>
                   )
                 })}
-                </div>
-
-                {/* Version toggles */}
-                <div className="flex items-center gap-4 px-2 pt-2 text-xs">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <span className="text-foreground">Confirm deletion</span>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={confirmDeletion}
-                      onClick={() => setConfirmDeletion(!confirmDeletion)}
-                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-                        confirmDeletion ? 'bg-primary' : 'bg-muted'
-                      }`}
-                    >
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          confirmDeletion ? 'translate-x-4' : 'translate-x-0.5'
-                        }`}
-                      />
-                    </button>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <span className="text-foreground">Show autosaves</span>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={showAutosaves}
-                      onClick={() => setShowAutosaves(!showAutosaves)}
-                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-                        showAutosaves ? 'bg-primary' : 'bg-muted'
-                      }`}
-                    >
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          showAutosaves ? 'translate-x-4' : 'translate-x-0.5'
-                        }`}
-                      />
-                    </button>
-                  </label>
                 </div>
               </>
             )}
