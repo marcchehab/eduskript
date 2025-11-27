@@ -19,6 +19,14 @@ export function PageSettings() {
   const [typographyLoading, setTypographyLoading] = useState(false)
   const [usernameLoading, setUsernameLoading] = useState(false)
   const [username, setUsername] = useState(session?.user?.username || '')
+  const [hostnamePrefix, setHostnamePrefix] = useState('eduskript.org/')
+
+  // Set hostname prefix on client (avoids hydration mismatch)
+  useEffect(() => {
+    if (window.location.hostname === 'localhost') {
+      setHostnamePrefix(`localhost:${window.location.port}/`)
+    }
+  }, [])
 
   // Load current preference on mount
   useEffect(() => {
@@ -151,16 +159,16 @@ export function PageSettings() {
             <div className="flex items-center gap-2">
               <div className="flex items-center flex-1">
                 <span className="px-3 py-2 bg-muted border border-r-0 border-input rounded-l-md text-muted-foreground text-sm h-10 flex items-center">
-                  {typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'localhost:3000/' : 'eduskript.org/'}
+                  {hostnamePrefix}
                 </span>
                 <Input
                   id="username"
                   type="text"
                   value={username}
-                  onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                  onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9\-]/g, ''))}
                   className="rounded-l-none"
                   placeholder="your-username"
-                  pattern="^[a-z0-9-]+$"
+                  pattern="^[a-z0-9\-]+$"
                   required
                 />
               </div>

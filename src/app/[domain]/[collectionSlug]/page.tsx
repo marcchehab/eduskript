@@ -213,6 +213,10 @@ export default async function CollectionPreviewPage({ params }: CollectionPrevie
     }
 
   } catch (error) {
+    // Re-throw Next.js navigation errors (notFound, redirect) - these are expected
+    if (error && typeof error === 'object' && 'digest' in error) {
+      throw error
+    }
     console.error('Error loading collection preview:', error)
     notFound()
   }
