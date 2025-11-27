@@ -588,6 +588,16 @@ article.prose-theme > div > :first-child {
   animation: annotationFadeIn 0.5s ease-in;
 }
 
+/* Fade-in animation for new snaps */
+@keyframes snap-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 .dark .annotation-color-picker {
   filter: invert(1) hue-rotate(180deg);
   background-color: #ffffff !important;

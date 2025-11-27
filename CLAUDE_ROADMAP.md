@@ -10,7 +10,7 @@
 ## 🎯 Priority List
 
 todo: 
-- fix snaps
+- persist snaps
 - progress bar doesn't update properly
 - add edit link for teachers
 - bigger handles for things when using touch (editor)

@@ -95,12 +95,9 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom }: SnapO
         return
       }
 
-      // Hide the selection rectangle before capturing
-      const savedCurrentPos = currentPos
+      // Hide the selection box during capture to prevent it appearing in the snap
+      // (can happen near top of page due to overlap)
       setCurrentPos(null)
-
-      // Wait a tick for React to update
-      await new Promise(resolve => setTimeout(resolve, 0))
 
       // Get the paper element's position relative to the viewport
       const paperRect = paperElement.getBoundingClientRect()
@@ -120,18 +117,90 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom }: SnapO
       const logicalLeft = left + (overlayRect.left - paperRect.left) / zoom
       const logicalTop = top + (overlayRect.top - paperRect.top) / zoom
 
-      // For snap positioning: offset from selection
-      const snapLeft = logicalLeft + width + 20
-      const snapTop = logicalTop + height + 20
+      // For snap positioning: appear at the selection location
+      const snapLeft = logicalLeft
+      const snapTop = logicalTop
 
-      // Create a temporary wrapper to capture only the selected region
-      // html-to-image requires element to be visible in viewport - off-screen breaks it
+      // Create snap animation overlay at selection location (visual feedback)
+      // Use viewport coordinates (not zoom-adjusted) since animation uses position: fixed
+      const viewportLeft = left * zoom + (overlayRect?.left || 0)
+      const viewportTop = top * zoom + (overlayRect?.top || 0)
+      const viewportWidth = width * zoom
+      const viewportHeight = height * zoom
+
+      // Create animation overlay container
+      const animOverlay = document.createElement('div')
+      animOverlay.style.position = 'fixed'
+      animOverlay.style.left = `${viewportLeft}px`
+      animOverlay.style.top = `${viewportTop}px`
+      animOverlay.style.width = `${viewportWidth}px`
+      animOverlay.style.height = `${viewportHeight}px`
+      animOverlay.style.pointerEvents = 'none'
+      animOverlay.style.zIndex = '10000'
+
+      // 4 border segments with CSS transitions (like CodePen approach)
+      const animDuration = 0.2 // seconds
+      const borderW = 6
+
+      // Top segment
+      const segTop = document.createElement('div')
+      segTop.style.cssText = `
+        position: absolute; top: -${borderW}px; left: 0;
+        width: 100%; height: ${borderW}px;
+        background: white; transform-origin: left;
+        transform: scaleX(0);
+        transition: transform ${animDuration / 4}s ease-out 0s;
+      `
+
+      // Right segment
+      const segRight = document.createElement('div')
+      segRight.style.cssText = `
+        position: absolute; top: 0; right: -${borderW}px;
+        width: ${borderW}px; height: 100%;
+        background: white; transform-origin: top;
+        transform: scaleY(0);
+        transition: transform ${animDuration / 4}s ease-out ${animDuration / 4}s;
+      `
+
+      // Bottom segment
+      const segBottom = document.createElement('div')
+      segBottom.style.cssText = `
+        position: absolute; bottom: -${borderW}px; right: 0;
+        width: 100%; height: ${borderW}px;
+        background: white; transform-origin: right;
+        transform: scaleX(0);
+        transition: transform ${animDuration / 4}s ease-out ${animDuration / 2}s;
+      `
+
+      // Left segment
+      const segLeft = document.createElement('div')
+      segLeft.style.cssText = `
+        position: absolute; bottom: 0; left: -${borderW}px;
+        width: ${borderW}px; height: 100%;
+        background: white; transform-origin: bottom;
+        transform: scaleY(0);
+        transition: transform ${animDuration / 4}s ease-out ${animDuration * 3 / 4}s;
+      `
+
+      animOverlay.append(segTop, segRight, segBottom, segLeft)
+      document.body.appendChild(animOverlay)
+
+      // Trigger animation on next frame
+      requestAnimationFrame(() => {
+        segTop.style.transform = 'scaleX(1)'
+        segRight.style.transform = 'scaleY(1)'
+        segBottom.style.transform = 'scaleX(1)'
+        segLeft.style.transform = 'scaleY(1)'
+      })
+
+      // Create capture wrapper - position at selection location, style override handles capture
       const wrapper = document.createElement('div')
       wrapper.style.position = 'absolute'
-      wrapper.style.left = '0'
-      wrapper.style.top = '0'
+      wrapper.style.left = `${viewportLeft}px`
+      wrapper.style.top = `${viewportTop}px`
       wrapper.style.width = `${width}px`
       wrapper.style.height = `${height}px`
+      wrapper.style.zIndex = '1'
       wrapper.style.overflow = 'hidden'
       wrapper.style.pointerEvents = 'none'
 
@@ -325,15 +394,64 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom }: SnapO
         htmlEl.style.fontStyle = 'italic'
       })
 
-      // Remove or replace broken images to prevent capture failure
-      // html-to-image fails if ANY image resource fails to load
+      // Handle Excalidraw dual images - show the correct theme variant
+      // Hide (don't remove) the wrong variant to preserve layout
+      const isDarkMode = document.documentElement.classList.contains('dark')
+      paperClone.querySelectorAll('.excalidraw-light').forEach(el => {
+        const imgEl = el as HTMLElement
+        if (isDarkMode) {
+          // Hide completely - use multiple properties to ensure no space taken
+          imgEl.style.cssText = 'display: none !important; position: absolute; width: 0; height: 0;'
+        } else {
+          imgEl.style.display = 'block'
+        }
+      })
+      paperClone.querySelectorAll('.excalidraw-dark').forEach(el => {
+        const imgEl = el as HTMLElement
+        if (isDarkMode) {
+          imgEl.style.display = 'block'
+        } else {
+          // Hide completely - use multiple properties to ensure no space taken
+          imgEl.style.cssText = 'display: none !important; position: absolute; width: 0; height: 0;'
+        }
+      })
+      // Remove margins from Excalidraw wrappers and their parents to avoid blank space in snaps
+      paperClone.querySelectorAll('.excalidraw-wrapper').forEach(el => {
+        const wrapper = el as HTMLElement
+        wrapper.style.margin = '0'
+        wrapper.style.padding = '0'
+        // Also check parent elements that might have margin
+        let parent = wrapper.parentElement
+        while (parent && parent !== paperClone) {
+          if (parent.tagName === 'P' || parent.tagName === 'DIV' || parent.tagName === 'FIGURE') {
+            parent.style.margin = '0'
+            parent.style.padding = '0'
+          }
+          parent = parent.parentElement
+        }
+      })
+      // Also remove margins from figures in general
+      paperClone.querySelectorAll('figure').forEach(el => {
+        const fig = el as HTMLElement
+        fig.style.margin = '0'
+      })
+
+      // Clean up images for capture
       const images = paperClone.querySelectorAll('img')
       for (const img of Array.from(images)) {
         const imgEl = img as HTMLImageElement
-        // Check if image failed to load or has missing-file in src
-        if (imgEl.src.includes('missing-file') || !imgEl.complete || imgEl.naturalWidth === 0) {
-          // Replace with a placeholder or remove
+        // Only hide images with known-broken src patterns
+        if (imgEl.src.includes('missing-file') || imgEl.src.includes('.mp4')) {
           imgEl.style.display = 'none'
+          continue
+        }
+        // Remove Next.js Image attributes that may interfere with capture
+        imgEl.removeAttribute('data-nimg')
+        imgEl.removeAttribute('loading')
+        imgEl.removeAttribute('decoding')
+        // Ensure image takes its natural space
+        if (!imgEl.style.display || imgEl.style.display === 'none') {
+          imgEl.style.display = 'block'
         }
       }
 
@@ -429,10 +547,16 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom }: SnapO
       wrapper.offsetHeight
 
       // Capture as JPEG with quality compression
-      // Works with SVG, PNG
+      // Use style override to ensure position doesn't affect capture
       const imageUrl = await toJpeg(wrapper, {
         quality: 0.3,
         skipFonts: true,
+        style: {
+          position: 'static',
+          left: 'auto',
+          top: 'auto',
+          transform: 'none'
+        },
         // Filter out problematic elements that might cause capture to fail
         filter: (node: Element) => {
           // Skip video elements
@@ -450,13 +574,11 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom }: SnapO
         }
       } as any)
 
-      // Clean up: remove the temporary wrapper (only if not in debug mode)
+      // Clean up: remove the temporary elements (only if not in debug mode)
       if (!DEBUG_MODE) {
         document.body.removeChild(wrapper)
+        document.body.removeChild(animOverlay)
       }
-
-      // Restore the selection rectangle
-      setCurrentPos(savedCurrentPos)
 
       if (!imageUrl) {
         console.error('Failed to capture image')
@@ -487,12 +609,13 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom }: SnapO
     setCurrentPos(null)
   }, [isDragging, startPos, currentPos, onCapture, onCancel, nextSnapNumber, zoom])
 
-  // Calculate selection rectangle for display
+  // Calculate selection rectangle for display (in viewport coordinates)
+  // startPos/currentPos are in logical coords (divided by zoom), multiply back for display
   const selectionRect = startPos && currentPos ? {
-    left: Math.min(startPos.x, currentPos.x),
-    top: Math.min(startPos.y, currentPos.y),
-    width: Math.abs(currentPos.x - startPos.x),
-    height: Math.abs(currentPos.y - startPos.y)
+    left: Math.min(startPos.x, currentPos.x) * zoom,
+    top: Math.min(startPos.y, currentPos.y) * zoom,
+    width: Math.abs(currentPos.x - startPos.x) * zoom,
+    height: Math.abs(currentPos.y - startPos.y) * zoom
   } : null
 
   return (

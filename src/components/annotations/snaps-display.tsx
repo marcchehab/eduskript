@@ -24,6 +24,35 @@ export function SnapsDisplay({ snaps, onRemoveSnap, onRenameSnap, onReorderSnaps
   const [resizingId, setResizingId] = useState<string | null>(null)
   const [resizeDelta, setResizeDelta] = useState({ width: 0, height: 0 })
   const resizeStart = useRef({ x: 0, y: 0, width: 0, height: 0 })
+  const [newSnapIds, setNewSnapIds] = useState<Set<string>>(new Set())
+  const prevSnapIdsRef = useRef<Set<string>>(new Set())
+
+  // Track new snaps for fade-in animation
+  useEffect(() => {
+    const currentIds = new Set(snaps.map(s => s.id))
+    const prevIds = prevSnapIdsRef.current
+
+    // Find newly added snaps
+    const newIds = new Set<string>()
+    currentIds.forEach(id => {
+      if (!prevIds.has(id)) {
+        newIds.add(id)
+      }
+    })
+
+    if (newIds.size > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setNewSnapIds(newIds)
+      // Remove from newSnapIds after animation completes
+      const timer = setTimeout(() => {
+        setNewSnapIds(new Set())
+      }, 150) // 50ms fade-in + buffer
+      prevSnapIdsRef.current = currentIds
+      return () => clearTimeout(timer)
+    }
+
+    prevSnapIdsRef.current = currentIds
+  }, [snaps])
 
   const handleStartEdit = (snap: Snap) => {
     setEditingSnapId(snap.id)
@@ -181,6 +210,7 @@ export function SnapsDisplay({ snaps, onRemoveSnap, onRenameSnap, onReorderSnaps
       {snaps.map((snap, index) => {
         const isDragging = draggingId === snap.id
         const isResizing = resizingId === snap.id
+        const isNew = newSnapIds.has(snap.id)
         const transform = isDragging ? `translate(${dragOffset.x}px, ${dragOffset.y}px)` : 'none'
         const displayWidth = isResizing ? snap.width + resizeDelta.width : snap.width
         const displayHeight = isResizing ? snap.height + resizeDelta.height : snap.height
@@ -196,6 +226,7 @@ export function SnapsDisplay({ snaps, onRemoveSnap, onRenameSnap, onReorderSnaps
               transform,
               opacity: isDragging || isResizing ? 0.8 : 1,
               boxShadow: isDragging || isResizing ? '0 10px 30px rgba(0,0,0,0.3)' : undefined,
+              animation: isNew ? 'snap-fade-in 0.05s ease-out forwards' : undefined,
             }}
           >
             {/* Control buttons */}

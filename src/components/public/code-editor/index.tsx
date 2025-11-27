@@ -1874,7 +1874,7 @@ plots
                 <span className="ml-2">Loading versions...</span>
               </div>
             ) : versions.length === 0 ? (
-              <div className="text-muted-foreground italic px-2">No saved versions yet. Click "Save" to create one.</div>
+              <div className="text-muted-foreground italic px-2">No saved versions yet. Click &quot;Save&quot; to create one.</div>
             ) : (
               <>
                 {/* Version timeline */}

@@ -126,7 +126,6 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
       // Also get main element for snaps portal (snaps need to overflow paper)
       const main = paper.closest('main')
       if (main) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- Getting DOM element
         setMainElement(main)
         main.style.position = 'relative'
       }
