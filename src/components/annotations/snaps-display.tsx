@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback, memo } from 'react'
+import { useState, useRef, useEffect, useCallback, memo, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { X, GripVertical, Trash2 } from 'lucide-react'
 import type { Snap } from './snap-overlay'
@@ -71,85 +71,94 @@ const SnapItem = memo(function SnapItem({
     currentHeight: 0,
   })
 
-  const handlePointerMove = useCallback((e: PointerEvent) => {
-    const state = dragStateRef.current
-    if (!state.isDragging && !state.isResizing) return
+  // Use refs for handlers to avoid stale closures and self-reference issues
+  const handlePointerMoveRef = useRef<(e: PointerEvent) => void>(() => {})
+  const handlePointerUpRef = useRef<() => void>(() => {})
 
-    const element = elementRef.current
-    if (!element) return
+  // Update handlers when dependencies change
+  useEffect(() => {
+    handlePointerMoveRef.current = (e: PointerEvent) => {
+      const state = dragStateRef.current
+      if (!state.isDragging && !state.isResizing) return
 
-    const deltaX = (e.clientX - state.startX) / zoom
-    const deltaY = (e.clientY - state.startY) / zoom
+      const element = elementRef.current
+      if (!element) return
 
-    if (state.isDragging) {
-      state.currentX = deltaX
-      state.currentY = deltaY
-      // Use transform for smooth movement (GPU accelerated)
-      element.style.transform = `translate(${deltaX}px, ${deltaY}px)`
-    } else if (state.isResizing) {
-      const aspectRatio = state.startWidth / state.startHeight
-      const scale = Math.max(0.5, 1 + (deltaX + deltaY) / (state.startWidth + state.startHeight))
-      const newWidth = Math.max(100, state.startWidth * scale)
-      const newHeight = newWidth / aspectRatio
+      const deltaX = (e.clientX - state.startX) / zoom
+      const deltaY = (e.clientY - state.startY) / zoom
 
-      state.currentWidth = newWidth
-      state.currentHeight = newHeight
+      if (state.isDragging) {
+        state.currentX = deltaX
+        state.currentY = deltaY
+        // Use transform for smooth movement (GPU accelerated)
+        element.style.transform = `translate(${deltaX}px, ${deltaY}px)`
+      } else if (state.isResizing) {
+        const aspectRatio = state.startWidth / state.startHeight
+        const scale = Math.max(0.5, 1 + (deltaX + deltaY) / (state.startWidth + state.startHeight))
+        const newWidth = Math.max(100, state.startWidth * scale)
+        const newHeight = newWidth / aspectRatio
 
-      element.style.width = `${newWidth}px`
-      if (imageRef.current) {
-        imageRef.current.style.width = `${newWidth}px`
-        imageRef.current.style.height = `${newHeight}px`
+        state.currentWidth = newWidth
+        state.currentHeight = newHeight
+
+        element.style.width = `${newWidth}px`
+        if (imageRef.current) {
+          imageRef.current.style.width = `${newWidth}px`
+          imageRef.current.style.height = `${newHeight}px`
+        }
       }
     }
   }, [zoom])
 
-  const handlePointerUp = useCallback(() => {
-    const state = dragStateRef.current
-    const element = elementRef.current
+  useEffect(() => {
+    handlePointerUpRef.current = () => {
+      const state = dragStateRef.current
+      const element = elementRef.current
 
-    if (DEBUG_STATE) console.log(`[SnapItem ${snap.id.slice(-4)}] PointerUp - isDragging:${state.isDragging} isResizing:${state.isResizing}`)
+      if (DEBUG_STATE) console.log(`[SnapItem ${snap.id.slice(-4)}] PointerUp - isDragging:${state.isDragging} isResizing:${state.isResizing}`)
 
-    window.removeEventListener('pointermove', handlePointerMove)
-    window.removeEventListener('pointerup', handlePointerUp)
+      window.removeEventListener('pointermove', handlePointerMoveRef.current)
+      window.removeEventListener('pointerup', handlePointerUpRef.current)
 
-    if (!element) {
+      if (!element) {
+        state.isDragging = false
+        state.isResizing = false
+        return
+      }
+
+      // Reset visual styles
+      element.style.transform = ''
+      element.style.opacity = ''
+      element.style.boxShadow = ''
+      element.style.zIndex = ''
+      element.style.cursor = ''
+
+      if (state.isDragging) {
+        // Calculate final position
+        const finalTop = state.startTop + state.currentY
+        const finalLeft = state.startLeft + state.currentX
+
+        if (DEBUG_STATE) console.log(`[SnapItem ${snap.id.slice(-4)}] Drag end - finalTop:${finalTop.toFixed(0)} finalLeft:${finalLeft.toFixed(0)}`)
+
+        // Update all snaps with new position
+        const newSnaps = allSnaps.map(s =>
+          s.id === snap.id ? { ...s, top: finalTop, left: finalLeft } : s
+        )
+        onReorder(newSnaps)
+      } else if (state.isResizing) {
+        if (DEBUG_STATE) console.log(`[SnapItem ${snap.id.slice(-4)}] Resize end - width:${state.currentWidth.toFixed(0)} height:${state.currentHeight.toFixed(0)}`)
+
+        // Update all snaps with new size
+        const newSnaps = allSnaps.map(s =>
+          s.id === snap.id ? { ...s, width: state.currentWidth, height: state.currentHeight } : s
+        )
+        onReorder(newSnaps)
+      }
+
       state.isDragging = false
       state.isResizing = false
-      return
     }
-
-    // Reset visual styles
-    element.style.transform = ''
-    element.style.opacity = ''
-    element.style.boxShadow = ''
-    element.style.zIndex = ''
-    element.style.cursor = ''
-
-    if (state.isDragging) {
-      // Calculate final position
-      const finalTop = state.startTop + state.currentY
-      const finalLeft = state.startLeft + state.currentX
-
-      if (DEBUG_STATE) console.log(`[SnapItem ${snap.id.slice(-4)}] Drag end - finalTop:${finalTop.toFixed(0)} finalLeft:${finalLeft.toFixed(0)}`)
-
-      // Update all snaps with new position
-      const newSnaps = allSnaps.map(s =>
-        s.id === snap.id ? { ...s, top: finalTop, left: finalLeft } : s
-      )
-      onReorder(newSnaps)
-    } else if (state.isResizing) {
-      if (DEBUG_STATE) console.log(`[SnapItem ${snap.id.slice(-4)}] Resize end - width:${state.currentWidth.toFixed(0)} height:${state.currentHeight.toFixed(0)}`)
-
-      // Update all snaps with new size
-      const newSnaps = allSnaps.map(s =>
-        s.id === snap.id ? { ...s, width: state.currentWidth, height: state.currentHeight } : s
-      )
-      onReorder(newSnaps)
-    }
-
-    state.isDragging = false
-    state.isResizing = false
-  }, [snap.id, allSnaps, onReorder, handlePointerMove])
+  }, [snap.id, allSnaps, onReorder])
 
   const handleDragStart = useCallback((e: React.PointerEvent) => {
     e.preventDefault()
@@ -175,9 +184,9 @@ const SnapItem = memo(function SnapItem({
     element.style.zIndex = '1000'
     element.style.cursor = 'grabbing'
 
-    window.addEventListener('pointermove', handlePointerMove)
-    window.addEventListener('pointerup', handlePointerUp)
-  }, [snap.top, snap.left, snap.width, snap.height, handlePointerMove, handlePointerUp])
+    window.addEventListener('pointermove', handlePointerMoveRef.current)
+    window.addEventListener('pointerup', handlePointerUpRef.current)
+  }, [snap.top, snap.left, snap.width, snap.height])
 
   const handleResizeStart = useCallback((e: React.PointerEvent) => {
     e.preventDefault()
@@ -202,9 +211,9 @@ const SnapItem = memo(function SnapItem({
     element.style.boxShadow = '0 10px 40px rgba(0,0,0,0.3)'
     element.style.zIndex = '1000'
 
-    window.addEventListener('pointermove', handlePointerMove)
-    window.addEventListener('pointerup', handlePointerUp)
-  }, [snap.top, snap.left, snap.width, snap.height, handlePointerMove, handlePointerUp])
+    window.addEventListener('pointermove', handlePointerMoveRef.current)
+    window.addEventListener('pointerup', handlePointerUpRef.current)
+  }, [snap.top, snap.left, snap.width, snap.height])
 
   const handleStartEdit = () => {
     setIsEditing(true)
@@ -322,6 +331,7 @@ export function SnapsDisplay({ snaps, onRemoveSnap, onRenameSnap, onReorderSnaps
   const prevSnapIdsRef = useRef<Set<string>>(new Set())
 
   // Track new snaps for fade-in animation
+  // All detection and state updates happen in effect to avoid ref access during render
   useEffect(() => {
     const currentIds = new Set(snaps.map(s => s.id))
     const prevIds = prevSnapIdsRef.current
@@ -332,6 +342,7 @@ export function SnapsDisplay({ snaps, onRemoveSnap, onRenameSnap, onReorderSnaps
     })
 
     if (newIds.size > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional: triggers animation for new snaps, cleaned up with timeout
       setNewSnapIds(newIds)
       const timer = setTimeout(() => setNewSnapIds(new Set()), 150)
       prevSnapIdsRef.current = currentIds

@@ -44,45 +44,21 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
     await updateAnnotationData({ canvasData: '', headingOffsets: {}, pageVersion: '' })
   }
 
-  // DEBUG: Track state updates that cause re-renders
-  const DEBUG_STATE = false
-  const renderCountRef = useRef(0)
-  renderCountRef.current++
-  if (DEBUG_STATE) {
-    console.log(`[AnnotationLayer] Render #${renderCountRef.current}`)
-  }
 
-  const [mode, _setMode] = useState<AnnotationMode>('view')
-  const setMode = (v: AnnotationMode) => { if (DEBUG_STATE) console.log('[setState] mode:', v); _setMode(v) }
-
-  const [pageVersion, _setPageVersion] = useState<string>('')
-  const setPageVersion = (v: string) => { if (DEBUG_STATE) console.log('[setState] pageVersion'); _setPageVersion(v) }
-
-  const [versionMismatch, _setVersionMismatch] = useState(false)
-  const setVersionMismatch = (v: boolean) => { if (DEBUG_STATE) console.log('[setState] versionMismatch:', v); _setVersionMismatch(v) }
-
-  const [hasAnnotations, _setHasAnnotations] = useState(false)
-  const setHasAnnotations = (v: boolean) => { if (DEBUG_STATE) console.log('[setState] hasAnnotations:', v); _setHasAnnotations(v) }
-
-  const [canvasData, _setCanvasData] = useState<string>('')
-  const setCanvasData = (v: string) => { if (DEBUG_STATE) console.log('[setState] canvasData (length:', v.length, ')'); _setCanvasData(v) }
-
-  const [headingPositions, _setHeadingPositions] = useState<HeadingPosition[]>([])
-  const setHeadingPositions = (v: HeadingPosition[]) => { if (DEBUG_STATE) console.log('[setState] headingPositions:', v.length); _setHeadingPositions(v) }
+  const [mode, setMode] = useState<AnnotationMode>('view')
+  const [pageVersion, setPageVersion] = useState<string>('')
+  const [versionMismatch, setVersionMismatch] = useState(false)
+  const [hasAnnotations, setHasAnnotations] = useState(false)
+  const [canvasData, setCanvasData] = useState<string>('')
+  const [headingPositions, setHeadingPositions] = useState<HeadingPosition[]>([])
 
   // Save state tracking
-  const [saveState, _setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
-  const setSaveState = (v: 'idle' | 'saving' | 'saved' | 'error') => { if (DEBUG_STATE) console.log('[setState] saveState:', v); _setSaveState(v) }
-
-  const [stylusModeActive, _setStylusModeActive] = useState(false)
-  const setStylusModeActive = (v: boolean) => { if (DEBUG_STATE) console.log('[setState] stylusModeActive:', v); _setStylusModeActive(v) }
-
-  const [activePen, _setActivePen] = useState(0)
-  const setActivePen = (v: number) => { if (DEBUG_STATE) console.log('[setState] activePen:', v); _setActivePen(v) }
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [stylusModeActive, setStylusModeActive] = useState(false)
+  const [activePen, setActivePen] = useState(0)
 
   // Track if pen is currently hovering or drawing - controls pointer-events on canvas
-  const [penActive, _setPenActive] = useState(false)
-  const setPenActive = (v: boolean) => { if (DEBUG_STATE) console.log('[setState] penActive:', v); _setPenActive(v) }
+  const [penActive, setPenActive] = useState(false)
   // Use refs for zoom to avoid re-renders on every gesture
   const zoomRef = useRef(1.0)
   const rafIdRef = useRef<number | null>(null)
@@ -95,8 +71,7 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
   // Scroll container ref for zoom-scroll sync
   const scrollContainerRef = useRef<HTMLElement | null>(null)
   // Display-only zoom state (updated on gesture end, not during gesture)
-  const [zoom, _setZoom] = useState(1.0)
-  const setZoom = (v: number) => { if (DEBUG_STATE) console.log('[setState] zoom:', v); _setZoom(v) }
+  const [zoom, setZoom] = useState(1.0)
   const [penColors, setPenColors] = useState<[string, string, string]>(() => {
     // Load pen colors from localStorage
     if (typeof window !== 'undefined') {
@@ -136,20 +111,11 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
   const canvasRef = useRef<SimpleCanvasHandle | null>(null)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const isClearingRef = useRef(false)
-  const [pageHeight, _setPageHeight] = useState(0)
-  const setPageHeight = (v: number) => { if (DEBUG_STATE) console.log('[setState] pageHeight:', v); _setPageHeight(v) }
-
-  const [orphanedStrokesCount, _setOrphanedStrokesCount] = useState(0)
-  const setOrphanedStrokesCount = (v: number) => { if (DEBUG_STATE) console.log('[setState] orphanedStrokesCount:', v); _setOrphanedStrokesCount(v) }
-
-  const [storedHeadingOffsets, _setStoredHeadingOffsets] = useState<Record<string, number>>({})
-  const setStoredHeadingOffsets = (v: Record<string, number>) => { if (DEBUG_STATE) console.log('[setState] storedHeadingOffsets'); _setStoredHeadingOffsets(v) }
-
-  const [storedPaddingLeft, _setStoredPaddingLeft] = useState<number | undefined>(undefined)
-  const setStoredPaddingLeft = (v: number | undefined) => { if (DEBUG_STATE) console.log('[setState] storedPaddingLeft:', v); _setStoredPaddingLeft(v) }
-
-  const [currentPaddingLeft, _setCurrentPaddingLeft] = useState<number>(0)
-  const setCurrentPaddingLeft = (v: number) => { if (DEBUG_STATE) console.log('[setState] currentPaddingLeft:', v); _setCurrentPaddingLeft(v) }
+  const [pageHeight, setPageHeight] = useState(0)
+  const [orphanedStrokesCount, setOrphanedStrokesCount] = useState(0)
+  const [storedHeadingOffsets, setStoredHeadingOffsets] = useState<Record<string, number>>({})
+  const [storedPaddingLeft, setStoredPaddingLeft] = useState<number | undefined>(undefined)
+  const [currentPaddingLeft, setCurrentPaddingLeft] = useState<number>(0)
 
   // Derive snaps from synced data (convert SnapData to Snap type)
   // Memoized to prevent unnecessary re-renders of SnapsDisplay
@@ -170,15 +136,12 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
 
   // Canvas width matches paper width exactly including padding
   // Paper element for portal (canvas renders directly into #paper)
-  const [paperElement, _setPaperElement] = useState<HTMLElement | null>(null)
-  const setPaperElement = (v: HTMLElement | null) => { if (DEBUG_STATE) console.log('[setState] paperElement:', !!v); _setPaperElement(v) }
+  const [paperElement, setPaperElement] = useState<HTMLElement | null>(null)
 
   // Main element for snaps portal (snaps need to overflow paper boundaries)
-  const [mainElement, _setMainElement] = useState<HTMLElement | null>(null)
-  const setMainElement = (v: HTMLElement | null) => { if (DEBUG_STATE) console.log('[setState] mainElement:', !!v); _setMainElement(v) }
+  const [mainElement, setMainElement] = useState<HTMLElement | null>(null)
 
-  const [paperWidth, _setPaperWidth] = useState(1280) // Fixed paper width
-  const setPaperWidth = (v: number) => { if (DEBUG_STATE) console.log('[setState] paperWidth:', v); _setPaperWidth(v) }
+  const [paperWidth, setPaperWidth] = useState(1280) // Fixed paper width
 
   // Get paper element for portal and measure its width
   useEffect(() => {
