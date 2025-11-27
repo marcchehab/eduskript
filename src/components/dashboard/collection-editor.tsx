@@ -11,7 +11,7 @@ import { SortableSkripts } from './sortable-skripts'
 import { CollectionAccessManager } from '@/components/permissions/CollectionAccessManager'
 import { CollapsibleDrawer } from '@/components/ui/collapsible-drawer'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
-import { ArrowLeft, BookOpen, FileText, Users } from 'lucide-react'
+import { ArrowLeft, BookOpen, ExternalLink, FileText, Users } from 'lucide-react'
 import { UserPermissions, CollectionWithAuthors } from '@/types'
 
 interface CollectionEditorProps {
@@ -161,6 +161,12 @@ export function CollectionEditor({ collection, userPermissions, currentUserId, u
           </p>
         </div>
         <div className="flex gap-2">
+          <Link href={`/${username}/${collection.slug}`} target="_blank">
+            <Button variant="outline">
+              <ExternalLink className="w-4 h-4 mr-2" />
+              Preview
+            </Button>
+          </Link>
           {userPermissions.canEdit && (
             <>
               <CollectionSettingsModal

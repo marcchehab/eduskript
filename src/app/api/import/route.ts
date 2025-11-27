@@ -502,10 +502,10 @@ async function performImport(
     const skriptFolder = zip.folder(skriptSlug)
     if (!skriptFolder) continue
 
-    // Get all markdown files sorted
+    // Get all markdown files sorted (exclude .excalidraw.md - those are attachments)
     const mdFiles: { name: string; order: number }[] = []
     skriptFolder.forEach((relativePath, file) => {
-      if (relativePath.endsWith('.md') && !relativePath.includes('/')) {
+      if (relativePath.endsWith('.md') && !relativePath.endsWith('.excalidraw.md') && !relativePath.includes('/')) {
         // Extract order from filename (01-slug.md)
         const orderMatch = relativePath.match(/^(\d+)-/)
         const order = orderMatch ? parseInt(orderMatch[1], 10) : 999
@@ -567,6 +567,54 @@ async function performImport(
       }
     }
 
+    // Process .excalidraw.md files in the root (convert to .excalidraw)
+    const excalidrawFiles: string[] = []
+    skriptFolder.forEach((relativePath, file) => {
+      if (relativePath.endsWith('.excalidraw.md') && !relativePath.includes('/')) {
+        excalidrawFiles.push(relativePath)
+      }
+    })
+
+    for (const excalidrawMdFile of excalidrawFiles) {
+      const file = skriptFolder.file(excalidrawMdFile)
+      if (!file) continue
+
+      // Rename from .excalidraw.md to .excalidraw
+      const newName = excalidrawMdFile.replace(/\.excalidraw\.md$/, '.excalidraw')
+
+      const existingFile = await prisma.file.findFirst({
+        where: {
+          name: newName,
+          skriptId: skript.id
+        }
+      })
+
+      if (!existingFile) {
+        const buffer = Buffer.from(await file.async('arraybuffer'))
+        const hash = createHash('sha256').update(buffer).digest('hex')
+        const physicalFilename = `${hash}.excalidraw`
+        const physicalPath = join(uploadDir, physicalFilename)
+
+        if (!existsSync(physicalPath)) {
+          await writeFile(physicalPath, buffer)
+        }
+
+        await prisma.file.create({
+          data: {
+            name: newName,
+            isDirectory: false,
+            skriptId: skript.id,
+            hash,
+            contentType: 'application/json',
+            size: BigInt(buffer.length),
+            createdBy: userId
+          }
+        })
+
+        result.files++
+      }
+    }
+
     // Process attachments
     const attachmentsFolder = skriptFolder.folder('attachments')
     if (attachmentsFolder) {
@@ -579,10 +627,15 @@ async function performImport(
         const file = attachmentsFolder.file(attachmentName)
         if (!file) continue
 
+        // Rename .excalidraw.md to .excalidraw
+        const finalName = attachmentName.endsWith('.excalidraw.md')
+          ? attachmentName.replace(/\.excalidraw\.md$/, '.excalidraw')
+          : attachmentName
+
         // Check if file already exists
         const existingFile = await prisma.file.findFirst({
           where: {
-            name: attachmentName,
+            name: finalName,
             skriptId: skript.id
           }
         })
@@ -590,7 +643,10 @@ async function performImport(
         if (!existingFile) {
           const buffer = Buffer.from(await file.async('arraybuffer'))
           const hash = createHash('sha256').update(buffer).digest('hex')
-          const ext = attachmentName.split('.').pop() || 'bin'
+          // For .excalidraw files, use excalidraw extension; otherwise use original extension
+          const ext = finalName.endsWith('.excalidraw')
+            ? 'excalidraw'
+            : (finalName.split('.').pop() || 'bin')
           const physicalFilename = `${hash}.${ext}`
           const physicalPath = join(uploadDir, physicalFilename)
 
@@ -610,13 +666,14 @@ async function performImport(
             'pdf': 'application/pdf',
             'mp4': 'video/mp4',
             'webm': 'video/webm',
-            'json': 'application/json'
+            'json': 'application/json',
+            'excalidraw': 'application/json'
           }
           const contentType = contentTypeMap[ext.toLowerCase()] || 'application/octet-stream'
 
           await prisma.file.create({
             data: {
-              name: attachmentName,
+              name: finalName,
               isDirectory: false,
               skriptId: skript.id,
               hash,

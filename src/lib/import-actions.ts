@@ -3,6 +3,8 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { revalidatePath, revalidateTag } from 'next/cache'
+import { CACHE_TAGS } from '@/lib/cached-queries'
 import JSZip from 'jszip'
 import { writeFile, mkdir } from 'fs/promises'
 import { join } from 'path'
@@ -384,7 +386,8 @@ async function performImport(
 
     const mdFiles: { name: string; order: number }[] = []
     skriptFolder.forEach((relativePath, file) => {
-      if (relativePath.endsWith('.md') && !relativePath.includes('/')) {
+      // Match .md files but exclude .excalidraw.md (those are attachments)
+      if (relativePath.endsWith('.md') && !relativePath.endsWith('.excalidraw.md') && !relativePath.includes('/')) {
         const orderMatch = relativePath.match(/^(\d+)-/)
         const order = orderMatch ? parseInt(orderMatch[1], 10) : 999
         mdFiles.push({ name: relativePath, order })
@@ -441,6 +444,54 @@ async function performImport(
       }
     }
 
+    // Process .excalidraw.md files in the root (convert to .excalidraw)
+    const excalidrawFiles: string[] = []
+    skriptFolder.forEach((relativePath, file) => {
+      if (relativePath.endsWith('.excalidraw.md') && !relativePath.includes('/')) {
+        excalidrawFiles.push(relativePath)
+      }
+    })
+
+    for (const excalidrawMdFile of excalidrawFiles) {
+      const file = skriptFolder.file(excalidrawMdFile)
+      if (!file) continue
+
+      // Rename from .excalidraw.md to .excalidraw
+      const newName = excalidrawMdFile.replace(/\.excalidraw\.md$/, '.excalidraw')
+
+      const existingFile = await prisma.file.findFirst({
+        where: {
+          name: newName,
+          skriptId: skript.id
+        }
+      })
+
+      if (!existingFile) {
+        const buffer = Buffer.from(await file.async('arraybuffer'))
+        const hash = createHash('sha256').update(buffer).digest('hex')
+        const physicalFilename = `${hash}.excalidraw`
+        const physicalPath = join(uploadDir, physicalFilename)
+
+        if (!existsSync(physicalPath)) {
+          await writeFile(physicalPath, buffer)
+        }
+
+        await prisma.file.create({
+          data: {
+            name: newName,
+            isDirectory: false,
+            skriptId: skript.id,
+            hash,
+            contentType: 'application/json',
+            size: BigInt(buffer.length),
+            createdBy: userId
+          }
+        })
+
+        result.files++
+      }
+    }
+
     // Process attachments
     const attachmentsFolder = skriptFolder.folder('attachments')
     if (attachmentsFolder) {
@@ -453,9 +504,14 @@ async function performImport(
         const file = attachmentsFolder.file(attachmentName)
         if (!file) continue
 
+        // Rename .excalidraw.md to .excalidraw
+        const finalName = attachmentName.endsWith('.excalidraw.md')
+          ? attachmentName.replace(/\.excalidraw\.md$/, '.excalidraw')
+          : attachmentName
+
         const existingFile = await prisma.file.findFirst({
           where: {
-            name: attachmentName,
+            name: finalName,
             skriptId: skript.id
           }
         })
@@ -463,7 +519,10 @@ async function performImport(
         if (!existingFile) {
           const buffer = Buffer.from(await file.async('arraybuffer'))
           const hash = createHash('sha256').update(buffer).digest('hex')
-          const ext = attachmentName.split('.').pop() || 'bin'
+          // For .excalidraw files, use excalidraw extension; otherwise use original extension
+          const ext = finalName.endsWith('.excalidraw')
+            ? 'excalidraw'
+            : (finalName.split('.').pop() || 'bin')
           const physicalFilename = `${hash}.${ext}`
           const physicalPath = join(uploadDir, physicalFilename)
 
@@ -481,13 +540,14 @@ async function performImport(
             'pdf': 'application/pdf',
             'mp4': 'video/mp4',
             'webm': 'video/webm',
-            'json': 'application/json'
+            'json': 'application/json',
+            'excalidraw': 'application/json'
           }
           const contentType = contentTypeMap[ext.toLowerCase()] || 'application/octet-stream'
 
           await prisma.file.create({
             data: {
-              name: attachmentName,
+              name: finalName,
               isDirectory: false,
               skriptId: skript.id,
               hash,
@@ -501,6 +561,17 @@ async function performImport(
         }
       }
     }
+  }
+
+  // Invalidate cache so imported content is visible immediately
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { username: true }
+  })
+  if (user?.username) {
+    revalidateTag(CACHE_TAGS.teacherContent(user.username), 'default')
+    revalidatePath(`/${user.username}`)
+    revalidatePath('/dashboard')
   }
 
   return result
@@ -606,7 +677,8 @@ export async function processImportZip(
 
     const mdFiles: { name: string; order: number }[] = []
     skriptFolder.forEach((relativePath, file) => {
-      if (relativePath.endsWith('.md') && !relativePath.includes('/')) {
+      // Match .md files but exclude .excalidraw.md (those are attachments)
+      if (relativePath.endsWith('.md') && !relativePath.endsWith('.excalidraw.md') && !relativePath.includes('/')) {
         const orderMatch = relativePath.match(/^(\d+)-/)
         const order = orderMatch ? parseInt(orderMatch[1], 10) : 999
         mdFiles.push({ name: relativePath, order })
@@ -663,6 +735,54 @@ export async function processImportZip(
       }
     }
 
+    // Process .excalidraw.md files in the root (convert to .excalidraw)
+    const excalidrawFiles: string[] = []
+    skriptFolder.forEach((relativePath, file) => {
+      if (relativePath.endsWith('.excalidraw.md') && !relativePath.includes('/')) {
+        excalidrawFiles.push(relativePath)
+      }
+    })
+
+    for (const excalidrawMdFile of excalidrawFiles) {
+      const file = skriptFolder.file(excalidrawMdFile)
+      if (!file) continue
+
+      // Rename from .excalidraw.md to .excalidraw
+      const newName = excalidrawMdFile.replace(/\.excalidraw\.md$/, '.excalidraw')
+
+      const existingFile = await prisma.file.findFirst({
+        where: {
+          name: newName,
+          skriptId: skript.id
+        }
+      })
+
+      if (!existingFile) {
+        const buffer = Buffer.from(await file.async('arraybuffer'))
+        const hash = createHash('sha256').update(buffer).digest('hex')
+        const physicalFilename = `${hash}.excalidraw`
+        const physicalPath = join(uploadDir, physicalFilename)
+
+        if (!existsSync(physicalPath)) {
+          await writeFile(physicalPath, buffer)
+        }
+
+        await prisma.file.create({
+          data: {
+            name: newName,
+            isDirectory: false,
+            skriptId: skript.id,
+            hash,
+            contentType: 'application/json',
+            size: BigInt(buffer.length),
+            createdBy: userId
+          }
+        })
+
+        result.filesImported++
+      }
+    }
+
     // Process attachments
     const attachmentsFolder = skriptFolder.folder('attachments')
     if (attachmentsFolder) {
@@ -675,9 +795,14 @@ export async function processImportZip(
         const file = attachmentsFolder.file(attachmentName)
         if (!file) continue
 
+        // Rename .excalidraw.md to .excalidraw
+        const finalName = attachmentName.endsWith('.excalidraw.md')
+          ? attachmentName.replace(/\.excalidraw\.md$/, '.excalidraw')
+          : attachmentName
+
         const existingFile = await prisma.file.findFirst({
           where: {
-            name: attachmentName,
+            name: finalName,
             skriptId: skript.id
           }
         })
@@ -685,7 +810,10 @@ export async function processImportZip(
         if (!existingFile) {
           const buffer = Buffer.from(await file.async('arraybuffer'))
           const hash = createHash('sha256').update(buffer).digest('hex')
-          const ext = attachmentName.split('.').pop() || 'bin'
+          // For .excalidraw files, use excalidraw extension; otherwise use original extension
+          const ext = finalName.endsWith('.excalidraw')
+            ? 'excalidraw'
+            : (finalName.split('.').pop() || 'bin')
           const physicalFilename = `${hash}.${ext}`
           const physicalPath = join(uploadDir, physicalFilename)
 
@@ -703,7 +831,8 @@ export async function processImportZip(
             'pdf': 'application/pdf',
             'mp4': 'video/mp4',
             'webm': 'video/webm',
-            'json': 'application/json'
+            'json': 'application/json',
+            'excalidraw': 'application/json'
           }
           const contentType = contentTypeMap[ext.toLowerCase()] || 'application/octet-stream'
 
@@ -723,6 +852,17 @@ export async function processImportZip(
         }
       }
     }
+  }
+
+  // Invalidate cache so imported content is visible immediately
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { username: true }
+  })
+  if (user?.username) {
+    revalidateTag(CACHE_TAGS.teacherContent(user.username), 'default')
+    revalidatePath(`/${user.username}`)
+    revalidatePath('/dashboard')
   }
 
   return {

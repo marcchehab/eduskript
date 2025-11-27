@@ -39,7 +39,7 @@ function getS3Client(): S3Client {
         accessKeyId: SCALEWAY_ACCESS_KEY!,
         secretAccessKey: SCALEWAY_SECRET_KEY!,
       },
-      forcePathStyle: true, // Required for Scaleway
+      forcePathStyle: false, // Use virtual-hosted style for Scaleway
     })
   }
   return s3Client

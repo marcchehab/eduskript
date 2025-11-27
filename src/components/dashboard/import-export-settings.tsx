@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
-import { Download, Upload, Loader2, FileArchive, AlertTriangle, CheckCircle, Package, XCircle, Cloud } from 'lucide-react'
+import { Download, Upload, Loader2, FileArchive, AlertTriangle, CheckCircle, Package, XCircle, Cloud, Clock } from 'lucide-react'
 
 // Files larger than 10MB use S3 upload flow
 const LARGE_FILE_THRESHOLD = 10 * 1024 * 1024
@@ -44,6 +44,7 @@ export function ImportExportSettings() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const alert = useAlertDialog()
   const pollingRef = useRef<NodeJS.Timeout | null>(null)
+  const isUploadingRef = useRef(false) // Track if we're currently uploading (to prevent state overwrites)
 
   // Define startPolling before the useEffect that uses it
   const startPolling = useCallback((jobId: string) => {
@@ -85,18 +86,27 @@ export function ImportExportSettings() {
     poll() // Initial poll
   }, [alert])
 
-  // Check if S3 is configured and if there's an active job
+  // Check if S3 is configured and if there's an active job - only on mount
   useEffect(() => {
+    let mounted = true
+
     const checkStatus = async () => {
+      // Skip if we're actively uploading
+      if (isUploadingRef.current) return
+
       try {
         const response = await fetch('/api/import/prepare')
-        if (response.ok) {
+        if (response.ok && mounted) {
           const data = await response.json()
           setS3Configured(data.s3Configured)
-          if (data.activeJob) {
+
+          // Only set currentJob if we're not actively uploading
+          if (data.activeJob && !isUploadingRef.current) {
             setCurrentJob(data.activeJob)
-            // Start polling if there's an active job
-            startPolling(data.activeJob.id)
+            // Only start polling if job is already processing (not pending/uploading from browser)
+            if (data.activeJob.status === 'processing') {
+              startPolling(data.activeJob.id)
+            }
           }
         }
       } catch (error) {
@@ -106,11 +116,13 @@ export function ImportExportSettings() {
     checkStatus()
 
     return () => {
+      mounted = false
       if (pollingRef.current) {
         clearInterval(pollingRef.current)
       }
     }
-  }, [startPolling])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Only run once on mount
 
   const handleExport = async () => {
     setIsExporting(true)
@@ -188,6 +200,7 @@ export function ImportExportSettings() {
   }
 
   const handleLargeFileUpload = async (file: File) => {
+    isUploadingRef.current = true // Prevent status polling from overwriting our state
     try {
       // Step 1: Prepare upload
       setUploadProgress(0)
@@ -208,7 +221,8 @@ export function ImportExportSettings() {
       // Step 2: Upload directly to S3 with progress
       await uploadToS3WithProgress(uploadUrl, file, (progress) => {
         setUploadProgress(progress)
-        setCurrentJob(prev => prev ? { ...prev, progress: Math.floor(progress * 0.5), message: `Uploading... ${Math.floor(progress)}%` } : null)
+        const totalProgress = Math.floor(progress * 0.5) // Upload is 0-50% of total
+        setCurrentJob(prev => prev ? { ...prev, progress: totalProgress, message: `Uploading to cloud... ${totalProgress}%` } : null)
       })
 
       // Step 3: Start processing
@@ -221,13 +235,15 @@ export function ImportExportSettings() {
         throw new Error(error.error || 'Failed to start import')
       }
 
-      // Step 4: Start polling for status
+      // Step 4: Start polling for status (now safe because upload is done)
+      isUploadingRef.current = false
       startPolling(jobId)
     } catch (error) {
       console.error('Large file upload error:', error)
       alert.showError(error instanceof Error ? error.message : 'Upload failed')
       setCurrentJob(null)
       setUploadedFile(null)
+      isUploadingRef.current = false
     } finally {
       setIsUploading(false)
     }
@@ -241,6 +257,9 @@ export function ImportExportSettings() {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest()
 
+      // Set a long timeout for large files (30 minutes)
+      xhr.timeout = 30 * 60 * 1000
+
       xhr.upload.addEventListener('progress', (event) => {
         if (event.lengthComputable) {
           const progress = (event.loaded / event.total) * 100
@@ -252,12 +271,24 @@ export function ImportExportSettings() {
         if (xhr.status >= 200 && xhr.status < 300) {
           resolve()
         } else {
-          reject(new Error(`Upload failed with status ${xhr.status}`))
+          console.error('[S3 Upload] Failed:', { status: xhr.status, statusText: xhr.statusText, response: xhr.responseText })
+          reject(new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`))
         }
       })
 
-      xhr.addEventListener('error', () => {
-        reject(new Error('Upload failed'))
+      xhr.addEventListener('error', (event) => {
+        console.error('[S3 Upload] Network error:', event)
+        reject(new Error('Upload failed: Network error. Check browser console for details.'))
+      })
+
+      xhr.addEventListener('abort', () => {
+        console.error('[S3 Upload] Aborted')
+        reject(new Error('Upload was aborted'))
+      })
+
+      xhr.addEventListener('timeout', () => {
+        console.error('[S3 Upload] Timeout after 30 minutes')
+        reject(new Error('Upload timed out after 30 minutes'))
       })
 
       xhr.open('PUT', uploadUrl)
@@ -331,7 +362,11 @@ export function ImportExportSettings() {
 
   const hasBlockingErrors = preview?.errors.some(e => e.type === 'error') ?? false
   const isLargeFile = uploadedFile && uploadedFile.size > LARGE_FILE_THRESHOLD
-  const showJobProgress = currentJob && ['uploading', 'processing'].includes(currentJob.status)
+  // Show progress for uploading, processing, OR if we're actively uploading (isUploading with a job)
+  const showJobProgress = currentJob && (
+    ['uploading', 'processing'].includes(currentJob.status) ||
+    (currentJob.status === 'pending' && isUploading)
+  )
 
   return (
     <Card>
@@ -459,7 +494,28 @@ export function ImportExportSettings() {
               </div>
             )}
 
-            {!preview && !showJobProgress && !currentJob && (
+            {/* Pending job - can be cancelled */}
+            {currentJob && currentJob.status === 'pending' && (
+              <div className="border rounded-lg p-4 bg-yellow-500/10 border-yellow-500/20">
+                <div className="flex items-center gap-2 text-yellow-600 dark:text-yellow-400">
+                  <Clock className="w-5 h-5" />
+                  <span className="font-medium">Pending Upload: {currentJob.fileName}</span>
+                </div>
+                <p className="text-sm mt-2 text-muted-foreground">
+                  A previous import was started but not completed. Cancel it to start a new one.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3"
+                  onClick={handleCancelImport}
+                >
+                  Cancel &amp; Start New
+                </Button>
+              </div>
+            )}
+
+            {!preview && !showJobProgress && (!currentJob || currentJob.status === 'cancelled') && (
               <div className="flex items-center gap-4">
                 <input
                   ref={fileInputRef}

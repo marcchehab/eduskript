@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { saveFile, listFiles, listAllFiles } from '@/lib/file-storage'
+import { saveFile } from '@/lib/file-storage'
 
 export async function POST(request: NextRequest) {
   console.log('[UPLOAD] Starting file upload request')
@@ -119,9 +119,7 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const userId = session?.user?.id
 
     const { searchParams } = new URL(request.url)
     const skriptId = searchParams.get('skriptId')
@@ -132,20 +130,50 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Skript ID is required for file listing' }, { status: 400 })
     }
 
-    // List files using new file storage system
-    // If recursive flag is set or parentId is not specified, get all files
-    const files = recursive || !parentId
-      ? await listAllFiles({
-          skriptId,
-          userId: session.user.id
-        })
-      : await listFiles({
-          skriptId,
-          parentId: parentId || null,
-          userId: session.user.id
-        })
+    // Check if user has access: either they're an author OR the skript has published content
+    const skript = await prisma.skript.findUnique({
+      where: { id: skriptId },
+      include: {
+        authors: true,
+        pages: {
+          select: { isPublished: true }
+        }
+      }
+    })
 
-    return NextResponse.json({ files })
+    if (!skript) {
+      return NextResponse.json({ error: 'Skript not found' }, { status: 404 })
+    }
+
+    const isAuthor = userId && skript.authors.some(a => a.userId === userId)
+    const hasPublishedContent = skript.pages.some(p => p.isPublished)
+
+    // Allow access if user is author OR skript has published pages (public access for file resolution)
+    if (!isAuthor && !hasPublishedContent) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Get all files for this skript (public access needs all files for image resolution)
+    const files = await prisma.file.findMany({
+      where: { skriptId },
+      orderBy: [
+        { isDirectory: 'desc' },
+        { name: 'asc' }
+      ]
+    })
+
+    const mappedFiles = files.map(file => ({
+      id: file.id,
+      name: file.name,
+      isDirectory: file.isDirectory,
+      size: file.size ? Number(file.size) : undefined,
+      contentType: file.contentType || undefined,
+      createdAt: file.createdAt,
+      updatedAt: file.updatedAt,
+      url: file.isDirectory ? undefined : `/api/files/${file.id}`
+    }))
+
+    return NextResponse.json({ files: mappedFiles })
   } catch (error) {
     console.error('[UPLOAD_GET] File listing error:', error)
     console.error('[UPLOAD_GET] Error stack:', error instanceof Error ? error.stack : 'No stack trace')
