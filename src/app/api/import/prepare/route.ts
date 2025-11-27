@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { generatePresignedUploadUrl, isS3Configured } from '@/lib/s3'
+import { generatePresignedUploadUrl, isImportS3Configured, getImportBucketName } from '@/lib/s3'
 import { nanoid } from 'nanoid'
 
 /**
@@ -26,10 +26,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Check if S3 is configured
-    if (!isS3Configured()) {
+    // Check if import S3 bucket is configured
+    if (!isImportS3Configured()) {
       return NextResponse.json(
-        { error: 'S3 not configured. Large file imports require S3 storage.' },
+        { error: 'S3 import bucket not configured. Large file imports require SCW_IMPORT_BUCKET to be set.' },
         { status: 503 }
       )
     }
@@ -70,12 +70,14 @@ export async function POST(request: Request) {
 
     // Generate unique S3 key
     const s3Key = `imports/${userId}/${nanoid()}.zip`
+    const importBucket = getImportBucketName()
 
     // Generate presigned upload URL (15 minutes expiry)
     const { url: uploadUrl, expiresAt } = await generatePresignedUploadUrl(
       s3Key,
       'application/zip',
-      900 // 15 minutes
+      900, // 15 minutes
+      importBucket
     )
 
     // Create ImportJob record
@@ -161,7 +163,7 @@ export async function GET() {
         createdAt: job.createdAt.toISOString(),
         completedAt: job.completedAt?.toISOString()
       })),
-      s3Configured: isS3Configured()
+      s3Configured: isImportS3Configured()
     })
   } catch (error) {
     console.error('[import/prepare] GET Error:', error)

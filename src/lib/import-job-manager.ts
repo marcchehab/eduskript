@@ -9,7 +9,7 @@
  */
 
 import { prisma } from './prisma'
-import { downloadFromS3, deleteFromS3 } from './s3'
+import { downloadFromS3, deleteFromS3, getImportBucketName } from './s3'
 import { processImportZip, type ImportResult } from './import-actions'
 import JSZip from 'jszip'
 
@@ -90,12 +90,14 @@ async function processImportAsync(
   userId: string,
   s3Key: string
 ): Promise<void> {
+  const importBucket = getImportBucketName()
+
   try {
     // Update status: downloading
     await updateJobStatus(jobId, 'processing', 5, 'Downloading file from storage...')
 
-    // Download from S3
-    const zipBuffer = await downloadFromS3(s3Key)
+    // Download from S3 import bucket
+    const zipBuffer = await downloadFromS3(s3Key, importBucket)
     await updateJobStatus(jobId, 'processing', 15, 'File downloaded. Extracting...')
 
     // Extract ZIP
@@ -127,7 +129,7 @@ async function processImportAsync(
     // Cleanup S3 file
     await updateJobStatus(jobId, 'processing', 95, 'Cleaning up temporary files...')
     try {
-      await deleteFromS3(s3Key)
+      await deleteFromS3(s3Key, importBucket)
     } catch (cleanupError) {
       console.warn(`[ImportJob ${jobId}] Failed to cleanup S3 file:`, cleanupError)
       // Don't fail the job for cleanup errors
@@ -146,7 +148,7 @@ async function processImportAsync(
 
     // Try to cleanup S3 file on error
     try {
-      await deleteFromS3(s3Key)
+      await deleteFromS3(s3Key, importBucket)
     } catch {
       // Ignore cleanup errors
     }
@@ -181,7 +183,7 @@ export async function cancelImportJob(jobId: string, userId: string): Promise<bo
   // Cleanup S3 file if exists
   if (job.s3Key) {
     try {
-      await deleteFromS3(job.s3Key)
+      await deleteFromS3(job.s3Key, getImportBucketName())
     } catch {
       // Ignore cleanup errors
     }

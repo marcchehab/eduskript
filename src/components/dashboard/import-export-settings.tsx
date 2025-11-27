@@ -161,6 +161,22 @@ export function ImportExportSettings() {
     const file = e.target.files?.[0]
     if (!file) return
 
+    // Check if file is too large for direct upload
+    if (file.size > LARGE_FILE_THRESHOLD) {
+      if (!s3Configured) {
+        alert.showError(
+          `File is too large (${(file.size / 1024 / 1024).toFixed(1)}MB). ` +
+          `Files over 10MB require S3 storage to be configured. ` +
+          `Please contact your administrator or use a smaller export file.`
+        )
+        // Reset file input
+        if (fileInputRef.current) {
+          fileInputRef.current.value = ''
+        }
+        return
+      }
+    }
+
     setIsUploading(true)
     setUploadedFile(file)
     setPreview(null)

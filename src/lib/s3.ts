@@ -12,15 +12,27 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 // Supports both SCW_* (Scaleway CLI convention) and SCALEWAY_* naming
 // Set these in your .env file:
 //   SCW_REGION, SCW_BUCKET, SCW_ACCESS_KEY, SCW_SECRET_KEY
+//   SCW_IMPORT_BUCKET (optional, for large file imports)
 const SCALEWAY_REGION = process.env.SCALEWAY_REGION || process.env.SCW_REGION || 'fr-par'
 const SCALEWAY_ENDPOINT = process.env.SCALEWAY_ENDPOINT || `https://s3.${SCALEWAY_REGION}.scw.cloud`
 const SCALEWAY_BUCKET = process.env.SCALEWAY_BUCKET || process.env.SCW_BUCKET
+const SCALEWAY_IMPORT_BUCKET = process.env.SCW_IMPORT_BUCKET
 const SCALEWAY_ACCESS_KEY = process.env.SCALEWAY_ACCESS_KEY_ID || process.env.SCW_ACCESS_KEY
 const SCALEWAY_SECRET_KEY = process.env.SCALEWAY_SECRET_ACCESS_KEY || process.env.SCW_SECRET_KEY
 
-// Check if S3 is configured
+// Check if S3 is configured (for snaps/file storage)
 export function isS3Configured(): boolean {
   return !!(SCALEWAY_ACCESS_KEY && SCALEWAY_SECRET_KEY && SCALEWAY_BUCKET)
+}
+
+// Check if S3 import bucket is configured (for large file imports)
+export function isImportS3Configured(): boolean {
+  return !!(SCALEWAY_ACCESS_KEY && SCALEWAY_SECRET_KEY && SCALEWAY_IMPORT_BUCKET)
+}
+
+// Get the import bucket name
+export function getImportBucketName(): string {
+  return SCALEWAY_IMPORT_BUCKET || ''
 }
 
 // Create S3 client (lazy initialization)
@@ -125,17 +137,20 @@ export function getBucketName(): string {
  * @param key - The S3 object key (path)
  * @param contentType - MIME type of the file
  * @param expiresIn - URL expiry time in seconds (default: 900 = 15 minutes)
+ * @param bucket - Optional bucket name (defaults to main bucket)
  * @returns Object with upload URL and expiration time
  */
 export async function generatePresignedUploadUrl(
   key: string,
   contentType: string,
-  expiresIn: number = 900
+  expiresIn: number = 900,
+  bucket?: string
 ): Promise<{ url: string; expiresAt: Date }> {
   const client = getS3Client()
+  const targetBucket = bucket || SCALEWAY_BUCKET
 
   const command = new PutObjectCommand({
-    Bucket: SCALEWAY_BUCKET,
+    Bucket: targetBucket,
     Key: key,
     ContentType: contentType,
   })
@@ -171,13 +186,15 @@ export async function generatePresignedDownloadUrl(
  * Download a file from S3 as a buffer
  *
  * @param key - The S3 object key (path)
+ * @param bucket - Optional bucket name (defaults to main bucket)
  * @returns File contents as Buffer
  */
-export async function downloadFromS3(key: string): Promise<Buffer> {
+export async function downloadFromS3(key: string, bucket?: string): Promise<Buffer> {
   const client = getS3Client()
+  const targetBucket = bucket || SCALEWAY_BUCKET
 
   const response = await client.send(new GetObjectCommand({
-    Bucket: SCALEWAY_BUCKET,
+    Bucket: targetBucket,
     Key: key,
   }))
 
@@ -197,12 +214,14 @@ export async function downloadFromS3(key: string): Promise<Buffer> {
  * Delete a file from S3 by key
  *
  * @param key - The S3 object key (path)
+ * @param bucket - Optional bucket name (defaults to main bucket)
  */
-export async function deleteFromS3(key: string): Promise<void> {
+export async function deleteFromS3(key: string, bucket?: string): Promise<void> {
   const client = getS3Client()
+  const targetBucket = bucket || SCALEWAY_BUCKET
 
   await client.send(new DeleteObjectCommand({
-    Bucket: SCALEWAY_BUCKET,
+    Bucket: targetBucket,
     Key: key,
   }))
 }
