@@ -1,7 +1,10 @@
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
+import Link from 'next/link'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 import { PublicSiteLayout } from '@/components/public/layout'
-import { MarkdownRenderer } from '@/components/markdown/markdown-renderer'
+import { AnnotatableContent } from '@/components/public/annotatable-content'
 import {
   getTeacherByUsernameDeduped,
   getTeacherWithLayout,
@@ -78,13 +81,20 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
     notFound()
   }
 
-  // Check for published frontpage
+  // Check if current user is the owner
+  const session = await getServerSession(authOptions)
+  const isOwner = session?.user?.id === teacher.id
+
+  // Check for frontpage (published for visitors, any for owner)
   const frontPage = await prisma.frontPage.findFirst({
     where: {
       userId: teacher.id,
-      isPublished: true
+      ...(isOwner ? {} : { isPublished: true })
     }
   })
+
+  // Check if this is a preview (unpublished)
+  const isPreviewMode = isOwner && frontPage && !frontPage.isPublished
 
   // Get page layout items
   const pageItems = teacher.pageLayout?.items || []
@@ -105,6 +115,8 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
     title: teacher.title || undefined
   }
 
+  const editUrl = isOwner ? '/dashboard/frontpage' : undefined
+
   return (
     <PublicSiteLayout
       teacher={teacherData}
@@ -112,84 +124,54 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
       rootSkripts={rootSkripts}
       sidebarBehavior={teacher.sidebarBehavior as 'contextual' | 'full' || 'contextual'}
       typographyPreference={teacher.typographyPreference as 'modern' | 'classic' || 'modern'}
+      editUrl={editUrl}
     >
-      {/* If there's a published frontpage, show it */}
-      {frontPage?.content ? (
-        <div className="prose-theme max-w-4xl mx-auto">
-          <MarkdownRenderer
-            content={frontPage.content}
-            context={{ domain }}
-          />
-        </div>
-      ) : (
-        // Otherwise show the default homepage content
-        <div className="max-w-4xl mx-auto">
-          <div className="text-center py-12">
-            <h1 className="text-4xl font-bold text-foreground mb-4">
-              Welcome to {teacher.name}&apos;s Educational Platform
-            </h1>
+      <div id="paper" className="paper-responsive py-24 bg-card dark:bg-slate-900/80 paper-shadow border border-border dark:border-white/10" style={{ maxWidth: 'min(1280px, calc(100vw - 48px))', marginLeft: 'auto', marginRight: 'auto' }}>
+        {/* Preview mode indicator for unpublished frontpage */}
+        {isPreviewMode && (
+          <div className="flex items-center gap-2 px-3 py-1.5 mb-4 text-sm rounded-md bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-800/50">
+            <svg className="h-4 w-4 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+            <span><span className="font-semibold">Preview:</span> Not published yet. Only you can see this.</span>
+          </div>
+        )}
 
+        {/* Frontpage content or empty state for owners */}
+        {frontPage?.content ? (
+          <article className="prose-theme">
+            <AnnotatableContent
+              pageId={frontPage.id}
+              content={frontPage.content}
+              domain={domain}
+            />
+          </article>
+        ) : isOwner ? (
+          <div className="text-center py-12">
+            <h1 className="text-3xl font-bold mb-4">Your Frontpage</h1>
+            <p className="text-muted-foreground mb-6">
+              You haven&apos;t created a frontpage yet.
+            </p>
+            <Link
+              href="/dashboard/frontpage"
+              className="inline-flex items-center px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+            >
+              Create Frontpage
+            </Link>
+          </div>
+        ) : (
+          <div className="text-center py-12">
+            <h1 className="text-3xl font-bold mb-4">
+              {teacher.name}&apos;s Educational Platform
+            </h1>
             {teacher.bio && (
-              <p className="text-lg text-gray-600 dark:text-gray-400 mb-8 max-w-2xl mx-auto">
+              <p className="text-muted-foreground">
                 {teacher.bio}
               </p>
             )}
-
-            {pageItems.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-gray-500 dark:text-gray-400">
-                  This teacher hasn&apos;t organized their page yet.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-8 mt-12">
-                {/* Render collections */}
-                {collections.map((collection) => (
-                  <div key={collection.id} className="bg-card border border-border rounded-lg shadow-md p-6">
-                    <h2 className="text-2xl font-semibold text-foreground mb-3">
-                      {collection.title}
-                    </h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                      {collection.skripts.map((skript) => (
-                        <div key={skript.id} className="bg-muted p-4 rounded-lg">
-                          <h4 className="font-medium text-foreground">{skript.title}</h4>
-                          <div className="text-xs text-muted-foreground mt-2">
-                            {skript.pages.length} pages
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-
-                {/* Render root-level skripts */}
-                {rootSkripts.map((skript) => (
-                  <div key={skript.id} className="bg-card border border-border rounded-lg shadow-md p-6">
-                    <h2 className="text-2xl font-semibold text-foreground mb-3">
-                      {skript.title}
-                    </h2>
-                    {skript.description && (
-                      <p className="text-gray-600 dark:text-gray-400 mb-4">
-                        {skript.description}
-                      </p>
-                    )}
-                    <div className="text-sm text-gray-500 dark:text-gray-500 mb-4">
-                      From collection: {skript.collection.title} • {skript.pages.length} pages
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {skript.pages.map((page) => (
-                        <div key={page.id} className="bg-muted p-3 rounded-lg">
-                          <h4 className="font-medium text-sm text-foreground">{page.title}</h4>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </PublicSiteLayout>
   )
 }

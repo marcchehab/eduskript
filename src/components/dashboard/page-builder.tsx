@@ -3,7 +3,7 @@
 import { Droppable, Draggable } from '@hello-pangea/dnd'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Layout, Eye, BookOpen, FileText, Plus, Edit, ChevronDown, ChevronRight, X, GripVertical } from 'lucide-react'
+import { Layout, Eye, BookOpen, FileText, Plus, Edit, ChevronDown, ChevronRight, X, GripVertical, Pencil } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
 import { useSession } from 'next-auth/react'
@@ -122,9 +122,19 @@ export function PageBuilder({
             Your Personal Page
           </CardTitle>
           <div className="flex gap-2">
+            <Link href="/dashboard/frontpage">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2"
+              >
+                <Pencil className="w-4 h-4" />
+                Edit Main Frontpage
+              </Button>
+            </Link>
             <Link href="/dashboard/collections/new">
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 size="sm"
                 className="flex items-center gap-2"
               >
@@ -132,9 +142,9 @@ export function PageBuilder({
                 New Collection
               </Button>
             </Link>
-            <Button 
-              variant="outline" 
-              size="sm" 
+            <Button
+              variant="outline"
+              size="sm"
               onClick={onPreview}
               className="flex items-center gap-2"
             >

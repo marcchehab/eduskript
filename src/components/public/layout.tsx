@@ -208,6 +208,19 @@ export function PublicSiteLayout({
     setIsSidebarOpen(false)
   }
 
+  const navigateToSkript = (collectionSlug: string, skriptSlug: string, skriptId: string) => {
+    // Navigate to skript frontpage and expand the skript
+    const url = `/${teacher.username}/${collectionSlug}/${skriptSlug}`
+
+    // Ensure the skript is expanded
+    if (!expandedSkripts.includes(skriptId)) {
+      setExpandedSkripts(prev => [...prev, skriptId])
+    }
+
+    router.push(url)
+    setIsSidebarOpen(false)
+  }
+
   return (
     <div
       className="min-h-screen bg-background overflow-visible"
@@ -374,22 +387,37 @@ export function PublicSiteLayout({
                     <div className="ml-6 space-y-1">
                       {collection.skripts.map((skript) => (
                         <div key={skript.id} className="space-y-1">
-                          {/* Skript Title */}
-                          <button
-                            onClick={() => toggleSkript(skript.id)}
+                          {/* Skript Title - split into chevron (toggle only) and title (navigate + expand) */}
+                          <div
                             className={`flex items-center w-full text-left px-3 py-1 text-sm rounded-md transition-colors ${
                               expandedSkripts.includes(skript.id)
                                 ? 'text-foreground bg-muted/50'
                                 : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                             }`}
                           >
-                            {expandedSkripts.includes(skript.id) ? (
-                              <ChevronDown className="w-3 h-3 mr-2 flex-shrink-0" />
-                            ) : (
-                              <ChevronRight className="w-3 h-3 mr-2 flex-shrink-0" />
-                            )}
-                            <span className="truncate">{skript.title}</span>
-                          </button>
+                            {/* Chevron - toggle only */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                toggleSkript(skript.id)
+                              }}
+                              className="p-0.5 -ml-0.5 mr-1 hover:bg-muted rounded flex-shrink-0"
+                              aria-label={expandedSkripts.includes(skript.id) ? 'Collapse' : 'Expand'}
+                            >
+                              {expandedSkripts.includes(skript.id) ? (
+                                <ChevronDown className="w-3 h-3" />
+                              ) : (
+                                <ChevronRight className="w-3 h-3" />
+                              )}
+                            </button>
+                            {/* Title - navigate to frontpage and expand */}
+                            <button
+                              onClick={() => navigateToSkript(collection.slug, skript.slug, skript.id)}
+                              className="truncate flex-1 text-left hover:underline"
+                            >
+                              {skript.title}
+                            </button>
+                          </div>
 
                           {/* Pages */}
                           {expandedSkripts.includes(skript.id) && (
@@ -427,25 +455,40 @@ export function PublicSiteLayout({
                   </h3>
                   {rootSkripts.map((skript) => (
                     <div key={skript.id} className="space-y-1">
-                      {/* Root Skript Title */}
-                      <button
-                        onClick={() => toggleSkript(skript.id)}
+                      {/* Root Skript Title - split into chevron (toggle only) and title (navigate + expand) */}
+                      <div
                         className={`flex items-center w-full text-left px-3 py-1 text-sm rounded-md transition-colors ${
                           expandedSkripts.includes(skript.id)
                             ? 'text-foreground bg-muted/50'
                             : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                         }`}
                       >
-                        {expandedSkripts.includes(skript.id) ? (
-                          <ChevronDown className="w-3 h-3 mr-2 flex-shrink-0" />
-                        ) : (
-                          <ChevronRight className="w-3 h-3 mr-2 flex-shrink-0" />
-                        )}
-                        <span className="truncate">{skript.title}</span>
+                        {/* Chevron - toggle only */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            toggleSkript(skript.id)
+                          }}
+                          className="p-0.5 -ml-0.5 mr-1 hover:bg-muted rounded flex-shrink-0"
+                          aria-label={expandedSkripts.includes(skript.id) ? 'Collapse' : 'Expand'}
+                        >
+                          {expandedSkripts.includes(skript.id) ? (
+                            <ChevronDown className="w-3 h-3" />
+                          ) : (
+                            <ChevronRight className="w-3 h-3" />
+                          )}
+                        </button>
+                        {/* Title - navigate to frontpage and expand */}
+                        <button
+                          onClick={() => navigateToSkript(skript.collection.slug, skript.slug, skript.id)}
+                          className="truncate flex-1 text-left hover:underline"
+                        >
+                          {skript.title}
+                        </button>
                         <span className="ml-2 text-xs text-muted-foreground">
                           ({skript.collection.title})
                         </span>
-                      </button>
+                      </div>
 
                       {/* Root Skript Pages */}
                       {expandedSkripts.includes(skript.id) && (
