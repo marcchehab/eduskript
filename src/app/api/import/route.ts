@@ -9,6 +9,7 @@ import { existsSync } from 'fs'
 import { createHash } from 'crypto'
 import { Readable } from 'stream'
 import Busboy from 'busboy'
+import { startImportProcessing, getJobStatus, cancelImportJob } from '@/lib/import-job-manager'
 
 /**
  * Parse multipart form data using busboy (streaming, bypasses body size limits)
@@ -116,6 +117,49 @@ export async function POST(request: Request) {
 
     const { searchParams } = new URL(request.url)
     const action = searchParams.get('action') || 'preview'
+
+    // Handle async import start (after S3 upload)
+    if (action === 'start') {
+      const jobId = searchParams.get('jobId')
+      if (!jobId) {
+        return NextResponse.json({ error: 'Missing jobId' }, { status: 400 })
+      }
+
+      // Find the job and verify ownership
+      const job = await prisma.importJob.findFirst({
+        where: {
+          id: jobId,
+          userId: session.user.id,
+          status: 'pending'
+        }
+      })
+
+      if (!job) {
+        return NextResponse.json({ error: 'Job not found or already started' }, { status: 404 })
+      }
+
+      if (!job.s3Key) {
+        return NextResponse.json({ error: 'Job has no S3 key' }, { status: 400 })
+      }
+
+      // Update status to uploading complete, start processing
+      await prisma.importJob.update({
+        where: { id: jobId },
+        data: {
+          status: 'processing',
+          message: 'Starting import...'
+        }
+      })
+
+      // Start async processing (returns immediately)
+      startImportProcessing(jobId, session.user.id, job.s3Key)
+
+      return NextResponse.json({
+        success: true,
+        jobId,
+        message: 'Import started'
+      })
+    }
 
     // Use streaming parser to bypass Next.js body size limits
     const { file: fileBuffer } = await parseMultipartForm(request)
@@ -589,4 +633,76 @@ async function performImport(
   }
 
   return result
+}
+
+/**
+ * GET /api/import?action=status&jobId=xxx
+ * Get the status of an import job
+ */
+export async function GET(request: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { searchParams } = new URL(request.url)
+    const action = searchParams.get('action')
+    const jobId = searchParams.get('jobId')
+
+    if (action === 'status' && jobId) {
+      const job = await getJobStatus(jobId, session.user.id)
+
+      if (!job) {
+        return NextResponse.json({ error: 'Job not found' }, { status: 404 })
+      }
+
+      return NextResponse.json(job)
+    }
+
+    return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
+  } catch (error) {
+    console.error('[import] GET Error:', error)
+    return NextResponse.json(
+      { error: 'Failed to get status' },
+      { status: 500 }
+    )
+  }
+}
+
+/**
+ * DELETE /api/import?jobId=xxx
+ * Cancel an import job
+ */
+export async function DELETE(request: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { searchParams } = new URL(request.url)
+    const jobId = searchParams.get('jobId')
+
+    if (!jobId) {
+      return NextResponse.json({ error: 'Missing jobId' }, { status: 400 })
+    }
+
+    const cancelled = await cancelImportJob(jobId, session.user.id)
+
+    if (!cancelled) {
+      return NextResponse.json(
+        { error: 'Job not found or cannot be cancelled' },
+        { status: 404 }
+      )
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('[import] DELETE Error:', error)
+    return NextResponse.json(
+      { error: 'Failed to cancel job' },
+      { status: 500 }
+    )
+  }
 }

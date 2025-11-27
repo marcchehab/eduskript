@@ -132,6 +132,9 @@ model User {
   frontPage         FrontPage?
   frontPageVersions FrontPageVersion[]
 
+  // Import/Export jobs
+  importJobs ImportJob[]
+
   @@unique([oauthProvider, oauthProviderId]) // Students identified by OAuth provider
   @@map("users")
 }
@@ -553,4 +556,37 @@ model FrontPageVersion {
 
   @@unique([frontPageId, version])
   @@map("front_page_versions")
+}
+
+// Import/Export Job Tracking
+// Tracks large file import/export operations with progress and one-per-user limit
+model ImportJob {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  type        String   // "import" or "export"
+  status      String   @default("pending") // "pending", "uploading", "processing", "completed", "failed", "cancelled"
+  progress    Int      @default(0) // 0-100
+  message     String?  // Current status message for UI
+
+  // File info
+  s3Key       String?  @map("s3_key") // S3 key for uploaded/exported file
+  fileName    String?  @map("file_name") // Original filename
+  fileSize    BigInt?  @map("file_size") // Size in bytes
+
+  // Results
+  result      Json?    // Import: { skriptsCreated, pagesCreated, filesImported }, Export: { downloadUrl }
+  error       String?  // Error message if failed
+
+  // Timestamps
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  completedAt DateTime? @map("completed_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, status])
+  @@index([status])
+  @@map("import_jobs")
 }

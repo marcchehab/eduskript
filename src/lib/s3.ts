@@ -5,7 +5,8 @@
  * that would be too large/expensive to store in PostgreSQL.
  */
 
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 // Scaleway Object Storage configuration
 // Supports both SCW_* (Scaleway CLI convention) and SCALEWAY_* naming
@@ -116,4 +117,92 @@ export async function deleteSnapImage(imageUrl: string): Promise<void> {
  */
 export function getBucketName(): string {
   return SCALEWAY_BUCKET || ''
+}
+
+/**
+ * Generate a presigned URL for uploading a file to S3
+ *
+ * @param key - The S3 object key (path)
+ * @param contentType - MIME type of the file
+ * @param expiresIn - URL expiry time in seconds (default: 900 = 15 minutes)
+ * @returns Object with upload URL and expiration time
+ */
+export async function generatePresignedUploadUrl(
+  key: string,
+  contentType: string,
+  expiresIn: number = 900
+): Promise<{ url: string; expiresAt: Date }> {
+  const client = getS3Client()
+
+  const command = new PutObjectCommand({
+    Bucket: SCALEWAY_BUCKET,
+    Key: key,
+    ContentType: contentType,
+  })
+
+  const url = await getSignedUrl(client, command, { expiresIn })
+  const expiresAt = new Date(Date.now() + expiresIn * 1000)
+
+  return { url, expiresAt }
+}
+
+/**
+ * Generate a presigned URL for downloading a file from S3
+ *
+ * @param key - The S3 object key (path)
+ * @param expiresIn - URL expiry time in seconds (default: 3600 = 1 hour)
+ * @returns Presigned download URL
+ */
+export async function generatePresignedDownloadUrl(
+  key: string,
+  expiresIn: number = 3600
+): Promise<string> {
+  const client = getS3Client()
+
+  const command = new GetObjectCommand({
+    Bucket: SCALEWAY_BUCKET,
+    Key: key,
+  })
+
+  return await getSignedUrl(client, command, { expiresIn })
+}
+
+/**
+ * Download a file from S3 as a buffer
+ *
+ * @param key - The S3 object key (path)
+ * @returns File contents as Buffer
+ */
+export async function downloadFromS3(key: string): Promise<Buffer> {
+  const client = getS3Client()
+
+  const response = await client.send(new GetObjectCommand({
+    Bucket: SCALEWAY_BUCKET,
+    Key: key,
+  }))
+
+  if (!response.Body) {
+    throw new Error(`Empty response for S3 key: ${key}`)
+  }
+
+  // Convert stream to buffer
+  const chunks: Uint8Array[] = []
+  for await (const chunk of response.Body as AsyncIterable<Uint8Array>) {
+    chunks.push(chunk)
+  }
+  return Buffer.concat(chunks)
+}
+
+/**
+ * Delete a file from S3 by key
+ *
+ * @param key - The S3 object key (path)
+ */
+export async function deleteFromS3(key: string): Promise<void> {
+  const client = getS3Client()
+
+  await client.send(new DeleteObjectCommand({
+    Bucket: SCALEWAY_BUCKET,
+    Key: key,
+  }))
 }

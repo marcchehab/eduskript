@@ -46,7 +46,14 @@ interface ImportResult {
   preview?: ImportPreview
   imported?: { collections: number; skripts: number; pages: number; files: number }
   warnings?: ImportError[]
+  // For job manager compatibility
+  collectionsCreated?: number
+  skriptsCreated?: number
+  pagesCreated?: number
+  filesImported?: number
 }
+
+export type { ImportResult, ExportManifest }
 
 /**
  * Server Action for importing content (supports large files via serverActions.bodySizeLimit)
@@ -497,4 +504,229 @@ async function performImport(
   }
 
   return result
+}
+
+/**
+ * Process import from a pre-loaded ZIP with progress callback
+ * Used by the import job manager for large file imports via S3
+ */
+export async function processImportZip(
+  zip: JSZip,
+  manifest: ExportManifest,
+  userId: string,
+  onProgress?: (progress: number, message: string) => Promise<void>
+): Promise<ImportResult> {
+  const uploadDir = process.env.UPLOAD_DIR || join(process.cwd(), 'uploads')
+
+  if (!existsSync(uploadDir)) {
+    await mkdir(uploadDir, { recursive: true })
+  }
+
+  const result = {
+    collectionsCreated: 0,
+    skriptsCreated: 0,
+    pagesCreated: 0,
+    filesImported: 0
+  }
+  const collectionIdMap = new Map<string, string>()
+  const skriptIdMap = new Map<string, string>()
+
+  const totalSkripts = Object.keys(manifest.skripts).length
+  let processedSkripts = 0
+
+  // Create or find collections
+  await onProgress?.(0, 'Creating collections...')
+  for (const collectionData of manifest.collections) {
+    let collection = await prisma.collection.findFirst({
+      where: {
+        slug: collectionData.slug,
+        authors: { some: { userId } }
+      }
+    })
+
+    if (!collection) {
+      collection = await prisma.collection.create({
+        data: {
+          title: collectionData.title,
+          description: collectionData.description,
+          slug: collectionData.slug,
+          isPublished: false,
+          authors: {
+            create: { userId, permission: 'author' }
+          }
+        }
+      })
+      result.collectionsCreated++
+    }
+
+    collectionIdMap.set(collectionData.slug, collection.id)
+  }
+
+  // Create skripts and pages
+  for (const [skriptSlug, skriptData] of Object.entries(manifest.skripts)) {
+    processedSkripts++
+    const progressPercent = Math.floor((processedSkripts / totalSkripts) * 100)
+    await onProgress?.(progressPercent, `Processing skript ${processedSkripts}/${totalSkripts}: ${skriptData.title}`)
+
+    let skript = await prisma.skript.findFirst({
+      where: {
+        slug: skriptSlug,
+        authors: { some: { userId } }
+      }
+    })
+
+    if (!skript) {
+      const collectionSlug = manifest.collections.find(c => c.skripts.includes(skriptSlug))?.slug
+      const collectionId = collectionSlug ? collectionIdMap.get(collectionSlug) : null
+
+      skript = await prisma.skript.create({
+        data: {
+          title: skriptData.title,
+          description: skriptData.description,
+          slug: skriptSlug,
+          isPublished: false,
+          authors: {
+            create: { userId, permission: 'author' }
+          },
+          ...(collectionId && {
+            collectionSkripts: {
+              create: { collectionId, order: 0 }
+            }
+          })
+        }
+      })
+      result.skriptsCreated++
+    }
+
+    skriptIdMap.set(skriptSlug, skript.id)
+
+    // Process pages
+    const skriptFolder = zip.folder(skriptSlug)
+    if (!skriptFolder) continue
+
+    const mdFiles: { name: string; order: number }[] = []
+    skriptFolder.forEach((relativePath, file) => {
+      if (relativePath.endsWith('.md') && !relativePath.includes('/')) {
+        const orderMatch = relativePath.match(/^(\d+)-/)
+        const order = orderMatch ? parseInt(orderMatch[1], 10) : 999
+        mdFiles.push({ name: relativePath, order })
+      }
+    })
+    mdFiles.sort((a, b) => a.order - b.order)
+
+    for (let i = 0; i < mdFiles.length; i++) {
+      const mdFile = mdFiles[i]
+      const file = skriptFolder.file(mdFile.name)
+      if (!file) continue
+
+      const content = await file.async('string')
+      const { frontmatter, body } = parseFrontmatter(content)
+
+      const slugMatch = mdFile.name.match(/^\d+-(.+)\.md$/)
+      const pageSlug = slugMatch ? slugMatch[1] : mdFile.name.replace('.md', '')
+
+      const existingPage = await prisma.page.findFirst({
+        where: {
+          slug: pageSlug,
+          skriptId: skript.id
+        }
+      })
+
+      if (!existingPage) {
+        const title = frontmatter.title || pageSlug.replace(/-/g, ' ')
+
+        const page = await prisma.page.create({
+          data: {
+            title,
+            content: body,
+            slug: pageSlug,
+            order: i,
+            isPublished: false,
+            skriptId: skript.id,
+            authors: {
+              create: { userId, permission: 'author' }
+            }
+          }
+        })
+
+        await prisma.pageVersion.create({
+          data: {
+            pageId: page.id,
+            content: body,
+            version: 1,
+            authorId: userId,
+            changeLog: 'Imported'
+          }
+        })
+
+        result.pagesCreated++
+      }
+    }
+
+    // Process attachments
+    const attachmentsFolder = skriptFolder.folder('attachments')
+    if (attachmentsFolder) {
+      const attachmentFiles: string[] = []
+      attachmentsFolder.forEach((relativePath, file) => {
+        if (!file.dir) attachmentFiles.push(relativePath)
+      })
+
+      for (const attachmentName of attachmentFiles) {
+        const file = attachmentsFolder.file(attachmentName)
+        if (!file) continue
+
+        const existingFile = await prisma.file.findFirst({
+          where: {
+            name: attachmentName,
+            skriptId: skript.id
+          }
+        })
+
+        if (!existingFile) {
+          const buffer = Buffer.from(await file.async('arraybuffer'))
+          const hash = createHash('sha256').update(buffer).digest('hex')
+          const ext = attachmentName.split('.').pop() || 'bin'
+          const physicalFilename = `${hash}.${ext}`
+          const physicalPath = join(uploadDir, physicalFilename)
+
+          if (!existsSync(physicalPath)) {
+            await writeFile(physicalPath, buffer)
+          }
+
+          const contentTypeMap: Record<string, string> = {
+            'png': 'image/png',
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'svg': 'image/svg+xml',
+            'webp': 'image/webp',
+            'gif': 'image/gif',
+            'pdf': 'application/pdf',
+            'mp4': 'video/mp4',
+            'webm': 'video/webm',
+            'json': 'application/json'
+          }
+          const contentType = contentTypeMap[ext.toLowerCase()] || 'application/octet-stream'
+
+          await prisma.file.create({
+            data: {
+              name: attachmentName,
+              isDirectory: false,
+              skriptId: skript.id,
+              hash,
+              contentType,
+              size: BigInt(buffer.length),
+              createdBy: userId
+            }
+          })
+
+          result.filesImported++
+        }
+      }
+    }
+  }
+
+  return {
+    success: true,
+    ...result
+  }
 }

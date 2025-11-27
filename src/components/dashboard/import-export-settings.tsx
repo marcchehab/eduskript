@@ -1,11 +1,14 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
-import { Download, Upload, Loader2, FileArchive, AlertTriangle, CheckCircle, Package } from 'lucide-react'
+import { Download, Upload, Loader2, FileArchive, AlertTriangle, CheckCircle, Package, XCircle, Cloud } from 'lucide-react'
+
+// Files larger than 10MB use S3 upload flow
+const LARGE_FILE_THRESHOLD = 10 * 1024 * 1024
 
 interface ImportPreview {
   collections: { slug: string; title: string; isNew: boolean }[]
@@ -14,14 +17,100 @@ interface ImportPreview {
   errors: { type: 'error' | 'warning'; location: string; message: string }[]
 }
 
+interface ImportJob {
+  id: string
+  status: 'pending' | 'uploading' | 'processing' | 'completed' | 'failed' | 'cancelled'
+  progress: number
+  message: string | null
+  fileName: string | null
+  result?: {
+    collectionsCreated?: number
+    skriptsCreated?: number
+    pagesCreated?: number
+    filesImported?: number
+  }
+  error?: string
+}
+
 export function ImportExportSettings() {
   const [isExporting, setIsExporting] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
   const [preview, setPreview] = useState<ImportPreview | null>(null)
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
+  const [currentJob, setCurrentJob] = useState<ImportJob | null>(null)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [s3Configured, setS3Configured] = useState<boolean | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const alert = useAlertDialog()
+  const pollingRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Define startPolling before the useEffect that uses it
+  const startPolling = useCallback((jobId: string) => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current)
+    }
+
+    const poll = async () => {
+      try {
+        const response = await fetch(`/api/import?action=status&jobId=${jobId}`)
+        if (response.ok) {
+          const job = await response.json()
+          setCurrentJob(job)
+
+          if (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') {
+            if (pollingRef.current) {
+              clearInterval(pollingRef.current)
+              pollingRef.current = null
+            }
+
+            if (job.status === 'completed') {
+              const r = job.result
+              alert.showSuccess(
+                `Import completed: ${r?.collectionsCreated || 0} collections, ` +
+                `${r?.skriptsCreated || 0} skripts, ${r?.pagesCreated || 0} pages, ` +
+                `${r?.filesImported || 0} files`
+              )
+            } else if (job.status === 'failed') {
+              alert.showError(job.error || 'Import failed')
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Failed to poll job status:', error)
+      }
+    }
+
+    pollingRef.current = setInterval(poll, 1000)
+    poll() // Initial poll
+  }, [alert])
+
+  // Check if S3 is configured and if there's an active job
+  useEffect(() => {
+    const checkStatus = async () => {
+      try {
+        const response = await fetch('/api/import/prepare')
+        if (response.ok) {
+          const data = await response.json()
+          setS3Configured(data.s3Configured)
+          if (data.activeJob) {
+            setCurrentJob(data.activeJob)
+            // Start polling if there's an active job
+            startPolling(data.activeJob.id)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to check import status:', error)
+      }
+    }
+    checkStatus()
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current)
+      }
+    }
+  }, [startPolling])
 
   const handleExport = async () => {
     setIsExporting(true)
@@ -64,6 +153,15 @@ export function ImportExportSettings() {
     setUploadedFile(file)
     setPreview(null)
 
+    // Check if we need to use the large file flow
+    if (file.size > LARGE_FILE_THRESHOLD && s3Configured) {
+      await handleLargeFileUpload(file)
+    } else {
+      await handleSmallFileUpload(file)
+    }
+  }
+
+  const handleSmallFileUpload = async (file: File) => {
     try {
       const formData = new FormData()
       formData.append('file', file)
@@ -87,6 +185,85 @@ export function ImportExportSettings() {
     } finally {
       setIsUploading(false)
     }
+  }
+
+  const handleLargeFileUpload = async (file: File) => {
+    try {
+      // Step 1: Prepare upload
+      setUploadProgress(0)
+      const prepareResponse = await fetch('/api/import/prepare', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileName: file.name, fileSize: file.size })
+      })
+
+      if (!prepareResponse.ok) {
+        const error = await prepareResponse.json()
+        throw new Error(error.error || 'Failed to prepare upload')
+      }
+
+      const { jobId, uploadUrl } = await prepareResponse.json()
+      setCurrentJob({ id: jobId, status: 'uploading', progress: 0, message: 'Uploading to storage...', fileName: file.name })
+
+      // Step 2: Upload directly to S3 with progress
+      await uploadToS3WithProgress(uploadUrl, file, (progress) => {
+        setUploadProgress(progress)
+        setCurrentJob(prev => prev ? { ...prev, progress: Math.floor(progress * 0.5), message: `Uploading... ${Math.floor(progress)}%` } : null)
+      })
+
+      // Step 3: Start processing
+      const startResponse = await fetch(`/api/import?action=start&jobId=${jobId}`, {
+        method: 'POST'
+      })
+
+      if (!startResponse.ok) {
+        const error = await startResponse.json()
+        throw new Error(error.error || 'Failed to start import')
+      }
+
+      // Step 4: Start polling for status
+      startPolling(jobId)
+    } catch (error) {
+      console.error('Large file upload error:', error)
+      alert.showError(error instanceof Error ? error.message : 'Upload failed')
+      setCurrentJob(null)
+      setUploadedFile(null)
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  const uploadToS3WithProgress = async (
+    uploadUrl: string,
+    file: File,
+    onProgress: (progress: number) => void
+  ): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+
+      xhr.upload.addEventListener('progress', (event) => {
+        if (event.lengthComputable) {
+          const progress = (event.loaded / event.total) * 100
+          onProgress(progress)
+        }
+      })
+
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve()
+        } else {
+          reject(new Error(`Upload failed with status ${xhr.status}`))
+        }
+      })
+
+      xhr.addEventListener('error', () => {
+        reject(new Error('Upload failed'))
+      })
+
+      xhr.open('PUT', uploadUrl)
+      xhr.setRequestHeader('Content-Type', 'application/zip')
+      xhr.send(file)
+    })
   }
 
   const handleImport = async () => {
@@ -129,15 +306,32 @@ export function ImportExportSettings() {
     }
   }
 
-  const handleCancelImport = () => {
+  const handleCancelImport = async () => {
+    if (currentJob && (currentJob.status === 'pending' || currentJob.status === 'uploading')) {
+      try {
+        await fetch(`/api/import?jobId=${currentJob.id}`, { method: 'DELETE' })
+      } catch (error) {
+        console.error('Failed to cancel job:', error)
+      }
+    }
+
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current)
+      pollingRef.current = null
+    }
+
     setPreview(null)
     setUploadedFile(null)
+    setCurrentJob(null)
+    setUploadProgress(0)
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
   }
 
   const hasBlockingErrors = preview?.errors.some(e => e.type === 'error') ?? false
+  const isLargeFile = uploadedFile && uploadedFile.size > LARGE_FILE_THRESHOLD
+  const showJobProgress = currentJob && ['uploading', 'processing'].includes(currentJob.status)
 
   return (
     <Card>
@@ -182,9 +376,90 @@ export function ImportExportSettings() {
             <h3 className="text-sm font-medium">Import Content</h3>
             <p className="text-sm text-muted-foreground">
               Upload a zip file exported from Eduskript to import content. Existing content with the same slug will be skipped.
+              {s3Configured && (
+                <span className="block mt-1 text-xs">
+                  <Cloud className="w-3 h-3 inline mr-1" />
+                  Large file support enabled (files &gt;10MB upload via cloud storage)
+                </span>
+              )}
             </p>
 
-            {!preview && (
+            {/* Job Progress Display */}
+            {showJobProgress && (
+              <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
+                <div className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                  <span className="font-medium">{currentJob.fileName}</span>
+                </div>
+
+                {/* Progress Bar */}
+                <div className="space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">{currentJob.message || 'Processing...'}</span>
+                    <span className="font-mono">{currentJob.progress}%</span>
+                  </div>
+                  <div className="h-2 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-blue-500 transition-all duration-300"
+                      style={{ width: `${currentJob.progress}%` }}
+                    />
+                  </div>
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCancelImport}
+                  disabled={currentJob.status === 'processing'}
+                >
+                  Cancel
+                </Button>
+              </div>
+            )}
+
+            {/* Completed/Failed Job Display */}
+            {currentJob && currentJob.status === 'completed' && (
+              <div className="border rounded-lg p-4 bg-green-500/10 border-green-500/20">
+                <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
+                  <CheckCircle className="w-5 h-5" />
+                  <span className="font-medium">Import Completed</span>
+                </div>
+                <p className="text-sm mt-2">
+                  Imported {currentJob.result?.collectionsCreated || 0} collections,{' '}
+                  {currentJob.result?.skriptsCreated || 0} skripts,{' '}
+                  {currentJob.result?.pagesCreated || 0} pages,{' '}
+                  {currentJob.result?.filesImported || 0} files.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3"
+                  onClick={handleCancelImport}
+                >
+                  Dismiss
+                </Button>
+              </div>
+            )}
+
+            {currentJob && currentJob.status === 'failed' && (
+              <div className="border rounded-lg p-4 bg-destructive/10 border-destructive/20">
+                <div className="flex items-center gap-2 text-destructive">
+                  <XCircle className="w-5 h-5" />
+                  <span className="font-medium">Import Failed</span>
+                </div>
+                <p className="text-sm mt-2 text-destructive">{currentJob.error || 'Unknown error'}</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3"
+                  onClick={handleCancelImport}
+                >
+                  Dismiss
+                </Button>
+              </div>
+            )}
+
+            {!preview && !showJobProgress && !currentJob && (
               <div className="flex items-center gap-4">
                 <input
                   ref={fileInputRef}
@@ -214,8 +489,8 @@ export function ImportExportSettings() {
               </div>
             )}
 
-            {/* Preview */}
-            {preview && (
+            {/* Preview (for small files) */}
+            {preview && !isLargeFile && (
               <div className="border rounded-lg p-4 space-y-4">
                 <div className="flex items-center gap-2">
                   <FileArchive className="w-5 h-5" />
