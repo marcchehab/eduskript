@@ -5,9 +5,10 @@ import { Pool } from 'pg'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 
+const isLocal = process.env.DATABASE_URL?.includes('localhost')
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined,
+  ssl: isLocal ? false : { rejectUnauthorized: false },
   connectionTimeoutMillis: 10000,
 })
 const adapter = new PrismaPg(pool)
@@ -37,6 +38,7 @@ async function main() {
       email: 'eduadmin@eduskript.org',
       name: 'Edu Admin',
       username: 'eduadmin',
+      pageSlug: 'eduadmin',
       hashedPassword,
       emailVerified: new Date(),
       isAdmin: true,
