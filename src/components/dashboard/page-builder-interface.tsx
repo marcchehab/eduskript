@@ -4,6 +4,7 @@ import { DragDropContext, DropResult, DragStart } from '@hello-pangea/dnd'
 import { useState, useEffect } from 'react'
 import { ContentLibrary } from './content-library'
 import { PageBuilder } from './page-builder'
+import { ImportExportSettings } from './import-export-settings'
 import { useSession } from 'next-auth/react'
 import { checkCollectionPermissions, checkSkriptPermissions } from '@/lib/permissions'
 
@@ -642,7 +643,7 @@ export function PageBuilderInterface() {
       window.open(url, '_blank')
     } else {
       // Username not set - redirect to settings
-      alert('You need to set a username first. Go to Settings > Page Settings to set your username.')
+      alert('You need to set a Page URL first. Go to Settings > Page Settings to configure it.')
       window.location.href = '/dashboard/settings'
     }
   }
@@ -669,13 +670,13 @@ export function PageBuilderInterface() {
   }
 
   return (
-    <DragDropContext 
-      onDragStart={handleDragStart} 
+    <DragDropContext
+      onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
       <div className="flex gap-6 min-h-[400px]">
         {/* Page Builder - Left Side */}
-        <div className="flex-1">
+        <div className="flex-1 flex flex-col gap-6">
           <PageBuilder
             items={pageItems}
             onItemsChange={handleItemsChange}
@@ -691,6 +692,9 @@ export function PageBuilderInterface() {
             draggedItem={activeItem}
             onRefresh={() => setRefreshTrigger(prev => prev + 1)}
           />
+
+          {/* Import/Export - under page builder */}
+          <ImportExportSettings />
         </div>
 
         {/* Content Library - Right Side */}

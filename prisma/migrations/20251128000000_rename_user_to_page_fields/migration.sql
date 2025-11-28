@@ -7,3 +7,6 @@ ALTER TABLE "users" RENAME COLUMN "webpageDescription" TO "pageDescription";
 
 -- Add new pageName field
 ALTER TABLE "users" ADD COLUMN "pageName" TEXT;
+
+-- Add pageIcon field for custom page branding
+ALTER TABLE "users" ADD COLUMN "pageIcon" TEXT;

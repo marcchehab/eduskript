@@ -1,5 +1,4 @@
 import { PageBuilderInterface } from '@/components/dashboard/page-builder-interface'
-import { ImportExportSettings } from '@/components/dashboard/import-export-settings'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { redirect } from 'next/navigation'
@@ -24,9 +23,6 @@ export default async function PageBuilderPage() {
       </div>
 
       <PageBuilderInterface />
-
-      {/* Import/Export - Backup and restore your content */}
-      <ImportExportSettings />
     </div>
   )
 }
