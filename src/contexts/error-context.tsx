@@ -2,10 +2,9 @@
 
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
-import { useSession } from 'next-auth/react'
 import { ErrorModal, ErrorDetails } from '@/components/ui/error-modal'
 import { setGlobalErrorHandler, clearGlobalErrorHandler } from '@/lib/api-error-handler'
-import { getSignInUrlClient } from '@/lib/auth-redirect'
+import { getSignInUrl, getTeacherPageSlug } from '@/lib/auth-redirect'
 
 interface ErrorContextType {
   showError: (error: ErrorDetails, options?: ErrorOptions) => void
@@ -30,7 +29,6 @@ const ErrorContext = createContext<ErrorContextType | undefined>(undefined)
 
 export function ErrorProvider({ children }: { children: ReactNode }) {
   const router = useRouter()
-  const { data: session } = useSession()
   const [errorState, setErrorState] = useState<ErrorState>({
     error: null,
     options: {}
@@ -97,14 +95,16 @@ export function ErrorProvider({ children }: { children: ReactNode }) {
   const handleClose = useCallback(() => {
     // Handle 401 auto-redirect
     if (errorState.error?.status === 401 && errorState.options.autoRedirectOn401) {
-      // Use centralized auth redirect utility to intelligently determine sign-in type
-      const signInUrl = getSignInUrlClient({ session })
+      // Determine sign-in context from current pathname
+      const pathname = typeof window !== 'undefined' ? window.location.pathname : '/'
+      const pageSlug = getTeacherPageSlug(pathname)
+      const signInUrl = getSignInUrl(pathname, pageSlug)
       router.push(signInUrl)
       return
     }
 
     hideError()
-  }, [errorState.error, errorState.options, session, router, hideError])
+  }, [errorState.error, errorState.options, router, hideError])
 
   return (
     <ErrorContext.Provider value={{ showError, hideError, isVisible: !!errorState.error }}>

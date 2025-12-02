@@ -8,7 +8,7 @@ export default async function UserFrontPageEditPage() {
   const session = await getServerSession(authOptions)
 
   if (!session?.user?.id) {
-    redirect('/api/auth/signin')
+    redirect('/auth/signin')
   }
 
   // Only teachers can have frontpages

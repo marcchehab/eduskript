@@ -20,7 +20,7 @@ export default async function SkriptFrontPageEditPage({ params }: SkriptFrontPag
   const { slug: collectionSlug, skriptSlug } = await params
 
   if (!session?.user?.id) {
-    redirect('/api/auth/signin')
+    redirect('/auth/signin')
   }
 
   // Get the collection

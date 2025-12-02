@@ -7,10 +7,10 @@ import { SignInForm } from '@/components/auth/signin-form'
 function SignInContent() {
   const searchParams = useSearchParams()
   const callbackUrl = searchParams.get('callbackUrl') || '/dashboard'
-  // Get account type from URL parameter, default to 'student'
-  const accountType = (searchParams.get('type') as 'teacher' | 'student') || 'student'
+  // If 'from' param is present, user is coming from a teacher's page
+  const fromTeacherPage = searchParams.get('from') || undefined
 
-  return <SignInForm accountType={accountType} callbackUrl={callbackUrl} />
+  return <SignInForm fromTeacherPage={fromTeacherPage} callbackUrl={callbackUrl} />
 }
 
 export default function SignInPage() {

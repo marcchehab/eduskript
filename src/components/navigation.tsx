@@ -33,10 +33,10 @@ export function Navigation() {
               </div>
             ) : (
               <div className="flex items-center gap-2">
-                <Link href="/auth/signin?type=teacher">
+                <Link href="/auth/signin">
                   <Button variant="ghost">Sign In</Button>
                 </Link>
-                <Link href="/auth/signup?type=teacher">
+                <Link href="/auth/signup">
                   <Button>Sign Up</Button>
                 </Link>
               </div>

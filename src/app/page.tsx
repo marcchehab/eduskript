@@ -18,7 +18,7 @@ export default function HomePage() {
           
           <div className="flex gap-4 justify-center flex-wrap">
             <Button asChild size="lg">
-              <Link href="/auth/signin?type=teacher">Get Started For Free</Link>
+              <Link href="/auth/signup">Get Started For Free</Link>
             </Button>
             <Button asChild variant="outline" size="lg">
               <Link href="/demo">View Demo</Link>

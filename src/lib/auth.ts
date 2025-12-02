@@ -17,15 +17,18 @@ export const authOptions: NextAuthOptions = {
     ? PrivacyAdapter({
         prisma,
         isStudentSignup: async (email: string, context?: any) => {
-          // The account type will be stored in a server-side map during signin
-          // This is set by the custom signin endpoint
+          // Check if OAuth was initiated from a teacher's page (student signup)
+          // The cookie is set by SignInForm before OAuth redirect
           try {
-            // Try to get from the global signup type tracker
-            const accountType = (global as any).__nextauth_signup_type
-            // Clean up after use
-            delete (global as any).__nextauth_signup_type
-            return accountType === 'student'
+            const cookieStore = await cookies()
+            const fromTeacherPage = cookieStore.get('oauth_from_teacher_page')?.value
+
+            // If the cookie exists, this is a student signup from a teacher's page
+            // New users from teacher pages become students
+            // New users from main site become teachers
+            return !!fromTeacherPage
           } catch {
+            // If cookies() fails, default to teacher (main site behavior)
             return false
           }
         },
@@ -134,7 +137,13 @@ export const authOptions: NextAuthOptions = {
   } : undefined,
   callbacks: {
     async signIn({ user, account, profile }) {
-      // No need to clean up cookies anymore since we use global variable
+      // Clean up the OAuth context cookie after sign-in
+      try {
+        const cookieStore = await cookies()
+        cookieStore.delete('oauth_from_teacher_page')
+      } catch {
+        // Ignore cookie cleanup errors
+      }
       return true
     },
     async jwt({ token, user, trigger, account }) {

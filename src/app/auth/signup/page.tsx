@@ -14,7 +14,7 @@ export default function SignUpPage() {
     email: '',
     password: '',
     confirmPassword: '',
-    subdomain: ''
+    pageSlug: ''
   })
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
@@ -50,7 +50,7 @@ export default function SignUpPage() {
           name: formData.name,
           email: formData.email,
           password: formData.password,
-          subdomain: formData.subdomain
+          pageSlug: formData.pageSlug
         })
       })
 
@@ -105,7 +105,7 @@ export default function SignUpPage() {
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl text-center">Create Teacher Account</CardTitle>
           <CardDescription className="text-center">
-            If you are a teacher, create your account here. Students should sign in through their teacher&apos;s subdomain.
+            Create your teacher account to start building educational content.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -140,7 +140,7 @@ export default function SignUpPage() {
                 </Button>
                 
                 <Link
-                  href="/auth/signin?type=teacher"
+                  href="/auth/signin"
                   className="inline-flex items-center justify-center w-full px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-500 dark:text-blue-400"
                 >
                   Back to Sign In
@@ -174,17 +174,17 @@ export default function SignUpPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="subdomain">Subdomain (Optional)</Label>
+                <Label htmlFor="pageSlug">Page URL (Optional)</Label>
                 <Input
-                  id="subdomain"
-                  name="subdomain"
+                  id="pageSlug"
+                  name="pageSlug"
                   type="text"
-                  placeholder="your-site-name"
-                  value={formData.subdomain}
+                  placeholder="your-page-name"
+                  value={formData.pageSlug}
                   onChange={handleChange}
                 />
                 <p className="text-sm text-gray-500">
-                  This will be your site URL: {formData.subdomain || 'your-site'}.eduskript.org
+                  Your page URL: eduskript.org/{formData.pageSlug || 'your-page-name'}
                 </p>
               </div>
               <div className="space-y-2">
@@ -229,7 +229,7 @@ export default function SignUpPage() {
               Already have an account?{' '}
             </span>
             <Link
-              href="/auth/signin?type=teacher"
+              href="/auth/signin"
               className="text-blue-600 hover:text-blue-500 dark:text-blue-400"
             >
               Sign in

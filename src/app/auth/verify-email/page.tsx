@@ -43,7 +43,7 @@ function VerifyEmailContent() {
           // Redirect to signin after 3 seconds
           setTimeout(() => {
             if (isMounted) {
-              router.push('/auth/signin?type=teacher&verified=1')
+              router.push('/auth/signin?verified=1')
             }
           }, 3000)
         } else {
@@ -93,7 +93,7 @@ function VerifyEmailContent() {
               </p>
               <div className="mt-4">
                 <Link
-                  href="/auth/signin?type=teacher"
+                  href="/auth/signin"
                   className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                 >
                   Continue to Sign In
@@ -114,14 +114,14 @@ function VerifyEmailContent() {
               
               <div className="space-y-2">
                 <Link
-                  href="/auth/signup?type=teacher"
+                  href="/auth/signup"
                   className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                 >
                   Back to Sign Up
                 </Link>
                 <br />
                 <Link
-                  href="/auth/signin?type=teacher"
+                  href="/auth/signin"
                   className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                 >
                   Go to Sign In
