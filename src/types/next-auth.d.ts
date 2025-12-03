@@ -20,6 +20,7 @@ declare module "next-auth" {
       bio?: string | null
       isAdmin?: boolean
       requirePasswordReset?: boolean
+      needsProfileCompletion?: boolean
       accountType?: string
       studentPseudonym?: string | null
       typographyPreference?: string | null
@@ -42,6 +43,7 @@ declare module "next-auth" {
     bio?: string | null
     isAdmin?: boolean
     requirePasswordReset?: boolean
+    needsProfileCompletion?: boolean
     accountType?: string
     studentPseudonym?: string | null
     typographyPreference?: string | null
@@ -65,6 +67,7 @@ declare module "next-auth/jwt" {
     bio?: string | null
     isAdmin?: boolean
     requirePasswordReset?: boolean
+    needsProfileCompletion?: boolean
     accountType?: string
     studentPseudonym?: string | null
     typographyPreference?: string | null

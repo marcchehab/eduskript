@@ -104,7 +104,7 @@ export function SignInForm({ fromTeacherPage, callbackUrl = '/dashboard' }: Sign
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-background py-12 px-4 sm:px-6 lg:px-8">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl text-center">
@@ -205,7 +205,7 @@ export function SignInForm({ fromTeacherPage, callbackUrl = '/dashboard' }: Sign
               <div className="mt-4 text-center text-sm">
                 <span className="text-muted-foreground">Don&apos;t have an account? </span>
                 <Link href="/auth/signup" className="text-primary hover:underline">
-                  Sign up
+                  Create teaching account
                 </Link>
               </div>
             </>

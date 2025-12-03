@@ -166,6 +166,7 @@ export const authOptions: NextAuthOptions = {
             bio: true,
             isAdmin: true,
             requirePasswordReset: true,
+            needsProfileCompletion: true,
             accountType: true,
             studentPseudonym: true,
             typographyPreference: true,
@@ -185,6 +186,7 @@ export const authOptions: NextAuthOptions = {
           token.image = dbUser.image
           token.isAdmin = dbUser.isAdmin
           token.requirePasswordReset = dbUser.requirePasswordReset
+          token.needsProfileCompletion = dbUser.needsProfileCompletion
           token.accountType = dbUser.accountType
           token.studentPseudonym = dbUser.studentPseudonym
           token.typographyPreference = dbUser.typographyPreference
@@ -239,6 +241,7 @@ export const authOptions: NextAuthOptions = {
             bio: true,
             isAdmin: true,
             requirePasswordReset: true,
+            needsProfileCompletion: true,
             accountType: true,
             studentPseudonym: true,
             typographyPreference: true,
@@ -258,6 +261,7 @@ export const authOptions: NextAuthOptions = {
           token.image = dbUser.image
           token.isAdmin = dbUser.isAdmin
           token.requirePasswordReset = dbUser.requirePasswordReset
+          token.needsProfileCompletion = dbUser.needsProfileCompletion
           token.accountType = dbUser.accountType
           token.studentPseudonym = dbUser.studentPseudonym
           token.typographyPreference = dbUser.typographyPreference
@@ -281,6 +285,7 @@ export const authOptions: NextAuthOptions = {
         session.user.image = token.image as string
         session.user.isAdmin = token.isAdmin as boolean
         session.user.requirePasswordReset = token.requirePasswordReset as boolean
+        session.user.needsProfileCompletion = token.needsProfileCompletion as boolean
         session.user.accountType = token.accountType as string
         session.user.studentPseudonym = token.studentPseudonym as string | null
         session.user.typographyPreference = token.typographyPreference as string | null

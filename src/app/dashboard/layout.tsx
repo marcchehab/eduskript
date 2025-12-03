@@ -21,6 +21,11 @@ export default async function DashboardLayout({
     redirect('/auth/reset-password')
   }
 
+  // Check if teacher needs to complete their profile (new OAuth signups)
+  if (session.user.needsProfileCompletion) {
+    redirect('/auth/complete-profile')
+  }
+
   return (
     <ErrorProvider>
       <div className="h-screen flex flex-col bg-background overflow-hidden">

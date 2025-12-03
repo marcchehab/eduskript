@@ -37,7 +37,7 @@ export function Navigation() {
                   <Button variant="ghost">Sign In</Button>
                 </Link>
                 <Link href="/auth/signup">
-                  <Button>Sign Up</Button>
+                  <Button>Create account</Button>
                 </Link>
               </div>
             )}

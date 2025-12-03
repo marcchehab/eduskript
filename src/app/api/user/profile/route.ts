@@ -66,18 +66,24 @@ export async function PATCH(request: NextRequest) {
     const validatedData = schema.parse(body)
 
     const result = await withDatabaseConnection(async () => {
-      // Check if page slug is already taken by another user
+      // Check if page slug is already taken by another user (check both pageSlug and username)
       if (validatedData.pageSlug) {
-        const existingUser = await prisma.user.findUnique({
-          where: { pageSlug: validatedData.pageSlug }
+        const existingUser = await prisma.user.findFirst({
+          where: {
+            OR: [
+              { pageSlug: validatedData.pageSlug },
+              { username: validatedData.pageSlug }
+            ],
+            NOT: { id: session.user.id }
+          }
         })
 
-        if (existingUser && existingUser.id !== session.user.id) {
+        if (existingUser) {
           throw new Error('This page slug is already taken')
         }
       }
 
-      // Update the user profile
+      // Update the user profile and clear needsProfileCompletion flag
       return await prisma.user.update({
         where: { id: session.user.id },
         data: {
@@ -87,7 +93,8 @@ export async function PATCH(request: NextRequest) {
           pageDescription: validatedData.pageDescription || null,
           pageIcon: validatedData.pageIcon || null,
           title: validatedData.title || null,
-          bio: validatedData.bio || null
+          bio: validatedData.bio || null,
+          needsProfileCompletion: false, // Clear the flag when profile is updated
         },
         select: {
           id: true,

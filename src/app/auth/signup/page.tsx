@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { signIn } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -21,6 +22,12 @@ export default function SignUpPage() {
   const [success, setSuccess] = useState('')
   const [showVerificationMessage, setShowVerificationMessage] = useState(false)
   const router = useRouter()
+
+  const handleOAuthSignUp = (provider: string) => {
+    // Clear the student cookie to ensure this is a teacher signup
+    document.cookie = 'oauth_from_teacher_page=; path=/; max-age=0'
+    signIn(provider, { callbackUrl: '/dashboard' })
+  }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -100,7 +107,7 @@ export default function SignUpPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-background py-12 px-4 sm:px-6 lg:px-8">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl text-center">Create Teacher Account</CardTitle>
@@ -148,9 +155,38 @@ export default function SignUpPage() {
               </div>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Full Name</Label>
+            <>
+              {/* OAuth Providers */}
+              <div className="space-y-3 mb-6">
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => handleOAuthSignUp('azure-ad')}
+                >
+                  <svg className="w-5 h-5 mr-2" viewBox="0 0 23 23" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M0 0h10.87v10.87H0z" fill="#f25022"/>
+                    <path d="M12.13 0H23v10.87H12.13z" fill="#00a4ef"/>
+                    <path d="M0 12.13h10.87V23H0z" fill="#7fba00"/>
+                    <path d="M12.13 12.13H23V23H12.13z" fill="#ffb900"/>
+                  </svg>
+                  Continue with Microsoft
+                </Button>
+              </div>
+
+              <div className="relative mb-6">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-card px-2 text-muted-foreground">
+                    Or sign up with email
+                  </span>
+                </div>
+              </div>
+
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Full Name</Label>
                 <Input
                   id="name"
                   name="name"
@@ -174,7 +210,7 @@ export default function SignUpPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="pageSlug">Page URL (Optional)</Label>
+                <Label htmlFor="pageSlug">Page URL</Label>
                 <Input
                   id="pageSlug"
                   name="pageSlug"
@@ -214,14 +250,15 @@ export default function SignUpPage() {
               {error && (
                 <div className="text-red-600 text-sm text-center">{error}</div>
               )}
-              <Button 
-                type="submit" 
-                className="w-full" 
+              <Button
+                type="submit"
+                className="w-full"
                 disabled={isLoading}
               >
                 {isLoading ? 'Creating Account...' : 'Create Account'}
               </Button>
-            </form>
+              </form>
+            </>
           )}
           
           <div className="mt-6 text-center text-sm">

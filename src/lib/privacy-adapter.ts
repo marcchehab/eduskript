@@ -179,12 +179,14 @@ export function PrivacyAdapter(options: PrivacyAdapterOptions): Adapter {
         }
 
         // Set account type to teacher and auto-generated page slug
+        // Mark as needing profile completion so they can customize their page
         await prisma.user.update({
           where: { id: createdUser.id },
           data: {
             accountType: 'teacher',
             lastSeenAt: new Date(),
             pageSlug, // Auto-generated page slug for teachers
+            needsProfileCompletion: true, // New OAuth teachers should complete their profile
           },
         })
 

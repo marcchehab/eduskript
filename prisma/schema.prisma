@@ -84,6 +84,7 @@ model User {
   // Admin and security
   isAdmin Boolean @default(false)
   requirePasswordReset Boolean @default(false)
+  needsProfileCompletion Boolean @default(false) // True for new OAuth teachers until they complete their profile
 
   // Privacy and account type
   accountType      String    @default("teacher") // "teacher" or "student"

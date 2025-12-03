@@ -56,6 +56,7 @@ CREATE TABLE "users" (
     "typographyPreference" TEXT DEFAULT 'modern',
     "isAdmin" BOOLEAN NOT NULL DEFAULT false,
     "requirePasswordReset" BOOLEAN NOT NULL DEFAULT false,
+    "needsProfileCompletion" BOOLEAN NOT NULL DEFAULT false,
     "accountType" TEXT NOT NULL DEFAULT 'teacher',
     "studentPseudonym" TEXT,
     "gdprConsentAt" TIMESTAMP(3),
@@ -180,6 +181,18 @@ CREATE TABLE "files" (
     "updated_at" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "files_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "videos" (
+    "id" TEXT NOT NULL,
+    "filename" TEXT NOT NULL,
+    "provider" TEXT NOT NULL DEFAULT 'mux',
+    "metadata" JSONB NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "videos_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -363,6 +376,14 @@ CREATE TABLE "import_jobs" (
     CONSTRAINT "import_jobs_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "_SkriptVideos" (
+    "A" TEXT NOT NULL,
+    "B" TEXT NOT NULL,
+
+    CONSTRAINT "_SkriptVideos_AB_pkey" PRIMARY KEY ("A","B")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "accounts_provider_providerAccountId_key" ON "accounts"("provider", "providerAccountId");
 
@@ -425,6 +446,12 @@ CREATE INDEX "hash_idx" ON "files"("hash");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "files_parent_id_name_skript_id_key" ON "files"("parent_id", "name", "skript_id");
+
+-- CreateIndex
+CREATE INDEX "videos_filename_idx" ON "videos"("filename");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "videos_filename_provider_key" ON "videos"("filename", "provider");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "collaboration_requests_requester_id_receiver_id_key" ON "collaboration_requests"("requester_id", "receiver_id");
@@ -524,6 +551,9 @@ CREATE INDEX "import_jobs_user_id_status_idx" ON "import_jobs"("user_id", "statu
 
 -- CreateIndex
 CREATE INDEX "import_jobs_status_idx" ON "import_jobs"("status");
+
+-- CreateIndex
+CREATE INDEX "_SkriptVideos_B_index" ON "_SkriptVideos"("B");
 
 -- AddForeignKey
 ALTER TABLE "accounts" ADD CONSTRAINT "accounts_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -644,3 +674,10 @@ ALTER TABLE "front_page_versions" ADD CONSTRAINT "front_page_versions_front_page
 
 -- AddForeignKey
 ALTER TABLE "import_jobs" ADD CONSTRAINT "import_jobs_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "_SkriptVideos" ADD CONSTRAINT "_SkriptVideos_A_fkey" FOREIGN KEY ("A") REFERENCES "skripts"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "_SkriptVideos" ADD CONSTRAINT "_SkriptVideos_B_fkey" FOREIGN KEY ("B") REFERENCES "videos"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
