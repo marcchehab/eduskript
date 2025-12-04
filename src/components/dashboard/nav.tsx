@@ -8,6 +8,12 @@ import { ThemeToggle } from './theme-toggle'
 export function DashboardNav() {
   const { data: session } = useSession()
 
+  // For students, redirect to the teacher page they signed up from
+  // For teachers, redirect to homepage
+  const signOutUrl = session?.user?.accountType === 'student' && session?.user?.signedUpFromPageSlug
+    ? `/${session.user.signedUpFromPageSlug}`
+    : '/'
+
   return (
     <nav className="border-b border-border bg-card px-6 py-4">
       <div className="flex justify-between items-center">
@@ -19,12 +25,12 @@ export function DashboardNav() {
             Welcome back, {session?.user?.name}
           </div>
         </div>
-        
+
         <div className="flex items-center gap-4">
           <ThemeToggle />
           <Button
             variant="outline"
-            onClick={() => signOut({ callbackUrl: '/' })}
+            onClick={() => signOut({ callbackUrl: signOutUrl })}
           >
             Sign Out
           </Button>

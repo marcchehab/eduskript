@@ -224,6 +224,34 @@ export const authOptions: NextAuthOptions = {
           token.studentPseudonym = dbUser.studentPseudonym
           token.typographyPreference = dbUser.typographyPreference
 
+          // For students, extract and store the teacher page they signed up from (for signout redirect)
+          if (dbUser.accountType === 'student' && account?.provider) {
+            try {
+              const cookieStore = await cookies()
+              const callbackCookie = cookieStore.get('next-auth.callback-url')
+              const callbackUrl = callbackCookie?.value || ''
+
+              // Extract the first path segment (teacher's pageSlug)
+              const reservedPaths = ['auth', 'api', 'dashboard', 'admin', '_next', 'favicon.ico', 'robots.txt', 'sitemap.xml']
+              let pathSegment = ''
+              try {
+                const url = new URL(callbackUrl, 'http://dummy.com')
+                const parts = url.pathname.split('/').filter(Boolean)
+                pathSegment = parts[0] || ''
+              } catch {
+                const parts = callbackUrl.split('/').filter(Boolean)
+                pathSegment = parts[0] || ''
+              }
+
+              // Only store if it's a valid teacher page slug
+              if (pathSegment && !reservedPaths.includes(pathSegment.toLowerCase())) {
+                token.signedUpFromPageSlug = pathSegment
+              }
+            } catch {
+              // Ignore errors - signedUpFromPageSlug is optional
+            }
+          }
+
           // If this is an OAuth login and the user doesn't have a pseudonym yet,
           // generate one if it's a student account
           if (account?.provider && !dbUser.studentPseudonym && dbUser.email) {
@@ -324,6 +352,7 @@ export const authOptions: NextAuthOptions = {
         session.user.accountType = token.accountType as string
         session.user.studentPseudonym = token.studentPseudonym as string | null
         session.user.typographyPreference = token.typographyPreference as string | null
+        session.user.signedUpFromPageSlug = token.signedUpFromPageSlug as string | null
       }
       return session
     },

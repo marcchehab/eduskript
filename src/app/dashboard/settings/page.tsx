@@ -10,10 +10,10 @@ export default async function SettingsPage() {
     return null
   }
 
-  // Redirect students to their settings (they use Collaborate for profile)
+  // Redirect students to their profile page
   const isStudent = session.user.accountType === 'student'
   if (isStudent) {
-    redirect('/dashboard/my-classes')
+    redirect('/dashboard/profile')
   }
 
   return (

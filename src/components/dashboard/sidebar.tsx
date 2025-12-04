@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { cn } from '@/lib/utils'
-import { BookOpen, Settings, Users, ChevronLeft, ChevronRight, Shield, GraduationCap } from 'lucide-react'
+import { BookOpen, Settings, Users, ChevronLeft, ChevronRight, Shield, GraduationCap, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 const navigation = [
@@ -23,7 +23,7 @@ const teacherNavigation = [
 
 const studentNavigation = [
   { name: 'My Classes', href: '/dashboard/my-classes', icon: GraduationCap },
-  { name: 'Settings', href: '/dashboard/settings', icon: Settings },
+  { name: 'Profile', href: '/dashboard/profile', icon: User },
 ]
 
 export function DashboardSidebar() {

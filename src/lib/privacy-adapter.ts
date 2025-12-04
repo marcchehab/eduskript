@@ -165,7 +165,7 @@ export function PrivacyAdapter(options: PrivacyAdapterOptions): Adapter {
           email: `student_${createdUser.id}@eduskript.local`, // Return unique fake email for NextAuth
           emailVerified: null,
           name: createdUser.name,
-          image: createdUser.image,
+          image: user.image, // Pass through OAuth image (not stored in DB for privacy)
         }
       }
 

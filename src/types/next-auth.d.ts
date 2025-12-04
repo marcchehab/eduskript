@@ -24,6 +24,7 @@ declare module "next-auth" {
       accountType?: string
       studentPseudonym?: string | null
       typographyPreference?: string | null
+      signedUpFromPageSlug?: string | null // For students: the teacher page they signed up from
     }
   }
 
@@ -71,5 +72,6 @@ declare module "next-auth/jwt" {
     accountType?: string
     studentPseudonym?: string | null
     typographyPreference?: string | null
+    signedUpFromPageSlug?: string | null // For students: the teacher page they signed up from
   }
 }
