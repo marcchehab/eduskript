@@ -9,6 +9,7 @@
 
 ## 🎯 Priority List
 
+fix<: pinch zoom not captured anymore
 
 - Privacy consideration: Currently teachers send student emails to the server cleartext. would it increase privacy if we hashed them first, and the server hashes+salts them again? we'd need a hash function that the server and client can both do and arrive at the same hash.
 

@@ -11,12 +11,12 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 // Scaleway Object Storage configuration
 // Supports both SCW_* (Scaleway CLI convention) and SCALEWAY_* naming
 // Set these in your .env file:
-//   SCW_REGION, SCW_BUCKET, SCW_ACCESS_KEY, SCW_SECRET_KEY
+//   SCW_REGION, SCW_USER_BUCKET, SCW_ACCESS_KEY, SCW_SECRET_KEY
 //   SCW_IMPORT_BUCKET (optional, for large file imports)
 //   SCW_TEACHER_BUCKET (for teacher-uploaded files like images, databases)
 const SCALEWAY_REGION = process.env.SCALEWAY_REGION || process.env.SCW_REGION || 'fr-par'
 const SCALEWAY_ENDPOINT = process.env.SCALEWAY_ENDPOINT || `https://s3.${SCALEWAY_REGION}.scw.cloud`
-const SCALEWAY_BUCKET = process.env.SCALEWAY_BUCKET || process.env.SCW_BUCKET
+const SCALEWAY_BUCKET = process.env.SCALEWAY_BUCKET || process.env.SCW_USER_BUCKET
 const SCALEWAY_IMPORT_BUCKET = process.env.SCW_IMPORT_BUCKET
 const SCALEWAY_TEACHER_BUCKET = process.env.SCW_TEACHER_BUCKET
 const SCALEWAY_ACCESS_KEY = process.env.SCALEWAY_ACCESS_KEY_ID || process.env.SCW_ACCESS_KEY

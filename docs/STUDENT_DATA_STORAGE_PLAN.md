@@ -197,7 +197,7 @@ db.version(1).stores({
 # Scaleway Object Storage
 SCW_ACCESS_KEY=xxx
 SCW_SECRET_KEY=xxx
-SCW_BUCKET_NAME=eduskript-user-data
+SCW_USER_BUCKET_NAME=eduskript-user-data
 SCW_REGION=fr-par
 SCW_ENDPOINT=https://s3.fr-par.scw.cloud
 ```

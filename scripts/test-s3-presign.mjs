@@ -9,7 +9,7 @@ import 'dotenv/config'
 
 const REGION = process.env.SCALEWAY_REGION || process.env.SCW_REGION || 'fr-par'
 const ENDPOINT = process.env.SCALEWAY_ENDPOINT || `https://s3.${REGION}.scw.cloud`
-const BUCKET = process.env.SCALEWAY_BUCKET || process.env.SCW_BUCKET
+const BUCKET = process.env.SCALEWAY_BUCKET || process.env.SCW_USER_BUCKET
 const ACCESS_KEY = process.env.SCALEWAY_ACCESS_KEY_ID || process.env.SCW_ACCESS_KEY
 const SECRET_KEY = process.env.SCALEWAY_SECRET_ACCESS_KEY || process.env.SCW_SECRET_KEY
 

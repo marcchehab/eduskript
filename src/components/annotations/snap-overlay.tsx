@@ -556,7 +556,7 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom }: SnapO
       // Capture as JPEG with quality compression
       // Use style override to ensure position doesn't affect capture
       const imageUrl = await toJpeg(wrapper, {
-        quality: 0.6,
+        quality: 0.9,
         skipFonts: true,
         style: {
           position: 'static',
