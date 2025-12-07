@@ -9,10 +9,10 @@
 
 ## 🎯 Priority List
 
-- All student snaps on "my snaps" page
 
 - Privacy consideration: Currently teachers send student emails to the server cleartext. would it increase privacy if we hashed them first, and the server hashes+salts them again? we'd need a hash function that the server and client can both do and arrive at the same hash.
 
+- All student snaps on "my snaps" page
 - migration had issues, let's try locally until it works and ultimately migrate the database instead (teacher bucket is the same anyway)
 - **Content migration** - continue content migration
 

@@ -56,9 +56,9 @@ export const remarkPlugins: PluggableList = [
 export const rehypePlugins: PluggableList = [
   rehypeSlug,
   rehypeColorTitle,
+  rehypeStripInvalidProps, // Strip invalid HTML attributes BEFORE KaTeX adds its styles
   rehypeKatex,
   rehypeSourceLine,
-  rehypeStripInvalidProps, // Strip invalid HTML attributes (e.g., frameborder, style strings)
 ]
 
 export interface CompileMDXOptions {
