@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback, memo, useMemo } from 'react'
-import { createPortal } from 'react-dom'
-import { X, GripVertical, Trash2 } from 'lucide-react'
+import { useState, useRef, useEffect, useCallback, memo } from 'react'
+import { GripVertical, Trash2 } from 'lucide-react'
 import type { Snap } from './snap-overlay'
+import { SnapViewerOverlay } from './snap-viewer-overlay'
 
 interface SnapsDisplayProps {
   snaps: Snap[]
@@ -326,7 +326,7 @@ const SnapItem = memo(function SnapItem({
 export function SnapsDisplay({ snaps, onRemoveSnap, onRenameSnap, onReorderSnaps, zoom }: SnapsDisplayProps) {
   if (DEBUG_STATE) console.log(`[SnapsDisplay] Render - ${snaps.length} snaps`)
 
-  const [expandedSnapId, setExpandedSnapId] = useState<string | null>(null)
+  const [expandedSnapIndex, setExpandedSnapIndex] = useState<number | null>(null)
   const [newSnapIds, setNewSnapIds] = useState<Set<string>>(new Set())
   const prevSnapIdsRef = useRef<Set<string>>(new Set())
 
@@ -352,7 +352,10 @@ export function SnapsDisplay({ snaps, onRemoveSnap, onRenameSnap, onReorderSnaps
     prevSnapIdsRef.current = currentIds
   }, [snaps])
 
-  const expandedSnap = snaps.find(s => s.id === expandedSnapId)
+  const handleExpand = useCallback((id: string) => {
+    const index = snaps.findIndex(s => s.id === id)
+    if (index !== -1) setExpandedSnapIndex(index)
+  }, [snaps])
 
   if (snaps.length === 0) return null
 
@@ -366,43 +369,19 @@ export function SnapsDisplay({ snaps, onRemoveSnap, onRenameSnap, onReorderSnaps
           onRemove={onRemoveSnap}
           onRename={onRenameSnap}
           onReorder={onReorderSnaps}
-          onExpand={setExpandedSnapId}
+          onExpand={handleExpand}
           zoom={zoom}
           allSnaps={snaps}
         />
       ))}
 
       {/* Expanded snap modal */}
-      {expandedSnap && typeof document !== 'undefined' && createPortal(
-        <div
-          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-8"
-          onClick={() => setExpandedSnapId(null)}
-        >
-          <div
-            className="relative max-w-[90vw] max-h-[90vh] bg-background border-2 border-primary rounded-lg overflow-hidden shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-4 py-3 bg-muted/30 border-b border-border">
-              <h3 className="text-lg font-semibold text-foreground">{expandedSnap.name}</h3>
-              <button
-                onClick={() => setExpandedSnapId(null)}
-                className="p-2 hover:bg-accent rounded-md transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="overflow-auto max-h-[calc(90vh-4rem)]">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={expandedSnap.imageUrl} alt={expandedSnap.name} className="w-auto h-auto max-w-full" />
-            </div>
-
-            <div className="px-4 py-2 bg-muted/30 border-t border-border text-sm text-muted-foreground text-center">
-              {expandedSnap.width} × {expandedSnap.height} pixels
-            </div>
-          </div>
-        </div>,
-        document.body
+      {expandedSnapIndex !== null && (
+        <SnapViewerOverlay
+          snaps={snaps}
+          initialIndex={expandedSnapIndex}
+          onClose={() => setExpandedSnapIndex(null)}
+        />
       )}
     </>
   )

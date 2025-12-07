@@ -7,7 +7,8 @@ import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
-import { Camera, ExternalLink, X, Trash2, ZoomIn, ZoomOut, Download, ChevronLeft, ChevronRight } from 'lucide-react'
+import { SnapViewerOverlay } from '@/components/annotations/snap-viewer-overlay'
+import { Camera, ExternalLink, Trash2 } from 'lucide-react'
 import type { SnapWithPageInfo } from '@/app/api/user-data/snaps/route'
 
 export default function MySnapsPage() {
@@ -17,49 +18,8 @@ export default function MySnapsPage() {
   const [loading, setLoading] = useState(true)
   const [expandedSnapIndex, setExpandedSnapIndex] = useState<number | null>(null)
   const [lastViewedIndex, setLastViewedIndex] = useState<number | null>(null)
-  const [zoomLevel, setZoomLevel] = useState(1)
   const [deletingSnap, setDeletingSnap] = useState<SnapWithPageInfo | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
-
-  const expandedSnap = expandedSnapIndex !== null ? snaps[expandedSnapIndex] : null
-
-  const goToPrevSnap = () => {
-    if (expandedSnapIndex !== null && expandedSnapIndex > 0) {
-      setExpandedSnapIndex(expandedSnapIndex - 1)
-      setZoomLevel(1)
-    }
-  }
-
-  const goToNextSnap = () => {
-    if (expandedSnapIndex !== null && expandedSnapIndex < snaps.length - 1) {
-      setExpandedSnapIndex(expandedSnapIndex + 1)
-      setZoomLevel(1)
-    }
-  }
-
-  const closeOverlay = () => {
-    setLastViewedIndex(expandedSnapIndex)
-    setExpandedSnapIndex(null)
-    setZoomLevel(1)
-  }
-
-  // Keyboard navigation for overlay
-  useEffect(() => {
-    if (expandedSnapIndex === null) return
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        closeOverlay()
-      } else if (e.key === 'ArrowLeft') {
-        goToPrevSnap()
-      } else if (e.key === 'ArrowRight') {
-        goToNextSnap()
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [expandedSnapIndex, snaps.length])
 
   useEffect(() => {
     if (status === 'loading') return
@@ -263,115 +223,35 @@ export default function MySnapsPage() {
         )}
 
         {/* Expanded snap modal */}
-        {expandedSnap && (
-          <div
-            className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center"
-            onClick={closeOverlay}
-          >
-            {/* Top bar with controls */}
-            <div className="absolute top-4 left-4 right-4 flex items-center justify-between z-10">
-              {/* Info - left */}
-              <div className="bg-background/80 backdrop-blur rounded-lg px-4 py-2">
-                <h3 className="font-semibold text-foreground">
-                  {expandedSnap.name}
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  {expandedSnap.pageTitle} • {expandedSnapIndex! + 1} / {snaps.length}
-                </p>
-              </div>
-
-              {/* Controls - right */}
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={(e) => { e.stopPropagation(); setZoomLevel(z => Math.max(0.25, z - 0.25)) }}
-                  className="p-2 bg-background/80 backdrop-blur hover:bg-background rounded-full transition-colors"
-                  title="Zoom out"
-                >
-                  <ZoomOut className="w-5 h-5" />
-                </button>
-                <span className="bg-background/80 backdrop-blur rounded-lg px-3 py-1 text-sm min-w-[4rem] text-center">
-                  {Math.round(zoomLevel * 100)}%
-                </span>
-                <button
-                  onClick={(e) => { e.stopPropagation(); setZoomLevel(z => Math.min(4, z + 0.25)) }}
-                  className="p-2 bg-background/80 backdrop-blur hover:bg-background rounded-full transition-colors"
-                  title="Zoom in"
-                >
-                  <ZoomIn className="w-5 h-5" />
-                </button>
-                <a
-                  href={expandedSnap.imageUrl}
-                  download={`${expandedSnap.name}.jpg`}
-                  onClick={(e) => e.stopPropagation()}
-                  className="p-2 bg-background/80 backdrop-blur hover:bg-background rounded-full transition-colors"
-                  title="Download"
-                >
-                  <Download className="w-5 h-5" />
-                </a>
-                <button
-                  onClick={closeOverlay}
-                  className="p-2 bg-background/80 backdrop-blur hover:bg-background rounded-full transition-colors"
-                  title="Close (Esc)"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            {/* Previous button - left side */}
-            {expandedSnapIndex! > 0 && (
-              <button
-                onClick={(e) => { e.stopPropagation(); goToPrevSnap() }}
-                className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-background/80 backdrop-blur hover:bg-background rounded-full transition-colors z-10"
-                title="Previous (←)"
-              >
-                <ChevronLeft className="w-6 h-6" />
-              </button>
+        {expandedSnapIndex !== null && (
+          <SnapViewerOverlay
+            snaps={snaps}
+            initialIndex={expandedSnapIndex}
+            onClose={() => {
+              setLastViewedIndex(expandedSnapIndex)
+              setExpandedSnapIndex(null)
+            }}
+            onIndexChange={setExpandedSnapIndex}
+            renderSubtitle={(snap, index, total) => (
+              <p className="text-sm text-muted-foreground">
+                {snap.pageTitle} • {index + 1} / {total}
+              </p>
             )}
-
-            {/* Next button - right side */}
-            {expandedSnapIndex! < snaps.length - 1 && (
-              <button
-                onClick={(e) => { e.stopPropagation(); goToNextSnap() }}
-                className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-background/80 backdrop-blur hover:bg-background rounded-full transition-colors z-10"
-                title="Next (→)"
-              >
-                <ChevronRight className="w-6 h-6" />
-              </button>
-            )}
-
-            {/* View page button - bottom left */}
-            {buildPageUrl(expandedSnap) && (
-              <div className="absolute bottom-4 left-4 z-10">
+            renderBottomLeft={(snap) => {
+              const pageUrl = buildPageUrl(snap)
+              return pageUrl ? (
                 <Button variant="secondary" size="sm" asChild>
-                  <Link href={buildPageUrl(expandedSnap)!}>
+                  <Link href={pageUrl}>
                     <ExternalLink className="w-4 h-4 mr-1" />
                     View page
                   </Link>
                 </Button>
-              </div>
+              ) : null
+            }}
+            renderBottomRight={(snap) => (
+              <>{Math.round(snap.width)} x {Math.round(snap.height)} • {formatDate(snap.createdAt)}</>
             )}
-
-            {/* Dimensions - bottom right */}
-            <div className="absolute bottom-4 right-4 bg-background/80 backdrop-blur rounded-lg px-3 py-1 text-sm text-muted-foreground z-10">
-              {Math.round(expandedSnap.width)} x {Math.round(expandedSnap.height)} • {formatDate(expandedSnap.createdAt)}
-            </div>
-
-            {/* Image - fills available space */}
-            <div
-              className="w-full h-full flex items-center justify-center p-4 overflow-auto"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={expandedSnap.imageUrl}
-                alt={expandedSnap.name}
-                className="object-contain transition-transform duration-200"
-                style={{ transform: `scale(${zoomLevel})`, minWidth: '50vw', maxWidth: zoomLevel <= 1 ? '100%' : 'none', maxHeight: zoomLevel <= 1 ? '100%' : 'none' }}
-                onClick={closeOverlay}
-              />
-            </div>
-          </div>
+          />
         )}
 
         {/* Delete confirmation dialog */}

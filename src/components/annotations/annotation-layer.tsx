@@ -940,11 +940,13 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
     }
   }, [])
 
-  // Track whether Ctrl/Cmd is pressed for conditional wheel capture
-  const ctrlPressedRef = useRef(false)
-
-  // Handle trackpad pinch zoom (Ctrl+wheel) - only active when Ctrl is pressed
+  // Handle trackpad pinch zoom (Ctrl+wheel) and keyboard Ctrl+scroll
+  // Trackpad pinch sends wheel events with ctrlKey=true WITHOUT a keydown event
+  // So we must always listen for wheel events (non-passive) to intercept them
   const handleZoomWheel = useCallback((e: WheelEvent) => {
+    // Only handle zoom when Ctrl/Cmd is pressed (includes trackpad pinch)
+    if (!e.ctrlKey && !e.metaKey) return
+
     e.preventDefault()
 
     // Calculate zoom delta (negative deltaY means zoom in)
@@ -958,39 +960,12 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
     setZoom(newZoom)
   }, [applyZoom])
 
-  // Dynamically attach/detach wheel handler based on Ctrl key state
-  // This allows normal scroll to be completely passive (no jank)
+  // Attach wheel handler to capture trackpad pinch zoom
+  // Must be non-passive to allow preventDefault on Ctrl+wheel
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && !ctrlPressedRef.current) {
-        ctrlPressedRef.current = true
-        document.addEventListener('wheel', handleZoomWheel, { passive: false })
-      }
-    }
-
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (!e.ctrlKey && !e.metaKey && ctrlPressedRef.current) {
-        ctrlPressedRef.current = false
-        document.removeEventListener('wheel', handleZoomWheel)
-      }
-    }
-
-    // Also handle blur (user switches windows while Ctrl pressed)
-    const handleBlur = () => {
-      if (ctrlPressedRef.current) {
-        ctrlPressedRef.current = false
-        document.removeEventListener('wheel', handleZoomWheel)
-      }
-    }
-
-    document.addEventListener('keydown', handleKeyDown)
-    document.addEventListener('keyup', handleKeyUp)
-    window.addEventListener('blur', handleBlur)
+    document.addEventListener('wheel', handleZoomWheel, { passive: false })
 
     return () => {
-      document.removeEventListener('keydown', handleKeyDown)
-      document.removeEventListener('keyup', handleKeyUp)
-      window.removeEventListener('blur', handleBlur)
       document.removeEventListener('wheel', handleZoomWheel)
     }
   }, [handleZoomWheel])
