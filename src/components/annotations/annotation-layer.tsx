@@ -6,7 +6,7 @@ import { AlertTriangle } from 'lucide-react'
 import { SimpleCanvas, type SimpleCanvasHandle, type DrawMode } from './simple-canvas'
 import { AnnotationToolbar, type AnnotationMode } from './annotation-toolbar'
 import { useSyncedUserData } from '@/lib/userdata/provider'
-import type { AnnotationData } from '@/lib/userdata/types'
+import type { AnnotationData, StrokeTelemetry, TelemetryData } from '@/lib/userdata/types'
 import type { SnapsData } from '@/lib/userdata/adapters'
 import { generateContentHash, type HeadingPosition, type StrokeData } from '@/lib/indexeddb/annotations'
 import { repositionStrokes } from '@/lib/annotations/reposition-strokes'
@@ -38,6 +38,34 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
     'snaps',
     emptySnapsData
   )
+
+  // Use synced user data service for telemetry (lightweight, sampled)
+  const emptyTelemetryData = useMemo(() => ({ samples: [], totalStrokeCount: 0, sessionCount: 0, firstSampleAt: 0 } as TelemetryData), [])
+  const { data: telemetryData, updateData: updateTelemetryData } = useSyncedUserData<TelemetryData>(
+    pageId,
+    'annotation-telemetry',
+    emptyTelemetryData
+  )
+  const telemetryBufferRef = useRef<StrokeTelemetry[]>([])
+  const TELEMETRY_BATCH_SIZE = 20
+  const TELEMETRY_SAMPLE_RATE = 10 // Must match simple-canvas.tsx
+
+  // Handle telemetry from SimpleCanvas (called every 10th stroke)
+  const handleTelemetry = useCallback((sample: StrokeTelemetry) => {
+    telemetryBufferRef.current.push(sample)
+
+    // Persist when batch is full (20 samples = 200 strokes)
+    if (telemetryBufferRef.current.length >= TELEMETRY_BATCH_SIZE) {
+      const newData: TelemetryData = {
+        samples: [...(telemetryData?.samples ?? []), ...telemetryBufferRef.current].slice(-200), // Keep last 200 samples
+        totalStrokeCount: (telemetryData?.totalStrokeCount ?? 0) + (TELEMETRY_BATCH_SIZE * TELEMETRY_SAMPLE_RATE),
+        sessionCount: telemetryData?.sessionCount ?? 1,
+        firstSampleAt: telemetryData?.firstSampleAt || Date.now()
+      }
+      updateTelemetryData(newData)
+      telemetryBufferRef.current = []
+    }
+  }, [telemetryData, updateTelemetryData])
 
   // Delete function - update with empty/null data
   const deleteAnnotationData = useCallback(async () => {
@@ -1076,6 +1104,7 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
             height={pageHeight}
             mode={mode === 'view' ? 'view' : (mode as DrawMode)}
             onUpdate={handleCanvasUpdate}
+            onTelemetry={handleTelemetry}
             initialData={canvasData}
             strokeColor={penColors[activePen]}
             strokeWidth={penSizes[activePen]}

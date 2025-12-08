@@ -62,6 +62,30 @@ export interface QuizData {
   isSubmitted: boolean   // Whether the question has been submitted
 }
 
+/**
+ * Stroke telemetry sample (collected every Nth stroke)
+ */
+export interface StrokeTelemetry {
+  timestamp: number         // Unix timestamp of stroke completion
+  pointCount: number        // Total points in stroke
+  totalLengthPx: number     // Total stroke length in pixels
+  durationMs: number        // Total stroke duration in milliseconds
+  lengthPerPoint: number    // Average distance between points (px)
+  durationPerPoint: number  // Time between points (ms) = ~sampling interval
+  sectionId: string         // Which heading section the stroke belongs to
+  mode: 'draw' | 'highlight' | 'erase'
+}
+
+/**
+ * Annotation telemetry data structure
+ */
+export interface TelemetryData {
+  samples: StrokeTelemetry[]  // Sampled stroke telemetry
+  totalStrokeCount: number    // All strokes (not just sampled)
+  sessionCount: number        // Drawing sessions
+  firstSampleAt: number       // Unix timestamp of first sample
+}
+
 export interface PythonFile {
   name: string
   content: string

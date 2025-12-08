@@ -2,6 +2,7 @@
 
 import { useRef, useEffect, useCallback, forwardRef, useImperativeHandle, useState } from 'react'
 import { determineSectionFromY, type HeadingPosition } from '@/lib/annotations/reposition-strokes'
+import type { StrokeTelemetry } from '@/lib/userdata/types'
 
 export type DrawMode = 'draw' | 'erase'
 
@@ -20,6 +21,9 @@ const SMOOTHING_TEST_LEVELS = [
   { window: 3, color: '#ff0000' }, // Red = moderate smoothing
 ]
 
+// Telemetry sampling rate - collect every Nth stroke
+const TELEMETRY_SAMPLE_RATE = 10
+
 interface SimpleCanvasProps {
   width: number
   height: number
@@ -32,6 +36,7 @@ interface SimpleCanvasProps {
   onStylusDetected?: () => void
   onNonStylusInput?: () => void
   onPenStateChange?: (active: boolean) => void  // Notify parent when pen is actively drawing
+  onTelemetry?: (telemetry: StrokeTelemetry) => void  // Optional telemetry callback (sampled)
   zoom?: number
   headingPositions?: HeadingPosition[]
 }
@@ -42,7 +47,7 @@ export interface SimpleCanvasHandle {
 }
 
 export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
-  ({ width, height, mode, onUpdate, initialData, strokeWidth = 2, strokeColor = '#000000', stylusModeActive = false, onStylusDetected, onNonStylusInput, onPenStateChange, zoom = 1.0, headingPositions = [] }, ref) => {
+  ({ width, height, mode, onUpdate, initialData, strokeWidth = 2, strokeColor = '#000000', stylusModeActive = false, onStylusDetected, onNonStylusInput, onPenStateChange, onTelemetry, zoom = 1.0, headingPositions = [] }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const isDrawingRef = useRef(false)
     const [isPenDrawing, setIsPenDrawing] = useState(false) // Track if pen is actively drawing
@@ -71,6 +76,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
     const pendingPointsRef = useRef<number>(0) // Track number of points added since last RAF draw
     const lastSmoothedPointRef = useRef<{ x: number; y: number } | null>(null) // Track last rendered smoothed position for real-time smoothing
     const smoothingTestIndexRef = useRef(0) // TEMPORARY: Track which smoothing level we're testing
+    const telemetryStrokeCountRef = useRef(0) // Track stroke count for telemetry sampling
     const currentStrokeSmoothingRef = useRef({ window: REALTIME_SMOOTHING_WINDOW, color: '#000000' }) // Current stroke's smoothing settings
 
     // Update eraser cursor state and apply styles directly (no React re-render)
@@ -698,6 +704,21 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         const sectionId = determineSectionFromY(firstPoint.y, headingPositions) || 'unknown'
         const sectionOffsetY = headingPositions.find(h => h.sectionId === sectionId)?.offsetY || 0
 
+        // Telemetry: sample every Nth stroke
+        telemetryStrokeCountRef.current++
+        if (onTelemetry && telemetryStrokeCountRef.current % TELEMETRY_SAMPLE_RATE === 0) {
+          onTelemetry({
+            timestamp: strokeEndTime,
+            pointCount,
+            totalLengthPx: totalLength,
+            durationMs,
+            lengthPerPoint,
+            durationPerPoint,
+            sectionId,
+            mode: currentModeRef.current
+          })
+        }
+
         // Save the path with all original points and pressure data intact
         // Visual smoothing is handled by Bezier curves during rendering
         pathsRef.current.push({
@@ -720,7 +741,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
 
         onUpdate(data)
       }
-    }, [mode, strokeColor, strokeWidth, onUpdate, onPenStateChange, headingPositions, redrawCanvas, updateEraserCursor, hideEraserCursor])
+    }, [mode, strokeColor, strokeWidth, onUpdate, onPenStateChange, onTelemetry, headingPositions, redrawCanvas, updateEraserCursor, hideEraserCursor])
 
     const handlePointerCancel = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
       // Clean up when pointer is cancelled
