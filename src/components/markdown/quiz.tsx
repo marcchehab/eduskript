@@ -1,10 +1,12 @@
 "use client"
 
-import { useState, ReactNode, ReactElement } from 'react'
+import { useState, ReactNode, ReactElement, Children } from 'react'
 import { useUserData } from '@/lib/userdata/hooks'
 import type { QuizData } from '@/lib/userdata/types'
 import { cn } from '@/lib/utils'
 import { Check, X } from 'lucide-react'
+import { useTeacherClass } from '@/contexts/teacher-class-context'
+import { QuizProgressBar } from './quiz-progress-bar'
 
 interface QuestionProps {
   children: ReactNode
@@ -254,11 +256,39 @@ function QuestionInner({
   )
 }
 
+// Helper to extract correct indices and option labels from children
+function extractOptionsInfo(children: ReactNode, type: 'single' | 'multiple' | 'text' | 'number') {
+  const correctIndices: number[] = []
+  const optionLabels: string[] = []
+
+  if (type === 'single' || type === 'multiple') {
+    Children.forEach(children, (child, index) => {
+      if (child && typeof child === 'object' && 'props' in child) {
+        const element = child as ReactElement<OptionProps>
+        if (element.props) {
+          // Check if this option is marked as correct
+          if (element.props.is === 'true') {
+            correctIndices.push(index)
+          }
+          // Extract text content for option label
+          const label = typeof element.props.children === 'string'
+            ? element.props.children
+            : `Option ${index + 1}`
+          optionLabels.push(label)
+        }
+      }
+    })
+  }
+
+  return { correctIndices, optionLabels }
+}
+
 // Wrapper component that handles data loading
 function Question({
   children,
   id,
   pageId,
+  type = 'multiple',
   ...rest
 }: QuestionProps) {
   const componentId = `quiz-${id}`
@@ -267,6 +297,12 @@ function Question({
     componentId,
     null
   )
+
+  // Get teacher class context for progress bar
+  const { selectedClass, isTeacher } = useTeacherClass()
+
+  // Extract correct indices and option labels for the progress bar
+  const { correctIndices, optionLabels } = extractOptionsInfo(children, type)
 
   if (isLoading) {
     return (
@@ -281,13 +317,29 @@ function Question({
   }
 
   return (
-    <QuestionInner
-      {...rest}
-      initialData={data}
-      updateData={updateData}
-    >
-      {children}
-    </QuestionInner>
+    <>
+      <QuestionInner
+        {...rest}
+        type={type}
+        initialData={data}
+        updateData={updateData}
+      >
+        {children}
+      </QuestionInner>
+
+      {/* Teacher progress bar - only visible when teacher has selected a class */}
+      {isTeacher && selectedClass && (
+        <QuizProgressBar
+          classId={selectedClass.id}
+          className={selectedClass.name}
+          pageId={pageId}
+          componentId={componentId}
+          questionType={type}
+          correctIndices={correctIndices}
+          options={optionLabels}
+        />
+      )}
+    </>
   )
 }
 

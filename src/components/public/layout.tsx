@@ -12,6 +12,8 @@ import { AuthButton } from './auth-button'
 import { FontSizeControls } from './font-size-controls'
 import { SyncStatusButton } from '@/components/ui/sync-status'
 import { useLayout } from '@/contexts/layout-context'
+import { TeacherClassProvider } from '@/contexts/teacher-class-context'
+import { ClassSelectorFAB } from '@/components/teacher/class-selector-fab'
 
 interface Teacher {
   name: string | null
@@ -239,12 +241,13 @@ export function PublicSiteLayout({
   }
 
   return (
-    <div
-      className="min-h-screen bg-background overflow-visible"
-      data-typography={typographyPreference}
-      style={{ '--sidebar-width': `${sidebarWidth}px` } as React.CSSProperties}
-    >
-      <ReadingProgress />
+    <TeacherClassProvider>
+      <div
+        className="min-h-screen bg-background overflow-visible"
+        data-typography={typographyPreference}
+        style={{ '--sidebar-width': `${sidebarWidth}px` } as React.CSSProperties}
+      >
+        <ReadingProgress />
 
       {/* Top-right controls - only visible on mobile when sidebar is closed */}
       <div className="lg:hidden fixed top-4 right-4 z-50 flex items-center gap-2">
@@ -583,17 +586,21 @@ export function PublicSiteLayout({
         />
       )}
 
-      {/* Main content with scroll container */}
-      <div
-        id="scroll-container"
-        className={`transition-all duration-300 h-screen overflow-auto ${
-          isSidebarCollapsed ? 'lg:ml-16' : 'lg:ml-80'
-        }`}
-      >
-        <main className="p-6 lg:p-8 bg-background min-h-screen">
-          {children}
-        </main>
+        {/* Main content with scroll container */}
+        <div
+          id="scroll-container"
+          className={`transition-all duration-300 h-screen overflow-auto ${
+            isSidebarCollapsed ? 'lg:ml-16' : 'lg:ml-80'
+          }`}
+        >
+          <main className="p-6 lg:p-8 bg-background min-h-screen">
+            {children}
+          </main>
+        </div>
+
+        {/* Teacher class selector FAB - only visible for teachers */}
+        <ClassSelectorFAB />
       </div>
-    </div>
+    </TeacherClassProvider>
   )
 }
