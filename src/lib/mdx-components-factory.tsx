@@ -385,8 +385,17 @@ export function createMDXComponents(
     const id = (props['id'] as string) || ''
     const type = ((props['type'] as string) || 'multiple') as 'single' | 'multiple' | 'text' | 'number'
 
+    // Don't render quiz if pageId is missing (e.g., in dashboard preview without context)
+    if (!pageId) {
+      return (
+        <div className="border rounded-lg p-4 bg-muted/50 text-muted-foreground text-sm">
+          Quiz preview unavailable (no page context)
+        </div>
+      )
+    }
+
     return (
-      <Question id={id} pageId={pageId || ''} type={type}>
+      <Question id={id} pageId={pageId} type={type}>
         {children}
       </Question>
     )

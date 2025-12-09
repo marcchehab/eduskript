@@ -84,7 +84,13 @@ export function TeacherClassProvider({ children }: { children: ReactNode }) {
 export function useTeacherClass() {
   const context = useContext(TeacherClassContext)
   if (!context) {
-    throw new Error('useTeacherClass must be used within a TeacherClassProvider')
+    // Return a safe default when used outside provider (e.g., in dashboard preview)
+    return {
+      selectedClass: null,
+      setSelectedClass: () => {},
+      isTeacher: false,
+      isLoading: false,
+    }
   }
   return context
 }

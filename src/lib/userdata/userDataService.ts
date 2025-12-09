@@ -45,6 +45,12 @@ export class UserDataService {
     pageId: string,
     componentId: string
   ): Promise<UserDataRecord<T> | null> {
+    // Validate inputs to prevent IndexedDB DataError
+    if (!pageId || !componentId) {
+      console.warn('UserDataService.get called with invalid keys:', { pageId, componentId })
+      return null
+    }
+
     try {
       const record = await db.userData.get([pageId, componentId])
       return (record as UserDataRecord<T>) || null
@@ -63,6 +69,12 @@ export class UserDataService {
     data: T,
     options: SaveOptions = {}
   ): Promise<void> {
+    // Validate inputs to prevent IndexedDB DataError
+    if (!pageId || !componentId) {
+      console.warn('UserDataService.save called with invalid keys:', { pageId, componentId })
+      return
+    }
+
     const { debounce = this.DEFAULT_DEBOUNCE, immediate = false } = options
     const cacheKey = this.getCacheKey(pageId, componentId)
 
@@ -122,6 +134,12 @@ export class UserDataService {
    * Delete user data for a specific page component
    */
   public async delete(pageId: string, componentId: string): Promise<void> {
+    // Validate inputs to prevent IndexedDB DataError
+    if (!pageId || !componentId) {
+      console.warn('UserDataService.delete called with invalid keys:', { pageId, componentId })
+      return
+    }
+
     try {
       const cacheKey = this.getCacheKey(pageId, componentId)
 
@@ -187,9 +205,10 @@ export class UserDataService {
 
     this.saveTimers.forEach((timer, cacheKey) => {
       clearTimeout(timer)
-      const [pageId, componentId] = cacheKey.split(':')
+      const [_pageId, _componentId] = cacheKey.split(':')
       // Note: We don't have the data here, so this is best-effort
       // In practice, components should call save with immediate: true before unmounting
+      void _pageId, void _componentId // Suppress unused variable warnings
     })
 
     this.saveTimers.clear()
