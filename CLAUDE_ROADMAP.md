@@ -11,6 +11,8 @@
 
 - **Organization Support** - Groundwork for schools/organizations: org admins can manage users (delete, reset PW), administer org pages, pay per organization. See `docs/ORGANIZATION_GROUNDWORK_PLAN.md` for detailed plan.
 
+- **realtime events** - check docs/
+
 - migration had issues, let's try locally until it works and ultimately migrate the database instead (teacher bucket is the same anyway)
 - **Content migration** - continue content migration
 
@@ -32,6 +34,7 @@ small stuff:
 - investigate weirdness on chrome for android (might be gone)
 - Very low: Comments by students (maybe per class)
 
+- **delta updates for strokes** - check docs/
 ---
 
 ## 📝 Notes & Considerations
