@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { ChevronDown, ChevronUp, Check, X, Minus, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useRealtimeEvents } from '@/hooks/use-realtime-events'
 
 interface QuizStats {
   correct: number
@@ -52,46 +53,55 @@ export function QuizProgressBar({
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Fetch quiz responses when component mounts or classId changes
-  useEffect(() => {
-    const fetchResponses = async () => {
-      setIsLoading(true)
-      setError(null)
-      try {
-        const params = new URLSearchParams({
-          pageId,
-          componentId,
-          correctIndices: JSON.stringify(correctIndices)
-        })
-        const res = await fetch(`/api/classes/${classId}/quiz-responses?${params}`)
+  // Fetch quiz responses
+  const fetchResponses = useCallback(async () => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const params = new URLSearchParams({
+        pageId,
+        componentId,
+        correctIndices: JSON.stringify(correctIndices)
+      })
+      const res = await fetch(`/api/classes/${classId}/quiz-responses?${params}`)
 
-        if (!res.ok) {
-          throw new Error('Failed to fetch responses')
-        }
-
-        const data = await res.json()
-        setStats(data.stats)
-        setResponses(data.responses)
-      } catch (e) {
-        console.error('Failed to fetch quiz responses:', e)
-        setError('Failed to load class responses')
-      } finally {
-        setIsLoading(false)
+      if (!res.ok) {
+        throw new Error('Failed to fetch responses')
       }
-    }
 
+      const data = await res.json()
+      setStats(data.stats)
+      setResponses(data.responses)
+    } catch (e) {
+      console.error('Failed to fetch quiz responses:', e)
+      setError('Failed to load class responses')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [classId, pageId, componentId, correctIndices])
+
+  // Subscribe to real-time quiz submission events via SSE
+  useRealtimeEvents(
+    ['quiz-submission'],
+    (event) => {
+      // Only refresh if this event is for our class and page/component
+      if (
+        event.type === 'quiz-submission' &&
+        event.classId === classId &&
+        event.pageId === pageId &&
+        event.questionId === componentId
+      ) {
+        console.log('[QuizProgressBar] Received quiz submission via SSE, refreshing')
+        fetchResponses()
+      }
+    },
+    { enabled: true }
+  )
+
+  // Initial fetch when component mounts
+  useEffect(() => {
     fetchResponses()
-
-    // Poll for updates every 10 seconds when expanded
-    let interval: NodeJS.Timeout | null = null
-    if (isExpanded) {
-      interval = setInterval(fetchResponses, 10000)
-    }
-
-    return () => {
-      if (interval) clearInterval(interval)
-    }
-  }, [classId, pageId, componentId, correctIndices, isExpanded])
+  }, [fetchResponses])
 
   if (isLoading && !stats) {
     return (

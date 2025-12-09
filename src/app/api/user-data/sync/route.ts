@@ -12,6 +12,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { uploadSnapImage, deleteSnapImage, isS3Configured } from '@/lib/s3'
+import { eventBus } from '@/lib/events'
 
 interface SyncItem {
   adapter: string
@@ -47,6 +48,11 @@ interface UploadedSnap {
   imageUrl: string
 }
 
+interface QuizSubmission {
+  pageId: string
+  questionId: string
+}
+
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
@@ -66,6 +72,7 @@ export async function POST(request: NextRequest) {
     const synced: string[] = []
     const uploadedSnaps: UploadedSnap[] = []
     const s3Errors: string[] = []
+    const quizSubmissions: QuizSubmission[] = []
 
     // Process each item
     for (const item of items) {
@@ -176,9 +183,52 @@ export async function POST(request: NextRequest) {
         })
 
         synced.push(`${item.adapter}:${item.itemId}`)
+
+        // Track quiz submissions for SSE notification
+        // Quiz adapters are formatted as "quiz-{questionId}" and itemId is the pageId
+        if (item.adapter.startsWith('quiz-') && parsedData && typeof parsedData === 'object') {
+          const quizData = parsedData as { isSubmitted?: boolean }
+          if (quizData.isSubmitted) {
+            quizSubmissions.push({
+              pageId: item.itemId,
+              questionId: item.adapter
+            })
+          }
+        }
       } catch (error) {
         console.error(`[user-data/sync] Error syncing item ${item.adapter}:${item.itemId}:`, error)
         // Continue with other items
+      }
+    }
+
+    // Publish SSE events for quiz submissions
+    // Notify all classes the student is enrolled in so teachers see real-time updates
+    if (quizSubmissions.length > 0 && session.user.accountType === 'student') {
+      try {
+        const memberships = await prisma.classMembership.findMany({
+          where: { studentId: userId },
+          select: { classId: true }
+        })
+
+        const studentPseudonym = session.user.studentPseudonym ?? ''
+
+        for (const submission of quizSubmissions) {
+          for (const membership of memberships) {
+            await eventBus.publish(`class:${membership.classId}:teacher`, {
+              type: 'quiz-submission',
+              classId: membership.classId,
+              pageId: submission.pageId,
+              questionId: submission.questionId,
+              studentPseudonym,
+              timestamp: Date.now()
+            })
+          }
+        }
+
+        console.log(`[user-data/sync] Published ${quizSubmissions.length} quiz submissions to ${memberships.length} classes`)
+      } catch (eventError) {
+        console.error('[user-data/sync] Failed to publish quiz submission events:', eventError)
+        // Don't fail the sync if event publishing fails
       }
     }
 
