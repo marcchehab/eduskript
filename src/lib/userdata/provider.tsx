@@ -130,45 +130,57 @@ export function useSyncedUserData<T>(
   // Extract targeting from options
   const { targetType, targetId } = options
 
+  // Determine if we're in broadcast mode (targeting is set)
+  const isBroadcastMode = Boolean(targetType && targetId)
+
   // Load data on mount (re-run when pageId, componentId, or targeting changes)
   useEffect(() => {
     let mounted = true
+
+    // IMPORTANT: Reset data to initial immediately when targeting changes
+    // This ensures we don't show stale data from a previous target
+    setData(initialDataRef.current)
 
     const loadData = async () => {
       try {
         setIsLoading(true)
 
-        // If there's targeting, fetch from server directly
-        // (targeted data is not stored locally - it's for broadcasting to others)
-        if (targetType && targetId) {
-          const response = await fetch(
-            `/api/user-data/${componentId}/${encodeURIComponent(pageId)}?targetType=${targetType}&targetId=${targetId}`
-          )
-          if (response.ok) {
-            const serverData = await response.json()
-            if (mounted && serverData.data) {
-              setData(serverData.data as T)
-              setIsSynced(true)
-            } else if (mounted) {
-              setData(initialDataRef.current)
-              setIsSynced(true)
+        // Always try to load from local IndexedDB first (includes targeting in key)
+        const record = await userDataService.get<T>(pageId, componentId, { targetType, targetId })
+
+        if (mounted) {
+          if (record) {
+            setData(record.data)
+            setIsSynced(record.savedToRemote)
+          } else if (isBroadcastMode) {
+            // In broadcast mode, also try server if no local data
+            // (in case teacher synced from another device)
+            try {
+              const response = await fetch(
+                `/api/user-data/${componentId}/${encodeURIComponent(pageId)}?targetType=${targetType}&targetId=${targetId}`
+              )
+              if (response.ok) {
+                const serverData = await response.json()
+                if (mounted && serverData.data) {
+                  setData(serverData.data as T)
+                  setIsSynced(true)
+                } else if (mounted) {
+                  setData(initialDataRef.current)
+                  setIsSynced(true)
+                }
+              } else if (mounted) {
+                setData(initialDataRef.current)
+                setIsSynced(true)
+              }
+            } catch {
+              if (mounted) {
+                setData(initialDataRef.current)
+                setIsSynced(true)
+              }
             }
-          } else if (mounted) {
+          } else {
             setData(initialDataRef.current)
             setIsSynced(true)
-          }
-        } else {
-          // No targeting - load from local IndexedDB
-          const record = await userDataService.get<T>(pageId, componentId)
-
-          if (mounted) {
-            if (record) {
-              setData(record.data)
-              setIsSynced(record.savedToRemote)
-            } else {
-              setData(initialDataRef.current)
-              setIsSynced(true)
-            }
           }
         }
       } catch (error) {
@@ -188,7 +200,7 @@ export function useSyncedUserData<T>(
     return () => {
       mounted = false
     }
-  }, [pageId, componentId, targetType, targetId]) // Re-run when targeting changes
+  }, [pageId, componentId, targetType, targetId, isBroadcastMode]) // Re-run when targeting changes
 
   const updateData = useCallback(
     async (newData: T, updateOptions: { immediate?: boolean } = {}) => {
@@ -197,14 +209,19 @@ export function useSyncedUserData<T>(
         setData(newData)
         setIsSynced(false)
 
-        // Save to IndexedDB
+        // In broadcast mode, always sync immediately (teachers want real-time updates)
+        const shouldSyncImmediately = isBroadcastMode || updateOptions.immediate
+
+        // Save to IndexedDB (with targeting in key)
         await userDataService.save(pageId, componentId, newData, {
-          immediate: updateOptions.immediate,
+          immediate: shouldSyncImmediately,
+          targetType: targetType ?? null,
+          targetId: targetId ?? null,
         })
 
         // Queue for cloud sync if authenticated
         if (isAuthenticated) {
-          const record = await userDataService.get(pageId, componentId)
+          const record = await userDataService.get(pageId, componentId, { targetType, targetId })
           if (record) {
             syncEngine.queueSync(
               componentId, // adapter
@@ -212,7 +229,7 @@ export function useSyncedUserData<T>(
               JSON.stringify(newData),
               record.version,
               {
-                immediate: updateOptions.immediate, // Pass immediate flag to bypass debounce
+                immediate: shouldSyncImmediately, // Immediate in broadcast mode
                 targetType: targetType ?? null,
                 targetId: targetId ?? null,
               }
@@ -226,7 +243,7 @@ export function useSyncedUserData<T>(
         throw error
       }
     },
-    [pageId, componentId, isAuthenticated, targetType, targetId]
+    [pageId, componentId, isAuthenticated, targetType, targetId, isBroadcastMode]
   )
 
   return {

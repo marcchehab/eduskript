@@ -32,10 +32,29 @@ export class UserDataService {
   }
 
   /**
-   * Generate cache key for debounce timers
+   * Generate cache key for debounce timers (includes targeting)
    */
-  private getCacheKey(pageId: string, componentId: string): string {
-    return `${pageId}:${componentId}`
+  private getCacheKey(
+    pageId: string,
+    componentId: string,
+    targetType?: 'class' | 'student' | null,
+    targetId?: string | null
+  ): string {
+    const targetKey = targetType && targetId ? `:${targetType}:${targetId}` : ''
+    return `${pageId}:${componentId}${targetKey}`
+  }
+
+  /**
+   * Generate IndexedDB compound key (includes targeting)
+   * Note: Uses empty strings instead of null because IndexedDB doesn't support null in compound keys
+   */
+  private getDbKey(
+    pageId: string,
+    componentId: string,
+    targetType?: 'class' | 'student' | null,
+    targetId?: string | null
+  ): [string, string, string, string] {
+    return [pageId, componentId, targetType ?? '', targetId ?? '']
   }
 
   /**
@@ -43,7 +62,11 @@ export class UserDataService {
    */
   public async get<T = any>(
     pageId: string,
-    componentId: string
+    componentId: string,
+    options: {
+      targetType?: 'class' | 'student' | null
+      targetId?: string | null
+    } = {}
   ): Promise<UserDataRecord<T> | null> {
     // Validate inputs to prevent IndexedDB DataError
     if (!pageId || !componentId) {
@@ -52,7 +75,8 @@ export class UserDataService {
     }
 
     try {
-      const record = await db.userData.get([pageId, componentId])
+      const dbKey = this.getDbKey(pageId, componentId, options.targetType, options.targetId)
+      const record = await db.userData.get(dbKey)
       return (record as UserDataRecord<T>) || null
     } catch (error) {
       console.error('Failed to retrieve user data:', error)
@@ -67,7 +91,10 @@ export class UserDataService {
     pageId: string,
     componentId: string,
     data: T,
-    options: SaveOptions = {}
+    options: SaveOptions & {
+      targetType?: 'class' | 'student' | null
+      targetId?: string | null
+    } = {}
   ): Promise<void> {
     // Validate inputs to prevent IndexedDB DataError
     if (!pageId || !componentId) {
@@ -75,8 +102,8 @@ export class UserDataService {
       return
     }
 
-    const { debounce = this.DEFAULT_DEBOUNCE, immediate = false } = options
-    const cacheKey = this.getCacheKey(pageId, componentId)
+    const { debounce = this.DEFAULT_DEBOUNCE, immediate = false, targetType, targetId } = options
+    const cacheKey = this.getCacheKey(pageId, componentId, targetType, targetId)
 
     // Clear existing timer if any
     const existingTimer = this.saveTimers.get(cacheKey)
@@ -87,13 +114,13 @@ export class UserDataService {
 
     // If immediate save requested, execute now
     if (immediate) {
-      await this.performSave(pageId, componentId, data)
+      await this.performSave(pageId, componentId, data, targetType, targetId)
       return
     }
 
     // Otherwise, debounce the save
     const timer = setTimeout(async () => {
-      await this.performSave(pageId, componentId, data)
+      await this.performSave(pageId, componentId, data, targetType, targetId)
       this.saveTimers.delete(cacheKey)
     }, debounce)
 
@@ -106,10 +133,12 @@ export class UserDataService {
   private async performSave<T = any>(
     pageId: string,
     componentId: string,
-    data: T
+    data: T,
+    targetType?: 'class' | 'student' | null,
+    targetId?: string | null
   ): Promise<void> {
     try {
-      const existing = await this.get(pageId, componentId)
+      const existing = await this.get(pageId, componentId, { targetType, targetId })
       const now = Date.now()
 
       const record: UserDataRecord<T> = {
@@ -121,6 +150,9 @@ export class UserDataService {
         version: existing ? existing.version + 1 : 1,
         createdAt: existing?.createdAt || new Date().toISOString(),
         userId: existing?.userId, // Preserve userId if it exists
+        // Use empty strings for IndexedDB compound key compatibility (null not allowed)
+        targetType: targetType ?? '',
+        targetId: targetId ?? '',
       }
 
       await db.userData.put(record)
@@ -133,7 +165,14 @@ export class UserDataService {
   /**
    * Delete user data for a specific page component
    */
-  public async delete(pageId: string, componentId: string): Promise<void> {
+  public async delete(
+    pageId: string,
+    componentId: string,
+    options: {
+      targetType?: 'class' | 'student' | null
+      targetId?: string | null
+    } = {}
+  ): Promise<void> {
     // Validate inputs to prevent IndexedDB DataError
     if (!pageId || !componentId) {
       console.warn('UserDataService.delete called with invalid keys:', { pageId, componentId })
@@ -141,7 +180,8 @@ export class UserDataService {
     }
 
     try {
-      const cacheKey = this.getCacheKey(pageId, componentId)
+      const { targetType, targetId } = options
+      const cacheKey = this.getCacheKey(pageId, componentId, targetType, targetId)
 
       // Clear pending save timer if any
       const existingTimer = this.saveTimers.get(cacheKey)
@@ -150,7 +190,8 @@ export class UserDataService {
         this.saveTimers.delete(cacheKey)
       }
 
-      await db.userData.delete([pageId, componentId])
+      const dbKey = this.getDbKey(pageId, componentId, targetType, targetId)
+      await db.userData.delete(dbKey)
     } catch (error) {
       console.error('Failed to delete user data:', error)
       throw error

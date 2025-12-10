@@ -7,35 +7,41 @@
 import Dexie, { Table } from 'dexie'
 import type { UserDataRecord, UserDataVersion, VersionBlob } from './types'
 
+// Database name includes version suffix to handle primary key changes
+// (Dexie doesn't support migrating primary key structure)
+// Increment this when primary key changes require a fresh database
+const DB_NAME = 'EduskriptUserData_v2'
+
 export class UserDataDatabase extends Dexie {
-  userData!: Table<UserDataRecord, [string, string]>
+  // Primary key is [pageId, componentId, targetType, targetId]
+  // targetType/targetId use '' for personal data (IndexedDB doesn't support null in compound keys)
+  userData!: Table<UserDataRecord, [string, string, string, string]>
   userData_history!: Table<UserDataVersion, number>
   versionBlobs!: Table<VersionBlob, string>
 
   constructor() {
-    super('EduskriptUserData')
+    super(DB_NAME)
 
-    // Version 1 (original schema)
+    // Version 1 - Fresh schema with targeting support
+    // Primary key: [pageId, componentId, targetType, targetId]
+    // This allows storing both personal data (targetType=null) and
+    // targeted data (targetType='class'|'student') for the same page/component
     this.version(1).stores({
-      // Compound primary key [pageId, componentId]
-      // Indexes on updatedAt for cleanup, userId for future sync
-      userData: '[pageId+componentId], updatedAt, userId, savedToRemote'
-    })
-
-    // Version 2 (add version history tables)
-    this.version(2).stores({
-      // Keep existing table with same schema
-      userData: '[pageId+componentId], updatedAt, userId, savedToRemote',
+      // Extended compound primary key for targeting support
+      // targetType: null (personal), 'class', or 'student'
+      // targetId: null (personal), classId, or studentId
+      userData: '[pageId+componentId+targetType+targetId], updatedAt, userId, savedToRemote, targetType',
       // Version history: auto-increment id, compound index for queries
       userData_history: '++id, [pageId+componentId], versionNumber, createdAt, blobId',
       // Version blobs: hash-based deduplication
       versionBlobs: 'blobId, createdAt, refCount'
-    }).upgrade(async (tx) => {
-      // Migration: No action needed - existing data remains unchanged
-      // Version history will be created going forward
-      console.log('[UserDataDB] Migrated to v2 with version history support')
     })
   }
+}
+
+// Delete old database if it exists (one-time cleanup)
+if (typeof indexedDB !== 'undefined') {
+  indexedDB.deleteDatabase('EduskriptUserData')
 }
 
 // Singleton instance

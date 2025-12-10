@@ -44,12 +44,10 @@ export function useTeacherBroadcast(pageId: string) {
   // Fetch teacher annotations from API
   const fetchAnnotations = useCallback(async () => {
     if (status !== 'authenticated' || !pageId) {
-      console.log('[useTeacherBroadcast] Skipping fetch:', { status, pageId })
       setIsLoading(false)
       return
     }
 
-    console.log('[useTeacherBroadcast] Fetching annotations for pageId:', pageId)
     try {
       setError(null)
       const res = await fetch(`/api/student/teacher-annotations?pageId=${encodeURIComponent(pageId)}`)
@@ -58,11 +56,9 @@ export function useTeacherBroadcast(pageId: string) {
       }
 
       const data: TeacherBroadcastData = await res.json()
-      console.log('[useTeacherBroadcast] Received:', data)
       setClassAnnotations(data.classAnnotations || [])
       setIndividualFeedback(data.individualFeedback || null)
     } catch (err) {
-      console.error('[useTeacherBroadcast] Failed to fetch annotations:', err)
       setError(err instanceof Error ? err.message : 'Failed to fetch teacher annotations')
     } finally {
       setIsLoading(false)

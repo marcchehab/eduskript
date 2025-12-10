@@ -386,25 +386,33 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       }
     }, [width, height, zoom, redrawCanvas])
 
-    // Load initial data
+    // Load initial data (or clear canvas when initialData becomes empty)
     useEffect(() => {
-      if (initialData && canvasRef.current) {
-        try {
-          const paths = JSON.parse(initialData)
-          pathsRef.current = paths
-          // Only trigger fade-in animation on the FIRST load, not on subsequent updates
-          if (paths.length > 0 && !hasLoadedInitialDataRef.current) {
-            setShouldFadeIn(true)
-            // Remove the fade-in class after animation completes (0.5s)
-            setTimeout(() => {
-              setShouldFadeIn(false)
-            }, 500)
-          }
-          redrawCanvas()
-        } catch (error) {
-          console.error('Error loading canvas data:', error)
-        }
+      if (!canvasRef.current) return
+
+      // Handle empty initialData - clear the canvas
+      if (!initialData || initialData === '' || initialData === '[]') {
+        pathsRef.current = []
+        redrawCanvas()
+        return
       }
+
+      try {
+        const paths = JSON.parse(initialData)
+        pathsRef.current = paths
+        // Only trigger fade-in animation on the FIRST load, not on subsequent updates
+        if (paths.length > 0 && !hasLoadedInitialDataRef.current) {
+          setShouldFadeIn(true)
+          // Remove the fade-in class after animation completes (0.5s)
+          setTimeout(() => {
+            setShouldFadeIn(false)
+          }, 500)
+        }
+        redrawCanvas()
+      } catch (error) {
+        console.error('Error loading canvas data:', error)
+      }
+
       // Mark as initialized after first load attempt, regardless of whether there was data
       if (!hasLoadedInitialDataRef.current) {
         hasLoadedInitialDataRef.current = true
@@ -505,7 +513,6 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       if (SMOOTHING_TEST_MODE && currentModeRef.current === 'draw') {
         currentStrokeSmoothingRef.current = SMOOTHING_TEST_LEVELS[smoothingTestIndexRef.current]
         smoothingTestIndexRef.current = (smoothingTestIndexRef.current + 1) % SMOOTHING_TEST_LEVELS.length
-        console.log(`[Smoothing Test] Using window=${currentStrokeSmoothingRef.current.window}, color=${currentStrokeSmoothingRef.current.color}`)
       } else {
         currentStrokeSmoothingRef.current = { window: REALTIME_SMOOTHING_WINDOW, color: strokeColor }
       }
@@ -657,9 +664,6 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
 
           // Notify parent with updated data
           const data = JSON.stringify(pathsRef.current)
-          const totalPoints = pathsRef.current.reduce((sum, path) => sum + path.points.length, 0)
-          const sizeKB = (new Blob([data]).size / 1024).toFixed(2)
-          console.log(`Canvas data after erase: ${pathsRef.current.length} paths, ${totalPoints} points, ${sizeKB} KB`)
           onUpdate?.(data)
 
           // Clear current path for eraser

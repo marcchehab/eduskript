@@ -44,7 +44,8 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
     return {} // my-view: personal annotations
   }, [isTeacher, viewMode, selectedClass, selectedStudent])
 
-  console.log('[AnnotationLayer] Teacher sync options:', { isTeacher, viewMode, selectedClass: selectedClass?.id, selectedStudent: selectedStudent?.id, syncOptions })
+  // Create a stable key for targeting to detect changes
+  const targetingKey = `${syncOptions.targetType ?? ''}-${syncOptions.targetId ?? ''}`
 
   // Use synced user data service for annotations (with targeting for teachers)
   const { data: annotationData, updateData: updateAnnotationData, isLoading: annotationLoading } = useSyncedUserData<AnnotationData>(
@@ -65,13 +66,11 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
 
   // For students: fetch teacher annotations (class broadcasts + individual feedback)
   const isStudent = session?.user?.accountType === 'student'
-  console.log('[AnnotationLayer] isStudent:', isStudent, 'accountType:', session?.user?.accountType, 'pageId:', pageId)
   const {
     classAnnotations: teacherClassAnnotations,
     individualFeedback: teacherIndividualFeedback,
     isLoading: teacherAnnotationsLoading,
   } = useTeacherBroadcast(isStudent ? pageId : '')
-  console.log('[AnnotationLayer] Teacher annotations:', { teacherClassAnnotations, teacherIndividualFeedback, teacherAnnotationsLoading })
 
   // Toggle to show/hide teacher annotations
   const [showTeacherAnnotations, setShowTeacherAnnotations] = useState(true)
@@ -144,6 +143,12 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
   const [hasAnnotations, setHasAnnotations] = useState(false)
   const [canvasData, setCanvasData] = useState<string>('')
   const [headingPositions, setHeadingPositions] = useState<HeadingPosition[]>([])
+
+  // Refs to track latest values for use in callbacks (avoids stale closure issues)
+  const canvasDataRef = useRef<string>('')
+  const pageVersionRef = useRef<string>('')
+  const headingPositionsRef = useRef<HeadingPosition[]>([])
+  const currentPaddingLeftRef = useRef<number>(0)
 
   // Save state tracking
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
@@ -371,8 +376,22 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
   useEffect(() => {
     generateContentHash(content).then(hash => {
       setPageVersion(hash)
+      pageVersionRef.current = hash
     })
   }, [content])
+
+  // Keep refs in sync with state (for use in callbacks to avoid stale closures)
+  useEffect(() => {
+    canvasDataRef.current = canvasData
+  }, [canvasData])
+
+  useEffect(() => {
+    headingPositionsRef.current = headingPositions
+  }, [headingPositions])
+
+  useEffect(() => {
+    currentPaddingLeftRef.current = currentPaddingLeft
+  }, [currentPaddingLeft])
 
   // Check for version mismatch
   useEffect(() => {
@@ -386,13 +405,35 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
     }
   }, [pageVersion, annotationData])
 
+  // Track previous targeting key to detect class/student switches
+  const prevTargetingKeyRef = useRef(targetingKey)
+
+  // Reset canvas state when targeting changes (e.g., teacher switches class)
+  // This MUST run before the data loading effect below
+  useEffect(() => {
+    // Skip on initial mount (no previous value to compare)
+    if (prevTargetingKeyRef.current === targetingKey) return
+
+    // Clear local canvas state to allow new data to load
+    // DON'T call canvasRef.current.clear() here - it triggers onUpdate which sets canvasData to '[]'
+    // Instead, just reset state and let SimpleCanvas reload via initialData prop change
+    setCanvasData('')
+    setHasAnnotations(false)
+    setStoredHeadingOffsets({})
+    setStoredPaddingLeft(undefined)
+
+    // Update the ref for next comparison
+    prevTargetingKeyRef.current = targetingKey
+  }, [targetingKey])
+
   // Load annotations from user data service
-  // Only load if we don't have local data yet (prevents overwriting active drawing)
+  // Runs when annotationData changes OR when canvas was cleared (canvasData becomes empty)
   useEffect(() => {
     // Don't reload if we're in the middle of clearing
     if (isClearingRef.current) return
 
     // Don't reload if we already have canvas data (user is drawing)
+    // Exception: Allow reload if canvasData is empty (just switched targets or initial load)
     if (canvasData) return
 
     if (annotationData && annotationData.canvasData) {
@@ -402,17 +443,15 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
         if (strokes.length > 0) {
           // eslint-disable-next-line react-hooks/set-state-in-effect -- Loading stored state
           setHasAnnotations(true)
-
           setCanvasData(annotationData.canvasData)
-
           setStoredHeadingOffsets(annotationData.headingOffsets || {})
           setStoredPaddingLeft(annotationData.paddingLeft)
         }
-      } catch (error) {
-        console.error('Error parsing canvas data:', error)
+      } catch {
+        // Ignore parse errors
       }
     }
-  }, [annotationData, canvasData])
+  }, [annotationData, canvasData, targetingKey])
 
   // Initialize storedHeadingOffsets when heading positions are first available
   useEffect(() => {
@@ -462,8 +501,8 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
         setStoredHeadingOffsets(currentOffsets)
         setStoredPaddingLeft(currentPaddingLeft)
       }
-    } catch (error) {
-      console.error('Error checking repositioning:', error)
+    } catch {
+      // Ignore repositioning errors
     }
   }, [headingPositions, storedHeadingOffsets, canvasData, currentPaddingLeft, storedPaddingLeft])
 
@@ -550,31 +589,67 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
   }, [recalculateHeadingPositions])
 
   // Function to perform the actual save
+  // IMPORTANT: Uses refs instead of state to avoid stale closure issues when called from setTimeout
   const performSave = useCallback(async () => {
+    // Read from refs to get current values (avoids stale closure from setTimeout)
+    const currentCanvasData = canvasDataRef.current
+    const currentPageVersion = pageVersionRef.current
+    let currentHeadingPositions = headingPositionsRef.current
+    const paddingLeft = currentPaddingLeftRef.current
+
     // Don't save if we're in the middle of clearing
     if (isClearingRef.current) return
 
-    if (!canvasData || !pageVersion) return
+    if (!currentCanvasData || !currentPageVersion) return
 
-    // Don't save if heading positions haven't been tracked yet
-    if (headingPositions.length === 0) return
+    // If heading positions haven't been calculated yet, try to calculate them now
+    // This can happen during fast refresh or when save is triggered before the 500ms delay
+    if (currentHeadingPositions.length === 0 && contentRef.current) {
+      const paperElement = document.getElementById('paper')
+      if (paperElement) {
+        const headingElements = contentRef.current.querySelectorAll<HTMLElement>('[data-section-id]')
+        const positions: HeadingPosition[] = []
+
+        headingElements.forEach((element) => {
+          const sectionId = element.getAttribute('data-section-id')
+          const headingText = element.getAttribute('data-heading-text')
+
+          if (sectionId) {
+            const rect = element.getBoundingClientRect()
+            const paperRect = paperElement.getBoundingClientRect()
+            const offsetY = rect.top - paperRect.top
+
+            positions.push({
+              sectionId,
+              offsetY,
+              headingText: headingText || ''
+            })
+          }
+        })
+
+        currentHeadingPositions = positions
+        // Update the ref and state for future use
+        headingPositionsRef.current = positions
+        setHeadingPositions(positions)
+      }
+    }
 
     try {
       // Parse canvas data to check if we have strokes
-      const strokes = JSON.parse(canvasData) as StrokeData[]
+      const strokes = JSON.parse(currentCanvasData) as StrokeData[]
 
       if (strokes.length === 0) return
 
       // Build heading offsets map
       const headingOffsets = Object.fromEntries(
-        headingPositions.map(h => [h.sectionId, h.offsetY])
+        currentHeadingPositions.map(h => [h.sectionId, h.offsetY])
       )
 
       const data: AnnotationData = {
-        canvasData,
+        canvasData: currentCanvasData,
         headingOffsets,
-        pageVersion,
-        paddingLeft: currentPaddingLeft
+        pageVersion: currentPageVersion,
+        paddingLeft
       }
 
       setSaveState('saving')
@@ -586,14 +661,13 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
 
       // Reset to idle after showing success briefly
       setTimeout(() => setSaveState('idle'), 2000)
-    } catch (error) {
-      console.error('Error saving annotations:', error)
+    } catch {
       setSaveState('error')
 
       // Reset to idle after showing error briefly
       setTimeout(() => setSaveState('idle'), 3000)
     }
-  }, [canvasData, pageVersion, headingPositions, currentPaddingLeft, updateAnnotationData])
+  }, [updateAnnotationData])
 
   // Save on unmount (navigation away)
   useEffect(() => {
@@ -642,8 +716,7 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
       }
 
       if (!hasData) return
-    } catch (error) {
-      console.error('Error parsing canvas data:', error)
+    } catch {
       return
     }
 
@@ -692,8 +765,8 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
       if (canvasRef.current) {
         canvasRef.current.clear()
       }
-    } catch (error) {
-      console.error('Error clearing annotations:', error)
+    } catch {
+      // Ignore clearing errors
     }
   }, [deleteAnnotationData])
 
@@ -719,8 +792,8 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
         clearTimeout(saveTimeoutRef.current)
       }
       performSave()
-    } catch (error) {
-      console.error('Error removing orphaned strokes:', error)
+    } catch {
+      // Ignore orphan removal errors
     }
   }, [canvasData, performSave])
 

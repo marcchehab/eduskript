@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
-import { ChevronDown, Users, X, User, Radio, ArrowLeft } from 'lucide-react'
+import { ChevronDown, Users, X, User, Radio } from 'lucide-react'
 
 interface ClassInfo {
   id: string
@@ -17,8 +17,6 @@ interface StudentInfo {
   email?: string
 }
 
-type MenuState = 'classes' | 'students'
-
 export function ClassSelectorFAB() {
   const {
     selectedClass,
@@ -29,20 +27,25 @@ export function ClassSelectorFAB() {
     isTeacher,
     isLoading
   } = useTeacherClass()
-  const [isOpen, setIsOpen] = useState(false)
-  const [menuState, setMenuState] = useState<MenuState>('classes')
+
+  // Separate open states for each dropdown
+  const [isClassesOpen, setIsClassesOpen] = useState(false)
+  const [isTargetsOpen, setIsTargetsOpen] = useState(false)
+
   const [classes, setClasses] = useState<ClassInfo[]>([])
   const [students, setStudents] = useState<StudentInfo[]>([])
-  const [isFetching, setIsFetching] = useState(false)
-  const dropdownRef = useRef<HTMLDivElement>(null)
+  const [isFetchingClasses, setIsFetchingClasses] = useState(false)
+  const [isFetchingStudents, setIsFetchingStudents] = useState(false)
 
-  // Fetch classes when dropdown opens
+  const classesDropdownRef = useRef<HTMLDivElement>(null)
+  const targetsDropdownRef = useRef<HTMLDivElement>(null)
+
+  // Fetch classes when classes dropdown opens
   useEffect(() => {
-    // Skip if not teacher or loading, or dropdown is closed, or already have classes
-    if (!isTeacher || isLoading || !isOpen || classes.length > 0) return
+    if (!isTeacher || isLoading || !isClassesOpen || classes.length > 0) return
 
     const fetchClasses = async () => {
-      setIsFetching(true)
+      setIsFetchingClasses(true)
       try {
         const res = await fetch('/api/classes')
         if (res.ok) {
@@ -52,19 +55,19 @@ export function ClassSelectorFAB() {
       } catch (e) {
         console.error('Failed to fetch classes:', e)
       } finally {
-        setIsFetching(false)
+        setIsFetchingClasses(false)
       }
     }
 
     fetchClasses()
-  }, [isOpen, classes.length, isTeacher, isLoading])
+  }, [isClassesOpen, classes.length, isTeacher, isLoading])
 
-  // Fetch students when viewing student list for a class
+  // Fetch students when a class is selected and targets dropdown opens
   useEffect(() => {
-    if (!selectedClass || menuState !== 'students') return
+    if (!selectedClass || !isTargetsOpen) return
 
     const fetchStudents = async () => {
-      setIsFetching(true)
+      setIsFetchingStudents(true)
       setStudents([])
       try {
         const res = await fetch(`/api/classes/${selectedClass.id}/students`)
@@ -75,35 +78,34 @@ export function ClassSelectorFAB() {
       } catch (e) {
         console.error('Failed to fetch students:', e)
       } finally {
-        setIsFetching(false)
+        setIsFetchingStudents(false)
       }
     }
 
     fetchStudents()
-  }, [selectedClass, menuState])
+  }, [selectedClass, isTargetsOpen])
 
-  // Reset menu state when dropdown closes
+  // Refetch students when class changes (if targets menu is open)
   useEffect(() => {
-    if (!isOpen) {
-      // Delay reset to prevent flash during close animation
-      const timer = setTimeout(() => setMenuState('classes'), 200)
-      return () => clearTimeout(timer)
+    if (!selectedClass) {
+      setStudents([])
     }
-  }, [isOpen])
+  }, [selectedClass?.id])
 
-  // Close dropdown when clicking outside
+  // Close dropdowns when clicking outside
   useEffect(() => {
-    if (!isOpen) return
-
     const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setIsOpen(false)
+      if (isClassesOpen && classesDropdownRef.current && !classesDropdownRef.current.contains(e.target as Node)) {
+        setIsClassesOpen(false)
+      }
+      if (isTargetsOpen && targetsDropdownRef.current && !targetsDropdownRef.current.contains(e.target as Node)) {
+        setIsTargetsOpen(false)
       }
     }
 
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [isOpen])
+  }, [isClassesOpen, isTargetsOpen])
 
   // Don't render for non-teachers
   if (!isTeacher || isLoading) {
@@ -112,8 +114,9 @@ export function ClassSelectorFAB() {
 
   const handleSelectClass = (classInfo: ClassInfo) => {
     setSelectedClass({ id: classInfo.id, name: classInfo.name })
-    // Show students menu after selecting a class
-    setMenuState('students')
+    // Clear student selection when changing class
+    setSelectedStudent(null)
+    setIsClassesOpen(false)
   }
 
   const handleSelectStudent = (student: StudentInfo) => {
@@ -122,64 +125,127 @@ export function ClassSelectorFAB() {
       displayName: student.displayName,
       pseudonym: student.pseudonym,
     })
-    setIsOpen(false)
+    setIsTargetsOpen(false)
   }
 
-  const handleBackToClasses = () => {
-    setMenuState('classes')
-  }
-
-  const handleClearStudent = () => {
+  const handleSelectEntireClass = () => {
     setSelectedStudent(null)
+    setIsTargetsOpen(false)
   }
 
   const handleClearSelection = () => {
     setSelectedClass(null)
-    setIsOpen(false)
+    setSelectedStudent(null)
+    setIsClassesOpen(false)
+    setIsTargetsOpen(false)
   }
 
-  // Get display text for FAB button
-  const getButtonText = () => {
+  // Get display text for targets FAB
+  const getTargetText = () => {
     if (selectedStudent) return selectedStudent.displayName
-    if (selectedClass) return selectedClass.name
-    return 'Select Class'
+    return 'Entire Class'
   }
 
-  // Get icon for current mode
-  const getModeIcon = () => {
+  // Get icon for targets FAB
+  const getTargetIcon = () => {
     if (viewMode === 'student-view') return <User className="h-5 w-5" />
-    if (viewMode === 'class-broadcast') return <Radio className="h-5 w-5" />
-    return <Users className="h-5 w-5" />
+    return <Radio className="h-5 w-5" />
   }
 
   return (
-    <div
-      ref={dropdownRef}
-      className="fixed bottom-6 right-6 z-50"
-    >
-      {/* Dropdown menu - appears above the button */}
-      {isOpen && (
-        <div className="absolute bottom-full right-0 mb-2 w-72 bg-card border border-border rounded-lg shadow-lg overflow-hidden">
-          {/* Header */}
-          <div className="p-2 border-b border-border bg-muted/50 flex items-center gap-2">
-            {menuState === 'students' && (
-              <button
-                onClick={handleBackToClasses}
-                className="p-1 hover:bg-muted rounded transition-colors"
-                title="Back to classes"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </button>
-            )}
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              {menuState === 'classes' ? 'Select Class' : `${selectedClass?.name} - Students`}
-            </span>
-          </div>
+    <div className="fixed bottom-6 right-6 z-50 flex items-end gap-2">
+      {/* Targets FAB - only visible when class is selected */}
+      {selectedClass && (
+        <div ref={targetsDropdownRef} className="relative">
+          {/* Targets dropdown menu */}
+          {isTargetsOpen && (
+            <div className="absolute bottom-full right-0 mb-2 w-64 bg-card border border-border rounded-lg shadow-lg overflow-hidden">
+              {/* Header */}
+              <div className="p-2 border-b border-border bg-muted/50">
+                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  Broadcast Target
+                </span>
+              </div>
 
-          {/* Classes list */}
-          {menuState === 'classes' && (
+              <div className="max-h-64 overflow-y-auto">
+                {/* Broadcast to entire class option */}
+                <button
+                  onClick={handleSelectEntireClass}
+                  className={`w-full px-3 py-2 text-left hover:bg-muted/50 transition-colors flex items-center gap-2 border-b border-border ${
+                    !selectedStudent ? 'bg-primary/10 text-primary' : ''
+                  }`}
+                >
+                  <Radio className="h-4 w-4" />
+                  <span className="font-medium">Entire Class</span>
+                </button>
+
+                {/* Students list */}
+                {isFetchingStudents ? (
+                  <div className="p-4 text-center text-muted-foreground">
+                    Loading students...
+                  </div>
+                ) : students.length === 0 ? (
+                  <div className="p-4 text-center text-muted-foreground">
+                    No students in this class
+                  </div>
+                ) : (
+                  <div className="py-1">
+                    {students.map((student) => (
+                      <button
+                        key={student.id}
+                        onClick={() => handleSelectStudent(student)}
+                        className={`w-full px-3 py-2 text-left hover:bg-muted/50 transition-colors flex items-center gap-2 ${
+                          selectedStudent?.id === student.id ? 'bg-primary/10 text-primary' : ''
+                        }`}
+                      >
+                        <User className="h-4 w-4 text-muted-foreground" />
+                        <span className="font-medium truncate">{student.displayName}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Targets FAB button */}
+          <button
+            onClick={() => {
+              setIsTargetsOpen(!isTargetsOpen)
+              setIsClassesOpen(false) // Close other dropdown
+            }}
+            className={`flex items-center gap-2 px-4 py-3 rounded-full shadow-lg transition-all ${
+              selectedStudent
+                ? 'bg-orange-500 text-white hover:bg-orange-600'
+                : 'bg-primary text-primary-foreground hover:bg-primary/90'
+            }`}
+          >
+            {getTargetIcon()}
+            <span className="font-medium max-w-32 truncate">
+              {getTargetText()}
+            </span>
+            <ChevronDown
+              className={`h-4 w-4 transition-transform ${isTargetsOpen ? 'rotate-180' : ''}`}
+            />
+          </button>
+        </div>
+      )}
+
+      {/* Classes FAB */}
+      <div ref={classesDropdownRef} className="relative">
+        {/* Classes dropdown menu */}
+        {isClassesOpen && (
+          <div className="absolute bottom-full right-0 mb-2 w-64 bg-card border border-border rounded-lg shadow-lg overflow-hidden">
+            {/* Header */}
+            <div className="p-2 border-b border-border bg-muted/50">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Select Class
+              </span>
+            </div>
+
+            {/* Classes list */}
             <div className="max-h-64 overflow-y-auto">
-              {isFetching ? (
+              {isFetchingClasses ? (
                 <div className="p-4 text-center text-muted-foreground">
                   Loading classes...
                 </div>
@@ -207,95 +273,43 @@ export function ClassSelectorFAB() {
                 </div>
               )}
             </div>
-          )}
 
-          {/* Students list */}
-          {menuState === 'students' && (
-            <div className="max-h-64 overflow-y-auto">
-              {/* Broadcast to class option */}
-              <button
-                onClick={() => {
-                  setSelectedStudent(null)
-                  setIsOpen(false)
-                }}
-                className={`w-full px-3 py-2 text-left hover:bg-muted/50 transition-colors flex items-center gap-2 border-b border-border ${
-                  !selectedStudent ? 'bg-primary/10 text-primary' : ''
-                }`}
-              >
-                <Radio className="h-4 w-4" />
-                <span className="font-medium">Broadcast to Class</span>
-              </button>
-
-              {isFetching ? (
-                <div className="p-4 text-center text-muted-foreground">
-                  Loading students...
-                </div>
-              ) : students.length === 0 ? (
-                <div className="p-4 text-center text-muted-foreground">
-                  No students in this class
-                </div>
-              ) : (
-                <div className="py-1">
-                  {students.map((student) => (
-                    <button
-                      key={student.id}
-                      onClick={() => handleSelectStudent(student)}
-                      className={`w-full px-3 py-2 text-left hover:bg-muted/50 transition-colors flex items-center gap-2 ${
-                        selectedStudent?.id === student.id ? 'bg-primary/10 text-primary' : ''
-                      }`}
-                    >
-                      <User className="h-4 w-4 text-muted-foreground" />
-                      <span className="font-medium truncate">{student.displayName}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Clear selection option */}
-          {selectedClass && (
-            <div className="border-t border-border">
-              {selectedStudent && (
+            {/* Clear selection option */}
+            {selectedClass && (
+              <div className="border-t border-border">
                 <button
-                  onClick={handleClearStudent}
+                  onClick={handleClearSelection}
                   className="w-full px-3 py-2 text-left text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors flex items-center gap-2"
                 >
                   <X className="h-4 w-4" />
-                  Back to class broadcast
+                  Clear selection
                 </button>
-              )}
-              <button
-                onClick={handleClearSelection}
-                className="w-full px-3 py-2 text-left text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors flex items-center gap-2"
-              >
-                <X className="h-4 w-4" />
-                Clear selection (don&apos;t share content)
-              </button>
-            </div>
-          )}
-        </div>
-      )}
+              </div>
+            )}
+          </div>
+        )}
 
-      {/* FAB button */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center gap-2 px-4 py-3 rounded-full shadow-lg transition-all ${
-          selectedStudent
-            ? 'bg-orange-500 text-white hover:bg-orange-600'
-            : selectedClass
-            ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-            : 'bg-card text-foreground border border-border hover:bg-muted'
-        }`}
-      >
-        {getModeIcon()}
-        <span className="font-medium max-w-36 truncate">
-          {getButtonText()}
-        </span>
-        <ChevronDown
-          className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`}
-        />
-      </button>
+        {/* Classes FAB button */}
+        <button
+          onClick={() => {
+            setIsClassesOpen(!isClassesOpen)
+            setIsTargetsOpen(false) // Close other dropdown
+          }}
+          className={`flex items-center gap-2 px-4 py-3 rounded-full shadow-lg transition-all ${
+            selectedClass
+              ? 'bg-muted text-foreground border border-border hover:bg-muted/80'
+              : 'bg-card text-foreground border border-border hover:bg-muted'
+          }`}
+        >
+          <Users className="h-5 w-5" />
+          <span className="font-medium max-w-32 truncate">
+            {selectedClass ? selectedClass.name : 'Select Class'}
+          </span>
+          <ChevronDown
+            className={`h-4 w-4 transition-transform ${isClassesOpen ? 'rotate-180' : ''}`}
+          />
+        </button>
+      </div>
     </div>
   )
 }

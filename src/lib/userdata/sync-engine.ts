@@ -39,8 +39,9 @@ export interface SyncItem {
   version: number
   updatedAt: number
   // Optional targeting for teacher broadcasts/feedback
-  targetType?: 'class' | 'student' | null
-  targetId?: string | null
+  // Uses empty string (not null) for IndexedDB compound key compatibility
+  targetType?: 'class' | 'student' | ''
+  targetId?: string
 }
 
 export interface ManifestItem {
@@ -148,8 +149,9 @@ export class SyncEngine {
       data,
       version,
       updatedAt: Date.now(),
-      targetType: options.targetType ?? null,
-      targetId: options.targetId ?? null,
+      // Use empty string for IndexedDB compatibility (null not supported in compound keys)
+      targetType: options.targetType ?? '',
+      targetId: options.targetId ?? '',
     })
 
     this.updateStatus({ pending: this.syncQueue.size })
@@ -325,7 +327,9 @@ export class SyncEngine {
           continue
         }
 
-        const localRecord = await db.userData.get([serverItem.itemId, serverItem.adapter])
+        // Use 4-element key: [pageId, componentId, targetType, targetId]
+        // For initial sync, we're looking for personal data (empty targeting)
+        const localRecord = await db.userData.get([serverItem.itemId, serverItem.adapter, '', ''])
 
         if (!localRecord || serverItem.updatedAt > localRecord.updatedAt) {
           // Server has newer data - fetch and merge
@@ -405,7 +409,7 @@ export class SyncEngine {
         }
       }
 
-      // Update local DB
+      // Update local DB (use '' for targeting since this is personal data)
       await db.userData.put({
         pageId: serverItem.itemId,
         componentId: serverItem.adapter,
@@ -414,6 +418,8 @@ export class SyncEngine {
         savedToRemote: true,
         version: serverData.version,
         createdAt: localRecord?.createdAt || new Date().toISOString(),
+        targetType: localRecord?.targetType ?? '',
+        targetId: localRecord?.targetId ?? '',
       })
 
       this.updateOperation(opId, 'success', didMerge ? 'Merged with local' : 'Fetched from server')
@@ -432,7 +438,8 @@ export class SyncEngine {
     for (const conflict of conflicts) {
       const opId = this.logOperation('conflict', conflict.adapter, conflict.itemId, 'pending', 'Resolving conflict')
 
-      const localRecord = await db.userData.get([conflict.itemId, conflict.adapter])
+      // Use 4-element key for conflict resolution (personal data)
+      const localRecord = await db.userData.get([conflict.itemId, conflict.adapter, '', ''])
       if (!localRecord) {
         this.updateOperation(opId, 'failed', 'Local record not found')
         continue
@@ -490,7 +497,8 @@ export class SyncEngine {
    */
   private async markSynced(items: SyncItem[]): Promise<void> {
     for (const item of items) {
-      const record = await db.userData.get([item.itemId, item.adapter])
+      // Use 4-element key including targeting (if present)
+      const record = await db.userData.get([item.itemId, item.adapter, item.targetType ?? '', item.targetId ?? ''])
       if (record) {
         await db.userData.put({
           ...record,
@@ -511,8 +519,6 @@ export class SyncEngine {
 
     const delay = this.BASE_RETRY_MS * Math.pow(2, this.retryCount)
     this.retryCount++
-
-    console.log(`[SyncEngine] Scheduling retry in ${delay}ms (attempt ${this.retryCount})`)
 
     this.retryTimeout = setTimeout(() => {
       if (this.status.online) {
@@ -598,15 +604,12 @@ export class SyncEngine {
   private async cleanupMalformedEntries(): Promise<void> {
     try {
       const response = await fetch('/api/user-data/cleanup', { method: 'DELETE' })
-
+      // Silently process cleanup result
       if (response.ok) {
-        const result = await response.json()
-        console.log('[SyncEngine] Cleaned up malformed entries:', result.deletedCount)
-      } else {
-        console.warn('[SyncEngine] Cleanup failed:', response.status)
+        await response.json()
       }
-    } catch (error) {
-      console.error('[SyncEngine] Error cleaning up malformed entries:', error)
+    } catch {
+      // Silently ignore cleanup errors
     }
   }
 

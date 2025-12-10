@@ -15,6 +15,7 @@ export interface UserDataKey {
 
 /**
  * User data record stored in IndexedDB
+ * Note: targetType/targetId use empty strings (not null) for IndexedDB compound key compatibility
  */
 export interface UserDataRecord<T = any> {
   pageId: string          // Database ID of the page
@@ -25,6 +26,10 @@ export interface UserDataRecord<T = any> {
   updatedAt: number       // Unix timestamp of last update
   savedToRemote: boolean  // Whether synced to remote (future use)
   version: number         // Version for optimistic concurrency control
+  // Targeting for teacher broadcasts (empty string for personal data)
+  // Uses '' instead of null because IndexedDB compound keys don't support null
+  targetType: 'class' | 'student' | ''
+  targetId: string  // '' for personal data, classId or studentId for broadcasts
 }
 
 /**
