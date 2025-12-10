@@ -107,13 +107,11 @@ export async function GET(request: NextRequest) {
   }, 30000)
 
   // Send initial connected message
-  console.log(`[SSE] Client connected: user=${session.user.id}, channels=${channels.length}`, channels)
   writer.write(encoder.encode(`data: ${JSON.stringify({ type: 'connected', channels: channels.length })}\n\n`))
     .catch(() => { /* ignore */ })
 
   // Cleanup on client disconnect
   request.signal.addEventListener('abort', () => {
-    console.log(`[SSE] Client disconnected: user=${session.user.id}`)
     clearInterval(pingInterval)
     unsubscribes.forEach(unsub => unsub())
     writer.close().catch(() => { /* ignore */ })

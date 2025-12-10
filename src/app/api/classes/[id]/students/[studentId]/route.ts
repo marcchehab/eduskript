@@ -49,8 +49,6 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       }
     })
 
-    console.log('[API] Student unenrolled:', { classId, studentId })
-
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('[API] Error unenrolling student:', error)

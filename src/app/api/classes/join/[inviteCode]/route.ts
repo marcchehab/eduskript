@@ -158,14 +158,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       })
     }
 
-    console.log('[API] Student joined class:', {
-      classId: classRecord.id,
-      studentId: session.user.id,
-      inviteCode,
-      wasPreAuthorized,
-      identityConsent: wasPreAuthorized ? true : (identityConsent || false)
-    })
-
     return NextResponse.json({
       message: 'Successfully joined class',
       class: {

@@ -165,8 +165,6 @@ export async function POST(request: NextRequest) {
             }
           })
         }
-        
-        console.log(`Granted edit permission to user ${session.user.id} for skript ${skriptId}`)
       }
       
       // Get current collection relationships

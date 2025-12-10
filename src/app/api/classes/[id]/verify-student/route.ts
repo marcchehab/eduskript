@@ -57,13 +57,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // Verify if the email matches the pseudonym
     const matches = verifyStudentEmail(pseudonym, email)
 
-    console.log('[API] Student email verification:', {
-      classId,
-      teacherId: session.user.id,
-      matches,
-      // Don't log actual email or pseudonym for privacy
-    })
-
     return NextResponse.json({ matches })
   } catch (error) {
     console.error('[API] Error verifying student:', error)

@@ -27,8 +27,6 @@ export async function DELETE() {
       },
     })
 
-    console.log(`[user-data/cleanup] Deleted ${result.count} malformed entries for user ${userId}`)
-
     return NextResponse.json({
       success: true,
       deletedCount: result.count

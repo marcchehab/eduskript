@@ -5,7 +5,6 @@ import { prisma } from '@/lib/prisma'
 import { saveFile } from '@/lib/file-storage'
 
 export async function POST(request: NextRequest) {
-  console.log('[EXCALIDRAW] Starting drawing save request')
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {

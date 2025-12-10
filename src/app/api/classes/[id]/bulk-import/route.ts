@@ -148,16 +148,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         }))
       })
 
-      console.log('[API] Pre-authorized students for class:', {
-        classId,
-        count: pseudonymsToAdd.length
-      })
-
       // Publish real-time events for each pre-authorized student
       // Students subscribed to their pseudonym channel will receive this
-      console.log(`[Bulk Import] Publishing ${pseudonymsToAdd.length} class-invitation events`)
       for (const pseudonym of pseudonymsToAdd) {
-        console.log(`[Bulk Import] Publishing to channel: pseudonym:${pseudonym}`)
         await eventBus.publish(`pseudonym:${pseudonym}`, {
           type: 'class-invitation',
           classId,
@@ -169,8 +162,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // NO LONGER CREATING IDENTITY REVEAL REQUESTS
     // Email is hashed and discarded - never stored on server
     // Students who match the pseudonym will see join requests in their dashboard
-
-    console.log('[API] Bulk import complete - emails hashed and discarded')
 
     // Return statistics
     return NextResponse.json({

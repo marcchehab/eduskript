@@ -153,16 +153,6 @@ export async function POST(request: NextRequest) {
 
     // Process each item
     for (const item of items) {
-      // Log targeting for debugging
-      if (item.targetType || item.targetId) {
-        console.log('[sync] Processing item with targeting:', {
-          adapter: item.adapter,
-          itemId: item.itemId,
-          targetType: item.targetType,
-          targetId: item.targetId
-        })
-      }
-
       try {
         // Parse the data string to JSON
         let parsedData: unknown
@@ -329,9 +319,7 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        console.log(`[user-data/sync] Published ${quizSubmissions.length} quiz submissions to ${memberships.length} classes`)
-      } catch (eventError) {
-        console.error('[user-data/sync] Failed to publish quiz submission events:', eventError)
+      } catch {
         // Don't fail the sync if event publishing fails
       }
     }
@@ -361,9 +349,7 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        console.log(`[user-data/sync] Published ${teacherBroadcasts.length} teacher broadcast events`)
-      } catch (eventError) {
-        console.error('[user-data/sync] Failed to publish teacher broadcast events:', eventError)
+      } catch {
         // Don't fail the sync if event publishing fails
       }
     }

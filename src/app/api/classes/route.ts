@@ -139,13 +139,6 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    console.log('[API] Created class:', {
-      id: newClass.id,
-      name: newClass.name,
-      inviteCode: newClass.inviteCode,
-      teacherId: session.user.id
-    })
-
     return NextResponse.json({
       class: {
         id: newClass.id,
