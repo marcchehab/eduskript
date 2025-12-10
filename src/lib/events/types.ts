@@ -11,6 +11,7 @@
 export type AppEvent =
   | ClassInvitationEvent
   | TeacherAnnotationsUpdateEvent
+  | TeacherFeedbackEvent
   | QuizSubmissionEvent
   | CollaborationRequestEvent
 
@@ -24,13 +25,25 @@ export interface ClassInvitationEvent {
 }
 
 /**
- * Fired when a teacher updates annotations in broadcast mode
+ * Fired when a teacher updates annotations in broadcast mode (class-wide)
+ * Clients should refetch from API to get the actual data
  */
 export interface TeacherAnnotationsUpdateEvent {
   type: 'teacher-annotations-update'
   classId: string
   pageId: string
-  canvasData: string  // Full stroke data, same format as DB storage
+  timestamp: number
+}
+
+/**
+ * Fired when a teacher provides feedback to an individual student
+ * Clients should refetch from API to get the actual data
+ */
+export interface TeacherFeedbackEvent {
+  type: 'teacher-feedback'
+  studentId: string
+  pageId: string
+  adapter: string  // 'annotations', etc.
   timestamp: number
 }
 

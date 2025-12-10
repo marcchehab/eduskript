@@ -38,6 +38,9 @@ export interface SyncItem {
   data: string
   version: number
   updatedAt: number
+  // Optional targeting for teacher broadcasts/feedback
+  targetType?: 'class' | 'student' | null
+  targetId?: string | null
 }
 
 export interface ManifestItem {
@@ -119,15 +122,25 @@ export class SyncEngine {
    * @param data - JSON stringified data
    * @param version - Data version number
    * @param options.immediate - If true, sync immediately without debounce (for quiz submissions)
+   * @param options.targetType - For teacher broadcasts: 'class' or 'student'
+   * @param options.targetId - For teacher broadcasts: classId or studentId
    */
   public queueSync(
     adapter: string,
     itemId: string,
     data: string,
     version: number,
-    options: { immediate?: boolean } = {}
+    options: {
+      immediate?: boolean
+      targetType?: 'class' | 'student' | null
+      targetId?: string | null
+    } = {}
   ): void {
-    const key = `${adapter}:${itemId}`
+    // Include targeting in key to allow same adapter/itemId with different targets
+    const targetKey = options.targetType && options.targetId
+      ? `:${options.targetType}:${options.targetId}`
+      : ''
+    const key = `${adapter}:${itemId}${targetKey}`
 
     this.syncQueue.set(key, {
       adapter,
@@ -135,6 +148,8 @@ export class SyncEngine {
       data,
       version,
       updatedAt: Date.now(),
+      targetType: options.targetType ?? null,
+      targetId: options.targetId ?? null,
     })
 
     this.updateStatus({ pending: this.syncQueue.size })

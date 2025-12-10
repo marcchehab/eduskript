@@ -87,6 +87,16 @@ export function useSyncStatus(): SyncStatus {
 }
 
 /**
+ * Options for useSyncedUserData hook
+ */
+export interface SyncedUserDataOptions {
+  /** For teacher broadcasts: target type */
+  targetType?: 'class' | 'student' | null
+  /** For teacher broadcasts: target ID (classId or studentId) */
+  targetId?: string | null
+}
+
+/**
  * Hook for synced user data
  *
  * This is an enhanced version of useUserData that integrates with the sync engine.
@@ -95,14 +105,16 @@ export function useSyncStatus(): SyncStatus {
  * @param pageId - Page identifier
  * @param componentId - Component identifier (acts as adapter type)
  * @param initialData - Default data if nothing saved
+ * @param options - Optional targeting for teacher broadcasts
  */
 export function useSyncedUserData<T>(
   pageId: string,
   componentId: string,
-  initialData: T | null = null
+  initialData: T | null = null,
+  options: SyncedUserDataOptions = {}
 ): {
   data: T | null
-  updateData: (data: T, options?: { immediate?: boolean }) => Promise<void>
+  updateData: (data: T, updateOptions?: { immediate?: boolean }) => Promise<void>
   isLoading: boolean
   isSynced: boolean
 } {
@@ -152,8 +164,11 @@ export function useSyncedUserData<T>(
     }
   }, [pageId, componentId]) // Note: initialData NOT in deps - we use ref instead
 
+  // Extract targeting from options
+  const { targetType, targetId } = options
+
   const updateData = useCallback(
-    async (newData: T, options: { immediate?: boolean } = {}) => {
+    async (newData: T, updateOptions: { immediate?: boolean } = {}) => {
       try {
         // Optimistic local update
         setData(newData)
@@ -161,7 +176,7 @@ export function useSyncedUserData<T>(
 
         // Save to IndexedDB
         await userDataService.save(pageId, componentId, newData, {
-          immediate: options.immediate,
+          immediate: updateOptions.immediate,
         })
 
         // Queue for cloud sync if authenticated
@@ -173,7 +188,11 @@ export function useSyncedUserData<T>(
               pageId, // itemId
               JSON.stringify(newData),
               record.version,
-              { immediate: options.immediate } // Pass immediate flag to bypass debounce
+              {
+                immediate: updateOptions.immediate, // Pass immediate flag to bypass debounce
+                targetType: targetType ?? null,
+                targetId: targetId ?? null,
+              }
             )
           }
         }
@@ -184,7 +203,7 @@ export function useSyncedUserData<T>(
         throw error
       }
     },
-    [pageId, componentId, isAuthenticated]
+    [pageId, componentId, isAuthenticated, targetType, targetId]
   )
 
   return {

@@ -27,13 +27,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const userId = session.user.id
     const { adapter, itemId } = await params
 
-    const item = await prisma.userData.findUnique({
+    // Fetch personal data (no targeting)
+    const item = await prisma.userData.findFirst({
       where: {
-        userId_adapter_itemId: {
-          userId,
-          adapter,
-          itemId: decodeURIComponent(itemId),
-        },
+        userId,
+        adapter,
+        itemId: decodeURIComponent(itemId),
+        targetType: null,
+        targetId: null,
       },
     })
 

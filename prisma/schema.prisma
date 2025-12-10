@@ -502,6 +502,7 @@ model PreAuthorizedStudent {
 // User Data Storage
 // Stores all user-generated data (code, annotations, settings) with cloud sync support
 // Uses JSONB for flexible, queryable storage with efficient updates
+// Supports teacher broadcasts: targetType='class' for class-wide, 'student' for individual feedback
 model UserData {
   id        String   @id @default(cuid())
   userId    String   @map("user_id")
@@ -512,13 +513,19 @@ model UserData {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  // Targeting for teacher broadcasts and feedback
+  // null = personal data, 'class' = broadcast to class, 'student' = individual feedback
+  targetType String? @map("target_type")
+  targetId   String? @map("target_id") // classId when targetType='class', studentId when targetType='student'
+
   // Relations
   user User @relation("UserDataEntries", fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, adapter, itemId])
+  @@unique([userId, adapter, itemId, targetType, targetId])
   @@index([userId])
   @@index([userId, adapter])
   @@index([updatedAt])
+  @@index([targetType, targetId, adapter, itemId]) // For querying broadcasts/feedback
   @@map("user_data")
 }
 

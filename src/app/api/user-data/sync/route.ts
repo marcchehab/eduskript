@@ -5,6 +5,7 @@
  * Batch upsert user data items to the server.
  *
  * For snaps: automatically uploads base64 images to S3 and replaces with URLs
+ * For teacher broadcasts: saves with targetType/targetId and publishes SSE events
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -20,6 +21,16 @@ interface SyncItem {
   data: string
   version: number
   updatedAt: number
+  // Optional targeting for teacher broadcasts/feedback
+  targetType?: 'class' | 'student' | null
+  targetId?: string | null
+}
+
+interface TeacherBroadcast {
+  targetType: 'class' | 'student'
+  targetId: string
+  pageId: string
+  adapter: string
 }
 
 interface ConflictItem {
@@ -73,6 +84,72 @@ export async function POST(request: NextRequest) {
     const uploadedSnaps: UploadedSnap[] = []
     const s3Errors: string[] = []
     const quizSubmissions: QuizSubmission[] = []
+    const teacherBroadcasts: TeacherBroadcast[] = []
+
+    // For targeted items, validate teacher authorization upfront
+    const isTeacher = session.user.accountType === 'teacher'
+    const targetedItems = items.filter(item => item.targetType && item.targetId)
+
+    if (targetedItems.length > 0 && !isTeacher) {
+      return NextResponse.json(
+        { error: 'Only teachers can save targeted data' },
+        { status: 403 }
+      )
+    }
+
+    // Validate teacher owns the classes/students for all targeted items
+    if (targetedItems.length > 0) {
+      const classTargets = targetedItems
+        .filter(item => item.targetType === 'class')
+        .map(item => item.targetId!)
+      const studentTargets = targetedItems
+        .filter(item => item.targetType === 'student')
+        .map(item => item.targetId!)
+
+      // Verify teacher owns all targeted classes
+      if (classTargets.length > 0) {
+        const ownedClasses = await prisma.class.findMany({
+          where: {
+            id: { in: classTargets },
+            teacherId: userId,
+          },
+          select: { id: true },
+        })
+        const ownedClassIds = new Set(ownedClasses.map(c => c.id))
+        const unauthorizedClasses = classTargets.filter(id => !ownedClassIds.has(id))
+        if (unauthorizedClasses.length > 0) {
+          return NextResponse.json(
+            { error: 'Unauthorized: you do not own all targeted classes' },
+            { status: 403 }
+          )
+        }
+      }
+
+      // Verify students are in teacher's classes
+      if (studentTargets.length > 0) {
+        const teacherClasses = await prisma.class.findMany({
+          where: { teacherId: userId },
+          select: { id: true },
+        })
+        const teacherClassIds = teacherClasses.map(c => c.id)
+
+        const studentsInClasses = await prisma.classMembership.findMany({
+          where: {
+            studentId: { in: studentTargets },
+            classId: { in: teacherClassIds },
+          },
+          select: { studentId: true },
+        })
+        const authorizedStudentIds = new Set(studentsInClasses.map(s => s.studentId))
+        const unauthorizedStudents = studentTargets.filter(id => !authorizedStudentIds.has(id))
+        if (unauthorizedStudents.length > 0) {
+          return NextResponse.json(
+            { error: 'Unauthorized: some students are not in your classes' },
+            { status: 403 }
+          )
+        }
+      }
+    }
 
     // Process each item
     for (const item of items) {
@@ -85,14 +162,19 @@ export async function POST(request: NextRequest) {
           parsedData = item.data
         }
 
+        // Normalize targeting fields (null if not set)
+        const targetType = item.targetType || null
+        const targetId = item.targetId || null
+
         // Check for existing record first (needed for snap deletion check)
-        const existing = await prisma.userData.findUnique({
+        // Use findFirst with explicit where clause since targetType/targetId can be null
+        const existing = await prisma.userData.findFirst({
           where: {
-            userId_adapter_itemId: {
-              userId,
-              adapter: item.adapter,
-              itemId: item.itemId,
-            },
+            userId,
+            adapter: item.adapter,
+            itemId: item.itemId,
+            targetType: targetType,
+            targetId: targetId,
           },
         })
 
@@ -160,29 +242,41 @@ export async function POST(request: NextRequest) {
           continue
         }
 
-        // Upsert the data
-        await prisma.userData.upsert({
-          where: {
-            userId_adapter_itemId: {
+        // Create or update the data with targeting
+        // Use create/update pattern since upsert has issues with nullable compound keys
+        if (existing) {
+          await prisma.userData.update({
+            where: { id: existing.id },
+            data: {
+              data: parsedData as object,
+              version: item.version,
+            },
+          })
+        } else {
+          await prisma.userData.create({
+            data: {
               userId,
               adapter: item.adapter,
               itemId: item.itemId,
+              data: parsedData as object,
+              version: item.version,
+              targetType,
+              targetId,
             },
-          },
-          update: {
-            data: parsedData as object,
-            version: item.version,
-          },
-          create: {
-            userId,
-            adapter: item.adapter,
-            itemId: item.itemId,
-            data: parsedData as object,
-            version: item.version,
-          },
-        })
+          })
+        }
 
         synced.push(`${item.adapter}:${item.itemId}`)
+
+        // Track teacher broadcasts for SSE notification
+        if (targetType && targetId) {
+          teacherBroadcasts.push({
+            targetType: targetType as 'class' | 'student',
+            targetId,
+            pageId: item.itemId,
+            adapter: item.adapter,
+          })
+        }
 
         // Track quiz submissions for SSE notification
         // Quiz adapters are formatted as "quiz-{questionId}" and itemId is the pageId
@@ -228,6 +322,38 @@ export async function POST(request: NextRequest) {
         console.log(`[user-data/sync] Published ${quizSubmissions.length} quiz submissions to ${memberships.length} classes`)
       } catch (eventError) {
         console.error('[user-data/sync] Failed to publish quiz submission events:', eventError)
+        // Don't fail the sync if event publishing fails
+      }
+    }
+
+    // Publish SSE events for teacher broadcasts/feedback
+    if (teacherBroadcasts.length > 0) {
+      try {
+        for (const broadcast of teacherBroadcasts) {
+          if (broadcast.targetType === 'class') {
+            // Broadcast to entire class
+            await eventBus.publish(`class:${broadcast.targetId}`, {
+              type: 'teacher-annotations-update',
+              classId: broadcast.targetId,
+              pageId: broadcast.pageId,
+              // Don't include full data in event - clients will refetch
+              timestamp: Date.now(),
+            })
+          } else if (broadcast.targetType === 'student') {
+            // Individual student feedback
+            await eventBus.publish(`user:${broadcast.targetId}`, {
+              type: 'teacher-feedback',
+              studentId: broadcast.targetId,
+              pageId: broadcast.pageId,
+              adapter: broadcast.adapter,
+              timestamp: Date.now(),
+            })
+          }
+        }
+
+        console.log(`[user-data/sync] Published ${teacherBroadcasts.length} teacher broadcast events`)
+      } catch (eventError) {
+        console.error('[user-data/sync] Failed to publish teacher broadcast events:', eventError)
         // Don't fail the sync if event publishing fails
       }
     }
