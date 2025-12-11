@@ -1,9 +1,165 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { ChevronDown, ChevronUp, Check, X, Minus, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useRealtimeEvents } from '@/hooks/use-realtime-events'
+
+/**
+ * Number Histogram Visualization
+ * Shows distribution of single number answers as stacked dots
+ */
+function NumberHistogram({
+  responses,
+  minValue,
+  maxValue
+}: {
+  responses: QuizResponseItem[]
+  minValue: number
+  maxValue: number
+}) {
+  // Get all submitted number answers
+  const numbers = responses
+    .filter(r => r.data?.isSubmitted && r.data.numberAnswer !== undefined)
+    .map(r => r.data!.numberAnswer!)
+
+  if (numbers.length === 0) {
+    return null
+  }
+
+  // Create histogram bins (we'll use ~20 bins or step-based)
+  const range = maxValue - minValue
+  const binCount = Math.min(20, range + 1)
+  const binSize = range / binCount
+
+  // Count values per bin
+  const bins: number[] = new Array(binCount).fill(0)
+  numbers.forEach(num => {
+    const binIndex = Math.min(
+      Math.floor((num - minValue) / binSize),
+      binCount - 1
+    )
+    bins[binIndex]++
+  })
+
+  const maxCount = Math.max(...bins)
+
+  return (
+    <div className="px-4 py-3 border-b border-border">
+      <div className="text-xs text-muted-foreground mb-2">Distribution</div>
+      <div className="relative h-16">
+        {/* Histogram bars as stacked dots */}
+        <div className="absolute inset-0 flex items-end justify-between gap-px">
+          {bins.map((count, i) => (
+            <div
+              key={i}
+              className="flex-1 flex flex-col-reverse items-center gap-0.5"
+            >
+              {Array.from({ length: count }).map((_, j) => (
+                <div
+                  key={j}
+                  className="w-2 h-2 rounded-full bg-primary"
+                  style={{
+                    opacity: 0.6 + (0.4 * (j + 1) / maxCount)
+                  }}
+                />
+              ))}
+            </div>
+          ))}
+        </div>
+        {/* Baseline */}
+        <div className="absolute bottom-0 left-0 right-0 h-px bg-border" />
+      </div>
+      {/* Scale labels */}
+      <div className="flex justify-between text-xs text-muted-foreground mt-1">
+        <span>{minValue}</span>
+        <span>{maxValue}</span>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Range Stacking Visualization
+ * Shows all ranges stacked vertically with visual overlap indication
+ */
+function RangeStackVisualization({
+  responses,
+  minValue,
+  maxValue
+}: {
+  responses: QuizResponseItem[]
+  minValue: number
+  maxValue: number
+}) {
+  // Get all submitted range answers
+  const ranges = responses
+    .filter(r => r.data?.isSubmitted && r.data.rangeAnswer)
+    .map(r => ({
+      min: r.data!.rangeAnswer!.min,
+      max: r.data!.rangeAnswer!.max,
+      displayName: r.displayName
+    }))
+
+  if (ranges.length === 0) {
+    return null
+  }
+
+  const totalRange = maxValue - minValue
+
+  // Sort ranges by their start position, then by width
+  const sortedRanges = [...ranges].sort((a, b) => {
+    if (a.min !== b.min) return a.min - b.min
+    return (a.max - a.min) - (b.max - b.min)
+  })
+
+  // Calculate height based on number of ranges (max 8 visible rows)
+  const rowHeight = 6
+  const gap = 2
+  const maxRows = Math.min(sortedRanges.length, 8)
+  const visualHeight = maxRows * (rowHeight + gap)
+
+  return (
+    <div className="px-4 py-3 border-b border-border">
+      <div className="text-xs text-muted-foreground mb-2">Range Distribution</div>
+      <div className="relative" style={{ height: visualHeight }}>
+        {/* Background track */}
+        <div className="absolute bottom-0 left-0 right-0 h-px bg-border" />
+
+        {/* Stacked ranges */}
+        {sortedRanges.slice(0, maxRows).map((range, i) => {
+          const leftPercent = ((range.min - minValue) / totalRange) * 100
+          const widthPercent = ((range.max - range.min) / totalRange) * 100
+
+          return (
+            <div
+              key={i}
+              className="absolute bg-primary/70 rounded-sm hover:bg-primary transition-colors"
+              style={{
+                left: `${leftPercent}%`,
+                width: `${Math.max(widthPercent, 1)}%`,
+                height: rowHeight,
+                bottom: i * (rowHeight + gap)
+              }}
+              title={`${range.displayName}: ${range.min} – ${range.max}`}
+            />
+          )
+        })}
+
+        {sortedRanges.length > maxRows && (
+          <div className="absolute -top-4 right-0 text-xs text-muted-foreground">
+            +{sortedRanges.length - maxRows} more
+          </div>
+        )}
+      </div>
+      {/* Scale labels */}
+      <div className="flex justify-between text-xs text-muted-foreground mt-1">
+        <span>{minValue}</span>
+        <span>{maxValue}</span>
+      </div>
+    </div>
+  )
+}
 
 interface QuizStats {
   correct: number
@@ -21,6 +177,7 @@ interface QuizResponseItem {
     selected?: number[]
     textAnswer?: string
     numberAnswer?: number
+    rangeAnswer?: { min: number; max: number }
     isSubmitted: boolean
   } | null
   submittedAt: number | null
@@ -33,9 +190,11 @@ interface QuizProgressBarProps {
   className: string // Class name for display
   pageId: string
   componentId: string
-  questionType: 'single' | 'multiple' | 'text' | 'number'
+  questionType: 'single' | 'multiple' | 'text' | 'number' | 'range'
   correctIndices: number[]
   options?: string[] // Option labels for displaying what was selected
+  minValue?: number  // For number/range visualization
+  maxValue?: number  // For number/range visualization
 }
 
 export function QuizProgressBar({
@@ -45,7 +204,9 @@ export function QuizProgressBar({
   componentId,
   questionType,
   correctIndices,
-  options = []
+  options = [],
+  minValue = 0,
+  maxValue = 100
 }: QuizProgressBarProps) {
   const [stats, setStats] = useState<QuizStats | null>(null)
   const [responses, setResponses] = useState<QuizResponseItem[]>([])
@@ -196,6 +357,14 @@ export function QuizProgressBar({
       return <span className="font-mono">{response.data.numberAnswer}</span>
     }
 
+    if (questionType === 'range' && response.data.rangeAnswer) {
+      return (
+        <span className="font-mono">
+          {response.data.rangeAnswer.min} – {response.data.rangeAnswer.max}
+        </span>
+      )
+    }
+
     // Choice questions
     if (response.data.selected && response.data.selected.length > 0) {
       const selectedLabels = response.data.selected
@@ -297,7 +466,23 @@ export function QuizProgressBar({
 
       {/* Expanded answers panel */}
       {isExpanded && (
-        <div className="max-h-72 overflow-y-auto border-t border-border">
+        <div className="max-h-96 overflow-y-auto border-t border-border">
+          {/* Visualizations for number/range questions */}
+          {questionType === 'number' && responses.length > 0 && (
+            <NumberHistogram
+              responses={responses}
+              minValue={minValue}
+              maxValue={maxValue}
+            />
+          )}
+          {questionType === 'range' && responses.length > 0 && (
+            <RangeStackVisualization
+              responses={responses}
+              minValue={minValue}
+              maxValue={maxValue}
+            />
+          )}
+
           {responses.length === 0 ? (
             <div className="p-4 text-center text-muted-foreground text-sm">
               No students in this class

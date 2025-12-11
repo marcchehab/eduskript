@@ -64,6 +64,7 @@ export interface QuizData {
   selected?: number[]    // Selected option indices (for single/multiple choice)
   textAnswer?: string    // Free text answer
   numberAnswer?: number  // Numeric answer (for slider/number input)
+  rangeAnswer?: { min: number; max: number }  // Range answer (for range slider)
   isSubmitted: boolean   // Whether the question has been submitted
 }
 

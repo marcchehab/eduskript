@@ -10,7 +10,7 @@ import { QuizProgressBar } from './quiz-progress-bar'
 
 interface QuestionProps {
   children: ReactNode
-  type?: 'single' | 'multiple' | 'text' | 'number'
+  type?: 'single' | 'multiple' | 'text' | 'number' | 'range'
   id: string
   pageId: string
   showFeedback?: boolean
@@ -48,6 +48,9 @@ function QuestionInner({
   const [selected, setSelected] = useState<number[]>(initialData?.selected ?? [])
   const [textAnswer, setTextAnswer] = useState(initialData?.textAnswer ?? '')
   const [numberAnswer, setNumberAnswer] = useState(initialData?.numberAnswer ?? minValue)
+  const [rangeAnswer, setRangeAnswer] = useState<{ min: number; max: number }>(
+    initialData?.rangeAnswer ?? { min: minValue, max: maxValue }
+  )
   const [isSubmitted, setIsSubmitted] = useState(initialData?.isSubmitted ?? false)
 
   // Handle selection for choice questions
@@ -77,12 +80,32 @@ function QuestionInner({
     setNumberAnswer(Number(e.target.value))
   }
 
+  // Handle range input
+  const handleRangeMinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!allowUpdate && isSubmitted) return
+    const newMin = Number(e.target.value)
+    setRangeAnswer(prev => ({
+      min: Math.min(newMin, prev.max),
+      max: prev.max
+    }))
+  }
+
+  const handleRangeMaxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!allowUpdate && isSubmitted) return
+    const newMax = Number(e.target.value)
+    setRangeAnswer(prev => ({
+      min: prev.min,
+      max: Math.max(newMax, prev.min)
+    }))
+  }
+
   // Submit answer
   const handleSubmit = async () => {
     if (
       ((type === 'single' || type === 'multiple') && selected.length === 0) ||
       (type === 'text' && !textAnswer.trim()) ||
-      (type === 'number' && numberAnswer === undefined)
+      (type === 'number' && numberAnswer === undefined) ||
+      (type === 'range' && rangeAnswer === undefined)
     ) return
 
     setIsSubmitted(true)
@@ -91,7 +114,8 @@ function QuestionInner({
       isSubmitted: true,
       ...(type === 'single' || type === 'multiple' ? { selected } : {}),
       ...(type === 'text' ? { textAnswer } : {}),
-      ...(type === 'number' ? { numberAnswer } : {})
+      ...(type === 'number' ? { numberAnswer } : {}),
+      ...(type === 'range' ? { rangeAnswer } : {})
     }
 
     await updateData(quizData, { immediate: true })
@@ -100,7 +124,8 @@ function QuestionInner({
   const isButtonDisabled =
     ((type === 'single' || type === 'multiple') && selected.length === 0) ||
     (type === 'text' && !textAnswer.trim()) ||
-    (type === 'number' && numberAnswer === undefined)
+    (type === 'number' && numberAnswer === undefined) ||
+    (type === 'range' && rangeAnswer === undefined)
 
   return (
     <div className="space-y-4 border rounded-lg p-4 shadow-sm bg-card">
@@ -226,6 +251,89 @@ function QuestionInner({
         </div>
       )}
 
+      {/* Range Slider Question */}
+      {type === 'range' && (
+        <div className="space-y-4">
+          <div className="flex flex-col gap-2">
+            <div className="flex justify-between text-sm text-muted-foreground">
+              <span>{minValue}</span>
+              <span className="font-semibold text-foreground">
+                {rangeAnswer.min} – {rangeAnswer.max}
+              </span>
+              <span>{maxValue}</span>
+            </div>
+            {/* Dual range slider track - touch compatible via clip-path */}
+            <div className="relative h-8 touch-none">
+              {/* Background track */}
+              <div className="absolute top-1/2 left-0 right-0 h-2 -translate-y-1/2 bg-muted rounded-full" />
+              {/* Selected range highlight */}
+              <div
+                className="absolute top-1/2 h-2 -translate-y-1/2 bg-primary rounded-full pointer-events-none"
+                style={{
+                  left: `${((rangeAnswer.min - minValue) / (maxValue - minValue)) * 100}%`,
+                  right: `${100 - ((rangeAnswer.max - minValue) / (maxValue - minValue)) * 100}%`
+                }}
+              />
+              {/* Min slider - clipped to left half (up to midpoint between thumbs) */}
+              <input
+                type="range"
+                min={minValue}
+                max={maxValue}
+                step={step}
+                value={rangeAnswer.min}
+                onChange={handleRangeMinChange}
+                disabled={isSubmitted && !allowUpdate}
+                className={cn(
+                  'absolute inset-0 w-full h-full appearance-none bg-transparent cursor-pointer',
+                  '[&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5',
+                  '[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary',
+                  '[&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-background',
+                  '[&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-pointer',
+                  '[&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5',
+                  '[&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-primary',
+                  '[&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-background',
+                  '[&::-moz-range-thumb]:shadow-md [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:border-0',
+                  '[&::-moz-range-track]:bg-transparent',
+                  isSubmitted && !allowUpdate && 'opacity-70 cursor-not-allowed'
+                )}
+                style={{
+                  clipPath: `inset(0 ${100 - ((rangeAnswer.min + rangeAnswer.max) / 2 - minValue) / (maxValue - minValue) * 100}% 0 0)`
+                }}
+              />
+              {/* Max slider - clipped to right half (from midpoint between thumbs) */}
+              <input
+                type="range"
+                min={minValue}
+                max={maxValue}
+                step={step}
+                value={rangeAnswer.max}
+                onChange={handleRangeMaxChange}
+                disabled={isSubmitted && !allowUpdate}
+                className={cn(
+                  'absolute inset-0 w-full h-full appearance-none bg-transparent cursor-pointer',
+                  '[&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5',
+                  '[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary',
+                  '[&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-background',
+                  '[&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-pointer',
+                  '[&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5',
+                  '[&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-primary',
+                  '[&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-background',
+                  '[&::-moz-range-thumb]:shadow-md [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:border-0',
+                  '[&::-moz-range-track]:bg-transparent',
+                  isSubmitted && !allowUpdate && 'opacity-70 cursor-not-allowed'
+                )}
+                style={{
+                  clipPath: `inset(0 0 0 ${((rangeAnswer.min + rangeAnswer.max) / 2 - minValue) / (maxValue - minValue) * 100}%)`
+                }}
+              />
+            </div>
+          </div>
+          <div className="text-muted-foreground text-sm">
+            {children}
+          </div>
+        </div>
+      )}
+
       {/* Submit Button */}
       <div className="flex items-center justify-between pt-2">
         {(!isSubmitted || allowUpdate) && (
@@ -257,7 +365,7 @@ function QuestionInner({
 }
 
 // Helper to extract correct indices and option labels from children
-function extractOptionsInfo(children: ReactNode, type: 'single' | 'multiple' | 'text' | 'number') {
+function extractOptionsInfo(children: ReactNode, type: 'single' | 'multiple' | 'text' | 'number' | 'range') {
   const correctIndices: number[] = []
   const optionLabels: string[] = []
 
@@ -337,6 +445,8 @@ function Question({
           questionType={type}
           correctIndices={correctIndices}
           options={optionLabels}
+          minValue={rest.minValue}
+          maxValue={rest.maxValue}
         />
       )}
     </>

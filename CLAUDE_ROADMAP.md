@@ -9,11 +9,11 @@
 
 ## 🎯 Priority List
 
-- **Quiz submission monitoring** - Real-time quiz answer tracking for teachers
-- prettify display
 - make snaps box prettier
 - snap broadcast
-- teacher annotations should be hidable 
+
+
+- teacher annotations should be hidable for students. and they should be able to select class-indvidiual-both teacher notes, if those are available.
 
 - **Organization Support** - Groundwork for schools/organizations: org admins can manage users (delete, reset PW), administer org pages, pay per organization. See `docs/ORGANIZATION_GROUNDWORK_PLAN.md` for detailed plan.
 **LMS Features:**

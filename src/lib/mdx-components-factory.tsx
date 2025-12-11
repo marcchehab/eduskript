@@ -387,9 +387,9 @@ export function createMDXComponents(
   // Quiz components
   function QuizQuestionComponent({ children, ...props }: React.HTMLAttributes<HTMLElement> & Record<string, unknown>) {
     const id = (props['id'] as string) || ''
-    const type = ((props['type'] as string) || 'multiple') as 'single' | 'multiple' | 'text' | 'number'
+    const type = ((props['type'] as string) || 'multiple') as 'single' | 'multiple' | 'text' | 'number' | 'range'
     const showFeedback = props['showFeedback'] !== false && props['showfeedback'] !== 'false'
-    const allowUpdate = props['allowUpdate'] === true || props['allowupdate'] === 'true'
+    const allowUpdate = props['allowUpdate'] === true || props['allowUpdate'] === 'true' || props['allowupdate'] === 'true'
     const minValue = props['minValue'] !== undefined ? Number(props['minValue']) : (props['minvalue'] !== undefined ? Number(props['minvalue']) : undefined)
     const maxValue = props['maxValue'] !== undefined ? Number(props['maxValue']) : (props['maxvalue'] !== undefined ? Number(props['maxvalue']) : undefined)
     const step = props['step'] !== undefined ? Number(props['step']) : undefined
