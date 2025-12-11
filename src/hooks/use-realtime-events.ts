@@ -8,17 +8,19 @@
  * This prevents multiple SSE connections and orphaned server handlers.
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { useSession } from 'next-auth/react'
 import type { AppEvent } from '@/lib/events/types'
 
 type EventType = AppEvent['type']
 type EventHandler = (event: AppEvent) => void
+type ConnectionListener = () => void
 
 // Singleton EventSource manager
 class SSEManager {
   private eventSource: EventSource | null = null
   private handlers = new Set<EventHandler>()
+  private connectionListeners = new Set<ConnectionListener>()
   private isConnecting = false
   private connectionPromise: Promise<void> | null = null
 
@@ -42,6 +44,7 @@ class SSEManager {
       this.eventSource.onopen = () => {
         this.isConnecting = false
         this.connectionPromise = null
+        this.notifyConnectionListeners()
         resolve()
       }
 
@@ -70,6 +73,7 @@ class SSEManager {
       this.eventSource.onerror = () => {
         this.isConnecting = false
         this.connectionPromise = null
+        this.notifyConnectionListeners()
         // EventSource auto-reconnects
       }
     })
@@ -90,12 +94,29 @@ class SSEManager {
       if (this.handlers.size === 0 && this.eventSource) {
         this.eventSource.close()
         this.eventSource = null
+        this.notifyConnectionListeners()
       }
     }
   }
 
   isConnected(): boolean {
     return this.eventSource?.readyState === EventSource.OPEN
+  }
+
+  // For useSyncExternalStore
+  subscribeToConnection(listener: ConnectionListener): () => void {
+    this.connectionListeners.add(listener)
+    return () => {
+      this.connectionListeners.delete(listener)
+    }
+  }
+
+  private notifyConnectionListeners(): void {
+    this.connectionListeners.forEach(listener => listener())
+  }
+
+  getSnapshot(): boolean {
+    return this.isConnected()
   }
 }
 
@@ -107,6 +128,11 @@ function getSSEManager(): SSEManager {
     sseManager = new SSEManager()
   }
   return sseManager
+}
+
+// For SSR
+function getServerSnapshot(): boolean {
+  return false
 }
 
 interface UseRealtimeEventsOptions {
@@ -127,7 +153,6 @@ export function useRealtimeEvents<T extends EventType>(
 ) {
   const { enabled = true } = options
   const { status } = useSession()
-  const [isConnected, setIsConnected] = useState(false)
 
   // Use ref to always have latest callback without re-subscribing
   const onEventRef = useRef(onEvent)
@@ -138,12 +163,20 @@ export function useRealtimeEvents<T extends EventType>(
   // Stable event types key
   const eventTypesKey = eventTypes.join(',')
 
+  // Track connection state using useSyncExternalStore (avoids setState in effect)
+  const manager = typeof window !== 'undefined' ? getSSEManager() : null
+  const isConnected = useSyncExternalStore(
+    manager?.subscribeToConnection.bind(manager) ?? (() => () => {}),
+    manager?.getSnapshot.bind(manager) ?? (() => false),
+    getServerSnapshot
+  )
+
   useEffect(() => {
     if (!enabled || status !== 'authenticated' || typeof window === 'undefined') {
       return
     }
 
-    const manager = getSSEManager()
+    const mgr = getSSEManager()
 
     const handler: EventHandler = (event) => {
       const types = eventTypesKey.split(',')
@@ -152,12 +185,10 @@ export function useRealtimeEvents<T extends EventType>(
       }
     }
 
-    const unsubscribe = manager.subscribe(handler)
-    setIsConnected(manager.isConnected())
+    const unsubscribe = mgr.subscribe(handler)
 
     return () => {
       unsubscribe()
-      setIsConnected(false)
     }
   }, [enabled, status, eventTypesKey])
 
@@ -169,26 +200,12 @@ export function useRealtimeEvents<T extends EventType>(
  */
 export function useRealtimeConnection() {
   const { status } = useSession()
-  const [isConnected, setIsConnected] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
-  useRealtimeEvents(
+  const { isConnected } = useRealtimeEvents(
     [],
     () => {},
-    {
-      enabled: status === 'authenticated',
-      onConnect: () => {
-        setIsConnected(true)
-        setError(null)
-      },
-      onDisconnect: () => {
-        setIsConnected(false)
-      },
-      onError: () => {
-        setError('Connection error')
-      }
-    }
+    { enabled: status === 'authenticated' }
   )
 
-  return { isConnected, error }
+  return { isConnected, error: null }
 }
