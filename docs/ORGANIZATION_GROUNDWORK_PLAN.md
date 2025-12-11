@@ -13,20 +13,22 @@ Currently, Eduskript is user-centric:
 - Collaboration is peer-to-peer between teachers
 - Admin capabilities are global (platform-level only)
 
-**Future need:** Schools and organizations want to:
+**Need:** Schools and organizations want to:
 - Pay per organization (not per teacher)
 - Have organization admins who manage users within their org
 - Control content at the organization level
 - Have an organization-branded page
 
-**Goal:** Lay the groundwork now to avoid major breaking changes later.
+**Goal:** 
+- Lay the groundwork
+- turn eduskript itself into the first organization
 
 ---
 
 ## Design Principles
 
 1. **Additive only** - New tables/fields, no changes to existing behavior
-2. **Backward compatible** - Existing users/content work unchanged
+2. **Backward compatible** - Existing usquers/content work unchanged
 3. **Opt-in** - Organization features don't affect non-org users
 4. **Minimal** - Only add what's necessary for future extension
 

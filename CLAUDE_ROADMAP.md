@@ -9,24 +9,19 @@
 
 ## 🎯 Priority List
 
-- ✅ **realtime events system** - SSE infrastructure complete, applied to class invitations (see docs/REALTIME_EVENTS.md)
-- **Teacher annotation broadcasting** - Use realtime events for broadcast mode (teacher annotations → students)
-- i get many get requests to checkOnly: this was for class invitations.
-
- GET /api/classes/my-classes?checkOnly=true 200 in 20ms (compile: 3ms, proxy.ts: 3ms, render: 15ms)
- GET /api/classes/my-classes?checkOnly=true 200 in 21ms (compile: 4ms, proxy.ts: 4ms, render: 12ms)
- GET /api/classes/my-classes?checkOnly=true 200 in 24ms (compile: 3ms, proxy.ts: 5ms, render: 16ms)
- GET /api/classes/my-classes?checkOnly=true 200 in 22ms (compile: 3ms, proxy.ts: 9ms, render: 10ms)
-
 - **Quiz submission monitoring** - Real-time quiz answer tracking for teachers
+- prettify display
+- make snaps box prettier
+- snap broadcast
+- teacher annotations should be hidable 
 
+- **Organization Support** - Groundwork for schools/organizations: org admins can manage users (delete, reset PW), administer org pages, pay per organization. See `docs/ORGANIZATION_GROUNDWORK_PLAN.md` for detailed plan.
 **LMS Features:**
 - **Interactive Quizzes** - In-lesson quizzes with progress tracking. there is already a <Question> component.
 - **Randomized questions** maybe through special skripts?
 - **Teacher/author ability to publish/distribute snaps globally or per class**
 - **Teacher/author ability to publish/distribute annotations globally or per class**
 - **Student Progress Tracking** - Gradebook interface, view progress, grade submissions
-- **Organization Support** - Groundwork for schools/organizations: org admins can manage users (delete, reset PW), administer org pages, pay per organization. See `docs/ORGANIZATION_GROUNDWORK_PLAN.md` for detailed plan.
 
 
 - migration had issues, let's try locally until it works and ultimately migrate the database instead (teacher bucket is the same anyway)
