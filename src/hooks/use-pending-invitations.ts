@@ -1,38 +1,77 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useSyncExternalStore } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRealtimeEvents } from './use-realtime-events'
 
 const CACHE_KEY = 'hasPendingInvitations'
 
+// Module-level state to deduplicate requests across all hook instances
+let globalHasPending = false
+let globalListeners: Set<() => void> = new Set()
+let pendingFetch: Promise<void> | null = null
+let lastFetchTime = 0
+const DEBOUNCE_MS = 2000 // Don't fetch more than once every 2 seconds
+
+function subscribe(listener: () => void) {
+  globalListeners.add(listener)
+  return () => globalListeners.delete(listener)
+}
+
+function getSnapshot() {
+  return globalHasPending
+}
+
+function notifyListeners() {
+  globalListeners.forEach(listener => listener())
+}
+
+function setGlobalHasPending(value: boolean) {
+  if (globalHasPending !== value) {
+    globalHasPending = value
+    sessionStorage.setItem(CACHE_KEY, String(value))
+    notifyListeners()
+  }
+}
+
 /**
  * Hook to check for pending class invitations (students only).
  *
  * Uses multiple strategies for updates:
- * - Initial fetch on mount
+ * - Initial fetch on mount (deduplicated across all hook instances)
  * - Real-time updates via SSE (Server-Sent Events)
- * - Re-fetch on tab visibility change
+ * - Re-fetch on tab visibility change (SSE may have dropped)
  * - SessionStorage caching during navigation
  */
 export function usePendingInvitations() {
   const { data: session, status } = useSession()
-  const [hasPendingInvitations, setHasPendingInvitations] = useState(false)
+
+  // Use useSyncExternalStore for shared state across all hook instances
+  const hasPendingInvitations = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 
   const isStudent = status === 'authenticated' && session?.user?.accountType === 'student'
 
   const checkPendingInvitations = useCallback(() => {
     if (!isStudent) return
 
-    fetch('/api/classes/my-classes?checkOnly=true')
+    // Debounce: skip if we fetched recently
+    const now = Date.now()
+    if (now - lastFetchTime < DEBOUNCE_MS) return
+
+    // Deduplicate: if a fetch is already in progress, don't start another
+    if (pendingFetch) return
+
+    lastFetchTime = now
+    pendingFetch = fetch('/api/classes/my-classes?checkOnly=true')
       .then(res => res.json())
       .then(data => {
-        const hasPending = !!data.hasPendingInvitations
-        setHasPendingInvitations(hasPending)
-        sessionStorage.setItem(CACHE_KEY, String(hasPending))
+        setGlobalHasPending(!!data.hasPendingInvitations)
       })
       .catch(() => {
-        setHasPendingInvitations(false)
+        setGlobalHasPending(false)
+      })
+      .finally(() => {
+        pendingFetch = null
       })
   }, [isStudent])
 
@@ -41,8 +80,7 @@ export function usePendingInvitations() {
     ['class-invitation'],
     () => {
       // When we receive a class-invitation event, set to true immediately
-      setHasPendingInvitations(true)
-      sessionStorage.setItem(CACHE_KEY, 'true')
+      setGlobalHasPending(true)
     },
     { enabled: isStudent }
   )
@@ -57,18 +95,18 @@ export function usePendingInvitations() {
 
     if (isReload) {
       sessionStorage.removeItem(CACHE_KEY)
+      lastFetchTime = 0 // Reset debounce on reload
     }
 
     // Check sessionStorage cache first (unless cleared by reload)
     const cached = sessionStorage.getItem(CACHE_KEY)
     if (cached !== null) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setHasPendingInvitations(cached === 'true')
+      setGlobalHasPending(cached === 'true')
     } else {
       checkPendingInvitations()
     }
 
-    // Re-fetch when tab becomes visible
+    // Re-fetch when tab becomes visible (SSE connection may have dropped)
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         checkPendingInvitations()
@@ -78,7 +116,7 @@ export function usePendingInvitations() {
 
     // Listen for invitation status changes from other components (local events)
     const handleInvitationStatusChanged = (e: CustomEvent<{ hasPending: boolean }>) => {
-      setHasPendingInvitations(e.detail.hasPending)
+      setGlobalHasPending(e.detail.hasPending)
     }
     window.addEventListener('invitationStatusChanged', handleInvitationStatusChanged as EventListener)
 

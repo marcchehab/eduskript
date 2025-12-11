@@ -11,6 +11,13 @@
 
 - ✅ **realtime events system** - SSE infrastructure complete, applied to class invitations (see docs/REALTIME_EVENTS.md)
 - **Teacher annotation broadcasting** - Use realtime events for broadcast mode (teacher annotations → students)
+- i get many get requests to checkOnly: this was for class invitations.
+
+ GET /api/classes/my-classes?checkOnly=true 200 in 20ms (compile: 3ms, proxy.ts: 3ms, render: 15ms)
+ GET /api/classes/my-classes?checkOnly=true 200 in 21ms (compile: 4ms, proxy.ts: 4ms, render: 12ms)
+ GET /api/classes/my-classes?checkOnly=true 200 in 24ms (compile: 3ms, proxy.ts: 5ms, render: 16ms)
+ GET /api/classes/my-classes?checkOnly=true 200 in 22ms (compile: 3ms, proxy.ts: 9ms, render: 10ms)
+
 - **Quiz submission monitoring** - Real-time quiz answer tracking for teachers
 
 **LMS Features:**
