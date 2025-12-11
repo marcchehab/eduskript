@@ -298,16 +298,22 @@ export async function POST(request: NextRequest) {
     // Publish SSE events for quiz submissions
     // Notify all classes the student is enrolled in so teachers see real-time updates
     if (quizSubmissions.length > 0 && session.user.accountType === 'student') {
+      console.log(`[user-data/sync] Publishing ${quizSubmissions.length} quiz submissions for student ${userId}`)
       try {
         const memberships = await prisma.classMembership.findMany({
           where: { studentId: userId },
           select: { classId: true }
         })
 
+        console.log(`[user-data/sync] Student is in ${memberships.length} classes`)
         const studentPseudonym = session.user.studentPseudonym ?? ''
 
         for (const submission of quizSubmissions) {
           for (const membership of memberships) {
+            console.log(`[user-data/sync] Publishing quiz-submission to class:${membership.classId}:teacher`, {
+              pageId: submission.pageId,
+              questionId: submission.questionId
+            })
             await eventBus.publish(`class:${membership.classId}:teacher`, {
               type: 'quiz-submission',
               classId: membership.classId,
@@ -319,7 +325,8 @@ export async function POST(request: NextRequest) {
           }
         }
 
-      } catch {
+      } catch (err) {
+        console.error('[user-data/sync] Failed to publish quiz submission events:', err)
         // Don't fail the sync if event publishing fails
       }
     }
