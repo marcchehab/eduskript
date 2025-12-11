@@ -43,9 +43,10 @@ interface CalloutProps {
   type?: string
   isFoldable?: boolean
   initiallyFolded?: boolean
+  sectionId?: string  // For annotation alignment tracking
 }
 
-export function Callout({ children, className, type, isFoldable, initiallyFolded }: CalloutProps) {
+export function Callout({ children, className, type, isFoldable, initiallyFolded, sectionId }: CalloutProps) {
   const [isOpen, setIsOpen] = useState(!initiallyFolded)
 
   const Icon = type ? calloutIcons[type] : null
@@ -68,6 +69,8 @@ export function Callout({ children, className, type, isFoldable, initiallyFolded
       className={`${baseClassName} ${!isOpen && isFoldable ? 'callout-folded' : ''}`}
       onClick={handleToggle}
       style={{ cursor: isFoldable ? 'pointer' : undefined }}
+      data-section-id={sectionId}
+      data-dynamic-height={isFoldable ? 'true' : undefined}
     >
       {/* Process children to inject icon into callout-title */}
       {Children.toArray(children).map((child, i) => {

@@ -122,12 +122,16 @@ function BlockquoteComponent({ children, className, ...props }: React.HTMLAttrib
   const isFoldable = className?.includes('callout-foldable')
   const initiallyFolded = className?.includes('callout-folded')
 
+  // Extract data-section-id from props (added by rehype plugin for annotation alignment)
+  const sectionId = (props as Record<string, unknown>)['data-section-id'] as string | undefined
+
   return (
     <Callout
       className={className}
       type={calloutType}
       isFoldable={isFoldable}
       initiallyFolded={initiallyFolded}
+      sectionId={sectionId}
     >
       {children}
     </Callout>

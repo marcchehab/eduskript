@@ -571,26 +571,36 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
       setPaperWidth(paperRect.width)
     }
 
-    // Query for all headings with data-section-id (from h1, h2, h3 elements)
-    const headingElements = contentRef.current.querySelectorAll<HTMLElement>('[data-section-id]')
+    // Query for all elements with data-section-id (headings, code blocks, callouts, etc.)
+    const sectionElements = contentRef.current.querySelectorAll<HTMLElement>('[data-section-id]')
     const positions: HeadingPosition[] = []
+    const paperRect = paperElement!.getBoundingClientRect()
 
-    headingElements.forEach((element) => {
+    sectionElements.forEach((element) => {
       const sectionId = element.getAttribute('data-section-id')
       const headingText = element.getAttribute('data-heading-text')
+      const isDynamicHeight = element.getAttribute('data-dynamic-height') === 'true'
 
       if (sectionId) {
-        // Get the heading element's position relative to paper element (not contentRef)
+        // Get the element's position relative to paper element
         const rect = element.getBoundingClientRect()
-        const paperRect = paperElement!.getBoundingClientRect()
-        // Offset from top of paper (including top padding)
-        const offsetY = rect.top - paperRect.top
 
+        // Add top reference point
         positions.push({
           sectionId,
-          offsetY,
+          offsetY: rect.top - paperRect.top,
           headingText: headingText || ''
         })
+
+        // For dynamic-height elements (callouts, code editors), also track bottom
+        // This ensures annotations BELOW these elements move when they expand/collapse
+        if (isDynamicHeight) {
+          positions.push({
+            sectionId: `${sectionId}-end`,
+            offsetY: rect.bottom - paperRect.top,
+            headingText: ''
+          })
+        }
       }
     })
 
@@ -632,6 +642,36 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
     }
   }, [recalculateHeadingPositions])
 
+  // Watch dynamic-height elements (callouts, code editors) for size changes
+  // This triggers repositioning when callouts expand/collapse or editors show console output
+  useEffect(() => {
+    if (!contentRef.current) return
+
+    const dynamicElements = contentRef.current.querySelectorAll<HTMLElement>('[data-dynamic-height="true"]')
+    if (dynamicElements.length === 0) return
+
+    let rafId: number | null = null
+    let isScheduled = false
+
+    const resizeObserver = new ResizeObserver(() => {
+      // Debounce with requestAnimationFrame
+      if (!isScheduled) {
+        isScheduled = true
+        rafId = requestAnimationFrame(() => {
+          recalculateHeadingPositions()
+          isScheduled = false
+        })
+      }
+    })
+
+    dynamicElements.forEach(el => resizeObserver.observe(el))
+
+    return () => {
+      resizeObserver.disconnect()
+      if (rafId !== null) cancelAnimationFrame(rafId)
+    }
+  }, [children, recalculateHeadingPositions])
+
   // Function to perform the actual save
   // IMPORTANT: Uses refs instead of state to avoid stale closure issues when called from setTimeout
   const performSave = useCallback(async () => {
@@ -651,23 +691,33 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
     if (currentHeadingPositions.length === 0 && contentRef.current) {
       const paperElement = document.getElementById('paper')
       if (paperElement) {
-        const headingElements = contentRef.current.querySelectorAll<HTMLElement>('[data-section-id]')
+        const sectionElements = contentRef.current.querySelectorAll<HTMLElement>('[data-section-id]')
         const positions: HeadingPosition[] = []
+        const paperRect = paperElement.getBoundingClientRect()
 
-        headingElements.forEach((element) => {
+        sectionElements.forEach((element) => {
           const sectionId = element.getAttribute('data-section-id')
           const headingText = element.getAttribute('data-heading-text')
+          const isDynamicHeight = element.getAttribute('data-dynamic-height') === 'true'
 
           if (sectionId) {
             const rect = element.getBoundingClientRect()
-            const paperRect = paperElement.getBoundingClientRect()
-            const offsetY = rect.top - paperRect.top
 
+            // Add top reference point
             positions.push({
               sectionId,
-              offsetY,
+              offsetY: rect.top - paperRect.top,
               headingText: headingText || ''
             })
+
+            // For dynamic-height elements, also track bottom
+            if (isDynamicHeight) {
+              positions.push({
+                sectionId: `${sectionId}-end`,
+                offsetY: rect.bottom - paperRect.top,
+                headingText: ''
+              })
+            }
           }
         })
 
