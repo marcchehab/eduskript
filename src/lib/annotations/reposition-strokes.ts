@@ -3,6 +3,7 @@
  */
 
 export interface StrokeData {
+  id: string  // Unique identifier for per-stroke animations
   points: Array<{ x: number; y: number; pressure: number }>
   mode: 'draw' | 'erase'
   color: string

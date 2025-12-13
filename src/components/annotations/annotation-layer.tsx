@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -14,12 +14,71 @@ import { repositionStrokes } from '@/lib/annotations/reposition-strokes'
 import { useLayout } from '@/contexts/layout-context'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
 import { useTeacherBroadcast } from '@/hooks/use-teacher-broadcast'
+import { useStrokeAnimation, parseStrokes, type AnimatedStroke } from '@/hooks/use-stroke-animation'
 import { useSession } from 'next-auth/react'
 import { SnapOverlay, type Snap } from './snap-overlay'
 import { SnapsDisplay } from './snaps-display'
 import { createLogger } from '@/lib/logger'
 
 const log = createLogger('annotations:layer')
+
+/**
+ * Component for rendering an animated reference layer
+ * Uses the useStrokeAnimation hook to animate stroke opacity changes
+ */
+const AnimatedReferenceLayer = memo(function AnimatedReferenceLayer({
+  canvasData,
+  paperWidth,
+  pageHeight,
+  headingPositions,
+  zoom,
+  zIndex = 8,
+  className = ''
+}: {
+  canvasData: string
+  paperWidth: number
+  pageHeight: number
+  headingPositions: HeadingPosition[]
+  zoom: number
+  zIndex?: number
+  className?: string
+}) {
+  // Parse strokes from data - memoized to prevent recreation on every render
+  const strokes = useMemo(() => parseStrokes(canvasData), [canvasData])
+
+  // Use animation hook for per-stroke fade effects (1s fade-in for broadcast strokes)
+  const { strokesToRender, opacities } = useStrokeAnimation(strokes, 1000)
+
+  // Serialize strokes back to JSON for SimpleCanvas - memoized to prevent unnecessary re-parses
+  const dataToRender = useMemo(() => JSON.stringify(strokesToRender), [strokesToRender])
+
+  return (
+    <div
+      className={className}
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        height: pageHeight,
+        pointerEvents: 'none',
+        zIndex,
+      }}
+    >
+      <SimpleCanvas
+        width={paperWidth}
+        height={pageHeight}
+        mode="view"
+        initialData={dataToRender}
+        headingPositions={headingPositions}
+        zoom={zoom}
+        readOnly
+        strokeOpacities={opacities}
+      />
+    </div>
+  )
+})
 
 /**
  * Reposition teacher annotations to align with student's heading positions.
@@ -2233,29 +2292,14 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
             return (
               <div key={classAnnotation.classId}>
                 {createPortal(
-                  <div
-                    className="reference-layer-fade-in"
-                    style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      height: pageHeight,
-                      pointerEvents: 'none',
-                      zIndex: 8,
-                    }}
-                  >
-                    <SimpleCanvas
-                      width={paperWidth}
-                      height={pageHeight}
-                      mode="view"
-                      initialData={repositionedCanvasData}
-                      headingPositions={headingPositions}
-                      zoom={zoom}
-                      readOnly
-                    />
-                  </div>,
+                  <AnimatedReferenceLayer
+                    canvasData={repositionedCanvasData}
+                    paperWidth={paperWidth}
+                    pageHeight={pageHeight}
+                    headingPositions={headingPositions}
+                    zoom={zoom}
+                    zIndex={8}
+                  />,
                   paperElement
                 )}
               </div>
@@ -2276,29 +2320,14 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
             )
 
             return createPortal(
-              <div
-                className="reference-layer-fade-in"
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  height: pageHeight,
-                  pointerEvents: 'none',
-                  zIndex: 9,
-                }}
-              >
-                <SimpleCanvas
-                  width={paperWidth}
-                  height={pageHeight}
-                  mode="view"
-                  initialData={repositionedCanvasData}
-                  headingPositions={headingPositions}
-                  zoom={zoom}
-                  readOnly
-                />
-              </div>,
+              <AnimatedReferenceLayer
+                canvasData={repositionedCanvasData}
+                paperWidth={paperWidth}
+                pageHeight={pageHeight}
+                headingPositions={headingPositions}
+                zoom={zoom}
+                zIndex={9}
+              />,
               paperElement
             )
           })()}
@@ -2319,29 +2348,14 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
               )
 
               return createPortal(
-                <div
-                  className="reference-layer-fade-in"
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    height: pageHeight,
-                    pointerEvents: 'none',
-                    zIndex: 6, // Below other reference layers
-                  }}
-                >
-                  <SimpleCanvas
-                    width={paperWidth}
-                    height={pageHeight}
-                    mode="view"
-                    initialData={repositionedCanvasData}
-                    headingPositions={headingPositions}
-                    zoom={zoom}
-                    readOnly
-                  />
-                </div>,
+                <AnimatedReferenceLayer
+                  canvasData={repositionedCanvasData}
+                  paperWidth={paperWidth}
+                  pageHeight={pageHeight}
+                  headingPositions={headingPositions}
+                  zoom={zoom}
+                  zIndex={6}
+                />,
                 paperElement
               )
             }
@@ -2364,29 +2378,14 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
               return (
                 <div key={`public-${annotation.userId}-${index}`}>
                   {createPortal(
-                    <div
-                      className="reference-layer-fade-in"
-                      style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        height: pageHeight,
-                        pointerEvents: 'none',
-                        zIndex: 6, // Below other reference layers
-                      }}
-                    >
-                      <SimpleCanvas
-                        width={paperWidth}
-                        height={pageHeight}
-                        mode="view"
-                        initialData={repositionedCanvasData}
-                        headingPositions={headingPositions}
-                        zoom={zoom}
-                        readOnly
-                      />
-                    </div>,
+                    <AnimatedReferenceLayer
+                      canvasData={repositionedCanvasData}
+                      paperWidth={paperWidth}
+                      pageHeight={pageHeight}
+                      headingPositions={headingPositions}
+                      zoom={zoom}
+                      zIndex={6}
+                    />,
                     paperElement
                   )}
                 </div>

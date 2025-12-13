@@ -24,6 +24,29 @@ const SMOOTHING_TEST_LEVELS = [
 // Telemetry sampling rate - collect every Nth stroke
 const TELEMETRY_SAMPLE_RATE = 10
 
+// Generate stable content-based ID for strokes without IDs (backward compat)
+function generateStableStrokeId(stroke: {
+  points?: Array<{ x: number; y: number; pressure: number }>
+  color?: string
+  width?: number
+  sectionId?: string
+}): string {
+  const points = stroke.points || []
+  const first = points[0]
+  const last = points[points.length - 1]
+
+  const parts = [
+    first ? `${first.x.toFixed(1)},${first.y.toFixed(1)}` : '0,0',
+    last ? `${last.x.toFixed(1)},${last.y.toFixed(1)}` : '0,0',
+    points.length,
+    stroke.color || 'black',
+    stroke.width || 2,
+    stroke.sectionId || 'unknown'
+  ]
+
+  return `stroke-${parts.join('-')}`
+}
+
 interface SimpleCanvasProps {
   width: number
   height: number
@@ -41,6 +64,7 @@ interface SimpleCanvasProps {
   zoom?: number
   headingPositions?: HeadingPosition[]
   readOnly?: boolean  // When true, disables all interaction
+  strokeOpacities?: Map<string, number>  // Per-stroke opacity overrides for animations (stroke id → opacity 0-1)
 }
 
 export interface SimpleCanvasHandle {
@@ -49,11 +73,12 @@ export interface SimpleCanvasHandle {
 }
 
 export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
-  ({ width, height, mode, onUpdate, initialData, strokeWidth = 2, strokeColor = '#000000', stylusModeActive = false, onStylusDetected, onNonStylusInput, onPenStateChange, onDrawStart, onTelemetry, zoom = 1.0, headingPositions = [], readOnly = false }, ref) => {
+  ({ width, height, mode, onUpdate, initialData, strokeWidth = 2, strokeColor = '#000000', stylusModeActive = false, onStylusDetected, onNonStylusInput, onPenStateChange, onDrawStart, onTelemetry, zoom = 1.0, headingPositions = [], readOnly = false, strokeOpacities }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const isDrawingRef = useRef(false)
     const [isPenDrawing, setIsPenDrawing] = useState(false) // Track if pen is actively drawing
     const pathsRef = useRef<Array<{
+      id: string  // Unique identifier for per-stroke animations
       points: Array<{ x: number; y: number; pressure: number }>
       mode: DrawMode
       color: string
@@ -217,8 +242,11 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         // Check if this stroke is marked for deletion
         const isMarkedForDeletion = strokesMarkedForDeletionRef.current.has(index)
 
-        // Set opacity for strokes marked for deletion
-        ctx.globalAlpha = isMarkedForDeletion ? 0.3 : 1.0
+        // Get per-stroke opacity override (for fade animations), default to 1
+        const strokeOpacity = strokeOpacities?.get(path.id) ?? 1
+
+        // Set opacity: combine stroke opacity with deletion marking
+        ctx.globalAlpha = isMarkedForDeletion ? strokeOpacity * 0.3 : strokeOpacity
 
         ctx.strokeStyle = path.color
         ctx.lineCap = 'round'
@@ -300,7 +328,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
 
       // Reset globalAlpha
       ctx.globalAlpha = 1.0
-    }, [smoothPoints, applyPressureFloor])
+    }, [smoothPoints, applyPressureFloor, strokeOpacities])
 
     // Throttled redraw for eraser using RAF to avoid redrawing every single move
     const scheduleEraserRedraw = useCallback(() => {
@@ -400,7 +428,11 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
 
       try {
         const paths = JSON.parse(initialData)
-        pathsRef.current = paths
+        // Ensure all strokes have stable IDs (backward compatibility for existing data)
+        pathsRef.current = paths.map((stroke: typeof pathsRef.current[0]) => ({
+          ...stroke,
+          id: stroke.id || generateStableStrokeId(stroke)
+        }))
         // Only trigger fade-in animation on initial page load:
         // - Must be first load (!hasLoadedInitialDataRef.current)
         // - Must have data (paths.length > 0)
@@ -425,6 +457,13 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       }
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [initialData])
+
+    // Redraw when strokeOpacities change (for per-stroke fade animations)
+    useEffect(() => {
+      if (strokeOpacities && strokeOpacities.size > 0) {
+        redrawCanvas()
+      }
+    }, [strokeOpacities, redrawCanvas])
 
     const startDrawing = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
       // Detect stylus input first
@@ -754,6 +793,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         // Save the path with all original points and pressure data intact
         // Visual smoothing is handled by Bezier curves during rendering
         pathsRef.current.push({
+          id: crypto.randomUUID(),
           points: currentPathRef.current,
           mode: currentModeRef.current,
           color: strokeColor,

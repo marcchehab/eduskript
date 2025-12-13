@@ -2,6 +2,7 @@ import Dexie, { Table } from 'dexie'
 
 // Individual stroke/path data structure
 export interface StrokeData {
+  id: string               // Unique identifier for per-stroke animations
   points: Array<{ x: number; y: number; pressure: number }>
   mode: 'draw' | 'erase'
   color: string
@@ -101,12 +102,26 @@ async function migrateToSingleCanvas(legacy: LegacyPageAnnotation): Promise<Page
       // These will be recalculated on first load
       headingOffsets[section.sectionId] = 0
 
-      // Add section ID to each stroke
-      const migratedStrokes = sectionStrokes.map(stroke => ({
-        ...stroke,
-        sectionId: section.sectionId,
-        sectionOffsetY: 0 // Will be recalculated on load
-      }))
+      // Add section ID and generate stable IDs for each stroke
+      const migratedStrokes = sectionStrokes.map((stroke) => {
+        const points = stroke.points || []
+        const first = points[0]
+        const last = points[points.length - 1]
+        const parts = [
+          first ? `${first.x.toFixed(1)},${first.y.toFixed(1)}` : '0,0',
+          last ? `${last.x.toFixed(1)},${last.y.toFixed(1)}` : '0,0',
+          points.length,
+          stroke.color || 'black',
+          stroke.width || 2,
+          section.sectionId
+        ]
+        return {
+          ...stroke,
+          id: `stroke-${parts.join('-')}`,
+          sectionId: section.sectionId,
+          sectionOffsetY: 0 // Will be recalculated on load
+        }
+      })
 
       allStrokes.push(...migratedStrokes)
     } catch (error) {
