@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LogIn, UserCheck, Pencil } from 'lucide-react'
+import { LogIn, UserCheck, FilePen } from 'lucide-react'
 import { usePendingInvitations } from '@/hooks/use-pending-invitations'
 
 interface AuthButtonProps {
@@ -93,11 +93,11 @@ export function AuthButton({ pageId }: AuthButtonProps) {
               className="object-cover"
             />
             <div className="absolute inset-0 flex items-center justify-center bg-primary/70">
-              <Pencil className="h-4 w-4 text-primary-foreground" />
+              <FilePen className="h-4 w-4 text-primary-foreground" />
             </div>
           </>
         ) : (
-          <Pencil className="h-4 w-4 text-primary" />
+          <FilePen className="h-4 w-4 text-primary" />
         )}
       </Link>
     )

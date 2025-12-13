@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import { Pen, Eraser, Trash2, Camera, Eye, EyeOff, Radio, User, Users, UserPen, ChevronDown } from 'lucide-react'
 import { Circle } from '@uiw/react-color'
 import { cn } from '@/lib/utils'
+import { useLayout } from '@/contexts/layout-context'
 
 // =============================================================================
 // TYPES
@@ -178,6 +179,9 @@ export function AnnotationToolbar({
   lastSelectedStudent = null,
   onClearLastSelectedStudent,
 }: AnnotationToolbarProps) {
+  // Get layout context for centering toolbar on page content (not viewport)
+  const { sidebarWidth } = useLayout()
+
   // Broadcast dropdown state
   const [showClassDropdown, setShowClassDropdown] = useState(false)
   const [showStudentDropdown, setShowStudentDropdown] = useState(false)
@@ -592,7 +596,7 @@ export function AnnotationToolbar({
   }
 
   const toolbarContent = (
-    <div data-annotation-toolbar className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 select-none" style={{ isolation: 'isolate', touchAction: 'manipulation' }}>
+    <div data-annotation-toolbar className="fixed bottom-6 z-50 select-none" style={{ left: `calc(${sidebarWidth}px + (100% - ${sidebarWidth}px) / 2)`, transform: 'translateX(-50%)', isolation: 'isolate', touchAction: 'manipulation' }}>
       {/* Single horizontal toolbar */}
       <div className="bg-background/95 backdrop-blur border border-border rounded-lg shadow-lg p-2 flex items-center gap-1">
 
