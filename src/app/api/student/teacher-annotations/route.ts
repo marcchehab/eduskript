@@ -65,8 +65,9 @@ export async function GET(request: NextRequest) {
     const classAnnotationsWithInfo = classAnnotations
       .filter(annotation => {
         // Skip annotations with empty canvasData (cleared by teacher)
+        // Check for both empty string AND empty JSON array
         const data = annotation.data as { canvasData?: string } | null
-        return data?.canvasData && data.canvasData.length > 0
+        return data?.canvasData && data.canvasData.length > 0 && data.canvasData !== '[]'
       })
       .map(annotation => {
         const membership = memberships.find(m => m.classId === annotation.targetId)
@@ -93,9 +94,25 @@ export async function GET(request: NextRequest) {
     })
 
     // Filter out empty individual feedback (cleared by teacher)
+    // Check for both empty string AND empty JSON array
     const feedbackData = individualFeedback?.data as { canvasData?: string } | null
-    const hasValidFeedback = feedbackData?.canvasData && feedbackData.canvasData.length > 0
+    const hasValidFeedback = feedbackData?.canvasData && feedbackData.canvasData.length > 0 && feedbackData.canvasData !== '[]'
 
+    // Debug: log raw data from database before filtering
+    console.log('[student/teacher-annotations] Raw class data from DB:', classAnnotations.map(a => ({
+      targetId: a.targetId,
+      canvasDataLength: (a.data as { canvasData?: string } | null)?.canvasData?.length ?? 0,
+      canvasDataPreview: (a.data as { canvasData?: string } | null)?.canvasData?.slice(0, 50) ?? 'null',
+    })))
+
+    console.log('[student/teacher-annotations] Returning:', {
+      classAnnotationsCount: classAnnotationsWithInfo.length,
+      hasIndividualFeedback: !!(individualFeedback && hasValidFeedback),
+      pageId
+    })
+
+    // Return with aggressive no-cache headers to ensure students always get fresh data
+    // Teacher annotations should NEVER be cached on the client - server is always the source of truth
     return NextResponse.json({
       classAnnotations: classAnnotationsWithInfo,
       individualFeedback: individualFeedback && hasValidFeedback
@@ -104,6 +121,12 @@ export async function GET(request: NextRequest) {
             updatedAt: individualFeedback.updatedAt.getTime(),
           }
         : null,
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      }
     })
   } catch (error) {
     console.error('[student/teacher-annotations] Error:', error)

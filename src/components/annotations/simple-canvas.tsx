@@ -36,6 +36,7 @@ interface SimpleCanvasProps {
   onStylusDetected?: () => void
   onNonStylusInput?: () => void
   onPenStateChange?: (active: boolean) => void  // Notify parent when pen is actively drawing
+  onDrawStart?: () => void  // Called when user starts drawing (pointer down in draw mode)
   onTelemetry?: (telemetry: StrokeTelemetry) => void  // Optional telemetry callback (sampled)
   zoom?: number
   headingPositions?: HeadingPosition[]
@@ -48,7 +49,7 @@ export interface SimpleCanvasHandle {
 }
 
 export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
-  ({ width, height, mode, onUpdate, initialData, strokeWidth = 2, strokeColor = '#000000', stylusModeActive = false, onStylusDetected, onNonStylusInput, onPenStateChange, onTelemetry, zoom = 1.0, headingPositions = [], readOnly = false }, ref) => {
+  ({ width, height, mode, onUpdate, initialData, strokeWidth = 2, strokeColor = '#000000', stylusModeActive = false, onStylusDetected, onNonStylusInput, onPenStateChange, onDrawStart, onTelemetry, zoom = 1.0, headingPositions = [], readOnly = false }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const isDrawingRef = useRef(false)
     const [isPenDrawing, setIsPenDrawing] = useState(false) // Track if pen is actively drawing
@@ -400,8 +401,13 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       try {
         const paths = JSON.parse(initialData)
         pathsRef.current = paths
-        // Only trigger fade-in animation on the FIRST load, not on subsequent updates
-        if (paths.length > 0 && !hasLoadedInitialDataRef.current) {
+        // Only trigger fade-in animation on initial page load:
+        // - Must be first load (!hasLoadedInitialDataRef.current)
+        // - Must have data (paths.length > 0)
+        // - Must NOT be a readOnly canvas (those update frequently via SSE)
+        // - Must have significant data (> 5 strokes) to avoid fade-in on user's first few strokes
+        //   when their data syncs back from server
+        if (paths.length > 5 && !hasLoadedInitialDataRef.current && !readOnly) {
           setShouldFadeIn(true)
           // Remove the fade-in class after animation completes (0.5s)
           setTimeout(() => {
@@ -490,6 +496,9 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       isDrawingRef.current = true
       strokeStartTimeRef.current = Date.now() // Track start time for telemetry
 
+      // Notify parent that drawing has started (for auto-showing hidden layers)
+      onDrawStart?.()
+
       // Track pen drawing state for touch-action control
       if (isStylusInput) {
         setIsPenDrawing(true)
@@ -516,7 +525,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       } else {
         currentStrokeSmoothingRef.current = { window: REALTIME_SMOOTHING_WINDOW, color: strokeColor }
       }
-    }, [mode, stylusModeActive, onStylusDetected, onPenStateChange, width, height, updateEraserCursor, strokeColor])
+    }, [mode, stylusModeActive, onStylusDetected, onPenStateChange, onDrawStart, width, height, updateEraserCursor, strokeColor])
 
     const draw = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
       // Don't draw if multiple touch/mouse pointers are active (pinch gesture)

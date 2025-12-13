@@ -38,6 +38,8 @@ interface ConflictItem {
   itemId: string
   serverData: unknown
   serverVersion: number
+  targetType?: string | null
+  targetId?: string | null
 }
 
 interface SnapData {
@@ -162,6 +164,15 @@ export async function POST(request: NextRequest) {
           parsedData = item.data
         }
 
+        // Debug: log targeting info
+        console.log('[user-data/sync] Item:', {
+          adapter: item.adapter,
+          itemId: item.itemId,
+          targetType: item.targetType,
+          targetId: item.targetId,
+          dataLength: item.data?.length ?? 0
+        })
+
         // Normalize targeting fields (null if not set)
         const targetType = item.targetType || null
         const targetId = item.targetId || null
@@ -233,11 +244,14 @@ export async function POST(request: NextRequest) {
 
         if (existing && existing.version > item.version) {
           // Server has newer version - conflict
+          // Include targeting info so client can resolve conflict correctly
           conflicts.push({
             adapter: item.adapter,
             itemId: item.itemId,
             serverData: existing.data,
             serverVersion: existing.version,
+            targetType: targetType,
+            targetId: targetId,
           })
           continue
         }
@@ -269,7 +283,9 @@ export async function POST(request: NextRequest) {
         synced.push(`${item.adapter}:${item.itemId}`)
 
         // Track teacher broadcasts for SSE notification
+        console.log('[user-data/sync] After normalization:', { targetType, targetId, adapter: item.adapter })
         if (targetType && targetId) {
+          console.log('[user-data/sync] Adding to teacherBroadcasts:', { targetType, targetId, pageId: item.itemId })
           teacherBroadcasts.push({
             targetType: targetType as 'class' | 'student',
             targetId,
@@ -333,10 +349,12 @@ export async function POST(request: NextRequest) {
 
     // Publish SSE events for teacher broadcasts/feedback
     if (teacherBroadcasts.length > 0) {
+      console.log('[user-data/sync] Publishing teacher broadcast events:', teacherBroadcasts.length)
       try {
         for (const broadcast of teacherBroadcasts) {
           if (broadcast.targetType === 'class') {
             // Broadcast to entire class
+            console.log('[user-data/sync] Publishing to class:', broadcast.targetId, 'pageId:', broadcast.pageId)
             await eventBus.publish(`class:${broadcast.targetId}`, {
               type: 'teacher-annotations-update',
               classId: broadcast.targetId,
@@ -346,6 +364,7 @@ export async function POST(request: NextRequest) {
             })
           } else if (broadcast.targetType === 'student') {
             // Individual student feedback
+            console.log('[user-data/sync] Publishing to student:', broadcast.targetId, 'pageId:', broadcast.pageId)
             await eventBus.publish(`user:${broadcast.targetId}`, {
               type: 'teacher-feedback',
               studentId: broadcast.targetId,
@@ -356,7 +375,8 @@ export async function POST(request: NextRequest) {
           }
         }
 
-      } catch {
+      } catch (err) {
+        console.error('[user-data/sync] Failed to publish broadcast events:', err)
         // Don't fail the sync if event publishing fails
       }
     }

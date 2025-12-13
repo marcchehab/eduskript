@@ -8,11 +8,19 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { level, args, timestamp } = body
+    const { level, args, timestamp, clientId } = body
 
-    // Format the output
+    // Get client IP for identification
+    const forwarded = request.headers.get('x-forwarded-for')
+    const ip = forwarded ? forwarded.split(',')[0].trim() : request.headers.get('x-real-ip') || 'local'
+
+    // Extract last octet of IP for brevity (e.g., "192.168.1.112" -> "112")
+    const ipShort = ip === 'local' ? 'local' : ip.split('.').pop() || ip
+
+    // Format the output with client identifier
     const time = new Date(timestamp).toLocaleTimeString()
-    const prefix = `[Browser ${level.toUpperCase()}] ${time}`
+    const clientTag = clientId ? `${ipShort}:${clientId}` : ipShort
+    const prefix = `[Browser ${level.toUpperCase()}] ${time} [${clientTag}]`
 
     // Print to server console with appropriate method
     switch (level) {

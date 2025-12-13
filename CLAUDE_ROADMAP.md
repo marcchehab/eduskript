@@ -9,13 +9,12 @@
 
 ## 🎯 Priority List
 
-- universal layer toggles for everyone
+- edit page button should be this: https://lucide.dev/icons/file-pen
+- center toolbar on page, not viewport
+
 
 - make snaps box prettier
 - snap broadcast
-
-
-- teacher annotations should be hidable for students. and they should be able to select class-indvidiual-both teacher notes, if those are available.
 
 - **Organization Support** - Groundwork for schools/organizations: org admins can manage users (delete, reset PW), administer org pages, pay per organization. See `docs/ORGANIZATION_GROUNDWORK_PLAN.md` for detailed plan.
 **LMS Features:**

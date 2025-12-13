@@ -26,6 +26,10 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // Check for optional pageId to include annotation status
+    const { searchParams } = new URL(request.url)
+    const pageId = searchParams.get('pageId')
+
     // Get all classes for this teacher with member counts
     const classes = await prisma.class.findMany({
       where: {
@@ -45,6 +49,35 @@ export async function GET(request: NextRequest) {
       }
     })
 
+    // If pageId provided, check which classes have annotations on that page
+    let classesWithAnnotations: Set<string> = new Set()
+    if (pageId) {
+      const classIds = classes.map(c => c.id)
+      console.log('[/api/classes] Checking annotations for classIds:', classIds, 'pageId:', pageId)
+      const annotations = await prisma.userData.findMany({
+        where: {
+          targetType: 'class',
+          targetId: { in: classIds },
+          adapter: 'annotations',
+          itemId: pageId,
+        },
+        select: {
+          targetId: true,
+          data: true,
+        }
+      })
+      console.log('[/api/classes] Found annotations:', annotations.length)
+      // Only count classes with non-empty canvasData
+      for (const ann of annotations) {
+        const data = ann.data as { canvasData?: string } | null
+        console.log('[/api/classes] Annotation for', ann.targetId, 'canvasData length:', data?.canvasData?.length ?? 0)
+        if (ann.targetId && data?.canvasData && data.canvasData.length > 0 && data.canvasData !== '[]') {
+          classesWithAnnotations.add(ann.targetId)
+        }
+      }
+      console.log('[/api/classes] Classes with annotations:', Array.from(classesWithAnnotations))
+    }
+
     return NextResponse.json({
       classes: classes.map(c => ({
         id: c.id,
@@ -55,7 +88,8 @@ export async function GET(request: NextRequest) {
         memberCount: c._count.memberships,
         preAuthorizedCount: c._count.preAuthorizedStudents,
         createdAt: c.createdAt,
-        updatedAt: c.updatedAt
+        updatedAt: c.updatedAt,
+        ...(pageId && { hasAnnotationsOnPage: classesWithAnnotations.has(c.id) })
       }))
     })
   } catch (error) {

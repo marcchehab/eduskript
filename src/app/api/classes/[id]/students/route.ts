@@ -36,6 +36,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       )
     }
 
+    // Check for optional pageId to include annotation status
+    const { searchParams } = new URL(request.url)
+    const pageId = searchParams.get('pageId')
+
     // Get all members with identity consent status
     const memberships = await prisma.classMembership.findMany({
       where: { classId },
@@ -55,6 +59,31 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }
     })
 
+    // If pageId provided, check which students have annotations on that page
+    let studentsWithAnnotations: Set<string> = new Set()
+    if (pageId) {
+      const studentIds = memberships.map(m => m.student.id)
+      const annotations = await prisma.userData.findMany({
+        where: {
+          targetType: 'student',
+          targetId: { in: studentIds },
+          adapter: 'annotations',
+          itemId: pageId,
+        },
+        select: {
+          targetId: true,
+          data: true,
+        }
+      })
+      // Only count students with non-empty canvasData
+      for (const ann of annotations) {
+        const data = ann.data as { canvasData?: string } | null
+        if (ann.targetId && data?.canvasData && data.canvasData.length > 0 && data.canvasData !== '[]') {
+          studentsWithAnnotations.add(ann.targetId)
+        }
+      }
+    }
+
     return NextResponse.json({
       students: memberships.map(m => ({
         id: m.student.id,
@@ -68,7 +97,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         identityConsent: m.identityConsent,
         consentedAt: m.consentedAt,
         joinedAt: m.joinedAt,
-        lastSeenAt: m.student.lastSeenAt
+        lastSeenAt: m.student.lastSeenAt,
+        ...(pageId && { hasAnnotationsOnPage: studentsWithAnnotations.has(m.student.id) })
       }))
     })
   } catch (error) {

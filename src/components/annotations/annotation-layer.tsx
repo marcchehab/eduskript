@@ -71,19 +71,33 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
   const { setAnnotationVersionMismatch, setOnClearAnnotations } = useUserDataContext()
 
   // State for classes and students lists (for toolbar broadcast controls)
-  const [teacherClasses, setTeacherClasses] = useState<Array<{ id: string; name: string }>>([])
-  const [classStudents, setClassStudents] = useState<Array<{ id: string; displayName: string; pseudonym?: string }>>([])
+  const [teacherClasses, setTeacherClasses] = useState<Array<{ id: string; name: string; hasAnnotationsOnPage?: boolean }>>([])
+  const [classStudents, setClassStudents] = useState<Array<{ id: string; displayName: string; pseudonym?: string; hasAnnotationsOnPage?: boolean }>>([])
 
-  // Fetch teacher's classes on mount
+  // Track last selected student for quick-access and data loading when in class-broadcast mode
+  const [lastSelectedStudent, setLastSelectedStudent] = useState<{ id: string; displayName: string; pseudonym?: string } | null>(null)
+
+  // Update lastSelectedStudent when a student is selected
   useEffect(() => {
-    if (!isTeacher) return
+    if (selectedStudent) {
+      setLastSelectedStudent(selectedStudent)
+    }
+  }, [selectedStudent])
+
+  // Fetch teacher's classes (with annotation status for current page)
+  useEffect(() => {
+    if (!isTeacher || !pageId) return
 
     const fetchClasses = async () => {
       try {
-        const res = await fetch('/api/classes')
+        const res = await fetch(`/api/classes?pageId=${encodeURIComponent(pageId)}`)
         if (res.ok) {
           const data = await res.json()
-          setTeacherClasses(data.classes?.map((c: { id: string; name: string }) => ({ id: c.id, name: c.name })) || [])
+          setTeacherClasses(data.classes?.map((c: { id: string; name: string; hasAnnotationsOnPage?: boolean }) => ({
+            id: c.id,
+            name: c.name,
+            hasAnnotationsOnPage: c.hasAnnotationsOnPage
+          })) || [])
         }
       } catch (e) {
         console.error('Failed to fetch classes:', e)
@@ -91,11 +105,11 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
     }
 
     fetchClasses()
-  }, [isTeacher])
+  }, [isTeacher, pageId])
 
-  // Fetch students when a class is selected
+  // Fetch students when a class is selected (with annotation status for current page)
   useEffect(() => {
-    if (!isTeacher || !selectedClass) {
+    if (!isTeacher || !selectedClass || !pageId) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- intentionally clear when class is deselected
       setClassStudents([])
       return
@@ -103,13 +117,14 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
 
     const fetchStudents = async () => {
       try {
-        const res = await fetch(`/api/classes/${selectedClass.id}/students`)
+        const res = await fetch(`/api/classes/${selectedClass.id}/students?pageId=${encodeURIComponent(pageId)}`)
         if (res.ok) {
           const data = await res.json()
-          setClassStudents(data.students?.map((s: { id: string; displayName: string; pseudonym?: string }) => ({
+          setClassStudents(data.students?.map((s: { id: string; displayName: string; pseudonym?: string; hasAnnotationsOnPage?: boolean }) => ({
             id: s.id,
             displayName: s.displayName,
-            pseudonym: s.pseudonym
+            pseudonym: s.pseudonym,
+            hasAnnotationsOnPage: s.hasAnnotationsOnPage
           })) || [])
         }
       } catch (e) {
@@ -118,7 +133,7 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
     }
 
     fetchStudents()
-  }, [isTeacher, selectedClass])
+  }, [isTeacher, selectedClass, pageId])
 
   // Compute targeting options based on teacher selection
   // - 'my-view': No targeting (personal annotations)
@@ -214,31 +229,56 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
         return next
       })
     }
+    // Auto-hide student feedback when switching from student-view to class-broadcast
+    if (isTeacher && prevViewModeRef.current === 'student-view' && viewMode === 'class-broadcast') {
+      // Teacher just switched from individual student to entire class
+      // Auto-hide student feedback layer (unless manually toggled before)
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional: sync layer visibility when broadcast target changes
+      setLayerVisibility(prev => {
+        const next = { ...prev, 'student-feedback': false }
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('annotation-layer-visibility', JSON.stringify(next))
+        }
+        return next
+      })
+    }
     prevViewModeRef.current = viewMode
   }, [isTeacher, viewMode])
 
+  // Helper to get default visibility for a layer
+  const getDefaultVisibility = useCallback((layerId: string) => {
+    // Personal hidden by default when teacher is broadcasting
+    if (layerId === 'personal' && isTeacher && viewMode !== 'my-view') {
+      return false
+    }
+    // Student feedback hidden by default when in class-broadcast mode
+    if (layerId === 'student-feedback' && isTeacher && viewMode === 'class-broadcast') {
+      return false
+    }
+    return true // All other layers visible by default
+  }, [isTeacher, viewMode])
+
   // Toggle a layer's visibility
+  // IMPORTANT: Must account for default visibility when layer hasn't been explicitly set
   const toggleLayerVisibility = useCallback((layerId: string) => {
     setLayerVisibility(prev => {
-      const next = { ...prev, [layerId]: !prev[layerId] }
+      // Get current visibility: explicit value or default
+      const currentVisible = layerId in prev ? prev[layerId] : getDefaultVisibility(layerId)
+      const next = { ...prev, [layerId]: !currentVisible }
       if (typeof window !== 'undefined') {
         localStorage.setItem('annotation-layer-visibility', JSON.stringify(next))
       }
       return next
     })
-  }, [])
+  }, [getDefaultVisibility])
 
-  // Get visibility for a layer (default: true for most, false for personal when teacher is broadcasting)
+  // Get visibility for a layer (default: true for most, false for personal/student-feedback in certain modes)
   const isLayerVisible = useCallback((layerId: string) => {
     if (layerId in layerVisibility) {
       return layerVisibility[layerId]
     }
-    // Default visibility
-    if (layerId === 'personal' && isTeacher && viewMode !== 'my-view') {
-      return false // Personal hidden by default when teacher is broadcasting
-    }
-    return true // All other layers visible by default
-  }, [layerVisibility, isTeacher, viewMode])
+    return getDefaultVisibility(layerId)
+  }, [layerVisibility, getDefaultVisibility])
 
   // "My annotations" visibility - controls personal annotations (person icon)
   // When in broadcast mode, this controls the 'personal' reference layer
@@ -349,43 +389,63 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
     return { targetType: 'class', targetId: selectedClass.id }
   }, [isTeacher, selectedClass])
 
+  // Use selectedStudent if available, otherwise fall back to lastSelectedStudent for data loading
+  const studentForFeedback = selectedStudent || lastSelectedStudent
+
   const studentFeedbackSyncOptions: SyncedUserDataOptions = useMemo(() => {
-    if (!isTeacher || !selectedStudent) return {}
-    return { targetType: 'student', targetId: selectedStudent.id }
-  }, [isTeacher, selectedStudent])
+    if (!isTeacher || !studentForFeedback) return {}
+    return { targetType: 'student', targetId: studentForFeedback.id }
+  }, [isTeacher, studentForFeedback])
 
   // Get data and update functions for class broadcast and student feedback (for targeted deletions)
+  // Only load when we have valid targeting to avoid warning about empty pageId
+  const shouldLoadClassBroadcast = isTeacher && !!selectedClass
+  // Load student feedback for selected student OR last selected (for reference layer in class-broadcast mode)
+  const shouldLoadStudentFeedback = isTeacher && !!studentForFeedback
+
   const { data: classBroadcastData, updateData: updateClassBroadcastData } = useSyncedUserData<AnnotationData>(
-    (isTeacher && selectedClass) ? pageId : '',
+    shouldLoadClassBroadcast ? pageId : '__skip__', // Use placeholder to skip loading
     'annotations',
     null,
     classBroadcastSyncOptions
   )
 
   const { data: studentFeedbackData, updateData: updateStudentFeedbackData } = useSyncedUserData<AnnotationData>(
-    (isTeacher && selectedStudent) ? pageId : '',
+    shouldLoadStudentFeedback ? pageId : '__skip__', // Use placeholder to skip loading
     'annotations',
     null,
     studentFeedbackSyncOptions
   )
 
-  // Check if class broadcast and student feedback layers have content
-  const hasClassBroadcastAnnotations = useMemo(() => {
-    return !!(classBroadcastData?.canvasData &&
-      classBroadcastData.canvasData.length > 0 &&
-      classBroadcastData.canvasData !== '[]')
-  }, [classBroadcastData])
-
-  const hasStudentFeedbackAnnotations = useMemo(() => {
-    return !!(studentFeedbackData?.canvasData &&
-      studentFeedbackData.canvasData.length > 0 &&
-      studentFeedbackData.canvasData !== '[]')
-  }, [studentFeedbackData])
-
   const [mode, setMode] = useState<AnnotationMode>('view')
   const [pageVersion, setPageVersion] = useState<string>('')
   const [hasAnnotations, setHasAnnotations] = useState(false)
   const [canvasData, setCanvasData] = useState<string>('')
+
+  // Check if class broadcast and student feedback layers have content
+  // IMPORTANT: When in the respective mode, use local canvasData/hasAnnotations state (which updates immediately)
+  // because the useSyncedUserData hooks don't update until after save completes
+  const hasClassBroadcastAnnotations = useMemo(() => {
+    // When actively editing class broadcast, use local state for immediate feedback
+    if (viewMode === 'class-broadcast') {
+      return hasAnnotations
+    }
+    // Otherwise use the hook data
+    return !!(classBroadcastData?.canvasData &&
+      classBroadcastData.canvasData.length > 0 &&
+      classBroadcastData.canvasData !== '[]')
+  }, [classBroadcastData, viewMode, hasAnnotations])
+
+  const hasStudentFeedbackAnnotations = useMemo(() => {
+    // When actively editing student feedback, use local state for immediate feedback
+    if (viewMode === 'student-view') {
+      return hasAnnotations
+    }
+    // Otherwise use the hook data
+    return !!(studentFeedbackData?.canvasData &&
+      studentFeedbackData.canvasData.length > 0 &&
+      studentFeedbackData.canvasData !== '[]')
+  }, [studentFeedbackData, viewMode, hasAnnotations])
 
   // Canvas ref needed by delete callbacks
   const canvasRef = useRef<SimpleCanvasHandle | null>(null)
@@ -402,12 +462,17 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
           canvasRef.current.clear()
         }
       }
+      // Update the brush icon indicator in the class dropdown
+      setTeacherClasses(prev => prev.map(c =>
+        c.id === selectedClass.id ? { ...c, hasAnnotationsOnPage: false } : c
+      ))
     }
-  }, [isTeacher, selectedClass, updateClassBroadcastData, viewMode])
+  }, [isTeacher, selectedClass, updateClassBroadcastData, viewMode, classBroadcastData?.canvasData?.length])
 
   // Delete student feedback annotations specifically
+  // Works for both selected student and last selected student (in class-broadcast mode)
   const deleteStudentFeedbackData = useCallback(async () => {
-    if (isTeacher && selectedStudent && updateStudentFeedbackData) {
+    if (isTeacher && studentForFeedback && updateStudentFeedbackData) {
       await updateStudentFeedbackData({ canvasData: '', headingOffsets: {}, pageVersion: '' }, { immediate: true })
       // If currently viewing student feedback, also clear local state
       if (viewMode === 'student-view') {
@@ -417,8 +482,12 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
           canvasRef.current.clear()
         }
       }
+      // Update the brush icon indicator in the student dropdown
+      setClassStudents(prev => prev.map(s =>
+        s.id === studentForFeedback.id ? { ...s, hasAnnotationsOnPage: false } : s
+      ))
     }
-  }, [isTeacher, selectedStudent, updateStudentFeedbackData, viewMode])
+  }, [isTeacher, selectedStudent, studentForFeedback, updateStudentFeedbackData, viewMode, studentFeedbackData?.canvasData?.length])
 
   // Build list of available layers for the toolbar UI
   // This includes reference layers AND the currently active/editable layer
@@ -1138,6 +1207,19 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
       }
 
       if (!hasData) return
+
+      // Update the class indicator when teacher draws on class broadcast
+      if (isTeacher && viewMode === 'class-broadcast' && selectedClass) {
+        setTeacherClasses(prev => prev.map(c =>
+          c.id === selectedClass.id ? { ...c, hasAnnotationsOnPage: true } : c
+        ))
+      }
+      // Update the student indicator when teacher draws on student feedback
+      if (isTeacher && viewMode === 'student-view' && selectedStudent) {
+        setClassStudents(prev => prev.map(s =>
+          s.id === selectedStudent.id ? { ...s, hasAnnotationsOnPage: true } : s
+        ))
+      }
     } catch {
       return
     }
@@ -1160,7 +1242,7 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
     saveTimeoutRef.current = setTimeout(() => {
       performSave()
     }, 2000)
-  }, [performSave, headingPositions, ensureActiveLayerVisible])
+  }, [performSave, headingPositions, ensureActiveLayerVisible, isTeacher, viewMode, selectedClass, selectedStudent])
 
   // Handle clear all annotations
   const handleClearAll = useCallback(async () => {
@@ -1203,11 +1285,33 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
   // This should NOT clear broadcast annotations, only the teacher's personal ones
   const handleClearPersonalAnnotations = useCallback(async () => {
     try {
+      // Set flag to prevent any saves during/after clear operation
+      isClearingRef.current = true
+
+      // Cancel any pending save operations to prevent re-saving old data
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+        saveTimeoutRef.current = null
+      }
+
+      // When NOT in broadcast mode, personal = current canvas, so clear UI state too
+      if (!shouldLoadPersonalAsReference) {
+        setCanvasData('')
+        setHasAnnotations(false)
+        setAnnotationVersionMismatch(false)
+        setOrphanedStrokesCount(0)
+
+        // Clear canvas
+        if (canvasRef.current) {
+          canvasRef.current.clear()
+        }
+      }
+
       await deletePersonalAnnotationData()
-    } catch {
-      // Ignore clearing errors
+    } catch (err) {
+      console.error('Failed to clear personal annotations:', err)
     }
-  }, [deletePersonalAnnotationData])
+  }, [deletePersonalAnnotationData, shouldLoadPersonalAsReference, setAnnotationVersionMismatch])
 
   // Register clear callback with global provider for SyncStatusButton
   useEffect(() => {
@@ -1667,6 +1771,7 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
             mode={mode === 'view' ? 'view' : (mode as DrawMode)}
             onUpdate={handleCanvasUpdate}
             onTelemetry={handleTelemetry}
+            onDrawStart={ensureActiveLayerVisible}
             initialData={canvasData}
             strokeColor={penColors[activePen]}
             strokeWidth={penSizes[activePen]}
@@ -1713,6 +1818,66 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
                   height={pageHeight}
                   mode="view"
                   initialData={repositionedCanvasData}
+                  headingPositions={headingPositions}
+                  zoom={zoom}
+                  readOnly
+                />
+              </div>,
+              paperElement
+            )
+          })()}
+
+          {/* Teacher's class broadcast as reference (when giving individual student feedback) */}
+          {isTeacher && viewMode === 'student-view' && classBroadcastData?.canvasData && isLayerVisible('class-broadcast') && (() => {
+            return createPortal(
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: pageHeight,
+                  pointerEvents: 'none',
+                  zIndex: 7, // Below active layer
+                  opacity: 0.5,
+                }}
+              >
+                <SimpleCanvas
+                  width={paperWidth}
+                  height={pageHeight}
+                  mode="view"
+                  initialData={classBroadcastData.canvasData}
+                  headingPositions={headingPositions}
+                  zoom={zoom}
+                  readOnly
+                />
+              </div>,
+              paperElement
+            )
+          })()}
+
+          {/* Student feedback as reference (when broadcasting to entire class but want to see last student's feedback) */}
+          {isTeacher && viewMode === 'class-broadcast' && studentFeedbackData?.canvasData && isLayerVisible('student-feedback') && (() => {
+            return createPortal(
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: pageHeight,
+                  pointerEvents: 'none',
+                  zIndex: 7, // Below active layer
+                  opacity: 0.5,
+                }}
+              >
+                <SimpleCanvas
+                  width={paperWidth}
+                  height={pageHeight}
+                  mode="view"
+                  initialData={studentFeedbackData.canvasData}
                   headingPositions={headingPositions}
                   zoom={zoom}
                   readOnly
@@ -1849,6 +2014,8 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
         students={classStudents}
         selectedStudent={selectedStudent}
         onStudentSelect={setSelectedStudent}
+        lastSelectedStudent={lastSelectedStudent}
+        onClearLastSelectedStudent={() => setLastSelectedStudent(null)}
       />
 
       {/* Snap overlay - shown when in snap mode */}

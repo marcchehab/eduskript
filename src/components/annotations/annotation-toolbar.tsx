@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Pen, Eraser, Trash2, Camera, Eye, EyeOff, Radio, User, UserPen, ChevronDown } from 'lucide-react'
+import { Pen, Eraser, Trash2, Camera, Eye, EyeOff, Radio, User, Users, UserPen, ChevronDown } from 'lucide-react'
 import { Circle } from '@uiw/react-color'
 import { cn } from '@/lib/utils'
 
@@ -14,17 +14,20 @@ import { cn } from '@/lib/utils'
 export interface ClassOption {
   id: string
   name: string
+  hasAnnotationsOnPage?: boolean
 }
 
 export interface StudentOption {
   id: string
   displayName: string
   pseudonym?: string
+  hasAnnotationsOnPage?: boolean
 }
 
 export type BroadcastMode = 'personal' | 'class' | 'student'
 
 // Inline SVG brush icons - use currentColor for automatic light/dark mode support
+// Paths extracted from brush_thick.svg and brush_thin.svg with transforms applied
 function BrushThickIcon({ className }: { className?: string }) {
   return (
     <svg
@@ -33,7 +36,7 @@ function BrushThickIcon({ className }: { className?: string }) {
       fill="currentColor"
       aria-hidden="true"
     >
-      <path d="m 3.85,34.79 c 0.78,-2.2 0.63,-9.42 5.89,-13.31 1.27,-0.94 2.93,-1.78 4.86,-2.43 4.27,-1.44 9.31,-1.83 14.44,-1.13 4.39,0.6 8.33,1.92 11.87,3.43 3.75,1.59 6.93,3.3 9.61,4.52 0.39,0.18 0.76,0.34 1.12,0.49 2.75,1.17 5.16,2.22 7.65,3.1 3.03,1.08 6.02,1.86 9.16,2.08 1.45,0.1 2.94,0.09 4.45,-0.06 1.95,-0.19 4.09,-0.62 6.4,-1.37 5.39,-1.73 10,-4.6 13.02,-6.64 -2.67,2.38 -7,5.87 -12.16,8.64 -2.26,1.21 -4.39,2.14 -6.43,2.88 -1.58,0.57 -3.18,1.06 -4.8,1.46 -3.56,0.87 -7.14,1.29 -10.94,1.31 -3.06,0.02 -6.09,-0.22 -9.19,-0.6 -0.41,-0.05 -0.84,-0.1 -1.27,-0.14 -2.99,-0.3 -6.5,-0.48 -9.85,-0.39 -3.27,0.09 -6.08,0.41 -8.93,0.91 -3.2,0.57 -6.1,1.33 -8.82,1.74 -1.26,0.19 -2.5,0.3 -3.63,0.23 -4.55,-0.26 -10.06,-4.27 -12.45,-4.75 z" />
+      <path d="m 5.28,37.02 c -8.35,-6.1 5.09,-22.53 18.72,-22.1 20.18,0.63 32.97,26.23 53.83,21.66 5.7,-1.25 10.45,-4.36 13.6,-6.76 -10.15,10.24 -19.28,11.66 -25.65,11.64 -15.84,-0.04 -28.81,-10.07 -39.55,-10.07 -6.54,0 -15.92,9.3 -20.95,5.63 z" />
     </svg>
   )
 }
@@ -46,7 +49,21 @@ function BrushThinIcon({ className }: { className?: string }) {
       fill="currentColor"
       aria-hidden="true"
     >
-      <path d="m 2.28,32.96 c -0.09,-0.72 -1.63,-2.21 -0.48,-4.31 1.27,-2.32 5.92,-6.36 11.84,-8.99 4.28,-1.9 8.82,-2.93 13.48,-2.93 4.28,0 8.18,0.85 11.73,2.03 3.84,1.28 7.55,3.07 10.18,4.3 0.31,0.15 0.62,0.29 0.92,0.43 2.96,1.36 5.77,2.8 8.73,4.17 3.38,1.56 6.61,2.84 9.98,3.61 1.54,0.35 3.1,0.6 4.69,0.71 2.06,0.15 4.29,0.09 6.68,-0.25 5.57,-0.8 10.24,-2.9 13.3,-4.47 -2.96,1.73 -7.58,4.04 -13.16,5.27 -2.42,0.53 -4.69,0.8 -6.85,0.9 -1.66,0.08 -3.31,0.06 -4.98,-0.04 -3.66,-0.22 -7.27,-0.86 -11.06,-1.85 -3.15,-0.82 -6.15,-1.82 -9.4,-2.93 -0.3,-0.1 -0.62,-0.21 -0.94,-0.31 -2.81,-0.92 -6.32,-1.91 -9.85,-2.43 -3.19,-0.47 -6.29,-0.55 -9.45,-0.11 -3.41,0.47 -6.64,1.52 -9.95,3.01 -4.61,2.07 -9.02,4.98 -11.38,5.56 -2.15,0.53 -3.36,-1.16 -4.05,-1.37 z" />
+      <path d="m 176.44,128.54 c -1.61,-2.99 11.93,-12.25 22.02,-12.14 17.74,0.58 33.83,14.77 50.55,14.55 4.74,-0.22 11.01,-1.9 18.49,-8.11 -10.3,9.54 -18.15,9.77 -23.17,9.75 -9.22,-0.04 -33.96,-11.68 -46.1,-11.89 -11.13,-0.19 -20.17,10.83 -21.79,7.84 z" transform="translate(-174.16,-95.58)" />
+    </svg>
+  )
+}
+
+// Small brush indicator for showing annotation status (uses thick brush path)
+function BrushIndicator({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 95.1 55.3"
+      className={className}
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="m 5.28,37.02 c -8.35,-6.1 5.09,-22.53 18.72,-22.1 20.18,0.63 32.97,26.23 53.83,21.66 5.7,-1.25 10.45,-4.36 13.6,-6.76 -10.15,10.24 -19.28,11.66 -25.65,11.64 -15.84,-0.04 -28.81,-10.07 -39.55,-10.07 -6.54,0 -15.92,9.3 -20.95,5.63 z" />
     </svg>
   )
 }
@@ -117,6 +134,9 @@ interface AnnotationToolbarProps {
   students?: StudentOption[]
   selectedStudent?: StudentOption | null
   onStudentSelect?: (student: StudentOption | null) => void
+  // Last selected student for quick-access (managed by parent)
+  lastSelectedStudent?: StudentOption | null
+  onClearLastSelectedStudent?: () => void
 }
 
 export function AnnotationToolbar({
@@ -155,6 +175,8 @@ export function AnnotationToolbar({
   students = [],
   selectedStudent = null,
   onStudentSelect,
+  lastSelectedStudent = null,
+  onClearLastSelectedStudent,
 }: AnnotationToolbarProps) {
   // Broadcast dropdown state
   const [showClassDropdown, setShowClassDropdown] = useState(false)
@@ -536,6 +558,7 @@ export function AnnotationToolbar({
       myAnnotationsHideTimer.current = null
     }
     myAnnotationsHoverTimer.current = setTimeout(() => {
+      console.log('[AnnotationToolbar] Showing my annotations popup, hasAnnotations:', hasAnnotations)
       setShowMyAnnotationsPopup(true)
     }, 400)
   }
@@ -577,7 +600,7 @@ export function AnnotationToolbar({
         {isTeacher && (
           <>
             <ToolbarSection>
-              {/* Class selector dropdown */}
+              {/* Class selector dropdown - just picks which class, no layer controls */}
               <div className="relative" ref={classDropdownRef}>
                 <button
                   onClick={() => {
@@ -586,11 +609,11 @@ export function AnnotationToolbar({
                   }}
                   className={cn(
                     'p-2 rounded-md transition-colors flex items-center gap-1',
-                    selectedClass && !selectedStudent
-                      ? 'bg-primary text-primary-foreground'
+                    selectedClass
+                      ? 'text-foreground hover:bg-accent'
                       : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                   )}
-                  title="Broadcast to class"
+                  title="Select class"
                 >
                   <Radio className="w-5 h-5" />
                   <span className="text-xs max-w-[80px] truncate">
@@ -601,41 +624,179 @@ export function AnnotationToolbar({
 
                 {showClassDropdown && classes.length > 0 && (
                   <div className="absolute bottom-full mb-2 left-0 bg-background border border-border rounded-lg shadow-lg py-1 min-w-[180px] max-h-[200px] overflow-y-auto">
-                    {/* Show non-selected classes only */}
-                    {classes.filter(cls => cls.id !== selectedClass?.id).map(cls => (
+                    {/* All classes */}
+                    {classes.map(cls => (
                       <button
                         key={cls.id}
                         onClick={() => {
                           onClassSelect?.(cls)
-                          onStudentSelect?.(null)
+                          onStudentSelect?.(null) // Reset to "Entire class" when switching classes
                           setShowClassDropdown(false)
                         }}
-                        className="w-full px-3 py-1.5 text-left text-sm truncate hover:bg-accent transition-colors"
+                        className={cn(
+                          'w-full px-3 py-1.5 text-left text-sm truncate hover:bg-accent transition-colors flex items-center gap-2',
+                          cls.id === selectedClass?.id && 'bg-accent font-medium'
+                        )}
                       >
-                        {cls.name}
+                        <span className={cn('w-4 flex-shrink-0', !cls.hasAnnotationsOnPage && 'invisible')}>
+                          <BrushIndicator className="w-4 h-4" />
+                        </span>
+                        <span className="truncate">{cls.name}</span>
                       </button>
                     ))}
-                    {/* Divider before quick access section */}
+                    {/* Divider and Off option */}
                     <div className="h-px bg-border my-1" />
-                    {/* Selected class with eye/trash (always shown when a class is selected) */}
-                    {selectedClass && (
+                    <button
+                      onClick={() => {
+                        onClassSelect?.(null)
+                        onStudentSelect?.(null)
+                        setShowClassDropdown(false)
+                      }}
+                      className={cn(
+                        'w-full px-3 py-1.5 text-left text-sm hover:bg-accent transition-colors',
+                        !selectedClass ? 'bg-accent font-medium' : 'text-muted-foreground hover:text-foreground'
+                      )}
+                    >
+                      Off
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Target selector dropdown (only when class is selected) - controls who to annotate for */}
+              {selectedClass && (
+                <div className="relative" ref={studentDropdownRef}>
+                  <button
+                    onClick={() => {
+                      setShowStudentDropdown(!showStudentDropdown)
+                      setShowClassDropdown(false)
+                    }}
+                    className={cn(
+                      'p-2 rounded-md transition-colors flex items-center gap-1',
+                      'bg-primary text-primary-foreground' // Always highlighted - this is the active target
+                    )}
+                    title={selectedStudent ? 'Individual student feedback' : 'Broadcasting to entire class'}
+                  >
+                    {selectedStudent ? <User className="w-4 h-4" /> : <Users className="w-4 h-4" />}
+                    <span className="text-xs max-w-[100px] truncate">
+                      {selectedStudent ? selectedStudent.displayName : 'Entire class'}
+                    </span>
+                    <ChevronDown className="w-3 h-3" />
+                  </button>
+
+                  {showStudentDropdown && (() => {
+                    // Determine which student to show in quick-access section
+                    // Use fresh data from students array to get current hasAnnotationsOnPage
+                    const quickAccessStudentId = selectedStudent?.id || lastSelectedStudent?.id
+                    const quickAccessStudent = quickAccessStudentId
+                      ? students.find(s => s.id === quickAccessStudentId) || selectedStudent || lastSelectedStudent
+                      : null
+                    // Filter out the quick-access student from the main list
+                    const mainListStudents = students.filter(s => s.id !== quickAccessStudent?.id)
+
+                    return (
+                    <div className="absolute bottom-full mb-2 left-0 bg-background border border-border rounded-lg shadow-lg py-1 min-w-[200px] max-h-[280px] overflow-y-auto">
+                      {/* Student list (excluding quick-access student) */}
+                      {mainListStudents.map(student => (
+                        <button
+                          key={student.id}
+                          onClick={() => {
+                            onStudentSelect?.(student)
+                            setShowStudentDropdown(false)
+                          }}
+                          className="w-full px-3 py-1.5 text-left text-sm truncate hover:bg-accent transition-colors flex items-center gap-2"
+                        >
+                          <span className={cn('w-4 flex-shrink-0', !student.hasAnnotationsOnPage && 'invisible')}>
+                            <BrushIndicator className="w-4 h-4" />
+                          </span>
+                          <span className="truncate">{student.displayName}</span>
+                        </button>
+                      ))}
+
+                      {/* Separator before quick-access section */}
+                      <div className="h-px bg-border my-1" />
+
+                      {/* Quick-access section: selected/last student + "Entire class" */}
+                      {/* Show last selected student for quick switching (when in "Entire class" mode) */}
+                      {quickAccessStudent && (() => {
+                        const isStudentActive = selectedStudent?.id === quickAccessStudent.id
+                        return (
+                        <div className={cn(
+                          'flex items-center gap-1 px-2 py-1.5 mx-1 rounded-md',
+                          isStudentActive ? 'bg-primary text-primary-foreground' : 'hover:bg-accent'
+                        )}>
+                          <button
+                            onClick={() => {
+                              onStudentSelect?.(quickAccessStudent)
+                              setShowStudentDropdown(false)
+                            }}
+                            className={cn(
+                              'flex-1 text-left text-sm truncate transition-colors flex items-center gap-2',
+                              isStudentActive ? 'font-medium' : 'text-muted-foreground hover:text-foreground'
+                            )}
+                          >
+                            <span className={cn('w-4 flex-shrink-0', !quickAccessStudent.hasAnnotationsOnPage && 'invisible')}>
+                              <BrushIndicator className="w-4 h-4" />
+                            </span>
+                            <span className="truncate">{quickAccessStudent.displayName}</span>
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onStudentFeedbackToggle?.()
+                            }}
+                            className={cn(
+                              'p-1 rounded transition-colors',
+                              isStudentActive
+                                ? 'hover:bg-primary-foreground/20'
+                                : studentFeedbackVisible
+                                  ? 'text-foreground hover:bg-background/50'
+                                  : 'text-muted-foreground/50 hover:bg-background/50'
+                            )}
+                            title={studentFeedbackVisible ? 'Hide student feedback' : 'Show student feedback'}
+                          >
+                            {studentFeedbackVisible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onStudentFeedbackDelete?.()
+                              onClearLastSelectedStudent?.()
+                              setShowStudentDropdown(false)
+                            }}
+                            className={cn(
+                              'p-1 rounded transition-colors',
+                              hasStudentFeedbackAnnotations
+                                ? isStudentActive
+                                  ? 'hover:bg-primary-foreground/20'
+                                  : 'text-muted-foreground hover:text-destructive hover:bg-background/50'
+                                : 'opacity-30 cursor-not-allowed'
+                            )}
+                            title="Clear student feedback"
+                            disabled={!hasStudentFeedbackAnnotations}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )})()}
+
+                      {/* "Entire class" option */}
                       <div className={cn(
-                        'flex items-center gap-1 px-2 py-1',
-                        !selectedStudent && 'bg-accent'
+                        'flex items-center gap-1 px-2 py-1.5 mx-1 rounded-md',
+                        !selectedStudent ? 'bg-primary text-primary-foreground' : 'hover:bg-accent'
                       )}>
                         <button
                           onClick={() => {
-                            // Clear student selection to switch to "whole class" mode
                             onStudentSelect?.(null)
-                            setShowClassDropdown(false)
+                            setShowStudentDropdown(false)
                           }}
                           className={cn(
-                            'flex-1 text-left text-sm truncate hover:text-foreground transition-colors',
-                            !selectedStudent ? 'font-medium' : 'text-muted-foreground'
+                            'flex-1 text-left text-sm truncate transition-colors flex items-center gap-2',
+                            !selectedStudent ? 'font-medium' : 'text-muted-foreground hover:text-foreground'
                           )}
-                          title="Broadcast to entire class"
                         >
-                          {selectedClass.name}
+                          <Users className="w-4 h-4 flex-shrink-0" />
+                          <span>Entire class</span>
                         </button>
                         <button
                           onClick={(e) => {
@@ -644,9 +805,11 @@ export function AnnotationToolbar({
                           }}
                           className={cn(
                             'p-1 rounded transition-colors',
-                            classBroadcastVisible
-                              ? 'text-foreground hover:bg-background/50'
-                              : 'text-muted-foreground/50 hover:bg-background/50'
+                            !selectedStudent
+                              ? 'hover:bg-primary-foreground/20'
+                              : classBroadcastVisible
+                                ? 'text-foreground hover:bg-background/50'
+                                : 'text-muted-foreground/50 hover:bg-background/50'
                           )}
                           title={classBroadcastVisible ? 'Hide class broadcast' : 'Show class broadcast'}
                         >
@@ -660,8 +823,10 @@ export function AnnotationToolbar({
                           className={cn(
                             'p-1 rounded transition-colors',
                             hasClassBroadcastAnnotations
-                              ? 'text-muted-foreground hover:text-destructive hover:bg-background/50'
-                              : 'text-muted-foreground/30 cursor-not-allowed'
+                              ? !selectedStudent
+                                ? 'hover:bg-primary-foreground/20'
+                                : 'text-muted-foreground hover:text-destructive hover:bg-background/50'
+                              : 'opacity-30 cursor-not-allowed'
                           )}
                           title="Clear class broadcast"
                           disabled={!hasClassBroadcastAnnotations}
@@ -669,160 +834,8 @@ export function AnnotationToolbar({
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
-                    )}
-                    {/* "Off" shown as current state when no class is selected */}
-                    {!selectedClass && (
-                      <div className="px-3 py-1.5 text-sm font-medium bg-accent">
-                        Off
-                      </div>
-                    )}
-                    {/* Off option to switch to personal mode (when a class is selected) */}
-                    {selectedClass && (
-                      <button
-                        onClick={() => {
-                          onClassSelect?.(null)
-                          onStudentSelect?.(null)
-                          setShowClassDropdown(false)
-                        }}
-                        className="w-full px-3 py-1.5 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-                      >
-                        Off
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Student selector dropdown (only when class is selected) */}
-              {selectedClass && students.length > 0 && (
-                <div className="relative" ref={studentDropdownRef}>
-                  <button
-                    onClick={() => {
-                      setShowStudentDropdown(!showStudentDropdown)
-                      setShowClassDropdown(false)
-                    }}
-                    className={cn(
-                      'p-2 rounded-md transition-colors flex items-center gap-1',
-                      selectedStudent
-                        ? 'bg-primary text-primary-foreground'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                    )}
-                    title="Individual student feedback"
-                  >
-                    <User className="w-4 h-4" />
-                    <span className="text-xs max-w-[80px] truncate">
-                      {selectedStudent ? selectedStudent.displayName : 'Student'}
-                    </span>
-                    <ChevronDown className="w-3 h-3" />
-                  </button>
-
-                  {showStudentDropdown && (
-                    <div className="absolute bottom-full mb-2 left-0 bg-background border border-border rounded-lg shadow-lg py-1 min-w-[180px] max-h-[200px] overflow-y-auto">
-                      {/* Show non-selected students only */}
-                      {students.filter(s => s.id !== selectedStudent?.id).map(student => (
-                        <button
-                          key={student.id}
-                          onClick={() => {
-                            onStudentSelect?.(student)
-                            setShowStudentDropdown(false)
-                          }}
-                          className="w-full px-3 py-1.5 text-left text-sm truncate hover:bg-accent transition-colors"
-                        >
-                          {student.displayName}
-                        </button>
-                      ))}
-                      {/* Divider before quick access section */}
-                      <div className="h-px bg-border my-1" />
-                      {/* Selected student with eye/trash (or "Entire class" if none selected) */}
-                      {selectedStudent ? (
-                        <div className="flex items-center gap-1 px-2 py-1 bg-accent">
-                          <span className="flex-1 text-left text-sm truncate font-medium">
-                            {selectedStudent.displayName}
-                          </span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              onStudentFeedbackToggle?.()
-                            }}
-                            className={cn(
-                              'p-1 rounded transition-colors',
-                              studentFeedbackVisible
-                                ? 'text-foreground hover:bg-background/50'
-                                : 'text-muted-foreground/50 hover:bg-background/50'
-                            )}
-                            title={studentFeedbackVisible ? 'Hide' : 'Show'}
-                          >
-                            {studentFeedbackVisible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              onStudentFeedbackDelete?.()
-                            }}
-                            className={cn(
-                              'p-1 rounded transition-colors',
-                              hasStudentFeedbackAnnotations
-                                ? 'text-muted-foreground hover:text-destructive hover:bg-background/50'
-                                : 'text-muted-foreground/30 cursor-not-allowed'
-                            )}
-                            title="Clear student feedback"
-                            disabled={!hasStudentFeedbackAnnotations}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1 px-2 py-1 bg-accent">
-                          <span className="flex-1 text-left text-sm font-medium">
-                            Entire class
-                          </span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              onClassBroadcastToggle?.()
-                            }}
-                            className={cn(
-                              'p-1 rounded transition-colors',
-                              classBroadcastVisible
-                                ? 'text-foreground hover:bg-background/50'
-                                : 'text-muted-foreground/50 hover:bg-background/50'
-                            )}
-                            title={classBroadcastVisible ? 'Hide' : 'Show'}
-                          >
-                            {classBroadcastVisible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              onClassBroadcastDelete?.()
-                            }}
-                            className={cn(
-                              'p-1 rounded transition-colors',
-                              hasClassBroadcastAnnotations
-                                ? 'text-muted-foreground hover:text-destructive hover:bg-background/50'
-                                : 'text-muted-foreground/30 cursor-not-allowed'
-                            )}
-                            title="Clear class broadcast"
-                            disabled={!hasClassBroadcastAnnotations}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      )}
-                      {/* "Entire class" option to deselect student (when a student is selected) */}
-                      {selectedStudent && (
-                        <button
-                          onClick={() => {
-                            onStudentSelect?.(null)
-                            setShowStudentDropdown(false)
-                          }}
-                          className="w-full px-3 py-1.5 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-                        >
-                          Entire class
-                        </button>
-                      )}
                     </div>
-                  )}
+                  )})()}
                 </div>
               )}
             </ToolbarSection>
@@ -874,17 +887,20 @@ export function AnnotationToolbar({
               onPointerCancel={handleMyAnnotationsPointerUp}
               className={cn(
                 'p-2 rounded-md transition-colors relative',
-                myAnnotationsActive
+                myAnnotationsActive && myAnnotationsVisible
                   ? 'bg-primary text-primary-foreground'
                   : myAnnotationsVisible
                     ? 'text-foreground hover:bg-accent'
                     : 'text-muted-foreground/50 hover:text-muted-foreground hover:bg-accent'
               )}
-              title={myAnnotationsActive ? 'Drawing to my annotations' : myAnnotationsVisible ? 'Hide my annotations' : 'Show my annotations'}
+              title={myAnnotationsActive
+                ? (myAnnotationsVisible ? 'Hide my annotations' : 'Show my annotations')
+                : (myAnnotationsVisible ? 'Hide my annotations' : 'Show my annotations')
+              }
             >
               <UserPen className="w-4 h-4" />
-              {/* Visibility indicator when not active */}
-              {!myAnnotationsActive && (
+              {/* Visibility indicator - show when not active, OR when active but hidden */}
+              {(!myAnnotationsActive || !myAnnotationsVisible) && (
                 <span className="absolute -top-0.5 -right-0.5">
                   {myAnnotationsVisible
                     ? <Eye className="w-2.5 h-2.5 text-foreground" />
@@ -908,6 +924,7 @@ export function AnnotationToolbar({
               >
                 <button
                   onClick={() => {
+                    console.log('[AnnotationToolbar] Delete button clicked, calling onMyAnnotationsDelete')
                     onMyAnnotationsDelete?.()
                     setShowMyAnnotationsPopup(false)
                   }}

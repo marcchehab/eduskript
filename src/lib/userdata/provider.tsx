@@ -5,12 +5,22 @@
  *
  * React context that connects the user data service with authentication
  * and provides sync status to the UI.
+ *
+ * IMPORTANT: IndexedDB keys don't include userId, so we must clear the database
+ * when the user changes to prevent cross-user data contamination.
  */
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { useSession } from 'next-auth/react'
 import { syncEngine, type SyncStatus } from './sync-engine'
 import { userDataService } from './userDataService'
+import { db } from './schema'
+
+const LAST_USER_KEY = 'eduskript-last-user-id'
+// Increment this to force a one-time IndexedDB clear for all users
+// Use when fixing data corruption bugs or schema issues
+const CACHE_VERSION = 3
+const CACHE_VERSION_KEY = 'eduskript-cache-version'
 
 interface UserDataContextValue {
   /** Current sync status */
@@ -21,6 +31,8 @@ interface UserDataContextValue {
   isAuthenticated: boolean
   /** User ID if authenticated */
   userId: string | null
+  /** Whether the IndexedDB is ready (after user change cleanup) */
+  isDbReady: boolean
   /** Annotation version mismatch state */
   annotationVersionMismatch: boolean
   /** Set annotation version mismatch */
@@ -45,14 +57,72 @@ export function UserDataProvider({ children }: UserDataProviderProps) {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(syncEngine.getStatus())
   const [annotationVersionMismatch, setAnnotationVersionMismatch] = useState(false)
   const [onClearAnnotations, setOnClearAnnotationsState] = useState<(() => void) | null>(null)
+  const [isDbReady, setIsDbReady] = useState(false)
+  const userChangeHandledRef = useRef(false)
 
   const userId = session?.user?.id ?? null
   const isAuthenticated = status === 'authenticated' && userId !== null
 
-  // Connect sync engine to auth state
+  // CRITICAL: Clear IndexedDB when user changes OR when cache version is outdated
+  // IndexedDB keys don't include userId, so different users on the same browser would
+  // share cached data without this cleanup.
   useEffect(() => {
+    if (status === 'loading') return // Wait for session to load
+
+    const handleUserChange = async () => {
+      // Prevent double handling
+      if (userChangeHandledRef.current) return
+      userChangeHandledRef.current = true
+
+      try {
+        const lastUserId = localStorage.getItem(LAST_USER_KEY)
+        const storedVersion = parseInt(localStorage.getItem(CACHE_VERSION_KEY) || '0', 10)
+        const currentUserId = userId ?? 'anonymous'
+
+        // Clear if user changed OR if cache version is outdated
+        const userChanged = lastUserId && lastUserId !== currentUserId
+        const versionOutdated = storedVersion < CACHE_VERSION
+
+        if (userChanged || versionOutdated) {
+          console.log('[UserDataProvider] Clearing IndexedDB cache', {
+            reason: versionOutdated ? 'version upgrade' : 'user change',
+            from: lastUserId ? lastUserId.substring(0, 8) + '...' : 'none',
+            to: currentUserId === 'anonymous' ? 'anonymous' : currentUserId.substring(0, 8) + '...',
+            storedVersion,
+            currentVersion: CACHE_VERSION
+          })
+
+          // Clear all tables in IndexedDB
+          await db.userData.clear()
+          await db.userData_history.clear()
+          await db.versionBlobs.clear()
+
+          console.log('[UserDataProvider] IndexedDB cleared successfully')
+        }
+
+        // Update last user and version
+        if (userId) {
+          localStorage.setItem(LAST_USER_KEY, userId)
+        } else {
+          localStorage.setItem(LAST_USER_KEY, 'anonymous')
+        }
+        localStorage.setItem(CACHE_VERSION_KEY, String(CACHE_VERSION))
+      } catch (error) {
+        console.error('[UserDataProvider] Failed to handle user change:', error)
+      } finally {
+        setIsDbReady(true)
+        userChangeHandledRef.current = false
+      }
+    }
+
+    handleUserChange()
+  }, [userId, status])
+
+  // Connect sync engine to auth state (only after DB is ready)
+  useEffect(() => {
+    if (!isDbReady) return
     syncEngine.setUser(userId)
-  }, [userId])
+  }, [userId, isDbReady])
 
   // Subscribe to sync status changes
   useEffect(() => {
@@ -73,6 +143,7 @@ export function UserDataProvider({ children }: UserDataProviderProps) {
     forceSync,
     isAuthenticated,
     userId,
+    isDbReady,
     annotationVersionMismatch,
     setAnnotationVersionMismatch,
     onClearAnnotations,
@@ -137,7 +208,7 @@ export function useSyncedUserData<T>(
   isLoading: boolean
   isSynced: boolean
 } {
-  const { isAuthenticated } = useUserDataContext()
+  const { isAuthenticated, isDbReady } = useUserDataContext()
   const [data, setData] = useState<T | null>(initialData)
   const [isLoading, setIsLoading] = useState(true)
   const [isSynced, setIsSynced] = useState(true)
@@ -153,7 +224,11 @@ export function useSyncedUserData<T>(
   const isBroadcastMode = Boolean(targetType && targetId)
 
   // Load data on mount (re-run when pageId, componentId, or targeting changes)
+  // IMPORTANT: Wait for isDbReady to ensure user change cleanup is complete
   useEffect(() => {
+    // Don't load until DB is ready (after user change cleanup)
+    if (!isDbReady) return
+
     let mounted = true
 
     // IMPORTANT: Reset data to initial immediately when targeting changes
@@ -219,10 +294,20 @@ export function useSyncedUserData<T>(
     return () => {
       mounted = false
     }
-  }, [pageId, componentId, targetType, targetId, isBroadcastMode]) // Re-run when targeting changes
+  }, [pageId, componentId, targetType, targetId, isBroadcastMode, isDbReady]) // Re-run when targeting changes or DB becomes ready
 
   const updateData = useCallback(
     async (newData: T, updateOptions: { immediate?: boolean } = {}) => {
+      // Debug: log targeting info
+      console.log('[useSyncedUserData.updateData]', {
+        pageId,
+        componentId,
+        targetType,
+        targetId,
+        isBroadcastMode,
+        dataPreview: JSON.stringify(newData).slice(0, 100)
+      })
+
       try {
         // Optimistic local update
         setData(newData)

@@ -69,8 +69,8 @@ export class UserDataService {
     } = {}
   ): Promise<UserDataRecord<T> | null> {
     // Validate inputs to prevent IndexedDB DataError
-    if (!pageId || !componentId) {
-      console.warn('UserDataService.get called with invalid keys:', { pageId, componentId })
+    // Skip silently for placeholder values (used when hook shouldn't load yet)
+    if (!pageId || !componentId || pageId === '__skip__') {
       return null
     }
 
@@ -97,8 +97,8 @@ export class UserDataService {
     } = {}
   ): Promise<void> {
     // Validate inputs to prevent IndexedDB DataError
-    if (!pageId || !componentId) {
-      console.warn('UserDataService.save called with invalid keys:', { pageId, componentId })
+    // Skip silently for placeholder values (used when hook shouldn't save yet)
+    if (!pageId || !componentId || pageId === '__skip__') {
       return
     }
 

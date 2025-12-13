@@ -2,10 +2,24 @@
 
 import { useEffect } from 'react'
 
+// Generate a short unique ID for this browser tab
+function getClientId(): string {
+  // Check sessionStorage first (persists across page reloads within same tab)
+  let clientId = sessionStorage.getItem('dev-console-client-id')
+  if (!clientId) {
+    // Generate a short 4-char ID for readability
+    clientId = Math.random().toString(36).substring(2, 6).toUpperCase()
+    sessionStorage.setItem('dev-console-client-id', clientId)
+  }
+  return clientId
+}
+
 // Intercept browser console and forward to server in development
 export function DevConsole() {
   useEffect(() => {
     if (process.env.NODE_ENV !== 'development') return
+
+    const clientId = getClientId()
 
     const originalConsole = {
       log: console.log.bind(console),
@@ -38,6 +52,7 @@ export function DevConsole() {
             level,
             args: serializedArgs,
             timestamp: Date.now(),
+            clientId,
           }),
         })
       } catch {

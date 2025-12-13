@@ -42,6 +42,8 @@ export function useTeacherBroadcast(pageId: string) {
   const [error, setError] = useState<string | null>(null)
 
   // Fetch teacher annotations from API
+  // IMPORTANT: Server is always the source of truth for teacher annotations.
+  // We clear local state before fetching to ensure stale data is never shown.
   const fetchAnnotations = useCallback(async () => {
     if (status !== 'authenticated' || !pageId) {
       setIsLoading(false)
@@ -50,12 +52,24 @@ export function useTeacherBroadcast(pageId: string) {
 
     try {
       setError(null)
-      const res = await fetch(`/api/student/teacher-annotations?pageId=${encodeURIComponent(pageId)}`)
+      setIsLoading(true)
+
+      // Clear local state BEFORE fetching to ensure server always wins
+      // This prevents showing stale data if teacher deleted annotations while student was offline
+      setClassAnnotations([])
+      setIndividualFeedback(null)
+
+      // Add timestamp to prevent browser caching
+      const res = await fetch(`/api/student/teacher-annotations?pageId=${encodeURIComponent(pageId)}&_t=${Date.now()}`)
       if (!res.ok) {
         throw new Error(`Failed to fetch: ${res.status}`)
       }
 
       const data: TeacherBroadcastData = await res.json()
+      console.log('[useTeacherBroadcast] Fetched data:', {
+        classAnnotationsCount: data.classAnnotations?.length ?? 0,
+        hasIndividualFeedback: !!data.individualFeedback
+      })
       setClassAnnotations(data.classAnnotations || [])
       setIndividualFeedback(data.individualFeedback || null)
     } catch (err) {
@@ -74,14 +88,17 @@ export function useTeacherBroadcast(pageId: string) {
   useRealtimeEvents(
     ['teacher-annotations-update', 'teacher-feedback'],
     (event) => {
+      console.log('[useTeacherBroadcast] Received SSE event:', event.type, 'pageId:', (event as { pageId?: string }).pageId, 'current pageId:', pageId)
       // Check if event is for this page
       if (event.type === 'teacher-annotations-update') {
         if (event.pageId === pageId) {
+          console.log('[useTeacherBroadcast] Event matches page, refetching class annotations')
           // Refetch to get updated class annotations
           fetchAnnotations()
         }
       } else if (event.type === 'teacher-feedback') {
         if (event.pageId === pageId) {
+          console.log('[useTeacherBroadcast] Event matches page, refetching individual feedback')
           // Refetch to get updated individual feedback
           fetchAnnotations()
         }
