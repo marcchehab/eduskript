@@ -7,6 +7,7 @@ interface ServerMarkdownRendererProps {
   content: string
   skriptId?: string
   pageId?: string
+  organizationSlug?: string
 }
 
 /**
@@ -19,7 +20,7 @@ interface ServerMarkdownRendererProps {
  * 2. Compile MDX with pure transformer plugins
  * 3. Create components with files prop bound
  */
-export async function ServerMarkdownRenderer({ content, skriptId, pageId }: ServerMarkdownRendererProps) {
+export async function ServerMarkdownRenderer({ content, skriptId, pageId, organizationSlug }: ServerMarkdownRendererProps) {
   // 1. Get all files for this skript upfront
   const files = skriptId ? await getSkriptFiles(skriptId) : createEmptySkriptFiles()
 
@@ -40,7 +41,7 @@ export async function ServerMarkdownRenderer({ content, skriptId, pageId }: Serv
   }
 
   // 3. Create components with files prop bound
-  const components = createMDXComponents(files, { pageId })
+  const components = createMDXComponents(files, { pageId, organizationSlug })
 
   return (
     <div className="markdown-content prose dark:prose-invert max-w-none">

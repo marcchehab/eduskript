@@ -80,6 +80,61 @@ interface PrivacyAdapterOptions {
 }
 
 /**
+ * Auto-join organizations that have a matching email domain requirement
+ * e.g., if an org has requireEmailDomain = "@school.edu" and user signs up with "john@school.edu",
+ * they are automatically added as a member of that org.
+ */
+async function autoJoinOrgByEmailDomain(prisma: PrismaClient, userId: string, email: string): Promise<void> {
+  try {
+    // Extract domain from email (e.g., "@school.edu")
+    const atIndex = email.lastIndexOf('@')
+    if (atIndex === -1) return
+
+    const emailDomain = email.substring(atIndex).toLowerCase() // e.g., "@school.edu"
+
+    // Find all organizations that require this email domain
+    const matchingOrgs = await prisma.organization.findMany({
+      where: {
+        requireEmailDomain: {
+          equals: emailDomain,
+          mode: 'insensitive', // Case-insensitive match
+        },
+      },
+      select: { id: true, name: true },
+    })
+
+    if (matchingOrgs.length === 0) return
+
+    // Add user to each matching organization
+    for (const org of matchingOrgs) {
+      // Check if already a member (shouldn't happen for new users, but be safe)
+      const existing = await prisma.organizationMember.findUnique({
+        where: {
+          organizationId_userId: {
+            organizationId: org.id,
+            userId,
+          },
+        },
+      })
+
+      if (!existing) {
+        await prisma.organizationMember.create({
+          data: {
+            organizationId: org.id,
+            userId,
+            role: 'member',
+          },
+        })
+        console.log(`[PrivacyAdapter] Auto-joined user ${userId} to org ${org.name} (email domain: ${emailDomain})`)
+      }
+    }
+  } catch (error) {
+    // Don't fail user creation if auto-join fails
+    console.error('[PrivacyAdapter] Error auto-joining organization:', error)
+  }
+}
+
+/**
  * Creates a privacy-preserving adapter that wraps PrismaAdapter
  * Students: OAuth-only, NO email storage
  * Teachers: Normal email storage
@@ -189,6 +244,11 @@ export function PrivacyAdapter(options: PrivacyAdapterOptions): Adapter {
             needsProfileCompletion: true, // New OAuth teachers should complete their profile
           },
         })
+
+        // Auto-join organizations by email domain
+        if (user.email) {
+          await autoJoinOrgByEmailDomain(prisma, createdUser.id, user.email)
+        }
 
         return createdUser
       }

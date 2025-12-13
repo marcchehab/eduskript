@@ -59,6 +59,7 @@ interface PublicSiteLayoutProps {
   sidebarBehavior?: 'contextual' | 'full'
   typographyPreference?: 'modern' | 'classic'
   pageId?: string // Page ID for lazy edit permission check
+  routePrefix?: string // Custom route prefix (e.g., '/org/slug' for orgs, defaults to '/{pageSlug}')
 }
 
 export function PublicSiteLayout({
@@ -70,8 +71,11 @@ export function PublicSiteLayout({
   fullSiteStructure,
   sidebarBehavior = 'contextual',
   typographyPreference = 'modern',
-  pageId
+  pageId,
+  routePrefix
 }: PublicSiteLayoutProps) {
+  // Compute the base URL prefix for navigation
+  const basePrefix = routePrefix ?? `/${teacher.pageSlug}`
   const router = useRouter()
   const { data: session } = useSession()
   const { setSidebarCollapsed: setSidebarCollapsedInContext, sidebarWidth } = useLayout()
@@ -219,8 +223,8 @@ export function PublicSiteLayout({
   }
 
   const navigateToPage = (collectionSlug: string, skriptSlug: string, pageSlug: string) => {
-    // Always use path-based routing with username
-    const url = `/${teacher.pageSlug}/${collectionSlug}/${skriptSlug}/${pageSlug}`
+    // Use basePrefix for routing (supports both teacher pages and org pages)
+    const url = `${basePrefix}/${collectionSlug}/${skriptSlug}/${pageSlug}`
 
     router.push(url)
     setIsSidebarOpen(false)
@@ -228,7 +232,7 @@ export function PublicSiteLayout({
 
   const navigateToSkript = (collectionSlug: string, skriptSlug: string, skriptId: string) => {
     // Navigate to skript frontpage and expand the skript
-    const url = `/${teacher.pageSlug}/${collectionSlug}/${skriptSlug}`
+    const url = `${basePrefix}/${collectionSlug}/${skriptSlug}`
 
     // Ensure the skript is expanded
     if (!expandedSkripts.includes(skriptId)) {
@@ -374,8 +378,7 @@ export function PublicSiteLayout({
                       {showHomeButton && (
                         <button
                           onClick={() => {
-                            const url = `/${teacher.pageSlug}`
-                            router.push(url)
+                            router.push(basePrefix)
                             setIsSidebarOpen(false)
                           }}
                           className="flex items-center justify-center w-full px-2 py-2 text-sm font-medium rounded-md transition-colors text-muted-foreground hover:bg-muted hover:text-foreground mb-4"
@@ -405,9 +408,8 @@ export function PublicSiteLayout({
                     {showHomeButton && (
                       <button
                         onClick={() => {
-                          // Navigate to teacher's root page
-                          const url = `/${teacher.pageSlug}`
-                          router.push(url)
+                          // Navigate to root page (teacher or org)
+                          router.push(basePrefix)
                           setIsSidebarOpen(false)
                         }}
                         className="flex items-center w-full text-left px-3 py-2 text-sm font-medium rounded-md transition-colors text-muted-foreground hover:bg-muted hover:text-foreground mb-4"

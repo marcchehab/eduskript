@@ -18,6 +18,7 @@ import { ContentImage } from '@/components/markdown/content-image'
 import { Question, Option } from '@/components/markdown/quiz'
 import { Callout } from '@/components/markdown/callout'
 import { CodeBlock } from '@/components/markdown/code-block'
+import { OurTeachers } from '@/components/markdown/our-teachers'
 
 // Simple hash function for generating stable IDs
 function hashCode(str: string): string {
@@ -142,6 +143,7 @@ interface CreateMDXComponentsOptions {
   pageId?: string
   onContentChange?: (newContent: string) => void
   content?: string  // For editor mode, to find/replace content
+  organizationSlug?: string  // For organization pages (OurTeachers component)
 }
 
 /**
@@ -154,7 +156,7 @@ export function createMDXComponents(
   files: SkriptFilesData,
   options?: CreateMDXComponentsOptions
 ): Record<string, ComponentType<any>> {
-  const { pageId, onContentChange, content } = options ?? {}
+  const { pageId, onContentChange, content, organizationSlug } = options ?? {}
 
   // Image component - passes files through to child components
   function ImageComponent({ src, alt, title, style, ...props }: React.ImgHTMLAttributes<HTMLImageElement>) {
@@ -518,5 +520,14 @@ export function createMDXComponents(
     Question: QuizQuestionComponent,
     Option: QuizOptionComponent,
     Image: MDXImageComponent,
+
+    // Organization components
+    OurTeachers: function OurTeachersComponent(props: {
+      roles?: ('owner' | 'admin' | 'member')[]
+      limit?: number
+      className?: string
+    }) {
+      return <OurTeachers orgSlug={organizationSlug} {...props} />
+    },
   }
 }
