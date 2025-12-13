@@ -391,17 +391,19 @@ export function AnnotationLayer({ pageId, content, children }: AnnotationLayerPr
 
   // Use selectedStudent if available, otherwise fall back to lastSelectedStudent for data loading
   const studentForFeedback = selectedStudent || lastSelectedStudent
+  // Use ID for stable reference in sync options (avoids object reference changes)
+  const studentForFeedbackId = selectedStudent?.id || lastSelectedStudent?.id
 
   const studentFeedbackSyncOptions: SyncedUserDataOptions = useMemo(() => {
-    if (!isTeacher || !studentForFeedback) return {}
-    return { targetType: 'student', targetId: studentForFeedback.id }
-  }, [isTeacher, studentForFeedback])
+    if (!isTeacher || !studentForFeedbackId) return {}
+    return { targetType: 'student', targetId: studentForFeedbackId }
+  }, [isTeacher, studentForFeedbackId])
 
   // Get data and update functions for class broadcast and student feedback (for targeted deletions)
   // Only load when we have valid targeting to avoid warning about empty pageId
   const shouldLoadClassBroadcast = isTeacher && !!selectedClass
   // Load student feedback for selected student OR last selected (for reference layer in class-broadcast mode)
-  const shouldLoadStudentFeedback = isTeacher && !!studentForFeedback
+  const shouldLoadStudentFeedback = isTeacher && !!studentForFeedbackId
 
   const { data: classBroadcastData, updateData: updateClassBroadcastData } = useSyncedUserData<AnnotationData>(
     shouldLoadClassBroadcast ? pageId : '__skip__', // Use placeholder to skip loading
