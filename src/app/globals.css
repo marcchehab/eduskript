@@ -573,19 +573,23 @@ article.prose-theme > div > :first-child {
   filter: invert(1) hue-rotate(180deg);
 }
 
+/* Shared fade-in duration - change this one value to adjust all fade-in speeds */
+:root {
+  --annotation-fade-duration: 200ms;
+}
+
 /* Fade-in animation for loaded annotations */
 @keyframes annotationFadeIn {
   from {
     opacity: 0;
   }
-
   to {
     opacity: 1;
   }
 }
 
 .annotation-fade-in {
-  animation: annotationFadeIn 0.5s ease-in;
+  animation: annotationFadeIn var(--annotation-fade-duration) ease-out;
 }
 
 /* Fade-in animation for new snaps */
@@ -596,6 +600,16 @@ article.prose-theme > div > :first-child {
   to {
     opacity: 1;
   }
+}
+
+/* Fade-in for reference/broadcast layers (annotations from others) */
+.reference-layer-fade-in {
+  animation: annotationFadeIn var(--annotation-fade-duration) ease-out;
+}
+
+/* Fade-in for teacher snaps */
+.teacher-snap-fade-in {
+  animation: snap-fade-in var(--annotation-fade-duration) ease-out;
 }
 
 .dark .annotation-color-picker {

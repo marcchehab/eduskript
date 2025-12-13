@@ -2118,6 +2118,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
 
             return createPortal(
               <div
+                className="reference-layer-fade-in"
                 style={{
                   position: 'absolute',
                   top: 0,
@@ -2151,6 +2152,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
             if (!broadcastCanvasData || broadcastCanvasData === '[]') return null
             return createPortal(
               <div
+                className="reference-layer-fade-in"
                 style={{
                   position: 'absolute',
                   top: 0,
@@ -2185,6 +2187,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
 
             return createPortal(
               <div
+                className="reference-layer-fade-in"
                 style={{
                   position: 'absolute',
                   top: 0,
@@ -2231,6 +2234,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
               <div key={classAnnotation.classId}>
                 {createPortal(
                   <div
+                    className="reference-layer-fade-in"
                     style={{
                       position: 'absolute',
                       top: 0,
@@ -2273,6 +2277,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
 
             return createPortal(
               <div
+                className="reference-layer-fade-in"
                 style={{
                   position: 'absolute',
                   top: 0,
@@ -2315,6 +2320,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
 
               return createPortal(
                 <div
+                  className="reference-layer-fade-in"
                   style={{
                     position: 'absolute',
                     top: 0,
@@ -2359,6 +2365,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
                 <div key={`public-${annotation.userId}-${index}`}>
                   {createPortal(
                     <div
+                      className="reference-layer-fade-in"
                       style={{
                         position: 'absolute',
                         top: 0,

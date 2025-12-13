@@ -231,7 +231,7 @@ const TeacherSnapItem = memo(function TeacherSnapItem({
   return (
     <div
       ref={elementRef}
-      className="absolute z-40 bg-card border-2 border-blue-500 shadow-lg rounded-lg overflow-hidden group"
+      className="absolute z-40 bg-card border-2 border-blue-500 shadow-lg rounded-lg overflow-hidden group teacher-snap-fade-in"
       style={{
         top: position.top,
         left: position.left,
