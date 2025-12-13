@@ -2102,7 +2102,9 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
       )}
 
       {/* Reference annotation layers - read-only overlays */}
-      {!teacherAnnotationsLoading && paperElement && pageHeight > 0 && (
+      {/* Note: Don't condition on teacherAnnotationsLoading - use SWR pattern to keep showing */}
+      {/* stale data while loading. Each layer checks its own data existence. */}
+      {paperElement && pageHeight > 0 && (
         <>
           {/* Teacher's personal annotations as reference (when broadcasting to class/student) */}
           {hasPersonalContent && isLayerVisible('personal') && (() => {

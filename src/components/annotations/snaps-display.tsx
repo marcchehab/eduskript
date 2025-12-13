@@ -231,7 +231,7 @@ const TeacherSnapItem = memo(function TeacherSnapItem({
   return (
     <div
       ref={elementRef}
-      className="absolute z-40 bg-background border-2 border-blue-500 shadow-lg rounded-lg overflow-hidden group"
+      className="absolute z-40 bg-card border-2 border-blue-500 shadow-lg rounded-lg overflow-hidden group"
       style={{
         top: position.top,
         left: position.left,
@@ -241,15 +241,15 @@ const TeacherSnapItem = memo(function TeacherSnapItem({
     >
       {/* Drag handle - styled differently for teacher snaps */}
       <div
-        className="px-3 py-2 bg-blue-50 dark:bg-blue-900/30 border-b border-blue-300 dark:border-blue-700 flex items-center gap-2 cursor-grab active:cursor-grabbing select-none"
+        className="px-3 py-2 bg-muted/50 border-b border-border flex items-center gap-2 cursor-grab active:cursor-grabbing select-none"
         style={{ touchAction: 'none' }}
         onPointerDown={handleDragStart}
       >
         <GripVertical className="w-4 h-4 text-blue-500 flex-shrink-0" />
-        <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+        <span className="text-sm font-medium text-foreground">
           {snap.name}
         </span>
-        <span className="text-xs text-blue-500/70 ml-auto">
+        <span className="text-xs text-blue-500 ml-auto">
           {snap.layerName}
         </span>
       </div>

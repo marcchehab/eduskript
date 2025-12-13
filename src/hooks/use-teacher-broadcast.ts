@@ -53,8 +53,8 @@ export function useTeacherBroadcast(pageId: string) {
   const [error, setError] = useState<string | null>(null)
 
   // Fetch teacher annotations from API
-  // IMPORTANT: Server is always the source of truth for teacher annotations.
-  // We clear local state before fetching to ensure stale data is never shown.
+  // Uses SWR pattern: keep showing stale data while fetching, then swap when ready.
+  // This prevents UI flicker during refetch.
   const fetchAnnotations = useCallback(async () => {
     if (status !== 'authenticated' || !pageId) {
       setIsLoading(false)
@@ -63,14 +63,8 @@ export function useTeacherBroadcast(pageId: string) {
 
     try {
       setError(null)
-      setIsLoading(true)
-
-      // Clear local state BEFORE fetching to ensure server always wins
-      // This prevents showing stale data if teacher deleted broadcasts while student was offline
-      setClassAnnotations([])
-      setClassSnaps([])
-      setIndividualFeedback(null)
-      setIndividualSnapFeedback(null)
+      // Don't set isLoading=true on refetch - keeps stale data visible (SWR pattern)
+      // Only set loading on initial fetch (when we have no data yet)
 
       // Add timestamp to prevent browser caching
       const res = await fetch(`/api/student/teacher-annotations?pageId=${encodeURIComponent(pageId)}&_t=${Date.now()}`)
