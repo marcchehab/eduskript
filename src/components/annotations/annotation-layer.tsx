@@ -1,3 +1,83 @@
+/**
+ * Annotation Layer - Multi-User Canvas Overlay System
+ *
+ * This is the most complex component in Eduskript (~2500 lines). It manages
+ * a layered annotation system where teachers and students can draw on content.
+ *
+ * ## Architecture Overview
+ *
+ * ```
+ * ┌─────────────────────────────────────────────────────────────┐
+ * │  Page Content (markdown)                                    │
+ * ├─────────────────────────────────────────────────────────────┤
+ * │  Reference Layers (read-only, portaled into paper)          │
+ * │  ├─ Public annotations (page author's broadcasts)           │
+ * │  ├─ Class broadcasts (teacher → all students)               │
+ * │  ├─ Individual feedback (teacher → specific student)        │
+ * │  └─ Personal reference (teacher's own when broadcasting)    │
+ * ├─────────────────────────────────────────────────────────────┤
+ * │  Active Canvas (editable, user's current drawing target)    │
+ * ├─────────────────────────────────────────────────────────────┤
+ * │  Snap Overlays (positioned screenshots)                     │
+ * └─────────────────────────────────────────────────────────────┘
+ * ```
+ *
+ * ## View Modes (Teachers)
+ *
+ * - `my-view`: Personal annotations (default)
+ * - `class-broadcast`: Draw annotations visible to entire class
+ * - `student-view`: Give individual feedback to specific student
+ * - `page-broadcast`: Public annotations visible to all visitors
+ *
+ * ## Cross-Device Alignment
+ *
+ * Annotations are stored with section IDs and Y-offsets. When displayed on
+ * a different device, strokes are repositioned based on current heading
+ * positions via `repositionStrokes()`. This handles responsive layouts.
+ *
+ * ## Known Limitations & Technical Debt
+ *
+ * 1. **Component size**: At ~2500 lines, this should ideally be split into
+ *    smaller modules (layer management, toolbar integration, sync logic).
+ *    The current monolithic structure makes testing and maintenance harder.
+ *
+ * 2. **State explosion**: Many useState/useRef pairs track similar things.
+ *    A state machine or reducer pattern would be cleaner but would require
+ *    significant refactoring.
+ *
+ * 3. **Ref gymnastics**: We use refs (canvasDataRef, pageVersionRef, etc.)
+ *    alongside state to avoid stale closures in callbacks. This works but
+ *    is error-prone and requires careful synchronization.
+ *
+ * 4. **Multiple data hooks**: We instantiate several useSyncedUserData hooks
+ *    for different targets (personal, class, student, page). This works but
+ *    creates complexity and potential race conditions when switching modes.
+ *
+ * 5. **Fallback refs pattern**: We store canvas data in refs when switching
+ *    modes (studentFeedbackCanvasRef, classBroadcastCanvasRef) to provide
+ *    immediate UI feedback before the sync hook catches up. This is a
+ *    workaround for async data loading latency.
+ *
+ * 6. **Portal complexity**: Reference layers are portaled into the paper
+ *    element for correct stacking. This works but makes the component tree
+ *    harder to reason about.
+ *
+ * 7. **No undo/redo**: The canvas supports clear-all but not undo. Adding
+ *    undo would require storing stroke history, which we don't currently do.
+ *
+ * ## Performance Notes
+ *
+ * - Reference layers use CSS opacity transitions instead of per-stroke
+ *   animation to avoid React re-renders during fade-in.
+ * - Stroke telemetry is sampled (every 10th stroke) to reduce data volume.
+ * - Layer visibility uses localStorage to persist user preferences.
+ *
+ * @see simple-canvas.tsx - The actual HTML canvas drawing implementation
+ * @see annotation-toolbar.tsx - UI controls for drawing modes
+ * @see reposition-strokes.ts - Cross-device stroke alignment algorithm
+ * @see src/lib/userdata/provider.tsx - Data sync infrastructure
+ */
+
 'use client'
 
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react'

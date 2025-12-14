@@ -1,3 +1,57 @@
+/**
+ * Simple Canvas - Low-Level Drawing Surface
+ *
+ * This is the core canvas implementation for drawing annotations. It handles:
+ * - Pointer events (mouse, touch, stylus with pressure sensitivity)
+ * - Stroke rendering with configurable color/width
+ * - Eraser mode with visual cursor and collision detection
+ * - Real-time smoothing of strokes (configurable window size)
+ * - Section tracking for cross-device repositioning
+ *
+ * ## Architecture
+ *
+ * ```
+ * Pointer Events → Point Collection → Smoothing → Canvas Render → Data Export
+ *                                                                      ↓
+ *                                            Parent (annotation-layer.tsx)
+ * ```
+ *
+ * ## Drawing Pipeline
+ *
+ * 1. Pointer down: Start new stroke, record mode (draw/erase)
+ * 2. Pointer move: Collect points with pressure, apply real-time smoothing
+ * 3. Pointer up: Finalize stroke, apply post-stroke smoothing, export data
+ *
+ * ## Known Limitations
+ *
+ * 1. **Single canvas**: All strokes render on one canvas. For very large
+ *    annotation sets (1000+ strokes), performance may degrade. A tiled or
+ *    virtualized canvas approach would scale better.
+ *
+ * 2. **Eraser collision is O(n*m)**: Each eraser point checks against all
+ *    strokes and all points. Large drawings get slower. Could be optimized
+ *    with spatial indexing (quadtree).
+ *
+ * 3. **No partial stroke editing**: Can only delete entire strokes, not
+ *    portions. More advanced erasing would require stroke splitting.
+ *
+ * 4. **Smoothing is post-hoc**: Real-time smoothing has latency. We smooth
+ *    again after stroke completion, which can cause visual jumps.
+ *
+ * 5. **Hardware eraser detection**: Uses heuristics (button === 5, pointerType
+ *    checks) that may not work on all stylus hardware.
+ *
+ * ## Performance Optimizations
+ *
+ * - RAF throttling for draw operations
+ * - Cached bounding rect to avoid layout thrashing
+ * - Direct DOM manipulation for eraser cursor (no React re-renders)
+ * - Strokes marked for deletion in batch (applied on pointer up)
+ *
+ * @see annotation-layer.tsx - Parent component managing multiple canvases
+ * @see reposition-strokes.ts - Cross-device stroke alignment
+ */
+
 'use client'
 
 import { useRef, useEffect, useCallback, forwardRef, useImperativeHandle, useState } from 'react'

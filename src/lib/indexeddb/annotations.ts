@@ -1,3 +1,54 @@
+/**
+ * Annotation IndexedDB Storage
+ *
+ * Client-side persistence for annotation data using Dexie (IndexedDB wrapper).
+ * This enables offline annotation storage and fast local reads.
+ *
+ * ## Data Model
+ *
+ * ```
+ * PageAnnotation {
+ *   pageId: string           // Primary key
+ *   pageVersion: string      // Content hash for version tracking
+ *   canvasData: string       // JSON stringified StrokeData[]
+ *   headingOffsets: Record   // Section positions for repositioning
+ * }
+ * ```
+ *
+ * ## Version Migration (v1 → v2)
+ *
+ * Originally, annotations were stored per-section (multi-canvas). This was
+ * migrated to single-canvas format for simpler rendering. The migration
+ * runs automatically on first load after upgrade.
+ *
+ * ## Sync Architecture
+ *
+ * IndexedDB is the local cache. Server sync happens via useSyncedUserData:
+ *
+ * ```
+ * IndexedDB ←→ useSyncedUserData hook ←→ Server API
+ *    ↑                                        ↓
+ *    └─────── Conflict resolution ───────────┘
+ * ```
+ *
+ * ## Known Limitations
+ *
+ * 1. **No conflict resolution here**: This layer just stores/retrieves.
+ *    The sync logic in useSyncedUserData handles server conflicts.
+ *
+ * 2. **Version mismatch handling is simple**: We detect mismatches but
+ *    don't auto-migrate strokes. User sees a warning and can clear.
+ *
+ * 3. **Content hash is truncated**: We use first 16 chars of SHA-256.
+ *    Collision probability is negligible but not zero.
+ *
+ * 4. **No storage limits handling**: IndexedDB can fill up. We don't
+ *    currently handle quota exceeded errors gracefully.
+ *
+ * @see annotation-layer.tsx - Main consumer of this API
+ * @see src/lib/userdata/provider.tsx - Server sync layer
+ */
+
 import Dexie, { Table } from 'dexie'
 
 // Individual stroke/path data structure

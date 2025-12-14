@@ -1,5 +1,53 @@
 /**
- * Utilities for repositioning annotation strokes when content changes
+ * Cross-Device Stroke Repositioning
+ *
+ * When a teacher draws annotations and broadcasts to students, the students'
+ * screens may have different dimensions, zoom levels, or responsive breakpoints.
+ * This module aligns strokes to the correct content sections.
+ *
+ * ## How It Works
+ *
+ * ```
+ * Teacher draws at:          Student sees content at:
+ * Heading A: y=100           Heading A: y=150  (moved down)
+ * Heading B: y=300           Heading B: y=400  (moved down)
+ *
+ * Stroke in section A        → repositioned by delta (+50)
+ * ```
+ *
+ * Each stroke stores:
+ * - `sectionId`: Which heading it belongs to (e.g., "h2-introduction")
+ * - `sectionOffsetY`: The Y position of that heading when drawn
+ *
+ * On display, we compute the delta between stored and current heading Y,
+ * then translate all stroke points by that delta.
+ *
+ * ## Majority Voting
+ *
+ * A stroke may cross multiple sections. We assign it to whichever section
+ * contains the majority of its points. This handles edge cases where users
+ * draw across heading boundaries.
+ *
+ * ## Known Limitations
+ *
+ * 1. **Section deletion = orphaned strokes**: If a heading is removed from
+ *    content, strokes in that section become orphaned. We mark them with
+ *    `-ORPHANED` suffix but don't delete them (data preservation).
+ *
+ * 2. **X-axis repositioning is simple**: We only adjust for padding changes,
+ *    not for responsive content reflow. Horizontal content shifts may cause
+ *    misalignment.
+ *
+ * 3. **No sub-section awareness**: If content within a section grows/shrinks,
+ *    strokes in that section don't reposition internally. They move as a
+ *    block with the section heading.
+ *
+ * 4. **O(n*m) majority voting**: Each stroke checks all its points against
+ *    all sections. For very long strokes (1000+ points), this could be slow.
+ *    In practice, most strokes have <100 points.
+ *
+ * @see annotation-layer.tsx - Uses this for teacher→student broadcasts
+ * @see simple-canvas.tsx - Records sectionId/sectionOffsetY per stroke
  */
 
 export interface StrokeData {
