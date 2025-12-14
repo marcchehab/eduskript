@@ -9,9 +9,42 @@ import {
   teacherFileExists,
 } from './s3'
 
-// File storage configuration
-const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE || '10485760') // 10MB
-const ALLOWED_TYPES = (process.env.ALLOWED_FILE_TYPES || 'jpg,jpeg,png,gif,webp,svg,pdf,doc,docx,txt,md,zip,mp4,mp3,wav,ogg,webm,csv,json,xml,html,css,js,ts,py,java,cpp,c,h,hpp,rs,go,php,rb,sh,yml,yaml,excalidraw,db,sqlite').split(',')
+// File storage configuration - exported for use in upload handlers
+export const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE || '10485760') // 10MB default
+export const ALLOWED_TYPES = (process.env.ALLOWED_FILE_TYPES || 'jpg,jpeg,png,gif,webp,svg,pdf,doc,docx,txt,md,zip,mp4,mp3,wav,ogg,webm,csv,json,xml,html,css,js,ts,py,java,cpp,c,h,hpp,rs,go,php,rb,sh,yml,yaml,excalidraw,db,sqlite').split(',')
+
+/**
+ * Characters that are dangerous in filenames (path traversal, null bytes, control chars).
+ * Used to sanitize uploaded filenames before storage.
+ */
+const DANGEROUS_FILENAME_PATTERN = /[<>:"/\\|?*\x00-\x1f]|\.\.|\.\//g
+
+/**
+ * Sanitize a filename by removing dangerous characters.
+ * Prevents path traversal attacks and filesystem issues.
+ */
+export function sanitizeFilename(filename: string): string {
+  // Remove path traversal sequences and dangerous characters
+  let sanitized = filename.replace(DANGEROUS_FILENAME_PATTERN, '')
+
+  // Remove leading/trailing dots and spaces (Windows issues)
+  sanitized = sanitized.replace(/^[\s.]+|[\s.]+$/g, '')
+
+  // Ensure we have a valid filename
+  if (!sanitized || sanitized.length === 0) {
+    return 'unnamed_file'
+  }
+
+  // Truncate if too long (keep extension if possible)
+  if (sanitized.length > 255) {
+    const ext = getFileExtension(sanitized)
+    const maxBase = 255 - (ext ? ext.length + 1 : 0)
+    const base = sanitized.substring(0, sanitized.lastIndexOf('.') || sanitized.length)
+    sanitized = base.substring(0, maxBase) + (ext ? `.${ext}` : '')
+  }
+
+  return sanitized
+}
 
 /**
  * Calculate SHA256 hash for file content (using built-in crypto for simplicity)

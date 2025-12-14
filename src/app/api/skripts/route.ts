@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth'
 import { revalidatePath } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { generateSlug } from '@/lib/markdown'
+import { generateSlug, isReservedSlug } from '@/lib/markdown'
 import { checkCollectionPermissions } from '@/lib/permissions'
 
 export async function POST(request: NextRequest) {
@@ -56,6 +56,14 @@ export async function POST(request: NextRequest) {
 
     // Normalize slug
     const normalizedSlug = generateSlug(slug)
+
+    // Check for reserved slugs that conflict with system routes
+    if (isReservedSlug(normalizedSlug)) {
+      return NextResponse.json(
+        { error: `The slug "${normalizedSlug}" is reserved and cannot be used` },
+        { status: 400 }
+      )
+    }
 
     // Check if slug is already taken globally
     const existingSkript = await prisma.skript.findFirst({

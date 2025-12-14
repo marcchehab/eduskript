@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { generateSlug } from '@/lib/markdown'
+import { generateSlug, isReservedSlug } from '@/lib/markdown'
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,6 +27,14 @@ export async function POST(request: NextRequest) {
 
     // Normalize slug
     const normalizedSlug = generateSlug(slug)
+
+    // Check for reserved slugs that conflict with system routes
+    if (isReservedSlug(normalizedSlug)) {
+      return NextResponse.json(
+        { error: `The slug "${normalizedSlug}" is reserved and cannot be used` },
+        { status: 400 }
+      )
+    }
 
     // Check if slug already exists (globally, since no more user-scoped slugs)
     const existingCollection = await prisma.collection.findFirst({

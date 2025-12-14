@@ -43,6 +43,42 @@ export function generateSlug(title: string): string {
 }
 
 /**
+ * Reserved slugs that conflict with system routes.
+ * These cannot be used for collections, skripts, or user page slugs.
+ */
+export const RESERVED_SLUGS = [
+  'api',
+  'auth',
+  'dashboard',
+  'admin',
+  'login',
+  'logout',
+  'register',
+  'signup',
+  'signin',
+  'signout',
+  'settings',
+  'profile',
+  'classes',
+  'consent',
+  'test',
+  'health',
+  '_next',
+  'static',
+  'public',
+  'favicon',
+]
+
+/**
+ * Check if a slug is reserved (conflicts with system routes).
+ * Returns true if the slug is reserved and should not be used.
+ */
+export function isReservedSlug(slug: string): boolean {
+  const normalized = slug.toLowerCase().trim()
+  return RESERVED_SLUGS.includes(normalized)
+}
+
+/**
  * Validate markdown content for common syntax errors
  */
 export function validateMarkdown(content: string): string[] {

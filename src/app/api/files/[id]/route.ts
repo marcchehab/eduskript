@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { getFileById, getFileExtension, getS3Key } from '@/lib/file-storage'
+import { getFileById, getFileExtension, getS3Key, sanitizeFilename } from '@/lib/file-storage'
 import { prisma } from '@/lib/prisma'
 import { getTeacherFileUrl } from '@/lib/s3'
 
@@ -155,7 +155,13 @@ export async function PATCH(
       return NextResponse.json({ error: 'New filename is required' }, { status: 400 })
     }
 
-    const trimmedFilename = newFilename.trim()
+    // Sanitize filename to prevent path traversal and other attacks
+    const sanitizedFilename = sanitizeFilename(newFilename.trim())
+
+    // Ensure sanitization didn't result in an empty or generic filename
+    if (sanitizedFilename === 'unnamed_file' && newFilename.trim() !== 'unnamed_file') {
+      return NextResponse.json({ error: 'Invalid filename - contains only invalid characters' }, { status: 400 })
+    }
 
     // Get file info with permission check
     const file = await getFileById(fileId, session.user.id)
@@ -188,7 +194,7 @@ export async function PATCH(
     // Check if a file with the new name already exists in the same skript/parent directory
     const existingFile = await prisma.file.findFirst({
       where: {
-        name: trimmedFilename,
+        name: sanitizedFilename,
         skriptId: fileRecord.skriptId,
         parentId: fileRecord.parentId,
         id: { not: fileId } // Exclude the current file
@@ -196,8 +202,8 @@ export async function PATCH(
     })
 
     if (existingFile) {
-      return NextResponse.json({ 
-        error: `A file named "${trimmedFilename}" already exists in this location` 
+      return NextResponse.json({
+        error: `A file named "${sanitizedFilename}" already exists in this location`
       }, { status: 409 })
     }
 
@@ -205,7 +211,7 @@ export async function PATCH(
     const updatedFile = await prisma.file.update({
       where: { id: fileId },
       data: {
-        name: trimmedFilename,
+        name: sanitizedFilename,
         updatedAt: new Date()
       }
     })

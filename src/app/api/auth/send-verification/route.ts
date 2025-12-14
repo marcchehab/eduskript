@@ -14,24 +14,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if user exists
+    // Check if user exists and needs verification
     const user = await prisma.user.findUnique({
       where: { email },
       select: { id: true, email: true, emailVerified: true }
     })
 
-    if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      )
+    // Return generic response to prevent email enumeration
+    // We only actually send an email if: user exists AND email not verified
+    const genericResponse = {
+      message: 'If an account exists with this email and requires verification, a verification email has been sent.'
     }
 
-    if (user.emailVerified) {
-      return NextResponse.json(
-        { error: 'Email already verified' },
-        { status: 400 }
-      )
+    if (!user || user.emailVerified) {
+      // Don't reveal whether user exists or is already verified
+      return NextResponse.json(genericResponse)
     }
 
     // Generate verification token
@@ -64,9 +61,7 @@ export async function POST(request: NextRequest) {
       textContent
     })
 
-    return NextResponse.json({
-      message: 'Verification email sent successfully'
-    })
+    return NextResponse.json(genericResponse)
 
   } catch (error) {
     console.error('Failed to send verification email:', error)

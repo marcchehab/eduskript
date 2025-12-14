@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { saveFile } from '@/lib/file-storage'
+import { saveFile, MAX_FILE_SIZE, validateFile, sanitizeFilename } from '@/lib/file-storage'
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,6 +25,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Skript ID is required for file upload' }, { status: 400 })
     }
 
+    // Pre-validate file size BEFORE loading into memory (prevents DoS)
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { error: `File too large. Maximum size is ${MAX_FILE_SIZE / 1048576}MB` },
+        { status: 400 }
+      )
+    }
+
+    // Sanitize and validate filename
+    const sanitizedFilename = sanitizeFilename(file.name)
+    const validation = validateFile(sanitizedFilename, file.size)
+    if (!validation.valid) {
+      return NextResponse.json({ error: validation.error }, { status: 400 })
+    }
+
     // Verify skript ownership
     const skript = await prisma.skript.findFirst({
       where: {
@@ -41,14 +56,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Skript not found or access denied' }, { status: 403 })
     }
 
-    // Convert file to buffer
+    // Convert file to buffer (after validation to prevent memory exhaustion)
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
 
-    // Save file using new file storage system
+    // Save file using new file storage system (with sanitized filename)
     const savedFile = await saveFile({
       buffer,
-      filename: file.name,
+      filename: sanitizedFilename,
       skriptId,
       userId: session.user.id,
       parentId: parentId || null,
@@ -59,9 +74,9 @@ export async function POST(request: NextRequest) {
     // Return file info
     const fileInfo = {
       id: savedFile.id,
-      name: file.name, // For consistency with FileItem interface
-      filename: file.name,
-      originalName: file.name,
+      name: sanitizedFilename, // Sanitized filename for storage
+      filename: sanitizedFilename,
+      originalName: file.name, // Keep original for reference
       size: savedFile.size,
       type: file.type,
       hash: savedFile.hash,

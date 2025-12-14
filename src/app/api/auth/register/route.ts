@@ -107,16 +107,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if user already exists
+    // Check if user already exists - return same response to prevent email enumeration
     const existingUser = await prisma.user.findUnique({
       where: { email }
     })
 
     if (existingUser) {
-      return NextResponse.json(
-        { error: 'User with this email already exists' },
-        { status: 400 }
-      )
+      // Return success-like response to prevent email enumeration
+      // Don't reveal whether the email already exists
+      return NextResponse.json({
+        message: 'If this email is not already registered, a verification email has been sent.',
+        requiresEmailVerification: true
+      })
     }
 
     // Generate unique page slug

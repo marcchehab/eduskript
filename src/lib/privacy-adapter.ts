@@ -258,23 +258,3 @@ export function PrivacyAdapter(options: PrivacyAdapterOptions): Adapter {
   }
 }
 
-/**
- * Helper to extract domain context from OAuth callback
- * This will be set in the OAuth state parameter
- */
-export function isStudentFromCallback(email: string, request?: any): boolean {
-  // Check if the callback contains student indicator
-  // This will be set when initiating OAuth from a subdomain
-  if (request?.query?.student === 'true') {
-    return true
-  }
-
-  // Check if the callback URL indicates a subdomain signup
-  if (request?.url) {
-    const url = new URL(request.url, 'http://dummy.com')
-    const domain = url.searchParams.get('domain')
-    return domain === 'subdomain'
-  }
-
-  return false
-}

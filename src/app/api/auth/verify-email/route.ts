@@ -49,15 +49,16 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Find the user
+    // Find the user (should exist if token is valid, but verify to be safe)
     const user = await prisma.user.findUnique({
       where: { email }
     })
 
     if (!user) {
+      // Don't reveal whether user exists - use generic error
       return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
+        { error: 'Invalid verification link' },
+        { status: 400 }
       )
     }
 
@@ -107,9 +108,10 @@ export async function POST(request: NextRequest) {
     })
 
     if (!user) {
+      // Don't reveal whether user exists - use generic error
       return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
+        { error: 'Invalid verification link' },
+        { status: 400 }
       )
     }
 
