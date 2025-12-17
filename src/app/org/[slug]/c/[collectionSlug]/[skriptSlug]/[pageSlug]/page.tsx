@@ -71,7 +71,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
         description,
         type: 'article',
         siteName: organization.name,
-        url: `/org/${slug}/${collectionSlug}/${skriptSlug}/${pageSlug}`
+        url: `/org/${slug}/c/${collectionSlug}/${skriptSlug}/${pageSlug}`
       },
       twitter: {
         card: 'summary_large_image',
@@ -198,7 +198,7 @@ export default async function OrgPublicPage({ params }: PageProps) {
       currentPath={currentPath}
       sidebarBehavior="contextual"
       typographyPreference="modern"
-      routePrefix={`/org/${slug}`}
+      routePrefix={`/org/${slug}/c`}
       pageId={page.id}
     >
       <div id="paper" className="paper-responsive py-24 bg-card dark:bg-slate-900/80 paper-shadow border border-border dark:border-white/10" style={{ maxWidth: 'min(1280px, calc(100vw - 48px))', marginLeft: 'auto', marginRight: 'auto' }}>

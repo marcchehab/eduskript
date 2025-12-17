@@ -538,7 +538,7 @@ export async function POST(request: NextRequest) {
                 // Invalidate org page paths for all collections
                 for (const cs of page.skript.collectionSkripts) {
                   if (!cs.collection) continue
-                  const orgPath = `/org/${orgLayout.organization.slug}/${cs.collection.slug}/${skriptSlug}/${contentPageSlug}`
+                  const orgPath = `/org/${orgLayout.organization.slug}/c/${cs.collection.slug}/${skriptSlug}/${contentPageSlug}`
                   console.log('[user-data/sync] Revalidating org path:', orgPath)
                   revalidatePath(orgPath)
                 }
@@ -626,7 +626,7 @@ export async function POST(request: NextRequest) {
               for (const orgLayout of orgLayouts) {
                 for (const cs of frontPage.skript.collectionSkripts) {
                   if (!cs.collection) continue
-                  const orgPath = `/org/${orgLayout.organization.slug}/${cs.collection.slug}/${skriptSlug}`
+                  const orgPath = `/org/${orgLayout.organization.slug}/c/${cs.collection.slug}/${skriptSlug}`
                   console.log('[user-data/sync] Revalidating org skript front page:', orgPath)
                   revalidatePath(orgPath)
                 }

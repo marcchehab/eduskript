@@ -237,7 +237,7 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
         rootSkripts={[]}
         sidebarBehavior="contextual"
         typographyPreference="modern"
-        routePrefix={`/org/${slug}`}
+        routePrefix={`/org/${slug}/c`}
       >
         <div id="paper" className="paper-responsive py-24 bg-card dark:bg-slate-900/80 paper-shadow border border-border dark:border-white/10" style={{ maxWidth: 'min(1280px, calc(100vw - 48px))', marginLeft: 'auto', marginRight: 'auto' }}>
           {isPreviewMode && (
@@ -283,7 +283,7 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
   const firstPage = skript.pages.find(page => isAdmin || page.isPublished)
 
   if (firstPage) {
-    const redirectUrl = `/org/${slug}/${collectionSlug}/${skriptSlug}/${firstPage.slug}`
+    const redirectUrl = `/org/${slug}/c/${collectionSlug}/${skriptSlug}/${firstPage.slug}`
     return <SkriptRedirect redirectUrl={redirectUrl} />
   }
 

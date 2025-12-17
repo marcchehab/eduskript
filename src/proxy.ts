@@ -6,8 +6,8 @@ const domainCache = new Map<string, { orgSlug: string; expiry: number } | null>(
 const CACHE_TTL = 60 * 1000 // 1 minute
 const NEGATIVE_CACHE_TTL = 30 * 1000 // 30 seconds for "not found" results
 
-// Default organization slug for local development
-const DEV_ORG_SLUG = 'eduskript'
+// Default organization slug - all unknown domains fall back to this org
+const DEFAULT_ORG_SLUG = process.env.DEFAULT_ORG_SLUG || 'eduskript'
 
 export async function proxy(request: NextRequest) {
   const hostname = request.headers.get('host') || ''
@@ -15,31 +15,6 @@ export async function proxy(request: NextRequest) {
 
   // Extract just the domain (without port for localhost)
   const domain = hostname.split(':')[0]
-
-  // For local development, route to the default org (eduskript)
-  // This allows testing the org page locally without a real custom domain
-  if (domain === 'localhost' || domain === '127.0.0.1' || domain.startsWith('192.168.')) {
-    // Skip for internal routes that shouldn't be rewritten
-    if (
-      pathname.startsWith('/_next') ||
-      pathname.startsWith('/api') ||
-      pathname.startsWith('/auth') ||
-      pathname.startsWith('/org/') ||
-      pathname.startsWith('/dashboard') ||
-      pathname === '/favicon.ico' ||
-      pathname === '/robots.txt' ||
-      pathname === '/sitemap.xml' ||
-      pathname.includes('.')
-    ) {
-      return NextResponse.next()
-    }
-    return rewriteToOrg(request, DEV_ORG_SLUG)
-  }
-
-  // Skip for local development domains (anything ending in .local or .test)
-  if (domain.endsWith('.local') || domain.endsWith('.test')) {
-    return NextResponse.next()
-  }
 
   // Skip for static files and internal routes
   if (
@@ -60,11 +35,11 @@ export async function proxy(request: NextRequest) {
   const cached = domainCache.get(domain)
   if (cached !== undefined) {
     if (cached === null) {
-      // Negative cache hit (domain not found)
+      // Negative cache hit (domain not found) - fall back to default org
       const expiryKey = `${domain}_expiry`
       const expiry = domainCache.get(expiryKey) as unknown as number
       if (expiry && expiry > Date.now()) {
-        return NextResponse.next()
+        return rewriteToOrg(request, DEFAULT_ORG_SLUG)
       }
     } else if (cached.expiry > Date.now()) {
       // Positive cache hit
@@ -102,8 +77,8 @@ export async function proxy(request: NextRequest) {
     // Don't cache errors
   }
 
-  // Domain not found - proceed normally (will likely 404)
-  return NextResponse.next()
+  // Domain not found in database - fall back to default org
+  return rewriteToOrg(request, DEFAULT_ORG_SLUG)
 }
 
 function rewriteToOrg(request: NextRequest, orgSlug: string) {

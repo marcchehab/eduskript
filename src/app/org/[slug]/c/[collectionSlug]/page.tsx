@@ -153,7 +153,7 @@ export default async function OrgCollectionPage({ params }: CollectionPageProps)
 
   if (firstPage && firstSkript) {
     // Redirect to the first available page
-    redirect(`/org/${slug}/${collectionSlug}/${firstSkript.slug}/${firstPage.slug}`)
+    redirect(`/org/${slug}/c/${collectionSlug}/${firstSkript.slug}/${firstPage.slug}`)
   }
 
   // No pages available - 404

@@ -129,7 +129,7 @@ export default async function OrgPage({ params }: OrgPageProps) {
       rootSkripts={rootSkripts}
       sidebarBehavior="contextual"
       typographyPreference="modern"
-      routePrefix={`/org/${slug}`}
+      routePrefix={`/org/${slug}/c`}
     >
       <div id="paper" className="paper-responsive py-24 bg-card dark:bg-slate-900/80 paper-shadow border border-border dark:border-white/10" style={{ maxWidth: 'min(1280px, calc(100vw - 48px))', marginLeft: 'auto', marginRight: 'auto' }}>
         {/* Preview mode indicator for unpublished frontpage */}
