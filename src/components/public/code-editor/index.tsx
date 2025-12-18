@@ -61,6 +61,11 @@ interface CodeEditorProps {
 // Custom annotation to mark programmatic changes (defined once outside component)
 const programmaticChange = Annotation.define<boolean>()
 
+// Highlight colors for cursor (URL-encoded hex values)
+const highlightColorHex: Record<HighlightColor, string> = {
+  red: '%23ef4444', yellow: '%23eab308', green: '%2322c55e', blue: '%233b82f6'
+}
+
 export const CodeEditor = memo(function CodeEditor({
   id = 'code-editor',
   pageId,
@@ -272,9 +277,6 @@ export const CodeEditor = memo(function CodeEditor({
   const [highlightColor, setHighlightColor] = useState<HighlightColor>('yellow')
 
   // Generate cursor SVG data URI based on highlight color
-  const highlightColorHex: Record<HighlightColor, string> = {
-    red: '%23ef4444', yellow: '%23eab308', green: '%2322c55e', blue: '%233b82f6'
-  }
   const highlighterCursor = useMemo(() => {
     const color = highlightColorHex[highlightColor]
     return `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='${color}' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 11-6 6v3h9l3-3'/%3E%3Cpath d='m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4'/%3E%3C/svg%3E") 3 21, crosshair`
@@ -1473,7 +1475,6 @@ export const CodeEditor = memo(function CodeEditor({
         clearTimeout(contentSaveTimeoutRef.current)
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- createVersionSnapshot excluded to prevent editor recreation on highlight changes
   }, [mounted, resolvedTheme, language, initialCode, fontSize, debouncedSaveContent, activeFileIndex, files])
 
   // Attach non-passive wheel event listener to prevent page scroll

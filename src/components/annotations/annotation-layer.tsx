@@ -1444,7 +1444,6 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
             currentPaddingLeft,
             storedPaddingLeft
           )
-          // eslint-disable-next-line react-hooks/set-state-in-effect -- Repositioning stored data
           setCanvasData(JSON.stringify(result.strokes))
           setOrphanedStrokesCount(result.orphanedCount)
         }
@@ -1462,7 +1461,6 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
         currentPaddingLeft,
         storedPaddingLeft
       )
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- Repositioning stored data
       updateSnapsData({ snaps: snapResult.snaps })
     }
 
