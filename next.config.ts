@@ -28,8 +28,6 @@ const nextConfig: NextConfig = {
     '@prisma/client',
     'sql.js', // SQL.js uses Node.js 'fs' module which should not be bundled for server
   ],
-  // Allow local network access for development
-  allowedDevOrigins: ['192.168.1.112'],
   // Empty turbopack config to silence warnings about webpack config in Next.js 16
   turbopack: {},
   webpack(config, { isServer }) {

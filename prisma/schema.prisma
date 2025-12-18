@@ -129,6 +129,9 @@ model User {
   teacherClasses     Class[]             @relation("TeacherClasses")
   studentMemberships ClassMembership[]   @relation("StudentMemberships")
 
+  // Exam unlock relations
+  studentUnlocks     PageUnlock[]        @relation("StudentUnlocks") // Pages unlocked for this student
+  teacherUnlocks     PageUnlock[]        @relation("TeacherUnlocks") // Pages this teacher has unlocked
 
   // User data (code, annotations, settings, etc.)
   userData UserData[] @relation("UserDataEntries")
@@ -207,6 +210,7 @@ model Skript {
   description String?
   slug        String   @unique
   isPublished Boolean  @default(false)
+  skriptType  String   @default("normal") @map("skript_type") // "normal", "randomized-daily", "randomized-weekly"
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -251,9 +255,11 @@ model Page {
   content     String
   order       Int
   isPublished Boolean  @default(false)
+  pageType    String   @default("normal") @map("page_type") // "normal", "exam"
+  examSettings Json?   @map("exam_settings") // { requireSEB: boolean, timeLimitMinutes?: number }
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  
+
   // Relations
   skriptId    String
   skript      Skript   @relation(fields: [skriptId], references: [id], onDelete: Cascade)
@@ -265,6 +271,9 @@ model Page {
   // Student data
   studentProgress    StudentProgress[]   @relation("PageProgress")
   studentSubmissions StudentSubmission[] @relation("PageSubmissions")
+
+  // Exam unlocks
+  unlocks     PageUnlock[]
 
   @@unique([skriptId, slug])
   @@map("pages")
@@ -489,6 +498,7 @@ model Class {
   teacher               User                      @relation("TeacherClasses", fields: [teacherId], references: [id], onDelete: Cascade)
   memberships           ClassMembership[]
   preAuthorizedStudents PreAuthorizedStudent[]
+  pageUnlocks           PageUnlock[]              @relation("ClassUnlocks") // Pages unlocked for this class
 
   @@index([teacherId])
   @@index([inviteCode])
@@ -532,6 +542,28 @@ model PreAuthorizedStudent {
   @@map("pre_authorized_students")
 }
 
+// Exam page unlocks - can unlock for entire class OR individual student
+model PageUnlock {
+  id         String   @id @default(cuid())
+  pageId     String   @map("page_id")
+  classId    String?  @map("class_id")   // Unlock for entire class (optional)
+  studentId  String?  @map("student_id") // OR unlock for individual student (optional)
+  unlockedBy String   @map("unlocked_by")
+  unlockedAt DateTime @default(now()) @map("unlocked_at")
+
+  // Relations
+  page    Page   @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  class   Class? @relation("ClassUnlocks", fields: [classId], references: [id], onDelete: Cascade)
+  student User?  @relation("StudentUnlocks", fields: [studentId], references: [id], onDelete: Cascade)
+  teacher User   @relation("TeacherUnlocks", fields: [unlockedBy], references: [id])
+
+  @@unique([pageId, classId]) // One unlock per page per class
+  @@unique([pageId, studentId]) // One unlock per page per student
+  @@index([classId])
+  @@index([studentId])
+  @@index([pageId])
+  @@map("page_unlocks")
+}
 
 // User Data Storage
 // Stores all user-generated data (code, annotations, settings) with cloud sync support

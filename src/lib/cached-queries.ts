@@ -113,6 +113,8 @@ export const getPublishedCollection = (teacherId: string, pageSlug: string, coll
                       content: true,
                       order: true,
                       isPublished: true,
+                      pageType: true,
+                      examSettings: true,
                     }
                   }
                 }
@@ -222,6 +224,8 @@ export const getPublishedPage = (
                       content: true,
                       order: true,
                       isPublished: true,
+                      pageType: true,
+                      examSettings: true,
                     }
                   }
                 }
@@ -415,6 +419,8 @@ export const getCollectionForPreview = async (teacherId: string, collectionSlug:
                   content: true,
                   order: true,
                   isPublished: true,
+                  pageType: true,
+                  examSettings: true,
                 }
               }
             }
@@ -518,6 +524,8 @@ export const getOrgPublishedPage = (
                       content: true,
                       order: true,
                       isPublished: true,
+                      pageType: true,
+                      examSettings: true,
                     }
                   }
                 }

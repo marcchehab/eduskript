@@ -12,7 +12,7 @@
 - integrate code quality review
 
 **LMS Features:**
-- **SEB** integrate safe exam browser and create exams using eduskript
+- **SEB** integrate safe exam browser and create exams using eduskript, working in plans/compressed-tickling-feigenbaum.md
 - **Interactive Quizzes** - In-lesson quizzes with progress tracking. there is already a <Question> component with live answers.
 - **Student Progress Tracking** - Gradebook interface, view progress, grade submissions. <Question> component would probably have to save question to db to quickly query questions.
 - **Randomized question / exercise pages** maybe through special skripts that serve their pages randomized per day / week?
@@ -26,6 +26,7 @@
 - **Backup System** - Easy database exports and UI to restore if necessary
 - **Marketplace / Sharing** - Content sharing and selling platform
 - **Plugin System** - Extensible component architecture, MDX support
+- **Full text search**
 
 small stuff:
 - bigger handles for resize bars in the editor when using touch device (in place but untested)

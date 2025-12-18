@@ -14,7 +14,16 @@ import { CollapsibleDrawer } from '@/components/ui/collapsible-drawer'
 import { PublishToggle } from '@/components/dashboard/publish-toggle'
 import { VersionHistory } from '@/components/dashboard/version-history'
 import { ExcalidrawEditor } from '@/components/dashboard/excalidraw-editor'
-import { ArrowLeft, Save, History, Files, Eye, Image as ImageIcon, Link2, FileCode } from 'lucide-react'
+import { ArrowLeft, Save, History, Files, Eye, Image as ImageIcon, Link2, FileCode, ClipboardCopy, Check, Shield, Lock, Unlock } from 'lucide-react'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { useSession } from 'next-auth/react'
 
 interface PageVersion {
@@ -47,6 +56,10 @@ interface PageEditorProps {
     content: string
     isPublished: boolean
     currentVersion?: number
+    pageType?: string
+    examSettings?: {
+      requireSEB?: boolean
+    } | null
   }
 }
 
@@ -64,6 +77,15 @@ export function PageEditor({ collection, skript, page }: PageEditorProps) {
   const router = useRouter()
   const { data: session, status: sessionStatus } = useSession()
   const alert = useAlertDialog()
+
+  // Exam settings state
+  const [pageType, setPageType] = useState(page.pageType || 'normal')
+  const [examSettings, setExamSettings] = useState<{ requireSEB?: boolean }>(
+    (page.examSettings as { requireSEB?: boolean }) || { requireSEB: false }
+  )
+  const [teacherClasses, setTeacherClasses] = useState<Array<{ id: string; name: string }>>([])
+  const [unlockedClassIds, setUnlockedClassIds] = useState<string[]>([])
+  const [sebLinkCopied, setSebLinkCopied] = useState(false)
 
   // Shared file list state - updated for new file system
   const [fileList, setFileList] = useState<Array<{
@@ -330,6 +352,79 @@ export function PageEditor({ collection, skript, page }: PageEditorProps) {
     }
   }, [page.id])
 
+  // Fetch teacher's classes for exam unlock checkboxes
+  useEffect(() => {
+    const fetchClasses = async () => {
+      try {
+        const response = await fetch('/api/classes')
+        if (response.ok) {
+          const data = await response.json()
+          setTeacherClasses(data.classes || [])
+        }
+      } catch (error) {
+        console.error('Error fetching classes:', error)
+      }
+    }
+    fetchClasses()
+  }, [])
+
+  // Fetch unlock status for this page
+  const loadUnlocks = useCallback(async () => {
+    if (pageType !== 'exam') return
+    try {
+      const response = await fetch(`/api/pages/${page.id}/unlock`)
+      if (response.ok) {
+        const data = await response.json()
+        const classIds = (data.unlocks || [])
+          .filter((u: { classId?: string }) => u.classId)
+          .map((u: { classId: string }) => u.classId)
+        setUnlockedClassIds(classIds)
+      }
+    } catch (error) {
+      console.error('Error fetching unlocks:', error)
+    }
+  }, [page.id, pageType])
+
+  useEffect(() => {
+    loadUnlocks()
+  }, [loadUnlocks])
+
+  // Handle class unlock toggle
+  const handleClassUnlockToggle = async (classId: string, unlock: boolean) => {
+    try {
+      if (unlock) {
+        const response = await fetch(`/api/pages/${page.id}/unlock`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ classId })
+        })
+        if (response.ok) {
+          setUnlockedClassIds(prev => [...prev, classId])
+        }
+      } else {
+        const response = await fetch(`/api/pages/${page.id}/unlock?classId=${classId}`, {
+          method: 'DELETE'
+        })
+        if (response.ok) {
+          setUnlockedClassIds(prev => prev.filter(id => id !== classId))
+        }
+      }
+    } catch (error) {
+      console.error('Error toggling unlock:', error)
+    }
+  }
+
+  // Copy SEB link to clipboard
+  const handleCopySebLink = async () => {
+    const userPageSlug = (session?.user as { pageSlug?: string })?.pageSlug
+    if (!userPageSlug) return
+
+    const sebUrl = `sebs://${window.location.host}/${userPageSlug}/${collection.slug}/${skript.slug}/${page.slug}`
+    await navigator.clipboard.writeText(sebUrl)
+    setSebLinkCopied(true)
+    setTimeout(() => setSebLinkCopied(false), 2000)
+  }
+
   const handleSave = useCallback(async () => {
     if (!title.trim() || !slug.trim()) {
       alert.showError('Title and slug are required')
@@ -347,7 +442,9 @@ export function PageEditor({ collection, skript, page }: PageEditorProps) {
           slug: slug.trim(),
           description: description.trim(),
           content: contentRef.current,
-          isPublished
+          isPublished,
+          pageType,
+          examSettings: pageType === 'exam' ? examSettings : null
         })
       })
 
@@ -371,7 +468,7 @@ export function PageEditor({ collection, skript, page }: PageEditorProps) {
       alert.showError('Failed to save page')
     }
     setIsSaving(false)
-  }, [title, slug, description, isPublished, page.id, page.slug, collection.slug, skript.slug, router, loadVersions, alert])
+  }, [title, slug, description, isPublished, pageType, examSettings, page.id, page.slug, collection.slug, skript.slug, router, loadVersions, alert])
 
   // Handle version restoration
   const handleRestoreVersion = async (versionId: string, versionContent: string) => {
@@ -511,6 +608,102 @@ export function PageEditor({ collection, skript, page }: PageEditorProps) {
           placeholder="page-slug"
           className="text-sm font-mono border-transparent hover:border-border focus:border-border"
         />
+      </div>
+
+      {/* Page Type & Exam Settings */}
+      <div className="flex items-start gap-4 p-4 border rounded-lg bg-muted/30">
+        <div className="flex items-center gap-2">
+          <Label htmlFor="page-type" className="text-sm font-medium whitespace-nowrap">
+            Page Type
+          </Label>
+          <Select
+            value={pageType}
+            onValueChange={(value) => {
+              setPageType(value)
+              setHasUnsavedChanges(true)
+            }}
+          >
+            <SelectTrigger id="page-type" className="w-[120px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="normal">Normal</SelectItem>
+              <SelectItem value="exam">Exam</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Exam Settings - shown when page type is exam */}
+        {pageType === 'exam' && (
+          <div className="flex-1 flex flex-wrap items-start gap-6 pl-4 border-l">
+            {/* Require SEB */}
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="require-seb"
+                checked={examSettings.requireSEB || false}
+                onCheckedChange={(checked) => {
+                  setExamSettings(prev => ({ ...prev, requireSEB: !!checked }))
+                  setHasUnsavedChanges(true)
+                }}
+              />
+              <Label htmlFor="require-seb" className="text-sm flex items-center gap-1.5 cursor-pointer">
+                <Shield className="w-4 h-4 text-muted-foreground" />
+                Require Safe Exam Browser
+              </Label>
+            </div>
+
+            {/* Unlock for Classes */}
+            {teacherClasses.length > 0 && (
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-muted-foreground">Unlock for:</span>
+                {teacherClasses.map((cls) => (
+                  <div key={cls.id} className="flex items-center gap-1.5">
+                    <Checkbox
+                      id={`unlock-${cls.id}`}
+                      checked={unlockedClassIds.includes(cls.id)}
+                      onCheckedChange={(checked) => handleClassUnlockToggle(cls.id, !!checked)}
+                    />
+                    <Label htmlFor={`unlock-${cls.id}`} className="text-sm cursor-pointer flex items-center gap-1">
+                      {unlockedClassIds.includes(cls.id) ? (
+                        <Unlock className="w-3.5 h-3.5 text-green-600" />
+                      ) : (
+                        <Lock className="w-3.5 h-3.5 text-muted-foreground" />
+                      )}
+                      {cls.name}
+                    </Label>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* SEB Link - shown when requireSEB is enabled */}
+            {examSettings.requireSEB && sessionStatus === 'authenticated' && (session?.user as { pageSlug?: string })?.pageSlug && (
+              <div className="flex items-center gap-2">
+                <code className="text-xs bg-background px-2 py-1 rounded border font-mono">
+                  sebs://{typeof window !== 'undefined' ? window.location.host : 'example.com'}/{(session?.user as { pageSlug?: string })?.pageSlug}/{collection.slug}/{skript.slug}/{page.slug}
+                </code>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleCopySebLink}
+                  title="Copy SEB link"
+                >
+                  {sebLinkCopied ? (
+                    <Check className="w-4 h-4 text-green-600" />
+                  ) : (
+                    <ClipboardCopy className="w-4 h-4" />
+                  )}
+                </Button>
+              </div>
+            )}
+
+            {teacherClasses.length === 0 && (
+              <span className="text-sm text-muted-foreground italic">
+                No classes yet. Create a class to unlock exams for students.
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Skript Files - Collapsible Drawer */}

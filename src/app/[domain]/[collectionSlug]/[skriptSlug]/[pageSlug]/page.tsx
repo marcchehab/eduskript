@@ -1,9 +1,13 @@
 import { notFound } from 'next/navigation'
+import { headers } from 'next/headers'
 import { PublicSiteLayout } from '@/components/public/layout'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
 import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
 import { ExportPDF } from '@/components/public/export-pdf'
 import { DevClearDataButton } from '@/components/dev/dev-clear-data-button'
+import { ExamLockedPage } from '@/components/exam/exam-locked-page'
+import { SEBRequiredPage } from '@/components/exam/seb-required-page'
+import { isSEBRequest, type ExamSettings } from '@/lib/seb'
 import type { Metadata } from 'next'
 import {
   getTeacherByUsernameDeduped,
@@ -124,6 +128,88 @@ export default async function PublicPage({ params }: PageProps) {
   }
 
   const { collection, skript, page, allPages } = content
+
+  // EXAM ACCESS CONTROL
+  // If this is an exam page, check if the user has access
+  if (page.pageType === 'exam') {
+    const session = await getServerSession(authOptions)
+    const currentUrl = `/${domain}/${collectionSlug}/${skriptSlug}/${pageSlug}`
+    const loginUrl = `/auth/signin?callbackUrl=${encodeURIComponent(currentUrl)}`
+
+    // Check 1: User must be logged in
+    if (!session?.user?.id) {
+      return (
+        <ExamLockedPage
+          pageTitle={page.title}
+          teacherName={teacher.name || teacher.pageSlug || 'Unknown'}
+          isLoggedIn={false}
+          loginUrl={loginUrl}
+        />
+      )
+    }
+
+    // Check 2: User must have an unlock (either via class membership or direct student unlock)
+    const studentId = session.user.id
+
+    // Check for direct student unlock
+    const studentUnlock = await prisma.pageUnlock.findFirst({
+      where: {
+        pageId: page.id,
+        studentId
+      }
+    })
+
+    // Check for class-based unlock (student is in a class that has this page unlocked)
+    const classUnlock = await prisma.pageUnlock.findFirst({
+      where: {
+        pageId: page.id,
+        classId: { not: null },
+        class: {
+          memberships: {
+            some: { studentId }
+          }
+        }
+      }
+    })
+
+    const hasUnlock = studentUnlock || classUnlock
+
+    if (!hasUnlock) {
+      // Allow teachers (page authors) to access their own exam pages without unlock
+      const isTeacherAuthor = await prisma.pageAuthor.findFirst({
+        where: { pageId: page.id, userId: studentId, permission: 'author' }
+      }) || await prisma.skriptAuthor.findFirst({
+        where: { skriptId: skript.id, userId: studentId, permission: 'author' }
+      }) || await prisma.collectionAuthor.findFirst({
+        where: { collectionId: collection.id, userId: studentId, permission: 'author' }
+      })
+
+      if (!isTeacherAuthor) {
+        return (
+          <ExamLockedPage
+            pageTitle={page.title}
+            teacherName={teacher.name || teacher.pageSlug || 'Unknown'}
+            isLoggedIn={true}
+            loginUrl={loginUrl}
+          />
+        )
+      }
+    }
+
+    // Check 3: If SEB is required, verify request is from SEB
+    const examSettings = page.examSettings as ExamSettings | null
+    if (examSettings?.requireSEB) {
+      const headersList = await headers()
+      if (!isSEBRequest(headersList)) {
+        return (
+          <SEBRequiredPage
+            pageTitle={page.title}
+            pageId={page.id}
+          />
+        )
+      }
+    }
+  }
 
   // Fetch public annotations for this page (annotations broadcast to all visitors)
   const publicAnnotations = await prisma.userData.findMany({
