@@ -12,7 +12,7 @@ import { authOptions } from '@/lib/auth'
 
 interface PageProps {
   params: Promise<{
-    slug: string
+    orgSlug: string
     collectionSlug: string
     skriptSlug: string
     pageSlug: string
@@ -29,11 +29,11 @@ export async function generateStaticParams() {
 
 // Generate metadata for SEO
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const { slug, collectionSlug, skriptSlug, pageSlug } = await params
+  const { orgSlug, collectionSlug, skriptSlug, pageSlug } = await params
 
   try {
     const organization = await prisma.organization.findUnique({
-      where: { slug },
+      where: { slug: orgSlug },
       select: { id: true, name: true }
     })
 
@@ -46,7 +46,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
     const content = await getOrgPublishedPage(
       organization.id,
-      slug,
+      orgSlug,
       collectionSlug,
       skriptSlug,
       pageSlug
@@ -71,7 +71,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
         description,
         type: 'article',
         siteName: organization.name,
-        url: `/org/${slug}/c/${collectionSlug}/${skriptSlug}/${pageSlug}`
+        url: `/org/${orgSlug}/c/${collectionSlug}/${skriptSlug}/${pageSlug}`
       },
       twitter: {
         card: 'summary_large_image',
@@ -89,11 +89,11 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 }
 
 export default async function OrgPublicPage({ params }: PageProps) {
-  const { slug, collectionSlug, skriptSlug, pageSlug } = await params
+  const { orgSlug, collectionSlug, skriptSlug, pageSlug } = await params
 
   // Get organization
   const organization = await prisma.organization.findUnique({
-    where: { slug },
+    where: { slug: orgSlug },
     select: {
       id: true,
       name: true,
@@ -109,7 +109,7 @@ export default async function OrgPublicPage({ params }: PageProps) {
   // Get published content
   const content = await getOrgPublishedPage(
     organization.id,
-    slug,
+    orgSlug,
     collectionSlug,
     skriptSlug,
     pageSlug
@@ -181,7 +181,7 @@ export default async function OrgPublicPage({ params }: PageProps) {
   // Create org as "teacher" for the layout
   const orgAsTeacher = {
     name: organization.name,
-    pageSlug: `org/${slug}`,
+    pageSlug: `org/${orgSlug}`,
     pageName: organization.name,
     pageDescription: organization.description,
     pageIcon: organization.logoUrl,
@@ -198,7 +198,7 @@ export default async function OrgPublicPage({ params }: PageProps) {
       currentPath={currentPath}
       sidebarBehavior="contextual"
       typographyPreference="modern"
-      routePrefix={`/org/${slug}/c`}
+      routePrefix={`/org/${orgSlug}/c`}
       pageId={page.id}
     >
       <div id="paper" className="paper-responsive py-24 bg-card dark:bg-slate-900/80 paper-shadow border border-border dark:border-white/10" style={{ maxWidth: 'min(1280px, calc(100vw - 48px))', marginLeft: 'auto', marginRight: 'auto' }}>
@@ -208,7 +208,7 @@ export default async function OrgPublicPage({ params }: PageProps) {
               content={page.content}
               skriptId={skript.id}
               pageId={page.id}
-              organizationSlug={slug}
+              organizationSlug={orgSlug}
             />
           </AnnotationWrapper>
         </article>

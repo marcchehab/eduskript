@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
 interface RouteParams {
-  params: Promise<{ slug: string }>
+  params: Promise<{ orgSlug: string }>
 }
 
 /**
@@ -15,7 +15,7 @@ interface RouteParams {
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const { slug } = await params
+    const { orgSlug } = await params
     const { searchParams } = new URL(request.url)
     const rolesParam = searchParams.get('roles') || 'owner,admin'
     const limitParam = searchParams.get('limit') || '20'
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     // Get organization by slug
     const organization = await prisma.organization.findUnique({
-      where: { slug },
+      where: { slug: orgSlug },
       select: { id: true },
     })
 

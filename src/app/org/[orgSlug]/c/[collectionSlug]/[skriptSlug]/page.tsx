@@ -16,7 +16,7 @@ export const dynamicParams = true
 
 interface SkriptPageProps {
   params: Promise<{
-    slug: string
+    orgSlug: string
     collectionSlug: string
     skriptSlug: string
   }>
@@ -24,11 +24,11 @@ interface SkriptPageProps {
 
 // Generate metadata for SEO
 export async function generateMetadata({ params }: SkriptPageProps): Promise<Metadata> {
-  const { slug, collectionSlug, skriptSlug } = await params
+  const { orgSlug, collectionSlug, skriptSlug } = await params
 
   try {
     const organization = await prisma.organization.findUnique({
-      where: { slug },
+      where: { slug: orgSlug },
       select: { id: true, name: true }
     })
 
@@ -85,11 +85,11 @@ export async function generateMetadata({ params }: SkriptPageProps): Promise<Met
 }
 
 export default async function OrgSkriptPage({ params }: SkriptPageProps) {
-  const { slug, collectionSlug, skriptSlug } = await params
+  const { orgSlug, collectionSlug, skriptSlug } = await params
 
   // Get organization
   const organization = await prisma.organization.findUnique({
-    where: { slug },
+    where: { slug: orgSlug },
     select: {
       id: true,
       name: true,
@@ -222,7 +222,7 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
 
     const orgAsTeacher = {
       name: organization.name,
-      pageSlug: `org/${slug}`,
+      pageSlug: `org/${orgSlug}`,
       pageName: organization.name,
       pageDescription: organization.description,
       pageIcon: organization.logoUrl,
@@ -237,7 +237,7 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
         rootSkripts={[]}
         sidebarBehavior="contextual"
         typographyPreference="modern"
-        routePrefix={`/org/${slug}/c`}
+        routePrefix={`/org/${orgSlug}/c`}
       >
         <div id="paper" className="paper-responsive py-24 bg-card dark:bg-slate-900/80 paper-shadow border border-border dark:border-white/10" style={{ maxWidth: 'min(1280px, calc(100vw - 48px))', marginLeft: 'auto', marginRight: 'auto' }}>
           {isPreviewMode && (
@@ -256,7 +256,7 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
                   content={frontPage.content}
                   skriptId={skript.id}
                   pageId={frontPage.id}
-                  organizationSlug={slug}
+                  organizationSlug={orgSlug}
                 />
               </AnnotationWrapper>
             </article>
@@ -283,7 +283,7 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
   const firstPage = skript.pages.find(page => isAdmin || page.isPublished)
 
   if (firstPage) {
-    const redirectUrl = `/org/${slug}/c/${collectionSlug}/${skriptSlug}/${firstPage.slug}`
+    const redirectUrl = `/org/${orgSlug}/c/${collectionSlug}/${skriptSlug}/${firstPage.slug}`
     return <SkriptRedirect redirectUrl={redirectUrl} />
   }
 

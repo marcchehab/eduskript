@@ -10,14 +10,14 @@ export const revalidate = 0
 
 interface SkriptFrontPageProps {
   params: Promise<{
-    slug: string
+    collectionSlug: string
     skriptSlug: string
   }>
 }
 
 export default async function SkriptFrontPageEditPage({ params }: SkriptFrontPageProps) {
   const session = await getServerSession(authOptions)
-  const { slug: collectionSlug, skriptSlug } = await params
+  const { collectionSlug, skriptSlug } = await params
 
   if (!session?.user?.id) {
     redirect('/auth/signin')

@@ -17,7 +17,7 @@ export async function PATCH(
 
     const { id } = await params
     const body = await request.json()
-    const { title, slug, content, isPublished } = body
+    const { title, slug, content, isPublished, pageType, examSettings } = body
 
     // For content-only updates or publish-only updates, title and slug are not required
     const isContentOnlyUpdate = content !== undefined && title === undefined && slug === undefined && isPublished === undefined
@@ -88,13 +88,7 @@ export async function PATCH(
     const contentChanged = content !== undefined && currentVersion?.content !== content
 
     // Prepare update data - only include fields that are provided
-    const updateData: {
-      updatedAt: Date
-      title?: string
-      slug?: string
-      content?: string
-      isPublished?: boolean
-    } = {
+    const updateData: Record<string, unknown> = {
       updatedAt: new Date()
     }
 
@@ -102,6 +96,8 @@ export async function PATCH(
     if (slug !== undefined) updateData.slug = slug.trim()
     if (content !== undefined) updateData.content = content
     if (isPublished !== undefined) updateData.isPublished = isPublished
+    if (pageType !== undefined) updateData.pageType = pageType
+    if (examSettings !== undefined) updateData.examSettings = examSettings
 
     // Update the page
     const updatedPage = await prisma.page.update({

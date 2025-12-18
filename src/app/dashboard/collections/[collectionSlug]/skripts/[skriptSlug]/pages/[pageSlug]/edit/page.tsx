@@ -5,15 +5,15 @@ import { prisma } from '@/lib/prisma'
 import { PageEditor } from '@/components/dashboard/page-editor'
 
 interface PageParams {
-  slug: string
+  collectionSlug: string
   skriptSlug: string
   pageSlug: string
 }
 
-async function getPageData(slug: string, skriptSlug: string, pageSlug: string, userId: string) {
+async function getPageData(collectionSlug: string, skriptSlug: string, pageSlug: string, userId: string) {
   const collection = await prisma.collection.findFirst({
-    where: { 
-      slug,
+    where: {
+      slug: collectionSlug,
       authors: {
         some: {
           userId: userId
@@ -66,8 +66,8 @@ export default async function PageEditPage({
     return notFound()
   }
 
-  const { slug, skriptSlug, pageSlug } = await params
-  const data = await getPageData(slug, skriptSlug, pageSlug, session.user.id)
+  const { collectionSlug, skriptSlug, pageSlug } = await params
+  const data = await getPageData(collectionSlug, skriptSlug, pageSlug, session.user.id)
 
   if (!data) {
     return notFound()
@@ -76,10 +76,13 @@ export default async function PageEditPage({
   const { collection, skript, page } = data
 
   return (
-    <PageEditor 
-      collection={collection} 
-      skript={skript} 
-      page={page} 
+    <PageEditor
+      collection={collection}
+      skript={skript}
+      page={{
+        ...page,
+        examSettings: page.examSettings as { requireSEB?: boolean } | null
+      }}
     />
   )
 }

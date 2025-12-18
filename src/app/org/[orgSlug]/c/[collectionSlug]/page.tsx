@@ -11,18 +11,18 @@ export const dynamicParams = true
 
 interface CollectionPageProps {
   params: Promise<{
-    slug: string
+    orgSlug: string
     collectionSlug: string
   }>
 }
 
 // Generate metadata for SEO
 export async function generateMetadata({ params }: CollectionPageProps): Promise<Metadata> {
-  const { slug, collectionSlug } = await params
+  const { orgSlug, collectionSlug } = await params
 
   try {
     const organization = await prisma.organization.findUnique({
-      where: { slug },
+      where: { slug: orgSlug },
       select: { id: true, name: true }
     })
 
@@ -72,11 +72,11 @@ export async function generateMetadata({ params }: CollectionPageProps): Promise
 }
 
 export default async function OrgCollectionPage({ params }: CollectionPageProps) {
-  const { slug, collectionSlug } = await params
+  const { orgSlug, collectionSlug } = await params
 
   // Get organization
   const organization = await prisma.organization.findUnique({
-    where: { slug },
+    where: { slug: orgSlug },
     select: { id: true, name: true }
   })
 
@@ -153,7 +153,7 @@ export default async function OrgCollectionPage({ params }: CollectionPageProps)
 
   if (firstPage && firstSkript) {
     // Redirect to the first available page
-    redirect(`/org/${slug}/c/${collectionSlug}/${firstSkript.slug}/${firstPage.slug}`)
+    redirect(`/org/${orgSlug}/c/${collectionSlug}/${firstSkript.slug}/${firstPage.slug}`)
   }
 
   // No pages available - 404

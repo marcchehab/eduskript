@@ -14,14 +14,14 @@ export const dynamicParams = true
 
 interface OrgTeacherPageProps {
   params: Promise<{
-    slug: string
+    orgSlug: string
     pageSlug: string
   }>
 }
 
 // Generate metadata for SEO
 export async function generateMetadata({ params }: OrgTeacherPageProps): Promise<Metadata> {
-  const { slug: orgSlug, pageSlug } = await params
+  const { orgSlug, pageSlug } = await params
 
   try {
     // Get organization
@@ -89,7 +89,7 @@ export async function generateMetadata({ params }: OrgTeacherPageProps): Promise
 }
 
 export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
-  const { slug: orgSlug, pageSlug } = await params
+  const { orgSlug, pageSlug } = await params
 
   // Get organization
   const organization = await prisma.organization.findUnique({
@@ -219,7 +219,11 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
             id: cs.skript.id,
             title: cs.skript.title,
             slug: cs.skript.slug,
-            pages: cs.skript.pages
+            pages: cs.skript.pages.map(p => ({
+              id: p.id,
+              title: p.title,
+              slug: p.slug
+            }))
           }))
         })
       }
@@ -251,8 +255,15 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
           title: skript.title,
           description: skript.description,
           slug: skript.slug,
-          collection: skript.collectionSkripts[0].collection,
-          pages: skript.pages
+          collection: {
+            title: skript.collectionSkripts[0].collection.title,
+            slug: skript.collectionSkripts[0].collection.slug
+          },
+          pages: skript.pages.map(p => ({
+            id: p.id,
+            title: p.title,
+            slug: p.slug
+          }))
         })
       }
     }

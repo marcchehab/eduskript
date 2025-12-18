@@ -11,13 +11,13 @@ export const revalidate = 0
 
 interface CollectionPageProps {
   params: Promise<{
-    slug: string
+    collectionSlug: string
   }>
 }
 
 export default async function CollectionPage({ params }: CollectionPageProps) {
   const session = await getServerSession(authOptions)
-  const { slug } = await params
+  const { collectionSlug } = await params
   
   if (!session?.user?.id) {
     return null
@@ -25,7 +25,7 @@ export default async function CollectionPage({ params }: CollectionPageProps) {
 
   const collection = await prisma.collection.findFirst({
     where: {
-      slug: slug,
+      slug: collectionSlug,
       authors: {
         some: {
           userId: session.user.id

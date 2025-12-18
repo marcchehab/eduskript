@@ -16,17 +16,17 @@ export const dynamicParams = true
 
 interface OrgPageProps {
   params: Promise<{
-    slug: string
+    orgSlug: string
   }>
 }
 
 // Generate metadata for SEO
 export async function generateMetadata({ params }: OrgPageProps): Promise<Metadata> {
-  const { slug } = await params
+  const { orgSlug } = await params
 
   try {
     const organization = await prisma.organization.findUnique({
-      where: { slug },
+      where: { slug: orgSlug },
       select: { name: true, description: true, logoUrl: true },
     })
 
@@ -58,10 +58,10 @@ export async function generateMetadata({ params }: OrgPageProps): Promise<Metada
 }
 
 export default async function OrgPage({ params }: OrgPageProps) {
-  const { slug } = await params
+  const { orgSlug } = await params
 
   // Get organization with layout using cached query
-  const organization = await getOrgWithLayout(slug)
+  const organization = await getOrgWithLayout(orgSlug)
 
   if (!organization) {
     notFound()
@@ -106,7 +106,7 @@ export default async function OrgPage({ params }: OrgPageProps) {
   const { collections, rootSkripts } = pageItems.length > 0
     ? await getOrgHomepageContent(
         organization.id,
-        slug,
+        orgSlug,
         pageItems.map(item => ({ type: item.type, contentId: item.contentId }))
       )
     : { collections: [], rootSkripts: [] }
@@ -114,7 +114,7 @@ export default async function OrgPage({ params }: OrgPageProps) {
   // Create a "teacher" object for PublicSiteLayout (org acts as page owner)
   const orgAsTeacher = {
     name: organization.name,
-    pageSlug: `org/${slug}`, // Used for localStorage keys
+    pageSlug: `org/${orgSlug}`, // Used for localStorage keys
     pageName: organization.name,
     pageDescription: organization.description,
     pageIcon: organization.logoUrl,
@@ -129,7 +129,7 @@ export default async function OrgPage({ params }: OrgPageProps) {
       rootSkripts={rootSkripts}
       sidebarBehavior="contextual"
       typographyPreference="modern"
-      routePrefix={`/org/${slug}/c`}
+      routePrefix={`/org/${orgSlug}/c`}
     >
       <div id="paper" className="paper-responsive py-24 bg-card dark:bg-slate-900/80 paper-shadow border border-border dark:border-white/10" style={{ maxWidth: 'min(1280px, calc(100vw - 48px))', marginLeft: 'auto', marginRight: 'auto' }}>
         {/* Preview mode indicator for unpublished frontpage */}
@@ -149,7 +149,7 @@ export default async function OrgPage({ params }: OrgPageProps) {
               <ServerMarkdownRenderer
                 content={frontPage.content}
                 pageId={frontPage.id}
-                organizationSlug={slug}
+                organizationSlug={orgSlug}
               />
             </AnnotationWrapper>
           </article>
