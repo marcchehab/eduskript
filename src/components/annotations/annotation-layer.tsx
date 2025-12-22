@@ -1691,17 +1691,14 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
 
   // Watch dynamic-height elements (callouts, code editors) for size changes
   // This triggers repositioning when callouts expand/collapse or editors show console output
+  // Uses MutationObserver to handle dynamically added elements (e.g., hydrated code editors)
   useEffect(() => {
     if (!contentRef.current) return
-
-    const dynamicElements = contentRef.current.querySelectorAll<HTMLElement>('[data-dynamic-height="true"]')
-    if (dynamicElements.length === 0) return
 
     let rafId: number | null = null
     let isScheduled = false
 
-    const resizeObserver = new ResizeObserver(() => {
-      // Debounce with requestAnimationFrame
+    const scheduleRecalculation = () => {
       if (!isScheduled) {
         isScheduled = true
         rafId = requestAnimationFrame(() => {
@@ -1709,12 +1706,46 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
           isScheduled = false
         })
       }
+    }
+
+    const resizeObserver = new ResizeObserver(scheduleRecalculation)
+
+    // Observe all current dynamic-height elements
+    const observeElements = () => {
+      const dynamicElements = contentRef.current?.querySelectorAll<HTMLElement>('[data-dynamic-height="true"]')
+      dynamicElements?.forEach(el => resizeObserver.observe(el))
+    }
+
+    observeElements()
+
+    // Watch for dynamically added elements (e.g., hydrated code editors)
+    const mutationObserver = new MutationObserver((mutations) => {
+      let shouldObserve = false
+      for (const mutation of mutations) {
+        if (mutation.type === 'childList') {
+          mutation.addedNodes.forEach(node => {
+            if (node instanceof HTMLElement) {
+              // Check if the added node or its children have data-dynamic-height
+              if (node.hasAttribute?.('data-dynamic-height') ||
+                  node.querySelector?.('[data-dynamic-height="true"]')) {
+                shouldObserve = true
+              }
+            }
+          })
+        }
+      }
+      if (shouldObserve) {
+        observeElements()
+        // Also recalculate since new elements may have changed layout
+        scheduleRecalculation()
+      }
     })
 
-    dynamicElements.forEach(el => resizeObserver.observe(el))
+    mutationObserver.observe(contentRef.current, { childList: true, subtree: true })
 
     return () => {
       resizeObserver.disconnect()
+      mutationObserver.disconnect()
       if (rafId !== null) cancelAnimationFrame(rafId)
     }
   }, [children, recalculateHeadingPositions])
@@ -2523,6 +2554,16 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
             // Use classBroadcastData if available, otherwise fall back to stored canvas data
             const broadcastCanvasData = classBroadcastData?.canvasData || classBroadcastCanvasRef.current
             if (!broadcastCanvasData || broadcastCanvasData === '[]') return null
+
+            // Reposition to match current layout
+            const repositionedCanvasData = repositionTeacherAnnotations(
+              broadcastCanvasData,
+              classBroadcastData?.headingOffsets,
+              classBroadcastData?.paddingLeft,
+              headingPositions,
+              currentPaddingLeft
+            )
+
             return createPortal(
               <div
                 className="reference-layer-fade-in"
@@ -2542,7 +2583,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
                   width={paperWidth}
                   height={pageHeight}
                   mode="view"
-                  initialData={broadcastCanvasData}
+                  initialData={repositionedCanvasData}
                   headingPositions={headingPositions}
                   zoom={zoom}
                   readOnly
@@ -2558,6 +2599,15 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
             const feedbackCanvasData = studentFeedbackData?.canvasData || studentFeedbackCanvasRef.current
             if (!feedbackCanvasData || feedbackCanvasData === '[]') return null
 
+            // Reposition to match current layout
+            const repositionedCanvasData = repositionTeacherAnnotations(
+              feedbackCanvasData,
+              studentFeedbackData?.headingOffsets,
+              studentFeedbackData?.paddingLeft,
+              headingPositions,
+              currentPaddingLeft
+            )
+
             return createPortal(
               <div
                 className="reference-layer-fade-in"
@@ -2577,7 +2627,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
                   width={paperWidth}
                   height={pageHeight}
                   mode="view"
-                  initialData={feedbackCanvasData}
+                  initialData={repositionedCanvasData}
                   headingPositions={headingPositions}
                   zoom={zoom}
                   readOnly

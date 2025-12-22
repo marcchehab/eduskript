@@ -2204,6 +2204,7 @@ plots
       ref={wrapperRef}
       className="flex flex-col w-full border rounded-lg overflow-hidden bg-background relative"
       style={{ height: fullscreen ? '100vh' : `${manualHeight ?? totalHeight}px` }}
+      data-dynamic-height="true"
     >
       {/* Main content area */}
       <div ref={containerRef} className="flex flex-1 overflow-hidden relative">
