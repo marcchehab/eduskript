@@ -24,13 +24,39 @@ export function FontSizeControls({ orientation = 'horizontal' }: FontSizeControl
   const [mounted, setMounted] = useState(false)
 
   // Apply font size to the document
+  // All heading sizes are calculated as multiples of --user-font-size in CSS,
+  // so we only need to set this one variable for consistent cross-device rendering.
   const applyFontSize = (size: number) => {
-    // Apply to prose content specifically
     document.documentElement.style.setProperty('--user-font-size', `${size}px`)
 
-    // Also apply a scaling factor for other text elements
-    const scaleFactor = size / DEFAULT_SIZE
-    document.documentElement.style.setProperty('--user-font-scale', scaleFactor.toString())
+    // Force Safari/iPad to recalculate styles by directly setting font-size on prose containers
+    // Safari sometimes doesn't propagate CSS variable changes to em-based child sizes
+    const proseElements = document.querySelectorAll('.prose-theme, .markdown-content')
+    proseElements.forEach((el) => {
+      (el as HTMLElement).style.fontSize = `${size}px`
+    })
+
+    // Safari workaround: directly set h1 font-size since em units don't update reliably
+    const h1Elements = document.querySelectorAll('h1')
+    const h1Size = size * 5 // 5x base for title h1
+    h1Elements.forEach((el) => {
+      (el as HTMLElement).style.fontSize = `${h1Size}px`
+    })
+
+    // Force consistent line-height on paragraphs (browsers round 1.7 differently)
+    const lineHeight = Math.round(size * 1.7)
+    const textElements = document.querySelectorAll('.prose-theme p, .prose-theme li')
+    textElements.forEach((el) => {
+      (el as HTMLElement).style.lineHeight = `${lineHeight}px`
+    })
+
+    // Dispatch custom event after layout settles so annotation layer can reposition
+    // Double RAF ensures all style changes have been applied and layout is complete
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        window.dispatchEvent(new CustomEvent('eduskript:fontsize-change', { detail: { size } }))
+      })
+    })
   }
 
   // Set mounted state
@@ -102,6 +128,16 @@ export function FontSizeControls({ orientation = 'horizontal' }: FontSizeControl
         </Tooltip>
 
         <div className={isVertical ? 'h-[1px] w-4 bg-border mx-auto' : 'w-[1px] h-4 bg-border'} />
+
+        {/* Show font size number in development */}
+        {process.env.NODE_ENV === 'development' && (
+          <>
+            <span className="text-xs text-muted-foreground tabular-nums px-1 min-w-[24px] text-center">
+              {fontSize}
+            </span>
+            <div className={isVertical ? 'h-[1px] w-4 bg-border mx-auto' : 'w-[1px] h-4 bg-border'} />
+          </>
+        )}
 
         <Tooltip>
           <TooltipTrigger asChild>

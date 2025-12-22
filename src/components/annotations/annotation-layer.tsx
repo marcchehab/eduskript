@@ -1072,6 +1072,9 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [stylusModeActive, setStylusModeActive] = useState(false)
   const [activePen, setActivePen] = useState(0)
+  // Track if we're in "finger draw mode" (explicit draw mode without stylus)
+  // In this mode, ALL touch events should be blocked for annotation, not just stylus
+  const fingerDrawModeRef = useRef(false)
 
   // Track if pen is currently hovering or drawing - controls pointer-events on canvas
   const [penActive, setPenActive] = useState(false)
@@ -1266,7 +1269,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
   // Main element for snaps portal (snaps need to overflow paper boundaries)
   const [mainElement, setMainElement] = useState<HTMLElement | null>(null)
 
-  const [paperWidth, setPaperWidth] = useState(1280) // Fixed paper width
+  const [paperWidth, setPaperWidth] = useState(1024) // Fixed paper width (matches .paper-responsive)
 
   // Get paper element for portal and measure its width
   useEffect(() => {
@@ -1292,6 +1295,9 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
   const isAnnotatingRef = useRef(false)
   useEffect(() => {
     isAnnotatingRef.current = mode !== 'view' || stylusModeActive
+    // Finger draw mode: user explicitly activated draw/erase without a stylus
+    // In this mode, ALL touch input should draw, not scroll
+    fingerDrawModeRef.current = mode !== 'view' && !stylusModeActive
   }, [mode, stylusModeActive])
 
   // Add annotation-active class to paper when in draw/erase mode (prevents text selection on iOS Safari)
@@ -1332,6 +1338,15 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
         lastPenEventTimeRef.current = Date.now()
       }
 
+      // In finger draw mode, block ALL pointer events on paper (touch draws, not scrolls)
+      if (fingerDrawModeRef.current) {
+        const target = e.target as Element
+        if (target?.tagName === 'CANVAS' || target?.closest('#paper')) {
+          e.preventDefault()
+        }
+        return
+      }
+
       // Only prevent for pen/stylus, allow touch/mouse through for scrolling
       if (e.pointerType !== 'pen') return
 
@@ -1344,17 +1359,25 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
 
     // Block touch events that occur immediately after pen events
     // This prevents the "phantom scroll" when pen touches the screen
+    // Also blocks ALL touch in finger draw mode
     const preventTouchDuringPen = (e: TouchEvent) => {
       if (!isAnnotatingRef.current) return
 
+      const target = e.target as Element
+      const isOnPaper = target?.tagName === 'CANVAS' || target?.closest('#paper')
+
+      // In finger draw mode, block ALL touch events on paper
+      if (fingerDrawModeRef.current && isOnPaper) {
+        e.preventDefault()
+        return
+      }
+
+      // Otherwise, only block touch events that occur immediately after pen events
       const timeSinceLastPen = Date.now() - lastPenEventTimeRef.current
       // If a touch event happens within 300ms of pen activity, block it
       // This is likely a touch event triggered by the pen itself, not a finger
-      if (timeSinceLastPen < 300) {
-        const target = e.target as Element
-        if (target?.tagName === 'CANVAS' || target?.closest('#paper')) {
-          e.preventDefault()
-        }
+      if (timeSinceLastPen < 300 && isOnPaper) {
+        e.preventDefault()
       }
     }
 
@@ -1657,8 +1680,11 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
     }
 
     window.addEventListener('resize', handleResize)
+    // Also listen for font size changes from font-size-controls
+    window.addEventListener('eduskript:fontsize-change', handleResize)
     return () => {
       window.removeEventListener('resize', handleResize)
+      window.removeEventListener('eduskript:fontsize-change', handleResize)
       if (rafId !== null) cancelAnimationFrame(rafId)
     }
   }, [recalculateHeadingPositions])

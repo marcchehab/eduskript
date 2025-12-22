@@ -202,6 +202,30 @@ export function PublicSiteLayout({
     localStorage.setItem(EXPANDED_SKRIPTS_KEY, JSON.stringify(expandedSkripts))
   }, [expandedSkripts, isInitialized, EXPANDED_SKRIPTS_KEY])
 
+  // Apply paper scale for narrow viewports (< 1024px)
+  // This scales the paper to fit viewport width while maintaining fixed internal dimensions
+  useEffect(() => {
+    const PAPER_WIDTH = 1024
+
+    const updatePaperScale = () => {
+      const vw = window.innerWidth
+      if (vw < PAPER_WIDTH) {
+        const scale = vw / PAPER_WIDTH
+        document.documentElement.style.setProperty('--paper-scale', scale.toString())
+        // Negative margin to compensate for scaled height
+        const marginAdjust = `calc(-1 * (1 - ${scale}) * var(--paper-height, 0px))`
+        document.documentElement.style.setProperty('--paper-scale-margin', marginAdjust)
+      } else {
+        document.documentElement.style.removeProperty('--paper-scale')
+        document.documentElement.style.removeProperty('--paper-scale-margin')
+      }
+    }
+
+    updatePaperScale()
+    window.addEventListener('resize', updatePaperScale)
+    return () => window.removeEventListener('resize', updatePaperScale)
+  }, [])
+
   const toggleCollection = (collectionId: string) => {
     setExpandedCollections(prev => 
       prev.includes(collectionId) 
@@ -594,7 +618,7 @@ export function PublicSiteLayout({
             isSidebarCollapsed ? 'lg:ml-16' : 'lg:ml-80'
           }`}
         >
-          <main className="p-6 lg:p-8 bg-background min-h-screen">
+          <main className="bg-background min-h-screen">
             {children}
           </main>
         </div>

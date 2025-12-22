@@ -27,11 +27,17 @@
   - 🔲 TODO: SEB security: increase from spoofable user agent to BEK validation
 
 Issues
-- annotations: make groups "real" ? advantage would be in repositioning, but also maybe a horizontal repositioning
+- annotations: font resize doesn't initially have the correct state and it doesn't trigger annotation repositioning
 - annotations + positioning system: could scrolling be made more natural
 
+**Annotation Positioning: Tablet-First Fixed Paper Width** (see `docs/annotation-positioning-research.md`)
+- 🔲 Change `.paper-responsive` to fixed 768px width (no responsive padding breakpoints)
+- 🔲 Ensure sidebar behavior works correctly (floating on tablet, fixed on desktop)
+- 🔲 Test annotation alignment across tablet/desktop
+- 🔲 Accept phones as "scaled down" experience (pinch-zoom to read)
+- 🔲 Future: "Reading mode" toggle for responsive text without annotations
+
 - major:on safari ipad when i use the snap feature it freezes after the border animation is done. it then toook around 30 seconds until the snap appeared with the wrong font and no annotations.
-- minor: font resize doesn't initially have the correct state and it doesn't trigger annotation repositioning
 - minor: it might be the org frontpage cache invalidation isn't working. i updated a frontpage and still got the old version
 
 

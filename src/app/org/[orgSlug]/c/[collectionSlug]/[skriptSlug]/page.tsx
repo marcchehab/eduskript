@@ -239,7 +239,7 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
         typographyPreference="modern"
         routePrefix={`/org/${orgSlug}/c`}
       >
-        <div id="paper" className="paper-responsive py-24 bg-card dark:bg-slate-900/80 paper-shadow border border-border dark:border-white/10" style={{ maxWidth: 'min(1280px, calc(100vw - 48px))', marginLeft: 'auto', marginRight: 'auto' }}>
+        <div id="paper" className="paper-responsive py-24 bg-card dark:bg-slate-900/80 paper-shadow border border-border dark:border-white/10">
           {isPreviewMode && (
             <div className="flex items-center gap-2 px-3 py-1.5 mb-4 text-sm rounded-md bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-800/50">
               <svg className="h-4 w-4 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">

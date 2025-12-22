@@ -3,29 +3,21 @@
 /**
  * Hook for students to receive teacher annotations
  *
- * Fetches teacher annotations (class broadcasts and individual feedback)
- * and subscribes to real-time updates via SSE.
+ * IMPORTANT: This hook now uses TeacherBroadcastContext when available.
+ * If wrapped in TeacherBroadcastProvider, all calls share a single data source.
+ * If not wrapped, it falls back to direct API calls (legacy behavior).
+ *
+ * RECOMMENDED: Wrap pages with TeacherBroadcastProvider to deduplicate requests.
  *
  * USAGE: Called by student-facing components (annotation-layer, code-editor)
  * to receive teacher content. The hook is intentionally "dumb" - it fetches
  * everything for the page and lets consumers filter by their needs.
- *
- * DATA FLOW:
- * 1. Initial fetch from /api/student/teacher-annotations
- * 2. SSE subscription for real-time updates
- * 3. On SSE event, refetch entire dataset (not incremental)
- *
- * TRADE-OFF: Refetching all data on any update is simple but wasteful.
- * For pages with many broadcasts, consider adding event payload with
- * changed data to enable incremental updates.
- *
- * SWR-LIKE PATTERN: Shows stale data while fetching to prevent UI flicker.
- * isLoading is only true on initial load, not on refetch.
  */
 
 import { useState, useEffect, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import { useExamSession } from '@/contexts/exam-session-context'
+import { useTeacherBroadcastContext } from '@/contexts/teacher-broadcast-context'
 import { useRealtimeEvents } from './use-realtime-events'
 
 export interface TeacherClassAnnotation {
@@ -80,13 +72,32 @@ export interface TeacherBroadcastData {
   individualCodeHighlights: TeacherIndividualCodeHighlights[]
 }
 
+interface TeacherBroadcastResult {
+  classAnnotations: TeacherClassAnnotation[]
+  classSnaps: TeacherClassSnaps[]
+  classCodeHighlights: TeacherClassCodeHighlights[]
+  individualFeedback: TeacherIndividualFeedback | null
+  individualSnapFeedback: TeacherIndividualFeedback | null
+  individualCodeHighlights: TeacherIndividualCodeHighlights[]
+  isLoading: boolean
+  error: string | null
+  refetch: () => Promise<void>
+}
+
 /**
  * Hook to receive teacher annotations for a specific page
+ *
+ * Uses TeacherBroadcastContext when available (recommended).
+ * Falls back to direct API calls when context is not present.
  *
  * @param pageId - The page ID to fetch annotations for
  * @returns Object with teacher annotations and loading state
  */
-export function useTeacherBroadcast(pageId: string) {
+export function useTeacherBroadcast(pageId: string): TeacherBroadcastResult {
+  // Try to use context first (deduplicates requests)
+  const contextData = useTeacherBroadcastContext()
+
+  // Direct fetch state (used when context not available)
   const { status } = useSession()
   const examSession = useExamSession()
   const [classAnnotations, setClassAnnotations] = useState<TeacherClassAnnotation[]>([])
@@ -98,31 +109,29 @@ export function useTeacherBroadcast(pageId: string) {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Track if context is being used
+  const useContext = !!contextData
+
   // Consider authenticated if either NextAuth session OR exam session is active
   const isAuthenticated = status === 'authenticated' || examSession.isInExamSession
 
-  // Fetch teacher annotations from API
-  // Uses SWR pattern: keep showing stale data while fetching, then swap when ready.
-  // This prevents UI flicker during refetch.
+  // Fetch teacher annotations from API (only when context not available)
   const fetchAnnotations = useCallback(async () => {
-    if (!isAuthenticated || !pageId) {
+    if (useContext || !isAuthenticated || !pageId) {
       setIsLoading(false)
       return
     }
 
     try {
       setError(null)
-      // Don't set isLoading=true on refetch - keeps stale data visible (SWR pattern)
-      // Only set loading on initial fetch (when we have no data yet)
 
-      // Add timestamp to prevent browser caching
       const res = await fetch(`/api/student/teacher-annotations?pageId=${encodeURIComponent(pageId)}&_t=${Date.now()}`)
       if (!res.ok) {
         throw new Error(`Failed to fetch: ${res.status}`)
       }
 
       const data: TeacherBroadcastData = await res.json()
-      console.log('[useTeacherBroadcast] Fetched data:', {
+      console.log('[useTeacherBroadcast] Fetched data (fallback):', {
         classAnnotationsCount: data.classAnnotations?.length ?? 0,
         classSnapsCount: data.classSnaps?.length ?? 0,
         classCodeHighlightsCount: data.classCodeHighlights?.length ?? 0,
@@ -130,7 +139,6 @@ export function useTeacherBroadcast(pageId: string) {
         hasIndividualSnapFeedback: !!data.individualSnapFeedback,
         individualCodeHighlightsCount: data.individualCodeHighlights?.length ?? 0,
         individualFeedbackTeacherName: data.individualFeedback?.teacherName,
-        individualSnapFeedbackTeacherName: data.individualSnapFeedback?.teacherName,
       })
       setClassAnnotations(data.classAnnotations || [])
       setClassSnaps(data.classSnaps || [])
@@ -143,38 +151,43 @@ export function useTeacherBroadcast(pageId: string) {
     } finally {
       setIsLoading(false)
     }
-  }, [pageId, isAuthenticated])
+  }, [pageId, isAuthenticated, useContext])
 
-  // Initial fetch
+  // Initial fetch (only when context not available)
   useEffect(() => {
-    fetchAnnotations()
-  }, [fetchAnnotations])
+    if (!useContext) {
+      fetchAnnotations()
+    }
+  }, [fetchAnnotations, useContext])
 
-  // Subscribe to real-time updates
-  // Note: Snaps share the same SSE events as annotations (teacher-annotations-update, teacher-feedback)
-  // since both are fetched together in a single API call
+  // Subscribe to real-time updates (only when context not available)
+  // When context IS available, the context handles SSE subscription
   useRealtimeEvents(
     ['teacher-annotations-update', 'teacher-feedback'],
     (event) => {
-      console.log('[useTeacherBroadcast] Received SSE event:', event.type, 'pageId:', (event as { pageId?: string }).pageId, 'current pageId:', pageId)
-      // Check if event is for this page
+      if (useContext) return // Context handles this
+      console.log('[useTeacherBroadcast] Received SSE event (fallback):', event.type, 'pageId:', (event as { pageId?: string }).pageId, 'current pageId:', pageId)
       if (event.type === 'teacher-annotations-update') {
-        if (event.pageId === pageId) {
+        if ((event as { pageId?: string }).pageId === pageId) {
           console.log('[useTeacherBroadcast] Event matches page, refetching class broadcasts')
-          // Refetch to get updated class data (annotations + snaps)
           fetchAnnotations()
         }
       } else if (event.type === 'teacher-feedback') {
-        if (event.pageId === pageId) {
+        if ((event as { pageId?: string }).pageId === pageId) {
           console.log('[useTeacherBroadcast] Event matches page, refetching individual feedback')
-          // Refetch to get updated individual feedback (annotations + snaps)
           fetchAnnotations()
         }
       }
     },
-    { enabled: isAuthenticated }
+    { enabled: isAuthenticated && !useContext }
   )
 
+  // If context is available, return context data
+  if (contextData) {
+    return contextData
+  }
+
+  // Fallback: return direct fetch data
   return {
     classAnnotations,
     classSnaps,

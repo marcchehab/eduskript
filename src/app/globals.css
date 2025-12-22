@@ -307,42 +307,44 @@ body {
 
 
 /*
- * Responsive paper container
+ * Fixed-width paper container for consistent annotation positioning
  *
- * #paper is the canvas boundary - canvas always matches its bounds exactly.
- * Width is 100% of parent (respects main's padding for symmetric margins).
- * Combined padding (canvas boundary + text readability) all on #paper.
+ * See: docs/annotation-positioning-research.md
+ *
+ * Why 768px: Matches tablet viewport (iPad portrait). Tablets are the
+ * primary annotation device. Phones scale down (pinch-zoom), desktops
+ * have sidebar space around the fixed paper.
+ *
+ * Fixed width means:
+ * - Text line breaks at same positions on all devices
+ * - Annotation coordinates don't need horizontal repositioning
+ * - Y-axis repositioning still handled by section-based algorithm
  */
 .paper-responsive {
-  max-width: 1280px;
-  /* Don't set explicit width - let block element flow naturally */
+  width: 1024px;
+  max-width: 1024px;
   box-sizing: border-box;
   position: relative;
   /* Use clip instead of hidden - clips overflow without creating a scroll container */
   /* This prevents paper from capturing scroll events, letting parent handle all scrolling */
   overflow: clip;
+  margin: 0 auto;
 
-  /* Combined horizontal padding: canvas boundary + text readability */
-  /* 96px (p-24) + 96px (px-24) = 192px on large screens */
-  @apply px-48;
+  /* Fixed padding - same on all devices for consistent annotation coordinates */
+  @apply px-24; /* 96px horizontal padding - generous margins on wider paper */
 }
 
-/* Responsive padding adjustments for smaller screens */
-@media (max-width: 1280px) {
-  .paper-responsive {
-    @apply px-32; /* 128px */
-  }
-}
-
+/* On narrow screens, JavaScript applies transform scale via --paper-scale CSS variable */
 @media (max-width: 1024px) {
   .paper-responsive {
-    @apply px-16; /* 64px */
-  }
-}
-
-@media (max-width: 768px) {
-  .paper-responsive {
-    @apply px-8; /* 32px */
+    /* Scale from top-left so paper aligns to viewport edge */
+    transform-origin: top left;
+    transform: scale(var(--paper-scale, 1));
+    /* Remove auto margin - paper fills viewport width when scaled */
+    margin-left: 0;
+    margin-right: 0;
+    /* Negative margin compensates for scaled height */
+    margin-bottom: calc(var(--paper-scale-margin, 0px));
   }
 }
 
@@ -375,9 +377,15 @@ article.prose-theme > div > :first-child {
 .prose-theme h1 {
   position: relative;
   text-align: center;
-  font-size: calc(var(--user-font-scale, 1.1875) * 5rem);
+  /* 5em = 5x the parent font size (which is --user-font-size) */
+  font-size: 5em;
   margin: 3rem 0 2.5rem 0;
   z-index: 0;
+  /* Normalize font rendering across browsers */
+  letter-spacing: -0.02em !important;
+  word-spacing: 0 !important;
+  font-kerning: normal !important;
+  text-rendering: geometricPrecision !important;
 }
 
 .prose-theme h2 {
@@ -1062,10 +1070,13 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
   font-weight: 700;
 }
 
-/* User-controlled font size */
+/* User-controlled font size
+ * All sizes use --user-font-size (px) as base to ensure consistent rendering
+ * across devices regardless of browser root font size.
+ * Headings are calculated as multiples of --user-font-size.
+ */
 :root {
   --user-font-size: 19px; /* Default ~14pt */
-  --user-font-scale: 1.1875; /* 19/16 */
 }
 
 .prose-theme {
@@ -1077,41 +1088,55 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
 .prose-theme td,
 .prose-theme blockquote {
   font-size: var(--user-font-size, 19px);
+  /* Fixed line-height ratio - browsers may round differently with unitless values */
   line-height: 1.7;
 }
 
-/* Scale headings proportionally */
+/* Scale headings proportionally using em units
+ * em is relative to parent font size (which is --user-font-size on .prose-theme)
+ * This works consistently across all browsers including Safari on iPad.
+ */
 .prose-theme h1 {
-  font-size: calc(var(--user-font-scale, 1.1875) * 2.25rem);
+  /* Main content h1 - overridden below for title h1 */
+  font-size: 2.25em;
 }
 
 .prose-theme h2 {
-  font-size: calc(var(--user-font-scale, 1.1875) * 1.875rem);
+  font-size: 1.875em;
 }
 
 .prose-theme h3 {
-  font-size: calc(var(--user-font-scale, 1.1875) * 1.5rem);
+  font-size: 1.5em;
 }
 
 .prose-theme h4 {
-  font-size: calc(var(--user-font-scale, 1.1875) * 1.25rem);
+  font-size: 1.25em;
 }
 
 .prose-theme h5 {
-  font-size: calc(var(--user-font-scale, 1.1875) * 1.125rem);
+  font-size: 1.125em;
 }
 
 .prose-theme h6 {
-  font-size: calc(var(--user-font-scale, 1.1875) * 1rem);
+  font-size: 1em;
 }
 
-/* ColorTitle - Fancy rainbow gradient for h1 headings */
+/* Title h1 - larger, centered page title
+ * 5em = 5x base size gives ~70px at min (14px) and ~140px at max (28px)
+ */
 .prose-theme h1 {
   position: relative;
   text-align: center;
-  font-size: calc(var(--user-font-scale, 1.1875) * 6rem);
+  font-size: 5em;
   margin: 3rem 0 2.5rem 0;
   color: hsl(var(--prose-headings)) !important;
+  /* Normalize font rendering across browsers (Safari renders wider than Firefox) */
+  letter-spacing: -0.02em !important;
+  word-spacing: 0 !important;
+  font-kerning: normal !important;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision !important;
 }
 
 /* Rainbow gradient shadow effect - apply to h1 with color-title class */
@@ -1146,6 +1171,8 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
   font-weight: bold;
   font-size: inherit;
   line-height: inherit;
+  letter-spacing: inherit;
+  word-spacing: inherit;
   pointer-events: none;
 }
 

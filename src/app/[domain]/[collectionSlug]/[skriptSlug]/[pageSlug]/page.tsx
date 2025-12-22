@@ -412,7 +412,7 @@ export default async function PublicPage({ params, searchParams }: PageProps) {
       typographyPreference={teacher.typographyPreference as 'modern' | 'classic' || 'modern'}
       pageId={page.id}
     >
-      <div id="paper" className="paper-responsive py-24 bg-card dark:bg-slate-900/80 paper-shadow border border-border dark:border-white/10" style={{ maxWidth: 'min(1280px, calc(100vw - 48px))', marginLeft: 'auto', marginRight: 'auto' }}>
+      <div id="paper" className="paper-responsive py-24 bg-card dark:bg-slate-900/80 paper-shadow border border-border dark:border-white/10">
         <article className="prose-theme">
           <AnnotationWrapper pageId={page.id} content={page.content} publicAnnotations={publicAnnotations} isPageAuthor={isPageAuthor}>
             <ServerMarkdownRenderer

@@ -451,10 +451,21 @@ export async function POST(request: NextRequest) {
     }
 
     // Publish SSE events for teacher broadcasts/feedback
+    // Deduplicate broadcasts by targetType+targetId+pageId to avoid spamming students
+    // when multiple adapters (e.g., 5 code editors) sync in the same request
     if (teacherBroadcasts.length > 0) {
-      console.log('[user-data/sync] Publishing teacher broadcast events:', teacherBroadcasts.length)
+      const uniqueBroadcasts = new Map<string, typeof teacherBroadcasts[0]>()
+      for (const broadcast of teacherBroadcasts) {
+        const key = `${broadcast.targetType}:${broadcast.targetId}:${broadcast.pageId}`
+        // Keep the first occurrence (adapter doesn't matter for notification)
+        if (!uniqueBroadcasts.has(key)) {
+          uniqueBroadcasts.set(key, broadcast)
+        }
+      }
+
+      console.log('[user-data/sync] Publishing teacher broadcast events:', uniqueBroadcasts.size, '(deduped from', teacherBroadcasts.length, ')')
       try {
-        for (const broadcast of teacherBroadcasts) {
+        for (const broadcast of uniqueBroadcasts.values()) {
           if (broadcast.targetType === 'class') {
             // Broadcast to entire class
             console.log('[user-data/sync] Publishing to class:', broadcast.targetId, 'pageId:', broadcast.pageId)
