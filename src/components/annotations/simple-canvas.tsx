@@ -138,6 +138,8 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       width: number
       sectionId: string
       sectionOffsetY: number
+      avgX?: number  // Average X position of all points (for grouping)
+      avgY?: number  // Average Y position of all points (for section detection)
     }>>([])
     const currentPathRef = useRef<Array<{ x: number; y: number; pressure: number }>>([])
     const strokeStartTimeRef = useRef<number>(0) // Track when current stroke started for telemetry
@@ -833,6 +835,15 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
           })
         }
 
+        // Compute average position for stroke grouping and quick section lookups
+        let avgX = 0, avgY = 0
+        for (const pt of currentPathRef.current) {
+          avgX += pt.x
+          avgY += pt.y
+        }
+        avgX /= pointCount
+        avgY /= pointCount
+
         // Save the path with all original points and pressure data intact
         // Visual smoothing is handled by Bezier curves during rendering
         pathsRef.current.push({
@@ -842,7 +853,9 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
           color: strokeColor,
           width: strokeWidth,
           sectionId,
-          sectionOffsetY
+          sectionOffsetY,
+          avgX,
+          avgY
         })
 
         currentPathRef.current = []

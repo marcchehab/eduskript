@@ -60,6 +60,8 @@ export interface StrokeData {
   width: number
   sectionId: string        // Which section this stroke belongs to
   sectionOffsetY: number   // Y-offset of section when drawn
+  avgX?: number            // Average X position of all points (for grouping and quick lookups)
+  avgY?: number            // Average Y position of all points (for section detection)
 }
 
 // Heading position tracking
