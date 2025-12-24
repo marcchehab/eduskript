@@ -1,72 +1,117 @@
 **IMPORTANT: Do not mark items as complete in this roadmap unless explicitly instructed by the user.**
 
-*Last updated: 2025-12-22*
-*Current Status: Simplified Architecture - Username-Based Routing*
+*Last updated: 2025-12-23*
+*Current Status: Production Migration in Progress*
 
 > **Note**: Completed features have been moved to `docs/COMPLETED_FEATURES.md`
 
 ---
 
-## 🎯 Priority List
+## 🚀 IMMEDIATE: Production Migration
 
-- **SEB** integrate safe exam browser and create exams using eduskript
-  - ✅ SEB token/session authentication (one-time tokens, persistent sessions)
-  - ✅ Exam session persistence (4 hours)
-  - ✅ Race condition fix (atomic token validation)
-  - ✅ PageUnlock model for class/student unlocks
-  - ✅ ExamState model (closed/open/ended per class)
-  - ✅ ExamSubmission model for tracking hand-ins
-  - ✅ Teacher exam toolbar (open/close/end exam, live student counts)
-  - ✅ Student exam layout (no sidebar, hand-in button always visible)
-  - ✅ Waiting room with polling until teacher opens exam
-  - ✅ Hand-in flow with confirmation dialog
-  - ✅ Auto-create ExamState when unlocking exam for class
-  - ✅ SSE event types for exam state changes
-  - 🔲 Switch to see what students are doing (like annotation system)
-  - 🔲 After-exam teacher UX (correct/view exam, points overview)
-  - 🔲 SEB security: increase from spoofable user agent to BEK validation
+**Goal**: Get production running with informatikgarten content migrated to eduskript
 
-**Annotation Positioning: Tablet-First Fixed Paper Width** (see `docs/annotation-positioning-research.md`)
-- ✅ Fixed paper width (1024px) with responsive scaling for narrow viewports
-- ✅ Safari/iPad font size fixes (CSS variable propagation, em-unit workarounds)
-- ✅ Consistent line-height across browsers (fixes subpixel rounding differences)
-- ✅ Font-size change triggers annotation repositioning via custom event
-- ✅ Paper scales proportionally on viewports < 1024px (transform: scale)
-- ✅ Sidebar floats on tablet (<1024px), fixed on desktop
-- ✅ Finger draw mode blocks touch scrolling for annotation on touch devices
-- ✅ CSS transform scale fix: heading positions now converted to unscaled coordinates for correct cross-device annotation repositioning
-- 🔲 Improve annotation UX again, it feels a little laggy on iPad again. Pressure curve might be a bit off, too.
-- 🔲 Future: "Reading mode" toggle for responsive text without annotations
+**Strategy**: Import to local dev DB, test thoroughly, then `pg_dump` to production (exact copy, no migration issues)
 
-Issues (annotation system):
-- 🔲 Scrolling could be more natural (investigate momentum/inertia). when zooming out, when page is narrower than viewport, it should be center aligned.
+### Step 1: Export Informatikgarten Content
+- [ ] Re-export informatikgarten data (content has been updated since last export)
+- [ ] Export format: JSON with collections, skripts, pages, files
+- [ ] Include file references and media assets
+- [ ] Verify export completeness
 
-- major: two sessions seem to be running sometimes. i logged out as eduadmin and was reverted to being logged in as a@a.com
-- major:on safari ipad when i use the snap feature it freezes after the border animation is done. it then toook around 30 seconds until the snap appeared with the wrong font and no annotations.
-- minor: it might be the org frontpage cache invalidation isn't working. i updated a frontpage and still got the old version
+### Step 2: Import to Local Dev Database
+- [ ] Ensure local PostgreSQL is running (`pnpm db:local`)
+- [ ] Reset local DB to clean state (`pnpm db:reset` or fresh `db push`)
+- [ ] Create/update import script for eduskript schema
+- [ ] Map informatikgarten structure to eduskript models:
+  - Collections → Collections
+  - Scripts → Skripts
+  - Pages → Pages
+  - Files → File storage with deduplication
+- [ ] Handle user creation (eduadmin as owner)
+- [ ] Run import script against local dev DB
+- [ ] Migrate file assets to Scaleway storage (or keep existing bucket)
 
-**LMS Features:**
-- **Interactive Quizzes** - In-lesson quizzes with progress tracking. there is already a <Question> component with live answers.
-- **Student Progress Tracking** - Gradebook interface, view progress, grade submissions. <Question> component would probably have to save question to db to quickly query questions.
-- **Randomized question / exercise pages** maybe through special skripts that serve their pages randomized per day / week?
-- **pages that are exams** and can be unlocked for a certain class
-- **grading with points**. teachers can use annotation feedback system, give points per question.
+### Step 3: Local Verification
+- [ ] Start dev server (`pnpm dev`)
+- [ ] Test all imported content renders correctly
+- [ ] Verify markdown processing (code blocks, math, images, Excalidraw)
+- [ ] Check file/image URLs resolve correctly
+- [ ] Test navigation and routing
+- [ ] Verify SQL editors with database files work
+- [ ] Test annotations work on imported pages
 
-- migration had issues, let's try locally until it works and ultimately migrate the database instead (teacher bucket is the same anyway)
-- **Content migration** - continue content migration
+### Step 4: Copy to Production (pg_dump)
+- [ ] Reset/recreate Koyeb production database (empty slate)
+- [ ] Export local dev DB:
+  ```bash
+  pg_dump postgresql://postgres:postgres@localhost:5432/eduskript_dev > dump.sql
+  ```
+- [ ] Import to production:
+  ```bash
+  psql $KOYEB_DATABASE_URL < dump.sql
+  ```
+- [ ] Verify production site works
 
-**Infrastructure:**
-- **Backup System** - Easy database exports and UI to restore if necessary
+### Step 5: Go-Live Verification
+- [ ] Test production site end-to-end
+- [ ] Verify login/auth works
+- [ ] Check all content accessible
+- [ ] Test on mobile/tablet
+- [ ] Monitor for errors
+
+---
+
+## 🐛 Known Bugs (Priority Order)
+
+### Major
+- **Safari iPad snap freeze** - When using snap feature, freezes after border animation for ~30 seconds, then shows snap with wrong font and no annotations
+
+### Minor
+- **Org frontpage cache invalidation** - Updated frontpage may still show old version (ISR cache issue)
+
+### Unconfirmed
+- **Session state after logout** - (Partially fixed) Enabled `refetchOnWindowFocus` to prevent stale sessions between tabs
+
+---
+
+## 🎯 Active Feature Development
+
+### Safe Exam Browser (SEB) Integration
+*Most features complete, remaining work:*
+- 🔲 Switch to see what students are doing (like annotation system)
+- 🔲 After-exam teacher UX (correct/view exam, points overview)
+- 🔲 SEB security: upgrade from spoofable user agent to BEK validation
+
+### Annotation System Polish
+*Core system complete, UX improvements needed:*
+- 🔲 Improve annotation UX - feels laggy on iPad, pressure curve may be off
+- 🔲 "Reading mode" toggle for responsive text without annotations
+- 🔲 Scrolling improvements (momentum/inertia, center alignment when zoomed out)
+- 🔲 Delta updates for strokes (see `docs/`)
+
+---
+
+## 📋 Backlog by Category
+
+### LMS Features
+- **Interactive Quizzes** - In-lesson quizzes with progress tracking (existing `<Question>` component has live answers)
+- **Student Progress Tracking** - Gradebook interface, view progress, grade submissions
+- **Randomized question/exercise pages** - Special skripts serving randomized pages per day/week
+- **Exam pages** - Pages that are exams, unlockable for specific classes
+- **Grading with points** - Annotation feedback system with points per question
+
+### Infrastructure
+- **Backup System** - Easy database exports and UI to restore
 - **Marketplace / Sharing** - Content sharing and selling platform
 - **Plugin System** - Extensible component architecture, MDX support
 - **Full text search**
 
-small stuff:
-- bigger handles for resize bars in the editor when using touch device (in place but untested)
-- investigate weirdness on chrome for android (might be gone)
-- Very low: Comments by students (maybe per class)
+### Small Improvements
+- Bigger handles for resize bars in editor on touch devices (in place, untested)
+- Investigate weirdness on Chrome for Android (might be resolved)
+- Comments by students (maybe per class) - very low priority
 
-- **delta updates for strokes** - check docs/
 ---
 
 ## 📝 Notes & Considerations
@@ -83,134 +128,45 @@ small stuff:
 **Goal**: Professional video hosting with Swiss data privacy compliance
 
 **Phase 1.1.1: Provider Research**
-- [ ] Evaluate Mux Video
-  - [ ] Pricing and storage limits
-  - [ ] Data residency (EU/Switzerland?)
-  - [ ] Video processing (adaptive streaming, thumbnails)
-  - [ ] Privacy compliance (GDPR, Swiss laws)
-- [ ] Research Infomaniak kDrive/kVideo
-  - [ ] Available APIs for video upload/streaming
-  - [ ] Data residency (Swiss-hosted)
-  - [ ] Pricing structure
-  - [ ] Features comparison with Mux
-- [ ] Research alternative Swiss/EU providers
-  - [ ] Swisscom, Cloudflare Stream (EU), bunny.net
-  - [ ] Compare features, pricing, data residency
-- [ ] **Decision criteria**:
-  - ✅ Data stored in Switzerland or EU
-  - ✅ GDPR compliant
-  - ✅ Adaptive streaming support
-  - ✅ API for upload/playback
-  - ✅ Reasonable pricing for educational use
+- [ ] Evaluate Mux Video (pricing, data residency, GDPR)
+- [ ] Research Infomaniak kDrive/kVideo (Swiss-hosted)
+- [ ] Research alternatives: Swisscom, Cloudflare Stream (EU), bunny.net
+- [ ] Decision criteria: Swiss/EU data, GDPR compliant, adaptive streaming, API, reasonable pricing
 
 **Phase 1.1.2: Video Upload Implementation**
-- [ ] Design video storage model
-  - [ ] Add `Video` table to Prisma schema
-  - [ ] Track upload status, processing state, provider metadata
-  - [ ] Link videos to skripts (similar to file storage)
-- [ ] Implement upload flow
-  - [ ] Create upload API endpoint: `/api/videos/upload`
-  - [ ] Direct upload to provider (avoid server relay)
-  - [ ] Progress tracking and error handling
-  - [ ] Generate thumbnail from first frame
-- [ ] Build video uploader component
-  - [ ] Drag-and-drop interface
-  - [ ] Upload progress indicator
-  - [ ] Video preview after upload
-  - [ ] Video management (delete, re-upload)
-- [ ] Add video embedding to markdown
-  - [ ] Custom remark plugin for `![[video:id]]` syntax
-  - [ ] Responsive video player
-  - [ ] Playback controls and quality selector
-  - [ ] Captions/subtitles support (future)
+- [ ] Design video storage model (`Video` table, link to skripts)
+- [ ] Implement upload flow (direct to provider, progress tracking)
+- [ ] Build video uploader component (drag-drop, preview, management)
+- [ ] Add video embedding to markdown (custom remark plugin, responsive player)
 
 ### 1.2 Interactive Quiz Component
 **Goal**: In-lesson quizzes with student progress tracking
 
 **Phase 1.2.1: Quiz Structure Design**
-- [ ] Define quiz types
-  - [ ] Multiple choice (single/multiple answers)
-  - [ ] True/False
-  - [ ] Fill in the blank
-  - [ ] Short answer (auto-graded with keyword matching)
-  - [ ] Code challenges (future: run code and check output)
-- [ ] Design quiz storage format
-  - [ ] JSON schema for quiz questions and answers
-  - [ ] Store as component data in markdown
-  - [ ] Version control for quiz content
-- [ ] Plan integration with user data service
-  - [ ] Submit answers anonymously (zero-knowledge)
-  - [ ] Track completion and scores
-  - [ ] Allow retry attempts
+- [ ] Define quiz types (multiple choice, true/false, fill-in-blank, short answer, code challenges)
+- [ ] Design quiz storage format (JSON schema in markdown)
+- [ ] Plan integration with user data service (anonymous submissions, retry attempts)
 
 **Phase 1.2.2: Quiz Component Implementation**
-- [ ] Build quiz renderer
-  - [ ] Create `src/components/quiz/quiz-renderer.tsx`
-  - [ ] Support all question types
-  - [ ] Immediate feedback on submission
-  - [ ] Show correct answers after submission
-- [ ] Build quiz editor
-  - [ ] Create `src/components/dashboard/quiz-editor.tsx`
-  - [ ] WYSIWYG interface for creating quizzes
-  - [ ] Add/remove/reorder questions
-  - [ ] Set correct answers and point values
-- [ ] Integrate with markdown pipeline
-  - [ ] Custom component plugin (uses plugin system from 1.3)
-  - [ ] Syntax: ` ```quiz` block with JSON config
-  - [ ] Render quiz in public pages
-- [ ] Connect to user data service (depends on Phase 2)
-  - [ ] Submit quiz responses via API
-  - [ ] Store anonymized results
-  - [ ] Display student's previous attempts
+- [ ] Build quiz renderer (`src/components/quiz/quiz-renderer.tsx`)
+- [ ] Build quiz editor (`src/components/dashboard/quiz-editor.tsx`)
+- [ ] Integrate with markdown pipeline (` ```quiz` blocks)
+- [ ] Connect to user data service
 
 ### 1.3 Custom Component Plugin System
 **Goal**: Extensible plugin architecture for interactive lesson components
 
 **Phase 1.3.1: Architecture Planning**
-- [ ] Brainstorm plugin architecture approaches
-  - [ ] Sandboxed iframe approach vs. React component registration
-  - [ ] Security model (XSS prevention, CSP)
-  - [ ] API surface for plugins
-  - [ ] Plugin manifest format
-- [ ] Design plugin lifecycle
-  - [ ] Discovery and loading mechanism
-  - [ ] Registration and validation
-  - [ ] Rendering and state management
-  - [ ] Hot reloading for development
-- [ ] Consider marketplace implications
-  - [ ] Plugin versioning and updates
-  - [ ] Review/approval process
-  - [ ] Licensing model (free vs. paid)
-  - [ ] Plugin dependencies
+- [ ] Brainstorm approaches (sandboxed iframe vs React registration)
+- [ ] Design plugin lifecycle (discovery, registration, rendering, hot reload)
+- [ ] Consider marketplace implications (versioning, review, licensing)
 
 **Phase 1.3.2: Core Plugin Infrastructure**
-- [ ] Implement plugin loader system
-  - [ ] Create plugin registry at `src/lib/plugins/registry.ts`
-  - [ ] Plugin manifest schema and validation
-  - [ ] Dynamic import mechanism for plugin bundles
+- [ ] Implement plugin loader system (`src/lib/plugins/registry.ts`)
 - [ ] Build plugin sandbox environment
-  - [ ] Isolate plugin execution context
-  - [ ] Provide safe API for DOM manipulation
-  - [ ] Message passing between host and plugin
 - [ ] Create plugin development kit (PDK)
-  - [ ] TypeScript types and interfaces
-  - [ ] Helper utilities for common tasks
-  - [ ] Development mode with hot reload
-  - [ ] Example plugin templates
-- [ ] Update markdown pipeline
-  - [ ] Custom remark/rehype plugin for component blocks
-  - [ ] Syntax: ` ```component:plugin-name` code blocks
-  - [ ] Props passing and serialization
+- [ ] Update markdown pipeline for component blocks
 - [ ] Build plugin management UI
-  - [ ] Dashboard section for installed plugins
-  - [ ] Enable/disable toggle per skript or globally
-  - [ ] Plugin settings/configuration interface
-
-**Phase 1.3.3: Marketplace Preparation (Future)**
-- [ ] Plugin submission and review workflow
-- [ ] Public plugin directory
-- [ ] Rating and review system
-- [ ] Revenue sharing for paid plugins
 
 ---
 
@@ -225,56 +181,32 @@ small stuff:
 - [ ] Submission management UI
 
 ### 2.2 Progress Tracking System
-- [ ] Implement progress tracking API
-  - [ ] Endpoint: `/api/progress/track`
-  - [ ] Track page views, time spent, completion
-  - [ ] Track quiz submissions and scores
-  - [ ] Store data with student ID + page ID (no sensitive data)
-- [ ] Build progress dashboard for teachers
-  - [ ] Class-level overview (completion rates, average scores)
-  - [ ] Individual student progress (opt-in only)
-  - [ ] Page-level analytics (which pages are hard?)
-  - [ ] Quiz performance breakdown
-- [ ] Student progress view
-  - [ ] Simple page for students: `/my-progress`
-  - [ ] Show their own completion percentage
-  - [ ] Quiz scores and review wrong answers
-  - [ ] No comparison to other students (avoid competition)
+- [ ] Implement progress tracking API (`/api/progress/track`)
+- [ ] Build progress dashboard for teachers (class overview, individual progress, analytics)
+- [ ] Student progress view (`/my-progress`)
 
 ### 2.3 Zero-Knowledge Implementation (Optional Enhancement)
-**Future**: If full zero-knowledge is desired
 - [ ] Client-side encryption for progress data
-  - [ ] Teacher generates encryption key on class creation
-  - [ ] All progress data encrypted before sending to server
-  - [ ] Server stores ciphertext, cannot read data
 - [ ] Teacher-side decryption for dashboard
-  - [ ] Teacher provides key to view dashboard
-  - [ ] Decryption happens in browser
-  - [ ] Server never sees plaintext progress data
-- [ ] Trade-offs to document
-  - [ ] Cannot show aggregated analytics without teacher key
-  - [ ] Key loss = data loss (need backup mechanism)
-  - [ ] More complex UX for teachers
+- [ ] Document trade-offs (key loss = data loss, no aggregation without key)
 
 ---
 
 ## 🔲 Phase 3: Marketplace Foundation
 
 ### Extended Permission Model
-Customers are basically a viewer with a different name and symbol.
-
 ```
 Current: author | viewer
 Future:  author | viewer | customer
 ```
 
 **Features to implement:**
-- [ ] Editors can mark skripts/collections as "for sale" and set a price (or give for free)
-- [ ] Viewers/customers can create editable copies of shared content
-- [ ] Cyclical tracking: notify users when original content is updated
-- [ ] Diff-editor to compare changes and merge updates
-- [ ] Payment provider integration for purchased content
-- [ ] License agreement ensuring uploaders have rights to sell content
+- [ ] Mark skripts/collections as "for sale" with pricing
+- [ ] Viewers/customers can create editable copies
+- [ ] Update notifications when original content changes
+- [ ] Diff-editor for comparing and merging updates
+- [ ] Payment provider integration
+- [ ] License agreement for content rights
 
 ---
 
@@ -283,22 +215,22 @@ Future:  author | viewer | customer
 **Key Principle**: Being a "collaborator" only establishes a relationship - it does NOT grant content access.
 
 **Permission Structure:**
-- Junction tables manage permissions: `CollectionAuthor`, `SkriptAuthor`, `PageAuthor`
-- `permission = "author"` = edit rights (can modify content)
-- `permission = "viewer"` = view rights (read-only access)
+- Junction tables: `CollectionAuthor`, `SkriptAuthor`, `PageAuthor`
+- `permission = "author"` = edit rights
+- `permission = "viewer"` = view rights
 
 **Drag-and-Drop Permission Model:**
-- **"Ownership Transfer"** approach (like Google Drive/Dropbox)
+- "Ownership Transfer" approach (like Google Drive/Dropbox)
 - Moving requires edit permissions on BOTH source AND target
-- Users automatically get edit rights on moved content if they don't have them
-- View-only content cannot be dragged (prevents content theft)
+- Automatic permission granting on move
+- View-only content cannot be dragged
 
 **Access Flow:**
 1. Teachers become "collaborators" (partnership established)
 2. Content owners explicitly share specific collections/skripts
-3. Collaborators can only see content they've been given access to
-4. When moving content, automatic permission granting ensures proper ownership
-5. Default permission for new content: `none` (no access)
+3. Collaborators only see content they've been given access to
+4. Automatic permission granting ensures proper ownership on move
+5. Default permission for new content: `none`
 
 **Benefits:**
 - ✅ Privacy by default
