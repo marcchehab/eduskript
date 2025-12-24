@@ -638,7 +638,7 @@ export function AnnotationToolbar({
         {(isTeacher || isPageAuthor) && (
           <>
             <ToolbarSection>
-              {/* Class/Page selector dropdown - picks class or "All Visitors" for page authors */}
+              {/* Class/Page selector dropdown - picks class or "Public" for page authors */}
               <div className="relative" ref={classDropdownRef}>
                 <button
                   onClick={() => {
@@ -651,7 +651,7 @@ export function AnnotationToolbar({
                       ? 'text-foreground hover:bg-accent'
                       : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                   )}
-                  title={broadcastToPage ? 'Broadcasting to all visitors' : 'Select class'}
+                  title={broadcastToPage ? 'Broadcasting publicly' : 'Select class'}
                 >
                   {broadcastToPage ? (
                     <Globe className="w-5 h-5 text-green-500" />
@@ -659,14 +659,14 @@ export function AnnotationToolbar({
                     <Radio className={cn('w-5 h-5', selectedClass && 'text-red-500')} />
                   )}
                   <span className="text-xs max-w-[80px] truncate">
-                    {broadcastToPage ? 'All Visitors' : selectedClass ? selectedClass.name : 'Broadcast'}
+                    {broadcastToPage ? 'Public' : selectedClass ? selectedClass.name : 'Broadcast'}
                   </span>
                   <ChevronDown className="w-3 h-3" />
                 </button>
 
                 {showClassDropdown && (classes.length > 0 || isPageAuthor) && (
                   <div className="absolute bottom-full mb-2 left-0 bg-background border border-border rounded-lg shadow-lg py-1 min-w-[180px] max-h-[200px] overflow-y-auto">
-                    {/* All Visitors option (page authors only) */}
+                    {/* Public option (page authors only) */}
                     {isPageAuthor && (
                       <>
                         <button
@@ -680,7 +680,7 @@ export function AnnotationToolbar({
                           )}
                         >
                           <Globe className="w-4 h-4 text-green-500 flex-shrink-0" />
-                          <span className="truncate">All Visitors</span>
+                          <span className="truncate">Public</span>
                         </button>
                         {classes.length > 0 && <div className="h-px bg-border my-1" />}
                       </>
@@ -726,11 +726,11 @@ export function AnnotationToolbar({
                 )}
               </div>
 
-              {/* Page broadcast indicator (when All Visitors is selected) */}
+              {/* Page broadcast indicator (when Public is selected) */}
               {broadcastToPage && (
                 <div className="flex items-center gap-1 px-2 py-1.5 bg-primary text-primary-foreground rounded-md">
                   <Globe className="w-4 h-4" />
-                  <span className="text-xs">All Visitors</span>
+                  <span className="text-xs">Public</span>
                   <button
                     onClick={onPageBroadcastToggle}
                     className="p-1 rounded hover:bg-primary-foreground/20 transition-colors"
