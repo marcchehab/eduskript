@@ -238,6 +238,9 @@ model Skript {
   // Front page (intro/landing page for skript)
   frontPage   FrontPage?
 
+  // File storage for user/org FrontPages (reverse relation)
+  frontPageFileStorage FrontPage? @relation("FrontPageFileStorage")
+
   // SEB exam sessions
   examSessions ExamSession[] @relation("ExamSessionSkript")
 
@@ -629,10 +632,14 @@ model FrontPage {
   skriptId       String?  @unique @map("skript_id")       // For skript intro pages
   organizationId String?  @unique @map("organization_id") // For organization pages
 
+  // File storage for user/org FrontPages (skript FrontPages use their skript's files)
+  fileSkriptId   String?  @unique @map("file_skript_id")
+
   // Relations
   user         User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
   skript       Skript?       @relation(fields: [skriptId], references: [id], onDelete: Cascade)
   organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  fileSkript   Skript?       @relation("FrontPageFileStorage", fields: [fileSkriptId], references: [id])
   versions     FrontPageVersion[]
 
   @@map("front_pages")
