@@ -160,9 +160,11 @@ export interface SnapData {
   name: string
   imageUrl: string  // URL to image in Scaleway bucket (NOT base64)
   top: number
-  left: number
+  left: number  // Pixels from left edge of paper
   width: number
   height: number
+  sectionId?: string  // Section heading ID for vertical repositioning
+  sectionOffsetY?: number  // Y offset of section when snap was created
 }
 
 /**

@@ -259,9 +259,10 @@ export function useSyncedUserData<T>(
         // Always try to load from local IndexedDB first (includes targeting in key)
         const localRecord = await userDataService.get<T>(pageId, componentId, { targetType, targetId })
 
-        // For broadcast mode (class/student), also check server and compare versions
+        // For broadcast mode (class/student/page), also check server and compare versions
         // This ensures we get the newest data regardless of which device saved it
-        if (isBroadcastMode && targetType !== 'page') {
+        // Note: page broadcasts need this too so authors see their own public content
+        if (isBroadcastMode) {
           try {
             const response = await fetch(
               `/api/user-data/${componentId}/${encodeURIComponent(pageId)}?targetType=${targetType}&targetId=${targetId}`
