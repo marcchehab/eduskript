@@ -49,9 +49,11 @@ interface SnapData {
   name: string
   imageUrl: string
   top: number
-  left: number
+  left: number  // Pixels from left edge of paper
   width: number
   height: number
+  sectionId?: string  // Section heading ID for vertical repositioning
+  sectionOffsetY?: number  // Y offset of section when snap was created
 }
 
 interface SnapsData {

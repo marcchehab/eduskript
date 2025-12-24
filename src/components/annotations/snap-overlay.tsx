@@ -8,9 +8,17 @@ export interface Snap {
   name: string
   imageUrl: string
   top: number
-  left: number
+  left: number // Pixels from left edge of paper
   width: number
   height: number
+  sectionId?: string // Section heading ID this snap belongs to
+  sectionOffsetY?: number // Y offset of the section when snap was created
+}
+
+interface HeadingPosition {
+  sectionId: string
+  offsetY: number
+  headingText: string
 }
 
 interface SnapOverlayProps {
@@ -18,9 +26,10 @@ interface SnapOverlayProps {
   onCancel: () => void
   nextSnapNumber: number
   zoom: number
+  headingPositions?: HeadingPosition[] // For section detection when creating snaps
 }
 
-export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom }: SnapOverlayProps) {
+export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom, headingPositions = [] }: SnapOverlayProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [startPos, setStartPos] = useState<{ x: number; y: number } | null>(null)
   const [currentPos, setCurrentPos] = useState<{ x: number; y: number } | null>(null)
@@ -459,6 +468,31 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom }: SnapO
         video.remove()
       }
 
+      // Copy canvas pixel data from original to cloned canvases
+      // cloneNode doesn't copy canvas content, so we need to manually draw it
+      const originalCanvases = paperElement.querySelectorAll('canvas')
+      const clonedCanvases = paperClone.querySelectorAll('canvas')
+
+      originalCanvases.forEach((originalCanvas, index) => {
+        const clonedCanvas = clonedCanvases[index] as HTMLCanvasElement | undefined
+        if (clonedCanvas && originalCanvas instanceof HTMLCanvasElement) {
+          // Ensure cloned canvas has same dimensions
+          clonedCanvas.width = originalCanvas.width
+          clonedCanvas.height = originalCanvas.height
+
+          // Copy the pixel content
+          const ctx = clonedCanvas.getContext('2d')
+          if (ctx) {
+            try {
+              ctx.drawImage(originalCanvas, 0, 0)
+            } catch (e) {
+              // Canvas might be tainted or empty, ignore
+              console.warn('Could not copy canvas content:', e)
+            }
+          }
+        }
+      })
+
       // Append the paper clone to the wrapper
       wrapper.appendChild(paperClone)
 
@@ -585,14 +619,36 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom }: SnapO
       }
 
       // Create snap with auto-generated name
+      // Determine which section the snap belongs to using the center of the snap
+      const snapCenterY = snapTop + height / 2
+      let sectionId: string | undefined
+      let sectionOffsetY: number | undefined
+
+      if (headingPositions.length > 0) {
+        // Sort headings by offsetY
+        const sortedHeadings = [...headingPositions].sort((a, b) => a.offsetY - b.offsetY)
+
+        // Find the section containing the snap center
+        // (the last heading whose offsetY is <= snap center Y)
+        for (let i = sortedHeadings.length - 1; i >= 0; i--) {
+          if (snapCenterY >= sortedHeadings[i].offsetY) {
+            sectionId = sortedHeadings[i].sectionId
+            sectionOffsetY = sortedHeadings[i].offsetY
+            break
+          }
+        }
+      }
+
       const snap: Snap = {
         id: Date.now().toString(),
         name: `snap${nextSnapNumber}`,
         imageUrl,
         top: snapTop,
-        left: snapLeft,
+        left: snapLeft, // Pixels from left edge of paper
         width,
         height,
+        sectionId,
+        sectionOffsetY,
       }
 
       onCapture(snap)
@@ -605,7 +661,7 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom }: SnapO
     setIsDragging(false)
     setStartPos(null)
     setCurrentPos(null)
-  }, [isDragging, startPos, currentPos, onCapture, onCancel, nextSnapNumber, zoom, isCapturing])
+  }, [isDragging, startPos, currentPos, onCapture, onCancel, nextSnapNumber, zoom, isCapturing, headingPositions])
 
   // Calculate selection rectangle for display (in viewport coordinates)
   // startPos/currentPos are in logical coords (divided by zoom), multiply back for display

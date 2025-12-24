@@ -243,16 +243,19 @@ export function repositionStrokes(
 }
 
 /**
- * Basic snap data for repositioning (no section metadata needed)
+ * Snap data for repositioning
+ * Includes optional section metadata for reliable vertical repositioning
  */
 export interface SnapForReposition {
   id: string
   name: string
   imageUrl: string
   top: number
-  left: number
+  left: number // Pixels from left edge of paper
   width: number
   height: number
+  sectionId?: string // Section heading ID this snap belongs to
+  sectionOffsetY?: number // Y offset of the section when snap was created
 }
 
 export interface RepositionSnapsResult {
@@ -260,32 +263,57 @@ export interface RepositionSnapsResult {
 }
 
 /**
- * Repositions snaps based on new heading positions and padding changes
- * Determines section membership at runtime from snap's top position
+ * Repositions snaps based on new heading positions
+ * Uses stored sectionId if available, otherwise determines section from snap's top position
+ *
+ * Note: snap.left is stored in pixels. Since the paper has a fixed width, horizontal
+ * repositioning is not needed. Only vertical repositioning based on section movement.
  */
 export function repositionSnaps(
   snaps: SnapForReposition[],
   currentHeadingPositions: HeadingPosition[],
   oldHeadingOffsets: Record<string, number>,
-  currentPaddingLeft?: number,
-  oldPaddingLeft?: number
+  _currentPaddingLeft?: number, // Kept for API compatibility, but not used
+  _oldPaddingLeft?: number      // Left is now percentage-based, no horizontal adjustment needed
 ): RepositionSnapsResult {
-  const deltaX = (currentPaddingLeft !== undefined && oldPaddingLeft !== undefined)
-    ? currentPaddingLeft - oldPaddingLeft
-    : 0
-
-  // Sort old offsets to find sections by position
+  // Sort old offsets to find sections by position (fallback when sectionId not stored)
   const oldPositions = Object.entries(oldHeadingOffsets)
     .map(([sectionId, offsetY]) => ({ sectionId, offsetY }))
     .sort((a, b) => a.offsetY - b.offsetY)
 
   const repositioned: SnapForReposition[] = snaps.map(snap => {
-    // Determine section from snap's top position using OLD heading positions
-    let sectionId: string | null = null
-    for (let i = oldPositions.length - 1; i >= 0; i--) {
-      if (snap.top >= oldPositions[i].offsetY) {
-        sectionId = oldPositions[i].sectionId
-        break
+    // First, try to use stored sectionId (most reliable)
+    let sectionId: string | null = snap.sectionId || null
+
+    // If snap has stored sectionId and it exists in old offsets, use it directly
+    if (sectionId && oldHeadingOffsets[sectionId] !== undefined) {
+      // sectionId is valid, continue with repositioning
+    } else if (sectionId && snap.sectionOffsetY !== undefined) {
+      // sectionId exists but not in oldHeadingOffsets - use stored sectionOffsetY
+      const currentHeading = currentHeadingPositions.find(h => h.sectionId === sectionId)
+      if (!currentHeading) {
+        // Section deleted, keep snap as-is
+        return snap
+      }
+
+      const deltaY = currentHeading.offsetY - snap.sectionOffsetY
+      if (deltaY === 0) {
+        return snap
+      }
+
+      return {
+        ...snap,
+        top: snap.top + deltaY,
+        sectionOffsetY: currentHeading.offsetY, // Update stored offset
+      }
+    } else {
+      // No stored sectionId or it's not in old offsets - fall back to position-based detection
+      sectionId = null
+      for (let i = oldPositions.length - 1; i >= 0; i--) {
+        if (snap.top >= oldPositions[i].offsetY) {
+          sectionId = oldPositions[i].sectionId
+          break
+        }
       }
     }
 
@@ -302,16 +330,22 @@ export function repositionSnaps(
     }
 
     const oldOffsetY = oldHeadingOffsets[sectionId]
+    if (oldOffsetY === undefined) {
+      // Section not tracked in old offsets, keep as-is
+      return snap
+    }
+
     const deltaY = currentHeading.offsetY - oldOffsetY
 
-    if (deltaY === 0 && deltaX === 0) {
+    if (deltaY === 0) {
       return snap
     }
 
     return {
       ...snap,
       top: snap.top + deltaY,
-      left: snap.left + deltaX,
+      sectionId, // Store sectionId for future repositioning
+      sectionOffsetY: currentHeading.offsetY, // Update stored offset
     }
   })
 
