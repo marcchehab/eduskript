@@ -1,6 +1,7 @@
 import { unstable_cache } from 'next/cache'
 import { cache } from 'react'
 import { prisma } from './prisma'
+import { buildSiteStructure, type SiteStructure } from './site-structure'
 
 // Cache tags for granular invalidation
 // Note: pageSlug is the URL slug for a user's public page (e.g., eduskript.org/mypage)
@@ -183,6 +184,90 @@ export const getAllPublishedCollections = (teacherId: string, pageSlug: string) 
   )()
 
 /**
+ * Get full site structure for sidebar - cached
+ * Returns all published collections/skripts/pages in SiteStructure format
+ * Used when sidebarBehavior is "full"
+ * Respects page layout ordering: collections in page layout order first, then remaining collections
+ */
+export const getFullSiteStructure = (teacherId: string, pageSlug: string) =>
+  unstable_cache(
+    async (): Promise<SiteStructure[]> => {
+      // Fetch page layout to determine collection order
+      const pageLayout = await prisma.pageLayout.findFirst({
+        where: {
+          user: { pageSlug }
+        },
+        include: {
+          items: {
+            where: { type: 'collection' },
+            orderBy: { order: 'asc' }
+          }
+        }
+      })
+
+      const layoutCollectionIds = pageLayout?.items.map(item => item.contentId) || []
+
+      // Only fetch collections that are in the page layout
+      if (layoutCollectionIds.length === 0) {
+        return []
+      }
+
+      const collections = await prisma.collection.findMany({
+        where: {
+          id: { in: layoutCollectionIds },
+          authors: { some: { userId: teacherId } },
+          isPublished: true
+        },
+        select: {
+          id: true,
+          title: true,
+          slug: true,
+          accentColor: true,
+          isPublished: true,
+          updatedAt: true,
+          collectionSkripts: {
+            where: {
+              skript: { isPublished: true }
+            },
+            include: {
+              skript: {
+                include: {
+                  pages: {
+                    where: { isPublished: true },
+                    orderBy: { order: 'asc' },
+                    select: {
+                      id: true,
+                      title: true,
+                      slug: true,
+                      isPublished: true,
+                      order: true
+                    }
+                  }
+                }
+              }
+            },
+            orderBy: { order: 'asc' }
+          }
+        }
+      })
+
+      // Sort collections by page layout order
+      const sortedCollections = [...collections].sort((a, b) => {
+        const aIndex = layoutCollectionIds.indexOf(a.id)
+        const bIndex = layoutCollectionIds.indexOf(b.id)
+        return aIndex - bIndex
+      })
+
+      return buildSiteStructure(sortedCollections, { onlyPublished: true })
+    },
+    [`full-site-structure-${pageSlug}`],
+    {
+      tags: [CACHE_TAGS.teacherContent(pageSlug)],
+      revalidate: false,
+    }
+  )()
+
+/**
  * Get published page content - cached
  * The main content fetch for public pages
  */
@@ -252,12 +337,14 @@ export const getPublishedPage = (
           slug: collection.slug,
           description: collection.description,
           isPublished: collection.isPublished,
+          accentColor: collection.accentColor,
         },
         skript: {
           id: skript.id,
           title: skript.title,
           slug: skript.slug,
           isPublished: skript.isPublished,
+          order: collectionSkript.order, // Position within collection for letter markers
         },
         page,
         // Include all pages for navigation
@@ -298,6 +385,7 @@ export const getTeacherHomepageContent = (teacherId: string, pageSlug: string, p
         id: string
         title: string
         slug: string
+        accentColor: string | null
         skripts: Array<{
           id: string
           title: string
@@ -346,10 +434,12 @@ export const getTeacherHomepageContent = (teacherId: string, pageSlug: string, p
               id: collection.id,
               title: collection.title,
               slug: collection.slug,
-              skripts: collection.collectionSkripts.map(cs => ({
+              accentColor: collection.accentColor,
+              skripts: collection.collectionSkripts.map((cs, index) => ({
                 id: cs.skript.id,
                 title: cs.skript.title,
                 slug: cs.skript.slug,
+                order: cs.order ?? index,
                 pages: cs.skript.pages
               }))
             })
@@ -552,12 +642,14 @@ export const getOrgPublishedPage = (
           slug: collection.slug,
           description: collection.description,
           isPublished: collection.isPublished,
+          accentColor: collection.accentColor,
         },
         skript: {
           id: skript.id,
           title: skript.title,
           slug: skript.slug,
           isPublished: skript.isPublished,
+          order: collectionSkript.order, // Position within collection for letter markers
         },
         page,
         allPages: skript.pages,
@@ -591,6 +683,7 @@ export const getOrgHomepageContent = (
         id: string
         title: string
         slug: string
+        accentColor: string | null
         skripts: Array<{
           id: string
           title: string
@@ -639,10 +732,12 @@ export const getOrgHomepageContent = (
               id: collection.id,
               title: collection.title,
               slug: collection.slug,
-              skripts: collection.collectionSkripts.map(cs => ({
+              accentColor: collection.accentColor,
+              skripts: collection.collectionSkripts.map((cs, index) => ({
                 id: cs.skript.id,
                 title: cs.skript.title,
                 slug: cs.skript.slug,
+                order: cs.order ?? index,
                 pages: cs.skript.pages
               }))
             })
