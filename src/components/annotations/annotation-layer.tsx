@@ -97,7 +97,7 @@ import { useTeacherBroadcast } from '@/hooks/use-teacher-broadcast'
 import { useStudentWork } from '@/hooks/use-student-work'
 import { parseStrokes, type AnimatedStroke } from '@/hooks/use-stroke-animation'
 import { useSession } from 'next-auth/react'
-import { SnapOverlay, type Snap } from './snap-overlay'
+import { SnapOverlay, type Snap, type SnapOverlayHandle } from './snap-overlay'
 import { SnapsDisplay, type StudentWorkSnap } from './snaps-display'
 import { LayerBadges } from './layer-badges'
 import { createLogger } from '@/lib/logger'
@@ -359,6 +359,8 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
   // Store class broadcast canvas data when switching from class-broadcast to student-view
   // This provides a fallback when the classBroadcastData hook hasn't loaded yet
   const classBroadcastCanvasRef = useRef<string>('')
+  // Ref for programmatic snap triggering (DEV ONLY)
+  const snapOverlayRef = useRef<SnapOverlayHandle>(null)
 
   // Update lastSelectedStudent when a student is selected
   useEffect(() => {
@@ -2185,6 +2187,63 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
     updateSnapsData({ snaps: currentSnaps.filter(snap => snap.id !== id) })
   }, [snapsData, updateSnapsData])
 
+  // DEV ONLY: Expose snap helper for testing
+  // This triggers the REAL SnapOverlay capture flow via imperative handle
+  // Usage: window.__devSnap.triggerSnap(300, 300, 600, 500)
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'development') return
+
+    const devSnap = {
+      // Enter snap mode (renders the actual SnapOverlay component)
+      enterSnapMode: () => {
+        setMode('snap')
+        console.log('[DevSnap] Snap mode activated. Overlay should now be visible.')
+      },
+      // Exit snap mode
+      exitSnapMode: () => {
+        setMode('view')
+        console.log('[DevSnap] Snap mode deactivated.')
+      },
+      // Trigger a snap using the REAL SnapOverlay capture logic
+      // Coordinates are logical coordinates (in the overlay's coordinate space)
+      triggerSnap: async (x1: number, y1: number, x2: number, y2: number) => {
+        // First, enter snap mode to render the SnapOverlay
+        setMode('snap')
+
+        // Wait for React to render the overlay and ref to be attached
+        await new Promise(r => setTimeout(r, 100))
+
+        if (!snapOverlayRef.current) {
+          console.error('[DevSnap] SnapOverlay ref not available. Make sure snap mode is active.')
+          return
+        }
+
+        console.log('[DevSnap] Triggering snap from', { x1, y1 }, 'to', { x2, y2 })
+
+        // Use the imperative handle to trigger capture with the real logic
+        await snapOverlayRef.current.triggerCapture(x1, y1, x2, y2)
+
+        console.log('[DevSnap] Capture complete!')
+      },
+      // Get current snap count
+      getSnapCount: () => snapsData?.snaps?.length || 0,
+      // Clear all snaps
+      clearSnaps: () => {
+        updateSnapsData({ snaps: [] })
+        console.log('[DevSnap] All snaps cleared')
+      },
+      // Get current mode
+      getMode: () => mode,
+    }
+
+    ;(window as any).__devSnap = devSnap
+    console.log('[DevSnap] Dev snap helper loaded. Commands: enterSnapMode(), exitSnapMode(), triggerSnap(x1, y1, x2, y2), getSnapCount(), clearSnaps(), getMode()')
+
+    return () => {
+      delete (window as any).__devSnap
+    }
+  }, [mode, snapsData, updateSnapsData])
+
   // Handle snap rename
   const handleRenameSnap = useCallback((id: string, newName: string) => {
     const currentSnaps = snapsData?.snaps || []
@@ -2962,6 +3021,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
       {/* Snap overlay - shown when in snap mode */}
       {mode === 'snap' && (
         <SnapOverlay
+          ref={snapOverlayRef}
           onCapture={handleSnapCapture}
           onCancel={() => setMode('view')}
           nextSnapNumber={snaps.length + 1}

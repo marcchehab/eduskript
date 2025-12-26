@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useImperativeHandle, forwardRef } from 'react'
 import { toJpeg } from 'html-to-image'
 
 export interface Snap {
@@ -29,76 +29,29 @@ interface SnapOverlayProps {
   headingPositions?: HeadingPosition[] // For section detection when creating snaps
 }
 
-export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom, headingPositions = [] }: SnapOverlayProps) {
+// Imperative handle for programmatic snap triggering (DEV ONLY)
+export interface SnapOverlayHandle {
+  triggerCapture: (x1: number, y1: number, x2: number, y2: number) => Promise<void>
+}
+
+export const SnapOverlay = forwardRef<SnapOverlayHandle, SnapOverlayProps>(function SnapOverlay(
+  { onCapture, onCancel, nextSnapNumber, zoom, headingPositions = [] },
+  ref
+) {
   const [isDragging, setIsDragging] = useState(false)
   const [startPos, setStartPos] = useState<{ x: number; y: number } | null>(null)
   const [currentPos, setCurrentPos] = useState<{ x: number; y: number } | null>(null)
   const [isCapturing, setIsCapturing] = useState(false)
   const overlayRef = useRef<HTMLDivElement>(null)
 
-  const handlePointerDown = useCallback((e: React.PointerEvent) => {
-    // Don't start new selection while capturing
-    if (isCapturing) return
-
-    // Only start dragging on left click/primary button
-    if (e.button !== 0) return
-
-    const rect = overlayRef.current?.getBoundingClientRect()
-    if (!rect) return
-
-    // Capture pointer to receive all events during drag
-    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
-
-    setIsDragging(true)
-    // Account for zoom transform - divide by zoom to get logical coordinates
-    setStartPos({
-      x: (e.clientX - rect.left) / zoom,
-      y: (e.clientY - rect.top) / zoom
-    })
-    setCurrentPos({
-      x: (e.clientX - rect.left) / zoom,
-      y: (e.clientY - rect.top) / zoom
-    })
-  }, [zoom, isCapturing])
-
-  const handlePointerMove = useCallback((e: React.PointerEvent) => {
-    if (!isDragging || !startPos || isCapturing) return
-
-    const rect = overlayRef.current?.getBoundingClientRect()
-    if (!rect) return
-
-    // Account for zoom transform - divide by zoom to get logical coordinates
-    setCurrentPos({
-      x: (e.clientX - rect.left) / zoom,
-      y: (e.clientY - rect.top) / zoom
-    })
-  }, [isDragging, startPos, zoom, isCapturing])
-
-  const handlePointerUp = useCallback(async (e: React.PointerEvent) => {
-    // Release pointer capture
-    ;(e.target as HTMLElement).releasePointerCapture(e.pointerId)
-
-    if (!isDragging || !startPos || !currentPos || isCapturing) {
-      setIsDragging(false)
-      setStartPos(null)
-      setCurrentPos(null)
-      return
-    }
-
-    // Calculate selection rectangle
-    const left = Math.min(startPos.x, currentPos.x)
-    const top = Math.min(startPos.y, currentPos.y)
-    const width = Math.abs(currentPos.x - startPos.x)
-    const height = Math.abs(currentPos.y - startPos.y)
-
-    // Ignore very small selections (likely accidental clicks)
-    if (width < 20 || height < 20) {
-      setIsDragging(false)
-      setStartPos(null)
-      setCurrentPos(null)
-      return
-    }
-
+  // Core capture logic - used by both mouse-based and programmatic captures
+  // Takes logical coordinates (already adjusted for zoom)
+  const performCapture = useCallback(async (
+    left: number,
+    top: number,
+    width: number,
+    height: number
+  ) => {
     // Mark as capturing to prevent new interactions
     setIsCapturing(true)
 
@@ -112,7 +65,6 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom, heading
       }
 
       // Hide the selection box during capture to prevent it appearing in the snap
-      // (can happen near top of page due to overlap)
       setCurrentPos(null)
 
       // Get the paper element's position relative to the viewport
@@ -197,10 +149,9 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom, heading
       const animOverlay = svg
 
       // Wait for animation to complete before starting capture
-      // This ensures smooth animation without main thread blocking
       await new Promise(resolve => setTimeout(resolve, animDuration * 1000))
 
-      // Create capture wrapper - position at selection location, style override handles capture
+      // Create capture wrapper - position at selection location
       const wrapper = document.createElement('div')
       wrapper.style.position = 'absolute'
       wrapper.style.left = `${viewportLeft}px`
@@ -284,7 +235,6 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom, heading
       }
 
       // Also add CSS variable mappings that Next.js uses
-      // Note: We allow font-synthesis so browser can synthesize bold/italic
       const cssVariables = `
         :root {
           --font-roboto-slab: 'Roboto Slab', serif;
@@ -346,7 +296,6 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom, heading
       })
 
       // For Firefox: Ensure fonts are applied by adding explicit font-family
-      // Firefox sometimes needs more explicit font application
       const needsExplicitFonts = navigator.userAgent.toLowerCase().includes('firefox')
       if (needsExplicitFonts) {
 
@@ -385,7 +334,6 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom, heading
       }
 
       // Ensure strong/bold elements have proper font-weight and color
-      // CSS uses font-weight: 600 and color: hsl(var(--foreground))
       const foregroundColor = getComputedStyle(document.documentElement).getPropertyValue('--foreground').trim()
       paperClone.querySelectorAll('strong, b').forEach(el => {
         const htmlEl = el as HTMLElement
@@ -402,12 +350,10 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom, heading
       })
 
       // Handle Excalidraw dual images - show the correct theme variant
-      // Hide (don't remove) the wrong variant to preserve layout
       const isDarkMode = document.documentElement.classList.contains('dark')
       paperClone.querySelectorAll('.excalidraw-light').forEach(el => {
         const imgEl = el as HTMLElement
         if (isDarkMode) {
-          // Hide completely - use multiple properties to ensure no space taken
           imgEl.style.cssText = 'display: none !important; position: absolute; width: 0; height: 0;'
         } else {
           imgEl.style.display = 'block'
@@ -418,17 +364,15 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom, heading
         if (isDarkMode) {
           imgEl.style.display = 'block'
         } else {
-          // Hide completely - use multiple properties to ensure no space taken
           imgEl.style.cssText = 'display: none !important; position: absolute; width: 0; height: 0;'
         }
       })
-      // Remove margins from Excalidraw wrappers and their parents to avoid blank space in snaps
+      // Remove margins from Excalidraw wrappers
       paperClone.querySelectorAll('.excalidraw-wrapper').forEach(el => {
-        const wrapper = el as HTMLElement
-        wrapper.style.margin = '0'
-        wrapper.style.padding = '0'
-        // Also check parent elements that might have margin
-        let parent = wrapper.parentElement
+        const wrapperEl = el as HTMLElement
+        wrapperEl.style.margin = '0'
+        wrapperEl.style.padding = '0'
+        let parent = wrapperEl.parentElement
         while (parent && parent !== paperClone) {
           if (parent.tagName === 'P' || parent.tagName === 'DIV' || parent.tagName === 'FIGURE') {
             parent.style.margin = '0'
@@ -437,7 +381,6 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom, heading
           parent = parent.parentElement
         }
       })
-      // Also remove margins from figures in general
       paperClone.querySelectorAll('figure').forEach(el => {
         const fig = el as HTMLElement
         fig.style.margin = '0'
@@ -447,46 +390,38 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom, heading
       const images = paperClone.querySelectorAll('img')
       for (const img of Array.from(images)) {
         const imgEl = img as HTMLImageElement
-        // Only hide images with known-broken src patterns
         if (imgEl.src.includes('missing-file') || imgEl.src.includes('.mp4')) {
           imgEl.style.display = 'none'
           continue
         }
-        // Remove Next.js Image attributes that may interfere with capture
         imgEl.removeAttribute('data-nimg')
         imgEl.removeAttribute('loading')
         imgEl.removeAttribute('decoding')
-        // Ensure image takes its natural space
         if (!imgEl.style.display || imgEl.style.display === 'none') {
           imgEl.style.display = 'block'
         }
       }
 
-      // Also remove video elements (they can't be captured anyway)
+      // Remove video elements
       const videos = paperClone.querySelectorAll('video, source')
       for (const video of Array.from(videos)) {
         video.remove()
       }
 
       // Copy canvas pixel data from original to cloned canvases
-      // cloneNode doesn't copy canvas content, so we need to manually draw it
       const originalCanvases = paperElement.querySelectorAll('canvas')
       const clonedCanvases = paperClone.querySelectorAll('canvas')
 
       originalCanvases.forEach((originalCanvas, index) => {
         const clonedCanvas = clonedCanvases[index] as HTMLCanvasElement | undefined
         if (clonedCanvas && originalCanvas instanceof HTMLCanvasElement) {
-          // Ensure cloned canvas has same dimensions
           clonedCanvas.width = originalCanvas.width
           clonedCanvas.height = originalCanvas.height
-
-          // Copy the pixel content
           const ctx = clonedCanvas.getContext('2d')
           if (ctx) {
             try {
               ctx.drawImage(originalCanvas, 0, 0)
             } catch (e) {
-              // Canvas might be tainted or empty, ignore
               console.warn('Could not copy canvas content:', e)
             }
           }
@@ -508,13 +443,11 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom, heading
           canvasClone.style.height = annotationCanvas.style.height
           canvasClone.className = annotationCanvas.className
 
-          // Copy canvas content
           const ctx = canvasClone.getContext('2d')
           if (ctx) {
             ctx.drawImage(annotationCanvas, 0, 0)
           }
 
-          // Position canvas correctly in the wrapper
           const canvasRect = canvasParent.getBoundingClientRect()
           const canvasOffsetLeft = (canvasRect.left - paperRect.left) / zoom
           const canvasOffsetTop = (canvasRect.top - paperRect.top) / zoom
@@ -532,10 +465,9 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom, heading
       document.body.appendChild(wrapper)
 
       // DEBUG MODE: Keep wrapper visible for inspection
-      const DEBUG_MODE = false  // Set to true for debugging
+      const DEBUG_MODE = false
 
       if (DEBUG_MODE) {
-        // Style wrapper for visibility
         wrapper.style.position = 'fixed'
         wrapper.style.left = '10px'
         wrapper.style.top = '10px'
@@ -543,7 +475,6 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom, heading
         wrapper.style.border = '2px solid red'
         wrapper.style.backgroundColor = 'white'
 
-        // Add a label to identify it
         const debugLabel = document.createElement('div')
         debugLabel.style.position = 'absolute'
         debugLabel.style.top = '-25px'
@@ -556,7 +487,6 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom, heading
         debugLabel.textContent = 'DEBUG: Snap Preview (click X to remove)'
         wrapper.appendChild(debugLabel)
 
-        // Add close button
         const closeBtn = document.createElement('button')
         closeBtn.textContent = 'X'
         closeBtn.style.position = 'absolute'
@@ -579,7 +509,6 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom, heading
       wrapper.offsetHeight
 
       // Capture as JPEG with quality compression
-      // Use style override to ensure position doesn't affect capture
       const imageUrl = await toJpeg(wrapper, {
         quality: 0.9,
         skipFonts: true,
@@ -589,13 +518,10 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom, heading
           top: 'auto',
           transform: 'none'
         },
-        // Filter out problematic elements that might cause capture to fail
         filter: (node: Element) => {
-          // Skip video elements
           if (node.tagName === 'VIDEO' || node.tagName === 'SOURCE') {
             return false
           }
-          // Skip images with missing-file or broken sources
           if (node.tagName === 'IMG') {
             const img = node as HTMLImageElement
             if (img.src.includes('missing-file') || img.src.includes('.mp4')) {
@@ -606,7 +532,7 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom, heading
         }
       } as any)
 
-      // Clean up: remove the temporary elements (only if not in debug mode)
+      // Clean up
       if (!DEBUG_MODE) {
         document.body.removeChild(wrapper)
         document.body.removeChild(animOverlay)
@@ -619,17 +545,13 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom, heading
       }
 
       // Create snap with auto-generated name
-      // Determine which section the snap belongs to using the center of the snap
+      // Determine which section the snap belongs to
       const snapCenterY = snapTop + height / 2
       let sectionId: string | undefined
       let sectionOffsetY: number | undefined
 
       if (headingPositions.length > 0) {
-        // Sort headings by offsetY
         const sortedHeadings = [...headingPositions].sort((a, b) => a.offsetY - b.offsetY)
-
-        // Find the section containing the snap center
-        // (the last heading whose offsetY is <= snap center Y)
         for (let i = sortedHeadings.length - 1; i >= 0; i--) {
           if (snapCenterY >= sortedHeadings[i].offsetY) {
             sectionId = sortedHeadings[i].sectionId
@@ -644,7 +566,7 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom, heading
         name: `snap${nextSnapNumber}`,
         imageUrl,
         top: snapTop,
-        left: snapLeft, // Pixels from left edge of paper
+        left: snapLeft,
         width,
         height,
         sectionId,
@@ -655,13 +577,103 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom, heading
     } catch (error) {
       console.error('Error capturing screenshot:', error)
       onCancel()
+    } finally {
+      setIsCapturing(false)
     }
+  }, [zoom, onCapture, onCancel, nextSnapNumber, headingPositions])
+
+  // Expose programmatic capture method (DEV ONLY)
+  useImperativeHandle(ref, () => ({
+    triggerCapture: async (x1: number, y1: number, x2: number, y2: number) => {
+      const left = Math.min(x1, x2)
+      const top = Math.min(y1, y2)
+      const width = Math.abs(x2 - x1)
+      const height = Math.abs(y2 - y1)
+
+      if (width < 20 || height < 20) {
+        console.warn('Selection too small (minimum 20x20)')
+        return
+      }
+
+      await performCapture(left, top, width, height)
+    }
+  }), [performCapture])
+
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    // Don't start new selection while capturing
+    if (isCapturing) return
+
+    // Only start dragging on left click/primary button
+    if (e.button !== 0) return
+
+    const rect = overlayRef.current?.getBoundingClientRect()
+    if (!rect) return
+
+    // Capture pointer to receive all events during drag
+    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+
+    setIsDragging(true)
+    // Account for zoom transform - divide by zoom to get logical coordinates
+    setStartPos({
+      x: (e.clientX - rect.left) / zoom,
+      y: (e.clientY - rect.top) / zoom
+    })
+    setCurrentPos({
+      x: (e.clientX - rect.left) / zoom,
+      y: (e.clientY - rect.top) / zoom
+    })
+  }, [zoom, isCapturing])
+
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    if (!isDragging || !startPos || isCapturing) return
+
+    const rect = overlayRef.current?.getBoundingClientRect()
+    if (!rect) return
+
+    // Account for zoom transform - divide by zoom to get logical coordinates
+    setCurrentPos({
+      x: (e.clientX - rect.left) / zoom,
+      y: (e.clientY - rect.top) / zoom
+    })
+  }, [isDragging, startPos, zoom, isCapturing])
+
+  const handlePointerUp = useCallback(async (e: React.PointerEvent) => {
+    // Release pointer capture
+    try {
+      ;(e.target as HTMLElement).releasePointerCapture(e.pointerId)
+    } catch {
+      // Ignore if not captured (e.g., programmatic trigger)
+    }
+
+    if (!isDragging || !startPos || !currentPos || isCapturing) {
+      setIsDragging(false)
+      setStartPos(null)
+      setCurrentPos(null)
+      return
+    }
+
+    // Calculate selection rectangle
+    const left = Math.min(startPos.x, currentPos.x)
+    const top = Math.min(startPos.y, currentPos.y)
+    const width = Math.abs(currentPos.x - startPos.x)
+    const height = Math.abs(currentPos.y - startPos.y)
+
+    // Ignore very small selections (likely accidental clicks)
+    if (width < 20 || height < 20) {
+      setIsDragging(false)
+      setStartPos(null)
+      setCurrentPos(null)
+      return
+    }
+
+    // Delegate to shared capture logic
+    await performCapture(left, top, width, height)
 
     // Reset state
     setIsDragging(false)
     setStartPos(null)
     setCurrentPos(null)
-  }, [isDragging, startPos, currentPos, onCapture, onCancel, nextSnapNumber, zoom, isCapturing, headingPositions])
+  }, [isDragging, startPos, currentPos, isCapturing, performCapture])
 
   // Calculate selection rectangle for display (in viewport coordinates)
   // startPos/currentPos are in logical coords (divided by zoom), multiply back for display
@@ -708,4 +720,4 @@ export function SnapOverlay({ onCapture, onCancel, nextSnapNumber, zoom, heading
       )}
     </div>
   )
-}
+})

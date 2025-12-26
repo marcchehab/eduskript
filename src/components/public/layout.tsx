@@ -402,7 +402,9 @@ export function PublicSiteLayout({
                       {showHomeButton && (
                         <button
                           onClick={() => {
-                            router.push(basePrefix)
+                            // Strip trailing /c for org pages
+                            const homeUrl = basePrefix.replace(/\/c$/, '')
+                            router.push(homeUrl)
                             setIsSidebarOpen(false)
                           }}
                           className="flex items-center justify-center w-full px-2 py-2 text-sm font-medium rounded-md transition-colors text-muted-foreground hover:bg-muted hover:text-foreground mb-4"
@@ -433,7 +435,9 @@ export function PublicSiteLayout({
                       <button
                         onClick={() => {
                           // Navigate to root page (teacher or org)
-                          router.push(basePrefix)
+                          // Strip trailing /c for org pages (basePrefix includes /c for content routes)
+                          const homeUrl = basePrefix.replace(/\/c$/, '')
+                          router.push(homeUrl)
                           setIsSidebarOpen(false)
                         }}
                         className="flex items-center w-full text-left px-3 py-2 text-sm font-medium rounded-md transition-colors text-muted-foreground hover:bg-muted hover:text-foreground mb-4"
