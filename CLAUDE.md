@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Communication Style
+
+Be concise. Avoid verbose explanations. Stoic responses preferred.
+
 ## Documentation Standards
 
 **When writing code comments, be truthful and honest.**
