@@ -101,6 +101,21 @@ export async function POST(
       )
     }
 
+    // Teachers can only belong to one organization
+    if (user.accountType === 'teacher') {
+      const existingOrgMembership = await prisma.organizationMember.findFirst({
+        where: { userId: user.id },
+        include: { organization: { select: { name: true } } },
+      })
+
+      if (existingOrgMembership) {
+        return NextResponse.json(
+          { error: `Teachers can only belong to one organization. This teacher is already a member of "${existingOrgMembership.organization.name}".` },
+          { status: 400 }
+        )
+      }
+    }
+
     // Only owners can add admins/owners
     if (actorMembership && role !== 'member' && actorMembership.role !== 'owner') {
       return NextResponse.json(

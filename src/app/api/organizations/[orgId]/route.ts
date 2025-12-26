@@ -21,6 +21,7 @@ export async function GET(
         description: true,
         logoUrl: true,
         allowMemberPages: true,
+        allowTeacherCustomDomains: true,
         requireEmailDomain: true,
         billingPlan: true,
         createdAt: true,
@@ -53,7 +54,7 @@ export async function PATCH(
 
   try {
     const body = await request.json()
-    const { name, description, logoUrl, allowMemberPages, requireEmailDomain } = body
+    const { name, description, logoUrl, allowMemberPages, allowTeacherCustomDomains, requireEmailDomain } = body
 
     // Validate name if provided
     if (name !== undefined && (!name || typeof name !== 'string' || name.trim().length === 0)) {
@@ -79,6 +80,7 @@ export async function PATCH(
     if (description !== undefined) updateData.description = description || null
     if (logoUrl !== undefined) updateData.logoUrl = logoUrl || null
     if (allowMemberPages !== undefined) updateData.allowMemberPages = Boolean(allowMemberPages)
+    if (allowTeacherCustomDomains !== undefined) updateData.allowTeacherCustomDomains = Boolean(allowTeacherCustomDomains)
     if (requireEmailDomain !== undefined) {
       updateData.requireEmailDomain = requireEmailDomain || null
     }
@@ -93,6 +95,7 @@ export async function PATCH(
         description: true,
         logoUrl: true,
         allowMemberPages: true,
+        allowTeacherCustomDomains: true,
         requireEmailDomain: true,
         billingPlan: true,
         updatedAt: true,

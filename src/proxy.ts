@@ -1,8 +1,15 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
+// Cache entry types for domain lookups
+type DomainCacheEntry =
+  | { type: 'org'; orgSlug: string; expiry: number }
+  | { type: 'teacher'; pageSlug: string; expiry: number }
+  | null
+
 // Simple in-memory cache for domain lookups (cleared on deploy/restart)
-const domainCache = new Map<string, { orgSlug: string; expiry: number } | null>()
+const domainCache = new Map<string, DomainCacheEntry>()
+const negativeCacheExpiry = new Map<string, number>()
 const CACHE_TTL = 60 * 1000 // 1 minute
 const NEGATIVE_CACHE_TTL = 30 * 1000 // 30 seconds for "not found" results
 
@@ -37,14 +44,17 @@ export async function proxy(request: NextRequest) {
   if (cached !== undefined) {
     if (cached === null) {
       // Negative cache hit (domain not found) - fall back to default org
-      const expiryKey = `${domain}_expiry`
-      const expiry = domainCache.get(expiryKey) as unknown as number
+      const expiry = negativeCacheExpiry.get(domain)
       if (expiry && expiry > Date.now()) {
         return rewriteToOrg(request, DEFAULT_ORG_SLUG)
       }
     } else if (cached.expiry > Date.now()) {
       // Positive cache hit
-      return rewriteToOrg(request, cached.orgSlug)
+      if (cached.type === 'org') {
+        return rewriteToOrg(request, cached.orgSlug)
+      } else {
+        return rewriteToTeacher(request, cached.pageSlug)
+      }
     }
   }
 
@@ -62,16 +72,28 @@ export async function proxy(request: NextRequest) {
 
     if (response.ok) {
       const data = await response.json()
-      // Cache the result
-      domainCache.set(domain, {
-        orgSlug: data.orgSlug,
-        expiry: Date.now() + CACHE_TTL,
-      })
-      return rewriteToOrg(request, data.orgSlug)
+
+      if (data.type === 'teacher') {
+        // Cache teacher domain result
+        domainCache.set(domain, {
+          type: 'teacher',
+          pageSlug: data.pageSlug,
+          expiry: Date.now() + CACHE_TTL,
+        })
+        return rewriteToTeacher(request, data.pageSlug)
+      } else {
+        // Cache org domain result (default behavior)
+        domainCache.set(domain, {
+          type: 'org',
+          orgSlug: data.orgSlug,
+          expiry: Date.now() + CACHE_TTL,
+        })
+        return rewriteToOrg(request, data.orgSlug)
+      }
     } else {
       // Domain not found - negative cache
       domainCache.set(domain, null)
-      domainCache.set(`${domain}_expiry`, Date.now() + NEGATIVE_CACHE_TTL as unknown as { orgSlug: string; expiry: number })
+      negativeCacheExpiry.set(domain, Date.now() + NEGATIVE_CACHE_TTL)
     }
   } catch (error) {
     console.error('Domain resolution error:', error)
@@ -90,6 +112,18 @@ function rewriteToOrg(request: NextRequest, orgSlug: string) {
   // / -> /org/eduskript
   // /about -> /org/eduskript/about (if sub-pages exist in future)
   url.pathname = `/org/${orgSlug}${path === '/' ? '' : path}`
+
+  return NextResponse.rewrite(url)
+}
+
+function rewriteToTeacher(request: NextRequest, pageSlug: string) {
+  const url = request.nextUrl.clone()
+  const path = url.pathname
+
+  // Rewrite to /[pageSlug] path (teacher's personal page)
+  // / -> /teacher-name
+  // /about -> /teacher-name/about
+  url.pathname = `/${pageSlug}${path === '/' ? '' : path}`
 
   return NextResponse.rewrite(url)
 }

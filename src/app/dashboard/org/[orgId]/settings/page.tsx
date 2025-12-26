@@ -7,37 +7,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card } from '@/components/ui/card'
-import { ChevronLeft, Building2, FileText, Globe, LayoutDashboard, Settings, Users } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
+import { ChevronLeft, Building2, FileText, Globe, LayoutDashboard } from 'lucide-react'
 import Link from 'next/link'
-
-function OrgNav({ orgId, active }: { orgId: string; active: 'members' | 'settings' }) {
-  return (
-    <div className="flex gap-1 border-b mb-6">
-      <Link
-        href={`/dashboard/org/${orgId}/settings`}
-        className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-          active === 'settings'
-            ? 'border-primary text-primary'
-            : 'border-transparent text-muted-foreground hover:text-foreground'
-        }`}
-      >
-        <Settings className="h-4 w-4" />
-        Settings
-      </Link>
-      <Link
-        href={`/dashboard/org/${orgId}/members`}
-        className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-          active === 'members'
-            ? 'border-primary text-primary'
-            : 'border-transparent text-muted-foreground hover:text-foreground'
-        }`}
-      >
-        <Users className="h-4 w-4" />
-        Members
-      </Link>
-    </div>
-  )
-}
+import { OrgNav } from '@/components/dashboard/org-nav'
 
 interface Organization {
   id: string
@@ -46,6 +19,7 @@ interface Organization {
   description: string | null
   logoUrl: string | null
   requireEmailDomain: string | null
+  allowTeacherCustomDomains: boolean
   billingPlan: string
   createdAt: string
   updatedAt: string
@@ -70,6 +44,7 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
     description: '',
     logoUrl: '',
     requireEmailDomain: '',
+    allowTeacherCustomDomains: false,
   })
 
   // Fetch organization
@@ -94,6 +69,7 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
           description: data.organization.description || '',
           logoUrl: data.organization.logoUrl || '',
           requireEmailDomain: data.organization.requireEmailDomain || '',
+          allowTeacherCustomDomains: data.organization.allowTeacherCustomDomains || false,
         })
       } catch (err) {
         setError(err instanceof Error ? err.message : 'An error occurred')
@@ -123,6 +99,7 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
           description: formData.description || null,
           logoUrl: formData.logoUrl || null,
           requireEmailDomain: formData.requireEmailDomain || null,
+          allowTeacherCustomDomains: formData.allowTeacherCustomDomains,
         }),
       })
 
@@ -215,20 +192,38 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
           <div className="border-t pt-6">
             <h3 className="text-lg font-medium mb-4">Member Settings</h3>
 
-            <div>
-              <Label htmlFor="requireEmailDomain">Auto-join Email Domain</Label>
-              <Input
-                id="requireEmailDomain"
-                value={formData.requireEmailDomain}
-                onChange={(e) =>
-                  setFormData({ ...formData, requireEmailDomain: e.target.value })
-                }
-                placeholder="@school.edu"
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                Users with this email domain will automatically join this organization on signup.
-                Leave empty to disable.
-              </p>
+            <div className="space-y-6">
+              <div>
+                <Label htmlFor="requireEmailDomain">Auto-join Email Domain</Label>
+                <Input
+                  id="requireEmailDomain"
+                  value={formData.requireEmailDomain}
+                  onChange={(e) =>
+                    setFormData({ ...formData, requireEmailDomain: e.target.value })
+                  }
+                  placeholder="@school.edu"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Users with this email domain will automatically join this organization on signup.
+                  Leave empty to disable.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="allowTeacherDomains">Allow Teacher Custom Domains</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Let teachers in this organization add their own custom domains.
+                  </p>
+                </div>
+                <Switch
+                  id="allowTeacherDomains"
+                  checked={formData.allowTeacherCustomDomains}
+                  onCheckedChange={(checked) =>
+                    setFormData({ ...formData, allowTeacherCustomDomains: checked })
+                  }
+                />
+              </div>
             </div>
           </div>
 

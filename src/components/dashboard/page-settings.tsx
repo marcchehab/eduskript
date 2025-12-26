@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { Save, Loader2, FileText, Upload, X, ExternalLink } from 'lucide-react'
+import { Save, Loader2, FileText, Upload, X, ExternalLink, Globe } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
 
@@ -28,6 +28,10 @@ export function PageSettings() {
   const [hostnamePrefix, setHostnamePrefix] = useState('eduskript.org/')
   const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null)
   const [checkingSlug, setCheckingSlug] = useState(false)
+  const [isOrgAdmin, setIsOrgAdmin] = useState(false)
+
+  // Org admins and platform admins can use shorter slugs (min 1 char instead of 3)
+  const minSlugLength = (session?.user?.isAdmin || isOrgAdmin) ? 1 : 3
 
   // Set hostname prefix on client (avoids hydration mismatch)
   useEffect(() => {
@@ -40,9 +44,10 @@ export function PageSettings() {
   useEffect(() => {
     const loadPreferences = async () => {
       try {
-        const [sidebarResponse, typographyResponse] = await Promise.all([
+        const [sidebarResponse, typographyResponse, orgAdminResponse] = await Promise.all([
           fetch('/api/user/sidebar-preference'),
-          fetch('/api/user/typography-preference')
+          fetch('/api/user/typography-preference'),
+          fetch('/api/user/is-org-admin'),
         ])
 
         if (sidebarResponse.ok) {
@@ -53,6 +58,11 @@ export function PageSettings() {
         if (typographyResponse.ok) {
           const data = await typographyResponse.json()
           setTypographyPreference(data.typographyPreference || 'modern')
+        }
+
+        if (orgAdminResponse.ok) {
+          const data = await orgAdminResponse.json()
+          setIsOrgAdmin(data.isOrgAdmin || false)
         }
       } catch (error) {
         console.error('Error loading preferences:', error)
@@ -70,7 +80,7 @@ export function PageSettings() {
 
   // Debounced slug availability check
   const checkSlugAvailability = useCallback(async (slug: string) => {
-    if (!slug || slug.length < 3) {
+    if (!slug || slug.length < minSlugLength) {
       return null
     }
     try {
@@ -80,7 +90,7 @@ export function PageSettings() {
     } catch {
       return null
     }
-  }, [])
+  }, [minSlugLength])
 
   useEffect(() => {
     // Don't check if slug hasn't changed from the original
@@ -90,7 +100,7 @@ export function PageSettings() {
       return
     }
 
-    if (!pageSlug || pageSlug.length < 3) {
+    if (!pageSlug || pageSlug.length < minSlugLength) {
       setSlugAvailable(null)
       setCheckingSlug(false)
       return
@@ -110,7 +120,7 @@ export function PageSettings() {
       clearTimeout(timer)
       controller.abort()
     }
-  }, [pageSlug, session?.user?.pageSlug, checkSlugAvailability])
+  }, [pageSlug, session?.user?.pageSlug, checkSlugAvailability, minSlugLength])
 
   const handleSidebarBehaviorChange = async (value: string) => {
     setSidebarBehavior(value)
@@ -205,7 +215,7 @@ export function PageSettings() {
     pageIcon !== (session?.user?.pageIcon || '')
 
   // Check if slug is valid for saving
-  const slugIsValid = pageSlug.length >= 3 && slugAvailable !== false
+  const slugIsValid = pageSlug.length >= minSlugLength && slugAvailable !== false
 
   // Handle icon file upload
   const handleIconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -416,7 +426,7 @@ export function PageSettings() {
               {checkingSlug && (
                 <span className="text-sm text-muted-foreground">Checking...</span>
               )}
-              {!checkingSlug && slugAvailable === true && pageSlug.length >= 3 && (
+              {!checkingSlug && slugAvailable === true && pageSlug.length >= minSlugLength && (
                 <span className="text-sm text-green-600">Available</span>
               )}
               {!checkingSlug && slugAvailable === false && (
@@ -487,6 +497,22 @@ export function PageSettings() {
             <Button variant="outline" className="gap-2">
               <FileText className="w-4 h-4" />
               Edit Front Page
+            </Button>
+          </Link>
+        </div>
+
+        {/* Custom Domains Section */}
+        <div className="space-y-4 border-t pt-6">
+          <div>
+            <Label className="text-sm font-medium">Custom Domains</Label>
+            <p className="text-sm text-muted-foreground mt-1">
+              Add your own domain to access your page directly (e.g., yourdomain.com instead of eduskript.org/{session?.user?.pageSlug}).
+            </p>
+          </div>
+          <Link href="/dashboard/settings/domains">
+            <Button variant="outline" className="gap-2">
+              <Globe className="w-4 h-4" />
+              Manage Custom Domains
             </Button>
           </Link>
         </div>

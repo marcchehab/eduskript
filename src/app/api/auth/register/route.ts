@@ -157,6 +157,22 @@ export async function POST(request: NextRequest) {
       }
     })
 
+    // Auto-assign teacher to the default "eduskript" organization
+    // All teachers must belong to exactly one org
+    const defaultOrg = await prisma.organization.findUnique({
+      where: { slug: 'eduskript' }
+    })
+
+    if (defaultOrg) {
+      await prisma.organizationMember.create({
+        data: {
+          organizationId: defaultOrg.id,
+          userId: user.id,
+          role: 'member',
+        }
+      })
+    }
+
     // Generate verification token
     const token = randomBytes(32).toString('hex')
     const expires = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours

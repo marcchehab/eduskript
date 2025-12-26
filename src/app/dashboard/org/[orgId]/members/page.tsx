@@ -11,37 +11,9 @@ import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { UserMinus, RotateCw, Search, Shield, ShieldCheck, User, ChevronLeft, Settings, Users } from 'lucide-react'
+import { UserMinus, RotateCw, Search, Shield, ShieldCheck, User, ChevronLeft } from 'lucide-react'
 import Link from 'next/link'
-
-function OrgNav({ orgId, active }: { orgId: string; active: 'members' | 'settings' }) {
-  return (
-    <div className="flex gap-1 border-b mb-6">
-      <Link
-        href={`/dashboard/org/${orgId}/settings`}
-        className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-          active === 'settings'
-            ? 'border-primary text-primary'
-            : 'border-transparent text-muted-foreground hover:text-foreground'
-        }`}
-      >
-        <Settings className="h-4 w-4" />
-        Settings
-      </Link>
-      <Link
-        href={`/dashboard/org/${orgId}/members`}
-        className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-          active === 'members'
-            ? 'border-primary text-primary'
-            : 'border-transparent text-muted-foreground hover:text-foreground'
-        }`}
-      >
-        <Users className="h-4 w-4" />
-        Members
-      </Link>
-    </div>
-  )
-}
+import { OrgNav } from '@/components/dashboard/org-nav'
 
 interface OrgMember {
   id: string

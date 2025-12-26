@@ -53,16 +53,25 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Fetch user's admin status and current page slug
+    // Fetch user's admin status, org admin status, and current page slug
     const currentUser = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { isAdmin: true, pageSlug: true }
+      select: {
+        isAdmin: true,
+        pageSlug: true,
+        organizationMemberships: {
+          where: { role: { in: ['owner', 'admin'] } },
+          select: { id: true },
+          take: 1,
+        },
+      },
     })
 
     const body = await request.json()
 
-    // Use admin schema if user is admin, otherwise use regular schema
-    const schema = currentUser?.isAdmin ? adminUpdateProfileSchema : updateProfileSchema
+    // Use admin schema if user is platform admin or org admin, otherwise use regular schema
+    const isOrgAdmin = (currentUser?.organizationMemberships?.length ?? 0) > 0
+    const schema = (currentUser?.isAdmin || isOrgAdmin) ? adminUpdateProfileSchema : updateProfileSchema
     const validatedData = schema.parse(body)
 
     const result = await withDatabaseConnection(async () => {
