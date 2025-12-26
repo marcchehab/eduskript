@@ -36,13 +36,6 @@ export function FontSizeControls({ orientation = 'horizontal' }: FontSizeControl
       (el as HTMLElement).style.fontSize = `${size}px`
     })
 
-    // Safari workaround: directly set h1 font-size since em units don't update reliably
-    const h1Elements = document.querySelectorAll('h1')
-    const h1Size = size * 5 // 5x base for title h1
-    h1Elements.forEach((el) => {
-      (el as HTMLElement).style.fontSize = `${h1Size}px`
-    })
-
     // Force consistent line-height on paragraphs (browsers round 1.7 differently)
     const lineHeight = Math.round(size * 1.7)
     const textElements = document.querySelectorAll('.prose-theme p, .prose-theme li')
