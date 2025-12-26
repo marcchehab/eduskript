@@ -75,7 +75,7 @@ export async function PATCH(
     }
 
     const { id } = await params
-    const { title, description, isPublished } = await request.json()
+    const { title, slug, description, isPublished, accentColor } = await request.json()
 
     // Get collection with authors to check permissions
     const existingCollection = await prisma.collection.findUnique({
@@ -103,8 +103,10 @@ export async function PATCH(
       where: { id },
       data: {
         ...(title && { title }),
+        ...(slug && { slug }),
         ...(description !== undefined && { description }),
-        ...(isPublished !== undefined && { isPublished })
+        ...(isPublished !== undefined && { isPublished }),
+        ...(accentColor !== undefined && { accentColor })
       },
       include: {
         authors: {
