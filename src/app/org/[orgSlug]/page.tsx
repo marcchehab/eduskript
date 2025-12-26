@@ -7,7 +7,7 @@ import { PublicSiteLayout } from '@/components/public/layout'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
 import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
 import { getOrgMembership } from '@/lib/org-auth'
-import { getOrgWithLayout, getOrgHomepageContent } from '@/lib/cached-queries'
+import { getOrgWithLayout, getOrgHomepageContent, getOrgFullSiteStructure } from '@/lib/cached-queries'
 import { prisma } from '@/lib/prisma'
 
 // Enable ISR - pages are cached until explicitly invalidated
@@ -138,12 +138,18 @@ export default async function OrgPage({ params }: OrgPageProps) {
     title: null
   }
 
+  // Fetch full site structure if sidebar behavior is "full"
+  const fullSiteStructure = organization.sidebarBehavior === 'full'
+    ? await getOrgFullSiteStructure(organization.id, orgSlug)
+    : undefined
+
   return (
     <PublicSiteLayout
       teacher={orgAsTeacher}
       siteStructure={collections}
       rootSkripts={rootSkripts}
-      sidebarBehavior="contextual"
+      fullSiteStructure={fullSiteStructure}
+      sidebarBehavior={organization.sidebarBehavior as 'contextual' | 'full' || 'contextual'}
       typographyPreference="modern"
       routePrefix={`/org/${orgSlug}/c`}
     >

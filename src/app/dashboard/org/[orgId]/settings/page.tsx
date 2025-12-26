@@ -22,6 +22,7 @@ interface Organization {
   iconUrl: string | null
   requireEmailDomain: string | null
   allowTeacherCustomDomains: boolean
+  sidebarBehavior: string | null
   billingPlan: string
   createdAt: string
   updatedAt: string
@@ -35,6 +36,8 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
   const { data: session } = useSession()
   const router = useRouter()
   const [organization, setOrganization] = useState<Organization | null>(null)
+  const [teacherCount, setTeacherCount] = useState(0)
+  const [studentCount, setStudentCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -48,6 +51,7 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
     iconUrl: '',
     requireEmailDomain: '',
     allowTeacherCustomDomains: false,
+    sidebarBehavior: 'contextual' as string,
   })
   const [uploadingIcon, setUploadingIcon] = useState(false)
 
@@ -68,6 +72,8 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
         }
 
         setOrganization(data.organization)
+        setTeacherCount(data.teacherCount ?? 0)
+        setStudentCount(data.studentCount ?? 0)
         setFormData({
           name: data.organization.name,
           description: data.organization.description || '',
@@ -75,6 +81,7 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
           iconUrl: data.organization.iconUrl || '',
           requireEmailDomain: data.organization.requireEmailDomain || '',
           allowTeacherCustomDomains: data.organization.allowTeacherCustomDomains || false,
+          sidebarBehavior: data.organization.sidebarBehavior || 'contextual',
         })
       } catch (err) {
         setError(err instanceof Error ? err.message : 'An error occurred')
@@ -106,6 +113,7 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
           iconUrl: formData.iconUrl || null,
           requireEmailDomain: formData.requireEmailDomain || null,
           allowTeacherCustomDomains: formData.allowTeacherCustomDomains,
+          sidebarBehavior: formData.sidebarBehavior,
         }),
       })
 
@@ -321,6 +329,47 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
           </div>
 
           <div className="border-t pt-6">
+            <h3 className="text-lg font-medium mb-4">Navigation</h3>
+            <div className="space-y-3">
+              <Label>Sidebar Navigation Behavior</Label>
+              <div className="space-y-2">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="sidebarBehavior"
+                    value="contextual"
+                    checked={formData.sidebarBehavior === 'contextual'}
+                    onChange={(e) => setFormData({ ...formData, sidebarBehavior: e.target.value })}
+                    className="mt-1"
+                  />
+                  <div>
+                    <div className="font-medium">Contextual</div>
+                    <p className="text-xs text-muted-foreground">
+                      Show only the current collection in the sidebar when viewing content.
+                    </p>
+                  </div>
+                </label>
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="sidebarBehavior"
+                    value="full"
+                    checked={formData.sidebarBehavior === 'full'}
+                    onChange={(e) => setFormData({ ...formData, sidebarBehavior: e.target.value })}
+                    className="mt-1"
+                  />
+                  <div>
+                    <div className="font-medium">Full Navigation</div>
+                    <p className="text-xs text-muted-foreground">
+                      Always show all collections in the sidebar.
+                    </p>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t pt-6">
             <h3 className="text-lg font-medium mb-4">Organization Info</h3>
             <dl className="space-y-2 text-sm">
               <div className="flex gap-2">
@@ -328,8 +377,12 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
                 <dd className="font-mono">{organization.slug}</dd>
               </div>
               <div className="flex gap-2">
-                <dt className="text-muted-foreground">Members:</dt>
-                <dd>{organization._count.members}</dd>
+                <dt className="text-muted-foreground">Teachers:</dt>
+                <dd>{teacherCount}</dd>
+              </div>
+              <div className="flex gap-2">
+                <dt className="text-muted-foreground">Students:</dt>
+                <dd>{studentCount}</dd>
               </div>
               <div className="flex gap-2">
                 <dt className="text-muted-foreground">Plan:</dt>

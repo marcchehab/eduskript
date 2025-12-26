@@ -712,6 +712,7 @@ model Organization {
   allowMemberPages          Boolean @default(true) @map("allow_member_pages")  // Members can have personal pages
   allowTeacherCustomDomains Boolean @default(false) @map("allow_teacher_custom_domains") // Teachers can have custom domains
   requireEmailDomain        String? @map("require_email_domain")               // e.g., "@school.edu" - auto-join on signup
+  sidebarBehavior           String? @default("contextual") @map("sidebar_behavior") // "contextual" or "full"
 
   // Billing groundwork (payment provider TBD)
   billingPlan String @default("free") @map("billing_plan") // "free" | "school" | "enterprise"

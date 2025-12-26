@@ -558,6 +558,99 @@ export const getOrgWithLayout = (slug: string) =>
   )()
 
 /**
+ * Get org's full site structure for sidebar navigation - cached
+ * Fetches all published collections from org's page layout
+ */
+export const getOrgFullSiteStructure = (orgId: string, orgSlug: string) =>
+  unstable_cache(
+    async (): Promise<SiteStructure[]> => {
+      // Get all admin/owner user IDs for this org
+      const adminMembers = await prisma.organizationMember.findMany({
+        where: {
+          organizationId: orgId,
+          role: { in: ['owner', 'admin'] }
+        },
+        select: { userId: true }
+      })
+      const adminUserIds = adminMembers.map(m => m.userId)
+
+      if (adminUserIds.length === 0) {
+        return []
+      }
+
+      // Fetch org page layout to determine collection order
+      const pageLayout = await prisma.orgPageLayout.findFirst({
+        where: { organizationId: orgId },
+        include: {
+          items: {
+            where: { type: 'collection' },
+            orderBy: { order: 'asc' }
+          }
+        }
+      })
+
+      const layoutCollectionIds = pageLayout?.items.map(item => item.contentId) || []
+
+      if (layoutCollectionIds.length === 0) {
+        return []
+      }
+
+      const collections = await prisma.collection.findMany({
+        where: {
+          id: { in: layoutCollectionIds },
+          authors: { some: { userId: { in: adminUserIds } } },
+          isPublished: true
+        },
+        select: {
+          id: true,
+          title: true,
+          slug: true,
+          accentColor: true,
+          isPublished: true,
+          updatedAt: true,
+          collectionSkripts: {
+            where: {
+              skript: { isPublished: true }
+            },
+            include: {
+              skript: {
+                include: {
+                  pages: {
+                    where: { isPublished: true },
+                    orderBy: { order: 'asc' },
+                    select: {
+                      id: true,
+                      title: true,
+                      slug: true,
+                      isPublished: true,
+                      order: true
+                    }
+                  }
+                }
+              }
+            },
+            orderBy: { order: 'asc' }
+          }
+        }
+      })
+
+      // Sort collections by page layout order
+      const sortedCollections = [...collections].sort((a, b) => {
+        const aIndex = layoutCollectionIds.indexOf(a.id)
+        const bIndex = layoutCollectionIds.indexOf(b.id)
+        return aIndex - bIndex
+      })
+
+      return buildSiteStructure(sortedCollections, { onlyPublished: true })
+    },
+    [`org-full-site-structure-${orgSlug}`],
+    {
+      tags: [CACHE_TAGS.organization(orgSlug), CACHE_TAGS.orgContent(orgSlug)],
+      revalidate: false,
+    }
+  )()
+
+/**
  * Get org's homepage content - cached
  * Fetches collections and skripts based on org page layout
  * Content is fetched based on what org admins have access to

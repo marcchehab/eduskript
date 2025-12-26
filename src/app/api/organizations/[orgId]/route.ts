@@ -12,32 +12,47 @@ export async function GET(
   if (error) return error
 
   try {
-    const organization = await prisma.organization.findUnique({
-      where: { id: orgId },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        description: true,
-        showIcon: true,
-        iconUrl: true,
-        allowMemberPages: true,
-        allowTeacherCustomDomains: true,
-        requireEmailDomain: true,
-        billingPlan: true,
-        createdAt: true,
-        updatedAt: true,
-        _count: {
-          select: { members: true },
+    const [organization, teacherCount, studentCount] = await Promise.all([
+      prisma.organization.findUnique({
+        where: { id: orgId },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          description: true,
+          showIcon: true,
+          iconUrl: true,
+          allowMemberPages: true,
+          allowTeacherCustomDomains: true,
+          requireEmailDomain: true,
+          sidebarBehavior: true,
+          billingPlan: true,
+          createdAt: true,
+          updatedAt: true,
+          _count: {
+            select: { members: true },
+          },
         },
-      },
-    })
+      }),
+      prisma.organizationMember.count({
+        where: {
+          organizationId: orgId,
+          user: { accountType: 'teacher' },
+        },
+      }),
+      prisma.organizationMember.count({
+        where: {
+          organizationId: orgId,
+          user: { accountType: 'student' },
+        },
+      }),
+    ])
 
     if (!organization) {
       return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
     }
 
-    return NextResponse.json({ organization })
+    return NextResponse.json({ organization, teacherCount, studentCount })
   } catch (error) {
     console.error('Error fetching organization:', error)
     return NextResponse.json({ error: 'Failed to fetch organization' }, { status: 500 })
@@ -55,7 +70,7 @@ export async function PATCH(
 
   try {
     const body = await request.json()
-    const { name, description, showIcon, iconUrl, allowMemberPages, allowTeacherCustomDomains, requireEmailDomain } = body
+    const { name, description, showIcon, iconUrl, allowMemberPages, allowTeacherCustomDomains, requireEmailDomain, sidebarBehavior } = body
 
     // Validate name if provided
     if (name !== undefined && (!name || typeof name !== 'string' || name.trim().length === 0)) {
@@ -86,6 +101,12 @@ export async function PATCH(
     if (requireEmailDomain !== undefined) {
       updateData.requireEmailDomain = requireEmailDomain || null
     }
+    if (sidebarBehavior !== undefined) {
+      if (sidebarBehavior && !['contextual', 'full'].includes(sidebarBehavior)) {
+        return NextResponse.json({ error: 'Invalid sidebar behavior' }, { status: 400 })
+      }
+      updateData.sidebarBehavior = sidebarBehavior || 'contextual'
+    }
 
     const organization = await prisma.organization.update({
       where: { id: orgId },
@@ -100,7 +121,9 @@ export async function PATCH(
         allowMemberPages: true,
         allowTeacherCustomDomains: true,
         requireEmailDomain: true,
+        sidebarBehavior: true,
         billingPlan: true,
+        createdAt: true,
         updatedAt: true,
         _count: {
           select: { members: true },

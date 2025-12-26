@@ -9,6 +9,7 @@ import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getOrgMembership } from '@/lib/org-auth'
+import { getOrgFullSiteStructure } from '@/lib/cached-queries'
 
 // Enable ISR - pages are cached until explicitly invalidated
 export const revalidate = false
@@ -95,7 +96,8 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
       name: true,
       description: true,
       showIcon: true,
-      iconUrl: true
+      iconUrl: true,
+      sidebarBehavior: true
     }
   })
 
@@ -245,12 +247,18 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
       title: null
     }
 
+    // Fetch full site structure if sidebar behavior is "full"
+    const fullSiteStructure = organization.sidebarBehavior === 'full'
+      ? await getOrgFullSiteStructure(organization.id, orgSlug)
+      : undefined
+
     return (
       <PublicSiteLayout
         teacher={orgAsTeacher}
         siteStructure={siteStructure}
         rootSkripts={[]}
-        sidebarBehavior="contextual"
+        fullSiteStructure={fullSiteStructure}
+        sidebarBehavior={organization.sidebarBehavior as 'contextual' | 'full' || 'contextual'}
         typographyPreference="modern"
         routePrefix={`/org/${orgSlug}/c`}
       >

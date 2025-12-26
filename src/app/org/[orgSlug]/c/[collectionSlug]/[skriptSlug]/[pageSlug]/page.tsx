@@ -6,7 +6,7 @@ import { ExportPDF } from '@/components/public/export-pdf'
 import { DevClearDataButton } from '@/components/dev/dev-clear-data-button'
 import type { Metadata } from 'next'
 import { prisma } from '@/lib/prisma'
-import { getOrgPublishedPage } from '@/lib/cached-queries'
+import { getOrgPublishedPage, getOrgFullSiteStructure } from '@/lib/cached-queries'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 
@@ -99,7 +99,8 @@ export default async function OrgPublicPage({ params }: PageProps) {
       name: true,
       description: true,
       showIcon: true,
-      iconUrl: true
+      iconUrl: true,
+      sidebarBehavior: true
     }
   })
 
@@ -206,12 +207,18 @@ export default async function OrgPublicPage({ params }: PageProps) {
 
   const currentPath = `/${collectionSlug}/${skriptSlug}/${pageSlug}`
 
+  // Fetch full site structure if sidebar behavior is "full"
+  const fullSiteStructure = organization.sidebarBehavior === 'full'
+    ? await getOrgFullSiteStructure(organization.id, orgSlug)
+    : undefined
+
   return (
     <PublicSiteLayout
       teacher={orgAsTeacher}
       siteStructure={siteStructure}
       currentPath={currentPath}
-      sidebarBehavior="contextual"
+      fullSiteStructure={fullSiteStructure}
+      sidebarBehavior={organization.sidebarBehavior as 'contextual' | 'full' || 'contextual'}
       typographyPreference="modern"
       routePrefix={`/org/${orgSlug}/c`}
       pageId={page.id}
