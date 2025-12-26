@@ -20,6 +20,8 @@ import { Callout } from '@/components/markdown/callout'
 import { CodeBlock } from '@/components/markdown/code-block'
 import { OurTeachers } from '@/components/markdown/our-teachers'
 import { DemoEditor } from '@/components/demo/demo-editor'
+import { ColorSliders } from '@/components/markdown/color-sliders'
+import { StickMe } from '@/components/markdown/stick-me'
 
 // Simple hash function for generating stable IDs
 function hashCode(str: string): string {
@@ -528,6 +530,7 @@ export function createMDXComponents(
     'excalidraw-image': ExcalidrawImageComponent,
     'question': QuizQuestionComponent,
     'quiz-option': QuizOptionComponent,
+    'stickme': StickMe,
 
     // Direct MDX component access
     CodeEditor: CodeEditorComponent,
@@ -551,5 +554,9 @@ export function createMDXComponents(
 
     // Demo/marketing components
     DemoEditor,
+
+    // Educational interactive components
+    ColorSliders,
+    StickMe,
   }
 }

@@ -85,6 +85,17 @@ export function ContentImage({ src, alt = '', title, style, onWidthChange, origi
           <span className="flex items-center justify-center w-full h-32 bg-muted border border-dashed border-border rounded-md text-muted-foreground text-sm">
             Missing: {filename}
           </span>
+        ) : imageSrc.startsWith('http') ? (
+          // External URLs: use native img to avoid Next.js hostname restrictions
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={imageSrc}
+            alt={alt || ''}
+            title={title}
+            className="w-full h-auto rounded-md"
+            style={invertFilter ? { filter: invertFilter } : undefined}
+            loading="lazy"
+          />
         ) : (
           <Image
             src={imageSrc}
