@@ -170,15 +170,16 @@ model Collection {
   description String?
   slug        String   @unique
   isPublished Boolean  @default(false)
+  accentColor String?  // Hex color for sidebar letter markers (e.g., "#3b82f6")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  
+
   // Relations
   collectionSkripts CollectionSkript[]
-  
+
   // Many-to-many relation for multiple authors
   authors     CollectionAuthor[]
-  
+
   @@map("collections")
 }
 
