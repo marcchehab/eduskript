@@ -28,10 +28,12 @@ interface SiteStructure {
   id: string
   title: string
   slug: string
+  accentColor?: string | null // Hex color for letter markers
   skripts: {
     id: string
     title: string
     slug: string
+    order?: number // Position within collection (0-indexed) for letter markers
     pages: {
       id: string
       title: string
@@ -226,14 +228,6 @@ export function PublicSiteLayout({
     return () => window.removeEventListener('resize', updatePaperScale)
   }, [])
 
-  const toggleCollection = (collectionId: string) => {
-    setExpandedCollections(prev => 
-      prev.includes(collectionId) 
-        ? prev.filter(id => id !== collectionId)
-        : [...prev, collectionId]
-    )
-  }
-
   const toggleSkript = (skriptId: string) => {
     setExpandedSkripts(prev => 
       prev.includes(skriptId) 
@@ -399,7 +393,7 @@ export function PublicSiteLayout({
           </div>
 
           {/* Navigation */}
-          <div className="flex-1 overflow-y-auto p-4 flex flex-col">
+          <div className="flex-1 p-4 pr-2 flex flex-col overflow-y-scroll [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&:hover::-webkit-scrollbar-thumb]:bg-muted-foreground/30">
             {isSidebarCollapsed ? (
               /* Simplified navigation when collapsed - just show essential icons */
               <nav className="space-y-2">
@@ -416,7 +410,7 @@ export function PublicSiteLayout({
                             router.push(homeUrl)
                             setIsSidebarOpen(false)
                           }}
-                          className="flex items-center justify-center w-full px-2 py-2 text-sm font-medium rounded-md transition-colors text-muted-foreground hover:bg-muted hover:text-foreground mb-4"
+                          className="flex items-center justify-center w-full py-1 text-sm font-medium rounded-md transition-colors text-muted-foreground hover:bg-muted hover:text-foreground mb-4"
                           title="Home"
                         >
                           <Home className="w-5 h-5" />
@@ -431,12 +425,17 @@ export function PublicSiteLayout({
               <nav className="space-y-2">
               {/* Determine which structure to show based on sidebarBehavior */}
               {(() => {
-                const displayStructure = sidebarBehavior === 'full' && fullSiteStructure 
-                  ? fullSiteStructure 
+                const displayStructure = sidebarBehavior === 'full' && fullSiteStructure
+                  ? fullSiteStructure
                   : siteStructure
-                
+
                 const showHomeButton = sidebarBehavior === 'contextual' && siteStructure.length === 1
-                
+
+                // In contextual mode with single skript, chevron is just decorative (always expanded)
+                const isContextualSingleSkript = sidebarBehavior === 'contextual' &&
+                  siteStructure.length === 1 &&
+                  siteStructure[0]?.skripts?.length === 1
+
                 return (
                   <>
                     {/* Home button - only show when viewing a single collection in contextual mode */}
@@ -449,91 +448,98 @@ export function PublicSiteLayout({
                           router.push(homeUrl)
                           setIsSidebarOpen(false)
                         }}
-                        className="flex items-center w-full text-left px-3 py-2 text-sm font-medium rounded-md transition-colors text-muted-foreground hover:bg-muted hover:text-foreground mb-4"
+                        className="flex items-center w-full text-left py-1 text-sm font-medium rounded-md transition-colors text-muted-foreground hover:bg-muted hover:text-foreground mb-4"
                       >
                         <Home className="w-4 h-4 mr-2 flex-shrink-0" />
                         <span>Home</span>
                       </button>
                     )}
                     
-                    {displayStructure.map((collection) => (
-                <div key={collection.id} className="space-y-1">
-                  {/* Collection Title */}
-                  <button
-                    onClick={() => toggleCollection(collection.id)}
-                    className={`flex items-center w-full text-left px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                      expandedCollections.includes(collection.id)
-                        ? 'text-foreground bg-muted'
-                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                    }`}
-                  >
-                    {expandedCollections.includes(collection.id) ? (
-                      <ChevronDown className="w-4 h-4 mr-2 flex-shrink-0" />
-                    ) : (
-                      <ChevronRight className="w-4 h-4 mr-2 flex-shrink-0" />
-                    )}
-                    <span className="truncate">{collection.title}</span>
-                  </button>
+                    {displayStructure.map((collection, index) => (
+                <div key={collection.id} className={`${index > 0 ? 'mt-5' : ''} mb-4`}>
+                  {/* Collection Title - Docusaurus-style category header */}
+                  <div className="py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    {collection.title}
+                  </div>
 
-                  {/* Skripts */}
-                  {expandedCollections.includes(collection.id) && (
-                    <div className="ml-6 space-y-1">
-                      {collection.skripts.map((skript) => (
-                        <div key={skript.id} className="space-y-1">
-                          {/* Skript Title - split into chevron (toggle only) and title (navigate + expand) */}
+                  {/* Skripts - always visible */}
+                  <div className="space-y-1.5 mt-1">
+                      {collection.skripts.map((skript, skriptIndex) => (
+                        <div key={skript.id}>
+                          {/* Skript Title - letter marker, title, chevron */}
                           <div
-                            className={`flex items-center w-full text-left px-3 py-1 text-sm rounded-md transition-colors ${
+                            className={`flex items-center w-full text-left py-1 text-sm rounded-md transition-colors ${
                               expandedSkripts.includes(skript.id)
-                                ? 'text-foreground bg-muted/50'
-                                : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                                ? 'text-foreground font-medium bg-muted/50'
+                                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                             }`}
                           >
-                            {/* Chevron - toggle only */}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                toggleSkript(skript.id)
-                              }}
-                              className="p-0.5 -ml-0.5 mr-1 hover:bg-muted rounded flex-shrink-0"
-                              aria-label={expandedSkripts.includes(skript.id) ? 'Collapse' : 'Expand'}
+                            {/* Letter marker - uses skript.order (position in collection) or fallback to index */}
+                            <span
+                              className="w-5 h-5 rounded text-xs font-bold flex items-center justify-center mr-2 flex-shrink-0 text-white"
+                              style={{ backgroundColor: collection.accentColor || '#6b7280' }}
                             >
-                              {expandedSkripts.includes(skript.id) ? (
-                                <ChevronDown className="w-3 h-3" />
-                              ) : (
-                                <ChevronRight className="w-3 h-3" />
-                              )}
-                            </button>
+                              {String.fromCharCode(65 + (skript.order ?? skriptIndex))}
+                            </span>
                             {/* Title - navigate to frontpage and expand */}
                             <button
                               onClick={() => navigateToSkript(collection.slug, skript.slug, skript.id)}
-                              className="truncate flex-1 text-left hover:underline"
+                              className="truncate flex-1 text-left hover:text-primary"
                             >
                               {skript.title}
                             </button>
+                            {/* Chevron - toggle only, right-aligned (non-interactive in contextual single skript mode) */}
+                            {isContextualSingleSkript ? (
+                              <span className="p-1.5 ml-1 flex-shrink-0 text-muted-foreground">
+                                <ChevronDown className="w-4 h-4" />
+                              </span>
+                            ) : (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  toggleSkript(skript.id)
+                                }}
+                                className="p-1.5 ml-1 hover:bg-muted rounded flex-shrink-0 text-muted-foreground cursor-pointer"
+                                aria-label={expandedSkripts.includes(skript.id) ? 'Collapse' : 'Expand'}
+                              >
+                                {expandedSkripts.includes(skript.id) ? (
+                                  <ChevronDown className="w-4 h-4" />
+                                ) : (
+                                  <ChevronRight className="w-4 h-4" />
+                                )}
+                              </button>
+                            )}
                           </div>
 
-                          {/* Pages */}
-                          {expandedSkripts.includes(skript.id) && (
-                            <div className="ml-5 space-y-1">
-                              {skript.pages.map((page) => (
-                                <button
-                                  key={page.id}
-                                  onClick={() => navigateToPage(collection.slug, skript.slug, page.slug)}
-                                  className={`block w-full text-left px-3 py-1 text-sm rounded-md truncate transition-colors ${
-                                    isCurrentPage(collection.slug, skript.slug, page.slug)
-                                      ? 'bg-primary/10 text-primary font-medium'
-                                      : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
-                                  }`}
-                                >
-                                  {page.title}
-                                </button>
-                              ))}
+                          {/* Pages - with smooth slide transition */}
+                          <div className={`grid transition-[grid-template-rows] duration-200 ease-out ${
+                            expandedSkripts.includes(skript.id) ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+                          }`}>
+                            <div className="overflow-hidden">
+                              <div className="space-y-0.5 py-1 ml-4">
+                                {skript.pages.map((page, pageIndex) => (
+                                  <button
+                                    key={page.id}
+                                    onClick={() => navigateToPage(collection.slug, skript.slug, page.slug)}
+                                    className={`flex items-center w-full text-left py-1.5 px-2 text-sm rounded-md transition-colors ${
+                                      isCurrentPage(collection.slug, skript.slug, page.slug)
+                                        ? 'text-primary font-medium bg-primary/10'
+                                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                                    }`}
+                                  >
+                                    {/* Page number marker */}
+                                    <span className="w-5 h-5 rounded text-xs font-medium flex items-center justify-center mr-2 flex-shrink-0 bg-muted text-muted-foreground">
+                                      {pageIndex + 1}
+                                    </span>
+                                    <span className="truncate">{page.title}</span>
+                                  </button>
+                                ))}
+                              </div>
                             </div>
-                          )}
+                          </div>
                         </div>
                       ))}
                     </div>
-                  )}
                 </div>
                     ))}
                   </>
@@ -542,67 +548,80 @@ export function PublicSiteLayout({
               
               {/* Root-level skripts */}
               {rootSkripts.length > 0 && (
-                <div className="mt-4 space-y-1">
-                  <h3 className="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                <div className="mt-5 mb-4">
+                  <div className="py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     Individual Skripts
-                  </h3>
-                  {rootSkripts.map((skript) => (
-                    <div key={skript.id} className="space-y-1">
-                      {/* Root Skript Title - split into chevron (toggle only) and title (navigate + expand) */}
+                  </div>
+                  <div className="space-y-1.5 mt-1">
+                  {rootSkripts.map((skript, skriptIndex) => (
+                    <div key={skript.id}>
+                      {/* Root Skript Title - letter marker, title, chevron */}
                       <div
-                        className={`flex items-center w-full text-left px-3 py-1 text-sm rounded-md transition-colors ${
+                        className={`flex items-center w-full text-left text-sm rounded-md transition-colors ${
                           expandedSkripts.includes(skript.id)
-                            ? 'text-foreground bg-muted/50'
-                            : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                            ? 'text-foreground font-medium bg-muted/50'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                         }`}
                       >
-                        {/* Chevron - toggle only */}
+                        {/* Letter marker */}
+                        <span
+                          className="w-5 h-5 rounded text-xs font-bold flex items-center justify-center mr-2 flex-shrink-0 text-white bg-gray-500"
+                        >
+                          {String.fromCharCode(65 + skriptIndex)}
+                        </span>
+                        {/* Title - navigate to frontpage and expand */}
+                        <button
+                          onClick={() => navigateToSkript(skript.collection.slug, skript.slug, skript.id)}
+                          className="truncate flex-1 text-left hover:text-primary"
+                        >
+                          {skript.title}
+                        </button>
+                        {/* Chevron - toggle only, right-aligned */}
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
                             toggleSkript(skript.id)
                           }}
-                          className="p-0.5 -ml-0.5 mr-1 hover:bg-muted rounded flex-shrink-0"
+                          className="p-1.5 ml-1 hover:bg-muted rounded flex-shrink-0 text-muted-foreground"
                           aria-label={expandedSkripts.includes(skript.id) ? 'Collapse' : 'Expand'}
                         >
                           {expandedSkripts.includes(skript.id) ? (
-                            <ChevronDown className="w-3 h-3" />
+                            <ChevronDown className="w-4 h-4" />
                           ) : (
-                            <ChevronRight className="w-3 h-3" />
+                            <ChevronRight className="w-4 h-4" />
                           )}
                         </button>
-                        {/* Title - navigate to frontpage and expand */}
-                        <button
-                          onClick={() => navigateToSkript(skript.collection.slug, skript.slug, skript.id)}
-                          className="truncate flex-1 text-left hover:underline"
-                        >
-                          {skript.title}
-                        </button>
-                        <span className="ml-2 text-xs text-muted-foreground">
-                          ({skript.collection.title})
-                        </span>
                       </div>
 
-                      {/* Root Skript Pages */}
-                      {expandedSkripts.includes(skript.id) && (
-                        <div className="ml-5 space-y-1">
-                          {skript.pages.map((page) => (
-                            <button
-                              key={page.id}
-                              onClick={() => navigateToPage(skript.collection.slug, skript.slug, page.slug)}
-                              className={`block w-full text-left px-3 py-1 text-sm rounded-md truncate transition-colors ${
-                                isCurrentPage(skript.collection.slug, skript.slug, page.slug)
-                                  ? 'bg-primary/10 text-primary font-medium'
-                                  : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
-                              }`}
-                            >
-                              {page.title}
-                            </button>
-                          ))}
+                      {/* Root Skript Pages - with smooth slide transition */}
+                      <div className={`grid transition-[grid-template-rows] duration-200 ease-out ${
+                        expandedSkripts.includes(skript.id) ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+                      }`}>
+                        <div className="overflow-hidden">
+                          <div className="space-y-0.5 py-1 ml-4">
+                            {skript.pages.map((page, pageIndex) => (
+                              <button
+                                key={page.id}
+                                onClick={() => navigateToPage(skript.collection.slug, skript.slug, page.slug)}
+                                className={`flex items-center w-full text-left py-1.5 px-2 text-sm rounded-md transition-colors ${
+                                  isCurrentPage(skript.collection.slug, skript.slug, page.slug)
+                                    ? 'text-primary font-medium bg-primary/10'
+                                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                                }`}
+                              >
+                                {/* Page number marker */}
+                                <span className="w-5 h-5 rounded text-xs font-medium flex items-center justify-center mr-2 flex-shrink-0 bg-muted text-muted-foreground">
+                                  {pageIndex + 1}
+                                </span>
+                                <span className="truncate">{page.title}</span>
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                      )}
+                      </div>
                     </div>
                   ))}
+                  </div>
                 </div>
               )}
               </nav>
