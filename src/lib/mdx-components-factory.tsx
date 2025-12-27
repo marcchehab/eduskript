@@ -25,6 +25,7 @@ import { StickMe } from '@/components/markdown/stick-me'
 import { DijkstraVisualizer } from '@/components/markdown/dijkstra-visualizer'
 import { ColorTitleHeading } from '@/components/markdown/color-title-heading'
 import { YT } from '@/components/markdown/youtube'
+import { ModCalc } from '@/components/markdown/mod-calc'
 
 // Simple hash function for generating stable IDs
 function hashCode(str: string): string {
@@ -571,5 +572,8 @@ export function createMDXComponents(
 
     // YouTube timestamp links
     YT,
+
+    // Math/crypto educational components
+    ModCalc,
   }
 }
