@@ -4,7 +4,6 @@ import { PublicSiteLayout } from '@/components/public/layout'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
 import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
 import { ExportPDF } from '@/components/public/export-pdf'
-import { DevClearDataButton } from '@/components/dev/dev-clear-data-button'
 import { ExamLockedPage } from '@/components/exam/exam-locked-page'
 import { SEBRequiredPage } from '@/components/exam/seb-required-page'
 import { ExamSubmittedPage } from '@/components/exam/exam-submitted-page'
@@ -433,8 +432,6 @@ export default async function PublicPage({ params, searchParams }: PageProps) {
         </div>
       </div>
 
-      {/* Dev-only button to clear user data for this page */}
-      <DevClearDataButton pageId={page.id} />
     </PublicSiteLayout>
   )
 }

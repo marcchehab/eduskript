@@ -3,7 +3,6 @@ import { PublicSiteLayout } from '@/components/public/layout'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
 import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
 import { ExportPDF } from '@/components/public/export-pdf'
-import { DevClearDataButton } from '@/components/dev/dev-clear-data-button'
 import { ExamSessionIndicator } from '@/components/exam/exam-session-indicator'
 import { ExamLockedPage } from '@/components/exam/exam-locked-page'
 import { SEBRequiredPage } from '@/components/exam/seb-required-page'
@@ -598,7 +597,6 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
               classId={examClassId}
               examTitle={page.title}
             />
-            <DevClearDataButton pageId={page.id} />
           </ExamLayout>
         </ExamDataSync>
       )
@@ -620,7 +618,6 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
           typographyPreference={teacher.typographyPreference as 'modern' | 'classic' || 'modern'}
         >
           {examContent}
-          <DevClearDataButton pageId={page.id} />
         </ExamLayout>
       </ExamDataSync>
     )
@@ -648,7 +645,6 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
 
       {examContent}
 
-      <DevClearDataButton pageId={page.id} />
       {isInExamSession && <ExamSessionIndicator userName={examSessionUserName} />}
     </PublicSiteLayout>
   )

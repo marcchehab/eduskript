@@ -3,7 +3,6 @@ import { PublicSiteLayout } from '@/components/public/layout'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
 import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
 import { ExportPDF } from '@/components/public/export-pdf'
-import { DevClearDataButton } from '@/components/dev/dev-clear-data-button'
 import type { Metadata } from 'next'
 import { prisma } from '@/lib/prisma'
 import { getOrgPublishedPage, getOrgFullSiteStructure } from '@/lib/cached-queries'
@@ -244,7 +243,6 @@ export default async function OrgPublicPage({ params }: PageProps) {
         </div>
       </div>
 
-      <DevClearDataButton pageId={page.id} />
     </PublicSiteLayout>
   )
 }

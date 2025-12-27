@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { ChevronDown, ChevronRight, Menu, X, ChevronLeft, NotebookPen } from 'lucide-react'
@@ -13,6 +13,7 @@ import { FontSizeControls } from './font-size-controls'
 import { SyncStatusButton } from '@/components/ui/sync-status'
 import { useLayout } from '@/contexts/layout-context'
 import { TeacherClassProvider } from '@/contexts/teacher-class-context'
+import { AdminToolbox } from './admin-toolbox'
 
 interface Teacher {
   name: string | null
@@ -103,16 +104,12 @@ export function PublicSiteLayout({
   // Storage keys for persistence
   const EXPANDED_SCRIPTS_KEY = `expanded-collections-${teacher.pageSlug}`
   const EXPANDED_SKRIPTS_KEY = `expanded-skripts-${teacher.pageSlug}`
-  
-  // Initialize with persistent state or defaults
-  const [expandedCollections, setExpandedCollections] = useState<string[]>([])
-  const [expandedSkripts, setExpandedSkripts] = useState<string[]>([])
-  const [isInitialized, setIsInitialized] = useState(false)
 
-  // Get initial expanded state from localStorage or defaults
-  const getInitialExpandedCollections = useCallback(() => {
+  // Initialize with persistent state or defaults using lazy initializers
+  // This reads from localStorage synchronously to prevent flash during hydration
+  const [expandedCollections, setExpandedCollections] = useState<string[]>(() => {
     if (typeof window === 'undefined') return siteStructure.map(collection => collection.id)
-    
+
     const stored = localStorage.getItem(EXPANDED_SCRIPTS_KEY)
     if (stored) {
       try {
@@ -123,14 +120,19 @@ export function PublicSiteLayout({
     }
     // Default: all collections expanded
     return siteStructure.map(collection => collection.id)
-  }, [siteStructure, EXPANDED_SCRIPTS_KEY])
+  })
 
-  const getInitialExpandedSkripts = useCallback(() => {
-    if (typeof window === 'undefined') return []
-    
+  // Initialize as empty to match server render, populate after mount
+  const [expandedSkripts, setExpandedSkripts] = useState<string[]>([])
+
+  // Track if we've finished first render (for enabling animations after mount)
+  const [isInitialized, setIsInitialized] = useState(false)
+
+  // Initialize expandedSkripts from localStorage and currentPath after mount
+  useEffect(() => {
     const stored = localStorage.getItem(EXPANDED_SKRIPTS_KEY)
     let expandedFromStorage: string[] = []
-    
+
     if (stored) {
       try {
         expandedFromStorage = JSON.parse(stored)
@@ -138,13 +140,13 @@ export function PublicSiteLayout({
         expandedFromStorage = []
       }
     }
-    
+
     // Auto-expand skripts that contain the current page
     const expandedFromCurrentPath: string[] = []
     if (currentPath) {
       siteStructure.forEach(collection => {
         collection.skripts.forEach(skript => {
-          const hasCurrentPage = skript.pages.some(page => 
+          const hasCurrentPage = skript.pages.some(page =>
             currentPath === `/${collection.slug}/${skript.slug}/${page.slug}`
           )
           if (hasCurrentPage && !expandedFromStorage.includes(skript.id)) {
@@ -153,19 +155,11 @@ export function PublicSiteLayout({
         })
       })
     }
-    
-    return [...expandedFromStorage, ...expandedFromCurrentPath]
-  }, [siteStructure, currentPath, EXPANDED_SKRIPTS_KEY])
 
-  // Initialize state from localStorage on client side
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setExpandedCollections(getInitialExpandedCollections())
-     
-    setExpandedSkripts(getInitialExpandedSkripts())
-     
+    setExpandedSkripts([...expandedFromStorage, ...expandedFromCurrentPath])
     setIsInitialized(true)
-  }, [getInitialExpandedCollections, getInitialExpandedSkripts])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Only run on mount
 
   // Update expanded skripts when current path changes
   useEffect(() => {
@@ -272,6 +266,7 @@ export function PublicSiteLayout({
 
       {/* Top-right controls - only visible on mobile when sidebar is closed */}
       <div className="min-[1344px]:hidden fixed top-4 right-4 z-50 flex items-center gap-2">
+        <AdminToolbox pageId={pageId} />
         <FontSizeControls />
         <PublicThemeToggle />
         <AuthButton pageId={pageId} />
@@ -338,6 +333,7 @@ export function PublicSiteLayout({
                 >
                   <ChevronRight className="w-5 h-5" />
                 </Button>
+                <AdminToolbox pageId={pageId} />
                 <AuthButton pageId={pageId} />
                 <PublicThemeToggle />
                 <FontSizeControls orientation="vertical" />
@@ -393,6 +389,7 @@ export function PublicSiteLayout({
                   {/* Spacer to balance the collapse button */}
                   <div className="w-9" />
                   <div className="flex-1 flex items-center justify-center gap-2">
+                    <AdminToolbox pageId={pageId} />
                     <FontSizeControls />
                     <PublicThemeToggle />
                     <AuthButton pageId={pageId} />
