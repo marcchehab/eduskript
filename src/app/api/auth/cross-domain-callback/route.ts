@@ -103,8 +103,10 @@ export async function GET(request: NextRequest) {
     secret: process.env.NEXTAUTH_SECRET!,
   })
 
-  // Build redirect response
-  const response = NextResponse.redirect(new URL(returnPath, request.url))
+  // Build redirect response using the domain from the token
+  // (request.url may be internal container URL on platforms like Koyeb)
+  const redirectUrl = `https://${crossDomainToken.domain}${returnPath}`
+  const response = NextResponse.redirect(redirectUrl)
 
   // Set session cookie
   // Use the same cookie name NextAuth uses in production
