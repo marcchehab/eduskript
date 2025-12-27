@@ -38,8 +38,8 @@ export async function generateMetadata({ params }: DomainIndexProps): Promise<Me
       }
     }
 
-    const title = teacher.name || 'Eduskript'
-    const description = teacher.bio || `Educational content by ${teacher.name}`
+    const title = teacher.pageName || teacher.name || 'Eduskript'
+    const description = teacher.pageDescription || teacher.bio || `Educational content by ${teacher.pageName || teacher.name}`
 
     return {
       title,
@@ -49,7 +49,7 @@ export async function generateMetadata({ params }: DomainIndexProps): Promise<Me
         title,
         description,
         type: 'website',
-        siteName: teacher.name || 'Eduskript',
+        siteName: teacher.pageName || teacher.name || 'Eduskript',
         url: `https://${domain}`
       },
       twitter: {
