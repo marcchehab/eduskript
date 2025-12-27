@@ -88,24 +88,32 @@ export async function POST(request: Request) {
       return Response.json({ error: 'Access denied' }, { status: 403 })
     }
 
-    // 7. Get organization prompt if user belongs to an org with one
+    // 7. Get organization and teacher prompts
     let orgPrompt: string | undefined
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      include: {
+      select: {
+        aiSystemPrompt: true,
         organizationMemberships: {
           include: { organization: true },
         },
       },
     })
 
-    // Find org with AI prompt
+    // Combine org prompt and teacher prompt
     const orgWithPrompt = user?.organizationMemberships.find(
       (m) => m.organization.aiSystemPrompt
     )?.organization
 
+    const prompts: string[] = []
     if (orgWithPrompt?.aiSystemPrompt) {
-      orgPrompt = orgWithPrompt.aiSystemPrompt
+      prompts.push(`## Organization Guidelines\n${orgWithPrompt.aiSystemPrompt}`)
+    }
+    if (user?.aiSystemPrompt) {
+      prompts.push(`## Teacher Preferences\n${user.aiSystemPrompt}`)
+    }
+    if (prompts.length > 0) {
+      orgPrompt = prompts.join('\n\n')
     }
 
     // 8. Build context

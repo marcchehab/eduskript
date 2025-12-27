@@ -26,6 +26,7 @@ export async function GET(
           allowTeacherCustomDomains: true,
           requireEmailDomain: true,
           sidebarBehavior: true,
+          aiSystemPrompt: true,
           billingPlan: true,
           createdAt: true,
           updatedAt: true,
@@ -70,7 +71,7 @@ export async function PATCH(
 
   try {
     const body = await request.json()
-    const { name, description, showIcon, iconUrl, allowMemberPages, allowTeacherCustomDomains, requireEmailDomain, sidebarBehavior } = body
+    const { name, description, showIcon, iconUrl, allowMemberPages, allowTeacherCustomDomains, requireEmailDomain, sidebarBehavior, aiSystemPrompt } = body
 
     // Validate name if provided
     if (name !== undefined && (!name || typeof name !== 'string' || name.trim().length === 0)) {
@@ -107,6 +108,9 @@ export async function PATCH(
       }
       updateData.sidebarBehavior = sidebarBehavior || 'contextual'
     }
+    if (aiSystemPrompt !== undefined) {
+      updateData.aiSystemPrompt = aiSystemPrompt || null
+    }
 
     const organization = await prisma.organization.update({
       where: { id: orgId },
@@ -122,6 +126,7 @@ export async function PATCH(
         allowTeacherCustomDomains: true,
         requireEmailDomain: true,
         sidebarBehavior: true,
+        aiSystemPrompt: true,
         billingPlan: true,
         createdAt: true,
         updatedAt: true,

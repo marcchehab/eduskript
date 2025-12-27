@@ -8,7 +8,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
-import { Building2, X } from 'lucide-react'
+import { Textarea } from '@/components/ui/textarea'
+import { Building2, X, Wand2 } from 'lucide-react'
 import { OrgIcon } from '@/components/org-icon'
 import Link from 'next/link'
 
@@ -22,6 +23,7 @@ interface Organization {
   requireEmailDomain: string | null
   allowTeacherCustomDomains: boolean
   sidebarBehavior: string | null
+  aiSystemPrompt: string | null
   billingPlan: string
   createdAt: string
   updatedAt: string
@@ -51,6 +53,7 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
     requireEmailDomain: '',
     allowTeacherCustomDomains: false,
     sidebarBehavior: 'contextual' as string,
+    aiSystemPrompt: '',
   })
   const [uploadingIcon, setUploadingIcon] = useState(false)
 
@@ -81,6 +84,7 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
           requireEmailDomain: data.organization.requireEmailDomain || '',
           allowTeacherCustomDomains: data.organization.allowTeacherCustomDomains || false,
           sidebarBehavior: data.organization.sidebarBehavior || 'contextual',
+          aiSystemPrompt: data.organization.aiSystemPrompt || '',
         })
       } catch (err) {
         setError(err instanceof Error ? err.message : 'An error occurred')
@@ -113,6 +117,7 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
           requireEmailDomain: formData.requireEmailDomain || null,
           allowTeacherCustomDomains: formData.allowTeacherCustomDomains,
           sidebarBehavior: formData.sidebarBehavior,
+          aiSystemPrompt: formData.aiSystemPrompt || null,
         }),
       })
 
@@ -359,6 +364,32 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
                     </p>
                   </div>
                 </label>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t pt-6">
+            <h3 className="text-lg font-medium mb-4 flex items-center gap-2">
+              <Wand2 className="h-5 w-5" />
+              AI Assistant
+            </h3>
+            <div className="space-y-3">
+              <div>
+                <Label htmlFor="aiSystemPrompt">Custom System Prompt</Label>
+                <Textarea
+                  id="aiSystemPrompt"
+                  value={formData.aiSystemPrompt}
+                  onChange={(e) =>
+                    setFormData({ ...formData, aiSystemPrompt: e.target.value })
+                  }
+                  placeholder="Add custom instructions for the AI assistant that will apply to all teachers in this organization..."
+                  rows={5}
+                  className="mt-1.5 font-mono text-sm"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  This prompt is prepended to all AI interactions for teachers in this organization.
+                  Use it to set guidelines, tone, or subject-specific instructions.
+                </p>
               </div>
             </div>
           </div>

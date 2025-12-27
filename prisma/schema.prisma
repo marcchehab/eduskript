@@ -81,6 +81,9 @@ model User {
   sidebarBehavior String? @default("contextual") // "contextual" (default - show only current collection) or "full" (always show all)
   typographyPreference String? @default("modern") // "modern" (Roboto Slab + Barlow Condensed) or "classic" (EB Garamond + Barlow Condensed)
 
+  // AI customization
+  aiSystemPrompt String? @db.Text // Custom system prompt prepended to AI assistant messages
+
   // Admin and security
   isAdmin Boolean @default(false)
   requirePasswordReset Boolean @default(false)

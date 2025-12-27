@@ -92,23 +92,32 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ success: false, error: 'Edit access denied' }, { status: 403 })
   }
 
-  // 7. Get organization prompt
+  // 7. Get organization and teacher prompts
   let orgPrompt: string | undefined
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    include: {
+    select: {
+      aiSystemPrompt: true,
       organizationMemberships: {
         include: { organization: true },
       },
     },
   })
 
+  // Combine org prompt and teacher prompt
   const orgWithPrompt = user?.organizationMemberships.find(
     (m) => m.organization.aiSystemPrompt
   )?.organization
 
+  const prompts: string[] = []
   if (orgWithPrompt?.aiSystemPrompt) {
-    orgPrompt = orgWithPrompt.aiSystemPrompt
+    prompts.push(`## Organization Guidelines\n${orgWithPrompt.aiSystemPrompt}`)
+  }
+  if (user?.aiSystemPrompt) {
+    prompts.push(`## Teacher Preferences\n${user.aiSystemPrompt}`)
+  }
+  if (prompts.length > 0) {
+    orgPrompt = prompts.join('\n\n')
   }
 
   // 8. Build context with page content map for later use

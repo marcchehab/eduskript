@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { Save, Loader2, FileText, Upload, X, ExternalLink, Globe } from 'lucide-react'
+import { Save, Loader2, FileText, Upload, X, ExternalLink, Globe, Wand2 } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
 
@@ -29,6 +29,9 @@ export function PageSettings() {
   const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null)
   const [checkingSlug, setCheckingSlug] = useState(false)
   const [isOrgAdmin, setIsOrgAdmin] = useState(false)
+  const [aiSystemPrompt, setAiSystemPrompt] = useState('')
+  const [aiPromptLoading, setAiPromptLoading] = useState(false)
+  const [aiPromptSaved, setAiPromptSaved] = useState(false)
 
   // Org admins and platform admins can use shorter slugs (min 1 char instead of 3)
   const minSlugLength = (session?.user?.isAdmin || isOrgAdmin) ? 1 : 3
@@ -44,10 +47,11 @@ export function PageSettings() {
   useEffect(() => {
     const loadPreferences = async () => {
       try {
-        const [sidebarResponse, typographyResponse, orgAdminResponse] = await Promise.all([
+        const [sidebarResponse, typographyResponse, orgAdminResponse, aiPromptResponse] = await Promise.all([
           fetch('/api/user/sidebar-preference'),
           fetch('/api/user/typography-preference'),
           fetch('/api/user/is-org-admin'),
+          fetch('/api/user/ai-prompt'),
         ])
 
         if (sidebarResponse.ok) {
@@ -63,6 +67,11 @@ export function PageSettings() {
         if (orgAdminResponse.ok) {
           const data = await orgAdminResponse.json()
           setIsOrgAdmin(data.isOrgAdmin || false)
+        }
+
+        if (aiPromptResponse.ok) {
+          const data = await aiPromptResponse.json()
+          setAiSystemPrompt(data.aiSystemPrompt || '')
         }
       } catch (error) {
         console.error('Error loading preferences:', error)
@@ -262,6 +271,28 @@ export function PageSettings() {
 
   const handleRemoveIcon = () => {
     setPageIcon('')
+  }
+
+  const handleAiPromptSave = async () => {
+    setAiPromptLoading(true)
+    setAiPromptSaved(false)
+
+    try {
+      const response = await fetch('/api/user/ai-prompt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ aiSystemPrompt: aiSystemPrompt || null }),
+      })
+
+      if (response.ok) {
+        setAiPromptSaved(true)
+        setTimeout(() => setAiPromptSaved(false), 2000)
+      }
+    } catch (error) {
+      console.error('Failed to update AI prompt:', error)
+    } finally {
+      setAiPromptLoading(false)
+    }
   }
 
   return (
@@ -668,6 +699,54 @@ export function PageSettings() {
               Updating typography...
             </div>
           )}
+        </div>
+
+        {/* AI Assistant Section */}
+        <div className="space-y-4 border-t pt-6">
+          <div className="flex items-center gap-2">
+            <Wand2 className="h-5 w-5" />
+            <Label className="text-sm font-medium">AI Assistant</Label>
+          </div>
+          <div className="space-y-3">
+            <div>
+              <Label htmlFor="aiSystemPrompt" className="text-sm">Custom System Prompt</Label>
+              <Textarea
+                id="aiSystemPrompt"
+                value={aiSystemPrompt}
+                onChange={(e) => setAiSystemPrompt(e.target.value)}
+                placeholder="Add custom instructions for the AI assistant when editing your content..."
+                rows={5}
+                className="mt-1.5 font-mono text-sm"
+              />
+              <p className="text-sm text-muted-foreground mt-1">
+                This prompt is prepended to all AI interactions when editing your skripts.
+                Use it to set your preferred tone, teaching style, or subject-specific guidelines.
+              </p>
+            </div>
+            <Button
+              onClick={handleAiPromptSave}
+              disabled={aiPromptLoading}
+              variant="outline"
+              className="flex items-center gap-2"
+            >
+              {aiPromptLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Saving...
+                </>
+              ) : aiPromptSaved ? (
+                <>
+                  <Save className="w-4 h-4" />
+                  Saved!
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  Save AI Prompt
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>
