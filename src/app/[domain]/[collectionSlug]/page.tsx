@@ -9,8 +9,8 @@ import { headers } from 'next/headers'
 import { getTeacherByUsernameDeduped, getPublishedCollection, getFullSiteStructure } from '@/lib/cached-queries'
 import { buildSiteStructure } from '@/lib/site-structure'
 
-// Enable ISR - pages are cached until explicitly invalidated
-export const revalidate = false
+// Force dynamic rendering - this page uses headers() for hostname detection
+export const dynamic = 'force-dynamic'
 export const dynamicParams = true
 
 interface CollectionPreviewProps {

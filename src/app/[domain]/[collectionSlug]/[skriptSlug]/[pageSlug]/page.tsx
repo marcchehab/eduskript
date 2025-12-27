@@ -30,8 +30,8 @@ interface PageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }
 
-// Enable ISR - pages are cached until explicitly invalidated via revalidateTag
-export const revalidate = false // Cache indefinitely, invalidate on content update
+// Force dynamic rendering - this page uses headers() and cookies() for exam features
+export const dynamic = 'force-dynamic'
 export const dynamicParams = true // Allow new params to be generated on-demand
 
 // Empty generateStaticParams signals Next.js this route uses ISR
