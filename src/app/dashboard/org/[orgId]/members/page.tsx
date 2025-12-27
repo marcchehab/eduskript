@@ -11,9 +11,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { UserMinus, RotateCw, Search, Shield, ShieldCheck, User, ChevronLeft } from 'lucide-react'
-import Link from 'next/link'
-import { OrgNav } from '@/components/dashboard/org-nav'
+import { UserMinus, RotateCw, Search, Shield, ShieldCheck, User, Users } from 'lucide-react'
 
 interface OrgMember {
   id: string
@@ -289,15 +287,11 @@ export default function OrgMembersPage({ params }: { params: Promise<{ orgId: st
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Link href="/dashboard" className="text-muted-foreground hover:text-foreground">
-          <ChevronLeft className="h-5 w-5" />
-        </Link>
-        <h1 className="text-3xl font-bold">Organization</h1>
+        <Users className="h-6 w-6 text-muted-foreground" />
+        <h1 className="text-3xl font-bold">Members</h1>
         <div className="flex-1" />
         <Button onClick={() => setShowAddDialog(true)}>Add Member</Button>
       </div>
-
-      <OrgNav orgId={orgId} active="members" />
 
       {error && (
         <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>

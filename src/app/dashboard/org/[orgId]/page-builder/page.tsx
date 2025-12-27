@@ -4,9 +4,7 @@ import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState, use } from 'react'
 import { PageBuilderInterface } from '@/components/dashboard/page-builder-interface'
-import { ChevronLeft, Building2 } from 'lucide-react'
-import Link from 'next/link'
-import { OrgNav } from '@/components/dashboard/org-nav'
+import { Building2 } from 'lucide-react'
 
 interface Organization {
   id: string
@@ -81,14 +79,9 @@ export default function OrgPageBuilderPage({
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Link href="/dashboard" className="text-muted-foreground hover:text-foreground">
-          <ChevronLeft className="h-5 w-5" />
-        </Link>
         <Building2 className="h-6 w-6 text-muted-foreground" />
-        <h1 className="text-3xl font-bold">{organization.name}</h1>
+        <h1 className="text-3xl font-bold">{organization.name} Page Builder</h1>
       </div>
-
-      <OrgNav orgId={orgId} active="page-builder" />
 
       <PageBuilderInterface
         context={{

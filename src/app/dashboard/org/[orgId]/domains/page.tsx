@@ -9,9 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Card } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
-import { Globe, Plus, Trash2, CheckCircle, AlertCircle, Star, ChevronLeft, Copy, RefreshCw, Building2, Search } from 'lucide-react'
-import Link from 'next/link'
-import { OrgNav } from '@/components/dashboard/org-nav'
+import { Globe, Plus, Trash2, CheckCircle, AlertCircle, Star, Copy, RefreshCw, Search } from 'lucide-react'
 
 interface CustomDomain {
   id: string
@@ -315,14 +313,9 @@ export default function OrgDomainsPage({ params }: { params: Promise<{ orgId: st
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Link href="/dashboard" className="text-muted-foreground hover:text-foreground">
-          <ChevronLeft className="h-5 w-5" />
-        </Link>
-        <Building2 className="h-6 w-6 text-muted-foreground" />
-        <h1 className="text-3xl font-bold">Organization</h1>
+        <Globe className="h-6 w-6 text-muted-foreground" />
+        <h1 className="text-3xl font-bold">Domains</h1>
       </div>
-
-      <OrgNav orgId={orgId} active="domains" />
 
       <div className="max-w-4xl space-y-6">
         {error && (

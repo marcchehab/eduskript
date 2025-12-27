@@ -8,10 +8,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
-import { ChevronLeft, Building2, FileText, Globe, LayoutDashboard, X } from 'lucide-react'
+import { Building2, X } from 'lucide-react'
 import { OrgIcon } from '@/components/org-icon'
 import Link from 'next/link'
-import { OrgNav } from '@/components/dashboard/org-nav'
 
 interface Organization {
   id: string
@@ -151,14 +150,9 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Link href="/dashboard" className="text-muted-foreground hover:text-foreground">
-          <ChevronLeft className="h-5 w-5" />
-        </Link>
         <Building2 className="h-6 w-6 text-muted-foreground" />
-        <h1 className="text-3xl font-bold">{organization.name}</h1>
+        <h1 className="text-3xl font-bold">{organization.name} Settings</h1>
       </div>
-
-      <OrgNav orgId={orgId} active="settings" />
 
       <div className="max-w-2xl">
       {error && (
