@@ -1,11 +1,49 @@
 'use client'
 
+import React from 'react'
 import Image from 'next/image'
 import { useCallback } from 'react'
 import { useTheme } from 'next-themes'
 import type { SkriptFilesData } from '@/lib/skript-files'
 import { resolveUrl } from '@/lib/skript-files'
 import { ResizableWrapper } from './resizable-wrapper'
+
+/**
+ * Parse markdown links [text](url) in a string and return React elements
+ */
+function parseMarkdownLinks(text: string): React.ReactNode {
+  const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g
+  const parts: React.ReactNode[] = []
+  let lastIndex = 0
+  let match
+
+  while ((match = linkRegex.exec(text)) !== null) {
+    // Add text before the link
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index))
+    }
+    // Add the link
+    parts.push(
+      <a
+        key={match.index}
+        href={match[2]}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-primary hover:underline not-italic"
+      >
+        {match[1]}
+      </a>
+    )
+    lastIndex = match.index + match[0].length
+  }
+
+  // Add remaining text
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex))
+  }
+
+  return parts.length > 0 ? parts : text
+}
 
 interface ContentImageProps {
   src: string // Filename (e.g., "image.png")
@@ -110,10 +148,10 @@ export function ContentImage({ src, alt = '', title, style, onWidthChange, origi
         )}
       </span>
 
-      {/* Caption */}
+      {/* Caption - supports markdown links [text](url) */}
       {alt && (
         <span className="block mt-2 text-sm text-center text-muted-foreground italic">
-          {alt}
+          {parseMarkdownLinks(alt)}
         </span>
       )}
     </ResizableWrapper>

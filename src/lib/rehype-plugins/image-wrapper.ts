@@ -1,5 +1,42 @@
 import { visit } from 'unist-util-visit'
-import type { Element, Root } from 'hast'
+import type { Element, Root, Text, ElementContent } from 'hast'
+
+/**
+ * Parse markdown links [text](url) in a string and return HAST nodes
+ */
+function parseMarkdownLinks(text: string): ElementContent[] {
+  const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g
+  const nodes: ElementContent[] = []
+  let lastIndex = 0
+  let match
+
+  while ((match = linkRegex.exec(text)) !== null) {
+    // Add text before the link
+    if (match.index > lastIndex) {
+      nodes.push({ type: 'text', value: text.slice(lastIndex, match.index) } as Text)
+    }
+    // Add the link as an <a> element
+    nodes.push({
+      type: 'element',
+      tagName: 'a',
+      properties: {
+        href: match[2],
+        target: '_blank',
+        rel: 'noopener noreferrer',
+        className: ['text-primary', 'hover:underline', 'not-italic']
+      },
+      children: [{ type: 'text', value: match[1] } as Text]
+    } as Element)
+    lastIndex = match.index + match[0].length
+  }
+
+  // Add remaining text
+  if (lastIndex < text.length) {
+    nodes.push({ type: 'text', value: text.slice(lastIndex) } as Text)
+  }
+
+  return nodes.length > 0 ? nodes : [{ type: 'text', value: text } as Text]
+}
 
 /**
  * Rehype plugin that wraps regular images (not Excalidraw) in figure elements
@@ -62,7 +99,7 @@ export function rehypeImageWrapper() {
         ]
       }
 
-      // Add caption if alt text exists
+      // Add caption if alt text exists (supports markdown links)
       if (caption) {
         figure.children.push({
           type: 'element',
@@ -70,12 +107,7 @@ export function rehypeImageWrapper() {
           properties: {
             className: ['mt-2', 'text-sm', 'text-center', 'text-muted-foreground', 'italic']
           },
-          children: [
-            {
-              type: 'text',
-              value: caption
-            }
-          ]
+          children: parseMarkdownLinks(caption)
         })
       }
 
