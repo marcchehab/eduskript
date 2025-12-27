@@ -79,20 +79,14 @@ export function PublicSiteLayout({
 }: PublicSiteLayoutProps) {
   const router = useRouter()
 
-  // Detect if we're on a custom domain (not eduskript.org or localhost)
-  // On custom domains, use root-relative URLs (no pageSlug prefix)
-  // Must use useEffect because window is not available during SSR
-  const [isCustomDomain, setIsCustomDomain] = useState(false)
-  useEffect(() => {
+  // Helper to get the correct base prefix for navigation
+  // Must check at navigation time because SSR doesn't have window
+  const getBasePrefix = () => {
+    if (typeof window === 'undefined') return routePrefix ?? `/${teacher.pageSlug}`
     const hostname = window.location.hostname
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- Required: domain detection only possible after mount
-    setIsCustomDomain(!['localhost', 'eduskript.org', 'www.eduskript.org'].includes(hostname))
-  }, [])
-
-  // Compute the base URL prefix for navigation
-  // On custom domains: use root-relative URLs (e.g., /collection/skript/page)
-  // On main site: use pageSlug prefix (e.g., /ig/collection/skript/page)
-  const basePrefix = isCustomDomain ? '' : (routePrefix ?? `/${teacher.pageSlug}`)
+    const isCustom = !['localhost', 'eduskript.org', 'www.eduskript.org'].includes(hostname)
+    return isCustom ? '' : (routePrefix ?? `/${teacher.pageSlug}`)
+  }
   const { data: session } = useSession()
   const { setSidebarCollapsed: setSidebarCollapsedInContext, sidebarWidth } = useLayout()
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
@@ -276,8 +270,8 @@ export function PublicSiteLayout({
   }
 
   const navigateToPage = (collectionSlug: string, skriptSlug: string, pageSlug: string) => {
-    // Use basePrefix for routing (supports both teacher pages and org pages)
-    const url = `${basePrefix}/${collectionSlug}/${skriptSlug}/${pageSlug}`
+    // Use getBasePrefix() at click time for correct custom domain handling
+    const url = `${getBasePrefix()}/${collectionSlug}/${skriptSlug}/${pageSlug}`
 
     router.push(url)
     setIsSidebarOpen(false)
@@ -285,7 +279,7 @@ export function PublicSiteLayout({
 
   const navigateToSkript = (collectionSlug: string, skriptSlug: string, skriptId: string) => {
     // Navigate to skript frontpage and expand the skript
-    const url = `${basePrefix}/${collectionSlug}/${skriptSlug}`
+    const url = `${getBasePrefix()}/${collectionSlug}/${skriptSlug}`
 
     // Ensure the skript is expanded
     if (!expandedSkripts.includes(skriptId)) {
@@ -338,7 +332,7 @@ export function PublicSiteLayout({
                 {/* Icon: custom URL, default NotebookPen, or letter placeholder - clickable as home link */}
                 <button
                   onClick={() => {
-                    const homeUrl = basePrefix.replace(/\/c$/, '')
+                    const homeUrl = getBasePrefix() || '/'
                     router.push(homeUrl)
                     setIsSidebarOpen(false)
                   }}
@@ -385,7 +379,7 @@ export function PublicSiteLayout({
                 {/* Row 1: Icon + Page name - clickable as home link */}
                 <button
                   onClick={() => {
-                    const homeUrl = basePrefix.replace(/\/c$/, '')
+                    const homeUrl = getBasePrefix() || '/'
                     router.push(homeUrl)
                     setIsSidebarOpen(false)
                   }}
