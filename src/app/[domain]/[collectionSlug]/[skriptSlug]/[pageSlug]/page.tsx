@@ -3,7 +3,6 @@ import { headers } from 'next/headers'
 import { PublicSiteLayout } from '@/components/public/layout'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
 import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
-import { ExportPDF } from '@/components/public/export-pdf'
 import { ExamLockedPage } from '@/components/exam/exam-locked-page'
 import { SEBRequiredPage } from '@/components/exam/seb-required-page'
 import { ExamSubmittedPage } from '@/components/exam/exam-submitted-page'
@@ -423,13 +422,6 @@ export default async function PublicPage({ params, searchParams }: PageProps) {
           </AnnotationWrapper>
         </article>
 
-        <div className="mt-8 pt-8 border-t border-border">
-          <ExportPDF
-            content={page.content}
-            title={page.title}
-            author={teacherForLayout.name}
-          />
-        </div>
       </div>
 
     </PublicSiteLayout>

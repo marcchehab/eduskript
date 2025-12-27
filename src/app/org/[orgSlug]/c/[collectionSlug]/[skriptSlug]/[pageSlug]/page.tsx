@@ -2,7 +2,6 @@ import { notFound } from 'next/navigation'
 import { PublicSiteLayout } from '@/components/public/layout'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
 import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
-import { ExportPDF } from '@/components/public/export-pdf'
 import type { Metadata } from 'next'
 import { prisma } from '@/lib/prisma'
 import { getOrgPublishedPage, getOrgFullSiteStructure } from '@/lib/cached-queries'
@@ -234,13 +233,6 @@ export default async function OrgPublicPage({ params }: PageProps) {
           </AnnotationWrapper>
         </article>
 
-        <div className="mt-8 pt-8 border-t border-border">
-          <ExportPDF
-            content={page.content}
-            title={page.title}
-            author={organization.name}
-          />
-        </div>
       </div>
 
     </PublicSiteLayout>

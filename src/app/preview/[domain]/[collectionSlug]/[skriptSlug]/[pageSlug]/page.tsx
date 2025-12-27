@@ -5,7 +5,6 @@ import { prisma } from '@/lib/prisma'
 import { PublicSiteLayout } from '@/components/public/layout'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
 import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
-import { ExportPDF } from '@/components/public/export-pdf'
 import type { Metadata } from 'next'
 
 interface PageProps {
@@ -189,13 +188,6 @@ export default async function PreviewPage({ params }: PageProps) {
           </AnnotationWrapper>
         </article>
 
-        <div className="mt-8 pt-8 border-t border-border">
-          <ExportPDF
-            content={page.content}
-            title={page.title}
-            author={teacherForLayout.name}
-          />
-        </div>
       </div>
     </PublicSiteLayout>
   )
