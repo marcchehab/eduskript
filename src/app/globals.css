@@ -459,6 +459,13 @@ article.prose-theme > div > :first-child {
   transition: color 0.15s ease;
 }
 
+/* Inline code in h1 should blend with heading text (for rainbow shadow effect) */
+.prose-theme h1 code {
+  background: transparent !important;
+  padding: 0 !important;
+  font-family: var(--font-heading), sans-serif;
+}
+
 /* Add # suffix on hover for all headings except h1 (which has rainbow effect) */
 .prose-theme h2 a::after,
 .prose-theme h3 a::after,
