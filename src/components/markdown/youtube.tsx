@@ -2,6 +2,7 @@
 
 import Image from 'next/image'
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { usePathname } from 'next/navigation'
 
 interface YoutubeProps {
   id?: string
@@ -14,6 +15,10 @@ export function Youtube({ id, playlist, startTime }: YoutubeProps) {
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const iframeRef = useRef<HTMLIFrameElement>(null)
+  const pathname = usePathname()
+
+  // Unique ID for targeting this specific video from timestamp links
+  const uniqueId = `${id}-${pathname?.replace(/\//g, '-') || 'default'}`
 
   const handleClick = useCallback(() => setIsOpen(true), [])
 
@@ -65,6 +70,43 @@ export function Youtube({ id, playlist, startTime }: YoutubeProps) {
 
     checkThumbnail(0)
   }, [id])
+
+  // Listen for timestamp navigation events from YT components
+  useEffect(() => {
+    if (!isOpen || !iframeRef.current) return
+
+    const handleTimestampClick = (event: MessageEvent) => {
+      if (event.data.type === 'youtube-seek' && event.data.targetId === uniqueId) {
+        const iframe = iframeRef.current
+        if (iframe?.contentWindow) {
+          // Send seekTo command to YouTube iframe
+          iframe.contentWindow.postMessage(
+            JSON.stringify({
+              event: 'command',
+              func: 'seekTo',
+              args: [event.data.time, true]
+            }),
+            '*'
+          )
+
+          // Ensure video is playing
+          iframe.contentWindow.postMessage(
+            JSON.stringify({
+              event: 'command',
+              func: 'playVideo'
+            }),
+            '*'
+          )
+
+          // Scroll to video
+          iframe.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+      }
+    }
+
+    window.addEventListener('message', handleTimestampClick)
+    return () => window.removeEventListener('message', handleTimestampClick)
+  }, [isOpen, uniqueId])
 
   // Early return after all hooks
   if (!id && !playlist) return <div>No video id or playlist provided</div>
@@ -127,5 +169,57 @@ export function Youtube({ id, playlist, startTime }: YoutubeProps) {
         allowFullScreen
       />
     </span>
+  )
+}
+
+// ============================================================================
+// YT - Timestamp link component
+// ============================================================================
+
+interface YTProps {
+  time: number      // Time in seconds
+  videoId: string   // YouTube video ID to target
+  label: string     // Display text
+}
+
+/**
+ * YT - Clickable timestamp link that seeks a Youtube video to specific time.
+ * Works with Youtube component via postMessage.
+ */
+export function YT({ time, videoId, label }: YTProps) {
+  const pathname = usePathname()
+  const uniqueId = `${videoId}-${pathname?.replace(/\//g, '-') || 'default'}`
+
+  const formatTime = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600)
+    const mins = Math.floor((seconds % 3600) / 60)
+    const secs = seconds % 60
+
+    if (hours > 0) {
+      return `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+    }
+    return `${mins}:${secs.toString().padStart(2, '0')}`
+  }
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault()
+    window.postMessage({
+      type: 'youtube-seek',
+      targetId: uniqueId,
+      time: time
+    }, window.location.origin)
+  }
+
+  return (
+    <a
+      href="#"
+      onClick={handleClick}
+      className="inline-flex items-center gap-2 text-primary hover:text-primary/80 hover:underline cursor-pointer"
+    >
+      <span className="font-mono text-sm bg-muted px-1.5 py-0.5 rounded">
+        {formatTime(time)}
+      </span>
+      <span>{label}</span>
+    </a>
   )
 }
