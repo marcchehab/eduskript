@@ -76,9 +76,18 @@ function BrushIndicator({ className }: { className?: string }) {
 // TOOLBAR SECTION WRAPPER - provides consistent styling for each section
 // =============================================================================
 
-function ToolbarSection({ children, className }: { children: ReactNode; className?: string }) {
+function ToolbarSection({ children, className, onMouseEnter, onMouseLeave }: {
+  children: ReactNode
+  className?: string
+  onMouseEnter?: () => void
+  onMouseLeave?: () => void
+}) {
   return (
-    <div className={cn('flex items-center gap-1', className)}>
+    <div
+      className={cn('flex items-center gap-1', className)}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
       {children}
     </div>
   )
@@ -637,7 +646,10 @@ export function AnnotationToolbar({
         {/* ============ SECTION 1: Broadcast Controls (Teachers and Page Authors) ============ */}
         {(isTeacher || isPageAuthor) && (
           <>
-            <ToolbarSection>
+            <ToolbarSection
+              onMouseEnter={() => onShowLayerBadgesChange?.(true)}
+              onMouseLeave={() => onShowLayerBadgesChange?.(false)}
+            >
               {/* Class/Page selector dropdown - picks class or "Public" for page authors */}
               <div className="relative" ref={classDropdownRef}>
                 <button
