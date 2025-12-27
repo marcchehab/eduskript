@@ -2,6 +2,17 @@
 
 **Note**: Completed features have been moved to `docs/COMPLETED_FEATURES.md`
 
+### Annotation / Snap System Polish (Jan 2026)
+*Core system complete, UX improvements needed:*
+- [ ] i see multiple version of annotations on eduskript frontpage. it might be a locally cached version. i can't use the admin tool to delete site data however. 
+- [ ] i see the snap i added to "public" twice when logged in as the author. once like a visitor and once like a snap i can edit. we only need to the latter, but add the green public icon as an indicator to the top right of the snap.
+- [ ] Improve annotation UX - feels laggy on iPad, pressure curve may be off
+- [ ] Scrolling improvements (momentum/inertia, center alignment when zoomed out)
+- [ ] Delta updates for strokes (see `docs/`)?
+
+## Add claude to backend?
+- to use to create, edit, add, update pages inside a skript. (not multiple skripts at once, so context can be contained)
+
 ## Prepare open source publication of repo
 - search for security vulnerabilities in git history
 - setup issues and project infrastructure
@@ -14,19 +25,14 @@
 
 ### Safe Exam Browser (SEB) Integration (Jan 2026)
 *Most features complete, remaining work:*
-- 🔲 Switch to see what students are doing (like annotation system)
-- 🔲 After-exam teacher UX (correct/view exam, points overview)
-- 🔲 SEB security: upgrade from spoofable user agent to BEK validation
+- [ ] Switch to see what students are doing (like annotation system)
+- [ ] After-exam teacher UX (correct/view exam, points overview)
+- [ ] SEB security: upgrade from spoofable user agent to BEK validation
 
 ### Small Improvements
 - Bigger handles for resize bars in editor on touch devices (in place, untested)
 - Comments by students (maybe per class) - low priority
 
-### Annotation System Polish (Jan 2026)
-*Core system complete, UX improvements needed:*
-- 🔲 Improve annotation UX - feels laggy on iPad, pressure curve may be off
-- 🔲 Scrolling improvements (momentum/inertia, center alignment when zoomed out)
-- 🔲 Delta updates for strokes (see `docs/`)?
 
 ### LMS Features (Jan/Feb 2026)
 - **Interactive Quizzes** - In-lesson quizzes with progress tracking (existing `<Question>` component has live answers)

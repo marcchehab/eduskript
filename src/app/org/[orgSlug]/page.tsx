@@ -152,6 +152,7 @@ export default async function OrgPage({ params }: OrgPageProps) {
       sidebarBehavior={organization.sidebarBehavior as 'contextual' | 'full' || 'contextual'}
       typographyPreference="modern"
       routePrefix={`/org/${orgSlug}/c`}
+      pageId={frontPage?.id}
     >
       <div id="paper" className="paper-responsive py-24 bg-card dark:bg-slate-900/80 paper-shadow border border-border dark:border-white/10">
         {/* Preview mode indicator for unpublished frontpage */}
