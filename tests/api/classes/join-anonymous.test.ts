@@ -1,20 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { NextRequest } from 'next/server'
+import { getServerSession } from 'next-auth'
 
-/**
- * Unit tests for the Allow Anonymous Class Toggle feature.
- *
- * This feature controls whether students can join classes anonymously:
- * - allowAnonymous = false (default): Only pre-authorized students can join
- * - allowAnonymous = true: Anyone with invite link can join
- *
- * Key logic tested:
- * 1. Non-anonymous class + not pre-authorized = BLOCKED
- * 2. Non-anonymous class + pre-authorized + no consent = BLOCKED (requires consent)
- * 3. Non-anonymous class + pre-authorized + consent = ALLOWED
- * 4. Anonymous class + any student = ALLOWED (consent optional)
- */
-
-// Mock dependencies
+// Mock dependencies before imports
 vi.mock('next-auth', () => ({
   getServerSession: vi.fn(),
 }))
@@ -23,540 +11,487 @@ vi.mock('@/lib/auth', () => ({
   authOptions: {},
 }))
 
+vi.mock('@/lib/prisma', () => ({
+  prisma: {
+    user: {
+      findUnique: vi.fn(),
+    },
+    class: {
+      findUnique: vi.fn(),
+    },
+    classMembership: {
+      findUnique: vi.fn(),
+      create: vi.fn(),
+    },
+    preAuthorizedStudent: {
+      findUnique: vi.fn(),
+      deleteMany: vi.fn(),
+    },
+  },
+}))
+
 vi.mock('@/lib/rate-limit', () => ({
   inviteCodeRateLimiter: {
-    check: vi.fn(() => ({ allowed: true })),
+    check: vi.fn(() => ({ allowed: true, remaining: 5 })),
   },
   getClientIdentifier: vi.fn(() => 'test-client'),
 }))
 
-describe('Allow Anonymous Class Toggle', () => {
+import { GET, POST } from '@/app/api/classes/join/[inviteCode]/route'
+import { prisma } from '@/lib/prisma'
+import { inviteCodeRateLimiter } from '@/lib/rate-limit'
+
+function createPostRequest(inviteCode: string, body: object = {}): NextRequest {
+  return new NextRequest(`http://localhost:3000/api/classes/join/${inviteCode}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+function createGetRequest(inviteCode: string): NextRequest {
+  return new NextRequest(`http://localhost:3000/api/classes/join/${inviteCode}`, {
+    method: 'GET',
+  })
+}
+
+const mockParams = (inviteCode: string) => ({ params: Promise.resolve({ inviteCode }) })
+
+describe('Class Join API', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-  })
-
-  describe('Join eligibility logic', () => {
-    /**
-     * Core logic: determines if a student can join a class
-     * Mirrors the logic in /api/classes/join/[inviteCode]/route.ts
-     */
-    const canStudentJoin = (params: {
-      allowAnonymous: boolean
-      isPreAuthorized: boolean
-    }): { canJoin: boolean; reason?: string } => {
-      const { allowAnonymous, isPreAuthorized } = params
-
-      // If class doesn't allow anonymous students, they must be pre-authorized
-      if (!allowAnonymous && !isPreAuthorized) {
-        return {
-          canJoin: false,
-          reason: 'requiresPreAuthorization'
-        }
-      }
-
-      return { canJoin: true }
-    }
-
-    it('should BLOCK non-pre-authorized student from non-anonymous class', () => {
-      const result = canStudentJoin({
-        allowAnonymous: false,
-        isPreAuthorized: false
-      })
-
-      expect(result.canJoin).toBe(false)
-      expect(result.reason).toBe('requiresPreAuthorization')
-    })
-
-    it('should ALLOW pre-authorized student to join non-anonymous class', () => {
-      const result = canStudentJoin({
-        allowAnonymous: false,
-        isPreAuthorized: true
-      })
-
-      expect(result.canJoin).toBe(true)
-      expect(result.reason).toBeUndefined()
-    })
-
-    it('should ALLOW any student to join anonymous class', () => {
-      const result = canStudentJoin({
-        allowAnonymous: true,
-        isPreAuthorized: false
-      })
-
-      expect(result.canJoin).toBe(true)
-    })
-
-    it('should ALLOW pre-authorized student to join anonymous class', () => {
-      const result = canStudentJoin({
-        allowAnonymous: true,
-        isPreAuthorized: true
-      })
-
-      expect(result.canJoin).toBe(true)
+    vi.mocked(inviteCodeRateLimiter.check).mockReturnValue({
+      allowed: true,
+      remaining: 5,
+      resetAt: Date.now() + 3600000,
     })
   })
 
-  describe('Identity consent logic', () => {
-    /**
-     * Core logic: determines if identity consent is required
-     * Mirrors the logic in /api/classes/join/[inviteCode]/route.ts
-     */
-    const isConsentRequired = (params: {
-      allowAnonymous: boolean
-      isPreAuthorized: boolean
-    }): boolean => {
-      const { allowAnonymous, isPreAuthorized } = params
+  describe('POST /api/classes/join/[inviteCode]', () => {
+    describe('Rate Limiting', () => {
+      it('should return 429 when rate limit exceeded', async () => {
+        vi.mocked(inviteCodeRateLimiter.check).mockReturnValue({
+          allowed: false,
+          remaining: 0,
+          retryAfter: 60,
+          resetAt: Date.now() + 60000,
+        })
 
-      // Consent required if pre-authorized OR class doesn't allow anonymous
-      return isPreAuthorized || !allowAnonymous
-    }
+        const request = createPostRequest('ABC123')
+        const response = await POST(request, mockParams('ABC123'))
 
-    const validateConsent = (params: {
-      allowAnonymous: boolean
-      isPreAuthorized: boolean
-      identityConsent: boolean
-    }): { valid: boolean; reason?: string } => {
-      const { allowAnonymous, isPreAuthorized, identityConsent } = params
-
-      // If consent is required but not given, reject
-      if ((isPreAuthorized || !allowAnonymous) && !identityConsent) {
-        return {
-          valid: false,
-          reason: 'requiresConsent'
-        }
-      }
-
-      return { valid: true }
-    }
-
-    it('should require consent for non-anonymous class', () => {
-      expect(isConsentRequired({
-        allowAnonymous: false,
-        isPreAuthorized: false
-      })).toBe(true)
+        expect(response.status).toBe(429)
+        const data = await response.json()
+        expect(data.error).toContain('Too many attempts')
+      })
     })
 
-    it('should require consent for pre-authorized student', () => {
-      expect(isConsentRequired({
-        allowAnonymous: true,
-        isPreAuthorized: true
-      })).toBe(true)
-    })
+    describe('Authentication', () => {
+      it('should return 401 when not authenticated', async () => {
+        vi.mocked(getServerSession).mockResolvedValue(null)
 
-    it('should NOT require consent for anonymous class without pre-authorization', () => {
-      expect(isConsentRequired({
-        allowAnonymous: true,
-        isPreAuthorized: false
-      })).toBe(false)
-    })
+        const request = createPostRequest('ABC123')
+        const response = await POST(request, mockParams('ABC123'))
 
-    it('should REJECT pre-authorized student without consent', () => {
-      const result = validateConsent({
-        allowAnonymous: false,
-        isPreAuthorized: true,
-        identityConsent: false
+        expect(response.status).toBe(401)
+        const data = await response.json()
+        expect(data.error).toBe('Unauthorized')
       })
 
-      expect(result.valid).toBe(false)
-      expect(result.reason).toBe('requiresConsent')
-    })
+      it('should return 404 when user not found', async () => {
+        vi.mocked(getServerSession).mockResolvedValue({
+          user: { id: 'user-1' },
+        } as never)
+        vi.mocked(prisma.user.findUnique).mockResolvedValue(null)
 
-    it('should ACCEPT pre-authorized student with consent', () => {
-      const result = validateConsent({
-        allowAnonymous: false,
-        isPreAuthorized: true,
-        identityConsent: true
+        const request = createPostRequest('ABC123')
+        const response = await POST(request, mockParams('ABC123'))
+
+        expect(response.status).toBe(404)
+        const data = await response.json()
+        expect(data.error).toBe('User not found')
       })
 
-      expect(result.valid).toBe(true)
+      it('should return 403 when user is not a student', async () => {
+        vi.mocked(getServerSession).mockResolvedValue({
+          user: { id: 'teacher-1' },
+        } as never)
+        vi.mocked(prisma.user.findUnique).mockResolvedValue({
+          accountType: 'teacher',
+          studentPseudonym: null,
+        } as never)
+
+        const request = createPostRequest('ABC123')
+        const response = await POST(request, mockParams('ABC123'))
+
+        expect(response.status).toBe(403)
+        const data = await response.json()
+        expect(data.error).toBe('Only students can join classes')
+      })
     })
 
-    it('should ACCEPT anonymous class student without consent', () => {
-      const result = validateConsent({
-        allowAnonymous: true,
-        isPreAuthorized: false,
-        identityConsent: false
+    describe('Class Validation', () => {
+      beforeEach(() => {
+        vi.mocked(getServerSession).mockResolvedValue({
+          user: { id: 'student-1' },
+        } as never)
+        vi.mocked(prisma.user.findUnique).mockResolvedValue({
+          accountType: 'student',
+          studentPseudonym: 'pseudo-student1',
+        } as never)
       })
 
-      expect(result.valid).toBe(true)
+      it('should return 404 when invite code is invalid', async () => {
+        vi.mocked(prisma.class.findUnique).mockResolvedValue(null)
+
+        const request = createPostRequest('INVALID')
+        const response = await POST(request, mockParams('INVALID'))
+
+        expect(response.status).toBe(404)
+        const data = await response.json()
+        expect(data.error).toBe('Invalid invite code')
+      })
+
+      it('should return 403 when class is inactive', async () => {
+        vi.mocked(prisma.class.findUnique).mockResolvedValue({
+          id: 'class-1',
+          isActive: false,
+          teacher: { name: 'Teacher', pageSlug: 'teacher' },
+        } as never)
+
+        const request = createPostRequest('ABC123')
+        const response = await POST(request, mockParams('ABC123'))
+
+        expect(response.status).toBe(403)
+        const data = await response.json()
+        expect(data.error).toBe('This class is no longer active')
+      })
+    })
+
+    describe('Already Member Handling', () => {
+      it('should return success with alreadyMember flag when already joined', async () => {
+        vi.mocked(getServerSession).mockResolvedValue({
+          user: { id: 'student-1' },
+        } as never)
+        vi.mocked(prisma.user.findUnique).mockResolvedValue({
+          accountType: 'student',
+          studentPseudonym: null,
+        } as never)
+        vi.mocked(prisma.class.findUnique).mockResolvedValue({
+          id: 'class-1',
+          name: 'Test Class',
+          description: 'A test class',
+          isActive: true,
+          allowAnonymous: true,
+          teacher: { name: 'Teacher', pageSlug: 'teacher' },
+        } as never)
+        vi.mocked(prisma.classMembership.findUnique).mockResolvedValue({
+          id: 'membership-1',
+        } as never)
+
+        const request = createPostRequest('ABC123')
+        const response = await POST(request, mockParams('ABC123'))
+
+        expect(response.status).toBe(200)
+        const data = await response.json()
+        expect(data.alreadyMember).toBe(true)
+        expect(data.message).toBe('Already a member of this class')
+      })
+    })
+
+    describe('Non-Anonymous Class (allowAnonymous=false)', () => {
+      beforeEach(() => {
+        vi.mocked(getServerSession).mockResolvedValue({
+          user: { id: 'student-1' },
+        } as never)
+        vi.mocked(prisma.class.findUnique).mockResolvedValue({
+          id: 'class-1',
+          name: 'Test Class',
+          description: 'A test class',
+          isActive: true,
+          allowAnonymous: false,
+          teacher: { name: 'Teacher', pageSlug: 'teacher' },
+        } as never)
+        vi.mocked(prisma.classMembership.findUnique).mockResolvedValue(null)
+      })
+
+      it('should return 403 when student is not pre-authorized', async () => {
+        vi.mocked(prisma.user.findUnique).mockResolvedValue({
+          accountType: 'student',
+          studentPseudonym: 'pseudo-student1',
+        } as never)
+        vi.mocked(prisma.preAuthorizedStudent.findUnique).mockResolvedValue(null)
+
+        const request = createPostRequest('ABC123', { identityConsent: true })
+        const response = await POST(request, mockParams('ABC123'))
+
+        expect(response.status).toBe(403)
+        const data = await response.json()
+        expect(data.requiresPreAuthorization).toBe(true)
+        expect(data.error).toContain('requires teacher approval')
+      })
+
+      it('should return 400 when pre-authorized but no consent given', async () => {
+        vi.mocked(prisma.user.findUnique).mockResolvedValue({
+          accountType: 'student',
+          studentPseudonym: 'pseudo-student1',
+        } as never)
+        vi.mocked(prisma.preAuthorizedStudent.findUnique).mockResolvedValue({
+          classId: 'class-1',
+          pseudonym: 'pseudo-student1',
+        } as never)
+
+        const request = createPostRequest('ABC123', { identityConsent: false })
+        const response = await POST(request, mockParams('ABC123'))
+
+        expect(response.status).toBe(400)
+        const data = await response.json()
+        expect(data.requiresConsent).toBe(true)
+      })
+
+      it('should allow join when pre-authorized with consent', async () => {
+        vi.mocked(prisma.user.findUnique).mockResolvedValue({
+          accountType: 'student',
+          studentPseudonym: 'pseudo-student1',
+        } as never)
+        vi.mocked(prisma.preAuthorizedStudent.findUnique).mockResolvedValue({
+          classId: 'class-1',
+          pseudonym: 'pseudo-student1',
+        } as never)
+        vi.mocked(prisma.classMembership.create).mockResolvedValue({} as never)
+        vi.mocked(prisma.preAuthorizedStudent.deleteMany).mockResolvedValue({ count: 1 })
+
+        const request = createPostRequest('ABC123', { identityConsent: true })
+        const response = await POST(request, mockParams('ABC123'))
+
+        expect(response.status).toBe(201)
+        const data = await response.json()
+        expect(data.message).toBe('Successfully joined class')
+        expect(data.identityRevealed).toBe(true)
+        // Should delete pre-authorization after join
+        expect(prisma.preAuthorizedStudent.deleteMany).toHaveBeenCalled()
+      })
+    })
+
+    describe('Anonymous Class (allowAnonymous=true)', () => {
+      beforeEach(() => {
+        vi.mocked(getServerSession).mockResolvedValue({
+          user: { id: 'student-1' },
+        } as never)
+        vi.mocked(prisma.class.findUnique).mockResolvedValue({
+          id: 'class-1',
+          name: 'Test Class',
+          description: 'A test class',
+          isActive: true,
+          allowAnonymous: true,
+          teacher: { name: 'Teacher', pageSlug: 'teacher' },
+        } as never)
+        vi.mocked(prisma.classMembership.findUnique).mockResolvedValue(null)
+      })
+
+      it('should allow any student to join without consent', async () => {
+        vi.mocked(prisma.user.findUnique).mockResolvedValue({
+          accountType: 'student',
+          studentPseudonym: null,
+        } as never)
+        vi.mocked(prisma.classMembership.create).mockResolvedValue({} as never)
+
+        const request = createPostRequest('ABC123', { identityConsent: false })
+        const response = await POST(request, mockParams('ABC123'))
+
+        expect(response.status).toBe(201)
+        const data = await response.json()
+        expect(data.message).toBe('Successfully joined class')
+        expect(data.identityRevealed).toBe(false)
+      })
+
+      it('should reveal identity when consent given', async () => {
+        vi.mocked(prisma.user.findUnique).mockResolvedValue({
+          accountType: 'student',
+          studentPseudonym: null,
+        } as never)
+        vi.mocked(prisma.classMembership.create).mockResolvedValue({} as never)
+
+        const request = createPostRequest('ABC123', { identityConsent: true })
+        const response = await POST(request, mockParams('ABC123'))
+
+        expect(response.status).toBe(201)
+        const data = await response.json()
+        expect(data.identityRevealed).toBe(true)
+      })
+
+      it('should require consent when pre-authorized even in anonymous class', async () => {
+        vi.mocked(prisma.user.findUnique).mockResolvedValue({
+          accountType: 'student',
+          studentPseudonym: 'pseudo-student1',
+        } as never)
+        vi.mocked(prisma.preAuthorizedStudent.findUnique).mockResolvedValue({
+          classId: 'class-1',
+          pseudonym: 'pseudo-student1',
+        } as never)
+
+        const request = createPostRequest('ABC123', { identityConsent: false })
+        const response = await POST(request, mockParams('ABC123'))
+
+        expect(response.status).toBe(400)
+        const data = await response.json()
+        expect(data.requiresConsent).toBe(true)
+      })
+    })
+
+    describe('Error Handling', () => {
+      it('should return 500 on database error', async () => {
+        vi.mocked(getServerSession).mockResolvedValue({
+          user: { id: 'student-1' },
+        } as never)
+        vi.mocked(prisma.user.findUnique).mockRejectedValue(new Error('Database error'))
+
+        const request = createPostRequest('ABC123')
+        const response = await POST(request, mockParams('ABC123'))
+
+        expect(response.status).toBe(500)
+        const data = await response.json()
+        expect(data.error).toBe('Failed to join class')
+      })
     })
   })
 
-  describe('Identity reveal logic', () => {
-    /**
-     * Determines if student's identity will be revealed to teacher
-     * Mirrors the logic in /api/classes/join/[inviteCode]/route.ts
-     */
-    const willIdentityBeRevealed = (params: {
-      wasPreAuthorized: boolean
-      identityConsent: boolean
-    }): boolean => {
-      return params.wasPreAuthorized || params.identityConsent
-    }
+  describe('GET /api/classes/join/[inviteCode]', () => {
+    describe('Rate Limiting', () => {
+      it('should return 429 when rate limit exceeded', async () => {
+        vi.mocked(inviteCodeRateLimiter.check).mockReturnValue({
+          allowed: false,
+          remaining: 0,
+          retryAfter: 60,
+          resetAt: Date.now() + 60000,
+        })
 
-    it('should reveal identity for pre-authorized students', () => {
-      expect(willIdentityBeRevealed({
-        wasPreAuthorized: true,
-        identityConsent: false
-      })).toBe(true)
+        const request = createGetRequest('ABC123')
+        const response = await GET(request, mockParams('ABC123'))
+
+        expect(response.status).toBe(429)
+      })
     })
 
-    it('should reveal identity when consent is given', () => {
-      expect(willIdentityBeRevealed({
-        wasPreAuthorized: false,
-        identityConsent: true
-      })).toBe(true)
-    })
+    describe('Class Preview', () => {
+      it('should return 404 for invalid invite code', async () => {
+        vi.mocked(prisma.class.findUnique).mockResolvedValue(null)
 
-    it('should NOT reveal identity for anonymous student without consent', () => {
-      expect(willIdentityBeRevealed({
-        wasPreAuthorized: false,
-        identityConsent: false
-      })).toBe(false)
-    })
-  })
+        const request = createGetRequest('INVALID')
+        const response = await GET(request, mockParams('INVALID'))
 
-  describe('Class membership creation', () => {
-    /**
-     * Logic for creating class membership with consent tracking
-     */
-    const createMembershipData = (params: {
-      classId: string
-      studentId: string
-      wasPreAuthorized: boolean
-      identityConsent: boolean
-    }) => {
-      const { classId, studentId, wasPreAuthorized, identityConsent } = params
-
-      return {
-        classId,
-        studentId,
-        identityConsent: wasPreAuthorized ? true : (identityConsent || false),
-        consentedAt: (wasPreAuthorized || identityConsent) ? new Date() : null
-      }
-    }
-
-    it('should set identityConsent true for pre-authorized students', () => {
-      const data = createMembershipData({
-        classId: 'class-1',
-        studentId: 'student-1',
-        wasPreAuthorized: true,
-        identityConsent: false // Even without explicit consent
+        expect(response.status).toBe(404)
+        const data = await response.json()
+        expect(data.error).toBe('Invalid invite code')
       })
 
-      expect(data.identityConsent).toBe(true)
-      expect(data.consentedAt).not.toBeNull()
-    })
+      it('should return 403 for inactive class', async () => {
+        vi.mocked(prisma.class.findUnique).mockResolvedValue({
+          id: 'class-1',
+          isActive: false,
+          teacher: { name: 'Teacher', pageSlug: 'teacher' },
+          _count: { memberships: 10 },
+        } as never)
 
-    it('should set identityConsent based on user choice for anonymous class', () => {
-      const dataWithConsent = createMembershipData({
-        classId: 'class-1',
-        studentId: 'student-1',
-        wasPreAuthorized: false,
-        identityConsent: true
+        const request = createGetRequest('ABC123')
+        const response = await GET(request, mockParams('ABC123'))
+
+        expect(response.status).toBe(403)
+        const data = await response.json()
+        expect(data.error).toBe('This class is no longer active')
       })
 
-      expect(dataWithConsent.identityConsent).toBe(true)
-      expect(dataWithConsent.consentedAt).not.toBeNull()
+      it('should return class info for unauthenticated user', async () => {
+        vi.mocked(getServerSession).mockResolvedValue(null)
+        vi.mocked(prisma.class.findUnique).mockResolvedValue({
+          id: 'class-1',
+          name: 'Test Class',
+          description: 'A test class',
+          isActive: true,
+          allowAnonymous: true,
+          teacher: { name: 'Teacher', pageSlug: 'teacher' },
+          _count: { memberships: 10 },
+        } as never)
 
-      const dataWithoutConsent = createMembershipData({
-        classId: 'class-1',
-        studentId: 'student-1',
-        wasPreAuthorized: false,
-        identityConsent: false
+        const request = createGetRequest('ABC123')
+        const response = await GET(request, mockParams('ABC123'))
+
+        expect(response.status).toBe(200)
+        const data = await response.json()
+        expect(data.class.name).toBe('Test Class')
+        expect(data.class.memberCount).toBe(10)
+        expect(data.isPreAuthorized).toBe(false)
+        expect(data.isAlreadyMember).toBe(false)
       })
 
-      expect(dataWithoutConsent.identityConsent).toBe(false)
-      expect(dataWithoutConsent.consentedAt).toBeNull()
-    })
-  })
+      it('should indicate if authenticated user is pre-authorized', async () => {
+        vi.mocked(getServerSession).mockResolvedValue({
+          user: { id: 'student-1' },
+        } as never)
+        vi.mocked(prisma.class.findUnique).mockResolvedValue({
+          id: 'class-1',
+          name: 'Test Class',
+          description: 'A test class',
+          isActive: true,
+          allowAnonymous: false,
+          teacher: { name: 'Teacher', pageSlug: 'teacher' },
+          _count: { memberships: 10 },
+        } as never)
+        vi.mocked(prisma.classMembership.findUnique).mockResolvedValue(null)
+        vi.mocked(prisma.user.findUnique).mockResolvedValue({
+          studentPseudonym: 'pseudo-student1',
+        } as never)
+        vi.mocked(prisma.preAuthorizedStudent.findUnique).mockResolvedValue({
+          classId: 'class-1',
+          pseudonym: 'pseudo-student1',
+        } as never)
 
-  describe('Pre-authorization check', () => {
-    /**
-     * Logic to check if student is pre-authorized via pseudonym matching
-     */
-    const checkPreAuthorization = (params: {
-      studentPseudonym: string | null
-      preAuthorizedPseudonyms: string[]
-    }): boolean => {
-      if (!params.studentPseudonym) return false
-      return params.preAuthorizedPseudonyms.includes(params.studentPseudonym)
-    }
+        const request = createGetRequest('ABC123')
+        const response = await GET(request, mockParams('ABC123'))
 
-    it('should return true when pseudonym matches pre-authorized list', () => {
-      expect(checkPreAuthorization({
-        studentPseudonym: 'pseudo-abc123',
-        preAuthorizedPseudonyms: ['pseudo-abc123', 'pseudo-def456']
-      })).toBe(true)
-    })
-
-    it('should return false when pseudonym does not match', () => {
-      expect(checkPreAuthorization({
-        studentPseudonym: 'pseudo-xyz789',
-        preAuthorizedPseudonyms: ['pseudo-abc123', 'pseudo-def456']
-      })).toBe(false)
-    })
-
-    it('should return false when student has no pseudonym', () => {
-      expect(checkPreAuthorization({
-        studentPseudonym: null,
-        preAuthorizedPseudonyms: ['pseudo-abc123']
-      })).toBe(false)
-    })
-  })
-
-  describe('Full join flow scenarios', () => {
-    /**
-     * Complete join flow combining all checks
-     */
-    interface JoinParams {
-      allowAnonymous: boolean
-      studentPseudonym: string | null
-      preAuthorizedPseudonyms: string[]
-      identityConsent: boolean
-    }
-
-    interface JoinResult {
-      success: boolean
-      error?: string
-      identityRevealed?: boolean
-    }
-
-    const attemptJoin = (params: JoinParams): JoinResult => {
-      const { allowAnonymous, studentPseudonym, preAuthorizedPseudonyms, identityConsent } = params
-
-      // Check pre-authorization
-      const isPreAuthorized = studentPseudonym
-        ? preAuthorizedPseudonyms.includes(studentPseudonym)
-        : false
-
-      // Check if can join
-      if (!allowAnonymous && !isPreAuthorized) {
-        return {
-          success: false,
-          error: 'requiresPreAuthorization'
-        }
-      }
-
-      // Check consent
-      if ((isPreAuthorized || !allowAnonymous) && !identityConsent) {
-        return {
-          success: false,
-          error: 'requiresConsent'
-        }
-      }
-
-      // Success
-      return {
-        success: true,
-        identityRevealed: isPreAuthorized || identityConsent
-      }
-    }
-
-    it('Scenario 1: Non-anonymous class, student NOT pre-authorized', () => {
-      const result = attemptJoin({
-        allowAnonymous: false,
-        studentPseudonym: 'pseudo-student1',
-        preAuthorizedPseudonyms: ['pseudo-other'],
-        identityConsent: true // Even with consent
+        expect(response.status).toBe(200)
+        const data = await response.json()
+        expect(data.isPreAuthorized).toBe(true)
+        expect(data.isAlreadyMember).toBe(false)
       })
 
-      expect(result.success).toBe(false)
-      expect(result.error).toBe('requiresPreAuthorization')
-    })
+      it('should indicate if authenticated user is already a member', async () => {
+        vi.mocked(getServerSession).mockResolvedValue({
+          user: { id: 'student-1' },
+        } as never)
+        vi.mocked(prisma.class.findUnique).mockResolvedValue({
+          id: 'class-1',
+          name: 'Test Class',
+          description: 'A test class',
+          isActive: true,
+          allowAnonymous: true,
+          teacher: { name: 'Teacher', pageSlug: 'teacher' },
+          _count: { memberships: 10 },
+        } as never)
+        vi.mocked(prisma.classMembership.findUnique).mockResolvedValue({
+          id: 'membership-1',
+        } as never)
 
-    it('Scenario 2: Non-anonymous class, student pre-authorized, NO consent', () => {
-      const result = attemptJoin({
-        allowAnonymous: false,
-        studentPseudonym: 'pseudo-student1',
-        preAuthorizedPseudonyms: ['pseudo-student1'],
-        identityConsent: false
+        const request = createGetRequest('ABC123')
+        const response = await GET(request, mockParams('ABC123'))
+
+        expect(response.status).toBe(200)
+        const data = await response.json()
+        expect(data.isAlreadyMember).toBe(true)
       })
-
-      expect(result.success).toBe(false)
-      expect(result.error).toBe('requiresConsent')
     })
 
-    it('Scenario 3: Non-anonymous class, student pre-authorized, WITH consent', () => {
-      const result = attemptJoin({
-        allowAnonymous: false,
-        studentPseudonym: 'pseudo-student1',
-        preAuthorizedPseudonyms: ['pseudo-student1'],
-        identityConsent: true
+    describe('Error Handling', () => {
+      it('should return 500 on database error', async () => {
+        vi.mocked(prisma.class.findUnique).mockRejectedValue(new Error('Database error'))
+
+        const request = createGetRequest('ABC123')
+        const response = await GET(request, mockParams('ABC123'))
+
+        expect(response.status).toBe(500)
+        const data = await response.json()
+        expect(data.error).toBe('Failed to preview class')
       })
-
-      expect(result.success).toBe(true)
-      expect(result.identityRevealed).toBe(true)
-    })
-
-    it('Scenario 4: Anonymous class, any student, NO consent', () => {
-      const result = attemptJoin({
-        allowAnonymous: true,
-        studentPseudonym: 'pseudo-random',
-        preAuthorizedPseudonyms: [],
-        identityConsent: false
-      })
-
-      expect(result.success).toBe(true)
-      expect(result.identityRevealed).toBe(false)
-    })
-
-    it('Scenario 5: Anonymous class, any student, WITH consent', () => {
-      const result = attemptJoin({
-        allowAnonymous: true,
-        studentPseudonym: 'pseudo-random',
-        preAuthorizedPseudonyms: [],
-        identityConsent: true
-      })
-
-      expect(result.success).toBe(true)
-      expect(result.identityRevealed).toBe(true)
-    })
-
-    it('Scenario 6: Anonymous class, pre-authorized student, NO explicit consent', () => {
-      // Pre-authorized students MUST consent even in anonymous classes
-      const result = attemptJoin({
-        allowAnonymous: true,
-        studentPseudonym: 'pseudo-student1',
-        preAuthorizedPseudonyms: ['pseudo-student1'],
-        identityConsent: false
-      })
-
-      expect(result.success).toBe(false)
-      expect(result.error).toBe('requiresConsent')
-    })
-
-    it('Scenario 7: Anonymous class, pre-authorized student, WITH consent', () => {
-      const result = attemptJoin({
-        allowAnonymous: true,
-        studentPseudonym: 'pseudo-student1',
-        preAuthorizedPseudonyms: ['pseudo-student1'],
-        identityConsent: true
-      })
-
-      expect(result.success).toBe(true)
-      expect(result.identityRevealed).toBe(true)
-    })
-  })
-
-  describe('OAuth email in JWT token', () => {
-    /**
-     * Tests for storing OAuth email in JWT (not database) for display
-     */
-    interface JwtToken {
-      id: string
-      email: string // Fake email for DB
-      accountType: string
-      oauthEmail?: string // Real OAuth email stored in token only
-    }
-
-    const createStudentToken = (params: {
-      userId: string
-      oauthEmail: string
-    }): JwtToken => {
-      return {
-        id: params.userId,
-        email: `student_${params.userId.slice(0, 8)}@eduskript.local`, // Fake email
-        accountType: 'student',
-        oauthEmail: params.oauthEmail // Real email stored in token
-      }
-    }
-
-    it('should store real OAuth email in token for students', () => {
-      const token = createStudentToken({
-        userId: 'user-123456789',
-        oauthEmail: 'real.student@school.edu'
-      })
-
-      expect(token.oauthEmail).toBe('real.student@school.edu')
-      expect(token.email).toBe('student_user-123@eduskript.local')
-      expect(token.email).not.toBe(token.oauthEmail)
-    })
-
-    it('should preserve OAuth email for display in join page', () => {
-      const token = createStudentToken({
-        userId: 'user-abc',
-        oauthEmail: 'john.doe@university.edu'
-      })
-
-      // This is what gets displayed in the UI
-      const displayMessage = `Ask your teacher to add: ${token.oauthEmail}`
-      expect(displayMessage).toContain('john.doe@university.edu')
-    })
-  })
-
-  describe('Class data structure', () => {
-    /**
-     * Tests for class data with allowAnonymous field
-     */
-    interface ClassData {
-      id: string
-      name: string
-      allowAnonymous: boolean
-      isActive: boolean
-    }
-
-    it('should default allowAnonymous to false', () => {
-      const classData: ClassData = {
-        id: 'class-1',
-        name: 'Test Class',
-        allowAnonymous: false, // Default
-        isActive: true
-      }
-
-      expect(classData.allowAnonymous).toBe(false)
-    })
-
-    it('should allow toggling allowAnonymous', () => {
-      const classData: ClassData = {
-        id: 'class-1',
-        name: 'Test Class',
-        allowAnonymous: false,
-        isActive: true
-      }
-
-      // Toggle to allow anonymous
-      classData.allowAnonymous = true
-      expect(classData.allowAnonymous).toBe(true)
-
-      // Toggle back
-      classData.allowAnonymous = false
-      expect(classData.allowAnonymous).toBe(false)
-    })
-  })
-
-  describe('Join request display logic', () => {
-    /**
-     * Tests for displaying pending join requests in student dashboard
-     */
-    interface JoinRequest {
-      classId: string
-      className: string
-      allowAnonymous: boolean
-    }
-
-    const shouldShowIdentityBadge = (request: JoinRequest): boolean => {
-      return !request.allowAnonymous
-    }
-
-    it('should show "Identity required" badge for non-anonymous class', () => {
-      const request: JoinRequest = {
-        classId: 'class-1',
-        className: 'Math 101',
-        allowAnonymous: false
-      }
-
-      expect(shouldShowIdentityBadge(request)).toBe(true)
-    })
-
-    it('should NOT show badge for anonymous class', () => {
-      const request: JoinRequest = {
-        classId: 'class-2',
-        className: 'Open Study Group',
-        allowAnonymous: true
-      }
-
-      expect(shouldShowIdentityBadge(request)).toBe(false)
     })
   })
 })
