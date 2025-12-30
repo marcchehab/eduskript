@@ -1,0 +1,16 @@
+{
+  "collections": [
+    {
+      "title": "User Manual",
+      "slug": "manual",
+      "description": "Complete guide for teachers using Eduskript.",
+      "skripts": ["writing-content", "components", "organization"]
+    },
+    {
+      "title": "Developer Guide",
+      "slug": "dev",
+      "description": "For contributors: setup, extend, and contribute.",
+      "skripts": ["getting-started", "extending", "internals", "contributing", "future-ideas"]
+    }
+  ]
+}
