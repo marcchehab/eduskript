@@ -36,7 +36,10 @@ function checkRateLimit(userId: string): boolean {
 // SSE helper to send events
 function sendSSE(controller: ReadableStreamDefaultController, event: string, data: unknown) {
   const encoder = new TextEncoder()
-  controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`))
+  const jsonData = JSON.stringify(data)
+  const message = `event: ${event}\ndata: ${jsonData}\n\n`
+  console.log(`[AI Edit] SSE sending event: ${event}, data size: ${jsonData.length} bytes`)
+  controller.enqueue(encoder.encode(message))
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -254,16 +257,26 @@ export async function POST(request: Request): Promise<Response> {
         const pageByIdMap = new Map(skript.pages.map(p => [p.id, p]))
         const pageBySlugMap = new Map(skript.pages.map(p => [p.slug, p]))
 
+        console.log(`[AI Edit] Starting edit generation loop for ${plan.edits.length} edits`)
+
         for (let i = 0; i < plan.edits.length; i++) {
           const plannedEdit = plan.edits[i]
+          console.log(`[AI Edit] Processing edit ${i + 1}/${plan.edits.length}:`, {
+            pageId: plannedEdit.pageId,
+            pageSlug: plannedEdit.pageSlug,
+            pageTitle: plannedEdit.pageTitle,
+            isNew: plannedEdit.isNew,
+          })
 
           // Find the original page
           let originalPage = plannedEdit.pageId ? pageByIdMap.get(plannedEdit.pageId) : undefined
           if (!originalPage && plannedEdit.pageSlug) {
             originalPage = pageBySlugMap.get(plannedEdit.pageSlug)
           }
+          console.log(`[AI Edit] Original page lookup: found=${!!originalPage}, slug=${originalPage?.slug}`)
 
           const isNew = plannedEdit.isNew === true || (!originalPage && plannedEdit.pageId === null)
+          console.log(`[AI Edit] isNew=${isNew}, will use ${isNew && !originalPage ? 'NEW page' : 'EXISTING page'} branch`)
           const actualPageId = originalPage?.id ?? plannedEdit.pageId
 
           // Get original content
@@ -275,6 +288,7 @@ export async function POST(request: Request): Promise<Response> {
           // For new pages, just use the summary as a starting point
           if (isNew && !originalPage) {
             // Generate content for new page
+            console.log(`[AI Edit] Generating NEW page content for: ${plannedEdit.pageTitle}`)
             const newPagePrompt = assembleSinglePageEditPrompt({
               orgPrompt,
               skriptContext,
@@ -287,12 +301,14 @@ export async function POST(request: Request): Promise<Response> {
               instruction,
             })
 
+            console.log(`[AI Edit] Calling Anthropic API for new page...`)
             const newPageMessage = await anthropic.messages.create({
               model: 'claude-sonnet-4-20250514',
               max_tokens: 8192,
               system: newPagePrompt,
               messages: [{ role: 'user', content: `Create the content for the new page "${plannedEdit.pageTitle}". ${plannedEdit.summary}` }],
             })
+            console.log(`[AI Edit] Anthropic API returned for new page, stop_reason: ${newPageMessage.stop_reason}`)
 
             const newContent = newPageMessage.content
               .filter((block) => block.type === 'text')
@@ -312,6 +328,7 @@ export async function POST(request: Request): Promise<Response> {
             })
           } else {
             // Generate edit for existing page
+            console.log(`[AI Edit] Generating EDIT for existing page: ${originalPage?.title || plannedEdit.pageTitle}`)
             const editPrompt = assembleSinglePageEditPrompt({
               orgPrompt,
               skriptContext,
@@ -326,12 +343,14 @@ export async function POST(request: Request): Promise<Response> {
               instruction,
             })
 
+            console.log(`[AI Edit] Calling Anthropic API for existing page edit...`)
             const editMessage = await anthropic.messages.create({
               model: 'claude-sonnet-4-20250514',
               max_tokens: 8192,
               system: editPrompt,
               messages: [{ role: 'user', content: `Apply the following change to the page "${originalPage?.title || plannedEdit.pageTitle}": ${plannedEdit.summary}` }],
             })
+            console.log(`[AI Edit] Anthropic API returned for edit, stop_reason: ${editMessage.stop_reason}`)
 
             const proposedContent = editMessage.content
               .filter((block) => block.type === 'text')
@@ -352,12 +371,19 @@ export async function POST(request: Request): Promise<Response> {
           }
         }
 
-        console.log(`[AI Edit] Complete: ${plan.edits.length} edits sent`)
+        console.log(`[AI Edit] Loop finished. Plan had ${plan.edits.length} edits`)
         // All done
         sendSSE(controller, 'complete', { success: true })
+        console.log(`[AI Edit] Complete event sent`)
         controller.close()
       } catch (error) {
-        console.error('AI Edit streaming error:', error)
+        console.error('[AI Edit] Streaming error:', error)
+        // Log full error details
+        if (error instanceof Error) {
+          console.error('[AI Edit] Error name:', error.name)
+          console.error('[AI Edit] Error message:', error.message)
+          console.error('[AI Edit] Error stack:', error.stack)
+        }
         sendSSE(controller, 'error', { error: 'Internal server error' })
         controller.close()
       }

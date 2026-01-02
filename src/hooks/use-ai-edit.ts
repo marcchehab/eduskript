@@ -100,14 +100,22 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
           const lines = buffer.split('\n')
           buffer = lines.pop() || '' // Keep incomplete line in buffer
 
+          // Log chunk info for debugging
+          console.log(`[AI Edit Client] Processing chunk: ${lines.length} lines, buffer remaining: ${buffer.length} chars`)
+
           let eventType = ''
           let eventData = ''
 
           for (const line of lines) {
+            // Log each non-empty line for debugging
+            if (line.trim()) {
+              console.log(`[AI Edit Client] Line: ${line.substring(0, 100)}${line.length > 100 ? '...' : ''}`)
+            }
             if (line.startsWith('event: ')) {
               eventType = line.slice(7).trim()
             } else if (line.startsWith('data: ')) {
               eventData = line.slice(6)
+              console.log(`[AI Edit Client] Got data line, length: ${eventData.length}, eventType: ${eventType}`)
 
               if (eventType && eventData) {
                 try {
