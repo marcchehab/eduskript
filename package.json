@@ -24,8 +24,8 @@
     "db:reset": "prisma migrate reset --force && node scripts/seed-admin.js",
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
-    "db:local": "docker-compose -f docker-compose.local.yml up -d",
-    "db:local:stop": "docker-compose -f docker-compose.local.yml down",
+    "db:local": "docker compose -f docker-compose.local.yml up -d",
+    "db:local:stop": "docker compose -f docker-compose.local.yml down",
     "prepare": "husky"
   },
   "prisma": {
