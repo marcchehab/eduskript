@@ -26,6 +26,7 @@ import { DijkstraVisualizer } from '@/components/markdown/dijkstra-visualizer'
 import { ColorTitleHeading } from '@/components/markdown/color-title-heading'
 import { YT } from '@/components/markdown/youtube'
 import { ModCalc } from '@/components/markdown/mod-calc'
+import { DataCubeVisualizer } from '@/components/markdown/data-cube-visualizer'
 
 // Simple hash function for generating stable IDs
 function hashCode(str: string): string {
@@ -620,5 +621,9 @@ export function createMarkdownComponents(
     // Math/crypto educational components
     ModCalc,
     'modcalc': ModCalc,
+
+    // Data visualization components
+    DataCubeVisualizer,
+    'datacubevisualizer': DataCubeVisualizer,
   }
 }

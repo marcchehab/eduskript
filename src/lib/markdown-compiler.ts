@@ -69,6 +69,7 @@ export const sanitizeSchema = {
     'stickme',
     'dijkstravisualizer',
     'colorsliders',
+    'datacubevisualizer',
     'demoeditor',
     'ourteachers',
     'yt',
