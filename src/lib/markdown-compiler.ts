@@ -68,6 +68,11 @@ export const sanitizeSchema = {
     'quiz-option',
     'stickme',
     'dijkstravisualizer',
+    'colorsliders',
+    'demoeditor',
+    'ourteachers',
+    'yt',
+    'modcalc',
     'image', // <image> custom component for images with layout props
     'excali', // <excali> shorthand for excalidraw drawings
   ],
@@ -87,6 +92,8 @@ export const sanitizeSchema = {
     'image': ['src', 'alt', 'width', 'align', 'wrap', 'invert', 'saturate'],
     'question': ['id', 'type', 'showfeedback', 'allowupdate', 'minvalue', 'maxvalue', 'step'],
     'quiz-option': ['correct', 'is', 'feedback'],
+    'yt': ['time', 'videoid', 'label'],
+    'ourteachers': ['roles', 'limit', 'className'],
     // Extended img attributes for our plugins (both camelCase and kebab-case)
     'img': [
       ...(defaultSchema.attributes?.['img'] || []),
