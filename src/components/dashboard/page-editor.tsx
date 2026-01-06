@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useSession } from 'next-auth/react'
+import type { VideoInfo } from '@/lib/skript-files'
 
 interface PageVersion {
   id: string
@@ -110,6 +111,7 @@ export function PageEditor({ collection, skript, page }: PageEditorProps) {
     updatedAt: Date
   }>>([])
   const [fileListLoading, setFileListLoading] = useState(false)
+  const [videoList, setVideoList] = useState<VideoInfo[]>([])
 
   // File insertion menu state (includes drop position and screen coordinates)
   const [insertionMenuFile, setInsertionMenuFile] = useState<{
@@ -135,15 +137,16 @@ export function PageEditor({ collection, skript, page }: PageEditorProps) {
     skriptId?: string
   } | null>(null)
 
-  // Fetch file list from API
+  // Fetch file list and videos from API
   const refreshFileList = useCallback(async () => {
     setFileListLoading(true)
     try {
       const response = await fetch(`/api/upload?skriptId=${skript.id}`)
       if (response.ok) {
         const data = await response.json()
-        // The new API returns files directly in the new format
+        // The new API returns files and videos
         setFileList(data.files || [])
+        setVideoList(data.videos || [])
       }
     } catch (error) {
       console.error('Error fetching file list:', error)
@@ -830,6 +833,7 @@ export function PageEditor({ collection, skript, page }: PageEditorProps) {
             pageId={page.id}
             domain={(session?.user as { pageSlug?: string })?.pageSlug || undefined}
             fileList={fileList}
+            videoList={videoList}
             fileListLoading={fileListLoading}
             onFileUpload={refreshFileList}
             onAIEdit={() => setAiEditModalOpen(true)}

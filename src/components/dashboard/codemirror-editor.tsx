@@ -21,6 +21,7 @@ import type { EditorView } from '@codemirror/view'
 import type { ViewUpdate } from '@codemirror/view'
 import { fromMarkdown } from 'mdast-util-from-markdown'
 import type { Strong, Emphasis, Parent } from 'mdast'
+import type { VideoInfo } from '@/lib/skript-files'
 
 interface CodeMirrorEditorProps {
   content: string
@@ -31,6 +32,7 @@ interface CodeMirrorEditorProps {
   domain?: string
   isReadOnly?: boolean
   fileList?: Array<{id: string, name: string, url?: string, isDirectory?: boolean}>
+  videoList?: VideoInfo[]
   fileListLoading?: boolean
   onFileUpload?: () => void
   onFileDrop?: (file: {
@@ -50,6 +52,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   pageId,
   isReadOnly = false,
   fileList,
+  videoList,
   onFileUpload,
   onFileDrop,
   onExcalidrawEdit: onExcalidrawEditProp,
@@ -1528,6 +1531,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
                 markdown={useSimpleEditor ? textareaContent : editorContent}
                 onContentChange={onChange}
                 fileList={fileList}
+                videoList={videoList}
                 pageId={pageId}
                 onExcalidrawEdit={onExcalidrawEditProp ?? handleExcalidrawEdit}
               />

@@ -1,6 +1,7 @@
 'use client'
 
 import dynamic from 'next/dynamic'
+import type { VideoInfo } from '@/lib/skript-files'
 
 interface MarkdownEditorProps {
   content: string
@@ -23,6 +24,7 @@ interface MarkdownEditorProps {
   domain?: string
   isReadOnly?: boolean
   fileList?: Array<{id: string, name: string, url?: string, isDirectory?: boolean}>
+  videoList?: VideoInfo[]
   fileListLoading?: boolean
   onFileUpload?: () => void
   onExcalidrawEdit?: (filename: string, fileId: string) => void

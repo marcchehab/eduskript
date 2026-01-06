@@ -164,7 +164,30 @@ export async function GET(request: NextRequest) {
       url: file.isDirectory ? undefined : `/api/files/${file.id}`
     }))
 
-    return NextResponse.json({ files: mappedFiles })
+    // Also fetch all videos (they're global, not per-skript)
+    const videos = await prisma.video.findMany({
+      select: {
+        filename: true,
+        provider: true,
+        metadata: true,
+      },
+    })
+
+    const mappedVideos = videos.map(video => {
+      const metadata = video.metadata as Record<string, unknown>
+      return {
+        filename: video.filename,
+        provider: video.provider,
+        metadata: {
+          playbackId: metadata?.playbackId as string | undefined,
+          poster: metadata?.poster as string | undefined,
+          blurDataURL: metadata?.blurDataURL as string | undefined,
+          aspectRatio: typeof metadata?.aspectRatio === 'number' ? metadata.aspectRatio : undefined,
+        },
+      }
+    })
+
+    return NextResponse.json({ files: mappedFiles, videos: mappedVideos })
   } catch (error) {
     console.error('File listing error:', error instanceof Error ? error.message : error)
     return NextResponse.json(
