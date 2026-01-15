@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { RefreshCw, TrendingUp, Clock, Database } from 'lucide-react'
-import { formatMetricName, getMetricUnit, METRICS, type MetricName } from '@/lib/metrics/registry'
+import { formatMetricName, getMetricUnit, getMetricDisplay, METRICS, CALCULATED_METRICS, type MetricName } from '@/lib/metrics/registry'
 
 interface MetricData {
   avg: number
@@ -89,14 +89,22 @@ export default function MetricsAdminPage() {
     return () => clearInterval(interval)
   }, [autoRefresh, session, fetchLiveData])
 
-  // Get all unique metric names from data
-  const allMetricNames = Array.from(
-    new Set([
-      ...Object.keys(METRICS),
-      ...liveData.flatMap(s => Object.keys(s.data)),
-      ...Object.keys(historyData),
-    ])
-  ) as MetricName[]
+  // Only show metrics defined in registry (not auto-discovered)
+  const allMetricNames = Object.keys(METRICS) as MetricName[]
+
+  // Calculate totals for calculated metrics
+  const getTotals = () => {
+    const totals: Record<string, number> = {}
+    for (const name of allMetricNames) {
+      const liveSummary = getLiveSummary(name)
+      const historySummary = getHistorySummary(name)
+      const displayMode = METRICS[name]?.display || 'avg'
+      if (displayMode === 'count') {
+        totals[name] = (liveSummary?.count ?? 0) + (historySummary?.count ?? 0)
+      }
+    }
+    return totals
+  }
 
   // Calculate summary stats for a metric from live data
   const getLiveSummary = (metricName: MetricName) => {
@@ -205,11 +213,13 @@ export default function MetricsAdminPage() {
           const liveSummary = getLiveSummary(name)
           const historySummary = getHistorySummary(name)
           const summary = liveSummary || historySummary
+          const displayMode = METRICS[name as MetricName]?.display || 'avg'
+          const isCountMetric = displayMode === 'count'
 
-          // Get sparkline data from live or history
+          // Get sparkline data from live or history (use count for count metrics)
           const sparklineData = liveData.length > 0
-            ? liveData.map(s => s.data[name]?.avg).filter((v): v is number => v !== undefined)
-            : (historyData[name] || []).map(p => p.avg)
+            ? liveData.map(s => s.data[name] ? (isCountMetric ? s.data[name].count : s.data[name].avg) : undefined).filter((v): v is number => v !== undefined)
+            : (historyData[name] || []).map(p => isCountMetric ? p.count : p.avg)
 
           return (
             <Card
@@ -234,7 +244,7 @@ export default function MetricsAdminPage() {
               {summary ? (
                 <>
                   <div className="text-2xl font-bold mb-2">
-                    {summary.current.toFixed(1)}
+                    {isCountMetric ? summary.count : summary.current.toFixed(1)}
                     <span className="text-sm font-normal text-muted-foreground ml-1">
                       {getMetricUnit(name as MetricName)}
                     </span>
@@ -243,9 +253,15 @@ export default function MetricsAdminPage() {
                     <Sparkline data={sparklineData} />
                   </div>
                   <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>Avg: {summary.avg.toFixed(1)}</span>
-                    <span>Min: {summary.min.toFixed(1)}</span>
-                    <span>Max: {summary.max.toFixed(1)}</span>
+                    {isCountMetric ? (
+                      <span>Total: {summary.count}</span>
+                    ) : (
+                      <>
+                        <span>Avg: {summary.avg.toFixed(1)}</span>
+                        <span>Min: {summary.min.toFixed(1)}</span>
+                        <span>Max: {summary.max.toFixed(1)}</span>
+                      </>
+                    )}
                   </div>
                 </>
               ) : (
@@ -254,6 +270,36 @@ export default function MetricsAdminPage() {
             </Card>
           )
         })}
+      </div>
+
+      {/* Calculated Metrics */}
+      <div className="space-y-2">
+        <h2 className="text-lg font-semibold">Calculated Metrics</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Object.entries(CALCULATED_METRICS).map(([key, metric]) => {
+            const totals = getTotals()
+            const value = metric.formula(totals)
+
+            return (
+              <Card key={key} className="p-4 bg-muted/30">
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <h3 className="font-medium text-sm">{metric.label}</h3>
+                    <p className="text-xs text-muted-foreground">{metric.unit}</p>
+                  </div>
+                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <div className="text-2xl font-bold mb-2">
+                  {value.toFixed(1)}
+                  <span className="text-sm font-normal text-muted-foreground ml-1">
+                    {metric.unit}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">{metric.description}</p>
+              </Card>
+            )
+          })}
+        </div>
       </div>
 
       {/* Detailed View for Selected Metric */}
@@ -347,17 +393,21 @@ export default function MetricsAdminPage() {
                     <td className="p-2 font-mono text-xs">
                       {new Date(minute.timestamp).toLocaleTimeString()}
                     </td>
-                    {allMetricNames.map(name => (
-                      <td key={name} className="p-2 text-right">
-                        {minute.data[name] ? (
-                          <span title={`Count: ${minute.data[name].count}`}>
-                            {minute.data[name].avg.toFixed(1)}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </td>
-                    ))}
+                    {allMetricNames.map(name => {
+                      const displayMode = METRICS[name]?.display || 'avg'
+                      const data = minute.data[name]
+                      return (
+                        <td key={name} className="p-2 text-right">
+                          {data ? (
+                            <span title={`Avg: ${data.avg.toFixed(1)}, Count: ${data.count}`}>
+                              {displayMode === 'count' ? data.count : data.avg.toFixed(1)}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </td>
+                      )
+                    })}
                   </tr>
                 ))}
               </tbody>

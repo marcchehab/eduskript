@@ -14,7 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { RateLimiter } from '@/lib/rate-limit'
 import { recordMetric } from '@/lib/metrics/buffer'
-import { isValidMetricName, isClientMetric, type MetricName } from '@/lib/metrics/registry'
+import { isValidMetricName, type MetricName } from '@/lib/metrics/registry'
 
 // Rate limit: 60 metrics per minute per IP
 const rateLimiter = new RateLimiter('metrics', {
@@ -78,13 +78,6 @@ export async function POST(request: NextRequest) {
   if (!isValidMetricName(name)) {
     return NextResponse.json(
       { error: `Unknown metric: ${name}` },
-      { status: 400 }
-    )
-  }
-
-  if (!isClientMetric(name as MetricName)) {
-    return NextResponse.json(
-      { error: `Metric "${name}" is not a client metric` },
       { status: 400 }
     )
   }

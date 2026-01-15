@@ -6,32 +6,37 @@
  */
 
 export const METRICS = {
-  // Server-side metrics
-  db_queries_total: { unit: 'queries/min', source: 'server' as const },
-  db_queries_per_request: { unit: 'count', source: 'server' as const },
-  db_query_time_ms: { unit: 'ms', source: 'server' as const },
-  api_response_time_ms: { unit: 'ms', source: 'server' as const },
-
-  // Client-side metrics
-  page_load_time_ms: { unit: 'ms', source: 'client' as const },
-  time_to_interactive_ms: { unit: 'ms', source: 'client' as const },
-  annotation_points_per_stroke: { unit: 'count', source: 'client' as const },
-  editor_save_time_ms: { unit: 'ms', source: 'client' as const },
+  // Server-side metrics (active)
+  page_loads_total: { unit: 'loads', source: 'server' as const, display: 'count' as const },
+  db_queries_total: { unit: 'queries', source: 'server' as const, display: 'count' as const },
+  db_query_time_ms: { unit: 'ms', source: 'server' as const, display: 'avg' as const },
 } as const
+
+/**
+ * Calculated metrics derived from raw metrics.
+ * These are computed on the dashboard, not stored in DB.
+ */
+export const CALCULATED_METRICS = {
+  db_queries_per_page_load: {
+    label: 'DB Queries per Page Load',
+    unit: 'queries/load',
+    formula: (data: { db_queries_total?: number; page_loads_total?: number }) => {
+      const queries = data.db_queries_total ?? 0
+      const loads = data.page_loads_total ?? 0
+      return loads > 0 ? queries / loads : 0
+    },
+    description: 'Average database queries triggered per page navigation',
+  },
+} as const
+
+export type CalculatedMetricName = keyof typeof CALCULATED_METRICS
 
 export type MetricName = keyof typeof METRICS
 export type MetricSource = 'server' | 'client'
+export type MetricDisplay = 'avg' | 'count'
 
 export function isValidMetricName(name: string): name is MetricName {
   return name in METRICS
-}
-
-export function isClientMetric(name: MetricName): boolean {
-  return METRICS[name].source === 'client'
-}
-
-export function isServerMetric(name: MetricName): boolean {
-  return METRICS[name].source === 'server'
 }
 
 /**
@@ -55,4 +60,11 @@ export function formatMetricName(name: string): string {
  */
 export function getMetricUnit(name: MetricName): string {
   return METRICS[name].unit
+}
+
+/**
+ * Get display mode for a metric (avg or count)
+ */
+export function getMetricDisplay(name: MetricName): MetricDisplay {
+  return METRICS[name].display
 }

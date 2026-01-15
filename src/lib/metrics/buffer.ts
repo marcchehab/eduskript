@@ -3,9 +3,12 @@
  *
  * Accumulates metrics per minute for live view, flushes to DB hourly.
  * DB stores one row per metric per hour (normalized schema).
+ *
+ * NOTE: In dev mode with multiple workers (Turbopack), live data may not
+ * appear because middleware and API routes run in separate processes with
+ * separate memory. In production single-process mode, live data works correctly.
  */
 
-import { prisma } from '@/lib/prisma'
 import { type MetricName, isValidMetricName } from './registry'
 
 interface MetricAccumulator {
@@ -115,9 +118,13 @@ function flushMinuteToRingBuffer(): void {
 
 /**
  * Flush current hour's buffer to DB
+ * Uses dynamic import to avoid pulling Prisma into Edge Runtime
  */
 async function flushHourToDb(): Promise<void> {
   if (currentHourBuffer.size === 0) return
+
+  // Dynamic import - only runs in Node.js context (not Edge)
+  const { prisma } = await import('@/lib/prisma')
 
   const timestamp = new Date(currentHourTimestamp)
   const promises: Promise<unknown>[] = []

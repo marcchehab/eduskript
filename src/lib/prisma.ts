@@ -1,7 +1,6 @@
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { Pool } from 'pg'
-import { recordDbQuery } from '@/lib/metrics/request-context'
 import { recordMetric } from '@/lib/metrics/buffer'
 
 const globalForPrisma = globalThis as unknown as {
@@ -42,11 +41,8 @@ export const prisma = basePrisma.$extends({
       const start = performance.now()
       return query(args).finally(() => {
         const duration = performance.now() - start
-        // Record to request context (for per-request aggregation)
-        recordDbQuery(duration)
-        // Record directly to buffer (always visible in metrics)
         recordMetric('db_query_time_ms', duration)
-        recordMetric('db_queries_total', 1) // Count each query
+        recordMetric('db_queries_total', 1)
       })
     },
   },

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { recordMetric } from '@/lib/metrics/buffer'
 
 // Cache entry types for domain lookups
 type DomainCacheEntry =
@@ -35,18 +36,34 @@ export async function proxy(request: NextRequest) {
   // Extract just the domain (without port for localhost)
   const domain = hostname.split(':')[0]
 
-  // Skip for static files and internal routes
-  if (
-    pathname.startsWith('/_next') ||
+  // Track page loads - must happen BEFORE early returns
+  // 1. Hard navigation: Sec-Fetch-Mode: navigate (direct URL, refresh)
+  // 2. SPA navigation: Next-Url header present (client-side nav destination)
+  const secFetchMode = request.headers.get('Sec-Fetch-Mode')
+  const nextUrl = request.headers.get('Next-Url')
+  const prefetchHeader = request.headers.get('Next-Router-Prefetch')
+
+  const isStaticOrInternal = pathname.startsWith('/_next') ||
     pathname.startsWith('/api') ||
-    pathname.startsWith('/auth') ||
-    pathname.startsWith('/org/') ||
-    pathname.startsWith('/dashboard') ||
-    pathname.startsWith('/exam-complete') ||
     pathname === '/favicon.ico' ||
     pathname === '/robots.txt' ||
     pathname === '/sitemap.xml' ||
     pathname.includes('.')
+
+  const isHardNavigation = secFetchMode === 'navigate' && !isStaticOrInternal
+  const isSpaNavigation = nextUrl !== null && prefetchHeader !== '1'
+
+  if (isHardNavigation || isSpaNavigation) {
+    recordMetric('page_loads_total', 1)
+  }
+
+  // Skip for static files and internal routes
+  if (
+    isStaticOrInternal ||
+    pathname.startsWith('/auth') ||
+    pathname.startsWith('/org/') ||
+    pathname.startsWith('/dashboard') ||
+    pathname.startsWith('/exam-complete')
   ) {
     return NextResponse.next()
   }
