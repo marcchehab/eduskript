@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { checkSkriptPermissions } from '@/lib/permissions'
 import { assembleEditPrompt, assembleSinglePageEditPrompt } from '@/lib/ai/prompts'
 import type { EditRequest, SkriptContext } from '@/lib/ai/types'
+import { parseJsonResponse, isValidEditPlan } from '@/lib/ai/parse-json-response'
 import Anthropic from '@anthropic-ai/sdk'
 
 export const dynamic = 'force-dynamic'
@@ -95,33 +96,31 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ success: false, error: 'Edit access denied' }, { status: 403 })
   }
 
-  // 7. Get organization and teacher prompts
-  let orgPrompt: string | undefined
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      aiSystemPrompt: true,
-      organizationMemberships: {
-        include: { organization: true },
-      },
-    },
-  })
-
-  // Combine org prompt and teacher prompt
-  const orgWithPrompt = user?.organizationMemberships.find(
-    (m) => m.organization.aiSystemPrompt
-  )?.organization
-
-  const prompts: string[] = []
-  if (orgWithPrompt?.aiSystemPrompt) {
-    prompts.push(`## Organization Guidelines\n${orgWithPrompt.aiSystemPrompt}`)
-  }
-  if (user?.aiSystemPrompt) {
-    prompts.push(`## Teacher Preferences\n${user.aiSystemPrompt}`)
-  }
-  if (prompts.length > 0) {
-    orgPrompt = prompts.join('\n\n')
-  }
+  // 7. Get organization prompt (aiSystemPrompt fields not yet in schema)
+  const orgPrompt: string | undefined = undefined
+  // TODO: Re-enable when aiSystemPrompt is added to User and Organization models
+  // const user = await prisma.user.findUnique({
+  //   where: { id: userId },
+  //   select: {
+  //     aiSystemPrompt: true,
+  //     organizationMemberships: {
+  //       include: { organization: true },
+  //     },
+  //   },
+  // })
+  // const orgWithPrompt = user?.organizationMemberships.find(
+  //   (m) => m.organization.aiSystemPrompt
+  // )?.organization
+  // const prompts: string[] = []
+  // if (orgWithPrompt?.aiSystemPrompt) {
+  //   prompts.push(`## Organization Guidelines\n${orgWithPrompt.aiSystemPrompt}`)
+  // }
+  // if (user?.aiSystemPrompt) {
+  //   prompts.push(`## Teacher Preferences\n${user.aiSystemPrompt}`)
+  // }
+  // if (prompts.length > 0) {
+  //   orgPrompt = prompts.join('\n\n')
+  // }
 
   // 8. Build context with page content map for later use
   const pageContentMap = new Map<string, string>()
@@ -185,43 +184,33 @@ export async function POST(request: Request): Promise<Response> {
           .map((block) => block.text)
           .join('')
 
-        // Parse the plan
-        let plan: {
-          edits: Array<{
-            pageId: string | null
-            pageTitle: string
-            pageSlug: string
-            summary: string
-            isNew?: boolean
-          }>
-          overallSummary: string
-        }
+        // Debug: Log raw AI response
+        console.log('[AI Edit] Raw plan response:', planText)
+        console.log('[AI Edit] Plan response length:', planText.length)
 
-        try {
-          // Try to extract JSON even if AI included preamble text
-          let jsonStr = planText
-            .replace(/^```json\s*/i, '')
-            .replace(/^```\s*/i, '')
-            .replace(/\s*```$/i, '')
-            .trim()
+        // Parse the plan using robust parser
+        const parseResult = parseJsonResponse(planText, isValidEditPlan)
 
-          // If it doesn't start with {, try to find JSON object in the text
-          if (!jsonStr.startsWith('{')) {
-            const jsonMatch = planText.match(/\{[\s\S]*"edits"[\s\S]*\}/)
-            if (jsonMatch) {
-              jsonStr = jsonMatch[0]
-              console.log('[AI Edit] Extracted JSON from preamble text')
-            }
-          }
-
-          plan = JSON.parse(jsonStr)
-        } catch (parseError) {
-          // AI didn't return valid JSON - send the response as error
-          console.error('[AI Edit] Failed to parse plan JSON:', parseError)
-          const truncated = planText.length > 500 ? planText.slice(0, 500) + '...' : planText
-          sendSSE(controller, 'error', { error: `Failed to parse AI response: ${truncated}` })
+        if (!parseResult.success) {
+          // AI returned text without valid JSON - treat as "no edits" with explanation
+          console.log('[AI Edit] No valid JSON in response, treating as text-only response')
+          sendSSE(controller, 'complete', {
+            edits: [],
+            overallSummary: 'The AI provided an explanation instead of edit suggestions.',
+            aiMessage: parseResult.fullResponse, // Pass the raw AI text
+          })
           controller.close()
           return
+        }
+
+        const plan = parseResult.data
+
+        // Log if there was overflow (AI added text outside JSON)
+        if (parseResult.overflowBefore || parseResult.overflowAfter) {
+          console.log('[AI Edit] Response had overflow text:', {
+            before: parseResult.overflowBefore?.slice(0, 100),
+            after: parseResult.overflowAfter?.slice(0, 100)
+          })
         }
 
         if (!plan.edits || plan.edits.length === 0) {
@@ -240,7 +229,7 @@ export async function POST(request: Request): Promise<Response> {
           pages: plan.edits.map(e => ({ title: e.pageTitle, isNew: e.isNew })),
         })
 
-        // Send the plan to client
+        // Send the plan to client (include overflow info if present)
         sendSSE(controller, 'plan', {
           totalEdits: plan.edits.length,
           overallSummary: plan.overallSummary,
@@ -251,6 +240,10 @@ export async function POST(request: Request): Promise<Response> {
             summary: e.summary,
             isNew: e.isNew,
           })),
+          // Include overflow info for UI warning
+          overflowBefore: parseResult.overflowBefore,
+          overflowAfter: parseResult.overflowAfter,
+          fullResponse: (parseResult.overflowBefore || parseResult.overflowAfter) ? parseResult.fullResponse : undefined,
         })
 
         // Phase 2: Generate each edit

@@ -19,6 +19,18 @@ interface EditPlan {
     summary: string
     isNew?: boolean
   }>
+  // Overflow info when AI response had text outside JSON
+  overflowBefore?: string | null
+  overflowAfter?: string | null
+  fullResponse?: string
+  // AI message when it returned text instead of JSON
+  aiMessage?: string
+}
+
+interface OverflowInfo {
+  overflowBefore: string | null
+  overflowAfter: string | null
+  fullResponse: string
 }
 
 interface UseAIEditReturn {
@@ -29,6 +41,10 @@ interface UseAIEditReturn {
   plan: EditPlan | null
   currentEditIndex: number
   completedEdits: PageEdit[]
+  // Overflow info (when AI response had malformed output)
+  overflow: OverflowInfo | null
+  // AI message (when AI returned text instead of JSON edits)
+  aiMessage: string | null
   // Actions
   requestEdit: (instruction: string) => Promise<void>
   applyEdits: (edits: PageEdit[]) => Promise<void>
@@ -45,6 +61,8 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
   const [plan, setPlan] = useState<EditPlan | null>(null)
   const [currentEditIndex, setCurrentEditIndex] = useState(-1)
   const [completedEdits, setCompletedEdits] = useState<PageEdit[]>([])
+  const [overflow, setOverflow] = useState<OverflowInfo | null>(null)
+  const [aiMessage, setAiMessage] = useState<string | null>(null)
 
   // AbortController ref for cancellation
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -62,6 +80,8 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
       setCurrentEditIndex(-1)
       setCompletedEdits([])
       setProposal(null)
+      setOverflow(null)
+      setAiMessage(null)
 
       const controller = new AbortController()
       abortControllerRef.current = controller
@@ -117,8 +137,9 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
               eventData = line.slice(6)
               console.log(`[AI Edit Client] Got data line, length: ${eventData.length}, eventType: ${eventType}`)
 
-              if (eventType && eventData) {
+              if (eventType && eventData && eventData.trim()) {
                 try {
+                  console.log(`[AI Edit Client] Parsing eventData (${eventData.length} chars):`, eventData.slice(0, 200))
                   const data = JSON.parse(eventData)
                   console.log(`[AI Edit Client] Received event: ${eventType}`, data)
 
@@ -127,6 +148,14 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
                       setPlan(data)
                       overallSummary = data.overallSummary
                       setCurrentEditIndex(0)
+                      // Capture overflow info if present
+                      if (data.overflowBefore || data.overflowAfter) {
+                        setOverflow({
+                          overflowBefore: data.overflowBefore || null,
+                          overflowAfter: data.overflowAfter || null,
+                          fullResponse: data.fullResponse || ''
+                        })
+                      }
                       break
 
                     case 'edit':
@@ -150,6 +179,13 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
                       // Server sends { success: true }, edits were sent progressively via 'edit' events
                       console.log(`[AI Edit Client] Complete event. Local edits: ${edits.length}, data.edits: ${data.edits?.length ?? 'undefined'}`)
                       console.log(`[AI Edit Client] Local edit titles:`, edits.map(e => e.pageTitle))
+
+                      // Handle AI text-only response (no JSON edits)
+                      if (data.aiMessage) {
+                        console.log('[AI Edit Client] AI returned text instead of JSON edits')
+                        setAiMessage(data.aiMessage)
+                      }
+
                       // Prefer locally accumulated edits (from streaming) - only fall back to data.edits if empty
                       const finalEdits = edits.length > 0 ? edits : (data.edits || [])
                       console.log(`[AI Edit Client] Setting proposal with ${finalEdits.length} edits`)
@@ -169,6 +205,14 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
                       break
 
                     case 'error':
+                      // Preserve full response for display if available
+                      if (data.fullResponse) {
+                        setOverflow({
+                          overflowBefore: null,
+                          overflowAfter: null,
+                          fullResponse: data.fullResponse
+                        })
+                      }
                       throw new Error(data.error || 'Unknown error')
                   }
                 } catch (parseError) {
@@ -274,6 +318,8 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
     setPlan(null)
     setCompletedEdits([])
     setCurrentEditIndex(-1)
+    setOverflow(null)
+    setAiMessage(null)
   }, [])
 
   const cancelRequest = useCallback(() => {
@@ -291,6 +337,8 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
     plan,
     currentEditIndex,
     completedEdits,
+    overflow,
+    aiMessage,
     requestEdit,
     applyEdits,
     clearProposal,
