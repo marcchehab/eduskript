@@ -7,6 +7,7 @@
 
 export const METRICS = {
   // Server-side metrics
+  db_queries_total: { unit: 'queries/min', source: 'server' as const },
   db_queries_per_request: { unit: 'count', source: 'server' as const },
   db_query_time_ms: { unit: 'ms', source: 'server' as const },
   api_response_time_ms: { unit: 'ms', source: 'server' as const },

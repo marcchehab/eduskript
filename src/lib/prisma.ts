@@ -46,6 +46,7 @@ export const prisma = basePrisma.$extends({
         recordDbQuery(duration)
         // Record directly to buffer (always visible in metrics)
         recordMetric('db_query_time_ms', duration)
+        recordMetric('db_queries_total', 1) // Count each query
       })
     },
   },

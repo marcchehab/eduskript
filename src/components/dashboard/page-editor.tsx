@@ -996,8 +996,9 @@ export function PageEditor({ collection, skript, page }: PageEditorProps) {
             setHasUnsavedChanges(false)
             setLastSaved(new Date())
           }
-          // Refresh to update version history
+          // Refresh to update version history and pages list
           loadVersions()
+          router.refresh() // Refresh server data to show new pages in sidebar
         }}
       />
     </div>
