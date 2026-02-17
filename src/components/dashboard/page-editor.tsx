@@ -848,6 +848,7 @@ export function PageEditor({ collection, skript, page }: PageEditorProps) {
             fileListLoading={fileListLoading}
             onFileUpload={refreshFileList}
             onAIEdit={() => setAiEditModalOpen(true)}
+            onExcalidrawEdit={(filename, fileId) => handleExcalidrawEdit({ id: fileId, name: filename })}
           />
         </CardContent>
       </Card>

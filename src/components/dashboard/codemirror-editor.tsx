@@ -885,20 +885,38 @@ const CodeMirrorEditor = function CodeMirrorEditor({
     }
 
     try {
-      // Fetch the excalidraw data from the API
-      const response = await fetch(`/api/excalidraw?fileId=${fileId}&skriptId=${skriptId}`)
+      // Fetch the .excalidraw file data via the file proxy endpoint
+      // Using proxy=true to avoid CORS issues with S3 redirects
+      const fileUrl = `/api/files/${fileId}?proxy=true&v=${Date.now()}`
+      const response = await fetch(fileUrl)
       if (!response.ok) {
-        throw new Error('Failed to fetch drawing data')
+        throw new Error(`Failed to fetch drawing data (${response.status})`)
       }
 
-      const data = await response.json()
+      const text = await response.text()
+
+      // Parse the Excalidraw data - supports both pure JSON and Obsidian format
+      let excalidrawData
+      try {
+        excalidrawData = JSON.parse(text)
+      } catch {
+        const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/)
+        if (jsonMatch) {
+          excalidrawData = JSON.parse(jsonMatch[1])
+        } else {
+          throw new Error('Could not parse Excalidraw data')
+        }
+      }
+
+      // Derive name from filename, stripping .excalidraw extension
+      const name = filename.replace(/\.excalidraw$/, '')
 
       // Set initial data and open editor (mark as editing existing file)
       setExcalidrawInitialData({
-        name: data.name,
-        elements: data.data.elements || [],
-        appState: data.data.appState,
-        files: data.data.files  // Include embedded images
+        name,
+        elements: excalidrawData.elements || [],
+        appState: excalidrawData.appState,
+        files: excalidrawData.files  // Include embedded images
       })
       setIsEditingExistingExcalidraw(true)
       setExcalidrawOpen(true)
