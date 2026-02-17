@@ -10,18 +10,14 @@ const CodeMirrorEditor = dynamic(
   { ssr: false, loading: () => <div className="h-full bg-muted animate-pulse rounded-lg" /> }
 )
 
-const SAMPLE_CONTENT = `# Welcome to Eduskript
+const SAMPLE_CONTENT = `
+Naturally I'm not one with the tendency to write longer paragraphs. But you could of course do that. You might want to **emphasise certain things** or, instead, be... *subtle*.
 
-Try editing this content to see the **live preview** update instantly.
+Whatever you do, you'd probably want to add:
+- Lists with bullet points
+- And [Links](https://eduskript.org)
 
-## Features
-
-You can write:
-- **Bold** and *italic* text
-- [Links](https://example.com)
-- Lists (like this one!)
-
-### Code Blocks
+### Code Blocks + Code Editors
 
 \`\`\`python
 def greet(name):
@@ -32,18 +28,20 @@ print(greet("World"))
 
 ### Math with LaTeX
 
-The quadratic formula: $x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$
+An inline equation: $E = mc^2$
 
-Or as a display equation:
+Or a block, e.g. the quadratic formula:
 
-$$E = mc^2$$
+$$
+x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}
+$$
 
 ### Callouts
 
 > [!tip] Pro Tip
 > Callouts help highlight important information for your students.
 
-> [!note] Note
+> [!note]- Collapsed Note
 > You can also use note, warning, success, and many other callout types.
 
 ### Tables
@@ -54,10 +52,6 @@ $$E = mc^2$$
 | LaTeX Math | Supported |
 | Code Blocks | Syntax Highlighted |
 | Callouts | 40+ Types |
-
----
-
-*Start typing above to see your changes appear here!*
 `
 
 interface DemoEditorProps {
