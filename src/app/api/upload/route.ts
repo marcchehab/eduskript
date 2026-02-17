@@ -67,7 +67,27 @@ export async function POST(request: NextRequest) {
     // Extract image dimensions if this is an image file
     let imageWidth: number | undefined
     let imageHeight: number | undefined
-    if (file.type.startsWith('image/') && !file.type.includes('svg')) {
+    if (file.type === 'image/svg+xml') {
+      // SVGs: parse width/height or viewBox from XML (sharp doesn't handle SVGs)
+      try {
+        const svgStr = buffer.toString('utf-8').slice(0, 2000)
+        const wMatch = svgStr.match(/\bwidth=["']([.\d]+)/)
+        const hMatch = svgStr.match(/\bheight=["']([.\d]+)/)
+        if (wMatch && hMatch) {
+          imageWidth = Math.round(parseFloat(wMatch[1]))
+          imageHeight = Math.round(parseFloat(hMatch[1]))
+        } else {
+          const viewBox = svgStr.match(/viewBox=["']([^"']+)["']/)
+          if (viewBox) {
+            const parts = viewBox[1].split(/[\s,]+/)
+            imageWidth = Math.round(parseFloat(parts[2]))
+            imageHeight = Math.round(parseFloat(parts[3]))
+          }
+        }
+      } catch {
+        // Non-fatal: dimensions are optional
+      }
+    } else if (file.type.startsWith('image/')) {
       try {
         const metadata = await sharp(buffer).metadata()
         if (metadata.width && metadata.height) {

@@ -56,6 +56,7 @@ interface ContentImageProps {
   wrap?: boolean
   invert?: 'dark' | 'light' | 'always' // Invert colors for diagrams
   saturate?: string // Saturation percentage to apply with invert (e.g., '70' or '150')
+  optimizeImages?: boolean // Enable Next.js Image optimization (WebP/AVIF, resizing)
   // Files data for resolving URLs (serializable)
   files?: SkriptFilesData
   // Source line tracking for editor sync
@@ -63,7 +64,7 @@ interface ContentImageProps {
   sourceLineEnd?: string
 }
 
-export function ContentImage({ src, alt = '', title, style, onWidthChange, originalSrc, align = 'center', wrap = false, invert, saturate, files, sourceLineStart, sourceLineEnd }: ContentImageProps) {
+export function ContentImage({ src, alt = '', title, style, onWidthChange, originalSrc, align = 'center', wrap = false, invert, saturate, optimizeImages, files, sourceLineStart, sourceLineEnd }: ContentImageProps) {
   const filename = originalSrc || src
   const { resolvedTheme } = useTheme()
 
@@ -156,7 +157,7 @@ export function ContentImage({ src, alt = '', title, style, onWidthChange, origi
             height={imgHeight}
             className="w-full h-auto rounded-md"
             style={invertFilter ? { filter: invertFilter } : undefined}
-            unoptimized={imageSrc.startsWith('/api/')}
+            unoptimized={!optimizeImages}
           />
         )}
       </span>

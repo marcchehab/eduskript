@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Pen, Eraser, Trash2, Camera, Eye, EyeOff, Radio, User, Users, UserPen, ChevronDown, Globe, Layers } from 'lucide-react'
+import { Pen, Eraser, Trash2, Eye, EyeOff, Radio, User, Users, UserPen, ChevronDown, Globe, Layers } from 'lucide-react'
 import { Circle } from '@uiw/react-color'
 import { cn } from '@/lib/utils'
 import { useLayout } from '@/contexts/layout-context'
@@ -1170,67 +1170,7 @@ export function AnnotationToolbar({
             <Eraser className="w-4 h-4" />
           </button>
 
-          {/* Snap Tool */}
-          <div
-            className="relative"
-            onMouseEnter={handleSnapMouseEnter}
-            onMouseLeave={handleSnapMouseLeave}
-          >
-            <button
-              data-snap-button
-              onClick={handleSnapClick}
-              onPointerDown={handleSnapPointerDown}
-              onPointerMove={handleSnapPointerMove}
-              onPointerUp={handleSnapPointerUp}
-              onPointerCancel={handleSnapPointerUp}
-              disabled={snapDisabled}
-              className={cn(
-                'p-2 rounded-md transition-colors relative',
-                snapDisabled
-                  ? 'opacity-50 cursor-not-allowed text-muted-foreground'
-                  : mode === 'snap'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-              )}
-              title={snapDisabled ? "Zoom must be at 1.0 to capture snaps" : "Capture screenshot"}
-              aria-label="Toggle snap mode"
-            >
-              <Camera className="w-4 h-4" />
-            </button>
-
-            {/* Snap controls popup */}
-            {showSnapControls && snapDisabled && (
-              <div
-                ref={snapPopoverRef}
-                className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2"
-                onMouseEnter={() => {
-                  if (snapHoverTimerRef.current) {
-                    clearTimeout(snapHoverTimerRef.current)
-                  }
-                  if (snapHideTimerRef.current) {
-                    clearTimeout(snapHideTimerRef.current)
-                    snapHideTimerRef.current = null
-                  }
-                }}
-                onMouseLeave={() => setShowSnapControls(false)}
-              >
-                <div className="bg-background border border-border rounded-lg shadow-lg p-3 whitespace-nowrap">
-                  <div className="text-xs text-foreground mb-2">
-                    Snapping only works without zoom
-                  </div>
-                  <button
-                    onClick={() => {
-                      onResetZoom()
-                      setShowSnapControls(false)
-                    }}
-                    className="w-full px-3 py-1.5 bg-primary text-primary-foreground rounded hover:bg-primary/90 text-xs transition-colors"
-                  >
-                    Reset zoom
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+          {/* Snap Tool - hidden, needs replacement (html2canvas is unreliable) */}
         </ToolbarSection>
       </div>
     </div>

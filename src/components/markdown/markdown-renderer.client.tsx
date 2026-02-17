@@ -5,6 +5,7 @@ import { compileMarkdown } from '@/lib/markdown-compiler'
 import { createMarkdownComponents } from '@/lib/markdown-components'
 import { createSkriptFiles, createEmptySkriptFiles, type SkriptFilesData } from '@/lib/skript-files'
 import type { VideoInfo } from '@/lib/skript-files'
+import { EagerImageLoader } from './eager-image-loader'
 
 interface MarkdownRendererProps {
   content: string
@@ -160,9 +161,11 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, onContent
   }
 
   return (
-    <div className="markdown-content prose dark:prose-invert max-w-none">
-      {renderedContent}
-    </div>
+    <EagerImageLoader>
+      <div className="markdown-content prose dark:prose-invert max-w-none">
+        {renderedContent}
+      </div>
+    </EagerImageLoader>
   )
 }
 

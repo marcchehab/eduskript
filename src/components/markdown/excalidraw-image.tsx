@@ -1,6 +1,5 @@
 'use client'
 
-import Image from 'next/image'
 import { useState, useCallback } from 'react'
 import { Pencil } from 'lucide-react'
 import type { SkriptFilesData } from '@/lib/skript-files'
@@ -34,6 +33,12 @@ export function ExcalidrawImage({ src, alt, style, onWidthChange, onEdit, align 
   // Get the original .excalidraw file ID for editing
   const excalidrawFile = files ? resolveFile(files, src) : undefined
   const fileId = excalidrawFile?.id ?? ''
+
+  // Get real dimensions from the light SVG file (fall back to 800x600)
+  const baseName = src.replace(/\.excalidraw(\.md)?$/, '')
+  const lightFile = files?.files[`${baseName}.excalidraw.light.svg`]
+  const imgWidth = lightFile?.width ?? 800
+  const imgHeight = lightFile?.height ?? 600
 
   const [lightLoaded, setLightLoaded] = useState(false)
   const [darkLoaded, setDarkLoaded] = useState(false)
@@ -103,30 +108,35 @@ export function ExcalidrawImage({ src, alt, style, onWidthChange, onEdit, align 
       )}
 
       {/* Render both images, CSS controls visibility based on theme */}
+      {/* Plain <img> intentional: SVGs don't benefit from Next.js Image optimization */}
       {lightSrc && (
-        <Image
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
           src={lightSrc}
           alt={caption}
-          width={800}
-          height={600}
+          width={imgWidth}
+          height={imgHeight}
+          loading="lazy"
+          decoding="async"
           onLoad={() => setLightLoaded(true)}
           className={`excalidraw-light w-full h-auto rounded-md transition-opacity duration-200 dark:hidden ${
             lightLoaded ? 'opacity-100' : 'opacity-0'
           }`}
-          unoptimized
         />
       )}
       {darkSrc && (
-        <Image
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
           src={darkSrc}
           alt={caption}
-          width={800}
-          height={600}
+          width={imgWidth}
+          height={imgHeight}
+          loading="lazy"
+          decoding="async"
           onLoad={() => setDarkLoaded(true)}
           className={`excalidraw-dark w-full h-auto rounded-md transition-opacity duration-200 hidden dark:block ${
             darkLoaded ? 'opacity-100' : 'opacity-0'
           }`}
-          unoptimized
         />
       )}
       {caption && (

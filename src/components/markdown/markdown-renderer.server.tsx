@@ -2,6 +2,7 @@ import { compileMarkdown } from '@/lib/markdown-compiler'
 import { createMarkdownComponents } from '@/lib/markdown-components'
 import { createEmptySkriptFiles } from '@/lib/skript-files'
 import { getSkriptFiles } from '@/lib/skript-files.server'
+import { EagerImageLoader } from './eager-image-loader'
 
 interface ServerMarkdownRendererProps {
   content: string
@@ -25,7 +26,7 @@ export async function ServerMarkdownRenderer({ content, skriptId, pageId, organi
   const files = skriptId ? await getSkriptFiles(skriptId) : createEmptySkriptFiles()
 
   // 2. Create components with files prop bound
-  const components = createMarkdownComponents(files, { pageId, organizationSlug })
+  const components = createMarkdownComponents(files, { pageId, organizationSlug, optimizeImages: true })
 
   // 3. Compile markdown (safe pipeline, no JS execution)
   let rendered: React.ReactNode
@@ -49,8 +50,10 @@ export async function ServerMarkdownRenderer({ content, skriptId, pageId, organi
   }
 
   return (
-    <div className="markdown-content prose dark:prose-invert max-w-none">
-      {rendered}
-    </div>
+    <EagerImageLoader>
+      <div className="markdown-content prose dark:prose-invert max-w-none">
+        {rendered}
+      </div>
+    </EagerImageLoader>
   )
 }

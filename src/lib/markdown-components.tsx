@@ -159,6 +159,7 @@ interface CreateMarkdownComponentsOptions {
   content?: string  // For editor mode, to find/replace content
   organizationSlug?: string  // For organization pages (OurTeachers component)
   onExcalidrawEdit?: (filename: string, fileId: string) => void  // Callback to edit Excalidraw drawings
+  optimizeImages?: boolean  // Enable Next.js Image optimization (only safe for public pages)
 }
 
 /**
@@ -171,7 +172,7 @@ export function createMarkdownComponents(
   files: SkriptFilesData,
   options?: CreateMarkdownComponentsOptions
 ): Record<string, ComponentType<any>> {
-  const { pageId, onContentChange, content, organizationSlug, onExcalidrawEdit } = options ?? {}
+  const { pageId, onContentChange, content, organizationSlug, onExcalidrawEdit, optimizeImages } = options ?? {}
 
   // Img element handler - handles <img> elements from markdown with data-* attributes
   function ImgElementComponent({ src, alt, title, style, ...props }: React.ImgHTMLAttributes<HTMLImageElement>) {
@@ -227,6 +228,7 @@ export function createMarkdownComponents(
         invert={dataInvert as 'dark' | 'light' | 'always' | undefined}
         saturate={dataSaturate}
         files={files}
+        optimizeImages={optimizeImages}
         onWidthChange={onContentChange ? (markdown) => handleImageWidthChange(originalSrc || srcStr, markdown) : undefined}
         sourceLineStart={sourceLineStart}
         sourceLineEnd={sourceLineEnd}
@@ -520,6 +522,7 @@ export function createMarkdownComponents(
         invert={invert}
         saturate={saturate}
         files={files}
+        optimizeImages={optimizeImages}
         onWidthChange={onContentChange ? (markdown) => handleImageWidthChange(src, markdown) : undefined}
         sourceLineStart={sourceLineStart}
         sourceLineEnd={sourceLineEnd}

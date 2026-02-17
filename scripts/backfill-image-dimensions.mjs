@@ -38,6 +38,21 @@ function getExtension(filename) {
   return filename.substring(lastDot + 1).toLowerCase()
 }
 
+function parseSvgDimensions(buffer) {
+  const svgStr = buffer.toString('utf-8').slice(0, 2000)
+  const wMatch = svgStr.match(/\bwidth=["']([.\d]+)/)
+  const hMatch = svgStr.match(/\bheight=["']([.\d]+)/)
+  if (wMatch && hMatch) {
+    return { width: Math.round(parseFloat(wMatch[1])), height: Math.round(parseFloat(hMatch[1])) }
+  }
+  const viewBox = svgStr.match(/viewBox=["']([^"']+)["']/)
+  if (viewBox) {
+    const parts = viewBox[1].split(/[\s,]+/)
+    return { width: Math.round(parseFloat(parts[2])), height: Math.round(parseFloat(parts[3])) }
+  }
+  return null
+}
+
 async function downloadFromS3(key) {
   const command = new GetObjectCommand({ Bucket: bucket, Key: key })
   const response = await s3Client.send(command)
@@ -51,12 +66,11 @@ async function downloadFromS3(key) {
 try {
   await client.connect()
 
-  // Find all image files without dimensions
+  // Find all image files without dimensions (raster + SVG)
   const result = await client.query(`
     SELECT id, name, hash, content_type
     FROM files
     WHERE content_type LIKE 'image/%'
-      AND content_type NOT LIKE '%svg%'
       AND width IS NULL
       AND hash IS NOT NULL
       AND is_directory = false
@@ -75,21 +89,31 @@ try {
     }
 
     const s3Key = `files/${file.hash}.${ext}`
+    const isSvg = file.content_type === 'image/svg+xml'
 
     try {
       const buffer = await downloadFromS3(s3Key)
-      const metadata = await sharp(buffer).metadata()
 
-      if (metadata.width && metadata.height) {
+      let width, height
+      if (isSvg) {
+        const dims = parseSvgDimensions(buffer)
+        if (dims) ({ width, height } = dims)
+      } else {
+        const metadata = await sharp(buffer).metadata()
+        width = metadata.width
+        height = metadata.height
+      }
+
+      if (width && height) {
         await client.query(
           'UPDATE files SET width = $1, height = $2 WHERE id = $3',
-          [metadata.width, metadata.height, file.id]
+          [width, height, file.id]
         )
         updated++
-        console.log(`  ${file.name}: ${metadata.width}x${metadata.height}`)
+        console.log(`  ${file.name}: ${width}x${height}${isSvg ? ' (svg)' : ''}`)
       } else {
         failed++
-        console.log(`  ${file.name}: no dimensions in metadata`)
+        console.log(`  ${file.name}: no dimensions found`)
       }
     } catch (err) {
       failed++
