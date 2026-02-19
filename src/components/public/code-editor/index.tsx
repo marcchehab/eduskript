@@ -1908,8 +1908,8 @@ export const CodeEditor = memo(function CodeEditor({
         const hasRows = result.results.length > 0 && result.results[0].values.length > 0
 
         if (hasRows) {
-          // Add output with SQL results
-          const message = `Query executed successfully in ${result.executionTime?.toFixed(2)}ms`
+          const totalRows = result.results.reduce((sum, r) => sum + r.values.length, 0)
+          const message = `Query executed in ${result.executionTime?.toFixed(2)}ms · ${totalRows} row${totalRows !== 1 ? 's' : ''}`
           setOutput([{
             message,
             level: OutputLevel.OUTPUT,
@@ -1918,7 +1918,7 @@ export const CodeEditor = memo(function CodeEditor({
           }])
         } else {
           // Query succeeded but returned no rows
-          const message = `Query executed successfully in ${result.executionTime?.toFixed(2)}ms\nNo rows returned.`
+          const message = `Query executed in ${result.executionTime?.toFixed(2)}ms · No rows returned.`
           setOutput([{
             message,
             level: OutputLevel.WARNING,
@@ -2865,43 +2865,39 @@ plots
                   {entry.sqlResults && entry.sqlResults.length > 0 && (
                     <div className="mt-1 overflow-x-auto">
                       {entry.sqlResults.map((resultSet, rsIndex) => (
-                        <div key={rsIndex} className="mb-2">
-                          <div className="text-[10px] text-muted-foreground mb-0.5">
-                            {resultSet.values.length} row{resultSet.values.length !== 1 ? 's' : ''}
-                          </div>
-                          <table className="min-w-full border-collapse border border-border text-[11px]">
-                            <thead className="bg-muted">
-                              <tr>
-                                {resultSet.columns.map((column, colIdx) => (
-                                  <th
-                                    key={colIdx}
-                                    className="border border-border px-1.5 py-0.5 text-left font-semibold"
+                        <table key={rsIndex} className="w-full border-collapse border border-border text-[11px] mb-2">
+                          <thead className="bg-muted">
+                            <tr>
+                              {resultSet.columns.map((column, colIdx) => (
+                                <th
+                                  key={colIdx}
+                                  className="border border-border px-1.5 py-0.5 text-left font-semibold"
+                                >
+                                  {column}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody style={{ fontSize: '0.6rem' }}>
+                            {resultSet.values.map((row, rowIdx) => (
+                              <tr key={rowIdx} className="hover:bg-muted/50">
+                                {row.map((cell, cellIdx) => (
+                                  <td
+                                    key={cellIdx}
+                                    style={{ padding: '0.2rem' }}
+                                    className="border border-border"
                                   >
-                                    {column}
-                                  </th>
+                                    {cell === null ? (
+                                      <span className="text-muted-foreground italic">NULL</span>
+                                    ) : (
+                                      String(cell)
+                                    )}
+                                  </td>
                                 ))}
                               </tr>
-                            </thead>
-                            <tbody>
-                              {resultSet.values.map((row, rowIdx) => (
-                                <tr key={rowIdx} className="hover:bg-muted/50">
-                                  {row.map((cell, cellIdx) => (
-                                    <td
-                                      key={cellIdx}
-                                      className="border border-border px-1.5 py-0.5"
-                                    >
-                                      {cell === null ? (
-                                        <span className="text-muted-foreground italic">NULL</span>
-                                      ) : (
-                                        String(cell)
-                                      )}
-                                    </td>
-                                  ))}
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
+                            ))}
+                          </tbody>
+                        </table>
                       ))}
                     </div>
                   )}
