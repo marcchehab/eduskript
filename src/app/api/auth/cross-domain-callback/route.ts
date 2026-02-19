@@ -16,6 +16,23 @@ export async function GET(request: NextRequest) {
   const token = searchParams.get('token')
   const returnPath = searchParams.get('returnPath') || '/'
 
+  // Tunnel domains bypass the DB token — production encodes the JWT directly
+  const jwtParam = searchParams.get('jwt')
+  if (jwtParam) {
+    const isProduction = process.env.NODE_ENV === 'production'
+    const cookieName = isProduction ? '__Secure-next-auth.session-token' : 'next-auth.session-token'
+    const redirectUrl = returnPath.startsWith('http') ? returnPath : `${request.nextUrl.origin}${returnPath}`
+    const response = NextResponse.redirect(redirectUrl)
+    response.cookies.set(cookieName, jwtParam, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 30 * 24 * 60 * 60,
+    })
+    return response
+  }
+
   if (!token) {
     return NextResponse.json(
       { error: 'Missing token' },
