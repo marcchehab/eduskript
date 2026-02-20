@@ -7,7 +7,6 @@ import { useSession } from 'next-auth/react'
 import { cn } from '@/lib/utils'
 import { BookOpen, Settings, Users, ChevronLeft, ChevronRight, Shield, GraduationCap, User, Camera, CornerUpLeft, Globe, BarChart3 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { usePendingInvitations } from '@/hooks/use-pending-invitations'
 
 // Personal navigation items for teachers
 const personalNavigation = [
@@ -53,7 +52,6 @@ export function DashboardSidebar() {
   const pathname = usePathname()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const { data: session } = useSession()
-  const hasPendingInvitations = usePendingInvitations()
   const [lastTeacherPage, setLastTeacherPage] = useState<{ slug: string; name: string; pageIcon?: string | null; href?: string } | null>(null)
   const [adminOrgs, setAdminOrgs] = useState<OrgWithRole[]>([])
 
@@ -159,15 +157,12 @@ export function DashboardSidebar() {
                 const Icon = item.icon
                 const isActive = pathname === item.href
 
-                // Show red dot on My Classes if there are pending invitations
-                const showDot = hasPendingInvitations && item.href === '/dashboard/my-classes'
-
                 return (
                   <Link
                     key={item.name}
                     href={item.href}
                     className={cn(
-                      'flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors relative',
+                      'flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors',
                       isActive
                         ? 'bg-primary/10 text-primary'
                         : 'text-muted-foreground hover:bg-muted hover:text-foreground',
@@ -177,9 +172,6 @@ export function DashboardSidebar() {
                   >
                     <Icon className="w-5 h-5" />
                     {!isCollapsed && <span>{item.name}</span>}
-                    {showDot && (
-                      <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
-                    )}
                   </Link>
                 )
               })}

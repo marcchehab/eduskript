@@ -6,7 +6,6 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { LogIn, UserCheck, FilePen } from 'lucide-react'
-import { usePendingInvitations } from '@/hooks/use-pending-invitations'
 
 interface AuthButtonProps {
   pageId?: string // Page ID to check edit permissions (lazy loaded)
@@ -19,8 +18,6 @@ export function AuthButton({ pageId, teacherPageSlug, isOrgPage, orgSlug }: Auth
   const pathname = usePathname() ?? '/'
   const { data: session, status } = useSession()
   const [editUrl, setEditUrl] = useState<string | null>(null)
-  const hasPendingInvitations = usePendingInvitations()
-
   // Extract pageSlug from pathname (first segment after /)
   // e.g., /chris/collection/skript/page -> "chris"
   // On custom domains, use the passed teacherPageSlug instead
@@ -155,10 +152,6 @@ export function AuthButton({ pageId, teacherPageSlug, isOrgPage, orgSlug }: Auth
       ) : (
         // Show icon for users without images
         <UserCheck className="h-4 w-4 text-primary" />
-      )}
-      {/* Red dot for pending invitations */}
-      {hasPendingInvitations && (
-        <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border border-background" />
       )}
     </Link>
   )
