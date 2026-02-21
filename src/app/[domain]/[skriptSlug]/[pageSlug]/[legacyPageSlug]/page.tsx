@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { headers } from 'next/headers'
 
 // Legacy redirect: /{domain}/{collectionSlug}/{skriptSlug}/{pageSlug}
 // → /{domain}/{skriptSlug}/{pageSlug}
@@ -15,5 +16,16 @@ interface LegacyPageProps {
 
 export default async function LegacyRedirectPage({ params }: LegacyPageProps) {
   const { domain, pageSlug, legacyPageSlug } = await params
-  redirect(`/${domain}/${pageSlug}/${legacyPageSlug}`)
+
+  // On custom domains the proxy already prepends the pageSlug,
+  // so redirect without it to avoid a double prefix.
+  const headersList = await headers()
+  const hostname = (headersList.get('host') || '').split(':')[0]
+  const isCustomDomain = !hostname.endsWith('.eduskript.org') && hostname !== 'localhost'
+
+  if (isCustomDomain) {
+    redirect(`/${pageSlug}/${legacyPageSlug}`)
+  } else {
+    redirect(`/${domain}/${pageSlug}/${legacyPageSlug}`)
+  }
 }

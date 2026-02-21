@@ -132,7 +132,12 @@ export default async function PublicPage({ params, searchParams }: PageProps) {
       select: { id: true }
     })
     if (fallbackSkript) {
-      redirect(`/${domain}/${pageSlug}`)
+      // On custom domains the proxy already prepends the pageSlug,
+      // so redirect without it to avoid a double prefix.
+      const headersList = await headers()
+      const hostname = (headersList.get('host') || '').split(':')[0]
+      const isCustomDomain = !hostname.endsWith('.eduskript.org') && hostname !== 'localhost'
+      redirect(isCustomDomain ? `/${pageSlug}` : `/${domain}/${pageSlug}`)
     }
 
     notFound()
