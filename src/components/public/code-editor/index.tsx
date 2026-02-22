@@ -2697,7 +2697,7 @@ plots
                   <TooltipProvider delayDuration={300}>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <span className="flex items-center justify-center w-5 h-5 cursor-default">
+                        <span className="flex items-center justify-center w-5 h-5 cursor-default opacity-50 hover:opacity-100 transition-opacity">
                           {dbStatus === 'idle' && (
                             <Circle className="w-3.5 h-3.5 text-muted-foreground/40" />
                           )}

@@ -184,7 +184,7 @@ function SyncStatusModal({ onClose }: { onClose: () => void }) {
           {status.lastSync && (
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">Last sync</span>
-              <span>{new Date(status.lastSync).toLocaleString()}</span>
+              <span title={new Date(status.lastSync).toLocaleString()}>{getTimeAgo(new Date(status.lastSync))}</span>
             </div>
           )}
 
@@ -323,7 +323,7 @@ function OperationRow({ operation }: { operation: SyncOperation }) {
         <span className="font-medium">{getTypeLabel(operation.type)}</span>
         <span className="text-muted-foreground">·</span>
         <span className="text-muted-foreground truncate flex-1">{operation.adapter}</span>
-        <span className="text-xs text-muted-foreground">{timeAgo}</span>
+        <span className="text-xs text-muted-foreground" title={new Date(operation.timestamp).toLocaleString()}>{timeAgo}</span>
       </div>
       {operation.message && (
         <div className="mt-0.5 text-xs text-muted-foreground pl-5 truncate">
