@@ -7,11 +7,12 @@
 ## Needs testing
 
 ## Doing
-auth via tunnel
-**snapshot** can seriously mess up website. a new idea: people use their own screenshot / snapping tool and just paste the image. that way we can get rid of loads of hacks that had to do with trying to get html to canvas to work. upon pasting an image, users should see an overlay with the image that they are inserting. it should have a selection/crop tool to cut the image. then a button to confirm or cancel. upon confirmation, the image should be uploaded to a bucket (i think we have one already for that).
+actually create / edit content, sql, fix sil input dijkstra
+
 
 ## To do
-**preview** buttons still often lead to wrong urls and thus produce 404s. e.g. in the page editor:
+
+*preview** buttons still often lead to wrong urls and thus produce 404s. e.g. in the page editor:
 https://www.informatikgarten.ch/dashboard/collections/grundjahr/skripts/computer-os/pages/betriebssystem/edit
 leads to: https://www.informatikgarten.ch/preview/ig/grundjahr/computer-os/betriebssystem (404, proper would be https://www.informatikgarten.ch/grundjahr/computer-os/betriebssystem
 )

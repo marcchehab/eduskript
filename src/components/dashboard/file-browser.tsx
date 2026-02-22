@@ -544,7 +544,7 @@ export function FileBrowser({ skriptId, onFileSelect, className = '', onUploadCo
                         <TextCursor className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={() => handleFileDelete(file)}
+                        onClick={(e) => { e.stopPropagation(); handleFileDelete(file) }}
                         className="opacity-0 group-hover:opacity-100 p-1 text-destructive hover:text-destructive/80 transition-opacity"
                         title="Delete file"
                       >
