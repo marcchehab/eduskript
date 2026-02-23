@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom'
 import { useTheme } from 'next-themes'
 import { EditorView, keymap } from '@codemirror/view'
 import { EditorState, Annotation, Compartment } from '@codemirror/state'
+import { indentUnit } from '@codemirror/language'
 import { indentWithTab, undo } from '@codemirror/commands'
 import { python } from '@codemirror/lang-python'
 import { javascript } from '@codemirror/lang-javascript'
@@ -1532,6 +1533,9 @@ export const CodeEditor = memo(function CodeEditor({
         { key: 'Mod-z', run: undo }, // Enable Ctrl+Z (Cmd+Z on Mac) for undo
       ]),
       langExtension,
+      // Python convention: 4-space indentation; 2 spaces for JS/SQL
+      indentUnit.of(language === 'python' ? '    ' : '  '),
+      EditorState.tabSize.of(language === 'python' ? 4 : 2),
       EditorView.theme({
         '&': {
           height: '100%',
