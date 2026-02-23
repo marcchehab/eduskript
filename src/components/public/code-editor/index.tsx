@@ -1656,19 +1656,22 @@ export const CodeEditor = memo(function CodeEditor({
       })
     )
 
-    // Debug: detect cursor jumps to position 0 (focus loss symptom)
+    // Debug: detect any significant backward cursor jumps
     let lastCursor = -1
     extensions.push(
       EditorView.updateListener.of((update) => {
         const cursor = update.state.selection.main.head
-        if (lastCursor > 0 && cursor === 0 && !update.docChanged) {
-          log.warn('CURSOR JUMPED TO 0 without doc change!', {
+        // Detect backward jump of >10 chars (ignoring small movements)
+        if (lastCursor > 10 && cursor < lastCursor - 10) {
+          log.warn('CURSOR JUMPED BACKWARD!', {
             id,
-            lastCursor,
+            from: lastCursor,
+            to: cursor,
+            docChanged: update.docChanged,
             focused: update.view.hasFocus,
             transactions: update.transactions.length,
+            isProgrammatic: update.transactions.some(tr => tr.annotation(programmaticChange)),
           })
-          // Log stack trace to find the caller
           console.trace('[editor:codemirror] cursor jump stack trace')
         }
         lastCursor = cursor
