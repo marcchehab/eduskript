@@ -8,6 +8,9 @@ import { EditorView, keymap } from '@codemirror/view'
 import { EditorState, Annotation, Compartment } from '@codemirror/state'
 import { indentUnit } from '@codemirror/language'
 import { indentWithTab, undo } from '@codemirror/commands'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('editor:codemirror')
 import { python } from '@codemirror/lang-python'
 import { javascript } from '@codemirror/lang-javascript'
 import { sql } from '@codemirror/lang-sql'
@@ -589,11 +592,25 @@ export const CodeEditor = memo(function CodeEditor({
   const debouncedSaveContent = useCallback(() => {
     if (!editorViewRef.current) return
 
-    const content = editorViewRef.current.state.doc.toString()
+    const view = editorViewRef.current
+    const cursor = view.state.selection.main.head
+    log('debounced save — syncing content to files state', { id, cursor })
+
+    const content = view.state.doc.toString()
     setFiles(prev => prev.map((file, idx) =>
       idx === activeFileIndex ? { ...file, content } : file
     ))
-  }, [activeFileIndex])
+
+    // Check cursor after state update (next microtask)
+    queueMicrotask(() => {
+      if (editorViewRef.current) {
+        const newCursor = editorViewRef.current.state.selection.main.head
+        if (newCursor !== cursor) {
+          log.warn('CURSOR MOVED after debounced save!', { before: cursor, after: newCursor })
+        }
+      }
+    })
+  }, [activeFileIndex, id])
 
   // Ref to avoid debouncedSaveContent as a dependency in the editor effect
   const debouncedSaveContentRef = useRef(debouncedSaveContent)
@@ -1516,6 +1533,7 @@ export const CodeEditor = memo(function CodeEditor({
 
   useEffect(() => {
     if (!editorRef.current || !mounted) return
+    log('EDITOR CREATE — destroying and recreating editor', { id, language, activeFileIndex })
 
     const isDark = resolvedTheme === 'dark'
 
@@ -1635,6 +1653,25 @@ export const CodeEditor = memo(function CodeEditor({
           }
         }
 
+      })
+    )
+
+    // Debug: detect cursor jumps to position 0 (focus loss symptom)
+    let lastCursor = -1
+    extensions.push(
+      EditorView.updateListener.of((update) => {
+        const cursor = update.state.selection.main.head
+        if (lastCursor > 0 && cursor === 0 && !update.docChanged) {
+          log.warn('CURSOR JUMPED TO 0 without doc change!', {
+            id,
+            lastCursor,
+            focused: update.view.hasFocus,
+            transactions: update.transactions.length,
+          })
+          // Log stack trace to find the caller
+          console.trace('[editor:codemirror] cursor jump stack trace')
+        }
+        lastCursor = cursor
       })
     )
 
