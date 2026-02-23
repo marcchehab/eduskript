@@ -500,39 +500,23 @@ export const CodeEditor = memo(function CodeEditor({
   }, [initialCode])
 
   useEffect(() => {
-    // Only restore once when data first loads
+    // Only restore once when data first loads.
+    // The editor id is a hash of the markdown content, so if the teacher edits
+    // the markdown the componentId changes and no saved data will be found.
     if (!isLoading && savedData && !hasLoadedData.current) {
       hasLoadedData.current = true
 
-      // Detect if the teacher changed the markdown since the student last saved.
-      // We compare the initialCode that was active at save time against the current prop.
-      // If they differ, the teacher edited the markdown and we should reset content.
-      const markdownHasChanged = savedData.initialCode !== undefined
-        && savedData.initialCode !== initialCode
-
-      if (markdownHasChanged) {
-        // Markdown was updated - don't restore old saved content
-        // But do restore other settings like fontSize, editorWidth, etc.
-        if (savedData.fontSize !== undefined) setFontSize(savedData.fontSize)
-        if (savedData.lineWrapping !== undefined) setLineWrapping(savedData.lineWrapping)
-        if (savedData.editorWidth !== undefined) setEditorWidth(savedData.editorWidth)
-        if (savedData.canvasTransform) setCanvasTransform(savedData.canvasTransform)
-        // Don't restore highlights when markdown changed - they'd be at wrong positions
-      } else {
-        // Markdown unchanged - safe to restore everything
-        if (savedData.files) setFiles(savedData.files)
-        if (savedData.activeFileIndex !== undefined) setActiveFileIndex(savedData.activeFileIndex)
-        if (savedData.fontSize !== undefined) setFontSize(savedData.fontSize)
-        if (savedData.lineWrapping !== undefined) setLineWrapping(savedData.lineWrapping)
-        if (savedData.editorWidth !== undefined) setEditorWidth(savedData.editorWidth)
-        if (savedData.canvasTransform) setCanvasTransform(savedData.canvasTransform)
-        // Only load personal highlights if NOT in broadcast mode
-        if (savedData.highlights && !isBroadcastMode) {
-          setHighlights(savedData.highlights)
-        }
+      if (savedData.files) setFiles(savedData.files)
+      if (savedData.activeFileIndex !== undefined) setActiveFileIndex(savedData.activeFileIndex)
+      if (savedData.fontSize !== undefined) setFontSize(savedData.fontSize)
+      if (savedData.lineWrapping !== undefined) setLineWrapping(savedData.lineWrapping)
+      if (savedData.editorWidth !== undefined) setEditorWidth(savedData.editorWidth)
+      if (savedData.canvasTransform) setCanvasTransform(savedData.canvasTransform)
+      if (savedData.highlights && !isBroadcastMode) {
+        setHighlights(savedData.highlights)
       }
     }
-  }, [isLoading, savedData, componentId, pageId, initialCode, isBroadcastMode])
+  }, [isLoading, savedData, isBroadcastMode])
 
   // Track previous broadcast mode to detect mode switches
   // MODE SWITCHING BEHAVIOR:
@@ -609,9 +593,8 @@ export const CodeEditor = memo(function CodeEditor({
       editorWidth,
       canvasTransform,
       highlights,
-      initialCode,
     })
-  }, [activeFileIndex, pageId, componentId, fontSize, lineWrapping, editorWidth, canvasTransform, highlights, initialCode])
+  }, [activeFileIndex, pageId, componentId, fontSize, lineWrapping, editorWidth, canvasTransform, highlights])
 
   // Ref to avoid debouncedSaveContent as a dependency in the editor effect
   const debouncedSaveContentRef = useRef(debouncedSaveContent)
@@ -651,7 +634,6 @@ export const CodeEditor = memo(function CodeEditor({
         editorWidth,
         canvasTransform,
         highlights: savedData?.highlights || [], // Preserve personal highlights
-        initialCode,
       }
       savePersistentData(personalData, { immediate: true })
     } else {
@@ -664,11 +646,10 @@ export const CodeEditor = memo(function CodeEditor({
         editorWidth,
         canvasTransform,
         highlights,
-        initialCode,
       }
       savePersistentData(dataToSave, { immediate: true })
     }
-  }, [activeFileIndex, fontSize, lineWrapping, editorWidth, canvasTransform, pageId, savePersistentData, files, componentId, isLoading, highlights, isBroadcastMode, updateBroadcastHighlights, savedData?.highlights, initialCode])
+  }, [activeFileIndex, fontSize, lineWrapping, editorWidth, canvasTransform, pageId, savePersistentData, files, componentId, isLoading, highlights, isBroadcastMode, updateBroadcastHighlights, savedData?.highlights])
 
   // Helper function to create a version snapshot
   const createVersionSnapshot = useCallback(async (isManualSave = false) => {
