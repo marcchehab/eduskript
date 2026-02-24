@@ -5,6 +5,14 @@ import { getFileById, getFileExtension, getS3Key, sanitizeFilename } from '@/lib
 import { prisma } from '@/lib/prisma'
 import { getTeacherFileUrl, downloadTeacherFile } from '@/lib/s3'
 
+function getPlaceholderUrl(request: NextRequest): string {
+  // Use X-Forwarded-Host/Proto to build public URL (Koyeb reverse proxy
+  // sets request.url to internal hostname which causes CORS errors)
+  const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || 'localhost'
+  const proto = request.headers.get('x-forwarded-proto') || 'https'
+  return `${proto}://${host}/no-image.svg`
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -34,7 +42,7 @@ export async function GET(
       console.warn(`[FILES] File not found or access denied: id=${fileId}`)
       // Redirect to placeholder to prevent Next.js image optimizer OOM
       // from repeatedly retrying missing image URLs
-      const placeholderUrl = new URL('/no-image.svg', request.url)
+      const placeholderUrl = getPlaceholderUrl(request)
       return NextResponse.redirect(placeholderUrl, { status: 302 })
     }
 
@@ -52,7 +60,7 @@ export async function GET(
 
       if (!svgFile || !svgFile.hash) {
         console.warn(`[FILES] SVG variant not found: "${svgFileName}" for file "${file.name}" (id=${fileId})`)
-        const placeholderUrl = new URL('/no-image.svg', request.url)
+        const placeholderUrl = getPlaceholderUrl(request)
         return NextResponse.redirect(placeholderUrl, { status: 302 })
       }
 
@@ -74,7 +82,7 @@ export async function GET(
           })
         } catch (fetchError) {
           console.error(`[FILES] Failed to proxy SVG from S3: "${svgFileName}" (s3Key=${s3Key})`, fetchError)
-          const placeholderUrl = new URL('/no-image.svg', request.url)
+          const placeholderUrl = getPlaceholderUrl(request)
           return NextResponse.redirect(placeholderUrl, { status: 302 })
         }
       }
@@ -110,7 +118,7 @@ export async function GET(
         })
       } catch (fetchError) {
         console.error(`[FILES] Failed to proxy file for download: "${file.name}" (s3Key=${file.s3Key})`, fetchError)
-        const placeholderUrl = new URL('/no-image.svg', request.url)
+        const placeholderUrl = getPlaceholderUrl(request)
         return NextResponse.redirect(placeholderUrl, { status: 302 })
       }
     }
@@ -134,7 +142,7 @@ export async function GET(
         })
       } catch (fetchError) {
         console.error(`[FILES] Failed to proxy file from S3: "${file.name}" (s3Key=${file.s3Key})`, fetchError)
-        const placeholderUrl = new URL('/no-image.svg', request.url)
+        const placeholderUrl = getPlaceholderUrl(request)
         return NextResponse.redirect(placeholderUrl, { status: 302 })
       }
     }
@@ -151,7 +159,7 @@ export async function GET(
     console.error(`[FILES] Error serving file:`, error)
     // Redirect to placeholder image to prevent Next.js image optimizer OOM
     // from repeatedly retrying broken image URLs
-    const placeholderUrl = new URL('/no-image.svg', request.url)
+    const placeholderUrl = getPlaceholderUrl(request)
     return NextResponse.redirect(placeholderUrl, { status: 302 })
   }
 }
