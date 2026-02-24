@@ -2998,14 +2998,13 @@ plots
                               ))}
                             </tr>
                           </thead>
-                          <tbody style={{ fontSize: '0.6rem' }}>
+                          <tbody>
                             {resultSet.values.map((row, rowIdx) => (
                               <tr key={rowIdx} className="hover:bg-muted/50">
                                 {row.map((cell, cellIdx) => (
                                   <td
                                     key={cellIdx}
-                                    style={{ padding: '0.2rem' }}
-                                    className="border border-border"
+                                    className="border border-border text-[0.7rem] text-center p-[0.2rem]"
                                   >
                                     {cell === null ? (
                                       <span className="text-muted-foreground italic">NULL</span>

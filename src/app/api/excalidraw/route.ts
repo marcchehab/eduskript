@@ -40,6 +40,17 @@ export async function POST(request: NextRequest) {
     // Ensure name doesn't already include .excalidraw extension
     const baseName = name.replace(/\.excalidraw$/, '')
 
+    // Extract dimensions from SVG markup to prevent layout shift on load
+    const parseSvgDimensions = (svg: string): { width?: number; height?: number } => {
+      const widthMatch = svg.match(/<svg[^>]*\bwidth="(\d+(?:\.\d+)?)/)
+      const heightMatch = svg.match(/<svg[^>]*\bheight="(\d+(?:\.\d+)?)/)
+      const w = widthMatch ? Math.round(parseFloat(widthMatch[1])) : undefined
+      const h = heightMatch ? Math.round(parseFloat(heightMatch[1])) : undefined
+      return { width: w, height: h }
+    }
+    const lightDims = parseSvgDimensions(lightSvg)
+    const darkDims = parseSvgDimensions(darkSvg)
+
     // Save the three files: .excalidraw (JSON), .excalidraw.light.svg, .excalidraw.dark.svg
     const [jsonFile, lightSvgFile, darkSvgFile] = await Promise.all([
       // Save Excalidraw JSON data
@@ -52,7 +63,7 @@ export async function POST(request: NextRequest) {
         contentType: 'application/json',
         overwrite: true // Allow overwriting for editing
       }),
-      // Save light theme SVG
+      // Save light theme SVG (with dimensions for layout stability)
       saveFile({
         buffer: Buffer.from(lightSvg),
         filename: `${baseName}.excalidraw.light.svg`,
@@ -60,9 +71,11 @@ export async function POST(request: NextRequest) {
         userId: session.user.id,
         parentId: null,
         contentType: 'image/svg+xml',
-        overwrite: true
+        overwrite: true,
+        width: lightDims.width,
+        height: lightDims.height,
       }),
-      // Save dark theme SVG
+      // Save dark theme SVG (with dimensions for layout stability)
       saveFile({
         buffer: Buffer.from(darkSvg),
         filename: `${baseName}.excalidraw.dark.svg`,
@@ -70,7 +83,9 @@ export async function POST(request: NextRequest) {
         userId: session.user.id,
         parentId: null,
         contentType: 'image/svg+xml',
-        overwrite: true
+        overwrite: true,
+        width: darkDims.width,
+        height: darkDims.height,
       })
     ])
 
