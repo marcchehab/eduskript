@@ -404,7 +404,50 @@ article.prose-theme > div > :first-child {
 }
 
 .prose-theme h2 {
-  @apply text-2xl mt-14 mb-4;
+  @apply text-2xl mb-4;
+  position: relative;
+  margin-top: 4rem;
+  padding-left: 0.75rem;
+}
+
+.prose-theme h2::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  /* Align to cap height → baseline of the heading text */
+  top: calc(0.5lh - 0.5cap);
+  width: 3px;
+  height: 1.15cap;
+  border-radius: 2px;
+  background: linear-gradient(
+    to bottom,
+    #ff0000,
+    #ff8000,
+    #ffff00,
+    #00ff80,
+    #00ffff,
+    #0080ff,
+    #8000ff,
+    #0080ff,
+    #00ffff,
+    #00ff80,
+    #ffff00,
+    #ff8000,
+    #ff0000
+  );
+  background-size: 100% 1300%;
+  animation: h2-rainbow-shift 180s linear infinite;
+}
+
+/* First h2 after h1 doesn't need extra top spacing — h1 already provides separation */
+.prose-theme h1 + h2 {
+  padding-top: 0;
+  margin-top: 2rem;
+}
+
+@keyframes h2-rainbow-shift {
+  0% { background-position: 0% 0%; }
+  100% { background-position: 0% 600%; }
 }
 
 .prose-theme h3 {
