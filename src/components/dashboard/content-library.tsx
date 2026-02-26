@@ -10,6 +10,8 @@ import { Search, BookOpen, FileText } from 'lucide-react'
 import { CollectionAuthor, SkriptAuthor, User, Collection, Skript } from '@prisma/client'
 import { checkSkriptPermissions } from '@/lib/permissions'
 import { api, handleJsonResponse } from '@/lib/api-error-handler'
+import { CreateSkriptModal } from './create-skript-modal'
+import { useRouter } from 'next/navigation'
 import type { PageBuilderContext } from './page-builder-interface'
 
 interface CollectionWithAuthors extends Collection {
@@ -38,6 +40,7 @@ interface ContentLibraryProps {
 
 export function ContentLibrary({ onDataLoad, refreshTrigger, context = { type: 'user' } }: ContentLibraryProps = {}) {
   const { data: session } = useSession()
+  const router = useRouter()
   const [collections, setCollections] = useState<CollectionWithAuthors[]>([])
   const [skripts, setSkripts] = useState<SkriptWithAuthors[]>([])
   const [searchTerm, setSearchTerm] = useState('')
@@ -134,6 +137,13 @@ export function ContentLibrary({ onDataLoad, refreshTrigger, context = { type: '
             className="pl-9"
           />
         </div>
+        {collections.length > 0 && (
+          <CreateSkriptModal
+            collections={collections.map(c => ({ id: c.id, title: c.title }))}
+            onSkriptCreated={() => fetchContent()}
+            onSkriptCreatedWithSlug={(slug) => router.push(`/dashboard/skripts/${slug}`)}
+          />
+        )}
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Collections Section */}

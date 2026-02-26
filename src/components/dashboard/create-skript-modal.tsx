@@ -17,11 +17,14 @@ import {
 import { Plus } from 'lucide-react'
 
 interface CreateSkriptModalProps {
-  collectionId: string
+  collectionId?: string
+  collections?: Array<{ id: string; title: string }>
   onSkriptCreated: () => void
+  onSkriptCreatedWithSlug?: (slug: string) => void
 }
 
-export function CreateSkriptModal({ collectionId, onSkriptCreated }: CreateSkriptModalProps) {
+export function CreateSkriptModal({ collectionId, collections, onSkriptCreated, onSkriptCreatedWithSlug }: CreateSkriptModalProps) {
+  const [selectedCollectionId, setSelectedCollectionId] = useState(collectionId || '')
   const [open, setOpen] = useState(false)
   const [formData, setFormData] = useState({
     title: '',
@@ -61,14 +64,17 @@ export function CreateSkriptModal({ collectionId, onSkriptCreated }: CreateSkrip
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
-          collectionId
+          collectionId: collectionId || selectedCollectionId
         })
       })
 
       if (response.ok) {
+        const data = await response.json()
         setFormData({ title: '', description: '', slug: '' })
+        setSelectedCollectionId(collectionId || '')
         setOpen(false)
         onSkriptCreated()
+        if (data.slug) onSkriptCreatedWithSlug?.(data.slug)
       } else {
         const data = await response.json()
         setError(data.error || 'Failed to create skript')
@@ -97,6 +103,23 @@ export function CreateSkriptModal({ collectionId, onSkriptCreated }: CreateSkrip
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="grid gap-4 py-4">
+            {!collectionId && collections && collections.length > 0 && (
+              <div className="space-y-2">
+                <Label htmlFor="collectionSelect">Collection *</Label>
+                <select
+                  id="collectionSelect"
+                  value={selectedCollectionId}
+                  onChange={(e) => setSelectedCollectionId(e.target.value)}
+                  required
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  <option value="">Select a collection...</option>
+                  {collections.map((c) => (
+                    <option key={c.id} value={c.id}>{c.title}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="title">Skript Title *</Label>
               <Input
@@ -144,7 +167,7 @@ export function CreateSkriptModal({ collectionId, onSkriptCreated }: CreateSkrip
             </Button>
             <Button
               type="submit"
-              disabled={isLoading || !formData.title.trim() || !formData.slug.trim()}
+              disabled={isLoading || !formData.title.trim() || !formData.slug.trim() || (!collectionId && !selectedCollectionId)}
             >
               {isLoading ? 'Creating...' : 'Create Skript'}
             </Button>
