@@ -491,11 +491,10 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
       if (response.ok) {
         const data = await response.json()
         setVersions(data.versions || [])
-      } else {
-        console.error('Failed to load versions')
       }
-    } catch (error) {
-      console.error('Error loading versions:', error)
+      // Non-OK is expected during navigation/unmount — don't log
+    } catch {
+      // Fetch aborted during navigation — expected, ignore
     }
   }, [page.id])
 
@@ -1240,13 +1239,13 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
         pageId={page.id}
         pageTitle={page.title}
         currentContent={content}
-        onEditsApplied={(newContent) => {
+        onEditsApplied={async (newContent) => {
           if (newContent !== undefined) {
             setContent(newContent)
             setHasUnsavedChanges(false)
             setLastSaved(new Date())
           }
-          loadVersions()
+          await loadVersions()
           router.refresh()
         }}
       />
