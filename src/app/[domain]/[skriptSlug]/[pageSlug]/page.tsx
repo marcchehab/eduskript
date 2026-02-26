@@ -394,7 +394,7 @@ export default async function PublicPage({ params, searchParams }: PageProps) {
             pages: allPages
           }
         }]
-      }], { onlyPublished: true })
+      }], { onlyPublished: !isPageAuthor })
     : [{
         id: 'standalone',
         title: skript.title,

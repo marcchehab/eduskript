@@ -396,7 +396,7 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
             pages: allPages
           }
         }]
-      }], { onlyPublished: true })
+      }], { onlyPublished: !isPageAuthor })
     : [{
         id: 'standalone',
         title: skript.title,

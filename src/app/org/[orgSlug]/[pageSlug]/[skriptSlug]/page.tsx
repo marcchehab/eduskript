@@ -1,4 +1,6 @@
 import { notFound } from 'next/navigation'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 import { PublicSiteLayout } from '@/components/public/layout'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
 import type { Metadata } from 'next'
@@ -155,6 +157,10 @@ export default async function OrgTeacherSkriptPage({ params }: PageProps) {
   const collectionSkript = skript.collectionSkripts[0]
   const collection = collectionSkript?.collection
 
+  // Check if current user is an author (to show unpublished content in sidebar)
+  const session = await getServerSession(authOptions)
+  const isAuthor = session?.user?.id === teacher.id
+
   // Build site structure
   const siteStructure = collection
     ? buildSiteStructure([{
@@ -179,7 +185,7 @@ export default async function OrgTeacherSkriptPage({ params }: PageProps) {
             }))
           }
         }]
-      }], { onlyPublished: true })
+      }], { onlyPublished: !isAuthor })
     : [{
         id: 'standalone',
         title: skript.title,
