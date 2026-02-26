@@ -2,6 +2,9 @@
 
 import { useState, useCallback, useRef } from 'react'
 import type { EditProposal, PageEdit } from '@/lib/ai/types'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('ai:edit')
 
 interface UseAIEditOptions {
   skriptId: string
@@ -71,6 +74,7 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
     async (instruction: string) => {
       // Cancel any existing request
       if (abortControllerRef.current) {
+        log('Aborting previous request')
         abortControllerRef.current.abort()
       }
 
@@ -85,6 +89,8 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
 
       const controller = new AbortController()
       abortControllerRef.current = controller
+
+      log('Starting edit request', { skriptId, pageId, instructionLength: instruction.length })
 
       try {
         const response = await fetch('/api/ai/edit', {
@@ -120,28 +126,26 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
           const lines = buffer.split('\n')
           buffer = lines.pop() || '' // Keep incomplete line in buffer
 
-          // Log chunk info for debugging
-          console.log(`[AI Edit Client] Processing chunk: ${lines.length} lines, buffer remaining: ${buffer.length} chars`)
+          log(`Processing chunk: ${lines.length} lines, buffer remaining: ${buffer.length} chars`)
 
           let eventType = ''
           let eventData = ''
 
           for (const line of lines) {
-            // Log each non-empty line for debugging
             if (line.trim()) {
-              console.log(`[AI Edit Client] Line: ${line.substring(0, 100)}${line.length > 100 ? '...' : ''}`)
+              log(`Line: ${line.substring(0, 100)}${line.length > 100 ? '...' : ''}`)
             }
             if (line.startsWith('event: ')) {
               eventType = line.slice(7).trim()
             } else if (line.startsWith('data: ')) {
               eventData = line.slice(6)
-              console.log(`[AI Edit Client] Got data line, length: ${eventData.length}, eventType: ${eventType}`)
+              log(`Got data line, length: ${eventData.length}, eventType: ${eventType}`)
 
               if (eventType && eventData && eventData.trim()) {
                 try {
-                  console.log(`[AI Edit Client] Parsing eventData (${eventData.length} chars):`, eventData.slice(0, 200))
+                  log(`Parsing eventData (${eventData.length} chars):`, eventData.slice(0, 200))
                   const data = JSON.parse(eventData)
-                  console.log(`[AI Edit Client] Received event: ${eventType}`, data)
+                  log(`Received event: ${eventType}`, data)
 
                   switch (eventType) {
                     case 'plan':
@@ -169,7 +173,7 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
                         isNew: data.isNew,
                       }
                       edits.push(edit)
-                      console.log(`[AI Edit Client] Edit ${data.index + 1} received: "${data.pageTitle}", total edits: ${edits.length}`)
+                      log(`Edit ${data.index + 1} received: "${data.pageTitle}", total edits: ${edits.length}`)
                       setCompletedEdits([...edits])
                       setCurrentEditIndex(data.index + 1)
                       break
@@ -177,18 +181,18 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
                     case 'complete':
                       // Build final proposal from locally accumulated edits
                       // Server sends { success: true }, edits were sent progressively via 'edit' events
-                      console.log(`[AI Edit Client] Complete event. Local edits: ${edits.length}, data.edits: ${data.edits?.length ?? 'undefined'}`)
-                      console.log(`[AI Edit Client] Local edit titles:`, edits.map(e => e.pageTitle))
+                      log(`Complete event. Local edits: ${edits.length}, data.edits: ${data.edits?.length ?? 'undefined'}`)
+                      log('Local edit titles:', edits.map(e => e.pageTitle))
 
                       // Handle AI text-only response (no JSON edits)
                       if (data.aiMessage) {
-                        console.log('[AI Edit Client] AI returned text instead of JSON edits')
+                        log('AI returned text instead of JSON edits')
                         setAiMessage(data.aiMessage)
                       }
 
                       // Prefer locally accumulated edits (from streaming) - only fall back to data.edits if empty
                       const finalEdits = edits.length > 0 ? edits : (data.edits || [])
-                      console.log(`[AI Edit Client] Setting proposal with ${finalEdits.length} edits`)
+                      log(`Setting proposal with ${finalEdits.length} edits`)
                       if (finalEdits.length > 0) {
                         setProposal({
                           skriptId,
@@ -216,7 +220,7 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
                       throw new Error(data.error || 'Unknown error')
                   }
                 } catch (parseError) {
-                  console.error('[AI Edit Client] Parse error:', parseError, 'Data:', eventData)
+                  log.error('Parse error:', parseError, 'Data:', eventData)
                   if (!(parseError instanceof SyntaxError)) {
                     throw parseError
                   }
@@ -228,13 +232,13 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
             }
           }
         }
-        console.log(`[AI Edit Client] Stream ended. Edits received: ${edits.length}`, edits.map(e => e.pageTitle))
+        log(`Stream ended. Edits received: ${edits.length}`, edits.map(e => e.pageTitle))
       } catch (err) {
-        console.error('[AI Edit Client] Error:', err)
         if (err instanceof Error && err.name === 'AbortError') {
-          // Request was cancelled, don't set error
+          log('Request aborted by user')
           return
         }
+        log.error('Request failed:', err)
         const message = err instanceof Error ? err.message : 'An error occurred'
         setError(message)
       } finally {
@@ -247,6 +251,7 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
 
   const applyEdits = useCallback(
     async (edits: PageEdit[]) => {
+      log(`Applying ${edits.length} edits`)
       // Separate new pages from existing page edits
       const newPages = edits.filter((e) => e.isNew)
       const existingEdits = edits.filter((e) => !e.isNew)
@@ -323,6 +328,7 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
   }, [])
 
   const cancelRequest = useCallback(() => {
+    log('Cancel requested', { hasController: !!abortControllerRef.current })
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
       abortControllerRef.current = null

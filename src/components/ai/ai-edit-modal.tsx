@@ -13,6 +13,9 @@ import { Textarea } from '@/components/ui/textarea'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
 import { useAIEdit } from '@/hooks/use-ai-edit'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('ai:edit-modal')
 import { MergeEditor, SimpleEditor } from './merge-editor'
 import type { PageEdit } from '@/lib/ai/types'
 
@@ -85,6 +88,7 @@ export function AIEditModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!instruction.trim() || isLoading) return
+    log('Submitting edit request', { instructionLength: instruction.trim().length, skriptId, pageId })
     // Reset state for new request
     setMergedContent({})
     setExpandedEdits(new Set())
@@ -103,19 +107,24 @@ export function AIEditModal({
 
     if (editsToApply.length === 0) return
 
+    log(`Saving ${editsToApply.length} edits`)
     setIsSaving(true)
     try {
       await applyEdits(editsToApply)
       // Find the edit for the focused page and pass its content back
       const focusedEdit = pageId ? editsToApply.find(e => e.pageId === pageId) : undefined
+      log('Edits applied successfully', { focusedPageId: focusedEdit?.pageId })
       onEditsApplied?.(focusedEdit?.proposedContent)
       onOpenChange(false)
+    } catch (err) {
+      log.error('Failed to apply edits:', err)
     } finally {
       setIsSaving(false)
     }
   }
 
   const handleCancel = () => {
+    log('Cancel/clear', { isLoading, hasProposal: !!proposal, completedEdits: completedEdits.length })
     if (isLoading) {
       cancelRequest()
     }
@@ -126,6 +135,7 @@ export function AIEditModal({
   }
 
   const handleClose = (open: boolean) => {
+    log('Dialog close', { open, isLoading })
     if (!open) {
       handleCancel()
       setInstruction('')
@@ -228,7 +238,7 @@ export function AIEditModal({
 
             {/* Edit list - progressive with merge editors */}
             <div className="flex-1 overflow-y-auto">
-              {(() => { console.log(`[AI Edit Modal] Rendering edits: proposal=${proposal?.edits?.length ?? 'none'}, completedEdits=${completedEdits.length}`); return null })()}
+              {(() => { log(`Rendering edits: proposal=${proposal?.edits?.length ?? 'none'}, completedEdits=${completedEdits.length}`); return null })()}
 
               {/* AI text-only response (no JSON edits) */}
               {aiMessage && (proposal?.edits?.length === 0 || completedEdits.length === 0) && (
