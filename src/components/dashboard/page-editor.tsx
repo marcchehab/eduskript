@@ -308,6 +308,26 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
     }
   }
 
+  const handleDeletePage = async (pageId: string, pageTitle: string) => {
+    if (!confirm(`Delete "${pageTitle}"?`)) return
+
+    try {
+      const res = await fetch(`/api/pages/${pageId}`, { method: 'DELETE' })
+      if (res.ok) {
+        if (pageId === page.id) {
+          router.push(`/dashboard/skripts/${skript.slug}`)
+        } else {
+          router.refresh()
+        }
+      } else {
+        alert.showError('Failed to delete page')
+      }
+    } catch (error) {
+      console.error('Error deleting page:', error)
+      alert.showError('Failed to delete page')
+    }
+  }
+
   const handleFileInsert = (file: {
     id: string
     name: string
@@ -425,7 +445,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
     }
   }
 
-  const handleMovePage = async (targetSkriptId: string, targetSlug: string) => {
+  const handleMovePage = async (targetSkriptId: string) => {
     if (!movePageId) return
     setMoveInFlight(true)
     try {
@@ -435,10 +455,11 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
         body: JSON.stringify({ pageId: movePageId, targetSkriptId }),
       })
       if (res.ok) {
+        const data = await res.json()
         setMovePageId(null)
-        // If we moved the currently-viewed page, navigate to the target skript
+        // If we moved the currently-viewed page, navigate to it in the target skript
         if (movePageId === page.id) {
-          router.push(`/dashboard/skripts/${targetSlug}/pages`)
+          router.push(`/dashboard/skripts/${data.targetSkriptSlug}/pages/${data.pageSlug}/edit`)
         } else {
           router.refresh()
         }
@@ -873,13 +894,22 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                       )}
                     </Link>
                     {canEdit && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleOpenMoveDialog(p.id) }}
-                        className="p-1 rounded text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground hover:bg-muted transition-all flex-shrink-0"
-                        title="Move to another skript"
-                      >
-                        <ArrowRightLeft className="w-3.5 h-3.5" />
-                      </button>
+                      <>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleOpenMoveDialog(p.id) }}
+                          className="p-1 rounded text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground hover:bg-muted transition-all flex-shrink-0"
+                          title="Move to another skript"
+                        >
+                          <ArrowRightLeft className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDeletePage(p.id, p.title) }}
+                          className="p-1 rounded text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-muted transition-all flex-shrink-0"
+                          title="Delete page"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </>
                     )}
                   </div>
                 </Fragment>
@@ -990,6 +1020,16 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                   <Eye className="w-4 h-4" />
                 </Button>
               </Link>
+            )}
+            {canEdit && !isFullscreen && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleDeletePage(page.id, page.title)}
+                title="Delete page"
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
             )}
             <Button
               variant="ghost"
@@ -1339,7 +1379,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                 <button
                   key={s.id}
                   disabled={moveInFlight}
-                  onClick={() => handleMovePage(s.id, s.slug)}
+                  onClick={() => handleMovePage(s.id)}
                   className="w-full flex items-center gap-2 px-4 py-2 text-sm text-left hover:bg-muted rounded-md transition-colors disabled:opacity-50"
                 >
                   <BookOpen className="w-4 h-4 flex-shrink-0 text-muted-foreground" />

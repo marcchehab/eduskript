@@ -113,6 +113,7 @@ export async function POST(request: NextRequest) {
       where: { skriptId: targetSkriptId, slug: page.slug },
     })
 
+    let finalSlug = page.slug
     await prisma.$transaction(async (tx) => {
       // Copy files that don't already exist in target
       // Content-addressed storage: same hash → same S3 object, no S3 ops needed
@@ -135,7 +136,6 @@ export async function POST(request: NextRequest) {
       }
 
       // Resolve slug: append "-2", "-3", etc. if conflict exists
-      let finalSlug = page.slug
       if (slugConflict) {
         let suffix = 2
         while (true) {
@@ -193,7 +193,11 @@ export async function POST(request: NextRequest) {
       revalidatePath('/dashboard')
     }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({
+      success: true,
+      targetSkriptSlug: targetSkript.slug,
+      pageSlug: finalSlug,
+    })
   } catch (error) {
     console.error('Error moving page:', error)
     return NextResponse.json(
