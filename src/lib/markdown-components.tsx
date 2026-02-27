@@ -245,8 +245,8 @@ export function createMarkdownComponents(
     const baseName = srcForMatching.replace(/\.excalidraw$/, '')
     const escapedBaseName = baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
-    // Match <image>, <Image> (legacy), and <excali> components
-    const imageComponentPattern = new RegExp(`<[Ii]mage[^>]*src="${escapedSrc}"[^>]*/?>`, 'g')
+    // Match <img> and <excali> components
+    const imageComponentPattern = new RegExp(`<img[^>]*src="${escapedSrc}"[^>]*/?>`, 'g')
     const excaliPattern = new RegExp(`<excali[^>]*src="${escapedBaseName}"[^>]*/?>`, 'g')
     const markdownPattern = new RegExp(`!\\[([^\\]]*)\\]\\(${escapedSrc}\\)(\\{[^}]*\\})?`, 'g')
 
