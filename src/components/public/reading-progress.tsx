@@ -10,9 +10,24 @@ interface Chapter {
   widthPercent: number
 }
 
+// offsetTop is relative to offsetParent, not necessarily the article.
+// e.g. an h2 inside a callout blockquote has the blockquote as offsetParent.
+// Walk up the offsetParent chain to get the true offset relative to #paper.
+function getOffsetRelativeTo(el: HTMLElement, ancestor: HTMLElement): number {
+  let offset = 0
+  let current: HTMLElement | null = el
+  while (current && current !== ancestor) {
+    offset += current.offsetTop
+    current = current.offsetParent as HTMLElement | null
+  }
+  return offset
+}
+
 function getChaptersFromDOM(): Chapter[] {
   const article = document.querySelector('article.prose-theme')
   if (!article) return []
+
+  const paper = document.getElementById('paper') ?? article as HTMLElement
 
   const h2s = article.querySelectorAll('h2')
   if (h2s.length === 0) return []
@@ -22,7 +37,7 @@ function getChaptersFromDOM(): Chapter[] {
 
   // Content before first h2 becomes an unlabeled intro segment
   const firstH2 = h2s[0] as HTMLElement
-  const firstH2Top = firstH2.offsetTop
+  const firstH2Top = getOffsetRelativeTo(firstH2, paper)
   if (firstH2Top > 10) {
     const h1 = article.querySelector('h1')
     // h1 may have nested <a> from rehypeAutolinkHeadings — use innerText to avoid duplication
@@ -39,9 +54,9 @@ function getChaptersFromDOM(): Chapter[] {
 
   h2s.forEach((h2, i) => {
     const el = h2 as HTMLElement
-    const top = el.offsetTop
+    const top = getOffsetRelativeTo(el, paper)
     const nextTop = i < h2s.length - 1
-      ? (h2s[i + 1] as HTMLElement).offsetTop
+      ? getOffsetRelativeTo(h2s[i + 1] as HTMLElement, paper)
       : articleHeight
     rawChapters.push({
       id: el.id || `chapter-${i}`,
