@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Pen, Eraser, Trash2, Eye, EyeOff, Radio, User, Users, UserPen, ChevronDown, Globe, Layers, Camera, SeparatorHorizontal } from 'lucide-react'
+import { Pen, Eraser, Trash2, Eye, EyeOff, Radio, User, Users, UserPen, ChevronDown, Globe, Layers, Camera, Highlighter, Ellipsis, SeparatorHorizontal } from 'lucide-react'
 import type { SpacerPattern } from '@/types/spacer'
 import { Circle } from '@uiw/react-color'
 import { cn } from '@/lib/utils'
@@ -284,6 +284,10 @@ export function AnnotationToolbar({
     return false
   })
 
+  // "More tools" popover state
+  const [showMoreTools, setShowMoreTools] = useState(false)
+  const moreToolsRef = useRef<HTMLDivElement>(null)
+
   // Spacer pattern picker state (hover/long-press popover, same pattern as pen)
   const [showSpacerPicker, setShowSpacerPicker] = useState(false)
   const spacerHoverTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -521,6 +525,9 @@ export function AnnotationToolbar({
       }
       if (spacerPopoverRef.current && !spacerPopoverRef.current.contains(e.target as Node)) {
         setShowSpacerPicker(false)
+      }
+      if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
+        setShowMoreTools(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -1105,28 +1112,6 @@ export function AnnotationToolbar({
             <Eraser className="w-4 h-4" />
           </button>
 
-          {/* Snap Camera - tooltip hint for paste-to-snap workflow */}
-          <div className="relative group">
-            <button
-              className="p-2 rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-accent"
-              aria-label="Snap: take a screenshot and paste it here"
-            >
-              <Camera className="w-4 h-4" />
-            </button>
-            <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:block pointer-events-none z-50">
-              <div className="bg-popover text-popover-foreground text-sm rounded-md shadow-lg border border-border px-3 py-2 flex items-baseline gap-1.5 whitespace-nowrap">
-                <span>Paste a screenshot with</span>
-                <span className="inline-flex items-baseline gap-0.5">
-                  <kbd className="px-1.5 py-0.5 bg-muted rounded text-sm font-mono border border-border shadow-sm leading-none">Ctrl</kbd>
-                  <span className="text-muted-foreground">/</span>
-                  <kbd className="px-1.5 pt-0.5 bg-muted rounded text-lg border border-border shadow-sm leading-none translate-y-[2px]">⌘</kbd>
-                </span>
-                <span className="text-muted-foreground">+</span>
-                <kbd className="px-1.5 py-0.5 bg-muted rounded text-sm font-mono border border-border shadow-sm leading-none">V</kbd>
-              </div>
-            </div>
-          </div>
-
           {/* Spacer tool - insert visual spacers between content blocks */}
           <div className="relative" ref={spacerPopoverRef}>
             <button
@@ -1242,6 +1227,55 @@ export function AnnotationToolbar({
                         <div className={cn('w-full h-full rounded-sm spacer-element', `spacer-${key}`)} />
                       </button>
                     ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* More tools - popover with snap and highlight explanations */}
+          <div className="relative" ref={moreToolsRef}>
+            <button
+              className={cn(
+                'p-2 rounded-md transition-colors',
+                showMoreTools
+                  ? 'bg-accent text-foreground'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+              )}
+              onClick={() => setShowMoreTools(!showMoreTools)}
+              title="More tools"
+              aria-label="More tools"
+            >
+              <Ellipsis className="w-4 h-4" />
+            </button>
+            {showMoreTools && (
+              <div className="absolute bottom-full mb-2 left-0 z-50">
+                <div className="bg-popover text-popover-foreground text-sm rounded-md shadow-lg border border-border p-2 w-64 space-y-2">
+                  {/* Snap explanation */}
+                  <div className="flex items-start gap-2.5 px-1 py-1">
+                    <Camera className="w-4 h-4 mt-0.5 flex-shrink-0 text-muted-foreground" />
+                    <div>
+                      <span className="text-foreground font-medium">Snap</span>
+                      <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                        Paste and crop a screenshot
+                        <br />
+                        <span className="inline-flex items-baseline gap-0.5 mt-0.5">
+                          <kbd className="px-1 py-0.5 bg-muted rounded text-xs font-mono border border-border shadow-sm">{typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'}</kbd>
+                          <span className="text-muted-foreground mx-0.5">+</span>
+                          <kbd className="px-1 py-0.5 bg-muted rounded text-xs font-mono border border-border shadow-sm">V</kbd>
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+                  {/* Highlight explanation */}
+                  <div className="flex items-start gap-2.5 px-1 py-1">
+                    <Highlighter className="w-4 h-4 mt-0.5 flex-shrink-0 text-muted-foreground" />
+                    <div>
+                      <span className="text-foreground font-medium">Highlight</span>
+                      <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                        Select text to highlight
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>

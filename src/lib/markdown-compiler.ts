@@ -74,6 +74,7 @@ export const sanitizeSchema = {
     'ourteachers',
     'yt',
     'modcalc',
+    'mark',  // <mark> for text highlighting showcase
     'image', // <image> custom component for images with layout props
     'excali', // <excali> shorthand for excalidraw drawings
     'flex', // <flex> layout container
@@ -137,6 +138,8 @@ export const sanitizeSchema = {
     'h4': ['id', 'dataSectionId', 'data-section-id', 'dataHeadingText', 'data-heading-text'],
     'h5': ['id', 'dataSectionId', 'data-section-id', 'dataHeadingText', 'data-heading-text'],
     'h6': ['id', 'dataSectionId', 'data-section-id', 'dataHeadingText', 'data-heading-text'],
+    // Mark attributes (text highlighting)
+    'mark': ['className'],
     // Code attributes
     'code': ['className'],
     'pre': ['className'],

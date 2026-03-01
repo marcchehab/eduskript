@@ -1789,10 +1789,16 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
 
 /* ===== Text Highlight Styles ===== */
 :root {
+  /* Mark background (translucent, overlaid on text) */
   --text-highlight-yellow: rgba(250, 204, 21, 0.4);
   --text-highlight-green: rgba(74, 222, 128, 0.35);
   --text-highlight-blue: rgba(96, 165, 250, 0.35);
   --text-highlight-pink: rgba(249, 168, 212, 0.4);
+  /* Toolbar swatch dots (opaque, need to read as solid color) */
+  --text-highlight-swatch-yellow: rgb(250, 204, 21);
+  --text-highlight-swatch-green: rgb(74, 222, 128);
+  --text-highlight-swatch-blue: rgb(96, 165, 250);
+  --text-highlight-swatch-pink: rgb(249, 168, 212);
 }
 
 .dark {
@@ -1800,6 +1806,10 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
   --text-highlight-green: rgba(74, 222, 128, 0.25);
   --text-highlight-blue: rgba(96, 165, 250, 0.25);
   --text-highlight-pink: rgba(249, 168, 212, 0.3);
+  --text-highlight-swatch-yellow: rgb(202, 163, 17);
+  --text-highlight-swatch-green: rgb(52, 168, 96);
+  --text-highlight-swatch-blue: rgb(68, 130, 210);
+  --text-highlight-swatch-pink: rgb(200, 130, 168);
 }
 
 mark.text-highlight {

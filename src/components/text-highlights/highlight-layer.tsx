@@ -10,12 +10,12 @@ import { applyHighlightMark, removeHighlightMark, clearAllHighlightMarks } from 
 
 const HIGHLIGHT_COLORS: TextHighlightColor[] = ['yellow', 'green', 'blue', 'pink']
 
-/** CSS color for the toolbar dots */
-const COLOR_SWATCHES: Record<TextHighlightColor, string> = {
-  yellow: 'rgb(250, 204, 21)',
-  green: 'rgb(74, 222, 128)',
-  blue: 'rgb(96, 165, 250)',
-  pink: 'rgb(249, 168, 212)',
+/** CSS class for the toolbar swatch dots (matches CSS variables in globals.css) */
+const COLOR_SWATCH_CLASSES: Record<TextHighlightColor, string> = {
+  yellow: 'bg-[--text-highlight-swatch-yellow]',
+  green: 'bg-[--text-highlight-swatch-green]',
+  blue: 'bg-[--text-highlight-swatch-blue]',
+  pink: 'bg-[--text-highlight-swatch-pink]',
 }
 
 interface HighlightLayerProps {
@@ -284,8 +284,7 @@ const FloatingToolbar = forwardRef<HTMLDivElement, FloatingToolbarProps>(
             <button
               key={color}
               type="button"
-              className="h-5 w-5 rounded-full border border-black/10 transition-transform hover:scale-125 focus:outline-none focus:ring-2 focus:ring-ring"
-              style={{ backgroundColor: COLOR_SWATCHES[color] }}
+              className={`h-5 w-5 rounded-full border border-black/10 dark:border-white/10 transition-transform hover:scale-125 focus:outline-none focus:ring-2 focus:ring-ring ${COLOR_SWATCH_CLASSES[color]}`}
               title={`Highlight ${color}`}
               onClick={() => onSelectColor(color)}
             />
