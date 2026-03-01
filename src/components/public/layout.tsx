@@ -328,7 +328,7 @@ export function PublicSiteLayout({
         <ReadingProgress />
 
       {/* Top-right controls - only visible on mobile when sidebar is closed */}
-      <div className="min-[1344px]:hidden fixed top-4 right-4 z-50 flex items-center gap-2">
+      <div className="min-[1344px]:hidden fixed top-8 right-4 z-50 flex items-center gap-2">
         <AdminToolbox pageId={pageId} />
         <FontSizeControls />
         <PublicThemeToggle />
@@ -336,7 +336,7 @@ export function PublicSiteLayout({
       </div>
 
       {/* Mobile menu button */}
-      <div className="min-[1344px]:hidden fixed top-4 left-4 z-50">
+      <div className="min-[1344px]:hidden fixed top-8 left-4 z-50">
         <button
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
           className="p-2 bg-card rounded-md shadow-md border border-border"

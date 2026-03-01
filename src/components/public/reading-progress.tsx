@@ -203,7 +203,7 @@ export function ReadingProgress() {
               flexBasis: `${chapter.widthPercent}%`,
               flexGrow: 0,
               minWidth: '4px',
-              height: isActive || isHovered ? '28px' : '20px',
+              height: isActive || isHovered ? '20px' : '14px',
               alignSelf: 'flex-start',
             }}
             title={chapter.title}
@@ -235,10 +235,12 @@ export function ReadingProgress() {
                 }`}
               >
                 <span
-                  className={`truncate select-none leading-none ${
+                  className={`truncate select-none leading-none transition-colors duration-700 ${
                     isActive
-                      ? 'text-[11px] font-semibold text-white dark:text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]'
-                      : 'text-[10px] font-medium text-gray-700 dark:text-black'
+                      ? 'text-[11px] font-semibold text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]'
+                      : fill >= 100
+                        ? 'text-[10px] font-medium text-gray-800 dark:text-gray-900'
+                        : 'text-[10px] font-medium text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]'
                   }`}
                 >
                   {chapter.title}
