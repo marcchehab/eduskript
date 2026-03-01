@@ -553,8 +553,25 @@ export function createMarkdownComponents(
     return <a href={href} {...props}>{children}</a>
   }
 
+  // When custom block-level components (e.g. <ColorSliders />) appear on their
+  // own line in markdown, rehype wraps them in <p>. HTML forbids <div> inside
+  // <p>, causing hydration errors. When a <p> contains only a single custom
+  // React component (no surrounding text), it's block-level — render as <div>.
+  function ParagraphComponent({ children, ...props }: React.HTMLAttributes<HTMLParagraphElement>) {
+    const childArray = Children.toArray(children)
+    const hasBlockChild =
+      childArray.length === 1 &&
+      isValidElement(childArray[0]) &&
+      typeof childArray[0].type === 'function'
+    if (hasBlockChild) {
+      return <div {...props}>{children}</div>
+    }
+    return <p {...props}>{children}</p>
+  }
+
   return {
     // HTML element overrides
+    p: ParagraphComponent,
     pre: PreComponent,
     code: CodeComponent,
     img: ImgElementComponent,
