@@ -30,7 +30,7 @@ export async function generateMetadata({ params }: SkriptPreviewProps): Promise<
   try {
     const teacher = await prisma.user.findUnique({
       where: { pageSlug: domain },
-      select: { id: true, name: true, title: true }
+      select: { id: true, name: true, title: true, pageIcon: true }
     })
 
     if (!teacher) {
@@ -56,6 +56,7 @@ export async function generateMetadata({ params }: SkriptPreviewProps): Promise<
     return {
       title: `${skript.title} | ${teacher.name || domain}`,
       description: `${skript.title} by ${teacher.name || domain}`,
+      ...(teacher.pageIcon ? { icons: { icon: teacher.pageIcon } } : {}),
       robots: 'noindex, nofollow'
     }
   } catch (error) {

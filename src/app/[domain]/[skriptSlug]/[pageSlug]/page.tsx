@@ -74,6 +74,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       title,
       description,
       authors: [{ name: teacher.name || 'Unknown' }],
+      ...(teacher.pageIcon ? { icons: { icon: teacher.pageIcon } } : {}),
       openGraph: {
         title,
         description,

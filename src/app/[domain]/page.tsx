@@ -45,6 +45,7 @@ export async function generateMetadata({ params }: DomainIndexProps): Promise<Me
       title,
       description,
       authors: [{ name: teacher.name || 'Unknown' }],
+      ...(teacher.pageIcon ? { icons: { icon: teacher.pageIcon } } : {}),
       openGraph: {
         title,
         description,
