@@ -1,4 +1,4 @@
-export type TextHighlightColor = 'yellow' | 'green' | 'blue' | 'pink'
+export type TextHighlightColor = 'yellow' | 'red' | 'green' | 'blue' | 'purple'
 
 export interface TextHighlight {
   id: string

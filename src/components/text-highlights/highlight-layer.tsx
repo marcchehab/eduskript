@@ -8,14 +8,15 @@ import type { TextHighlightsData, TextHighlightColor, TextHighlight } from '@/li
 import { anchorHighlight, extractContext, findSectionId } from '@/lib/text-highlights/anchoring'
 import { applyHighlightMark, removeHighlightMark, clearAllHighlightMarks } from '@/lib/text-highlights/rendering'
 
-const HIGHLIGHT_COLORS: TextHighlightColor[] = ['yellow', 'green', 'blue', 'pink']
+const HIGHLIGHT_COLORS: TextHighlightColor[] = ['yellow', 'red', 'green', 'blue', 'purple']
 
 /** CSS class for the toolbar swatch dots (matches CSS variables in globals.css) */
 const COLOR_SWATCH_CLASSES: Record<TextHighlightColor, string> = {
   yellow: 'bg-[--text-highlight-swatch-yellow]',
+  red: 'bg-[--text-highlight-swatch-red]',
   green: 'bg-[--text-highlight-swatch-green]',
   blue: 'bg-[--text-highlight-swatch-blue]',
-  pink: 'bg-[--text-highlight-swatch-pink]',
+  purple: 'bg-[--text-highlight-swatch-purple]',
 }
 
 interface HighlightLayerProps {
