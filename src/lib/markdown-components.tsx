@@ -268,6 +268,7 @@ export function createMarkdownComponents(
   function CodeEditorComponent({ children, ...props }: React.HTMLAttributes<HTMLElement> & Record<string, unknown>) {
     const language = (props['dataLanguage'] as string) || (props['data-language'] as string) || 'python'
     const code = (props['dataCode'] as string) || (props['data-code'] as string) || ''
+    const filesJson = (props['dataFiles'] as string) || (props['data-files'] as string)
     const providedId = (props['dataId'] as string) || (props['data-id'] as string)
     const showCanvas = (props['dataShowCanvas'] as string) || (props['data-show-canvas'] as string)
     const db = (props['dataDb'] as string) || (props['data-db'] as string)
@@ -275,8 +276,23 @@ export function createMarkdownComponents(
     const single = (props['dataSingle'] as string) || (props['data-single'] as string)
     const solution = (props['dataSolution'] as string) || (props['data-solution'] as string)
 
-    const id = providedId || `editor-${hashCode(code + (solution || ''))}-${language}`
-    const decodedCode = decodeHtmlEntities(code)
+    // Parse multi-file data if present, otherwise fall back to single-file initialCode
+    let initialFiles: { name: string; content: string }[] | undefined
+    let decodedCode: string
+
+    if (filesJson) {
+      try {
+        const parsed = JSON.parse(decodeHtmlEntities(filesJson)) as { name: string; content: string }[]
+        initialFiles = parsed
+        decodedCode = parsed[0]?.content || ''
+      } catch {
+        decodedCode = decodeHtmlEntities(code)
+      }
+    } else {
+      decodedCode = decodeHtmlEntities(code)
+    }
+
+    const id = providedId || `editor-${hashCode(code + (filesJson || '') + (solution || ''))}-${language}`
     const decodedSolution = solution ? decodeHtmlEntities(solution).replace(/\\n/g, '\n') : undefined
 
     // Resolve database file URL
@@ -322,11 +338,12 @@ export function createMarkdownComponents(
           pageId={pageId}
           language={language as 'python' | 'javascript' | 'sql'}
           initialCode={decodedCode}
+          initialFiles={initialFiles}
           showCanvas={showCanvas !== 'false'}
           db={dbUrl}
           schemaImage={schemaImageUrl}
           schemaImageDark={schemaImageDarkUrl}
-          singleFile={single === 'true'}
+          singleFile={initialFiles ? initialFiles.length <= 1 && single === 'true' : single === 'true'}
           solution={decodedSolution}
         />
       </div>

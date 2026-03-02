@@ -117,6 +117,158 @@ describe('Remark Plugins', () => {
       expect(getHtmlAttr(htmlNode?.value, 'data-code')).toBe('')
     })
 
+    it('should merge consecutive blocks with same id into data-files', () => {
+      const markdown = `\`\`\`python editor id="ex1" file="main.py"
+print("Hello")
+\`\`\`
+
+\`\`\`python editor id="ex1" file="helper.py"
+def greet():
+    return "Hi"
+\`\`\``
+
+      const processor = unified()
+        .use(remarkParse)
+        .use(remarkCodeEditor)
+
+      const tree = processor.parse(markdown)
+      processor.runSync(tree)
+
+      const htmlNodes = findAllNodes(tree, (node: any) => node.type === 'html' && node.value?.includes('code-editor'))
+
+      // Should produce exactly one merged editor
+      expect(htmlNodes).toHaveLength(1)
+      expect(htmlNodes[0].value).toContain('data-files=')
+      expect(htmlNodes[0].value).toContain('data-language="python"')
+      expect(htmlNodes[0].value).toContain('data-id="ex1"')
+      // Should NOT have data-code (multi-file uses data-files instead)
+      expect(htmlNodes[0].value).not.toContain('data-code=')
+
+      // Parse the files JSON from the attribute
+      const filesAttr = getHtmlAttr(htmlNodes[0].value, 'data-files')
+      expect(filesAttr).toBeDefined()
+      // Decode HTML entities to get valid JSON
+      const decoded = filesAttr!
+        .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"').replace(/&#039;/g, "'")
+      const files = JSON.parse(decoded)
+      expect(files).toHaveLength(2)
+      expect(files[0]).toEqual({ name: 'main.py', content: 'print("Hello")' })
+      expect(files[1]).toEqual({ name: 'helper.py', content: 'def greet():\n    return "Hi"' })
+    })
+
+    it('should keep blocks with different ids as separate editors', () => {
+      const markdown = `\`\`\`python editor id="ex1" file="main.py"
+print("Hello")
+\`\`\`
+
+\`\`\`python editor id="ex2" file="main.py"
+print("World")
+\`\`\``
+
+      const processor = unified()
+        .use(remarkParse)
+        .use(remarkCodeEditor)
+
+      const tree = processor.parse(markdown)
+      processor.runSync(tree)
+
+      const htmlNodes = findAllNodes(tree, (node: any) => node.type === 'html' && node.value?.includes('code-editor'))
+
+      expect(htmlNodes).toHaveLength(2)
+      expect(htmlNodes[0].value).toContain('data-id="ex1"')
+      expect(htmlNodes[1].value).toContain('data-id="ex2"')
+    })
+
+    it('should not merge blocks separated by non-editor text', () => {
+      const markdown = `\`\`\`python editor id="ex1" file="main.py"
+print("Hello")
+\`\`\`
+
+Some explanatory text here.
+
+\`\`\`python editor id="ex1" file="helper.py"
+def greet():
+    return "Hi"
+\`\`\``
+
+      const processor = unified()
+        .use(remarkParse)
+        .use(remarkCodeEditor)
+
+      const tree = processor.parse(markdown)
+      processor.runSync(tree)
+
+      const htmlNodes = findAllNodes(tree, (node: any) => node.type === 'html' && node.value?.includes('code-editor'))
+
+      // Not consecutive — should produce two separate editors
+      expect(htmlNodes).toHaveLength(2)
+    })
+
+    it('should use data-code for blocks without id (backward compatible)', () => {
+      const markdown = '```python editor\nprint("Hello")\n```'
+
+      const processor = unified()
+        .use(remarkParse)
+        .use(remarkCodeEditor)
+
+      const tree = processor.parse(markdown)
+      processor.runSync(tree)
+
+      const htmlNode = findNode(tree, (node: any) => node.type === 'html' && node.value?.includes('code-editor'))
+
+      expect(htmlNode).toBeDefined()
+      expect(htmlNode.value).toContain('data-code=')
+      expect(htmlNode.value).not.toContain('data-files=')
+    })
+
+    it('should assign default filenames when file= is omitted', () => {
+      const markdown = `\`\`\`python editor id="ex1"
+print("Hello")
+\`\`\`
+
+\`\`\`python editor id="ex1"
+def greet():
+    return "Hi"
+\`\`\``
+
+      const processor = unified()
+        .use(remarkParse)
+        .use(remarkCodeEditor)
+
+      const tree = processor.parse(markdown)
+      processor.runSync(tree)
+
+      const htmlNodes = findAllNodes(tree, (node: any) => node.type === 'html' && node.value?.includes('code-editor'))
+      expect(htmlNodes).toHaveLength(1)
+
+      const filesAttr = getHtmlAttr(htmlNodes[0].value, 'data-files')
+      const decoded = filesAttr!
+        .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"').replace(/&#039;/g, "'")
+      const files = JSON.parse(decoded)
+      expect(files).toHaveLength(2)
+      expect(files[0].name).toBe('main.py')
+      expect(files[1].name).toBe('file2.py')
+    })
+
+    it('should emit data-files for single block with id and file=', () => {
+      const markdown = '```python editor id="ex1" file="app.py"\nprint("Hello")\n```'
+
+      const processor = unified()
+        .use(remarkParse)
+        .use(remarkCodeEditor)
+
+      const tree = processor.parse(markdown)
+      processor.runSync(tree)
+
+      const htmlNode = findNode(tree, (node: any) => node.type === 'html' && node.value?.includes('code-editor'))
+
+      expect(htmlNode).toBeDefined()
+      expect(htmlNode.value).toContain('data-files=')
+      expect(htmlNode.value).toContain('data-id="ex1"')
+    })
+
     it('should handle multiple code editors in same document', async () => {
       const markdown = `
 \`\`\`python editor

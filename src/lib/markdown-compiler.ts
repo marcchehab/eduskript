@@ -99,7 +99,7 @@ export const sanitizeSchema = {
     // Allow className and style on all elements
     '*': [...(defaultSchema.attributes?.['*'] || []), 'className', 'style'],
     // Custom component attributes (camelCase for HAST, kebab-case for raw HTML)
-    'code-editor': ['dataLanguage', 'dataCode', 'dataId', 'dataDb', 'dataSchemaImage', 'dataSingle', 'dataShowCanvas', 'dataSolution', 'data-language', 'data-code', 'data-id', 'data-db', 'data-schema-image', 'data-single', 'data-show-canvas', 'data-solution'],
+    'code-editor': ['dataLanguage', 'dataCode', 'dataFiles', 'dataId', 'dataDb', 'dataSchemaImage', 'dataSingle', 'dataShowCanvas', 'dataSolution', 'data-language', 'data-code', 'data-files', 'data-id', 'data-db', 'data-schema-image', 'data-single', 'data-show-canvas', 'data-solution'],
     'tabs-container': ['dataItems', 'data-items'],
     'youtube-embed': ['dataId', 'dataPlaylist', 'dataStartTime', 'data-id', 'data-playlist', 'data-start-time'],
     'muxvideo': ['src', 'alt'],

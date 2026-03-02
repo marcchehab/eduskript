@@ -56,6 +56,7 @@ interface CodeEditorProps {
   pageId?: string
   language?: 'python' | 'javascript' | 'sql'
   initialCode?: string
+  initialFiles?: PythonFile[] // Pre-populated multi-file content from markdown
   showCanvas?: boolean
   db?: string // Path to SQL database for SQL language
   schemaImage?: string // Optional schema image for SQL (light theme)
@@ -190,6 +191,7 @@ export const CodeEditor = memo(function CodeEditor({
   pageId,
   language = 'python',
   initialCode = '# Write your code here\nprint("Hello, World!")',
+  initialFiles,
   showCanvas = true,
   db = '/sql/netflixdb.sqlite',
   schemaImage,
@@ -349,7 +351,9 @@ export const CodeEditor = memo(function CodeEditor({
 
   // Initialize default data
   const defaultData: CodeEditorData = {
-    files: [{ name: `main${getFileExtension(language)}`, content: initialCode }],
+    files: initialFiles && initialFiles.length > 0
+      ? initialFiles
+      : [{ name: `main${getFileExtension(language)}`, content: initialCode }],
     activeFileIndex: 0,
     fontSize: 14,
     lineWrapping: true,
@@ -493,15 +497,21 @@ export const CodeEditor = memo(function CodeEditor({
   // Canvas pan and zoom state
   const [canvasTransform, setCanvasTransform] = useState(defaultData.canvasTransform ?? { x: 0, y: 0, scale: 1 })
 
-  // Store the original initial code for reset functionality
+  // Store the original initial files for reset functionality
   // This is the source of truth from the markdown and should never change
-  const originalInitialCode = useRef(initialCode)
+  const originalInitialFiles = useRef<PythonFile[]>(
+    initialFiles && initialFiles.length > 0
+      ? initialFiles
+      : [{ name: `main${getFileExtension(language)}`, content: initialCode }]
+  )
   const hasLoadedData = useRef(false)
 
-  // Update original code when initialCode prop changes (markdown was edited)
+  // Update original files when props change (markdown was edited)
   useEffect(() => {
-    originalInitialCode.current = initialCode
-  }, [initialCode])
+    originalInitialFiles.current = initialFiles && initialFiles.length > 0
+      ? initialFiles
+      : [{ name: `main${getFileExtension(language)}`, content: initialCode }]
+  }, [initialCode, initialFiles, language])
 
   useEffect(() => {
     // Only restore once when data first loads.
@@ -2402,14 +2412,15 @@ plots
 
   // Reset code to original markdown content and clear personal highlights
   const resetCode = () => {
-    // Reset to the original markdown content
-    const originalContent = originalInitialCode.current
+    // Reset to the original markdown files
+    const originalFiles = originalInitialFiles.current
 
     // Update files state
-    setFiles([{ name: `main${getFileExtension(language)}`, content: originalContent }])
+    setFiles(originalFiles)
     setActiveFileIndex(0)
 
-    // Update editor view
+    // Update editor view with the first file's content
+    const originalContent = originalFiles[0]?.content || ''
     if (editorViewRef.current) {
       editorViewRef.current.dispatch({
         changes: {
