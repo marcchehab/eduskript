@@ -115,7 +115,12 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, onContent
           const fullUrl = `${window.location.origin}${window.location.pathname}${headingId}`
 
           navigator.clipboard.writeText(fullUrl).then(() => {
+            // Remove any existing "Copied!" span so duplicates don't stack
+            const existing = headingLink.querySelector('.copied-indicator')
+            if (existing) existing.remove()
+
             const tempSpan = document.createElement('span')
+            tempSpan.className = 'copied-indicator'
             tempSpan.style.fontSize = '0.8em'
             tempSpan.style.marginLeft = '0.5rem'
             tempSpan.style.color = 'hsl(142.1, 76.2%, 36.3%)'
