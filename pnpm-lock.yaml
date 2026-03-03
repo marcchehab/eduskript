@@ -215,6 +215,9 @@ importers:
       openai:
         specifier: ^4.104.0
         version: 4.104.0(ws@8.18.3)(zod@3.25.76)
+      perfect-freehand:
+        specifier: ^1.2.3
+        version: 1.2.3
       pg:
         specifier: ^8.16.3
         version: 8.16.3
@@ -5397,6 +5400,9 @@ packages:
 
   perfect-freehand@1.2.0:
     resolution: {integrity: sha512-h/0ikF1M3phW7CwpZ5MMvKnfpHficWoOEyr//KVNTxV4F6deRK1eYMtHyBKEAKFK0aXIEUK9oBvlF6PNXMDsAw==}
+
+  perfect-freehand@1.2.3:
+    resolution: {integrity: sha512-bHZSfqDHGNlPpgH2yxXgPHlQSPpEbo+qg7li0M78J9vNAi2yjwLeA4x79BEQhX44lEWpCLSFCeRZwpw0niiXPA==}
 
   pg-cloudflare@1.2.7:
     resolution: {integrity: sha512-YgCtzMH0ptvZJslLM1ffsY4EuGaU0cx4XSdXLRFae8bPP4dS5xL1tNB3k2o/N64cHJpwU7dxKli/nZ2lUa5fLg==}
@@ -12861,6 +12867,8 @@ snapshots:
   perfect-debounce@1.0.0: {}
 
   perfect-freehand@1.2.0: {}
+
+  perfect-freehand@1.2.3: {}
 
   pg-cloudflare@1.2.7:
     optional: true

@@ -3,24 +3,33 @@
  *
  * This is the core canvas implementation for drawing annotations. It handles:
  * - Pointer events (mouse, touch, stylus with pressure sensitivity)
- * - Stroke rendering with configurable color/width
+ * - Stroke rendering via perfect-freehand (outline polygon fill, no stroke() artifacts)
  * - Eraser mode with visual cursor and collision detection
- * - Real-time smoothing of strokes (configurable window size)
  * - Section tracking for cross-device repositioning
  *
  * ## Architecture
  *
  * ```
- * Pointer Events → Point Collection → Smoothing → Canvas Render → Data Export
- *                                                                      ↓
- *                                            Parent (annotation-layer.tsx)
+ * Pointer Events → Point Collection → Canvas Render → Data Export
+ *                                                          ↓
+ *                                    Parent (annotation-layer.tsx)
  * ```
  *
  * ## Drawing Pipeline
  *
- * 1. Pointer down: Start new stroke, record mode (draw/erase)
- * 2. Pointer move: Collect points with pressure, apply real-time smoothing
- * 3. Pointer up: Finalize stroke, apply post-stroke smoothing, export data
+ * 1. Pointer down: Start new stroke, record mode (draw/erase), capture canvas snapshot
+ * 2. Pointer move: Collect points with pressure, render in-progress stroke via snapshot restore
+ * 3. Pointer up: Finalize stroke, full redraw of all committed strokes, export data
+ *
+ * ## Rendering Approach
+ *
+ * Uses perfect-freehand to compute a variable-width outline polygon from pressure-sensitive
+ * input points, then fills it. This eliminates the overlapping round-cap artifacts that occur
+ * with per-segment stroke() calls (visible as periodic "blotches" on iPad/Safari).
+ *
+ * Real-time drawing uses a snapshot approach: on pointer down, the current canvas state
+ * (all committed strokes) is saved to an offscreen canvas. On each pointer move, the
+ * snapshot is restored and the in-progress stroke is rendered on top via perfect-freehand.
  *
  * ## Known Limitations
  *
@@ -35,15 +44,13 @@
  * 3. **No partial stroke editing**: Can only delete entire strokes, not
  *    portions. More advanced erasing would require stroke splitting.
  *
- * 4. **Smoothing is post-hoc**: Real-time smoothing has latency. We smooth
- *    again after stroke completion, which can cause visual jumps.
- *
- * 5. **Hardware eraser detection**: Uses heuristics (button === 5, pointerType
+ * 4. **Hardware eraser detection**: Uses heuristics (button === 5, pointerType
  *    checks) that may not work on all stylus hardware.
  *
  * ## Performance Optimizations
  *
- * - RAF throttling for draw operations
+ * - RAF throttling for eraser operations
+ * - Snapshot-based real-time rendering (1 drawImage + 1 getStroke + 1 fill per frame)
  * - Cached bounding rect to avoid layout thrashing
  * - Direct DOM manipulation for eraser cursor (no React re-renders)
  * - Strokes marked for deletion in batch (applied on pointer up)
@@ -55,28 +62,45 @@
 'use client'
 
 import { useRef, useEffect, useCallback, forwardRef, useImperativeHandle, useState } from 'react'
+import { getStroke } from 'perfect-freehand'
+import type { StrokeOptions } from 'perfect-freehand'
 import { determineSectionFromY, type HeadingPosition } from '@/lib/annotations/reposition-strokes'
 import type { StrokeTelemetry } from '@/lib/userdata/types'
 
 export type DrawMode = 'draw' | 'erase'
 
-// Real-time smoothing window size for drawing
-// Higher = smoother but more lag, Lower = more responsive but jittery
-// Set to 1 to disable real-time smoothing (raw points)
-// 2 = light smoothing (average of current + previous point)
-// 3 = moderate smoothing (average of last 3 points)
-const REALTIME_SMOOTHING_WINDOW = 3
-
-// A/B testing mode - set to true to cycle through smoothing levels with colors
-const SMOOTHING_TEST_MODE = false
-const SMOOTHING_TEST_LEVELS = [
-  { window: 1, color: '#000000' }, // Black = raw (no smoothing)
-  { window: 2, color: '#0066ff' }, // Blue = light smoothing
-  { window: 3, color: '#ff0000' }, // Red = moderate smoothing
-]
-
 // Telemetry sampling rate - collect every Nth stroke
 const TELEMETRY_SAMPLE_RATE = 10
+
+// Convert perfect-freehand outline points to a Path2D using quadratic curves for smoothness.
+// Same approach as the perfect-freehand README / Excalidraw.
+function getPathFromStroke(outlinePoints: number[][]): Path2D {
+  const path = new Path2D()
+  if (outlinePoints.length < 2) return path
+
+  path.moveTo(outlinePoints[0][0], outlinePoints[0][1])
+  for (let i = 1; i < outlinePoints.length - 1; i++) {
+    const [x0, y0] = outlinePoints[i]
+    const [x1, y1] = outlinePoints[i + 1]
+    path.quadraticCurveTo(x0, y0, (x0 + x1) / 2, (y0 + y1) / 2)
+  }
+  const last = outlinePoints[outlinePoints.length - 1]
+  path.lineTo(last[0], last[1])
+  path.closePath()
+  return path
+}
+
+// Map our stroke params to perfect-freehand options.
+// Our width is radius-like; perfect-freehand size is diameter, hence * 2.
+function getStrokeOptions(width: number): StrokeOptions {
+  return {
+    size: width * 2,
+    thinning: 0.6,
+    smoothing: 0.5,
+    streamline: 0.3,
+    simulatePressure: false,
+  }
+}
 
 // Generate stable content-based ID for strokes without IDs (backward compat)
 function generateStableStrokeId(stroke: {
@@ -155,11 +179,8 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
     const eraserCursorRef = useRef<HTMLDivElement>(null) // Ref to eraser cursor element for direct DOM manipulation
     const canvasRectRef = useRef<DOMRect | null>(null) // Cache canvas bounding rect to avoid layout thrashing
     const drawRafRef = useRef<number | null>(null) // RAF ID for throttling draw operations
-    const pendingPointsRef = useRef<number>(0) // Track number of points added since last RAF draw
-    const lastSmoothedPointRef = useRef<{ x: number; y: number } | null>(null) // Track last rendered smoothed position for real-time smoothing
-    const smoothingTestIndexRef = useRef(0) // TEMPORARY: Track which smoothing level we're testing
+    const snapshotCanvasRef = useRef<HTMLCanvasElement | null>(null) // Offscreen canvas snapshot for real-time drawing
     const telemetryStrokeCountRef = useRef(0) // Track stroke count for telemetry sampling
-    const currentStrokeSmoothingRef = useRef({ window: REALTIME_SMOOTHING_WINDOW, color: '#000000' }) // Current stroke's smoothing settings
 
     // Update eraser cursor state and apply styles directly (no React re-render)
     const updateEraserCursor = useCallback((isActive: boolean) => {
@@ -226,57 +247,6 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       return false
     }, [])
 
-    // Apply pressure floor so light touches still produce visible strokes
-    // Maps pressure from [0, 1] to [MIN_PRESSURE, 1]
-    const applyPressureFloor = useCallback((pressure: number): number => {
-      const MIN_PRESSURE = 0.4
-      return MIN_PRESSURE + (1 - MIN_PRESSURE) * pressure
-    }, [])
-
-    // Apply moving average smoothing to point positions while preserving pressure
-    const smoothPoints = useCallback((points: Array<{ x: number; y: number; pressure: number }>, windowSize: number = 3): Array<{ x: number; y: number; pressure: number }> => {
-      if (points.length < windowSize) return points
-
-      const smoothed: Array<{ x: number; y: number; pressure: number }> = []
-      const halfWindow = Math.floor(windowSize / 2)
-
-      for (let i = 0; i < points.length; i++) {
-        const start = Math.max(0, i - halfWindow)
-        const end = Math.min(points.length, i + halfWindow + 1)
-        const window = points.slice(start, end)
-
-        smoothed.push({
-          x: window.reduce((sum, p) => sum + p.x, 0) / window.length,
-          y: window.reduce((sum, p) => sum + p.y, 0) / window.length,
-          pressure: points[i].pressure // Keep original pressure
-        })
-      }
-      return smoothed
-    }, [])
-
-    // Get smoothed position for real-time rendering using last N points
-    // Optimized to avoid array allocation - just direct index access
-    const getSmoothedPosition = useCallback((points: Array<{ x: number; y: number; pressure: number }>, windowSize: number = REALTIME_SMOOTHING_WINDOW): { x: number; y: number; pressure: number } => {
-      const len = points.length
-      if (len === 0) return { x: 0, y: 0, pressure: 0.5 }
-      if (len === 1 || windowSize <= 1) return points[len - 1]
-
-      // Average last windowSize points without allocating arrays
-      const start = Math.max(0, len - windowSize)
-      const count = len - start
-      let sumX = 0, sumY = 0
-      for (let i = start; i < len; i++) {
-        sumX += points[i].x
-        sumY += points[i].y
-      }
-
-      return {
-        x: sumX / count,
-        y: sumY / count,
-        pressure: points[len - 1].pressure
-      }
-    }, [])
-
     const redrawCanvas = useCallback(() => {
       const canvas = canvasRef.current
       if (!canvas) return
@@ -287,11 +257,11 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       // Clear canvas
       ctx.clearRect(0, 0, canvas.width, canvas.height)
 
-      // Redraw all paths with pressure-sensitive line width and Bezier smoothing
+      // Redraw all paths using perfect-freehand outline fill
       pathsRef.current.forEach((path, index) => {
         if (path.points.length < 2) return
 
-        // Skip strokes that are marked for deletion (they're old erase strokes)
+        // Skip erase-mode strokes (they're historical markers, not visible)
         if (path.mode === 'erase') return
 
         // Check if this stroke is marked for deletion
@@ -300,87 +270,18 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         // Set opacity (reduced if marked for deletion)
         ctx.globalAlpha = isMarkedForDeletion ? 0.3 : 1
 
-        ctx.strokeStyle = path.color
-        ctx.lineCap = 'round'
-        ctx.lineJoin = 'round'
-        ctx.globalCompositeOperation = 'source-over'
+        // Convert {x,y,pressure} objects to [x,y,pressure] arrays for perfect-freehand
+        const inputPoints = path.points.map(p => [p.x, p.y, p.pressure])
+        const outline = getStroke(inputPoints, getStrokeOptions(path.width))
+        const pathObj = getPathFromStroke(outline)
 
-        // Apply moving average smoothing to reduce choppiness when zoomed
-        const points = smoothPoints(path.points, 3)
-
-        // For very short strokes (2 points), just draw a straight line
-        if (points.length === 2) {
-          const lineWidth = path.width * applyPressureFloor(points[1].pressure || 0.5)
-
-          ctx.beginPath()
-          ctx.lineWidth = lineWidth
-          ctx.moveTo(points[0].x, points[0].y)
-          ctx.lineTo(points[1].x, points[1].y)
-          ctx.stroke()
-          return
-        }
-
-        // For longer strokes, use quadratic Bezier curves with pressure-sensitive width
-        // Draw with special handling for endpoints to avoid blobs
-
-        const baseWidth = path.width
-
-        // Draw first segment as a straight line to preserve pen-down appearance
-        ctx.beginPath()
-        ctx.lineWidth = baseWidth * applyPressureFloor(points[0].pressure || 0.5)
-        ctx.moveTo(points[0].x, points[0].y)
-
-        if (points.length === 3) {
-          // For 3-point strokes, draw straight lines to preserve shape
-          ctx.lineTo(points[1].x, points[1].y)
-          ctx.stroke()
-
-          ctx.beginPath()
-          ctx.lineWidth = baseWidth * applyPressureFloor(points[1].pressure || 0.5)
-          ctx.moveTo(points[1].x, points[1].y)
-          ctx.lineTo(points[2].x, points[2].y)
-          ctx.stroke()
-        } else {
-          // For 4+ points, use smooth curves in the middle but preserve endpoints
-          const firstMidX = (points[0].x + points[1].x) / 2
-          const firstMidY = (points[0].y + points[1].y) / 2
-          ctx.lineTo(firstMidX, firstMidY)
-          ctx.stroke()
-
-          // Draw middle segments with quadratic curves
-          for (let i = 1; i < points.length - 2; i++) {
-            const p0 = points[i]
-            const p1 = points[i + 1]
-
-            const midX0 = (points[i - 1].x + p0.x) / 2
-            const midY0 = (points[i - 1].y + p0.y) / 2
-            const midX1 = (p0.x + p1.x) / 2
-            const midY1 = (p0.y + p1.y) / 2
-
-            ctx.beginPath()
-            ctx.lineWidth = baseWidth * applyPressureFloor(p0.pressure || 0.5)
-            ctx.moveTo(midX0, midY0)
-            ctx.quadraticCurveTo(p0.x, p0.y, midX1, midY1)
-            ctx.stroke()
-          }
-
-          // Draw last segment as a straight line to preserve pen-up appearance
-          const lastIdx = points.length - 1
-          const secondLastIdx = lastIdx - 1
-          const lastMidX = (points[secondLastIdx].x + points[lastIdx].x) / 2
-          const lastMidY = (points[secondLastIdx].y + points[lastIdx].y) / 2
-
-          ctx.beginPath()
-          ctx.lineWidth = baseWidth * applyPressureFloor(points[lastIdx].pressure || 0.5)
-          ctx.moveTo(lastMidX, lastMidY)
-          ctx.lineTo(points[lastIdx].x, points[lastIdx].y)
-          ctx.stroke()
-        }
+        ctx.fillStyle = path.color
+        ctx.fill(pathObj)
       })
 
       // Reset globalAlpha
       ctx.globalAlpha = 1.0
-    }, [smoothPoints, applyPressureFloor])
+    }, [])
 
     // Throttled redraw for eraser using RAF to avoid redrawing every single move
     const scheduleEraserRedraw = useCallback(() => {
@@ -392,46 +293,6 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       }
     }, [redrawCanvas])
 
-    // Throttled draw for new strokes using RAF to smooth out Chrome's batched events
-    const scheduleIncrementalDraw = useCallback(() => {
-      if (drawRafRef.current === null) {
-        drawRafRef.current = requestAnimationFrame(() => {
-          const canvas = canvasRef.current
-          const ctx = canvas?.getContext('2d')
-          if (!canvas || !ctx || pendingPointsRef.current === 0) {
-            drawRafRef.current = null
-            return
-          }
-
-          // Draw all pending segments since last RAF
-          const points = currentPathRef.current
-          const startIdx = Math.max(0, points.length - pendingPointsRef.current - 1)
-
-          // Set context properties once
-          ctx.strokeStyle = strokeColor
-          ctx.lineCap = 'round'
-          ctx.lineJoin = 'round'
-          ctx.globalCompositeOperation = 'source-over'
-
-          // Draw all pending segments
-          for (let i = startIdx + 1; i < points.length; i++) {
-            const lastPoint = points[i - 1]
-            const currentPoint = points[i]
-            const lineWidth = strokeWidth * applyPressureFloor(currentPoint.pressure)
-
-            ctx.lineWidth = lineWidth
-            ctx.beginPath()
-            ctx.moveTo(lastPoint.x, lastPoint.y)
-            ctx.lineTo(currentPoint.x, currentPoint.y)
-            ctx.stroke()
-          }
-
-          pendingPointsRef.current = 0
-          drawRafRef.current = null
-        })
-      }
-    }, [strokeColor, strokeWidth, applyPressureFloor])
-
     // Set up high-DPI canvas scaling with zoom support
     useEffect(() => {
       const canvas = canvasRef.current
@@ -441,11 +302,17 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       // Include zoom in resolution calculation for crisp rendering at any zoom level
       const totalScale = dpr * zoom
 
-      // Prevent canvas from exceeding browser limits (typically 32,767 pixels)
+      // Prevent canvas from exceeding browser limits.
+      // Individual dimension limit (typically 32,767 pixels):
       const MAX_CANVAS_DIMENSION = 32767
       const maxScaleX = MAX_CANVAS_DIMENSION / width
       const maxScaleY = MAX_CANVAS_DIMENSION / height
-      const maxSafeScale = Math.min(maxScaleX, maxScaleY, totalScale)
+      // Total pixel area limit: iOS Safari silently produces a blank canvas when
+      // the pixel count exceeds a device-dependent threshold (~16M on older iPads).
+      // At dpr=2 zoom=2.5 on a 5000px-tall page this is easily exceeded without a cap.
+      const MAX_CANVAS_AREA = 16_777_216
+      const maxScaleArea = Math.sqrt(MAX_CANVAS_AREA / (width * height))
+      const maxSafeScale = Math.min(maxScaleX, maxScaleY, maxScaleArea, totalScale)
 
       const scaledWidth = width * maxSafeScale
       const scaledHeight = height * maxSafeScale
@@ -581,6 +448,16 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       isDrawingRef.current = true
       strokeStartTimeRef.current = Date.now() // Track start time for telemetry
 
+      // Capture canvas snapshot for real-time drawing (draw mode only).
+      // All committed strokes are on the canvas; we'll restore this + draw in-progress stroke each frame.
+      if (currentModeRef.current === 'draw') {
+        const offscreen = document.createElement('canvas')
+        offscreen.width = canvas.width
+        offscreen.height = canvas.height
+        offscreen.getContext('2d')!.drawImage(canvas, 0, 0)
+        snapshotCanvasRef.current = offscreen
+      }
+
       // Defer state updates to avoid React re-renders blocking the first pointermove events
       // (causes choppy stroke start if done synchronously)
       requestAnimationFrame(() => {
@@ -605,16 +482,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       const pressure = e.pressure || 0.5 // Default to 0.5 for mouse
 
       currentPathRef.current = [{ x, y, pressure }]
-      lastSmoothedPointRef.current = { x, y } // Initialize with first point for smooth rendering
-
-      // TEMPORARY: Set smoothing level for this stroke and cycle for next
-      if (SMOOTHING_TEST_MODE && currentModeRef.current === 'draw') {
-        currentStrokeSmoothingRef.current = SMOOTHING_TEST_LEVELS[smoothingTestIndexRef.current]
-        smoothingTestIndexRef.current = (smoothingTestIndexRef.current + 1) % SMOOTHING_TEST_LEVELS.length
-      } else {
-        currentStrokeSmoothingRef.current = { window: REALTIME_SMOOTHING_WINDOW, color: strokeColor }
-      }
-    }, [mode, stylusModeActive, onStylusDetected, onPenStateChange, onDrawStart, width, height, updateEraserCursor, strokeColor])
+    }, [mode, stylusModeActive, onStylusDetected, onPenStateChange, onDrawStart, width, height, updateEraserCursor])
 
     const draw = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
       // Don't draw if multiple touch/mouse pointers are active (pinch gesture)
@@ -675,16 +543,30 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       const coalescedEvents = e.nativeEvent.getCoalescedEvents?.() || []
       const events = coalescedEvents.length > 0 ? coalescedEvents : [e.nativeEvent]
 
-
       // Process each coalesced event to capture all intermediate points
-      events.forEach((event, index) => {
+      events.forEach((event) => {
         // Convert screen coordinates to canvas coordinates
         // The canvas CSS size matches the scaled section size, so we need to scale down to internal coordinates
         const x = (event.clientX - rect.left) * (width / rect.width)
         const y = (event.clientY - rect.top) * (height / rect.height)
         const pressure = event.pressure || 0.5 // Default to 0.5 for mouse
 
-        currentPathRef.current.push({ x, y, pressure })
+        // Deduplicate: iOS Safari fires coalesced events twice per pointermove,
+        // causing the path to jump backward and retrace — which creates self-intersecting
+        // outlines and triangular fill artifacts. Skip if this coordinate matches any
+        // of the last 8 points (typical coalesced batch is 4 events).
+        const path = currentPathRef.current
+        const lookback = Math.min(path.length, 8)
+        let isDuplicate = false
+        for (let j = path.length - lookback; j < path.length; j++) {
+          if (path[j].x === x && path[j].y === y) {
+            isDuplicate = true
+            break
+          }
+        }
+        if (!isDuplicate) {
+          path.push({ x, y, pressure })
+        }
 
         // For eraser mode, check for collisions with existing strokes
         if (currentModeRef.current === 'erase') {
@@ -706,30 +588,26 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
           if (markedNewStroke) {
             scheduleEraserRedraw()
           }
-        } else {
-          // For draw mode: Draw with real-time smoothing
-          // Raw points are stored in currentPathRef, but we render smoothed positions
-          const { window: smoothingWindow, color: testColor } = currentStrokeSmoothingRef.current
-          const smoothedPoint = getSmoothedPosition(currentPathRef.current, smoothingWindow)
-          const fromPoint = lastSmoothedPointRef.current
-
-          if (fromPoint) {
-            const lineWidth = strokeWidth * applyPressureFloor(smoothedPoint.pressure)
-            ctx.strokeStyle = SMOOTHING_TEST_MODE ? testColor : strokeColor
-            ctx.lineCap = 'round'
-            ctx.lineJoin = 'round'
-            ctx.lineWidth = lineWidth
-            ctx.beginPath()
-            ctx.moveTo(fromPoint.x, fromPoint.y)
-            ctx.lineTo(smoothedPoint.x, smoothedPoint.y)
-            ctx.stroke()
-          }
-
-          // Update last smoothed position for next segment
-          lastSmoothedPointRef.current = { x: smoothedPoint.x, y: smoothedPoint.y }
         }
       })
-    }, [mode, width, height, strokeColor, strokeWidth, isPointNearStroke, applyPressureFloor, scheduleEraserRedraw, updateEraserCursorPosition, updateEraserCursor, getSmoothedPosition])
+
+      // After processing all coalesced events, render in-progress stroke (draw mode only)
+      if (currentModeRef.current !== 'erase' && snapshotCanvasRef.current) {
+        // Restore snapshot (all committed strokes) at physical pixel level
+        ctx.save()
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        ctx.drawImage(snapshotCanvasRef.current, 0, 0)
+        ctx.restore()
+
+        // Draw current in-progress stroke with perfect-freehand
+        const inputPoints = currentPathRef.current.map(p => [p.x, p.y, p.pressure])
+        const outline = getStroke(inputPoints, getStrokeOptions(strokeWidth))
+        const pathObj = getPathFromStroke(outline)
+        ctx.fillStyle = strokeColor
+        ctx.fill(pathObj)
+      }
+    }, [mode, width, height, strokeColor, strokeWidth, isPointNearStroke, scheduleEraserRedraw, updateEraserCursorPosition, updateEraserCursor])
 
     const stopDrawing = useCallback((e?: React.PointerEvent<HTMLCanvasElement>) => {
       // Remove pointer from tracking
@@ -764,9 +642,6 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       if (!isDrawingRef.current) return
 
       isDrawingRef.current = false
-
-      // Reset pending points counter
-      pendingPointsRef.current = 0
 
       // If we just finished an eraser stroke, delete all marked strokes
       if (currentModeRef.current === 'erase') {
@@ -818,7 +693,65 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         const lengthPerPoint = pointCount > 1 ? totalLength / (pointCount - 1) : 0
         const durationPerPoint = pointCount > 1 ? durationMs / (pointCount - 1) : 0
 
+        // DEBUG: Log stroke data to diagnose iPad rendering artifacts.
+        // Look for: very close points, pressure spikes, or self-intersecting outline.
+        // Remove once root cause is found.
+        {
+          const distances: number[] = []
+          const pressures: number[] = []
+          let minDist = Infinity, maxDist = 0
+          let minPressure = Infinity, maxPressure = 0
+          let nearZeroDistCount = 0
+          const suspiciousPoints: Array<{ i: number; dist: number; pressure: number; prevPressure: number; x: number; y: number }> = []
 
+          for (let i = 0; i < points.length; i++) {
+            pressures.push(points[i].pressure)
+            if (points[i].pressure < minPressure) minPressure = points[i].pressure
+            if (points[i].pressure > maxPressure) maxPressure = points[i].pressure
+
+            if (i > 0) {
+              const dx = points[i].x - points[i-1].x
+              const dy = points[i].y - points[i-1].y
+              const dist = Math.sqrt(dx * dx + dy * dy)
+              distances.push(dist)
+              if (dist < minDist) minDist = dist
+              if (dist > maxDist) maxDist = dist
+              if (dist < 0.5) nearZeroDistCount++
+
+              // Flag points with large pressure jumps or very close spacing
+              const pressureDelta = Math.abs(points[i].pressure - points[i-1].pressure)
+              if (dist < 0.5 || pressureDelta > 0.3) {
+                suspiciousPoints.push({
+                  i,
+                  dist: Math.round(dist * 100) / 100,
+                  pressure: Math.round(points[i].pressure * 1000) / 1000,
+                  prevPressure: Math.round(points[i-1].pressure * 1000) / 1000,
+                  x: Math.round(points[i].x * 10) / 10,
+                  y: Math.round(points[i].y * 10) / 10,
+                })
+              }
+            }
+          }
+
+          const avgDist = distances.length > 0 ? distances.reduce((a, b) => a + b, 0) / distances.length : 0
+          console.log(
+            `[stroke-debug] ${pointCount} pts, ${durationMs}ms, ` +
+            `dist: min=${minDist.toFixed(2)} avg=${avgDist.toFixed(2)} max=${maxDist.toFixed(2)}, ` +
+            `pressure: ${minPressure.toFixed(3)}–${maxPressure.toFixed(3)}, ` +
+            `nearZero(<0.5px): ${nearZeroDistCount}/${distances.length}`
+          )
+          if (suspiciousPoints.length > 0) {
+            console.log(`[stroke-debug] suspicious points (close or pressure-jump):`, suspiciousPoints.slice(0, 20))
+          }
+          // Log raw points for the first few strokes to inspect in full
+          if (telemetryStrokeCountRef.current < 3) {
+            console.log(`[stroke-debug] raw points:`, JSON.stringify(points.map(p => [
+              Math.round(p.x * 10) / 10,
+              Math.round(p.y * 10) / 10,
+              Math.round(p.pressure * 1000) / 1000,
+            ])))
+          }
+        }
 
         // Determine which section this stroke belongs to based on first point
         const firstPoint = currentPathRef.current[0]
@@ -850,7 +783,6 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         avgY /= pointCount
 
         // Save the path with all original points and pressure data intact
-        // Visual smoothing is handled by Bezier curves during rendering
         pathsRef.current.push({
           id: crypto.randomUUID(),
           points: currentPathRef.current,
@@ -864,6 +796,10 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         })
 
         currentPathRef.current = []
+
+        // Discard snapshot and do clean render of all committed strokes
+        snapshotCanvasRef.current = null
+        redrawCanvas()
 
         // Notify parent with debouncing handled at parent level
         const data = JSON.stringify(pathsRef.current)
@@ -894,6 +830,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       if (isDrawingRef.current) {
         isDrawingRef.current = false
         currentPathRef.current = []
+        snapshotCanvasRef.current = null
       }
     }, [])
 
