@@ -355,10 +355,7 @@ body {
     margin-right: 0;
   }
 
-  /* Wrapper to contain the scaled paper and prevent horizontal scroll */
-  /* The paper is still 1024px but scaled down visually - this clips overflow */
   main:has(.paper-responsive) {
-    overflow-x: clip;
     max-width: 100vw;
   }
 }

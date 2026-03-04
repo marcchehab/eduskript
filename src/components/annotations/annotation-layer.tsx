@@ -2603,7 +2603,6 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
 
     if (zoomLevel <= 1) {
       spacer?.remove()
-      main.style.overflowX = ''
       main.style.maxWidth = ''
       return
     }
@@ -2620,8 +2619,6 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
     spacer.style.width = `${main.scrollWidth * zoomLevel}px`
     spacer.style.height = `${main.scrollHeight * zoomLevel}px`
 
-    // Override the @media (max-width:1024px) overflow-x:clip that would clip scaled content
-    main.style.overflowX = 'visible'
     main.style.maxWidth = 'none'
   }, [])
 
