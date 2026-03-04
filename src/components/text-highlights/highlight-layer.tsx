@@ -81,7 +81,7 @@ export function HighlightLayer({ pageId, children }: HighlightLayerProps) {
       node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement
     while (el) {
       const tag = el.tagName
-      if (tag === 'PRE' || tag === 'CODE' || tag === 'CODE-EDITOR') return true
+      if (tag === 'PRE' || tag === 'CODE' || el.classList.contains('cm-editor')) return true
       el = el.parentElement
     }
     return false
