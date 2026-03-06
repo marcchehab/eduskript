@@ -166,21 +166,22 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
           const fullUrl = `${window.location.origin}${window.location.pathname}${headingId}`
 
           navigator.clipboard.writeText(fullUrl).then(() => {
-            // Remove any existing "Copied!" span so duplicates don't stack
-            const existing = headingLink.querySelector('.copied-indicator')
+            // Dismiss any existing indicator so rapid clicks don't stack
+            const existing = document.querySelector('.copied-float-indicator')
             if (existing) existing.remove()
 
-            const tempSpan = document.createElement('span')
-            tempSpan.className = 'copied-indicator'
-            tempSpan.style.fontSize = '0.8em'
-            tempSpan.style.marginLeft = '0.5rem'
-            tempSpan.style.color = 'hsl(142.1, 76.2%, 36.3%)'
-            tempSpan.textContent = ' ✓ Copied!'
-            headingLink.appendChild(tempSpan)
+            // Compute position: centre above the heading link
+            const rect = headingLink.getBoundingClientRect()
 
-            setTimeout(() => {
-              tempSpan.remove()
-            }, 2000)
+            const indicator = document.createElement('div')
+            indicator.className = 'copied-float-indicator'
+            indicator.textContent = '✓ Link copied'
+            indicator.style.left = `${rect.left + rect.width / 2}px`
+            indicator.style.top = `${rect.top - 8}px`
+            document.body.appendChild(indicator)
+
+            // Remove after animation completes (matches --copied-float-duration)
+            setTimeout(() => indicator.remove(), 1600)
           }).catch((err) => {
             console.error('Failed to copy link:', err)
           })

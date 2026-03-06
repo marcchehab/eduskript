@@ -3,7 +3,9 @@
 import { ReactNode } from 'react'
 import { AnnotationLayer } from '@/components/annotations/annotation-layer'
 import { HighlightLayer } from '@/components/text-highlights/highlight-layer'
+import { StickyNotesLayer } from '@/components/annotations/sticky-notes-layer'
 import { TeacherBroadcastProvider } from '@/contexts/teacher-broadcast-context'
+import { StickyNotesProvider } from '@/contexts/sticky-notes-context'
 import type { Prisma } from '@prisma/client'
 
 /** Public annotation data passed from server */
@@ -45,12 +47,16 @@ interface AnnotationWrapperProps {
  */
 export function AnnotationWrapper({ pageId, content, children, publicAnnotations, publicSnaps, isPageAuthor, isExamStudent }: AnnotationWrapperProps) {
   return (
-    <TeacherBroadcastProvider pageId={pageId}>
-      <AnnotationLayer pageId={pageId} content={content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} isPageAuthor={isPageAuthor} isExamStudent={isExamStudent}>
-        <HighlightLayer pageId={pageId}>
-          {children}
-        </HighlightLayer>
-      </AnnotationLayer>
-    </TeacherBroadcastProvider>
+    <StickyNotesProvider>
+      <TeacherBroadcastProvider pageId={pageId}>
+        <AnnotationLayer pageId={pageId} content={content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} isPageAuthor={isPageAuthor} isExamStudent={isExamStudent}>
+          <StickyNotesLayer pageId={pageId}>
+            <HighlightLayer pageId={pageId}>
+              {children}
+            </HighlightLayer>
+          </StickyNotesLayer>
+        </AnnotationLayer>
+      </TeacherBroadcastProvider>
+    </StickyNotesProvider>
   )
 }
