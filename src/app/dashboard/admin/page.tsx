@@ -40,6 +40,12 @@ interface OAuthAccount {
   providerAccountId: string
 }
 
+interface Plan {
+  id: string
+  name: string
+  slug: string
+}
+
 interface User {
   id: string
   email: string
@@ -47,6 +53,7 @@ interface User {
   pageSlug: string
   title: string | null
   isAdmin: boolean
+  billingPlan: string
   requirePasswordReset: boolean
   emailVerified: Date | null
   accountType: string
@@ -80,6 +87,7 @@ export default function AdminPanelPage() {
   const [orgMembers, setOrgMembers] = useState<Record<string, OrgMember[]>>({})
   const [orgMembersLoading, setOrgMembersLoading] = useState<Record<string, boolean>>({})
   const [addMemberForms, setAddMemberForms] = useState<Record<string, string>>({})
+  const [availablePlans, setAvailablePlans] = useState<Plan[]>([])
 
   // Form states
   const [formData, setFormData] = useState({
@@ -89,6 +97,7 @@ export default function AdminPanelPage() {
     title: '',
     password: '',
     isAdmin: false,
+    billingPlan: '',
     requirePasswordReset: true,
     accountType: 'teacher' as 'teacher' | 'student',
     studentPseudonym: '',
@@ -230,10 +239,21 @@ export default function AdminPanelPage() {
     }
   }
 
+  const fetchPlans = async () => {
+    try {
+      const res = await fetch('/api/admin/plans')
+      const data = await res.json()
+      if (res.ok) setAvailablePlans(data.plans.filter((p: Plan & { isActive: boolean }) => p.isActive))
+    } catch {
+      // Plans are optional for the admin panel
+    }
+  }
+
   useEffect(() => {
     if (session?.user.isAdmin) {
       fetchUsers()
       fetchOrgs()
+      fetchPlans()
     }
   }, [session])
 
@@ -265,6 +285,7 @@ export default function AdminPanelPage() {
         title: '',
         password: '',
         isAdmin: false,
+        billingPlan: '',
         requirePasswordReset: true,
         accountType: 'teacher',
         studentPseudonym: '',
@@ -293,6 +314,7 @@ export default function AdminPanelPage() {
           pageSlug: formData.pageSlug,
           title: formData.title || null,
           isAdmin: formData.isAdmin,
+          ...(formData.billingPlan && { billingPlan: formData.billingPlan }),
           requirePasswordReset: formData.requirePasswordReset,
         }),
       })
@@ -485,6 +507,7 @@ export default function AdminPanelPage() {
       title: user.title || '',
       password: '',
       isAdmin: user.isAdmin,
+      billingPlan: '',
       requirePasswordReset: user.requirePasswordReset,
       accountType: (user.accountType || 'teacher') as 'teacher' | 'student',
       studentPseudonym: user.studentPseudonym || '',
@@ -608,6 +631,9 @@ export default function AdminPanelPage() {
                   <div className="flex items-center gap-2">
                     <h3 className="font-medium">{user.name}</h3>
                     {user.isAdmin && <Badge variant="outline">Admin</Badge>}
+                    <Badge variant={user.billingPlan === 'free' ? 'secondary' : 'default'}>
+                      {user.billingPlan || 'free'}
+                    </Badge>
                     {user.requirePasswordReset && <Badge variant="outline">Password Reset Required</Badge>}
                   </div>
                   <p className="text-sm text-muted-foreground">{user.email}</p>
@@ -1101,6 +1127,21 @@ export default function AdminPanelPage() {
                   value={formData.title}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                 />
+              </div>
+              <div>
+                <Label htmlFor="edit-billingPlan">Override Billing Plan</Label>
+                <select
+                  id="edit-billingPlan"
+                  value={formData.billingPlan}
+                  onChange={(e) => setFormData({ ...formData, billingPlan: e.target.value })}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="">Don&apos;t override (current: {selectedUser?.billingPlan || 'free'})</option>
+                  <option value="free">free</option>
+                  {availablePlans.map((plan) => (
+                    <option key={plan.id} value={plan.slug}>{plan.slug} ({plan.name})</option>
+                  ))}
+                </select>
               </div>
               <div className="flex items-center gap-2">
                 <Checkbox

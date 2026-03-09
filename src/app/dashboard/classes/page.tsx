@@ -28,6 +28,7 @@ import {
   Pencil,
 } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { UpgradePrompt } from '@/components/dashboard/upgrade-prompt'
 import {
   Dialog,
   DialogContent,
@@ -536,6 +537,11 @@ export default function ClassesPage() {
         </div>
       </div>
     )
+  }
+
+  const billingPlan = session?.user?.billingPlan || 'free'
+  if (billingPlan === 'free' && !session?.user?.isAdmin) {
+    return <UpgradePrompt feature="class management" />
   }
 
   return (

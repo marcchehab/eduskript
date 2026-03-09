@@ -1,5 +1,6 @@
 import { PageBuilderInterface } from '@/components/dashboard/page-builder-interface'
 import { AdminPageBuilderPlaceholder } from '@/components/dashboard/admin-page-builder-placeholder'
+import { UpgradePrompt } from '@/components/dashboard/upgrade-prompt'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { redirect } from 'next/navigation'
@@ -11,6 +12,12 @@ export default async function PageBuilderPage() {
   // Redirect students to their dashboard
   if (session?.user?.accountType === 'student') {
     redirect('/dashboard/my-classes')
+  }
+
+  // Gate behind paid plan
+  const billingPlan = session?.user?.billingPlan || 'free'
+  if (billingPlan === 'free' && !session?.user?.isAdmin) {
+    return <UpgradePrompt feature="the page builder" />
   }
 
   // Show placeholder only for the default eduadmin account, not all admins

@@ -20,6 +20,7 @@ export async function GET() {
         requirePasswordReset: true,
         emailVerified: true,
         accountType: true,
+        billingPlan: true,
         studentPseudonym: true,
         createdAt: true,
         updatedAt: true,

@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { checkSkriptPermissions } from '@/lib/permissions'
 import { FrontPageEditor } from '@/components/dashboard/frontpage-editor'
+import { UpgradePrompt } from '@/components/dashboard/upgrade-prompt'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -20,6 +21,11 @@ export default async function SkriptFrontPageEditPage({ params }: SkriptFrontPag
 
   if (!session?.user?.id) {
     redirect('/auth/signin')
+  }
+
+  const billingPlan = session?.user?.billingPlan || 'free'
+  if (billingPlan === 'free' && !session?.user?.isAdmin) {
+    return <UpgradePrompt feature="front page editing" />
   }
 
   const skript = await prisma.skript.findFirst({

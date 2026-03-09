@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { FrontPageEditor } from '@/components/dashboard/frontpage-editor'
+import { UpgradePrompt } from '@/components/dashboard/upgrade-prompt'
 
 export default async function UserFrontPageEditPage() {
   const session = await getServerSession(authOptions)
@@ -14,6 +15,12 @@ export default async function UserFrontPageEditPage() {
   // Only teachers can have frontpages
   if (session.user.accountType === 'student') {
     redirect('/dashboard')
+  }
+
+  // Gate behind paid plan
+  const billingPlan = session?.user?.billingPlan || 'free'
+  if (billingPlan === 'free' && !session?.user?.isAdmin) {
+    return <UpgradePrompt feature="front page editing" />
   }
 
   // Get user's frontpage if it exists

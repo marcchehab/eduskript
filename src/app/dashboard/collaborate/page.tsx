@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { ProfileSettings } from '@/components/dashboard/profile-settings'
+import { UpgradePrompt } from '@/components/dashboard/upgrade-prompt'
 
 interface User {
   id: string
@@ -195,6 +196,11 @@ export default function CollaboratePage() {
       default:
         return null
     }
+  }
+
+  const billingPlan = session?.user?.billingPlan || 'free'
+  if (billingPlan === 'free' && !session?.user?.isAdmin) {
+    return <UpgradePrompt feature="collaboration features" />
   }
 
   return (

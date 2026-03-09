@@ -23,6 +23,7 @@ declare module "next-auth" {
       needsProfileCompletion?: boolean
       accountType?: string
       studentPseudonym?: string | null
+      billingPlan?: string
       typographyPreference?: string | null
       signedUpFromPageSlug?: string | null // For students: the teacher page they signed up from
       oauthEmail?: string | null // For students: their real OAuth email (not stored in DB, only in token)
@@ -72,6 +73,7 @@ declare module "next-auth/jwt" {
     needsProfileCompletion?: boolean
     accountType?: string
     studentPseudonym?: string | null
+    billingPlan?: string
     typographyPreference?: string | null
     signedUpFromPageSlug?: string | null // For students: the teacher page they signed up from
     oauthEmail?: string | null // For students: their real OAuth email (not stored in DB, only in token)

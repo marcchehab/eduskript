@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { checkSkriptPermissions } from '@/lib/permissions'
 import { PageEditor } from '@/components/dashboard/page-editor'
+import { UpgradePrompt } from '@/components/dashboard/upgrade-prompt'
 
 interface PageParams {
   skriptSlug: string
@@ -82,6 +83,11 @@ export default async function PageEditPage({
 
   if (!session?.user?.id) {
     return notFound()
+  }
+
+  const billingPlan = session?.user?.billingPlan || 'free'
+  if (billingPlan === 'free' && !session?.user?.isAdmin) {
+    return <UpgradePrompt feature="content editing" />
   }
 
   const { skriptSlug, pageSlug } = await params

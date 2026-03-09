@@ -285,6 +285,7 @@ export const authOptions: NextAuthOptions = {
             needsProfileCompletion: true,
             accountType: true,
             studentPseudonym: true,
+            billingPlan: true,
             typographyPreference: true,
           }
         })
@@ -332,6 +333,7 @@ export const authOptions: NextAuthOptions = {
           token.needsProfileCompletion = dbUser.needsProfileCompletion
           token.accountType = dbUser.accountType
           token.studentPseudonym = dbUser.studentPseudonym
+          token.billingPlan = dbUser.billingPlan
           token.typographyPreference = dbUser.typographyPreference
 
           // For students, store OAuth email in token (for display purposes, NOT stored in DB)
@@ -433,6 +435,7 @@ export const authOptions: NextAuthOptions = {
             needsProfileCompletion: true,
             accountType: true,
             studentPseudonym: true,
+            billingPlan: true,
             typographyPreference: true,
           }
         })
@@ -455,6 +458,7 @@ export const authOptions: NextAuthOptions = {
           token.needsProfileCompletion = dbUser.needsProfileCompletion
           token.accountType = dbUser.accountType
           token.studentPseudonym = dbUser.studentPseudonym
+          token.billingPlan = dbUser.billingPlan
           token.typographyPreference = dbUser.typographyPreference
         }
       }
@@ -478,6 +482,7 @@ export const authOptions: NextAuthOptions = {
         session.user.requirePasswordReset = token.requirePasswordReset as boolean
         session.user.needsProfileCompletion = token.needsProfileCompletion as boolean
         session.user.accountType = token.accountType as string
+        session.user.billingPlan = token.billingPlan as string
         session.user.studentPseudonym = token.studentPseudonym as string | null
         session.user.typographyPreference = token.typographyPreference as string | null
         session.user.signedUpFromPageSlug = token.signedUpFromPageSlug as string | null

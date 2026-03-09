@@ -58,7 +58,7 @@ export async function PATCH(
   const { id } = await params
 
   try {
-    const { email, name, pageSlug, title, isAdmin, requirePasswordReset } = await request.json()
+    const { email, name, pageSlug, title, isAdmin, requirePasswordReset, billingPlan } = await request.json()
 
     // Check if user exists
     const existingUser = await prisma.user.findUnique({
@@ -125,6 +125,7 @@ export async function PATCH(
         ...(title !== undefined && { title: title || null }),
         ...(isAdmin !== undefined && { isAdmin }),
         ...(requirePasswordReset !== undefined && { requirePasswordReset }),
+        ...(billingPlan !== undefined && { billingPlan }),
       },
       select: {
         id: true,
@@ -133,12 +134,46 @@ export async function PATCH(
         pageSlug: true,
         title: true,
         isAdmin: true,
+        billingPlan: true,
         requirePasswordReset: true,
         emailVerified: true,
         createdAt: true,
         updatedAt: true,
       },
     })
+
+    // If billingPlan changed, create/update admin-granted subscription
+    if (billingPlan !== undefined && billingPlan !== 'free') {
+      const plan = await prisma.plan.findUnique({ where: { slug: billingPlan } })
+      if (plan) {
+        // Upsert: find existing active subscription or create new one
+        const existingSub = await prisma.subscription.findFirst({
+          where: { userId: id, status: 'active' },
+        })
+
+        if (existingSub) {
+          await prisma.subscription.update({
+            where: { id: existingSub.id },
+            data: { planId: plan.id, status: 'active' },
+          })
+        } else {
+          await prisma.subscription.create({
+            data: {
+              userId: id,
+              planId: plan.id,
+              status: 'active',
+              // No payrexxSubId — admin-granted
+            },
+          })
+        }
+      }
+    } else if (billingPlan === 'free') {
+      // Cancel any active subscriptions
+      await prisma.subscription.updateMany({
+        where: { userId: id, status: 'active' },
+        data: { status: 'cancelled', cancelledAt: new Date() },
+      })
+    }
 
     return NextResponse.json({ user: updatedUser })
   } catch (error) {

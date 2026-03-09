@@ -152,8 +152,9 @@ model User {
   // Custom domains for teachers
   customDomains TeacherCustomDomain[]
 
-  // Individual billing groundwork (payment provider TBD)
+  // Billing
   billingPlan String @default("free") @map("billing_plan") // "free" | "pro" | etc.
+  subscriptions Subscription[]
 
   // SEB exam tokens and sessions
   examTokens   ExamToken[]   @relation("ExamTokens")
@@ -920,4 +921,44 @@ model MetricPoint {
   @@index([name, timestamp])
   @@index([timestamp])
   @@map("metric_points")
+}
+
+// Subscription plans available for purchase
+model Plan {
+  id          String   @id @default(cuid())
+  name        String   // e.g., "Basic", "Pro"
+  slug        String   @unique // URL-safe identifier, e.g., "pro-monthly"
+  priceChf    Int      // Price in Rappen (cents), e.g., 990 = CHF 9.90
+  interval    String   // "monthly" | "yearly"
+  features    Json     // Feature flags, e.g., { maxSkripts: 50, customDomain: true }
+  isActive    Boolean  @default(true) @map("is_active") // Soft-delete for retired plans
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  subscriptions Subscription[]
+
+  @@map("plans")
+}
+
+// User subscriptions managed via Payrexx
+model Subscription {
+  id                String    @id @default(cuid())
+  userId            String    @map("user_id")
+  planId            String    @map("plan_id")
+  payrexxSubId      String?   @unique @map("payrexx_sub_id") // Payrexx subscription ID
+  payrexxCustomerId String?   @map("payrexx_customer_id") // Payrexx customer/contact ID
+  status            String    @default("incomplete") // "active" | "cancelled" | "past_due" | "trialing" | "incomplete"
+  currentPeriodStart DateTime? @map("current_period_start")
+  currentPeriodEnd   DateTime? @map("current_period_end")
+  cancelledAt       DateTime? @map("cancelled_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan Plan @relation(fields: [planId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([payrexxSubId])
+  @@map("subscriptions")
 }
