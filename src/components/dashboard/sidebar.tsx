@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { cn } from '@/lib/utils'
-import { BookOpen, Settings, Users, ChevronLeft, ChevronRight, Shield, GraduationCap, User, Camera, CornerUpLeft, Globe, BarChart3 } from 'lucide-react'
+import { BookOpen, Settings, Users, ChevronLeft, ChevronRight, Shield, GraduationCap, User, Camera, CornerUpLeft, Globe, BarChart3, CreditCard, Lock, Tag } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 // Personal navigation items for teachers
@@ -14,6 +14,7 @@ const personalNavigation = [
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
   { name: 'Collaborate', href: '/dashboard/collaborate', icon: Users },
   { name: 'My Classes', href: '/dashboard/classes', icon: GraduationCap },
+  { name: 'Billing', href: '/dashboard/billing', icon: CreditCard },
 ]
 
 // Student navigation items
@@ -58,6 +59,7 @@ export function DashboardSidebar() {
   // Determine which navigation to show based on account type
   const isStudent = session?.user?.accountType === 'student'
   const isTeacher = session?.user?.accountType === 'teacher'
+  const isFreePlan = session?.user?.billingPlan === 'free' || !session?.user?.billingPlan
 
   // Read localStorage immediately on mount — don't wait for session.
   // The render condition still gates on isStudent, but this way the data
@@ -192,6 +194,9 @@ export function DashboardSidebar() {
                 // Highlight page-builder for both /dashboard and /dashboard/page-builder
                 const isActive = pathname === item.href ||
                                (item.href === '/dashboard/page-builder' && pathname === '/dashboard')
+                // Items gated behind a paid plan
+                const gatedPaths = ['/dashboard/page-builder', '/dashboard/collaborate', '/dashboard/classes']
+                const isGated = isFreePlan && gatedPaths.includes(item.href)
 
                 return (
                   <Link
@@ -201,13 +206,20 @@ export function DashboardSidebar() {
                       'flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors',
                       isActive
                         ? 'bg-primary/10 text-primary'
-                        : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                        : isGated
+                          ? 'text-muted-foreground/50 hover:bg-muted hover:text-muted-foreground'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground',
                       isCollapsed ? 'justify-center px-2' : ''
                     )}
                     title={isCollapsed ? item.name : undefined}
                   >
                     <Icon className="w-5 h-5" />
-                    {!isCollapsed && <span>{item.name}</span>}
+                    {!isCollapsed && (
+                      <span className="flex items-center gap-2">
+                        {item.name}
+                        {isGated && <Lock className="w-3 h-3" />}
+                      </span>
+                    )}
                   </Link>
                 )
               })}
@@ -263,6 +275,20 @@ export function DashboardSidebar() {
                 {!isCollapsed && <span>Admin Panel</span>}
               </Link>
               <Link
+                href="/dashboard/admin/plans"
+                className={cn(
+                  'flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors',
+                  pathname === '/dashboard/admin/plans'
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                  isCollapsed ? 'justify-center px-2' : ''
+                )}
+                title={isCollapsed ? 'Subscription Plans' : undefined}
+              >
+                <Tag className="w-5 h-5" />
+                {!isCollapsed && <span>Subscription Plans</span>}
+              </Link>
+              <Link
                 href="/dashboard/admin/metrics"
                 className={cn(
                   'flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors',
@@ -280,6 +306,14 @@ export function DashboardSidebar() {
           )}
         </nav>
 
+        {/* Legal links - bottom of sidebar */}
+        {!isCollapsed && (
+          <div className="px-3 py-3 text-center text-[11px] text-muted-foreground/40">
+            <Link href="/impressum" className="hover:text-muted-foreground">Legal</Link>
+            <span className="mx-1.5">·</span>
+            <Link href="/terms" className="hover:text-muted-foreground">Terms (Mar 2026)</Link>
+          </div>
+        )}
       </div>
     </div>
   )

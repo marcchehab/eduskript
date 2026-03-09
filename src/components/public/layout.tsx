@@ -667,9 +667,16 @@ export function PublicSiteLayout({
               </nav>
             )}
 
-            {/* Sync Status Button - bottom of sidebar */}
-            <div className={`mt-auto pt-4 ${isSidebarCollapsed ? 'flex justify-center' : ''}`}>
+            {/* Sync Status + Legal links - bottom of sidebar */}
+            <div className={`mt-auto pt-4 ${isSidebarCollapsed ? 'flex flex-col items-center gap-2' : ''}`}>
               <SyncStatusButton />
+              {!isSidebarCollapsed && (
+                <div className="pt-2 text-center text-[11px] text-muted-foreground/40">
+                  <Link href="/impressum" className="hover:text-muted-foreground">Legal</Link>
+                  <span className="mx-1.5">·</span>
+                  <Link href="/terms" className="hover:text-muted-foreground">Terms (Mar 2026)</Link>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -693,11 +700,6 @@ export function PublicSiteLayout({
           <main className="bg-background min-h-screen">
             {children}
           </main>
-          <footer className="py-4 text-center text-xs text-muted-foreground/50">
-            <Link href="/impressum" className="hover:text-muted-foreground">Legal Notice</Link>
-            <span className="mx-2">·</span>
-            <Link href="/terms" className="hover:text-muted-foreground">Terms (Mar 2026)</Link>
-          </footer>
         </div>
       </div>
     </TeacherClassProvider>
