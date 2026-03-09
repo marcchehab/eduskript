@@ -64,7 +64,7 @@ interface User {
 }
 
 export default function AdminPanelPage() {
-  const { data: session } = useSession()
+  const { data: session, update: updateSession } = useSession()
   const router = useRouter()
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
@@ -323,6 +323,11 @@ export default function AdminPanelPage() {
 
       if (!response.ok) {
         throw new Error(data.error || 'Failed to update user')
+      }
+
+      // If we edited the current user's billing plan, refresh the JWT session
+      if (selectedUser.id === session?.user?.id && formData.billingPlan) {
+        await updateSession()
       }
 
       setSuccess('User updated successfully')

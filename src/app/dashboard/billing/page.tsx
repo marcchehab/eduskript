@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { useSession } from 'next-auth/react'
 import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { CreditCard, Check, AlertCircle, Loader2 } from 'lucide-react'
@@ -23,6 +24,7 @@ interface SubscriptionData {
 }
 
 export default function BillingPage() {
+  const { update: updateSession } = useSession()
   const searchParams = useSearchParams()
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null)
   const [plans, setPlans] = useState<PlanData[]>([])
@@ -55,7 +57,10 @@ export default function BillingPage() {
     if (status === 'success') {
       setSuccessMessage('Payment successful! Your subscription is being activated.')
       // Re-fetch after a short delay to allow webhook processing
-      setTimeout(fetchData, 3000)
+      setTimeout(async () => {
+        await fetchData()
+        await updateSession()
+      }, 3000)
     } else if (status === 'failed') {
       setError('Payment failed. Please try again.')
     } else if (status === 'cancelled') {
@@ -92,6 +97,7 @@ export default function BillingPage() {
       if (!res.ok) throw new Error(data.error || 'Failed to cancel')
       setSubscription(null)
       setSuccessMessage('Subscription cancelled.')
+      await updateSession()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to cancel subscription')
     } finally {
