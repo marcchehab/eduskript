@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { useSession } from 'next-auth/react'
 import { ChevronDown, ChevronRight, Menu, X, ChevronLeft, NotebookPen } from 'lucide-react'
 import Image from 'next/image'
@@ -692,6 +693,11 @@ export function PublicSiteLayout({
           <main className="bg-background min-h-screen">
             {children}
           </main>
+          <footer className="py-4 text-center text-xs text-muted-foreground/50">
+            <Link href="/impressum" className="hover:text-muted-foreground">Legal Notice</Link>
+            <span className="mx-2">·</span>
+            <Link href="/terms" className="hover:text-muted-foreground">Terms (Mar 2026)</Link>
+          </footer>
         </div>
       </div>
     </TeacherClassProvider>
