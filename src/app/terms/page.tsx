@@ -27,7 +27,7 @@ export default function TermsPage() {
             <p>
               These Terms of Service govern the use of Eduskript (the
               &ldquo;Platform&rdquo;), operated by Luz Media GmbH,
-              Altwiesenstrasse 63, 8051 Zürich, Switzerland (the
+              Untere Vogelsangstrasse 11, 8400 Winterthur, Switzerland (the
               &ldquo;Operator&rdquo;).
             </p>
             <p>
