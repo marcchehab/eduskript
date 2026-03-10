@@ -20,7 +20,7 @@ export default function TermsPage() {
         <h1 className="text-3xl font-bold mb-2">Terms of Service</h1>
         <p className="text-muted-foreground mb-8">Eduskript — Luz Media GmbH</p>
 
-        <div className="prose prose-neutral dark:prose-invert space-y-6">
+        <div className="prose prose-neutral dark:prose-invert space-y-6 [&_p]:mt-4">
           {/* 1 */}
           <section>
             <h2 className="text-xl font-semibold mt-6 mb-2">1. Scope</h2>

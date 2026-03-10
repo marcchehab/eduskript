@@ -23,7 +23,7 @@ export default function ImpressumPage() {
           Switzerland.
         </p>
 
-        <div className="prose prose-neutral dark:prose-invert space-y-6">
+        <div className="prose prose-neutral dark:prose-invert space-y-6 [&_p]:mt-4">
           <section>
             <p>
               Official company address:
