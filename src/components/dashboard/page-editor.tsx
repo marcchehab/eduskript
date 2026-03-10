@@ -944,6 +944,8 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
               <VideoBrowser
                 videos={videoList}
                 loading={fileListLoading}
+                isAdmin={session?.user?.isAdmin}
+                onVideoAdded={refreshFileList}
               />
             </div>
           )}
