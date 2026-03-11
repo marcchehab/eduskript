@@ -190,11 +190,27 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
         })
 
         if (!response.ok) {
-          const data = await response.json()
-          throw new Error(data.error || 'Failed to get edit plan')
+          const text = await response.text()
+          let errorMsg = 'Failed to get edit plan'
+          try {
+            const data = JSON.parse(text)
+            errorMsg = data.error || errorMsg
+          } catch {
+            // Non-JSON error response (e.g. proxy timeout HTML page)
+            log.error('Non-JSON error response:', text.slice(0, 200))
+          }
+          throw new Error(errorMsg)
         }
 
-        const data = await response.json()
+        const text = await response.text()
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let data: any
+        try {
+          data = JSON.parse(text)
+        } catch {
+          log.error('Failed to parse plan response as JSON:', text.slice(0, 200))
+          throw new Error('Server returned an invalid response. Please try again.')
+        }
 
         // Handle AI text-only response (no job created)
         if (data.aiMessage) {

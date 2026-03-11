@@ -141,14 +141,22 @@ export async function POST(request: Request): Promise<Response> {
   for (let attempt = 1; attempt <= MAX_PLAN_RETRIES; attempt++) {
     const planMessage = await openai.chat.completions.create({
       model: process.env.OPENROUTER_MODEL ?? 'z-ai/glm-5',
-      max_tokens: 4096,
+      max_tokens: 8192,
       messages: [{ role: 'system', content: planPrompt }, { role: 'user', content: instruction }],
     })
 
     lastPlanText = planMessage.choices[0]?.message?.content ?? ''
     const finishReason = planMessage.choices[0]?.finish_reason
 
-    log(`Plan attempt ${attempt}/${MAX_PLAN_RETRIES}, response length: ${lastPlanText.length}, finish_reason: ${finishReason}`)
+    log(`Plan attempt ${attempt}/${MAX_PLAN_RETRIES}, length: ${lastPlanText.length}, finish_reason: ${finishReason}`)
+
+    // If truncated, don't bother parsing — retry immediately
+    if (finishReason === 'length') {
+      log(`Plan attempt ${attempt} truncated at ${lastPlanText.length} chars, retrying...`)
+      parseResult = { success: false, error: 'Response truncated', fullResponse: lastPlanText }
+      continue
+    }
+
     if (lastPlanText.length > 0) {
       log('Plan response preview:', lastPlanText.slice(0, 300))
     }
@@ -157,7 +165,6 @@ export async function POST(request: Request): Promise<Response> {
 
     if (parseResult.success) break
 
-    // Log why parsing failed so we can diagnose production issues
     const failReason = lastPlanText.length === 0
       ? 'empty response'
       : !parseResult.success ? `parse error: ${parseResult.error}` : 'unknown'
