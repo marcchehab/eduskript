@@ -1,0 +1,273 @@
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { assembleSinglePageEditPrompt } from '@/lib/ai/prompts'
+import type { SkriptContext } from '@/lib/ai/types'
+import OpenAI from 'openai'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('ai:edit')
+
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
+interface AiEditPlan {
+  totalEdits: number
+  overallSummary: string
+  pages: Array<{
+    pageId: string | null
+    pageTitle: string
+    pageSlug: string
+    summary: string
+    isNew?: boolean
+  }>
+}
+
+interface AiEditJobResult {
+  skriptId: string
+  instruction: string
+  focusedPageId: string | null
+  currentContent: string | null
+  plan: AiEditPlan
+  completedEdits: Array<Record<string, unknown>>
+  failedPages: Array<{ pageIndex: number; error: string }>
+}
+
+/**
+ * POST /api/ai/edit/[jobId]/generate — Generate one page edit.
+ * Body: { pageIndex: number }
+ * Returns { edit: PageEdit } on success, { error } on failure.
+ */
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ jobId: string }> }
+): Promise<Response> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.id) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const userId = session.user.id
+  const { jobId } = await params
+
+  if (!process.env.OPENROUTER_API_KEY) {
+    return Response.json({ error: 'AI service not configured' }, { status: 503 })
+  }
+
+  const body = (await request.json()) as { pageIndex: number }
+  const { pageIndex } = body
+
+  if (typeof pageIndex !== 'number' || pageIndex < 0) {
+    return Response.json({ error: 'Invalid pageIndex' }, { status: 400 })
+  }
+
+  // 1. Fetch and verify job
+  const job = await prisma.importJob.findUnique({ where: { id: jobId } })
+
+  if (!job || job.userId !== userId || job.type !== 'ai-edit') {
+    return Response.json({ error: 'Job not found' }, { status: 404 })
+  }
+
+  if (job.status === 'cancelled') {
+    return Response.json({ error: 'Job was cancelled' }, { status: 409 })
+  }
+
+  const jobResult = job.result as unknown as AiEditJobResult
+  if (!jobResult?.plan?.pages) {
+    return Response.json({ error: 'Job has no plan' }, { status: 400 })
+  }
+
+  if (pageIndex >= jobResult.plan.pages.length) {
+    return Response.json({ error: 'pageIndex out of range' }, { status: 400 })
+  }
+
+  const plannedEdit = jobResult.plan.pages[pageIndex]
+
+  // 2. Fetch fresh skript context
+  const skript = await prisma.skript.findUnique({
+    where: { id: jobResult.skriptId },
+    include: {
+      pages: { orderBy: { order: 'asc' } },
+      files: { select: { id: true, name: true, contentType: true } },
+    },
+  })
+
+  if (!skript) {
+    return Response.json({ error: 'Skript not found' }, { status: 404 })
+  }
+
+  // Build page content map, using currentContent for the focused page
+  const pageContentMap = new Map<string, string>()
+  skript.pages.forEach((p) => {
+    const content = (jobResult.focusedPageId && p.id === jobResult.focusedPageId && jobResult.currentContent)
+      ? jobResult.currentContent
+      : p.content
+    pageContentMap.set(p.id, content)
+  })
+
+  const skriptContext: SkriptContext = {
+    skript: {
+      id: skript.id,
+      title: skript.title,
+      description: skript.description,
+      slug: skript.slug,
+      isPublished: skript.isPublished,
+    },
+    pages: skript.pages.map((p) => ({
+      id: p.id,
+      title: p.title,
+      slug: p.slug,
+      content: pageContentMap.get(p.id) || p.content,
+      order: p.order,
+      isPublished: p.isPublished,
+    })),
+    files: skript.files,
+    focusedPageId: jobResult.focusedPageId || undefined,
+  }
+
+  // 3. Find original page
+  const pageByIdMap = new Map(skript.pages.map(p => [p.id, p]))
+  const pageBySlugMap = new Map(skript.pages.map(p => [p.slug, p]))
+
+  let originalPage = plannedEdit.pageId ? pageByIdMap.get(plannedEdit.pageId) : undefined
+  if (!originalPage && plannedEdit.pageSlug) {
+    originalPage = pageBySlugMap.get(plannedEdit.pageSlug)
+  }
+
+  const isNew = plannedEdit.isNew === true || (!originalPage && plannedEdit.pageId === null)
+  const actualPageId = originalPage?.id ?? plannedEdit.pageId
+
+  const isFocusedPage = jobResult.focusedPageId && actualPageId === jobResult.focusedPageId
+  const originalContent = (isFocusedPage && jobResult.currentContent)
+    ? jobResult.currentContent
+    : (originalPage?.content ?? '')
+
+  // 4. Call AI
+  const openai = new OpenAI({
+    apiKey: process.env.OPENROUTER_API_KEY,
+    baseURL: 'https://openrouter.ai/api/v1',
+    defaultHeaders: { 'HTTP-Referer': 'https://eduskript.org', 'X-Title': 'Eduskript' },
+  })
+
+  const orgPrompt: string | undefined = undefined
+
+  try {
+    let proposedContent: string
+
+    if (isNew && !originalPage) {
+      // Generate content for new page
+      const newPagePrompt = assembleSinglePageEditPrompt({
+        orgPrompt,
+        skriptContext,
+        targetPage: {
+          title: plannedEdit.pageTitle,
+          slug: plannedEdit.pageSlug,
+          isNew: true,
+        },
+        editSummary: plannedEdit.summary,
+        instruction: jobResult.instruction,
+      })
+
+      const newPageMessage = await openai.chat.completions.create({
+        model: process.env.OPENROUTER_MODEL ?? 'z-ai/glm-5',
+        max_tokens: 8192,
+        messages: [
+          { role: 'system', content: newPagePrompt },
+          { role: 'user', content: `Create the content for the new page "${plannedEdit.pageTitle}". ${plannedEdit.summary}` },
+        ],
+      })
+
+      proposedContent = (newPageMessage.choices[0]?.message?.content ?? '').trim()
+    } else {
+      // Generate edit for existing page
+      const editPrompt = assembleSinglePageEditPrompt({
+        orgPrompt,
+        skriptContext,
+        targetPage: {
+          id: actualPageId!,
+          title: originalPage?.title || plannedEdit.pageTitle,
+          slug: originalPage?.slug || plannedEdit.pageSlug,
+          content: originalContent,
+          isNew: false,
+        },
+        editSummary: plannedEdit.summary,
+        instruction: jobResult.instruction,
+      })
+
+      const editMessage = await openai.chat.completions.create({
+        model: process.env.OPENROUTER_MODEL ?? 'z-ai/glm-5',
+        max_tokens: 8192,
+        messages: [
+          { role: 'system', content: editPrompt },
+          { role: 'user', content: `Apply the following change to the page "${originalPage?.title || plannedEdit.pageTitle}": ${plannedEdit.summary}` },
+        ],
+      })
+
+      proposedContent = (editMessage.choices[0]?.message?.content ?? '').trim()
+    }
+
+    // 5. Build edit result
+    const edit = {
+      index: pageIndex,
+      pageId: isNew ? null : actualPageId,
+      pageTitle: originalPage?.title || plannedEdit.pageTitle,
+      pageSlug: originalPage?.slug || plannedEdit.pageSlug,
+      originalContent: isNew ? '' : originalContent,
+      proposedContent,
+      summary: plannedEdit.summary,
+      isNew,
+    }
+
+    // 6. Atomically append to job result
+    // Read fresh job state, append edit, write back
+    const freshJob = await prisma.importJob.findUnique({ where: { id: jobId } })
+    const freshResult = freshJob?.result as unknown as AiEditJobResult
+    const completedEdits = [...(freshResult?.completedEdits ?? []), edit]
+    const totalPages = freshResult?.plan?.pages?.length ?? 0
+    const progress = totalPages > 0 ? Math.round((completedEdits.length / totalPages) * 100) : 0
+    const allDone = completedEdits.length + (freshResult?.failedPages?.length ?? 0) >= totalPages
+
+    await prisma.importJob.update({
+      where: { id: jobId },
+      data: {
+        result: { ...freshResult, completedEdits },
+        progress,
+        status: allDone ? 'completed' : 'processing',
+        message: `Generated ${completedEdits.length}/${totalPages} pages`,
+        ...(allDone ? { completedAt: new Date() } : {}),
+      },
+    })
+
+    log(`Job ${jobId}: page ${pageIndex + 1}/${totalPages} done (${plannedEdit.pageTitle})`)
+
+    return Response.json({ success: true, edit })
+  } catch (error) {
+    log.error(`Job ${jobId}: page ${pageIndex} failed:`, error)
+
+    // Record failure in job
+    const freshJob = await prisma.importJob.findUnique({ where: { id: jobId } })
+    const freshResult = freshJob?.result as unknown as AiEditJobResult
+    const failedPages = [...(freshResult?.failedPages ?? []), {
+      pageIndex,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    }]
+    const totalPages = freshResult?.plan?.pages?.length ?? 0
+    const allDone = (freshResult?.completedEdits?.length ?? 0) + failedPages.length >= totalPages
+
+    await prisma.importJob.update({
+      where: { id: jobId },
+      data: {
+        result: { ...freshResult, failedPages },
+        status: allDone ? 'completed' : 'processing',
+        message: `${freshResult?.completedEdits?.length ?? 0}/${totalPages} pages, ${failedPages.length} failed`,
+        ...(allDone ? { completedAt: new Date() } : {}),
+      },
+    })
+
+    return Response.json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to generate edit',
+      pageIndex,
+    }, { status: 500 })
+  }
+}

@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useCallback } from 'react'
-import { Wand2, Loader2, X, Check, FileText, Plus, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react'
+import { useState, useCallback, useEffect } from 'react'
+import { Wand2, Loader2, X, Check, FileText, Plus, ChevronDown, ChevronRight, AlertTriangle, RotateCcw } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -55,12 +55,16 @@ export function AIEditModal({
     plan,
     currentEditIndex,
     completedEdits,
+    failedPages,
     overflow,
     aiMessage,
+    jobId,
     requestEdit,
     applyEdits,
     clearProposal,
     cancelRequest,
+    retryPage,
+    recoverJob,
   } = useAIEdit({ skriptId, pageId, currentContent })
 
   // Track merged content for each page (user can edit while streaming)
@@ -68,6 +72,30 @@ export function AIEditModal({
   const [expandedEdits, setExpandedEdits] = useState<Set<string>>(new Set())
   const [isSaving, setIsSaving] = useState(false)
   const [showFullResponse, setShowFullResponse] = useState(false)
+  const [recoveryChecked, setRecoveryChecked] = useState(false)
+
+  // Check for recoverable job when modal opens
+  useEffect(() => {
+    if (open && !recoveryChecked && !isLoading && !proposal && completedEdits.length === 0) {
+      setRecoveryChecked(true)
+      try {
+        const storedJobId = sessionStorage.getItem(`ai-edit-job:${skriptId}`)
+        if (storedJobId) {
+          log('Found recoverable job:', storedJobId)
+          recoverJob(storedJobId)
+        }
+      } catch {
+        // sessionStorage not available
+      }
+    }
+  }, [open, recoveryChecked, isLoading, proposal, completedEdits.length, skriptId, recoverJob])
+
+  // Reset recovery check when modal closes
+  useEffect(() => {
+    if (!open) {
+      setRecoveryChecked(false)
+    }
+  }, [open])
 
   const handleContentChange = useCallback((key: string, content: string) => {
     setMergedContent(prev => ({ ...prev, [key]: content }))
@@ -149,8 +177,9 @@ export function AIEditModal({
 
   // Calculate progress
   const totalEdits = plan?.totalEdits || 0
-  const progressPercent = totalEdits > 0 ? (currentEditIndex / totalEdits) * 100 : 0
-  const isComplete = proposal && !isLoading
+  const doneCount = completedEdits.length + failedPages.length
+  const progressPercent = totalEdits > 0 ? (doneCount / totalEdits) * 100 : 0
+  const isComplete = (proposal && !isLoading) || (totalEdits > 0 && doneCount >= totalEdits && !isLoading)
 
   // Show progressive view when we have a plan or completed edits
   const showProgressiveView = (plan && currentEditIndex >= 0) || completedEdits.length > 0 || proposal
@@ -260,7 +289,7 @@ export function AIEditModal({
                   </div>
                 </div>
               )}
-              {(proposal?.edits || completedEdits).map((edit, index) => {
+              {(proposal?.edits || completedEdits).map((edit) => {
                 const key = getEditKey(edit)
                 const isExpanded = expandedEdits.has(key)
                 const content = mergedContent[key] ?? edit.proposedContent
@@ -319,9 +348,44 @@ export function AIEditModal({
                 )
               })}
 
+              {/* Show failed pages with retry button */}
+              {failedPages.map((fp) => {
+                const page = plan?.pages[fp.pageIndex]
+                if (!page) return null
+
+                return (
+                  <div key={`failed:${fp.pageIndex}`} className="border-b">
+                    <div className="flex items-center gap-3 px-4 py-3">
+                      <div className="w-4 h-4" /> {/* Spacer for chevron */}
+                      <div className="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center flex-shrink-0">
+                        <X className="w-3 h-3 text-white" />
+                      </div>
+                      {page.isNew ? (
+                        <Plus className="h-4 w-4 text-red-500 flex-shrink-0" />
+                      ) : (
+                        <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium truncate">{page.pageTitle}</div>
+                        <div className="text-sm text-red-500 truncate">{fp.error}</div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => retryPage(fp.pageIndex)}
+                        disabled={isLoading}
+                      >
+                        <RotateCcw className="h-3 w-3 mr-1" />
+                        Retry
+                      </Button>
+                    </div>
+                  </div>
+                )
+              })}
+
               {/* Show pending pages */}
-              {!isComplete && plan?.pages.slice(currentEditIndex).map((page, idx) => {
-                const actualIndex = currentEditIndex + idx
+              {!isComplete && plan?.pages.slice(doneCount).map((page, idx) => {
+                const actualIndex = doneCount + idx
                 const isCurrent = actualIndex === currentEditIndex
 
                 return (
@@ -359,7 +423,8 @@ export function AIEditModal({
             <div className="flex-shrink-0 border-t px-4 py-3 bg-background flex items-center justify-between">
               <p className="text-sm text-muted-foreground">
                 {completedEdits.length || proposal?.edits.length || 0} {(completedEdits.length || proposal?.edits.length || 0) === 1 ? 'page' : 'pages'} ready
-                {!isComplete && totalEdits > 0 && ` (${totalEdits - currentEditIndex} generating...)`}
+                {failedPages.length > 0 && `, ${failedPages.length} failed`}
+                {!isComplete && totalEdits > 0 && ` (${totalEdits - doneCount} generating...)`}
               </p>
               <div className="flex items-center gap-3">
                 <Button variant="outline" onClick={handleCancel} disabled={isSaving}>

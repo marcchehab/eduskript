@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import type { EditProposal, PageEdit } from '@/lib/ai/types'
 import { createLogger } from '@/lib/logger'
 
@@ -36,23 +36,38 @@ interface OverflowInfo {
   fullResponse: string
 }
 
+interface FailedPage {
+  pageIndex: number
+  error: string
+}
+
 interface UseAIEditReturn {
   proposal: EditProposal | null
   isLoading: boolean
   error: string | null
-  // Streaming state
+  // Progressive state
   plan: EditPlan | null
   currentEditIndex: number
   completedEdits: PageEdit[]
+  failedPages: FailedPage[]
   // Overflow info (when AI response had malformed output)
   overflow: OverflowInfo | null
   // AI message (when AI returned text instead of JSON edits)
   aiMessage: string | null
+  // Job ID for recovery
+  jobId: string | null
   // Actions
   requestEdit: (instruction: string) => Promise<void>
   applyEdits: (edits: PageEdit[]) => Promise<void>
   clearProposal: () => void
   cancelRequest: () => void
+  retryPage: (pageIndex: number) => Promise<void>
+  recoverJob: (jobId: string) => Promise<void>
+}
+
+// Session storage key for persisting active job ID
+function getJobStorageKey(skriptId: string): string {
+  return `ai-edit-job:${skriptId}`
 }
 
 export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions): UseAIEditReturn {
@@ -60,15 +75,86 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Streaming state
+  // Progressive state
   const [plan, setPlan] = useState<EditPlan | null>(null)
   const [currentEditIndex, setCurrentEditIndex] = useState(-1)
   const [completedEdits, setCompletedEdits] = useState<PageEdit[]>([])
+  const [failedPages, setFailedPages] = useState<FailedPage[]>([])
   const [overflow, setOverflow] = useState<OverflowInfo | null>(null)
   const [aiMessage, setAiMessage] = useState<string | null>(null)
+  const [jobId, setJobId] = useState<string | null>(null)
 
   // AbortController ref for cancellation
   const abortControllerRef = useRef<AbortController | null>(null)
+
+  /**
+   * Generate a single page edit, updating state progressively.
+   * Returns true on success, false on failure.
+   */
+  const generatePage = useCallback(
+    async (currentJobId: string, pageIndex: number, signal: AbortSignal): Promise<PageEdit | null> => {
+      const response = await fetch(`/api/ai/edit/${currentJobId}/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pageIndex }),
+        signal,
+      })
+
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        const errorMsg = data.error || 'Failed to generate edit'
+        log.error(`Page ${pageIndex} failed:`, errorMsg)
+        setFailedPages(prev => [...prev, { pageIndex, error: errorMsg }])
+        return null
+      }
+
+      const edit: PageEdit = {
+        pageId: data.edit.pageId,
+        pageTitle: data.edit.pageTitle,
+        pageSlug: data.edit.pageSlug,
+        originalContent: data.edit.originalContent,
+        proposedContent: data.edit.proposedContent,
+        summary: data.edit.summary,
+        isNew: data.edit.isNew,
+      }
+
+      return edit
+    },
+    []
+  )
+
+  /**
+   * Run page generation sequentially for all pages in the plan.
+   */
+  const generateAllPages = useCallback(
+    async (currentJobId: string, planPages: EditPlan['pages'], signal: AbortSignal) => {
+      const edits: PageEdit[] = []
+
+      for (let i = 0; i < planPages.length; i++) {
+        if (signal.aborted) break
+
+        setCurrentEditIndex(i)
+
+        const edit = await generatePage(currentJobId, i, signal)
+        if (edit) {
+          edits.push(edit)
+          setCompletedEdits([...edits])
+        }
+      }
+
+      // All done — build proposal
+      setCurrentEditIndex(planPages.length)
+      if (edits.length > 0) {
+        setProposal({
+          skriptId,
+          edits,
+          overallSummary: '', // Will be filled from plan
+        })
+      }
+    },
+    [skriptId, generatePage]
+  )
 
   const requestEdit = useCallback(
     async (instruction: string) => {
@@ -83,9 +169,11 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
       setPlan(null)
       setCurrentEditIndex(-1)
       setCompletedEdits([])
+      setFailedPages([])
       setProposal(null)
       setOverflow(null)
       setAiMessage(null)
+      setJobId(null)
 
       const controller = new AbortController()
       abortControllerRef.current = controller
@@ -93,6 +181,7 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
       log('Starting edit request', { skriptId, pageId, instructionLength: instruction.length })
 
       try {
+        // Phase 1: Create job + get plan
         const response = await fetch('/api/ai/edit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -102,137 +191,54 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
 
         if (!response.ok) {
           const data = await response.json()
-          throw new Error(data.error || 'Failed to get edit proposal')
+          throw new Error(data.error || 'Failed to get edit plan')
         }
 
-        // Handle SSE stream
-        const reader = response.body?.getReader()
-        if (!reader) {
-          throw new Error('No response body')
+        const data = await response.json()
+
+        // Handle AI text-only response (no job created)
+        if (data.aiMessage) {
+          setAiMessage(data.aiMessage)
+          setPlan(data.plan)
+          setProposal({ skriptId, edits: [], overallSummary: data.plan.overallSummary })
+          setIsLoading(false)
+          return
         }
 
-        const decoder = new TextDecoder()
-        let buffer = ''
-        const edits: PageEdit[] = []
-        let overallSummary = ''
-        // Persist across chunks - event: and data: lines may arrive in separate chunks
-        let eventType = ''
-        let eventData = ''
-
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-
-          buffer += decoder.decode(value, { stream: true })
-
-          // Parse SSE events from buffer
-          const lines = buffer.split('\n')
-          buffer = lines.pop() || '' // Keep incomplete line in buffer
-
-          log(`Processing chunk: ${lines.length} lines, buffer remaining: ${buffer.length} chars`)
-
-          for (const line of lines) {
-            if (line.trim()) {
-              log(`Line: ${line.substring(0, 100)}${line.length > 100 ? '...' : ''}`)
-            }
-            if (line.startsWith('event: ')) {
-              eventType = line.slice(7).trim()
-            } else if (line.startsWith('data: ')) {
-              eventData = line.slice(6)
-              log(`Got data line, length: ${eventData.length}, eventType: ${eventType}`)
-
-              if (eventType && eventData && eventData.trim()) {
-                try {
-                  log(`Parsing eventData (${eventData.length} chars):`, eventData.slice(0, 200))
-                  const data = JSON.parse(eventData)
-                  log(`Received event: ${eventType}`, data)
-
-                  switch (eventType) {
-                    case 'plan':
-                      setPlan(data)
-                      overallSummary = data.overallSummary
-                      setCurrentEditIndex(0)
-                      // Capture overflow info if present
-                      if (data.overflowBefore || data.overflowAfter) {
-                        setOverflow({
-                          overflowBefore: data.overflowBefore || null,
-                          overflowAfter: data.overflowAfter || null,
-                          fullResponse: data.fullResponse || ''
-                        })
-                      }
-                      break
-
-                    case 'edit':
-                      const edit: PageEdit = {
-                        pageId: data.pageId,
-                        pageTitle: data.pageTitle,
-                        pageSlug: data.pageSlug,
-                        originalContent: data.originalContent,
-                        proposedContent: data.proposedContent,
-                        summary: data.summary,
-                        isNew: data.isNew,
-                      }
-                      edits.push(edit)
-                      log(`Edit ${data.index + 1} received: "${data.pageTitle}", total edits: ${edits.length}`)
-                      setCompletedEdits([...edits])
-                      setCurrentEditIndex(data.index + 1)
-                      break
-
-                    case 'complete':
-                      // Build final proposal from locally accumulated edits
-                      // Server sends { success: true }, edits were sent progressively via 'edit' events
-                      log(`Complete event. Local edits: ${edits.length}, data.edits: ${data.edits?.length ?? 'undefined'}`)
-                      log('Local edit titles:', edits.map(e => e.pageTitle))
-
-                      // Handle AI text-only response (no JSON edits)
-                      if (data.aiMessage) {
-                        log('AI returned text instead of JSON edits')
-                        setAiMessage(data.aiMessage)
-                      }
-
-                      // Prefer locally accumulated edits (from streaming) - only fall back to data.edits if empty
-                      const finalEdits = edits.length > 0 ? edits : (data.edits || [])
-                      log(`Setting proposal with ${finalEdits.length} edits`)
-                      if (finalEdits.length > 0) {
-                        setProposal({
-                          skriptId,
-                          edits: finalEdits,
-                          overallSummary: data.overallSummary || overallSummary,
-                        })
-                      } else {
-                        setProposal({
-                          skriptId,
-                          edits: [],
-                          overallSummary: data.overallSummary || 'No changes needed',
-                        })
-                      }
-                      break
-
-                    case 'error':
-                      // Preserve full response for display if available
-                      if (data.fullResponse) {
-                        setOverflow({
-                          overflowBefore: null,
-                          overflowAfter: null,
-                          fullResponse: data.fullResponse
-                        })
-                      }
-                      throw new Error(data.error || 'Unknown error')
-                  }
-                } catch (parseError) {
-                  log.error('Parse error:', parseError, 'Data:', eventData)
-                  if (!(parseError instanceof SyntaxError)) {
-                    throw parseError
-                  }
-                }
-
-                eventType = ''
-                eventData = ''
-              }
-            }
-          }
+        // No edits planned
+        if (!data.jobId || data.plan.totalEdits === 0) {
+          setPlan(data.plan)
+          setProposal({ skriptId, edits: [], overallSummary: data.plan.overallSummary })
+          setIsLoading(false)
+          return
         }
-        log(`Stream ended. Edits received: ${edits.length}`, edits.map(e => e.pageTitle))
+
+        // Capture overflow info
+        if (data.overflowBefore || data.overflowAfter) {
+          setOverflow({
+            overflowBefore: data.overflowBefore || null,
+            overflowAfter: data.overflowAfter || null,
+            fullResponse: data.fullResponse || '',
+          })
+        }
+
+        const editPlan: EditPlan = data.plan
+        setPlan(editPlan)
+        setJobId(data.jobId)
+        setCurrentEditIndex(0)
+
+        // Store job ID for recovery
+        try {
+          sessionStorage.setItem(getJobStorageKey(skriptId), data.jobId)
+        } catch {
+          // sessionStorage may not be available
+        }
+
+        // Phase 2: Generate each page edit sequentially
+        await generateAllPages(data.jobId, editPlan.pages, controller.signal)
+
+        // Update proposal with overall summary from plan
+        setProposal(prev => prev ? { ...prev, overallSummary: editPlan.overallSummary } : prev)
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') {
           log('Request aborted by user')
@@ -246,8 +252,169 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
         abortControllerRef.current = null
       }
     },
-    [skriptId, pageId, currentContent]
+    [skriptId, pageId, currentContent, generateAllPages]
   )
+
+  /**
+   * Retry a single failed page.
+   */
+  const retryPage = useCallback(
+    async (pageIndex: number) => {
+      if (!jobId) return
+
+      const controller = new AbortController()
+      abortControllerRef.current = controller
+
+      // Remove from failed list
+      setFailedPages(prev => prev.filter(f => f.pageIndex !== pageIndex))
+
+      try {
+        const edit = await generatePage(jobId, pageIndex, controller.signal)
+        if (edit) {
+          setCompletedEdits(prev => {
+            const updated = [...prev, edit]
+            // Sort by page index to maintain order
+            // (index is stored in the edit via the API response)
+            setProposal(current => current
+              ? { ...current, edits: updated }
+              : { skriptId, edits: updated, overallSummary: plan?.overallSummary || '' }
+            )
+            return updated
+          })
+        }
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return
+        log.error('Retry failed:', err)
+      } finally {
+        abortControllerRef.current = null
+      }
+    },
+    [jobId, skriptId, plan, generatePage]
+  )
+
+  /**
+   * Recover a job after disconnect — fetch status from DB and resume.
+   */
+  const recoverJob = useCallback(
+    async (recoveryJobId: string) => {
+      setIsLoading(true)
+      setError(null)
+
+      try {
+        const response = await fetch(`/api/ai/edit/${recoveryJobId}`)
+        if (!response.ok) {
+          // Job not found or expired — clear storage
+          try { sessionStorage.removeItem(getJobStorageKey(skriptId)) } catch {}
+          setIsLoading(false)
+          return
+        }
+
+        const data = await response.json()
+
+        if (data.status === 'cancelled' || !data.plan) {
+          try { sessionStorage.removeItem(getJobStorageKey(skriptId)) } catch {}
+          setIsLoading(false)
+          return
+        }
+
+        // Restore state
+        setJobId(recoveryJobId)
+        setPlan(data.plan)
+
+        const recovered: PageEdit[] = (data.completedEdits || []).map((e: Record<string, unknown>) => ({
+          pageId: e.pageId as string | null,
+          pageTitle: e.pageTitle as string,
+          pageSlug: e.pageSlug as string,
+          originalContent: e.originalContent as string,
+          proposedContent: e.proposedContent as string,
+          summary: e.summary as string,
+          isNew: e.isNew as boolean,
+        }))
+        setCompletedEdits(recovered)
+        setFailedPages(data.failedPages || [])
+
+        const totalPages = data.plan.pages.length
+        const doneCount = recovered.length + (data.failedPages?.length || 0)
+
+        if (doneCount >= totalPages || data.status === 'completed') {
+          // Job is done
+          setCurrentEditIndex(totalPages)
+          if (recovered.length > 0) {
+            setProposal({
+              skriptId,
+              edits: recovered,
+              overallSummary: data.plan.overallSummary,
+            })
+          }
+          setIsLoading(false)
+        } else {
+          // Resume generating remaining pages
+          const controller = new AbortController()
+          abortControllerRef.current = controller
+
+          setCurrentEditIndex(doneCount)
+
+          const completedIndices = new Set([
+            ...recovered.map((_: PageEdit, i: number) => i),
+            ...(data.failedPages || []).map((f: FailedPage) => f.pageIndex),
+          ])
+
+          // Figure out which page indices from completedEdits
+          const completedPageIndices = new Set<number>()
+          for (const edit of data.completedEdits || []) {
+            const idx = (edit as Record<string, unknown>).index as number
+            if (typeof idx === 'number') completedPageIndices.add(idx)
+          }
+          for (const fp of data.failedPages || []) {
+            completedPageIndices.add(fp.pageIndex)
+          }
+
+          const edits = [...recovered]
+
+          for (let i = 0; i < totalPages; i++) {
+            if (controller.signal.aborted) break
+            if (completedPageIndices.has(i)) continue
+
+            setCurrentEditIndex(i)
+
+            const edit = await generatePage(recoveryJobId, i, controller.signal)
+            if (edit) {
+              edits.push(edit)
+              setCompletedEdits([...edits])
+            }
+          }
+
+          setCurrentEditIndex(totalPages)
+          if (edits.length > 0) {
+            setProposal({
+              skriptId,
+              edits,
+              overallSummary: data.plan.overallSummary,
+            })
+          }
+          setIsLoading(false)
+          abortControllerRef.current = null
+        }
+      } catch (err) {
+        log.error('Recovery failed:', err)
+        setError(err instanceof Error ? err.message : 'Failed to recover job')
+        setIsLoading(false)
+      }
+    },
+    [skriptId, generatePage]
+  )
+
+  // Check for recoverable job on mount
+  useEffect(() => {
+    try {
+      const storedJobId = sessionStorage.getItem(getJobStorageKey(skriptId))
+      if (storedJobId) {
+        setJobId(storedJobId)
+      }
+    } catch {
+      // sessionStorage not available
+    }
+  }, [skriptId])
 
   const applyEdits = useCallback(
     async (edits: PageEdit[]) => {
@@ -308,24 +475,40 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
         throw new Error(`Some edits failed: ${messages.join(', ')}`)
       }
 
+      // Clean up job and session storage
+      if (jobId) {
+        try { await fetch(`/api/ai/edit/${jobId}`, { method: 'DELETE' }) } catch {}
+        try { sessionStorage.removeItem(getJobStorageKey(skriptId)) } catch {}
+      }
+
       // Clear proposal on success
       setProposal(null)
       setPlan(null)
       setCompletedEdits([])
+      setFailedPages([])
       setCurrentEditIndex(-1)
+      setJobId(null)
     },
-    [skriptId]
+    [skriptId, jobId]
   )
 
   const clearProposal = useCallback(() => {
+    // Cancel job on server if active
+    if (jobId) {
+      fetch(`/api/ai/edit/${jobId}`, { method: 'DELETE' }).catch(() => {})
+      try { sessionStorage.removeItem(getJobStorageKey(skriptId)) } catch {}
+    }
+
     setProposal(null)
     setError(null)
     setPlan(null)
     setCompletedEdits([])
+    setFailedPages([])
     setCurrentEditIndex(-1)
     setOverflow(null)
     setAiMessage(null)
-  }, [])
+    setJobId(null)
+  }, [jobId, skriptId])
 
   const cancelRequest = useCallback(() => {
     log('Cancel requested', { hasController: !!abortControllerRef.current })
@@ -333,8 +516,13 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
       abortControllerRef.current.abort()
       abortControllerRef.current = null
     }
+    // Cancel job on server
+    if (jobId) {
+      fetch(`/api/ai/edit/${jobId}`, { method: 'DELETE' }).catch(() => {})
+      try { sessionStorage.removeItem(getJobStorageKey(skriptId)) } catch {}
+    }
     setIsLoading(false)
-  }, [])
+  }, [jobId, skriptId])
 
   return {
     proposal,
@@ -343,11 +531,15 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
     plan,
     currentEditIndex,
     completedEdits,
+    failedPages,
     overflow,
     aiMessage,
+    jobId,
     requestEdit,
     applyEdits,
     clearProposal,
     cancelRequest,
+    retryPage,
+    recoverJob,
   }
 }

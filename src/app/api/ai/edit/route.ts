@@ -2,47 +2,22 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { checkSkriptPermissions } from '@/lib/permissions'
-import { assembleEditPrompt, assembleSinglePageEditPrompt } from '@/lib/ai/prompts'
+import { assembleEditPrompt } from '@/lib/ai/prompts'
 import type { EditRequest, SkriptContext } from '@/lib/ai/types'
-import { parseJsonResponse, isValidEditPlan } from '@/lib/ai/parse-json-response'
+import { parseJsonResponse, isValidEditPlan, type ParseJsonResponse } from '@/lib/ai/parse-json-response'
 import OpenAI from 'openai'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('ai:edit')
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-export const maxDuration = 120 // 2 minutes for large edit requests
 
-// Rate limiting
-const requestCounts = new Map<string, { count: number; resetAt: number }>()
-const RATE_LIMIT = 10
-const RATE_WINDOW = 60 * 1000
-
-function checkRateLimit(userId: string): boolean {
-  const now = Date.now()
-  const key = `edit:${userId}`
-  const record = requestCounts.get(key)
-
-  if (!record || now > record.resetAt) {
-    requestCounts.set(key, { count: 1, resetAt: now + RATE_WINDOW })
-    return true
-  }
-
-  if (record.count >= RATE_LIMIT) {
-    return false
-  }
-
-  record.count++
-  return true
-}
-
-// SSE helper to send events
-function sendSSE(controller: ReadableStreamDefaultController, event: string, data: unknown) {
-  const encoder = new TextEncoder()
-  const jsonData = JSON.stringify(data)
-  const message = `event: ${event}\ndata: ${jsonData}\n\n`
-  console.log(`[AI Edit] SSE sending event: ${event}, data size: ${jsonData.length} bytes`)
-  controller.enqueue(encoder.encode(message))
-}
-
+/**
+ * POST /api/ai/edit — Create job + generate plan.
+ * Returns JSON { jobId, plan } instead of an SSE stream.
+ * Each page edit is handled by a separate /api/ai/edit/[jobId]/generate request.
+ */
 export async function POST(request: Request): Promise<Response> {
   // 1. Authentication
   const session = await getServerSession(authOptions)
@@ -57,8 +32,15 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ success: false, error: 'AI service not configured' }, { status: 503 })
   }
 
-  // 3. Rate limiting
-  if (!checkRateLimit(userId)) {
+  // 3. DB-backed rate limiting (survives deploys, unlike in-memory Map)
+  const recentJobs = await prisma.importJob.count({
+    where: {
+      userId,
+      type: 'ai-edit',
+      createdAt: { gt: new Date(Date.now() - 60_000) },
+    },
+  })
+  if (recentJobs >= 10) {
     return Response.json(
       { success: false, error: 'Rate limit exceeded. Please wait before requesting more edits.' },
       { status: 429 }
@@ -96,33 +78,18 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ success: false, error: 'Edit access denied' }, { status: 403 })
   }
 
-  // 7. Get organization prompt (aiSystemPrompt fields not yet in schema)
-  const orgPrompt: string | undefined = undefined
-  // TODO: Re-enable when aiSystemPrompt is added to User and Organization models
-  // const user = await prisma.user.findUnique({
-  //   where: { id: userId },
-  //   select: {
-  //     aiSystemPrompt: true,
-  //     organizationMemberships: {
-  //       include: { organization: true },
-  //     },
-  //   },
-  // })
-  // const orgWithPrompt = user?.organizationMemberships.find(
-  //   (m) => m.organization.aiSystemPrompt
-  // )?.organization
-  // const prompts: string[] = []
-  // if (orgWithPrompt?.aiSystemPrompt) {
-  //   prompts.push(`## Organization Guidelines\n${orgWithPrompt.aiSystemPrompt}`)
-  // }
-  // if (user?.aiSystemPrompt) {
-  //   prompts.push(`## Teacher Preferences\n${user.aiSystemPrompt}`)
-  // }
-  // if (prompts.length > 0) {
-  //   orgPrompt = prompts.join('\n\n')
-  // }
+  // 7. Cancel any existing active ai-edit jobs for this user+skript
+  await prisma.importJob.updateMany({
+    where: {
+      userId,
+      type: 'ai-edit',
+      status: { in: ['pending', 'processing'] },
+      result: { path: ['skriptId'], equals: skriptId },
+    },
+    data: { status: 'cancelled' },
+  })
 
-  // 8. Build context with page content map for later use
+  // 8. Build context
   const pageContentMap = new Map<string, string>()
   skript.pages.forEach((p) => {
     const content = (pageId && p.id === pageId && currentContent !== undefined)
@@ -130,12 +97,6 @@ export async function POST(request: Request): Promise<Response> {
       : p.content
     pageContentMap.set(p.id, content)
   })
-
-  // Debug: Log content snippets to verify we have latest from DB
-  console.log('[AI Edit] Page content snippets from DB:', skript.pages.map(p => ({
-    title: p.title,
-    contentPreview: p.content.slice(0, 100).replace(/\n/g, ' ')
-  })))
 
   const skriptContext: SkriptContext = {
     skript: {
@@ -157,227 +118,118 @@ export async function POST(request: Request): Promise<Response> {
     focusedPageId: pageId,
   }
 
-  // 9. Create streaming response
-  const stream = new ReadableStream({
-    async start(controller) {
-      try {
-        const openai = new OpenAI({
-          apiKey: process.env.OPENROUTER_API_KEY,
-          baseURL: 'https://openrouter.ai/api/v1',
-          defaultHeaders: { 'HTTP-Referer': 'https://eduskript.org', 'X-Title': 'Eduskript' },
-        })
+  // 9. Get the edit plan from AI (with retry)
+  const openai = new OpenAI({
+    apiKey: process.env.OPENROUTER_API_KEY,
+    baseURL: 'https://openrouter.ai/api/v1',
+    defaultHeaders: { 'HTTP-Referer': 'https://eduskript.org', 'X-Title': 'Eduskript' },
+  })
 
-        // Phase 1: Get the edit plan
-        const planPrompt = assembleEditPrompt({
-          orgPrompt,
-          skriptContext,
-          planOnly: true, // New flag to just get the plan
-        })
+  // Organization prompt placeholder
+  const orgPrompt: string | undefined = undefined
 
-        const planMessage = await openai.chat.completions.create({
-          model: process.env.OPENROUTER_MODEL ?? 'z-ai/glm-5',
-          max_tokens: 2048,
-          messages: [{ role: 'system', content: planPrompt }, { role: 'user', content: instruction }],
-        })
+  const planPrompt = assembleEditPrompt({
+    orgPrompt,
+    skriptContext,
+    planOnly: true,
+  })
 
-        const planText = planMessage.choices[0]?.message?.content ?? ''
+  const MAX_PLAN_RETRIES = 3
+  let parseResult: ParseJsonResponse<{ edits: Array<{ pageId: string | null; pageTitle: string; pageSlug: string; summary: string; isNew?: boolean }>; overallSummary: string }> | undefined
+  let lastPlanText = ''
 
-        // Debug: Log raw AI response
-        console.log('[AI Edit] Raw plan response:', planText)
-        console.log('[AI Edit] Plan response length:', planText.length)
+  for (let attempt = 1; attempt <= MAX_PLAN_RETRIES; attempt++) {
+    const planMessage = await openai.chat.completions.create({
+      model: process.env.OPENROUTER_MODEL ?? 'z-ai/glm-5',
+      max_tokens: 2048,
+      messages: [{ role: 'system', content: planPrompt }, { role: 'user', content: instruction }],
+    })
 
-        // Parse the plan using robust parser
-        const parseResult = parseJsonResponse(planText, isValidEditPlan)
+    lastPlanText = planMessage.choices[0]?.message?.content ?? ''
 
-        if (!parseResult.success) {
-          // AI returned text without valid JSON - treat as "no edits" with explanation
-          console.log('[AI Edit] No valid JSON in response, treating as text-only response')
-          sendSSE(controller, 'complete', {
-            edits: [],
-            overallSummary: 'The AI provided an explanation instead of edit suggestions.',
-            aiMessage: parseResult.fullResponse, // Pass the raw AI text
-          })
-          controller.close()
-          return
-        }
+    log(`Plan attempt ${attempt}/${MAX_PLAN_RETRIES}, response length: ${lastPlanText.length}`)
 
-        const plan = parseResult.data
+    parseResult = parseJsonResponse(lastPlanText, isValidEditPlan)
 
-        // Log if there was overflow (AI added text outside JSON)
-        if (parseResult.overflowBefore || parseResult.overflowAfter) {
-          console.log('[AI Edit] Response had overflow text:', {
-            before: parseResult.overflowBefore?.slice(0, 100),
-            after: parseResult.overflowAfter?.slice(0, 100)
-          })
-        }
+    if (parseResult.success) break
 
-        if (!plan.edits || plan.edits.length === 0) {
-          sendSSE(controller, 'complete', {
-            edits: [],
-            overallSummary: plan.overallSummary || 'No changes needed',
-          })
-          controller.close()
-          return
-        }
+    if (attempt < MAX_PLAN_RETRIES) {
+      log(`Plan attempt ${attempt} failed (${lastPlanText.length === 0 ? 'empty response' : 'invalid JSON'}), retrying...`)
+    }
+  }
 
-        // Log plan for debugging
-        console.log(`[AI Edit] Plan received: ${plan.edits.length} pages to generate`, {
-          skriptId,
-          focusedPageId: pageId || 'none (skript-level edit)',
-          pages: plan.edits.map(e => ({ title: e.pageTitle, isNew: e.isNew })),
-        })
+  // 10. Handle plan failure — no job created
+  if (!parseResult || !parseResult.success) {
+    log('All plan attempts failed')
+    return Response.json({
+      success: true,
+      jobId: null,
+      plan: {
+        totalEdits: 0,
+        overallSummary: 'The AI provided an explanation instead of edit suggestions.',
+        pages: [],
+      },
+      aiMessage: (parseResult && !parseResult.success ? parseResult.fullResponse : null) || lastPlanText || 'The AI returned an empty response. Please try again.',
+    })
+  }
 
-        // Send the plan to client (include overflow info if present)
-        sendSSE(controller, 'plan', {
-          totalEdits: plan.edits.length,
-          overallSummary: plan.overallSummary,
-          pages: plan.edits.map(e => ({
-            pageId: e.pageId,
-            pageTitle: e.pageTitle,
-            pageSlug: e.pageSlug,
-            summary: e.summary,
-            isNew: e.isNew,
-          })),
-          // Include overflow info for UI warning
-          overflowBefore: parseResult.overflowBefore,
-          overflowAfter: parseResult.overflowAfter,
-          fullResponse: (parseResult.overflowBefore || parseResult.overflowAfter) ? parseResult.fullResponse : undefined,
-        })
+  const planData = parseResult.data
 
-        // Phase 2: Generate each edit
-        const pageByIdMap = new Map(skript.pages.map(p => [p.id, p]))
-        const pageBySlugMap = new Map(skript.pages.map(p => [p.slug, p]))
+  if (!planData.edits || planData.edits.length === 0) {
+    return Response.json({
+      success: true,
+      jobId: null,
+      plan: {
+        totalEdits: 0,
+        overallSummary: planData.overallSummary || 'No changes needed',
+        pages: [],
+      },
+    })
+  }
 
-        console.log(`[AI Edit] Starting edit generation loop for ${plan.edits.length} edits`)
+  // 11. Create ImportJob with plan
+  const plan = {
+    totalEdits: planData.edits.length,
+    overallSummary: planData.overallSummary,
+    pages: planData.edits.map(e => ({
+      pageId: e.pageId,
+      pageTitle: e.pageTitle,
+      pageSlug: e.pageSlug,
+      summary: e.summary,
+      isNew: e.isNew,
+    })),
+  }
 
-        for (let i = 0; i < plan.edits.length; i++) {
-          const plannedEdit = plan.edits[i]
-          console.log(`[AI Edit] Processing edit ${i + 1}/${plan.edits.length}:`, {
-            pageId: plannedEdit.pageId,
-            pageSlug: plannedEdit.pageSlug,
-            pageTitle: plannedEdit.pageTitle,
-            isNew: plannedEdit.isNew,
-          })
+  const jobResult = {
+    skriptId,
+    instruction,
+    focusedPageId: pageId || null,
+    currentContent: currentContent || null,
+    plan,
+    completedEdits: [] as Array<Record<string, unknown>>,
+    failedPages: [] as Array<{ pageIndex: number; error: string }>,
+  }
 
-          // Find the original page
-          let originalPage = plannedEdit.pageId ? pageByIdMap.get(plannedEdit.pageId) : undefined
-          if (!originalPage && plannedEdit.pageSlug) {
-            originalPage = pageBySlugMap.get(plannedEdit.pageSlug)
-          }
-          console.log(`[AI Edit] Original page lookup: found=${!!originalPage}, slug=${originalPage?.slug}`)
-
-          const isNew = plannedEdit.isNew === true || (!originalPage && plannedEdit.pageId === null)
-          console.log(`[AI Edit] isNew=${isNew}, will use ${isNew && !originalPage ? 'NEW page' : 'EXISTING page'} branch`)
-          const actualPageId = originalPage?.id ?? plannedEdit.pageId
-
-          // Get original content
-          const isFocusedPage = pageId && actualPageId === pageId
-          const originalContent = (isFocusedPage && currentContent !== undefined)
-            ? currentContent
-            : (originalPage?.content ?? '')
-
-          // For new pages, just use the summary as a starting point
-          if (isNew && !originalPage) {
-            // Generate content for new page
-            console.log(`[AI Edit] Generating NEW page content for: ${plannedEdit.pageTitle}`)
-            const newPagePrompt = assembleSinglePageEditPrompt({
-              orgPrompt,
-              skriptContext,
-              targetPage: {
-                title: plannedEdit.pageTitle,
-                slug: plannedEdit.pageSlug,
-                isNew: true,
-              },
-              editSummary: plannedEdit.summary,
-              instruction,
-            })
-
-            console.log(`[AI Edit] Calling OpenRouter API for new page...`)
-            const newPageMessage = await openai.chat.completions.create({
-              model: process.env.OPENROUTER_MODEL ?? 'z-ai/glm-5',
-              max_tokens: 8192,
-              messages: [{ role: 'system', content: newPagePrompt }, { role: 'user', content: `Create the content for the new page "${plannedEdit.pageTitle}". ${plannedEdit.summary}` }],
-            })
-            console.log(`[AI Edit] OpenRouter API returned for new page, finish_reason: ${newPageMessage.choices[0]?.finish_reason}`)
-
-            const newContent = newPageMessage.choices[0]?.message?.content ?? ''
-
-            console.log(`[AI Edit] Sending new page ${i + 1}/${plan.edits.length}: ${plannedEdit.pageTitle}`)
-            sendSSE(controller, 'edit', {
-              index: i,
-              pageId: null,
-              pageTitle: plannedEdit.pageTitle,
-              pageSlug: plannedEdit.pageSlug,
-              originalContent: '',
-              proposedContent: newContent.trim(),
-              summary: plannedEdit.summary,
-              isNew: true,
-            })
-          } else {
-            // Generate edit for existing page
-            console.log(`[AI Edit] Generating EDIT for existing page: ${originalPage?.title || plannedEdit.pageTitle}`)
-            const editPrompt = assembleSinglePageEditPrompt({
-              orgPrompt,
-              skriptContext,
-              targetPage: {
-                id: actualPageId!,
-                title: originalPage?.title || plannedEdit.pageTitle,
-                slug: originalPage?.slug || plannedEdit.pageSlug,
-                content: originalContent,
-                isNew: false,
-              },
-              editSummary: plannedEdit.summary,
-              instruction,
-            })
-
-            console.log(`[AI Edit] Calling OpenRouter API for existing page edit...`)
-            const editMessage = await openai.chat.completions.create({
-              model: process.env.OPENROUTER_MODEL ?? 'z-ai/glm-5',
-              max_tokens: 8192,
-              messages: [{ role: 'system', content: editPrompt }, { role: 'user', content: `Apply the following change to the page "${originalPage?.title || plannedEdit.pageTitle}": ${plannedEdit.summary}` }],
-            })
-            console.log(`[AI Edit] OpenRouter API returned for edit, finish_reason: ${editMessage.choices[0]?.finish_reason}`)
-
-            const proposedContent = editMessage.choices[0]?.message?.content ?? ''
-
-            console.log(`[AI Edit] Sending edit ${i + 1}/${plan.edits.length}: ${originalPage?.title || plannedEdit.pageTitle}`)
-            sendSSE(controller, 'edit', {
-              index: i,
-              pageId: actualPageId,
-              pageTitle: originalPage?.title || plannedEdit.pageTitle,
-              pageSlug: originalPage?.slug || plannedEdit.pageSlug,
-              originalContent,
-              proposedContent: proposedContent.trim(),
-              summary: plannedEdit.summary,
-              isNew: false,
-            })
-          }
-        }
-
-        console.log(`[AI Edit] Loop finished. Plan had ${plan.edits.length} edits`)
-        // All done
-        sendSSE(controller, 'complete', { success: true })
-        console.log(`[AI Edit] Complete event sent`)
-        controller.close()
-      } catch (error) {
-        console.error('[AI Edit] Streaming error:', error)
-        // Log full error details
-        if (error instanceof Error) {
-          console.error('[AI Edit] Error name:', error.name)
-          console.error('[AI Edit] Error message:', error.message)
-          console.error('[AI Edit] Error stack:', error.stack)
-        }
-        sendSSE(controller, 'error', { error: 'Internal server error' })
-        controller.close()
-      }
+  const job = await prisma.importJob.create({
+    data: {
+      userId,
+      type: 'ai-edit',
+      status: 'processing',
+      progress: 0,
+      message: `Planned ${plan.totalEdits} page edits`,
+      result: jobResult,
     },
   })
 
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-    },
+  log(`Job created: ${job.id}, plan: ${plan.totalEdits} pages`)
+
+  return Response.json({
+    success: true,
+    jobId: job.id,
+    plan,
+    // Include overflow info if present
+    overflowBefore: parseResult.overflowBefore,
+    overflowAfter: parseResult.overflowAfter,
+    fullResponse: (parseResult.overflowBefore || parseResult.overflowAfter) ? parseResult.fullResponse : undefined,
   })
 }
