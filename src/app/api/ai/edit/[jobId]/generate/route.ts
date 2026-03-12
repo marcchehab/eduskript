@@ -149,7 +149,32 @@ export async function POST(
     defaultHeaders: { 'HTTP-Referer': 'https://eduskript.org', 'X-Title': 'Eduskript' },
   })
 
-  const orgPrompt: string | undefined = undefined
+  // Fetch user and organization custom AI prompts
+  let orgPrompt: string | undefined
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      aiSystemPrompt: true,
+      organizationMemberships: {
+        include: { organization: true },
+      },
+    },
+  })
+
+  const orgWithPrompt = user?.organizationMemberships.find(
+    (m) => m.organization.aiSystemPrompt
+  )?.organization
+
+  const customPrompts: string[] = []
+  if (orgWithPrompt?.aiSystemPrompt) {
+    customPrompts.push(`## Organization Guidelines\n${orgWithPrompt.aiSystemPrompt}`)
+  }
+  if (user?.aiSystemPrompt) {
+    customPrompts.push(`## Teacher Preferences\n${user.aiSystemPrompt}`)
+  }
+  if (customPrompts.length > 0) {
+    orgPrompt = customPrompts.join('\n\n')
+  }
 
   try {
     let proposedContent: string
