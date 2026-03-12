@@ -2,7 +2,8 @@
 
 import { useState, useRef, useEffect, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Pen, Eraser, Trash2, Eye, EyeOff, Radio, User, Users, UserPen, ChevronDown, Globe, Layers, Camera, Highlighter, Ellipsis, SeparatorHorizontal } from 'lucide-react'
+import { Pen, Eraser, Trash2, Eye, EyeOff, Radio, User, Users, UserPen, ChevronDown, Globe, Layers, Camera, Highlighter, Ellipsis, SeparatorHorizontal, StickyNote as StickyNoteIcon } from 'lucide-react'
+import type { SpacerPattern } from '@/types/spacer'
 import { Circle } from '@uiw/react-color'
 import { cn } from '@/lib/utils'
 import { useLayout } from '@/contexts/layout-context'
@@ -155,6 +156,15 @@ interface AnnotationToolbarProps {
   // Last selected student for quick-access (managed by parent)
   lastSelectedStudent?: StudentOption | null
   onClearLastSelectedStudent?: () => void
+  // Spacer controls
+  spacerPattern?: SpacerPattern
+  onSpacerPatternChange?: (pattern: SpacerPattern) => void
+  spacerDeleteAnnotations?: boolean
+  onSpacerDeleteAnnotationsChange?: (value: boolean) => void
+  // Sticky notes controls
+  stickyNotePlacementMode?: boolean
+  onStickyNotePlacementToggle?: () => void
+  stickyNoteCount?: number
 }
 
 export function AnnotationToolbar({
@@ -207,6 +217,13 @@ export function AnnotationToolbar({
   onStudentSelect,
   lastSelectedStudent = null,
   onClearLastSelectedStudent,
+  spacerPattern = 'blank',
+  onSpacerPatternChange,
+  spacerDeleteAnnotations = true,
+  onSpacerDeleteAnnotationsChange,
+  stickyNotePlacementMode = false,
+  onStickyNotePlacementToggle,
+  stickyNoteCount = 0,
 }: AnnotationToolbarProps) {
   // Get layout context for centering toolbar on page content (not viewport)
   const { sidebarWidth } = useLayout()
@@ -1109,6 +1126,29 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
           >
             <SeparatorHorizontal className="w-4 h-4" />
           </button>
+
+          {/* Sticky Note tool */}
+          <div className="relative">
+            <button
+              className={cn(
+                'p-2 rounded-md transition-colors relative',
+                stickyNotePlacementMode
+                  ? 'bg-yellow-400 dark:bg-yellow-500 text-yellow-950'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+              )}
+              onClick={onStickyNotePlacementToggle}
+              title={stickyNotePlacementMode ? 'Cancel sticky note placement (Esc)' : 'Add sticky note'}
+              aria-label={stickyNotePlacementMode ? 'Cancel sticky note placement' : 'Add sticky note'}
+              aria-pressed={stickyNotePlacementMode}
+            >
+              <StickyNoteIcon className="w-4 h-4" />
+              {stickyNoteCount > 0 && !stickyNotePlacementMode && (
+                <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] rounded-full bg-yellow-400 dark:bg-yellow-500 text-yellow-950 text-[9px] font-bold flex items-center justify-center px-0.5 leading-none tabular-nums">
+                  {stickyNoteCount > 99 ? '99+' : stickyNoteCount}
+                </span>
+              )}
+            </button>
+          </div>
 
           {/* More tools - popover with snap and highlight explanations */}
           <div className="relative" ref={moreToolsRef}>

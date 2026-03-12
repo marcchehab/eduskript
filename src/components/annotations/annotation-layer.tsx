@@ -95,6 +95,7 @@ import { getStrokeAvg } from '@/lib/annotations/stroke-grouping'
 import { repositionStrokes, repositionSnaps } from '@/lib/annotations/reposition-strokes'
 import { useLayout } from '@/contexts/layout-context'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
+import { useStickyNotesContext } from '@/contexts/sticky-notes-context'
 import { useTeacherBroadcast } from '@/hooks/use-teacher-broadcast'
 import { useStudentWork } from '@/hooks/use-student-work'
 import { parseStrokes, type AnimatedStroke } from '@/hooks/use-stroke-animation'
@@ -527,6 +528,9 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
     refetch: refetchTeacherAnnotations,
   } = useTeacherBroadcast(isStudent ? pageId : '')
 
+  // Sticky notes: placement mode and count come from StickyNotesContext (provided above us in annotation-wrapper)
+  const { placementMode: stickyNotePlacementMode, setPlacementMode: setStickyNotePlacementMode, noteCount: stickyNoteCount } = useStickyNotesContext()
+
   // For teachers: also load personal annotations when broadcasting to class/student
   // This allows them to see their personal annotations as a reference layer
   const shouldLoadPersonalAsReference = isTeacher && viewMode !== 'my-view'
@@ -892,6 +896,12 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
       localStorage.setItem('spacer-delete-annotations', value.toString())
     }
   }, [])
+
+  // Toggle sticky note placement mode; ensure annotation canvas is in view mode so it doesn't eat clicks
+  const handleStickyNotePlacementToggle = useCallback(() => {
+    setStickyNotePlacementMode(m => !m)
+    setMode('view')
+  }, [setStickyNotePlacementMode])
 
   // Check if class broadcast and student feedback layers have content
   // IMPORTANT: When in the respective mode, use local canvasData/hasAnnotations state (which updates immediately)
@@ -3357,6 +3367,13 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
         onStudentSelect={setSelectedStudent}
         lastSelectedStudent={lastSelectedStudent}
         onClearLastSelectedStudent={() => setLastSelectedStudent(null)}
+        spacerPattern={spacerPattern}
+        onSpacerPatternChange={setSpacerPattern}
+        spacerDeleteAnnotations={spacerDeleteAnnotations}
+        onSpacerDeleteAnnotationsChange={handleSpacerDeleteAnnotationsChange}
+        stickyNotePlacementMode={stickyNotePlacementMode}
+        onStickyNotePlacementToggle={handleStickyNotePlacementToggle}
+        stickyNoteCount={stickyNoteCount}
       />
 
       {/* Spacer click-to-place overlay - portaled into paper, captures pointer events (touch + stylus) */}

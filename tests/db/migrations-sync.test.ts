@@ -25,12 +25,26 @@ describe('Database Migrations', () => {
     const shadowUrl = dbUrl.replace(/\/[^/]+$/, '/eduskript_shadow')
 
     try {
-      // Ensure shadow database exists
+      // Ensure shadow database exists.
+      // Try psql first; if not installed (common in CI/dev without pg client),
+      // fall back to docker exec against the local dev container.
       const baseUrl = dbUrl.replace(/\/[^/]+$/, '/postgres')
-      execSync(
-        `psql "${baseUrl}" -c "CREATE DATABASE eduskript_shadow" 2>/dev/null || true`,
-        { cwd: rootDir, stdio: 'pipe' }
-      )
+      const urlMatch = dbUrl.match(/:(\d+)\//)
+      const port = urlMatch ? urlMatch[1] : '5432'
+      try {
+        execSync(
+          `psql "${baseUrl}" -c "CREATE DATABASE eduskript_shadow" 2>/dev/null || true`,
+          { cwd: rootDir, stdio: 'pipe' }
+        )
+      } catch {
+        // psql not available — try docker exec using the container exposed on this port
+        const containerName = process.env.POSTGRES_CONTAINER_NAME ||
+          `eduskript-postgres-${port}`
+        execSync(
+          `docker exec "${containerName}" psql -U postgres -c "CREATE DATABASE eduskript_shadow" 2>/dev/null || true`,
+          { cwd: rootDir, stdio: 'pipe' }
+        )
+      }
 
       // Compare migrations to schema
       // Exit code 0 = in sync, exit code 2 = differences found
