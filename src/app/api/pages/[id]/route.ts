@@ -140,6 +140,15 @@ export async function PATCH(
 
       // Revalidate dashboard pages
       revalidatePath('/dashboard')
+
+      // Revalidate org routes if user belongs to any organizations
+      const orgMemberships = await prisma.organizationMember.findMany({
+        where: { userId: session.user.id },
+        select: { organization: { select: { slug: true } } }
+      })
+      for (const membership of orgMemberships) {
+        revalidateTag(CACHE_TAGS.orgContent(membership.organization.slug), 'default')
+      }
     }
 
     return NextResponse.json(updatedPage)
