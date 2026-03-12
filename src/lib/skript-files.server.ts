@@ -34,6 +34,7 @@ export async function getSkriptFiles(skriptId: string): Promise<SkriptFilesData>
   // This helps during the transition period
   const allVideos = await prisma.video.findMany({
     select: {
+      id: true,
       filename: true,
       provider: true,
       metadata: true,
@@ -62,6 +63,7 @@ export async function getSkriptFiles(skriptId: string): Promise<SkriptFilesData>
   for (const video of allVideos) {
     const metadata = video.metadata as Record<string, unknown>
     videos[video.filename] = {
+      id: video.id,
       filename: video.filename,
       provider: video.provider,
       metadata: {

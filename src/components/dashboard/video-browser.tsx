@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Film, Copy, Check, Search, Plus, X, Loader2, Link, Upload, AlertCircle } from 'lucide-react'
+import { Film, Copy, Check, Search, Plus, X, Loader2, Link, Upload, AlertCircle, Trash2 } from 'lucide-react'
 import type { VideoInfo } from '@/lib/skript-files'
 import { VideoUploadModal } from './video-upload-modal'
 
@@ -25,6 +25,7 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
   const [addAspectRatio, setAddAspectRatio] = useState('')
   const [addError, setAddError] = useState('')
   const [adding, setAdding] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const filtered = query.trim()
     ? videos.filter(v => v.filename.toLowerCase().includes(query.toLowerCase()))
@@ -97,6 +98,25 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
       setAddError('Network error')
     } finally {
       setAdding(false)
+    }
+  }
+
+  const handleDelete = async (video: VideoInfo) => {
+    if (!confirm(`Delete "${video.filename}" from the database?`)) return
+
+    setDeletingId(video.id)
+    try {
+      const res = await fetch(`/api/videos/${video.id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const data = await res.json()
+        alert(data.error || 'Failed to delete video')
+        return
+      }
+      onVideoAdded?.() // triggers refresh
+    } catch {
+      alert('Network error')
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -300,6 +320,20 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
                       <Check className="w-3.5 h-3.5 text-green-600" />
                     ) : (
                       <Copy className="w-3.5 h-3.5 text-muted-foreground" />
+                    )}
+                  </button>
+
+                  {/* Delete button */}
+                  <button
+                    onClick={e => { e.stopPropagation(); handleDelete(video) }}
+                    disabled={deletingId === video.id}
+                    className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-destructive/10"
+                    title="Delete video entry"
+                  >
+                    {deletingId === video.id ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+                    ) : (
+                      <Trash2 className="w-3.5 h-3.5 text-destructive" />
                     )}
                   </button>
                 </div>

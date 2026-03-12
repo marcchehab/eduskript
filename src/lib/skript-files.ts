@@ -21,6 +21,7 @@ export interface SkriptFile {
 }
 
 export interface VideoInfo {
+  id: string
   filename: string
   provider: string
   metadata: {

@@ -219,6 +219,7 @@ export async function GET(request: NextRequest) {
     // Also fetch all videos (they're global, not per-skript)
     const videos = await prisma.video.findMany({
       select: {
+        id: true,
         filename: true,
         provider: true,
         metadata: true,
@@ -228,6 +229,7 @@ export async function GET(request: NextRequest) {
     const mappedVideos = videos.map(video => {
       const metadata = video.metadata as Record<string, unknown>
       return {
+        id: video.id,
         filename: video.filename,
         provider: video.provider,
         metadata: {
