@@ -8,6 +8,7 @@
 import type { AnnotationData, CodeEditorData } from './types'
 import type { Spacer } from '@/types/spacer'
 import type { TextHighlightsData } from '@/lib/text-highlights/types'
+import type { StickyNotesData } from '@/components/annotations/sticky-notes-layer'
 
 /**
  * Data adapter interface for type-safe data handling
@@ -261,6 +262,47 @@ export const textHighlightsAdapter: DataAdapter<TextHighlightsData> = {
 }
 
 /**
+ * Sticky notes data adapter
+ * Merges by note ID, keeping the version with the newer updatedAt timestamp.
+ * Notes that exist on only one side are preserved (additive).
+ */
+export const stickyNotesAdapter: DataAdapter<StickyNotesData> = {
+  key: 'sticky-notes',
+
+  serialize: (data) => JSON.stringify(data),
+
+  deserialize: (raw) => JSON.parse(raw) as StickyNotesData,
+
+  merge: (local, remote) => {
+    const remoteById = new Map(remote.notes.map(n => [n.id, n]))
+    const mergedIds = new Set<string>()
+    const merged = []
+
+    // Local notes win if updatedAt >= remote, otherwise take remote version
+    for (const note of local.notes) {
+      mergedIds.add(note.id)
+      const remoteNote = remoteById.get(note.id)
+      if (remoteNote && remoteNote.updatedAt > note.updatedAt) {
+        merged.push(remoteNote)
+      } else {
+        merged.push(note)
+      }
+    }
+
+    // Add remote-only notes
+    for (const note of remote.notes) {
+      if (!mergedIds.has(note.id)) {
+        merged.push(note)
+      }
+    }
+
+    return { notes: merged }
+  },
+
+  validate: (data) => Array.isArray(data.notes),
+}
+
+/**
  * Registry of all adapters by key
  */
 export const adapterRegistry: Record<string, DataAdapter<unknown>> = {
@@ -271,6 +313,7 @@ export const adapterRegistry: Record<string, DataAdapter<unknown>> = {
   snaps: snapsAdapter as DataAdapter<unknown>,
   spacers: spacersAdapter as DataAdapter<unknown>,
   'text-highlights': textHighlightsAdapter as DataAdapter<unknown>,
+  'sticky-notes': stickyNotesAdapter as DataAdapter<unknown>,
 }
 
 /**
