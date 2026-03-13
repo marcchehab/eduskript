@@ -2891,13 +2891,20 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
           }}
         >
           {/* SVG layer: committed strokes rendered as resolution-independent paths.
-              headingPositions enables per-stroke repositioning via SVG <g transform>
-              so stroke data stays pristine (no point mutation on layout changes). */}
+              Uses sectionTransforms (storedHeadingOffsets → current) for repositioning.
+              This is compatible with existing data where repositionStrokes() already
+              mutated points to match storedHeadingOffsets — the transform bridges
+              from that baseline to the current layout. */}
           <AnnotationSvgLayer
             strokes={parsedStrokes}
             width={paperWidth}
             height={pageHeight}
-            headingPositions={headingPositions}
+            sectionTransforms={computeSectionTransforms(
+              storedHeadingOffsets,
+              headingPositions,
+              storedPaddingLeft,
+              currentPaddingLeft
+            )}
           />
           {/* Canvas: handles pointer events and renders in-progress stroke only.
               Committed strokes are displayed by the SVG layer above. */}
