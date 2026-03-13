@@ -330,6 +330,21 @@ export function StickyNotesLayer({ pageId, children, isExamStudent }: StickyNote
 
   const notes = data?.notes ?? []
 
+  // Auto-clean: if a note ID exists in both the personal store and a broadcast layer,
+  // remove it from the personal store (broadcast is the canonical source).
+  // This fixes data contamination from view-mode switch races.
+  useEffect(() => {
+    if (notes.length === 0 || broadcastNotesByLayer.length === 0) return
+    const broadcastIds = new Set<string>()
+    for (const layer of broadcastNotesByLayer) {
+      for (const note of layer.notes) broadcastIds.add(note.id)
+    }
+    const cleaned = notes.filter(n => !broadcastIds.has(n.id))
+    if (cleaned.length < notes.length) {
+      updateData({ notes: cleaned })
+    }
+  }, [notes, broadcastNotesByLayer, updateData])
+
   // Report current note count to context so toolbar can show a badge
   const totalBroadcastNotes = broadcastNotesByLayer.reduce((sum, l) => sum + l.notes.length, 0)
   useEffect(() => {
