@@ -53,6 +53,54 @@ export function getSvgPathFromStroke(outlinePoints: number[][]): string {
 }
 
 /**
+ * Section transform: how much to translate strokes in a given section.
+ * Used by AnnotationSvgLayer to apply <g transform> per section group
+ * instead of mutating individual stroke point coordinates.
+ */
+export interface SectionTransform {
+  dx: number
+  dy: number
+}
+
+/**
+ * Compute per-section translation deltas from old heading offsets to current positions.
+ * Returns a Map<sectionId, {dx, dy}> for use as SVG <g transform="translate(dx,dy)">.
+ *
+ * This replaces the point-mutation approach in repositionStrokes() for SVG rendering.
+ * Strokes whose sectionId isn't found in current headings are omitted (orphaned).
+ */
+export function computeSectionTransforms(
+  oldHeadingOffsets: Record<string, number> | undefined,
+  currentHeadingPositions: Array<{ sectionId: string; offsetY: number }>,
+  oldPaddingLeft?: number,
+  currentPaddingLeft?: number
+): Map<string, SectionTransform> {
+  const transforms = new Map<string, SectionTransform>()
+
+  if (!oldHeadingOffsets || Object.keys(oldHeadingOffsets).length === 0) {
+    return transforms
+  }
+  if (currentHeadingPositions.length === 0) {
+    return transforms
+  }
+
+  const deltaX = (currentPaddingLeft !== undefined && oldPaddingLeft !== undefined)
+    ? currentPaddingLeft - oldPaddingLeft
+    : 0
+
+  // Build lookup for current positions
+  const currentMap = new Map(currentHeadingPositions.map(h => [h.sectionId, h.offsetY]))
+
+  for (const [sectionId, oldY] of Object.entries(oldHeadingOffsets)) {
+    const currentY = currentMap.get(sectionId)
+    if (currentY === undefined) continue // section deleted — orphaned strokes stay put
+    transforms.set(sectionId, { dx: deltaX, dy: currentY - oldY })
+  }
+
+  return transforms
+}
+
+/**
  * Check if a point is near a stroke (for eraser collision detection).
  * Pure data function — no DOM or canvas dependency.
  * O(n) per stroke where n = point count.

@@ -86,6 +86,7 @@ import { AlertTriangle, User, Users, MessageSquare, Globe } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SimpleCanvas, type SimpleCanvasHandle, type DrawMode } from './simple-canvas'
 import { AnnotationSvgLayer } from './annotation-svg-layer'
+import { computeSectionTransforms, type SectionTransform } from '@/lib/annotations/svg-path'
 import { AnnotationToolbar, type AnnotationMode } from './annotation-toolbar'
 import { useSyncedUserData, useUserDataContext, type SyncedUserDataOptions } from '@/lib/userdata/provider'
 import type { AnnotationData, StrokeTelemetry, TelemetryData } from '@/lib/userdata/types'
@@ -93,7 +94,7 @@ import type { SnapsData, SpacersData } from '@/lib/userdata/adapters'
 import type { Spacer, SpacerPattern } from '@/types/spacer'
 import { generateContentHash, type HeadingPosition, type StrokeData } from '@/lib/indexeddb/annotations'
 import { getStrokeAvg } from '@/lib/annotations/stroke-grouping'
-import { repositionStrokes, repositionSnaps } from '@/lib/annotations/reposition-strokes'
+import { repositionSnaps } from '@/lib/annotations/reposition-strokes'
 import { useLayout } from '@/contexts/layout-context'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
 import { useStickyNotesContext } from '@/contexts/sticky-notes-context'
@@ -120,17 +121,16 @@ const AnimatedReferenceLayer = memo(function AnimatedReferenceLayer({
   canvasData,
   paperWidth,
   pageHeight,
-  headingPositions: _headingPositions,
   zoom,
   zIndex = 38, // Below main canvas (40), above code editor buttons (z-30)
   className = '',
   badge,
-  showBadge = true
+  showBadge = true,
+  sectionTransforms,
 }: {
   canvasData: string
   paperWidth: number
   pageHeight: number
-  headingPositions: HeadingPosition[]
   zoom: number
   zIndex?: number
   className?: string
@@ -141,6 +141,7 @@ const AnimatedReferenceLayer = memo(function AnimatedReferenceLayer({
     icon: React.ReactNode
   }
   showBadge?: boolean
+  sectionTransforms?: Map<string, SectionTransform>
 }) {
   // Parse strokes from data
   const allStrokes = useMemo(() => parseStrokes(canvasData), [canvasData])
@@ -238,6 +239,7 @@ const AnimatedReferenceLayer = memo(function AnimatedReferenceLayer({
         strokes={establishedStrokes}
         width={paperWidth}
         height={pageHeight}
+        sectionTransforms={sectionTransforms}
       />
       {/* Overlay for new strokes with CSS fade-in */}
       {newStrokes.length > 0 && (
@@ -256,6 +258,7 @@ const AnimatedReferenceLayer = memo(function AnimatedReferenceLayer({
             strokes={newStrokes}
             width={paperWidth}
             height={pageHeight}
+            sectionTransforms={sectionTransforms}
           />
         </div>
       )}
@@ -273,48 +276,6 @@ const AnimatedReferenceLayer = memo(function AnimatedReferenceLayer({
     </div>
   )
 })
-
-/**
- * Reposition teacher annotations to align with student's heading positions.
- * This handles cross-device alignment when teacher broadcasts annotations.
- */
-function repositionTeacherAnnotations(
-  canvasData: string,
-  teacherHeadingOffsets: Record<string, number> | undefined,
-  teacherPaddingLeft: number | undefined,
-  studentHeadingPositions: HeadingPosition[],
-  studentPaddingLeft: number
-): string {
-  // If no teacher heading offsets, can't reposition - return as-is
-  if (!teacherHeadingOffsets || Object.keys(teacherHeadingOffsets).length === 0) {
-    console.log('[Reposition] No teacher heading offsets, skipping repositioning')
-    return canvasData
-  }
-
-  // If student hasn't calculated heading positions yet, return as-is
-  if (studentHeadingPositions.length === 0) {
-    console.log('[Reposition] No student heading positions yet, skipping repositioning')
-    return canvasData
-  }
-
-  try {
-    const strokes: StrokeData[] = JSON.parse(canvasData)
-    if (strokes.length === 0) return canvasData
-
-    const result = repositionStrokes(
-      strokes,
-      studentHeadingPositions,
-      teacherHeadingOffsets,
-      studentPaddingLeft,
-      teacherPaddingLeft
-    )
-
-    return JSON.stringify(result.strokes)
-  } catch {
-    // If parsing fails, return original data
-    return canvasData
-  }
-}
 
 import type { PublicAnnotation, PublicSnap } from '@/components/public/annotation-wrapper'
 
@@ -1727,43 +1688,23 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
     }
   }, [headingPositions, storedHeadingOffsets])
 
-  // Apply repositioning when heading positions or padding change (only if needed)
+  // Reposition snaps when heading positions change (snaps use CSS top/left, not SVG transforms).
+  // Strokes no longer need repositioning here — the SVG layer handles it via per-stroke
+  // sectionOffsetY transforms at render time, keeping stroke data pristine.
   useEffect(() => {
     if (headingPositions.length === 0 || Object.keys(storedHeadingOffsets).length === 0) return
 
-    // Check if repositioning is needed
     const currentOffsets = Object.fromEntries(
       headingPositions.map(h => [h.sectionId, h.offsetY])
     )
 
-    // Only reposition if stored offsets differ from current offsets OR padding changed
     const needsVerticalReposition = Object.keys(storedHeadingOffsets).some(
       key => storedHeadingOffsets[key] !== currentOffsets[key]
     )
     const needsHorizontalReposition = storedPaddingLeft !== undefined &&
-      Math.abs(currentPaddingLeft - storedPaddingLeft) > 1 // Allow 1px tolerance
+      Math.abs(currentPaddingLeft - storedPaddingLeft) > 1
 
     if (!needsVerticalReposition && !needsHorizontalReposition) return
-
-    // Reposition strokes if we have any
-    if (canvasData) {
-      try {
-        const strokes: StrokeData[] = JSON.parse(canvasData)
-        if (strokes.length > 0) {
-          const result = repositionStrokes(
-            strokes,
-            headingPositions,
-            storedHeadingOffsets,
-            currentPaddingLeft,
-            storedPaddingLeft
-          )
-          setCanvasData(JSON.stringify(result.strokes))
-          setOrphanedStrokesCount(result.orphanedCount)
-        }
-      } catch {
-        // Ignore stroke repositioning errors
-      }
-    }
 
     // Reposition snaps if we have any
     if (snaps.length > 0) {
@@ -1777,10 +1718,10 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
       updateSnapsData({ snaps: snapResult.snaps })
     }
 
-    // Update stored values so we don't reposition again
+    // Update stored values so we don't reposition snaps again
     setStoredHeadingOffsets(currentOffsets)
     setStoredPaddingLeft(currentPaddingLeft)
-  }, [headingPositions, storedHeadingOffsets, canvasData, currentPaddingLeft, storedPaddingLeft, snaps, updateSnapsData])
+  }, [headingPositions, storedHeadingOffsets, currentPaddingLeft, storedPaddingLeft, snaps, updateSnapsData])
 
   // Helper function to recalculate heading positions and paper dimensions
   const recalculateHeadingPositions = useCallback(() => {
@@ -2362,15 +2303,6 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
       return
     }
 
-    // Update stored heading offsets to current positions when drawing new strokes
-    // This prevents newly drawn strokes from being repositioned when content changes
-    if (headingPositions.length > 0) {
-      const currentOffsets = Object.fromEntries(
-        headingPositions.map(h => [h.sectionId, h.offsetY])
-      )
-      setStoredHeadingOffsets(currentOffsets)
-    }
-
     // Clear existing timeout
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current)
@@ -2380,7 +2312,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
     saveTimeoutRef.current = setTimeout(() => {
       performSave()
     }, 2000)
-  }, [performSave, headingPositions, ensureActiveLayerVisible, isTeacher, viewMode, selectedClass, selectedStudent])
+  }, [performSave, ensureActiveLayerVisible, isTeacher, viewMode, selectedClass, selectedStudent])
 
   // Handle clear all annotations
   const handleClearAll = useCallback(async () => {
@@ -2813,7 +2745,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
 
       // Calculate zoom factor relative to initial state
       const zoomFactor = currentDistance / initialPinchDistanceRef.current
-      const newZoom = Math.max(0.5, Math.min(2.5, initialZoomRef.current * zoomFactor))
+      const newZoom = Math.max(0.5, Math.min(50, initialZoomRef.current * zoomFactor))
 
       // Convert current pinch center to container-relative coordinates
       const relativeX = currentCenterX - containerRect.left
@@ -2866,7 +2798,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
 
     // Calculate zoom delta (negative deltaY means zoom in)
     const delta = -e.deltaY * 0.01
-    const newZoom = Math.max(0.5, Math.min(2.5, zoomRef.current * (1 + delta)))
+    const newZoom = Math.max(0.5, Math.min(50, zoomRef.current * (1 + delta)))
 
     // Apply zoom with focal point at cursor position
     applyZoom(newZoom, e.clientX, e.clientY)
@@ -2958,13 +2890,17 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
             zIndex: 40, // Above code editor buttons (z-30), below snap overlay (z-10000)
           }}
         >
-          {/* SVG layer: committed strokes rendered as resolution-independent paths */}
+          {/* SVG layer: committed strokes rendered as resolution-independent paths.
+              headingPositions enables per-stroke repositioning via SVG <g transform>
+              so stroke data stays pristine (no point mutation on layout changes). */}
           <AnnotationSvgLayer
             strokes={parsedStrokes}
             width={paperWidth}
             height={pageHeight}
+            headingPositions={headingPositions}
           />
-          {/* Canvas: handles pointer events and renders in-progress stroke */}
+          {/* Canvas: handles pointer events and renders in-progress stroke only.
+              Committed strokes are displayed by the SVG layer above. */}
           <SimpleCanvas
             ref={canvasRef}
             width={paperWidth}
@@ -2982,6 +2918,8 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
             onPenStateChange={handlePenStateChange}
             zoom={zoom}
             headingPositions={headingPositions}
+            svgHandlesDisplay
+            scrollContainer={scrollContainerRef.current}
           />
           {/* Badge for active layer - shown on toolbar hover only */}
           {showActiveLayerBadge && hasAnnotations && (
@@ -3006,11 +2944,10 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
         <>
           {/* Teacher's personal annotations as reference (when broadcasting to class/student) */}
           {hasPersonalContent && isLayerVisible('personal') && (() => {
-            const repositionedCanvasData = repositionTeacherAnnotations(
-              personalAnnotationData!.canvasData,
+            const transforms = computeSectionTransforms(
               personalAnnotationData!.headingOffsets,
-              personalAnnotationData!.paddingLeft,
               headingPositions,
+              personalAnnotationData!.paddingLeft,
               currentPaddingLeft
             )
 
@@ -3030,14 +2967,15 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
                 }}
               >
                 <AnnotationSvgLayer
-                  strokes={parseStrokes(repositionedCanvasData)}
+                  strokes={parseStrokes(personalAnnotationData!.canvasData)}
                   width={paperWidth}
                   height={pageHeight}
+                  sectionTransforms={transforms}
                 />
                 {/* Badge for personal reference layer */}
                 {shouldShowReferenceBadge('personal') && (
                   <LayerBadges
-                    canvasData={repositionedCanvasData}
+                    canvasData={personalAnnotationData!.canvasData}
                     layerId="personal"
                     layerName="Personal"
                     layerColor="blue"
@@ -3056,12 +2994,10 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
             const broadcastCanvasData = classBroadcastData?.canvasData || classBroadcastCanvasRef.current
             if (!broadcastCanvasData || broadcastCanvasData === '[]') return null
 
-            // Reposition to match current layout
-            const repositionedCanvasData = repositionTeacherAnnotations(
-              broadcastCanvasData,
+            const transforms = computeSectionTransforms(
               classBroadcastData?.headingOffsets,
-              classBroadcastData?.paddingLeft,
               headingPositions,
+              classBroadcastData?.paddingLeft,
               currentPaddingLeft
             )
 
@@ -3083,14 +3019,15 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
                 }}
               >
                 <AnnotationSvgLayer
-                  strokes={parseStrokes(repositionedCanvasData)}
+                  strokes={parseStrokes(broadcastCanvasData)}
                   width={paperWidth}
                   height={pageHeight}
+                  sectionTransforms={transforms}
                 />
                 {/* Badge for class broadcast reference layer */}
                 {shouldShowReferenceBadge(layerId) && (
                   <LayerBadges
-                    canvasData={repositionedCanvasData}
+                    canvasData={broadcastCanvasData}
                     layerId={layerId}
                     layerName={selectedClass?.name || 'Class'}
                     layerColor="blue"
@@ -3109,12 +3046,10 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
             const feedbackCanvasData = studentFeedbackData?.canvasData || studentFeedbackCanvasRef.current
             if (!feedbackCanvasData || feedbackCanvasData === '[]') return null
 
-            // Reposition to match current layout
-            const repositionedCanvasData = repositionTeacherAnnotations(
-              feedbackCanvasData,
+            const transforms = computeSectionTransforms(
               studentFeedbackData?.headingOffsets,
-              studentFeedbackData?.paddingLeft,
               headingPositions,
+              studentFeedbackData?.paddingLeft,
               currentPaddingLeft
             )
 
@@ -3134,14 +3069,15 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
                 }}
               >
                 <AnnotationSvgLayer
-                  strokes={parseStrokes(repositionedCanvasData)}
+                  strokes={parseStrokes(feedbackCanvasData)}
                   width={paperWidth}
                   height={pageHeight}
+                  sectionTransforms={transforms}
                 />
                 {/* Badge for student feedback reference layer */}
                 {shouldShowReferenceBadge('individual-feedback') && (
                   <LayerBadges
-                    canvasData={repositionedCanvasData}
+                    canvasData={feedbackCanvasData}
                     layerId="individual-feedback"
                     layerName={studentForFeedback?.displayName || 'Feedback'}
                     layerColor="orange"
@@ -3160,12 +3096,10 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
             const studentCanvasData = studentAnnotations?.canvasData
             if (!studentCanvasData || studentCanvasData === '[]') return null
 
-            // Reposition student strokes to match current layout
-            const repositionedCanvasData = repositionTeacherAnnotations(
-              studentCanvasData,
+            const transforms = computeSectionTransforms(
               studentAnnotations?.headingOffsets,
-              studentAnnotations?.paddingLeft,
               headingPositions,
+              studentAnnotations?.paddingLeft,
               currentPaddingLeft
             )
 
@@ -3185,14 +3119,15 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
                 }}
               >
                 <AnnotationSvgLayer
-                  strokes={parseStrokes(repositionedCanvasData)}
+                  strokes={parseStrokes(studentCanvasData)}
                   width={paperWidth}
                   height={pageHeight}
+                  sectionTransforms={transforms}
                 />
                 {/* Floating badges to identify student work - shown on toolbar hover or while drawing */}
                 {shouldShowReferenceBadge('student-work') && (
                   <LayerBadges
-                    canvasData={repositionedCanvasData}
+                    canvasData={studentCanvasData}
                     layerId="student-work"
                     layerName={studentForFeedback.displayName || 'Student'}
                     layerColor="purple"
@@ -3213,11 +3148,10 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
             const layerAnnotationData = classAnnotation.data as AnnotationData | null
             if (!layerAnnotationData?.canvasData || layerAnnotationData.canvasData === '[]') return null
 
-            const repositionedCanvasData = repositionTeacherAnnotations(
-              layerAnnotationData.canvasData,
+            const transforms = computeSectionTransforms(
               layerAnnotationData.headingOffsets,
-              layerAnnotationData.paddingLeft,
               headingPositions,
+              layerAnnotationData.paddingLeft,
               currentPaddingLeft
             )
 
@@ -3225,11 +3159,11 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
               <div key={classAnnotation.classId}>
                 {createPortal(
                   <AnimatedReferenceLayer
-                    canvasData={repositionedCanvasData}
+                    canvasData={layerAnnotationData.canvasData}
                     paperWidth={paperWidth}
                     pageHeight={pageHeight}
-                    headingPositions={headingPositions}
                     zoom={zoom}
+                    sectionTransforms={transforms}
                     badge={{
                       layerId,
                       layerName: classAnnotation.className || 'Class',
@@ -3249,22 +3183,21 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
             const layerAnnotationData = teacherIndividualFeedback.data as AnnotationData | null
             if (!layerAnnotationData?.canvasData || layerAnnotationData.canvasData === '[]') return null
 
-            const repositionedCanvasData = repositionTeacherAnnotations(
-              layerAnnotationData.canvasData,
+            const transforms = computeSectionTransforms(
               layerAnnotationData.headingOffsets,
-              layerAnnotationData.paddingLeft,
               headingPositions,
+              layerAnnotationData.paddingLeft,
               currentPaddingLeft
             )
 
             return createPortal(
               <AnimatedReferenceLayer
-                canvasData={repositionedCanvasData}
+                canvasData={layerAnnotationData.canvasData}
                 paperWidth={paperWidth}
                 pageHeight={pageHeight}
-                headingPositions={headingPositions}
                 zoom={zoom}
                 zIndex={39} // Below main canvas (40), above code editor buttons (z-30)
+                sectionTransforms={transforms}
                 badge={{
                   layerId: 'individual-feedback',
                   layerName: teacherIndividualFeedback.teacherName || 'Teacher',
@@ -3287,23 +3220,21 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
                 // Use synced pageBroadcastData (updates dynamically) or fall back to server-passed publicAnnotations
                 const syncedData = pageBroadcastData?.canvasData
                 if (syncedData && syncedData !== '[]') {
-                  // Use dynamically synced data
-                  const repositionedCanvasData = repositionTeacherAnnotations(
-                    syncedData,
+                  const transforms = computeSectionTransforms(
                     pageBroadcastData?.headingOffsets ?? {},
-                    pageBroadcastData?.paddingLeft,
                     headingPositions,
+                    pageBroadcastData?.paddingLeft,
                     currentPaddingLeft
                   )
 
                   return (
                     <AnimatedReferenceLayer
-                      canvasData={repositionedCanvasData}
+                      canvasData={syncedData}
                       paperWidth={paperWidth}
                       pageHeight={pageHeight}
-                      headingPositions={headingPositions}
                       zoom={zoom}
                       zIndex={36} // Public annotations - lowest layer, above code editor buttons (z-30)
+                      sectionTransforms={transforms}
                       badge={{
                         layerId: 'public',
                         layerName: 'Public',
@@ -3324,23 +3255,22 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
                   const layerAnnotationData = annotation.data as AnnotationData | null
                   if (!layerAnnotationData?.canvasData || layerAnnotationData.canvasData === '[]') return null
 
-                  const repositionedCanvasData = repositionTeacherAnnotations(
-                    layerAnnotationData.canvasData,
+                  const transforms = computeSectionTransforms(
                     layerAnnotationData.headingOffsets,
-                    layerAnnotationData.paddingLeft,
                     headingPositions,
+                    layerAnnotationData.paddingLeft,
                     currentPaddingLeft
                   )
 
                   return (
                     <AnimatedReferenceLayer
                       key={`public-${annotation.userId}-${index}`}
-                      canvasData={repositionedCanvasData}
+                      canvasData={layerAnnotationData.canvasData}
                       paperWidth={paperWidth}
                       pageHeight={pageHeight}
-                      headingPositions={headingPositions}
                       zoom={zoom}
                       zIndex={36} // Public annotations - lowest layer, above code editor buttons (z-30)
+                      sectionTransforms={transforms}
                       badge={{
                         layerId: `public-${annotation.userId}`,
                         layerName: 'Public',

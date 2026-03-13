@@ -142,6 +142,8 @@ interface SimpleCanvasProps {
   zoom?: number
   headingPositions?: HeadingPosition[]
   readOnly?: boolean  // When true, disables all interaction
+  svgHandlesDisplay?: boolean  // When true, skip rendering committed strokes (SVG layer shows them)
+  scrollContainer?: HTMLElement | null  // For viewport-sized canvas (svgHandlesDisplay mode)
 }
 
 export interface SimpleCanvasHandle {
@@ -150,7 +152,7 @@ export interface SimpleCanvasHandle {
 }
 
 export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
-  ({ width, height, mode, onUpdate, initialData, strokeWidth = 2, strokeColor = '#000000', stylusModeActive = false, onStylusDetected, onNonStylusInput, onPenStateChange, onDrawStart, onTelemetry, zoom = 1.0, headingPositions = [], readOnly = false }, ref) => {
+  ({ width, height, mode, onUpdate, initialData, strokeWidth = 2, strokeColor = '#000000', stylusModeActive = false, onStylusDetected, onNonStylusInput, onPenStateChange, onDrawStart, onTelemetry, zoom = 1.0, headingPositions = [], readOnly = false, svgHandlesDisplay = false, scrollContainer = null }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const isDrawingRef = useRef(false)
     const [isPenDrawing, setIsPenDrawing] = useState(false) // Track if pen is actively drawing
@@ -181,6 +183,8 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
     const drawRafRef = useRef<number | null>(null) // RAF ID for throttling draw operations
     const snapshotCanvasRef = useRef<HTMLCanvasElement | null>(null) // Offscreen canvas snapshot for real-time drawing
     const telemetryStrokeCountRef = useRef(0) // Track stroke count for telemetry sampling
+    // Viewport canvas: paper-space rect of the visible area (when svgHandlesDisplay + scrollContainer)
+    const viewportRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null)
 
     // Update eraser cursor state and apply styles directly (no React re-render)
     const updateEraserCursor = useCallback((isActive: boolean) => {
@@ -220,6 +224,22 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       }
     }, [])
 
+    // Convert screen coordinates to paper-space coordinates.
+    // In viewport mode, accounts for the canvas covering only a portion of the page.
+    const screenToPaper = useCallback((clientX: number, clientY: number, rect: DOMRect) => {
+      const vp = viewportRef.current
+      if (vp) {
+        return {
+          x: vp.x + (clientX - rect.left) * (vp.w / rect.width),
+          y: vp.y + (clientY - rect.top) * (vp.h / rect.height),
+        }
+      }
+      return {
+        x: (clientX - rect.left) * (width / rect.width),
+        y: (clientY - rect.top) * (height / rect.height),
+      }
+    }, [width, height])
+
     // Check if a point is near a stroke (for eraser collision detection)
     const isPointNearStroke = useCallback((px: number, py: number, stroke: typeof pathsRef.current[0], threshold: number = 20): boolean => {
       for (let i = 0; i < stroke.points.length - 1; i++) {
@@ -257,6 +277,10 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       // Clear canvas
       ctx.clearRect(0, 0, canvas.width, canvas.height)
 
+      // When SVG layer handles display, only clear — don't redraw committed strokes.
+      // Canvas still tracks pathsRef for eraser collision and data export.
+      if (svgHandlesDisplay) return
+
       // Redraw all paths using perfect-freehand outline fill
       pathsRef.current.forEach((path, index) => {
         if (path.points.length < 2) return
@@ -281,7 +305,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
 
       // Reset globalAlpha
       ctx.globalAlpha = 1.0
-    }, [])
+    }, [svgHandlesDisplay])
 
     // Throttled redraw for eraser using RAF to avoid redrawing every single move
     const scheduleEraserRedraw = useCallback(() => {
@@ -293,23 +317,98 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       }
     }, [redrawCanvas])
 
-    // Set up high-DPI canvas scaling with zoom support
+    // Set up canvas sizing.
+    // Viewport mode (svgHandlesDisplay + scrollContainer): canvas covers only the visible
+    // viewport at native screen resolution, staying crisp at any zoom level. Committed
+    // strokes are SVG, so the canvas only renders the in-progress stroke.
+    // Legacy mode: canvas covers the full page with DPI + zoom scaling (capped by iOS limits).
     useEffect(() => {
       const canvas = canvasRef.current
       if (!canvas) return
 
+      // Viewport mode: canvas tracks the visible area
+      if (svgHandlesDisplay && scrollContainer) {
+        // Use the canvas's offset parent (nearest positioned ancestor) for rect calculations.
+        // The canvas is position:absolute, so its top/left are relative to this element.
+        // canvas.parentElement may be an intermediate wrapper with different bounds.
+        const paper = (canvas.offsetParent as HTMLElement) || canvas.parentElement
+        if (!paper) return
+
+        const dpr = window.devicePixelRatio || 1
+
+        const updateViewport = () => {
+          // Don't reposition during active drawing — coordinate system must stay stable
+          if (isDrawingRef.current) return
+
+          const paperRect = paper.getBoundingClientRect()
+          const containerRect = scrollContainer.getBoundingClientRect()
+
+          // Extend canvas beyond visible area for scroll smoothness
+          const pad = 100 // screen pixels
+          const visLeft = Math.max(paperRect.left, containerRect.left - pad)
+          const visTop = Math.max(paperRect.top, containerRect.top - pad)
+          const visRight = Math.min(paperRect.right, containerRect.right + pad)
+          const visBottom = Math.min(paperRect.bottom, containerRect.bottom + pad)
+
+          if (visRight <= visLeft || visBottom <= visTop) {
+            viewportRef.current = null
+            return
+          }
+
+          // Screen-to-paper scale (≈ zoom)
+          const scale = paperRect.width / paper.offsetWidth
+
+          // Paper-space viewport rect
+          const vpX = (visLeft - paperRect.left) / scale
+          const vpY = (visTop - paperRect.top) / scale
+          const vpW = (visRight - visLeft) / scale
+          const vpH = (visBottom - visTop) / scale
+
+          viewportRef.current = { x: vpX, y: vpY, w: vpW, h: vpH }
+
+          // Position canvas in paper-space (parent's scale(zoom) makes it viewport-sized on screen)
+          canvas.style.left = `${vpX}px`
+          canvas.style.top = `${vpY}px`
+          canvas.style.width = `${vpW}px`
+          canvas.style.height = `${vpH}px`
+          canvas.style.right = 'auto'
+
+          // Internal resolution: visible screen pixels × dpr (always crisp, constant budget)
+          const screenW = visRight - visLeft
+          const screenH = visBottom - visTop
+          const newW = Math.round(screenW * dpr)
+          const newH = Math.round(screenH * dpr)
+
+          if (canvas.width !== newW || canvas.height !== newH) {
+            canvas.width = newW
+            canvas.height = newH
+          }
+          // Always set transform explicitly — canvas.width/height assignment resets it,
+          // and the legacy sizing path may have set a different scale.
+          const ctx = canvas.getContext('2d')
+          if (ctx) {
+            ctx.setTransform(newW / vpW, 0, 0, newH / vpH, 0, 0)
+          }
+        }
+
+        updateViewport()
+        scrollContainer.addEventListener('scroll', updateViewport, { passive: true })
+        window.addEventListener('resize', updateViewport)
+
+        return () => {
+          scrollContainer.removeEventListener('scroll', updateViewport)
+          window.removeEventListener('resize', updateViewport)
+        }
+      }
+
+      // Legacy full-page mode
       const dpr = window.devicePixelRatio || 1
-      // Include zoom in resolution calculation for crisp rendering at any zoom level
       const totalScale = dpr * zoom
 
-      // Prevent canvas from exceeding browser limits.
-      // Individual dimension limit (typically 32,767 pixels):
       const MAX_CANVAS_DIMENSION = 32767
       const maxScaleX = MAX_CANVAS_DIMENSION / width
       const maxScaleY = MAX_CANVAS_DIMENSION / height
-      // Total pixel area limit: iOS Safari silently produces a blank canvas when
-      // the pixel count exceeds a device-dependent threshold (~16M on older iPads).
-      // At dpr=2 zoom=2.5 on a 5000px-tall page this is easily exceeded without a cap.
+      // iOS Safari silently produces a blank canvas when pixel count exceeds ~16M.
       const MAX_CANVAS_AREA = 16_777_216
       const maxScaleArea = Math.sqrt(MAX_CANVAS_AREA / (width * height))
       const maxSafeScale = Math.min(maxScaleX, maxScaleY, maxScaleArea, totalScale)
@@ -317,22 +416,16 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       const scaledWidth = width * maxSafeScale
       const scaledHeight = height * maxSafeScale
 
-      // Only reset canvas if dimensions actually changed
       if (canvas.width !== scaledWidth || canvas.height !== scaledHeight) {
-        // Set internal canvas resolution (scaled by device pixel ratio AND zoom)
         canvas.width = scaledWidth
         canvas.height = scaledHeight
-
-        // Scale context so drawing coordinates stay in CSS pixels
         const ctx = canvas.getContext('2d')
         if (ctx) {
           ctx.scale(maxSafeScale, maxSafeScale)
         }
-
-        // Redraw existing paths at new resolution
         redrawCanvas()
       }
-    }, [width, height, zoom, redrawCanvas])
+    }, [width, height, zoom, redrawCanvas, svgHandlesDisplay, scrollContainer])
 
     // Load initial data (or clear canvas when initialData becomes empty)
     useEffect(() => {
@@ -449,13 +542,17 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       strokeStartTimeRef.current = Date.now() // Track start time for telemetry
 
       // Capture canvas snapshot for real-time drawing (draw mode only).
-      // All committed strokes are on the canvas; we'll restore this + draw in-progress stroke each frame.
+      // In viewport mode (svgHandlesDisplay), canvas has no committed strokes — skip snapshot.
       if (currentModeRef.current === 'draw') {
-        const offscreen = document.createElement('canvas')
-        offscreen.width = canvas.width
-        offscreen.height = canvas.height
-        offscreen.getContext('2d')!.drawImage(canvas, 0, 0)
-        snapshotCanvasRef.current = offscreen
+        if (svgHandlesDisplay) {
+          snapshotCanvasRef.current = null
+        } else {
+          const offscreen = document.createElement('canvas')
+          offscreen.width = canvas.width
+          offscreen.height = canvas.height
+          offscreen.getContext('2d')!.drawImage(canvas, 0, 0)
+          snapshotCanvasRef.current = offscreen
+        }
       }
 
       // Defer state updates to avoid React re-renders blocking the first pointermove events
@@ -475,14 +572,12 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       const rect = canvas.getBoundingClientRect()
       canvasRectRef.current = rect
 
-      // Convert screen coordinates to canvas coordinates
-      // The canvas CSS size matches the scaled section size, so we need to scale down to internal coordinates
-      const x = (e.clientX - rect.left) * (width / rect.width)
-      const y = (e.clientY - rect.top) * (height / rect.height)
+      // Convert screen coordinates to paper-space coordinates
+      const { x, y } = screenToPaper(e.clientX, e.clientY, rect)
       const pressure = e.pressure || 0.5 // Default to 0.5 for mouse
 
       currentPathRef.current = [{ x, y, pressure }]
-    }, [mode, stylusModeActive, onStylusDetected, onPenStateChange, onDrawStart, width, height, updateEraserCursor])
+    }, [mode, stylusModeActive, onStylusDetected, onPenStateChange, onDrawStart, screenToPaper, updateEraserCursor, svgHandlesDisplay])
 
     const draw = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
       // Don't draw if multiple touch/mouse pointers are active (pinch gesture)
@@ -519,8 +614,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         const canvas = canvasRef.current
         if (canvas) {
           const rect = canvas.getBoundingClientRect()
-          const x = (e.clientX - rect.left) * (width / rect.width)
-          const y = (e.clientY - rect.top) * (height / rect.height)
+          const { x, y } = screenToPaper(e.clientX, e.clientY, rect)
           updateEraserCursorPosition(x, y)
         }
         return
@@ -545,10 +639,8 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
 
       // Process each coalesced event to capture all intermediate points
       events.forEach((event) => {
-        // Convert screen coordinates to canvas coordinates
-        // The canvas CSS size matches the scaled section size, so we need to scale down to internal coordinates
-        const x = (event.clientX - rect.left) * (width / rect.width)
-        const y = (event.clientY - rect.top) * (height / rect.height)
+        // Convert screen coordinates to paper-space coordinates
+        const { x, y } = screenToPaper(event.clientX, event.clientY, rect)
         const pressure = event.pressure || 0.5 // Default to 0.5 for mouse
 
         // Deduplicate: iOS Safari fires coalesced events twice per pointermove,
@@ -592,22 +684,34 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       })
 
       // After processing all coalesced events, render in-progress stroke (draw mode only)
-      if (currentModeRef.current !== 'erase' && snapshotCanvasRef.current) {
-        // Restore snapshot (all committed strokes) at physical pixel level
-        ctx.save()
-        ctx.setTransform(1, 0, 0, 1, 0, 0)
-        ctx.clearRect(0, 0, canvas.width, canvas.height)
-        ctx.drawImage(snapshotCanvasRef.current, 0, 0)
-        ctx.restore()
+      if (currentModeRef.current !== 'erase') {
+        // Clear canvas (and restore snapshot if available)
+        if (snapshotCanvasRef.current) {
+          ctx.save()
+          ctx.setTransform(1, 0, 0, 1, 0, 0)
+          ctx.clearRect(0, 0, canvas.width, canvas.height)
+          ctx.drawImage(snapshotCanvasRef.current, 0, 0)
+          ctx.restore()
+        } else {
+          // Viewport mode: no snapshot, just clear
+          ctx.save()
+          ctx.setTransform(1, 0, 0, 1, 0, 0)
+          ctx.clearRect(0, 0, canvas.width, canvas.height)
+          ctx.restore()
+        }
 
-        // Draw current in-progress stroke with perfect-freehand
-        const inputPoints = currentPathRef.current.map(p => [p.x, p.y, p.pressure])
+        // Draw current in-progress stroke with perfect-freehand.
+        // In viewport mode, offset points to canvas-local coordinates.
+        const vp = viewportRef.current
+        const inputPoints = vp
+          ? currentPathRef.current.map(p => [p.x - vp.x, p.y - vp.y, p.pressure])
+          : currentPathRef.current.map(p => [p.x, p.y, p.pressure])
         const outline = getStroke(inputPoints, getStrokeOptions(strokeWidth))
         const pathObj = getPathFromStroke(outline)
         ctx.fillStyle = strokeColor
         ctx.fill(pathObj)
       }
-    }, [mode, width, height, strokeColor, strokeWidth, isPointNearStroke, scheduleEraserRedraw, updateEraserCursorPosition, updateEraserCursor])
+    }, [mode, strokeColor, strokeWidth, isPointNearStroke, scheduleEraserRedraw, updateEraserCursorPosition, updateEraserCursor, screenToPaper])
 
     const stopDrawing = useCallback((e?: React.PointerEvent<HTMLCanvasElement>) => {
       // Remove pointer from tracking
