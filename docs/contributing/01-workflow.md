@@ -6,7 +6,7 @@ How to make changes and submit them.
 
 ```bash
 # 1. Fork & clone
-git clone https://github.com/YOUR_USERNAME/eduskript.git
+git clone https://github.com/marcchehab/eduskript
 
 # 2. Branch
 git checkout -b feature/my-feature
