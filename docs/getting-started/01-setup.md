@@ -12,7 +12,7 @@ Get Eduskript running locally in 5 minutes.
 
 ```bash
 # Clone
-git clone https://github.com/eduskript/eduskript.git
+git clone https://github.com/marcchehab/eduskript
 cd eduskript
 
 # Install
