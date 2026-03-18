@@ -100,10 +100,23 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
         signal,
       })
 
-      const data = await response.json()
+      const text = await response.text()
+      log(`Page ${pageIndex} response: status=${response.status}, length=${text.length}, content-type=${response.headers.get('content-type')}`)
+      if (log.enabled) {
+        log(`Page ${pageIndex} body:`, text.slice(0, 500))
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let data: any
+      try {
+        data = JSON.parse(text)
+      } catch {
+        log.error(`Page ${pageIndex}: non-JSON response (status ${response.status}):`, text.slice(0, 200))
+        setFailedPages(prev => [...prev, { pageIndex, error: 'Server returned an invalid response. Please try again.' }])
+        return null
+      }
 
       if (!response.ok || !data.success) {
-        const errorMsg = data.error || 'Failed to generate edit'
+        const errorMsg = (data.error as string) || 'Failed to generate edit'
         log.error(`Page ${pageIndex} failed:`, errorMsg)
         setFailedPages(prev => [...prev, { pageIndex, error: errorMsg }])
         return null
