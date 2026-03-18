@@ -395,6 +395,10 @@ export async function POST(request: NextRequest) {
           }
         }
       } catch (error) {
+        // Foreign key violation = user was deleted but session is stale
+        if (error instanceof Error && 'code' in error && (error as { code: string }).code === 'P2003') {
+          return NextResponse.json({ error: 'User not found. Please sign in again.' }, { status: 401 })
+        }
         console.error(`[user-data/sync] Error syncing item ${item.adapter}:${item.itemId}:`, error)
         // Continue with other items
       }
