@@ -641,7 +641,10 @@ export function createMarkdownComponents(
 
     // Math/crypto educational components
     'modcalc': ModCalc,
-    'cipher-lab': CipherLab,
+    'cipher-lab': (props: Record<string, string>) => {
+      const cipher = props.cipher === 'vigenere' ? 'vigenere' as const : 'caesar' as const
+      return <CipherLab cipher={cipher} defaultKey={props.cipherkey} text={props.text} />
+    },
 
     // Data visualization components
     'datacubevisualizer': DataCubeVisualizer,

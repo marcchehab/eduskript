@@ -81,7 +81,7 @@ export const sanitizeSchema = {
     'flex', // <flex> layout container
     'flex-item', // <flex-item> child of flex
     'mermaid-diagram', // Mermaid diagram rendered client-side
-    'cipher-lab', // Caesar/Vigenère cipher interactive tool
+    'cipher-lab', // Caesar/Vigenère cipher interactive tool (attrs: cipher, shift, keytext)
     'style', // <style> blocks for scoped CSS in markdown
     // SVG elements
     'svg', 'g', 'defs', 'symbol', 'use', 'title', 'desc',
@@ -112,6 +112,7 @@ export const sanitizeSchema = {
     'excali': ['src', 'alt', 'width', 'align', 'wrap'],
     // <image> component attributes (src, alt, width, align, wrap, invert, saturate)
     'image': ['src', 'alt', 'width', 'align', 'wrap', 'invert', 'saturate'],
+    'cipher-lab': ['cipher', 'cipherkey', 'text'],
     'dijkstravisualizer': ['initialnodecount', 'initialdirected'],
     'mermaid-diagram': ['dataDefinition', 'data-definition'],
     'question': ['id', 'type', 'showfeedback', 'allowupdate', 'minvalue', 'maxvalue', 'step'],

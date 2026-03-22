@@ -49,12 +49,18 @@ function vigenereDecrypt(ciphertext: string, key: string): string {
 type Cipher = 'caesar' | 'vigenere'
 type Mode = 'encrypt' | 'decrypt'
 
-export function CipherLab() {
-  const [cipher, setCipher] = useState<Cipher>('caesar')
+interface CipherLabProps {
+  cipher?: Cipher
+  defaultKey?: string
+  text?: string
+}
+
+export function CipherLab({ cipher: defaultCipher = 'caesar', defaultKey, text = '' }: CipherLabProps) {
+  const [cipher, setCipher] = useState<Cipher>(defaultCipher)
   const [mode, setMode] = useState<Mode>('encrypt')
-  const [input, setInput] = useState('')
-  const [caesarShift, setCaesarShift] = useState(4)
-  const [vigenereKey, setVigenereKey] = useState('PYTHON')
+  const [input, setInput] = useState(text)
+  const [caesarShift, setCaesarShift] = useState(defaultKey ? parseInt(defaultKey) || 4 : 4)
+  const [vigenereKey, setVigenereKey] = useState(defaultKey ?? 'PYTHON')
   const [copied, setCopied] = useState(false)
 
   const output = useCallback(() => {
