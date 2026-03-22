@@ -364,6 +364,7 @@ body {
 .prose-theme {
   @apply max-w-none;
   color: hsl(var(--prose-text));
+  overflow-wrap: break-word;
 }
 
 /* Remove top margin from first content element to align canvas properly */

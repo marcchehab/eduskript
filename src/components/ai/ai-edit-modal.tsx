@@ -90,7 +90,7 @@ export function AIEditModal({
     }
   }, [open, recoveryChecked, isLoading, proposal, completedEdits.length, skriptId, recoverJob])
 
-  // Reset recovery check when modal closes
+  // Reset recovery check when modal closes (to retry recovery on next open)
   useEffect(() => {
     if (!open) {
       setRecoveryChecked(false)
@@ -164,10 +164,11 @@ export function AIEditModal({
 
   const handleClose = (open: boolean) => {
     log('Dialog close', { open, isLoading })
-    if (!open) {
-      handleCancel()
-      setInstruction('')
+    if (!open && isLoading) {
+      // Only cancel if generation is in-flight
+      cancelRequest()
     }
+    // Don't clear proposal or instruction on close — user can reopen to review
     onOpenChange(open)
   }
 
@@ -189,12 +190,14 @@ export function AIEditModal({
       <DialogContent
         className="max-w-5xl h-[80vh] flex flex-col p-0 gap-0"
         onInteractOutside={(e) => {
-          if (isLoading || proposal || completedEdits.length > 0 || instruction.trim()) {
+          // Prevent accidental close while generating
+          if (isLoading) {
             e.preventDefault()
           }
         }}
         onEscapeKeyDown={(e) => {
-          if (isLoading || proposal || completedEdits.length > 0 || instruction.trim()) {
+          // Prevent accidental close while generating
+          if (isLoading) {
             e.preventDefault()
           }
         }}
