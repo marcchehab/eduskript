@@ -29,6 +29,7 @@ import { ModCalc } from '@/components/markdown/mod-calc'
 import { DataCubeVisualizer } from '@/components/markdown/data-cube-visualizer'
 import { Flex, FlexItem } from '@/components/markdown/flex'
 import { MermaidDiagram } from '@/components/markdown/mermaid-diagram'
+import { CipherLab } from '@/components/markdown/cipher-lab'
 
 // Simple hash function for generating stable IDs
 function hashCode(str: string): string {
@@ -640,6 +641,7 @@ export function createMarkdownComponents(
 
     // Math/crypto educational components
     'modcalc': ModCalc,
+    'cipher-lab': CipherLab,
 
     // Data visualization components
     'datacubevisualizer': DataCubeVisualizer,

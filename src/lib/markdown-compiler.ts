@@ -81,6 +81,7 @@ export const sanitizeSchema = {
     'flex', // <flex> layout container
     'flex-item', // <flex-item> child of flex
     'mermaid-diagram', // Mermaid diagram rendered client-side
+    'cipher-lab', // Caesar/Vigenère cipher interactive tool
     'style', // <style> blocks for scoped CSS in markdown
     // SVG elements
     'svg', 'g', 'defs', 'symbol', 'use', 'title', 'desc',
