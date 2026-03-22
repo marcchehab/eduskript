@@ -118,7 +118,7 @@ export async function POST(
         select: { pageSlug: true }
       })
       if (user?.pageSlug) {
-        revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), 'default')
+        revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), { expire: 0 })
         revalidatePath(`/${user.pageSlug}`)
       }
     } else if (frontPage.skript) {
@@ -130,7 +130,7 @@ export async function POST(
           select: { pageSlug: true }
         })
         if (ownerUser?.pageSlug) {
-          revalidateTag(CACHE_TAGS.skriptBySlug(ownerUser.pageSlug, frontPage.skript.slug), 'default')
+          revalidateTag(CACHE_TAGS.skriptBySlug(ownerUser.pageSlug, frontPage.skript.slug), { expire: 0 })
           revalidatePath(`/${ownerUser.pageSlug}/${frontPage.skript.slug}`)
         }
       }

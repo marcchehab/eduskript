@@ -129,13 +129,13 @@ export async function PATCH(request: NextRequest) {
 
     // Revalidate cache tags for both old and new page slugs
     if (oldPageSlug) {
-      revalidateTag(CACHE_TAGS.user(oldPageSlug), 'default')
-      revalidateTag(CACHE_TAGS.teacherContent(oldPageSlug), 'default')
+      revalidateTag(CACHE_TAGS.user(oldPageSlug), { expire: 0 })
+      revalidateTag(CACHE_TAGS.teacherContent(oldPageSlug), { expire: 0 })
       revalidatePath(`/${oldPageSlug}`)
     }
     if (newPageSlug && newPageSlug !== oldPageSlug) {
-      revalidateTag(CACHE_TAGS.user(newPageSlug), 'default')
-      revalidateTag(CACHE_TAGS.teacherContent(newPageSlug), 'default')
+      revalidateTag(CACHE_TAGS.user(newPageSlug), { expire: 0 })
+      revalidateTag(CACHE_TAGS.teacherContent(newPageSlug), { expire: 0 })
       revalidatePath(`/${newPageSlug}`)
     }
 

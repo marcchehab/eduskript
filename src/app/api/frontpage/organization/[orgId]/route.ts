@@ -143,8 +143,8 @@ export async function PATCH(
     }
 
     // Revalidate caches — both the data cache (unstable_cache tags) and route cache
-    revalidateTag(CACHE_TAGS.organization(organization.slug), 'default')
-    revalidateTag(CACHE_TAGS.orgContent(organization.slug), 'default')
+    revalidateTag(CACHE_TAGS.organization(organization.slug), { expire: 0 })
+    revalidateTag(CACHE_TAGS.orgContent(organization.slug), { expire: 0 })
     revalidatePath(`/org/${organization.slug}`)
     revalidatePath('/dashboard')
 

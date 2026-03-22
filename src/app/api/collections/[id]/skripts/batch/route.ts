@@ -81,7 +81,7 @@ export async function PUT(
       select: { pageSlug: true }
     })
     if (user?.pageSlug) {
-      revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), 'default')
+      revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), { expire: 0 })
     }
 
     return NextResponse.json({

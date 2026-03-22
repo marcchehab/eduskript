@@ -218,8 +218,8 @@ export async function PATCH(
       })
 
       if (ownerUser?.pageSlug) {
-        revalidateTag(CACHE_TAGS.skriptBySlug(ownerUser.pageSlug, skript.slug), 'default')
-        revalidateTag(CACHE_TAGS.teacherContent(ownerUser.pageSlug), 'default')
+        revalidateTag(CACHE_TAGS.skriptBySlug(ownerUser.pageSlug, skript.slug), { expire: 0 })
+        revalidateTag(CACHE_TAGS.teacherContent(ownerUser.pageSlug), { expire: 0 })
       }
     }
 

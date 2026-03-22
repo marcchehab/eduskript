@@ -144,7 +144,7 @@ export async function PATCH(request: NextRequest) {
 
     // Revalidate caches
     if (user?.pageSlug) {
-      revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), 'default')
+      revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), { expire: 0 })
       revalidatePath(`/${user.pageSlug}`)
       revalidatePath('/dashboard')
     }

@@ -129,22 +129,22 @@ export async function PATCH(
         page: updatedPage.slug,
       })
       // Invalidate cached data for this page
-      revalidateTag(CACHE_TAGS.pageBySlug(user.pageSlug, existingPage.skript.slug, updatedPage.slug), 'default')
+      revalidateTag(CACHE_TAGS.pageBySlug(user.pageSlug, existingPage.skript.slug, updatedPage.slug), { expire: 0 })
 
       // Invalidate skript-level cache (navigation might need updating)
-      revalidateTag(CACHE_TAGS.skriptBySlug(user.pageSlug, existingPage.skript.slug), 'default')
+      revalidateTag(CACHE_TAGS.skriptBySlug(user.pageSlug, existingPage.skript.slug), { expire: 0 })
 
       // Invalidate collection-level cache
       const collectionSlug = existingPage.skript.collectionSkripts[0]?.collection?.slug
       if (collectionSlug) {
-        revalidateTag(CACHE_TAGS.collectionBySlug(user.pageSlug, collectionSlug), 'default')
+        revalidateTag(CACHE_TAGS.collectionBySlug(user.pageSlug, collectionSlug), { expire: 0 })
       }
 
       // Also revalidate paths for any non-cached renders
       revalidatePath(`/${user.pageSlug}/${existingPage.skript.slug}/${updatedPage.slug}`)
 
       // Invalidate teacher content cache (for full sidebar, homepage, etc.)
-      revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), 'default')
+      revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), { expire: 0 })
 
       // Revalidate dashboard pages
       revalidatePath('/dashboard')
@@ -155,7 +155,7 @@ export async function PATCH(
         select: { organization: { select: { slug: true } } }
       })
       for (const membership of orgMemberships) {
-        revalidateTag(CACHE_TAGS.orgContent(membership.organization.slug), 'default')
+        revalidateTag(CACHE_TAGS.orgContent(membership.organization.slug), { expire: 0 })
       }
     }
 

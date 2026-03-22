@@ -340,14 +340,14 @@ describe('revalidateTag integration', () => {
     vi.clearAllMocks()
   })
 
-  it('should call revalidateTag with correct profile parameter', () => {
-    // This verifies Next.js 16 compatibility - revalidateTag requires 2 arguments
+  it('should call revalidateTag with immediate expiration profile', () => {
+    // expire: 0 ensures immediate invalidation (no stale-while-revalidate)
     const tag = CACHE_TAGS.pageBySlug('john', 'algebra', 'intro')
 
     // Simulate what the API route does
-    revalidateTag(tag, 'default')
+    revalidateTag(tag, { expire: 0 })
 
-    expect(revalidateTag).toHaveBeenCalledWith('page:john:algebra:intro', 'default')
+    expect(revalidateTag).toHaveBeenCalledWith('page:john:algebra:intro', { expire: 0 })
   })
 
   it('should call revalidatePath for fallback invalidation', () => {
@@ -365,14 +365,14 @@ describe('revalidateTag integration', () => {
     const pageSlug = 'intro'
 
     // Simulate hierarchical invalidation (what API route does for page update)
-    revalidateTag(CACHE_TAGS.pageBySlug(username, skriptSlug, pageSlug), 'default')
-    revalidateTag(CACHE_TAGS.skriptBySlug(username, skriptSlug), 'default')
-    revalidateTag(CACHE_TAGS.teacherContent(username), 'default')
+    revalidateTag(CACHE_TAGS.pageBySlug(username, skriptSlug, pageSlug), { expire: 0 })
+    revalidateTag(CACHE_TAGS.skriptBySlug(username, skriptSlug), { expire: 0 })
+    revalidateTag(CACHE_TAGS.teacherContent(username), { expire: 0 })
 
     expect(revalidateTag).toHaveBeenCalledTimes(3)
-    expect(revalidateTag).toHaveBeenNthCalledWith(1, 'page:john:algebra:intro', 'default')
-    expect(revalidateTag).toHaveBeenNthCalledWith(2, 'skript:john:algebra', 'default')
-    expect(revalidateTag).toHaveBeenNthCalledWith(3, 'teacher-content:john', 'default')
+    expect(revalidateTag).toHaveBeenNthCalledWith(1, 'page:john:algebra:intro', { expire: 0 })
+    expect(revalidateTag).toHaveBeenNthCalledWith(2, 'skript:john:algebra', { expire: 0 })
+    expect(revalidateTag).toHaveBeenNthCalledWith(3, 'teacher-content:john', { expire: 0 })
   })
 })
 

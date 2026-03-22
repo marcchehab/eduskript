@@ -141,8 +141,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // Revalidate org content cache so sidebar updates
     if (pageLayout.organization?.slug) {
-      revalidateTag(CACHE_TAGS.organization(pageLayout.organization.slug), 'default')
-      revalidateTag(CACHE_TAGS.orgContent(pageLayout.organization.slug), 'default')
+      revalidateTag(CACHE_TAGS.organization(pageLayout.organization.slug), { expire: 0 })
+      revalidateTag(CACHE_TAGS.orgContent(pageLayout.organization.slug), { expire: 0 })
     }
 
     return NextResponse.json({ success: true, data: pageLayout })

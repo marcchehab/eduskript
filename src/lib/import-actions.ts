@@ -567,7 +567,7 @@ async function performImport(
     select: { pageSlug: true }
   })
   if (user?.pageSlug) {
-    revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), 'default')
+    revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), { expire: 0 })
     revalidatePath(`/${user.pageSlug}`)
     revalidatePath('/dashboard')
   }
@@ -858,7 +858,7 @@ export async function processImportZip(
     select: { pageSlug: true }
   })
   if (user?.pageSlug) {
-    revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), 'default')
+    revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), { expire: 0 })
     revalidatePath(`/${user.pageSlug}`)
     revalidatePath('/dashboard')
   }
