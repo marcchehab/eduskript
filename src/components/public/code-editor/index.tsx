@@ -51,6 +51,35 @@ import {
 } from './types'
 import { SqlProgressBar } from './sql-progress-bar'
 
+/**
+ * Strip Pyodide/internal traceback frames from Python errors, keeping only
+ * the error type + message and the relevant `File "<exec>"` frame.
+ */
+function cleanPythonError(msg: string): string {
+  const lines = msg.split('\n')
+
+  // Keep lines from `File "<exec>"` onwards, plus the final error line.
+  // Pyodide tracebacks start with "Traceback (most recent call last):" followed
+  // by internal frames (File "/lib/python3…") that students can't act on.
+  const kept: string[] = []
+  let inUserFrame = false
+  for (const line of lines) {
+    if (/^\s*File "<exec>"/.test(line)) {
+      inUserFrame = true
+    }
+    if (inUserFrame) {
+      kept.push(line)
+    }
+  }
+
+  // If we captured user-relevant lines, return them; otherwise fall back to
+  // just the last non-empty line (the actual error) to avoid showing nothing.
+  if (kept.length > 0) return kept.join('\n')
+
+  const last = lines.filter(l => l.trim()).pop()
+  return last ?? msg
+}
+
 interface CodeEditorProps {
   id?: string
   pageId?: string
@@ -2705,7 +2734,7 @@ plots
       setTimeout(() => setShowSuccessFlash(false), 1500)
       setRunState(RunState.STOPPED)
     } catch (error: any) {
-      const errorMessage = error.message || String(error)
+      const errorMessage = cleanPythonError(error.message || String(error))
       addOutput(errorMessage, OutputLevel.ERROR)
       setRunState(RunState.STOPPED)
     }
