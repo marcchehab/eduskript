@@ -59,6 +59,7 @@ interface SkriptPage {
   title: string
   slug: string
   isPublished: boolean
+  isUnlisted?: boolean
 }
 
 type SkriptAuthorWithUser = SkriptAuthor & { user: Pick<User, 'id' | 'name' | 'email' | 'image' | 'title'> }
@@ -76,6 +77,7 @@ interface PageEditorProps {
     title: string
     description: string | null
     isPublished: boolean
+    isUnlisted?: boolean
     pages?: SkriptPage[]
     authors: SkriptAuthorWithUser[]
     collectionSkripts: CollectionSkriptWithCollection[]
@@ -86,6 +88,7 @@ interface PageEditorProps {
     slug: string
     content: string
     isPublished: boolean
+    isUnlisted?: boolean
     currentVersion?: number
     pageType?: string
     examSettings?: {
@@ -758,6 +761,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
     title: skript.title,
     description: skript.description,
     isPublished: skript.isPublished,
+    isUnlisted: skript.isUnlisted ?? false,
     authors: skript.authors,
     collectionSkripts: skript.collectionSkripts,
     // Fill in required Skript model fields with reasonable defaults
@@ -793,6 +797,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                   type="skript"
                   itemId={skript.id}
                   isPublished={skript.isPublished}
+                  isUnlisted={skript.isUnlisted}
                   onToggle={() => {}}
                   showText={false}
                   size="sm"
@@ -1010,6 +1015,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
               type="page"
               itemId={page.id}
               isPublished={page.isPublished}
+              isUnlisted={page.isUnlisted}
               onToggle={() => router.refresh()}
               showText={false}
               size="sm"

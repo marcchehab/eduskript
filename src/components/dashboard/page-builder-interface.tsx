@@ -23,6 +23,7 @@ interface PageItem {
   isInLayout?: boolean // For skripts: whether they're explicitly in the page layout
   isFromLibrary?: boolean // For skripts: whether they were just added from library (skip move API)
   isPublished?: boolean // For skripts: whether the skript is published
+  isUnlisted?: boolean // For skripts: whether the skript is hidden from navigation
   permissions?: {
     canEdit: boolean
     canView: boolean
@@ -91,7 +92,7 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
                     // Get skripts from the junction table (CollectionSkript) and fetch their individual permissions
                     const collectionSkripts = await Promise.all(
                       (collection.collectionSkripts || [])
-                        .map(async (cs: { skript: { id: string; title: string; description?: string; slug: string; isPublished: boolean }, order: number }) => {
+                        .map(async (cs: { skript: { id: string; title: string; description?: string; slug: string; isPublished: boolean; isUnlisted?: boolean }, order: number }) => {
                           // Fetch individual skript permissions
                           // Note: The API now properly handles collection-level permission inheritance
                           // If the user has collection access, the API will return at minimum view-only permissions
@@ -117,7 +118,8 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
                             parentId: item.contentId,
                             permissions: skriptPermissions, // Use individual skript permissions
                             isInLayout: true, // All skripts in CollectionSkript are part of the layout
-                            isPublished: cs.skript.isPublished
+                            isPublished: cs.skript.isPublished,
+                            isUnlisted: cs.skript.isUnlisted
                           }
                         })
                     )

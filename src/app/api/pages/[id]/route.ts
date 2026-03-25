@@ -20,7 +20,7 @@ export async function PATCH(
 
     const { id } = await params
     const body = await request.json()
-    const { title, slug, content, isPublished, pageType, examSettings } = body
+    const { title, slug, content, isPublished, isUnlisted, pageType, examSettings } = body
 
     // For content-only updates or publish-only updates, title and slug are not required
     const isContentOnlyUpdate = content !== undefined && title === undefined && slug === undefined && isPublished === undefined
@@ -95,6 +95,7 @@ export async function PATCH(
     if (slug !== undefined) updateData.slug = slug.trim()
     if (content !== undefined) updateData.content = content
     if (isPublished !== undefined) updateData.isPublished = isPublished
+    if (isUnlisted !== undefined) updateData.isUnlisted = isUnlisted
     if (pageType !== undefined) updateData.pageType = pageType
     if (examSettings !== undefined) updateData.examSettings = examSettings
 

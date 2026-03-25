@@ -21,6 +21,7 @@ interface Page {
   title: string
   slug: string
   isPublished: boolean
+  isUnlisted?: boolean
   updatedAt: Date
   order: number
 }
@@ -98,6 +99,7 @@ function SortablePageItem({ page, index, skriptSlug, onPageUpdated, canEdit = tr
                   type="page"
                   itemId={page.id}
                   isPublished={page.isPublished}
+                  isUnlisted={page.isUnlisted}
                   onToggle={() => {}} // No-op - PublishToggle manages its own state
                   showText={false}
                 />
@@ -191,6 +193,7 @@ function StaticPageItem({ page, index, skriptSlug, onPageUpdated, canEdit = true
               type="page"
               itemId={page.id}
               isPublished={page.isPublished}
+              isUnlisted={page.isUnlisted}
               onToggle={() => {}} // No-op - PublishToggle manages its own state
               showText={false}
             />

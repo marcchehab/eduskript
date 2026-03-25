@@ -42,6 +42,7 @@ interface RawPage {
   title: string
   slug: string
   isPublished?: boolean
+  isUnlisted?: boolean
   order?: number
 }
 
@@ -50,6 +51,7 @@ interface RawSkript {
   title: string
   slug: string
   isPublished?: boolean
+  isUnlisted?: boolean
   frontPage?: { id: string } | null // Optional frontpage relation
   pages: RawPage[]
 }
@@ -104,7 +106,7 @@ export function buildSiteStructure(
       accentColor: col.accentColor,
       skripts: col.collectionSkripts
         // Filter unpublished skripts
-        .filter(cs => !onlyPublished || cs.skript.isPublished !== false)
+        .filter(cs => !onlyPublished || (cs.skript.isPublished !== false && !cs.skript.isUnlisted))
         // Sort by order field
         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
         .map((cs, index) => ({
@@ -116,7 +118,7 @@ export function buildSiteStructure(
           hasFrontpage: Boolean(cs.skript.frontPage),
           pages: cs.skript.pages
             // Filter unpublished pages
-            .filter(p => !onlyPublished || p.isPublished !== false)
+            .filter(p => !onlyPublished || (p.isPublished !== false && !p.isUnlisted))
             // Sort by order field
             .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
             .map(p => ({

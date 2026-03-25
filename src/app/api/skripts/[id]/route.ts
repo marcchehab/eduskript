@@ -108,10 +108,10 @@ export async function PATCH(
     }
 
     const { id } = await params
-    const { title, slug, description, isPublished } = await request.json()
+    const { title, slug, description, isPublished, isUnlisted } = await request.json()
 
     // Validate input - at least one field is required
-    if (!title && !slug && description === undefined && isPublished === undefined) {
+    if (!title && !slug && description === undefined && isPublished === undefined && isUnlisted === undefined) {
       return NextResponse.json(
         { error: 'At least one field is required for update' },
         { status: 400 }
@@ -172,7 +172,8 @@ export async function PATCH(
         ...(title && { title }),
         ...(slug && { slug }),
         ...(description !== undefined && { description }),
-        ...(isPublished !== undefined && { isPublished })
+        ...(isPublished !== undefined && { isPublished }),
+        ...(isUnlisted !== undefined && { isUnlisted })
       },
       include: {
         pages: {

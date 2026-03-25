@@ -21,6 +21,7 @@ interface PageItem {
   skripts?: PageItem[] // For collections containing skripts
   isInLayout?: boolean // For skripts: whether they're explicitly in the page layout
   isPublished?: boolean // For skripts: whether the skript is published
+  isUnlisted?: boolean // For skripts: whether the skript is hidden from navigation
   permissions?: {
     canEdit: boolean
     canView: boolean
@@ -569,6 +570,7 @@ function SimpleSkriptItem({ item, index, parentId, parentCanEdit = true, onRemov
                   type="skript"
                   itemId={item.id}
                   isPublished={item.isPublished}
+                  isUnlisted={item.isUnlisted}
                   onToggle={() => {}}
                   size="sm"
                   showText={false}

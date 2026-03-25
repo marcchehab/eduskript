@@ -27,12 +27,14 @@ interface Skript {
   order: number
   updatedAt: Date
   isPublished: boolean
+  isUnlisted?: boolean
   pages: Array<{
     id: string
     title: string
     slug: string
     order: number
     isPublished: boolean
+    isUnlisted?: boolean
     updatedAt: Date
   }>
   authors?: Array<{
@@ -216,6 +218,7 @@ function SortableSkriptItem({
                     type="skript"
                     itemId={skript.id}
                     isPublished={skript.isPublished}
+                    isUnlisted={skript.isUnlisted}
                     onToggle={() => {}} // No-op - PublishToggle manages its own state
                     showText={true}
                   />
@@ -433,6 +436,7 @@ function StaticSkriptItem({
                 type="skript"
                 itemId={skript.id}
                 isPublished={skript.isPublished}
+                isUnlisted={skript.isUnlisted}
                 onToggle={() => {}} // No-op - PublishToggle manages its own state
                 showText={true}
               />

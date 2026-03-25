@@ -29,6 +29,7 @@ async function getPageData(skriptSlug: string, pageSlug: string, userId: string,
           title: true,
           slug: true,
           isPublished: true,
+          isUnlisted: true,
         }
       },
       authors: {
@@ -107,6 +108,7 @@ export default async function PageEditPage({
         title: skript.title,
         description: skript.description,
         isPublished: skript.isPublished,
+        isUnlisted: skript.isUnlisted,
         pages: skript.pages,
         authors: skript.authors,
         collectionSkripts: skript.collectionSkripts,

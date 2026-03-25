@@ -102,14 +102,14 @@ export const getPublishedCollection = (teacherId: string, pageSlug: string, coll
         include: {
           collectionSkripts: {
             where: {
-              skript: { isPublished: true }
+              skript: { isPublished: true, isUnlisted: false }
             },
             include: {
               skript: {
                 include: {
                   frontPage: { select: { id: true } },
                   pages: {
-                    where: { isPublished: true },
+                    where: { isPublished: true, isUnlisted: false },
                     orderBy: { order: 'asc' },
                     select: {
                       id: true,
@@ -156,14 +156,14 @@ export const getAllPublishedCollections = (teacherId: string, pageSlug: string) 
         include: {
           collectionSkripts: {
             where: {
-              skript: { isPublished: true }
+              skript: { isPublished: true, isUnlisted: false }
             },
             include: {
               skript: {
                 include: {
                   frontPage: { select: { id: true } },
                   pages: {
-                    where: { isPublished: true },
+                    where: { isPublished: true, isUnlisted: false },
                     orderBy: { order: 'asc' },
                     select: {
                       id: true,
@@ -230,14 +230,14 @@ export const getFullSiteStructure = (teacherId: string, pageSlug: string) =>
           updatedAt: true,
           collectionSkripts: {
             where: {
-              skript: { isPublished: true }
+              skript: { isPublished: true, isUnlisted: false }
             },
             include: {
               skript: {
                 include: {
                   frontPage: { select: { id: true } },
                   pages: {
-                    where: { isPublished: true },
+                    where: { isPublished: true, isUnlisted: false },
                     orderBy: { order: 'asc' },
                     select: {
                       id: true,
@@ -313,6 +313,7 @@ export const getPublishedPage = (
               content: true,
               order: true,
               isPublished: true,
+              isUnlisted: true,
               pageType: true,
               examSettings: true,
             }
@@ -408,13 +409,13 @@ export const getTeacherHomepageContent = (teacherId: string, pageSlug: string, p
             },
             include: {
               collectionSkripts: {
-                where: { skript: { isPublished: true } },
+                where: { skript: { isPublished: true, isUnlisted: false } },
                 include: {
                   skript: {
                     include: {
                       frontPage: { select: { id: true } },
                       pages: {
-                        where: { isPublished: true },
+                        where: { isPublished: true, isUnlisted: false },
                         orderBy: { order: 'asc' },
                         select: { id: true, title: true, slug: true }
                       }
@@ -450,7 +451,7 @@ export const getTeacherHomepageContent = (teacherId: string, pageSlug: string, p
             include: {
               collectionSkripts: { include: { collection: true } },
               pages: {
-                where: { isPublished: true },
+                where: { isPublished: true, isUnlisted: false },
                 orderBy: { order: 'asc' },
                 select: { id: true, title: true, slug: true }
               }
@@ -649,14 +650,14 @@ export const getOrgFullSiteStructure = (orgId: string, orgSlug: string) =>
           updatedAt: true,
           collectionSkripts: {
             where: {
-              skript: { isPublished: true }
+              skript: { isPublished: true, isUnlisted: false }
             },
             include: {
               skript: {
                 include: {
                   frontPage: { select: { id: true } },
                   pages: {
-                    where: { isPublished: true },
+                    where: { isPublished: true, isUnlisted: false },
                     orderBy: { order: 'asc' },
                     select: {
                       id: true,
@@ -750,6 +751,7 @@ export const getOrgPublishedPage = (
               content: true,
               order: true,
               isPublished: true,
+              isUnlisted: true,
               pageType: true,
               examSettings: true,
             }
@@ -854,13 +856,13 @@ export const getOrgHomepageContent = (
             },
             include: {
               collectionSkripts: {
-                where: { skript: { isPublished: true } },
+                where: { skript: { isPublished: true, isUnlisted: false } },
                 include: {
                   skript: {
                     include: {
                       frontPage: { select: { id: true } },
                       pages: {
-                        where: { isPublished: true },
+                        where: { isPublished: true, isUnlisted: false },
                         orderBy: { order: 'asc' },
                         select: { id: true, title: true, slug: true }
                       }
@@ -896,7 +898,7 @@ export const getOrgHomepageContent = (
             include: {
               collectionSkripts: { include: { collection: true } },
               pages: {
-                where: { isPublished: true },
+                where: { isPublished: true, isUnlisted: false },
                 orderBy: { order: 'asc' },
                 select: { id: true, title: true, slug: true }
               }
