@@ -41,6 +41,7 @@ export async function POST(request: Request) {
         hashedPassword: hashedPassword,
         emailVerified: new Date(),
         requirePasswordReset: false,
+        billingPlan: 'pro',
       },
     })
 

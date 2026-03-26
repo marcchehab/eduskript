@@ -25,6 +25,7 @@ async function main() {
       emailVerified: new Date(),
       isAdmin: true,
       requirePasswordReset: true,
+      billingPlan: 'pro',
     },
     create: {
       email: 'eduadmin@eduskript.org',
@@ -35,6 +36,7 @@ async function main() {
       emailVerified: new Date(),
       isAdmin: true,
       requirePasswordReset: true,
+      billingPlan: 'pro',
     }
   })
 
