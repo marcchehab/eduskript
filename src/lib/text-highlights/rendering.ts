@@ -25,6 +25,11 @@ export function applyHighlightMark(range: Range, highlight: TextHighlight): void
     const text = node.nodeValue ?? ''
     if (start >= end || start >= text.length) continue
 
+    // Skip whitespace-only segments (e.g. newlines between <p> tags) —
+    // wrapping these creates visible empty highlight blocks between paragraphs.
+    const segment = text.slice(start, end)
+    if (!segment.trim()) continue
+
     const mark = createMark(className, highlightId)
     const wrappedRange = document.createRange()
     wrappedRange.setStart(node, start)
