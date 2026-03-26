@@ -158,16 +158,88 @@ describe('proxy routing', () => {
       expect(mockFetch).not.toHaveBeenCalled()
     })
 
-    it('should rewrite localhost paths to default org', async () => {
+    it('should pass through localhost sub-paths to let [domain] route handle them', async () => {
       const { proxy } = await import('@/proxy')
       const { NextResponse } = await import('next/server')
 
       const request = createMockRequest('localhost:3000', '/somepath')
       await proxy(request as any)
 
+      expect(NextResponse.next).toHaveBeenCalled()
+      expect(NextResponse.rewrite).not.toHaveBeenCalled()
+    })
+
+    it('should pass through teacher page URLs on localhost (not rewrite to org)', async () => {
+      const { proxy } = await import('@/proxy')
+      const { NextResponse } = await import('next/server')
+
+      const request = createMockRequest('localhost:3000', '/eduadmin/markdown-basics/headings-text')
+      await proxy(request as any)
+
+      expect(NextResponse.next).toHaveBeenCalled()
+      expect(NextResponse.rewrite).not.toHaveBeenCalled()
+    })
+
+    it('should pass through two-segment paths on localhost', async () => {
+      const { proxy } = await import('@/proxy')
+      const { NextResponse } = await import('next/server')
+
+      const request = createMockRequest('localhost:3000', '/eduadmin/some-skript')
+      await proxy(request as any)
+
+      expect(NextResponse.next).toHaveBeenCalled()
+      expect(NextResponse.rewrite).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('preview route bypass', () => {
+    it('should skip proxy for /preview routes on localhost', async () => {
+      const { proxy } = await import('@/proxy')
+      const { NextResponse } = await import('next/server')
+
+      const request = createMockRequest('localhost:3000', '/preview/eduadmin/markdown-basics/headings-text')
+      await proxy(request as any)
+
+      expect(NextResponse.next).toHaveBeenCalled()
+      expect(NextResponse.rewrite).not.toHaveBeenCalled()
+    })
+
+    it('should skip proxy for /preview routes on eduskript.org', async () => {
+      const { proxy } = await import('@/proxy')
+      const { NextResponse } = await import('next/server')
+
+      const request = createMockRequest('eduskript.org', '/preview/eduadmin/markdown-basics/headings-text')
+      await proxy(request as any)
+
+      expect(NextResponse.next).toHaveBeenCalled()
+      expect(NextResponse.rewrite).not.toHaveBeenCalled()
+    })
+
+    it('should skip proxy for /preview routes on custom domains', async () => {
+      const { proxy } = await import('@/proxy')
+      const { NextResponse } = await import('next/server')
+
+      const request = createMockRequest('informatikgarten.ch', '/preview/ig/grundlagen/intro')
+      await proxy(request as any)
+
+      expect(NextResponse.next).toHaveBeenCalled()
+      expect(NextResponse.rewrite).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('eduskript.org teacher page routing', () => {
+    it('should rewrite teacher page paths to org on eduskript.org', async () => {
+      const { proxy } = await import('@/proxy')
+      const { NextResponse } = await import('next/server')
+
+      // On eduskript.org, /eduadmin/skript/page gets rewritten to /org/eduskript/eduadmin/skript/page
+      // because the [domain] route on eduskript.org expects the org rewrite
+      const request = createMockRequest('eduskript.org', '/eduadmin/markdown-basics/headings-text')
+      await proxy(request as any)
+
       expect(NextResponse.rewrite).toHaveBeenCalled()
       const rewriteCall = (NextResponse.rewrite as any).mock.calls[0][0]
-      expect(rewriteCall.pathname).toBe('/org/eduskript/somepath')
+      expect(rewriteCall.pathname).toBe('/org/eduskript/eduadmin/markdown-basics/headings-text')
     })
   })
 

@@ -79,9 +79,14 @@ export async function proxy(request: NextRequest) {
     return rewriteToOrg(request, KNOWN_ORG_DOMAINS[domain])
   }
 
-  // For localhost, check if it's a teacher pageSlug or fall back to default org
+  // For localhost, only rewrite the root path to the default org.
+  // Sub-paths like /teacher-slug/skript/page are handled by the [domain]
+  // route directly — rewriting them to /org/... would break teacher pages.
   if (domain === 'localhost') {
-    return rewriteToOrg(request, DEFAULT_ORG_SLUG)
+    if (pathname === '/') {
+      return rewriteToOrg(request, DEFAULT_ORG_SLUG)
+    }
+    return NextResponse.next()
   }
 
   // Check cache first
