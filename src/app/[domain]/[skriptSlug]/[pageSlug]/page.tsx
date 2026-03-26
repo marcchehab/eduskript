@@ -6,6 +6,7 @@ import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
 import { ExamLockedPage } from '@/components/exam/exam-locked-page'
 import { SEBRequiredPage } from '@/components/exam/seb-required-page'
 import { ExamSubmittedPage } from '@/components/exam/exam-submitted-page'
+import { TeacherExamToolbar } from '@/components/exam/teacher-exam-toolbar'
 import { isSEBRequest, type ExamSettings } from '@/lib/seb'
 import { validateExamToken, validateExamSession } from '@/lib/exam-tokens'
 import { cookies } from 'next/headers'
@@ -163,7 +164,10 @@ export default async function PublicPage({ params, searchParams }: PageProps) {
   const { collection, skript, page, allPages } = content
 
   // EXAM ACCESS CONTROL
-  // If this is an exam page, check if the user has access
+  let isTeacherViewingExam = false
+  let unlockedClassesForExam: { id: string; name: string }[] = []
+  let examState: 'closed' | 'lobby' | 'open' | null = null
+
   if (page.pageType === 'exam') {
     const headersList = await headers()
     const cookieStore = await cookies()
@@ -260,59 +264,70 @@ export default async function PublicPage({ params, searchParams }: PageProps) {
 
     const hasUnlock = hasUnlockForAll || studentUnlock || classUnlock
 
-    if (!hasUnlock) {
-      // Allow teachers (page authors) to access their own exam pages without unlock
-      const isTeacherAuthor = await prisma.pageAuthor.findFirst({
-        where: { pageId: page.id, userId: studentId, permission: 'author' }
-      }) || await prisma.skriptAuthor.findFirst({
-        where: { skriptId: skript.id, userId: studentId, permission: 'author' }
-      }) || (collection && await prisma.collectionAuthor.findFirst({
-        where: { collectionId: collection.id, userId: studentId, permission: 'author' }
-      }))
+    // Check if user is a teacher/author
+    const skriptAuthorRecord = await prisma.skriptAuthor.findFirst({
+      where: { skriptId: skript.id, userId: studentId, permission: 'author' }
+    })
+    const collectionAuthorRecord = collection ? await prisma.collectionAuthor.findFirst({
+      where: { collectionId: collection.id, userId: studentId, permission: 'author' }
+    }) : null
+    const isTeacherAuthor = !!(skriptAuthorRecord || collectionAuthorRecord)
 
-      if (!isTeacherAuthor) {
+    if (!hasUnlock && !isTeacherAuthor) {
+      return (
+        <ExamLockedPage
+          pageTitle={page.title}
+          teacherName={teacher.name || teacher.pageSlug || 'Unknown'}
+          isLoggedIn={true}
+          loginUrl={loginUrl}
+        />
+      )
+    }
+
+    // Set up teacher exam toolbar data
+    if (isTeacherAuthor) {
+      isTeacherViewingExam = true
+      const unlocks = await prisma.pageUnlock.findMany({
+        where: { pageId: page.id, classId: { not: null } },
+        include: { class: { select: { id: true, name: true, teacherId: true } } }
+      })
+      unlockedClassesForExam = unlocks
+        .filter(u => u.class?.teacherId === studentId)
+        .map(u => ({ id: u.class!.id, name: u.class!.name }))
+    }
+
+    // Look up exam state for student's class
+    if (!isTeacherAuthor && classUnlock?.classId) {
+      const stateRecord = await prisma.examState.findUnique({
+        where: { pageId_classId: { pageId: page.id, classId: classUnlock.classId } },
+        select: { state: true }
+      })
+      examState = (stateRecord?.state as 'closed' | 'lobby' | 'open') || 'closed'
+    }
+
+    // Check 3: If student already submitted, show the submitted page
+    if (!isTeacherAuthor) {
+      const existingSubmission = await prisma.examSubmission.findUnique({
+        where: {
+          pageId_studentId: { pageId: page.id, studentId }
+        },
+        select: { submittedAt: true }
+      })
+
+      if (existingSubmission) {
         return (
-          <ExamLockedPage
+          <ExamSubmittedPage
             pageTitle={page.title}
-            teacherName={teacher.name || teacher.pageSlug || 'Unknown'}
-            isLoggedIn={true}
-            loginUrl={loginUrl}
+            pageId={page.id}
+            submittedAt={existingSubmission.submittedAt}
           />
         )
       }
     }
 
-    // Check 3: If student already submitted, show the submitted page
-    // This check comes before SEB check so students can see their status without SEB
-    const existingSubmission = await prisma.examSubmission.findUnique({
-      where: {
-        pageId_studentId: { pageId: page.id, studentId }
-      },
-      select: { submittedAt: true }
-    })
-
-    // Only show submitted page for students, not teachers
-    const isTeacherAuthor = await prisma.pageAuthor.findFirst({
-      where: { pageId: page.id, userId: studentId, permission: 'author' }
-    }) || await prisma.skriptAuthor.findFirst({
-      where: { skriptId: skript.id, userId: studentId, permission: 'author' }
-    }) || (collection && await prisma.collectionAuthor.findFirst({
-      where: { collectionId: collection.id, userId: studentId, permission: 'author' }
-    }))
-
-    if (!isTeacherAuthor && existingSubmission) {
-      return (
-        <ExamSubmittedPage
-          pageTitle={page.title}
-          pageId={page.id}
-          submittedAt={existingSubmission.submittedAt}
-        />
-      )
-    }
-
     // Check 4: If SEB is required, verify request is from SEB
     // (Skip if authenticated via token or exam session - they must be in SEB)
-    if (examSettings?.requireSEB && !authenticatedViaToken && !authenticatedViaExamSession) {
+    if (examSettings?.requireSEB && !isTeacherAuthor && !authenticatedViaToken && !authenticatedViaExamSession) {
       if (!isSEBRequest(headersList)) {
         return (
           <SEBRequiredPage
@@ -321,6 +336,18 @@ export default async function PublicPage({ params, searchParams }: PageProps) {
           />
         )
       }
+    }
+
+    // Check 5: If exam state is closed, block students
+    if (!isTeacherAuthor && examState === 'closed') {
+      return (
+        <ExamLockedPage
+          pageTitle={page.title}
+          teacherName={teacher.name || teacher.pageSlug || 'Unknown'}
+          isLoggedIn={true}
+          loginUrl={loginUrl}
+        />
+      )
     }
 
   }
@@ -445,6 +472,13 @@ export default async function PublicPage({ params, searchParams }: PageProps) {
       pageId={page.id}
       hideSidebar={page.pageType === 'exam'}
     >
+      {isTeacherViewingExam && (
+        <TeacherExamToolbar
+          pageId={page.id}
+          unlockedClasses={unlockedClassesForExam}
+        />
+      )}
+
       <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border">
         <article className="prose-theme">
           <AnnotationWrapper pageId={page.id} content={page.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} isPageAuthor={isPageAuthor}>
