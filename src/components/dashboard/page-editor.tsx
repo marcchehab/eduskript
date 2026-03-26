@@ -18,7 +18,7 @@ import { ExcalidrawEditor } from '@/components/dashboard/excalidraw-editor'
 import { EditModal } from '@/components/dashboard/edit-modal'
 import { CreatePageModal } from '@/components/dashboard/create-page-modal'
 import { SkriptAccessManager } from '@/components/permissions/SkriptAccessManager'
-import { ArrowLeft, ArrowRightLeft, Save, History, Files, Eye, Image as ImageIcon, Link2, FileCode, ClipboardCopy, Check, Shield, Lock, Unlock, Maximize2, Minimize2, BookA, BookOpen, FileText, FilePenLine, GripVertical, Trash2, Users, Wand2, Film, Loader2 } from 'lucide-react'
+import { ArrowLeft, ArrowRightLeft, Save, History, Files, Eye, Image as ImageIcon, Link2, FileCode, ClipboardCopy, Check, Shield, Lock, Unlock, Globe, Maximize2, Minimize2, BookA, BookOpen, FileText, FilePenLine, GripVertical, Trash2, Users, Wand2, Film, Loader2 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -119,8 +119,8 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
 
   // Exam settings state
   const [pageType, setPageType] = useState(page.pageType || 'normal')
-  const [examSettings, setExamSettings] = useState<{ requireSEB?: boolean }>(
-    (page.examSettings as { requireSEB?: boolean }) || { requireSEB: false }
+  const [examSettings, setExamSettings] = useState<{ requireSEB?: boolean; unlockForAll?: boolean }>(
+    (page.examSettings as { requireSEB?: boolean; unlockForAll?: boolean }) || { requireSEB: false }
   )
   const [teacherClasses, setTeacherClasses] = useState<Array<{ id: string; name: string }>>([])
   const [unlockedClassIds, setUnlockedClassIds] = useState<string[]>([])
@@ -1117,6 +1117,20 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
               <Label htmlFor="require-seb" className="text-sm flex items-center gap-1.5 cursor-pointer">
                 <Shield className="w-4 h-4 text-muted-foreground" />
                 Require Safe Exam Browser
+              </Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="unlock-for-all"
+                checked={examSettings.unlockForAll || false}
+                onCheckedChange={(checked) => {
+                  setExamSettings(prev => ({ ...prev, unlockForAll: !!checked }))
+                  setHasUnsavedChanges(true)
+                }}
+              />
+              <Label htmlFor="unlock-for-all" className="text-sm flex items-center gap-1.5 cursor-pointer">
+                <Globe className="w-4 h-4 text-muted-foreground" />
+                Unlock for all
               </Label>
             </div>
             {teacherClasses.length > 0 && (

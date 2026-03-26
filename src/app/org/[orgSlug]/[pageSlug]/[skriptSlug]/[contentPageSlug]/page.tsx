@@ -257,19 +257,22 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
     const studentId = authenticatedUserId
     examAuthenticatedUserId = authenticatedUserId
 
-    const studentUnlock = await prisma.pageUnlock.findFirst({
-      where: { pageId: page.id, studentId }
-    })
+    // Skip unlock check if exam is unlocked for all
+    const hasUnlockForAll = examSettings?.unlockForAll === true
 
-    const classUnlock = await prisma.pageUnlock.findFirst({
+    const studentUnlock = !hasUnlockForAll ? await prisma.pageUnlock.findFirst({
+      where: { pageId: page.id, studentId }
+    }) : null
+
+    const classUnlock = !hasUnlockForAll ? await prisma.pageUnlock.findFirst({
       where: {
         pageId: page.id,
         classId: { not: null },
         class: { memberships: { some: { studentId } } }
       }
-    })
+    }) : null
 
-    const hasUnlock = studentUnlock || classUnlock
+    const hasUnlock = hasUnlockForAll || studentUnlock || classUnlock
 
     const skriptAuthorRecord = await prisma.skriptAuthor.findFirst({
       where: { skriptId: skript.id, userId: studentId, permission: 'author' }

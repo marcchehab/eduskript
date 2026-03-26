@@ -12,6 +12,7 @@
  */
 export interface ExamSettings {
   requireSEB: boolean
+  unlockForAll?: boolean
   timeLimitMinutes?: number
   // Future: browserExamKey for full validation
 }

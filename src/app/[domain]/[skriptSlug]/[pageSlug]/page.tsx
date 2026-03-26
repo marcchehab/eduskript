@@ -231,19 +231,22 @@ export default async function PublicPage({ params, searchParams }: PageProps) {
       )
     }
 
-    // Check 2: User must have an unlock (either via class membership or direct student unlock)
+    // Check 2: User must have an unlock (either via class membership, direct student unlock, or unlockForAll)
     const studentId = authenticatedUserId
 
+    // Skip unlock check if exam is unlocked for all
+    const hasUnlockForAll = examSettings?.unlockForAll === true
+
     // Check for direct student unlock
-    const studentUnlock = await prisma.pageUnlock.findFirst({
+    const studentUnlock = !hasUnlockForAll ? await prisma.pageUnlock.findFirst({
       where: {
         pageId: page.id,
         studentId
       }
-    })
+    }) : null
 
     // Check for class-based unlock (student is in a class that has this page unlocked)
-    const classUnlock = await prisma.pageUnlock.findFirst({
+    const classUnlock = !hasUnlockForAll ? await prisma.pageUnlock.findFirst({
       where: {
         pageId: page.id,
         classId: { not: null },
@@ -253,9 +256,9 @@ export default async function PublicPage({ params, searchParams }: PageProps) {
           }
         }
       }
-    })
+    }) : null
 
-    const hasUnlock = studentUnlock || classUnlock
+    const hasUnlock = hasUnlockForAll || studentUnlock || classUnlock
 
     if (!hasUnlock) {
       // Allow teachers (page authors) to access their own exam pages without unlock
