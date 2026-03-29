@@ -17,6 +17,7 @@ export const PLUGIN_SDK_SOURCE = `
   var _readyCallback = null;
   var _themeCallback = null;
   var _dataChangedCallback = null;
+  var _fullscreenCallback = null;
   var _pendingRequests = {};
   var _requestId = 0;
 
@@ -61,6 +62,12 @@ export const PLUGIN_SDK_SOURCE = `
           _themeCallback(msg.theme);
         }
         break;
+
+      case 'host:fullscreenChange':
+        if (_fullscreenCallback) {
+          _fullscreenCallback(!!msg.isFullscreen);
+        }
+        break;
     }
   });
 
@@ -91,6 +98,18 @@ export const PLUGIN_SDK_SOURCE = `
 
         resize: function(height) {
           sendMessage({ type: 'plugin:resize', height: height });
+        },
+
+        requestFullscreen: function() {
+          sendMessage({ type: 'plugin:requestFullscreen' });
+        },
+
+        exitFullscreen: function() {
+          sendMessage({ type: 'plugin:exitFullscreen' });
+        },
+
+        onFullscreenChange: function(cb) {
+          _fullscreenCallback = cb;
         }
       };
     }

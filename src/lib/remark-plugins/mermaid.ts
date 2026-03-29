@@ -14,6 +14,12 @@ interface ParentNode extends Node {
 /**
  * Remark plugin to convert ```mermaid code blocks into <plugin> elements.
  * The diagram definition is passed as inner text content (read via config.content in the plugin SDK).
+ *
+ * Example markdown:
+ * ```mermaid
+ * graph LR
+ *   A --> B --> C
+ * ```
  */
 export function remarkMermaid() {
   return (tree: Node) => {

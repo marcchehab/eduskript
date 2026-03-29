@@ -940,7 +940,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
 
   // Insert plugin from picker
   const insertPlugin = (pluginSrc: string, configHint: string) => {
-    const pluginTag = `<plugin src="${pluginSrc}"${configHint}></plugin>\n`
+    const pluginTag = `<plugin src="${pluginSrc}"${configHint} />\n`
 
     if (editorViewRef.current && !useSimpleEditor) {
       const view = editorViewRef.current

@@ -407,7 +407,7 @@ export function PluginsDashboard({ userId, userPageSlug }: PluginsDashboardProps
       {/* Usage hint */}
       {editingPlugin && (
         <div className="text-xs text-muted-foreground bg-muted/50 rounded-md px-3 py-2">
-          Use in markdown: <code className="bg-muted px-1 rounded">{`<plugin src="${editingPlugin.author.pageSlug}/${editingPlugin.slug}"></plugin>`}</code>
+          Use in markdown: <code className="bg-muted px-1 rounded">{`<plugin src="${editingPlugin.author.pageSlug}/${editingPlugin.slug}" />`}</code>
         </div>
       )}
 

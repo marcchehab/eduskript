@@ -327,7 +327,7 @@
     <button id="btn-step-fwd" title="Schritt vor">&#9654;&#124;</button>
     <div class="toolbar-sep"></div>
     <span class="toolbar-label">Tempo:</span>
-    <input type="range" id="speed-slider" min="100" max="2000" value="800" step="100">
+    <input type="range" id="speed-slider" min="100" max="2000" value="1300" step="100">
     <span id="step-display">Schritt 0 / 0</span>
     <div class="toolbar-sep"></div>
     <span class="toolbar-label">Knoten:</span>
@@ -367,7 +367,7 @@
     <div id="table-panel">
       <div id="table-header">
         <span>Distanztabelle</span>
-        <button id="btn-sort-toggle">A-Z</button>
+        <button id="btn-sort-toggle" class="active">PQ</button>
       </div>
       <div id="table-container">
         <table id="distance-table">
@@ -422,7 +422,7 @@
   var tablePanelStartWidth = 320;
 
   // Sort
-  var sortByQueue = false;
+  var sortByQueue = true;
 
   // Fullscreen
   var isFullscreen = false;
@@ -938,17 +938,19 @@
     for (var i = 0; i < nodes.length; i++) nodeIndices.push(i);
 
     if (sortByQueue && step) {
-      // Sort: current first, then in-queue by distance, then unvisited, then visited
+      // Sort: visited first, then by distance ascending, then alphabetically (matches original)
       nodeIndices.sort(function(a, b) {
-        var stateA = getNodeSortPriority(a, step);
-        var stateB = getNodeSortPriority(b, step);
-        if (stateA !== stateB) return stateA - stateB;
+        var aVisited = !!step.visitedNodes[a];
+        var bVisited = !!step.visitedNodes[b];
+        if (aVisited !== bVisited) return aVisited ? -1 : 1;
         var dA = step.distances[a];
         var dB = step.distances[b];
-        if (dA === Infinity && dB === Infinity) return 0;
-        if (dA === Infinity) return 1;
-        if (dB === Infinity) return -1;
-        return dA - dB;
+        if (dA !== dB) {
+          if (dA === Infinity) return 1;
+          if (dB === Infinity) return -1;
+          return dA - dB;
+        }
+        return nodes[a].label.localeCompare(nodes[b].label);
       });
     }
 
@@ -1015,13 +1017,6 @@
         currentNodeLabel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       }, 50);
     }
-  }
-
-  function getNodeSortPriority(index, step) {
-    if (step.currentNode === index) return 0;
-    if (step.queueNodes[index]) return 1;
-    if (!step.visitedNodes[index] && !step.queueNodes[index]) return 2;
-    return 3; // visited
   }
 
   function updateDescription() {
@@ -1385,7 +1380,18 @@
   btnStepFwd.addEventListener('click', stepForward);
 
   speedSlider.addEventListener('input', function() {
-    speed = parseInt(speedSlider.value);
+    speed = 2100 - parseInt(speedSlider.value);
+    // Restart interval with new speed if currently playing
+    if (isPlaying && playInterval) {
+      clearInterval(playInterval);
+      playInterval = setInterval(function() {
+        if (currentStepIndex >= steps.length - 1) {
+          stopPlaying();
+          return;
+        }
+        stepForward();
+      }, speed);
+    }
     if (isPlaying) {
       stopPlaying();
       startPlaying();
@@ -1423,9 +1429,20 @@
     generateGraph();
   });
 
+  // --- Plugin Init (must be before handlers that reference `plugin`) ---
+  var plugin = eduskript.init();
+
   btnFullscreen.addEventListener('click', function() {
-    isFullscreen = !isFullscreen;
     if (isFullscreen) {
+      plugin.exitFullscreen();
+    } else {
+      plugin.requestFullscreen();
+    }
+  });
+
+  plugin.onFullscreenChange(function(fs) {
+    isFullscreen = fs;
+    if (fs) {
       root.classList.add('fullscreen');
       btnFullscreen.innerHTML = '&#x2716;';
     } else {
@@ -1436,7 +1453,9 @@
 
   btnSortToggle.addEventListener('click', function() {
     sortByQueue = !sortByQueue;
-    btnSortToggle.textContent = sortByQueue ? 'Priorit\u00e4t' : 'A-Z';
+    btnSortToggle.textContent = sortByQueue ? 'PQ' : 'A-Z';
+    btnSortToggle.style.background = sortByQueue ? 'var(--btn-active)' : 'var(--btn-bg)';
+    btnSortToggle.style.color = sortByQueue ? 'var(--btn-active-text)' : 'var(--text)';
     renderTable();
   });
 
@@ -1472,8 +1491,8 @@
     }
   }
 
-  // --- Plugin Init ---
-  var plugin = eduskript.init();
+  // plugin object used by event handlers above
+  // (actual onReady/onThemeChange registration below)
 
   plugin.onReady(function(ctx) {
     var config = ctx.config || {};

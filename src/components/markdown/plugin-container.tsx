@@ -174,11 +174,37 @@ export function PluginContainer({
           })
           break
         }
+
+        case 'plugin:requestFullscreen': {
+          if (iframeRef.current?.requestFullscreen) {
+            iframeRef.current.requestFullscreen().catch(() => {
+              // Fullscreen request denied by browser
+            })
+          }
+          break
+        }
+
+        case 'plugin:exitFullscreen': {
+          if (document.fullscreenElement) {
+            document.exitFullscreen().catch(() => {})
+          }
+          break
+        }
       }
     }
 
+    // Notify plugin when fullscreen state changes
+    const handleFullscreenChange = () => {
+      const isFs = document.fullscreenElement === iframeRef.current
+      sendToPlugin({ type: 'host:fullscreenChange', isFullscreen: isFs })
+    }
+
     window.addEventListener('message', handleMessage)
-    return () => window.removeEventListener('message', handleMessage)
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => {
+      window.removeEventListener('message', handleMessage)
+      document.removeEventListener('fullscreenchange', handleFullscreenChange)
+    }
   }, [config, userData, resolvedTheme, sendToPlugin, src, pageId, updateData])
 
   // Push theme changes to plugin
@@ -275,6 +301,7 @@ export function PluginContainer({
         <iframe
           ref={iframeRef}
           sandbox="allow-scripts allow-same-origin"
+          allowFullScreen
           srcDoc={srcdoc}
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           {...{ allowtransparency: 'true' } as any}
