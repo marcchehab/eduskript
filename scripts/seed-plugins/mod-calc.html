@@ -128,6 +128,9 @@
   plugin.onReady(function(ctx) {
     lang = (ctx.config && ctx.config.lang) || 'en';
     if (ctx.config && ctx.config.formula) formula = ctx.config.formula;
+    if (ctx.config && ctx.config.base) document.getElementById('input-base').value = ctx.config.base;
+    if (ctx.config && ctx.config.exp) document.getElementById('input-exp').value = ctx.config.exp;
+    if (ctx.config && ctx.config.mod) document.getElementById('input-mod').value = ctx.config.mod;
     setupFormula(formula);
     applyTheme(ctx.theme);
     calculate();
