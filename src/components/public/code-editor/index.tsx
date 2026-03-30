@@ -360,6 +360,14 @@ export const CodeEditor = memo(function CodeEditor({
   const { deleteVersion, isDeleting } = useDeleteVersion(pageId || 'no-page', componentId)
   const updateLabel = useUpdateVersionLabel(pageId || 'no-page', componentId)
 
+  // Pending input() state for Skulpt interactive programs
+  const [pendingInput, setPendingInput] = useState<{
+    prompt: string
+    resolve: (value: string) => void
+    reject: (reason: Error) => void
+  } | null>(null)
+  const pendingInputRef = useRef<typeof pendingInput>(null)
+
   // Output/History panel state
   const [activePanel, setActivePanel] = useState<'output' | 'history'>('output')
   const [panelVisible, setPanelVisible] = useState(false)
@@ -2068,6 +2076,13 @@ export const CodeEditor = memo(function CodeEditor({
     }
   }, [output.length, activePanel]) // Re-attach when output changes or panel switches
 
+  // Auto-scroll output panel when input prompt appears
+  useEffect(() => {
+    if (pendingInput && outputPanelRef.current) {
+      outputPanelRef.current.scrollTop = outputPanelRef.current.scrollHeight
+    }
+  }, [pendingInput])
+
   // Add output helper
   const addOutput = (message: string, level: OutputLevel = OutputLevel.OUTPUT) => {
     setOutput((prev) => [...prev, { message, level, timestamp: Date.now() }])
@@ -2332,9 +2347,10 @@ export const CodeEditor = memo(function CodeEditor({
       // Decide which runtime to use based on current editor content (not saved state)
       // This allows switching between Skulpt and Pyodide when code changes
       const hasTurtle = /import\s+turtle|from\s+turtle/.test(code)
+      const hasInput = /\binput\s*\(/.test(code)
 
-      if (hasTurtle) {
-        runPythonCode(code) // Use Skulpt for turtle
+      if (hasTurtle || hasInput) {
+        runPythonCode(code) // Use Skulpt for turtle and input() (native async suspension)
       } else {
         runPyodideCode(code) // Use Pyodide for everything else (including matplotlib)
       }
@@ -2447,6 +2463,14 @@ export const CodeEditor = memo(function CodeEditor({
         output: (text: string) => {
           addOutput(text, OutputLevel.OUTPUT)
         },
+        inputfun: (prompt: string): Promise<string> => {
+          if (prompt) addOutput(prompt, OutputLevel.OUTPUT)
+          return new Promise<string>((resolve, reject) => {
+            const entry = { prompt, resolve, reject }
+            setPendingInput(entry)
+            pendingInputRef.current = entry
+          })
+        },
         read: (filename: string) => {
           // Extract just the base filename (remove directory paths)
           const baseName = filename.split('/').pop() || filename
@@ -2530,16 +2554,23 @@ export const CodeEditor = memo(function CodeEditor({
 
       promise.then(
         () => {
+          setPendingInput(null)
+          pendingInputRef.current = null
           // Show success flash on Run button
           setShowSuccessFlash(true)
           setTimeout(() => setShowSuccessFlash(false), 1500)
           setRunState(RunState.STOPPED)
         },
-        (err: SkulptError) => {
-          if (err.tp$name === 'TimeoutError' && Sk.execLimit === 1) {
-            addOutput('Program stopped', OutputLevel.WARNING)
+        (err: SkulptError | Error) => {
+          setPendingInput(null)
+          pendingInputRef.current = null
+          const errStr = err.toString()
+          if ('tp$name' in err && err.tp$name === 'TimeoutError' && Sk.execLimit === 1) {
+            // Already reported by stopCode
+          } else if (errStr.includes('Program stopped')) {
+            // Rejected input from stopCode, already reported
           } else {
-            addOutput(err.toString(), OutputLevel.ERROR)
+            addOutput(errStr, OutputLevel.ERROR)
           }
           setRunState(RunState.STOPPED)
         }
@@ -2744,6 +2775,11 @@ plots
 
   // Stop running code
   const stopCode = () => {
+    if (pendingInputRef.current) {
+      pendingInputRef.current.reject(new Error('Program stopped'))
+      setPendingInput(null)
+      pendingInputRef.current = null
+    }
     if (window.Sk) {
       window.Sk.execLimit = 1
     }
@@ -3683,6 +3719,25 @@ plots
                   )}
                 </div>
               ))}
+              {pendingInput && (
+                <div className="flex items-center gap-1 mt-1">
+                  <span className="text-muted-foreground font-mono text-sm">{'>'}</span>
+                  <input
+                    autoFocus
+                    type="text"
+                    className="flex-1 bg-transparent border-b border-muted-foreground/30 outline-none text-sm font-mono text-foreground"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        const value = e.currentTarget.value
+                        addOutput(value, OutputLevel.OUTPUT)
+                        pendingInput.resolve(value)
+                        setPendingInput(null)
+                        pendingInputRef.current = null
+                      }
+                    }}
+                  />
+                </div>
+              )}
           </div>
         ) : (
           <div className="flex-1 overflow-x-auto overflow-y-hidden p-2">
