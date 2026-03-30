@@ -115,6 +115,58 @@ export function PluginContainer({
     }
   }, [])
 
+  // Forward zoom gestures from iframe to parent document so annotation-layer handles them.
+  // Iframes have their own document, so wheel/touch events inside don't bubble to the parent.
+  useEffect(() => {
+    const handleZoomMessage = (event: MessageEvent) => {
+      if (!iframeRef.current || event.source !== iframeRef.current.contentWindow) return
+      const msg = event.data
+      if (!msg || typeof msg.type !== 'string') return
+
+      if (msg.type === 'plugin:zoomWheel') {
+        // Convert iframe-relative coords to parent-relative coords
+        const rect = iframeRef.current.getBoundingClientRect()
+        const syntheticWheel = new WheelEvent('wheel', {
+          deltaY: msg.deltaY,
+          clientX: rect.left + (msg.clientX || 0),
+          clientY: rect.top + (msg.clientY || 0),
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        })
+        document.dispatchEvent(syntheticWheel)
+      }
+
+      if (msg.type === 'plugin:zoomTouchMove' && msg.ratio) {
+        // Convert incremental touch pinch ratio to synthetic ctrl+wheel.
+        // ratio > 1 means fingers spreading (zoom in) → negative deltaY.
+        // The parent handler does: delta = -deltaY * 0.01, newZoom = current * (1 + delta)
+        // We want newZoom = current * ratio, so (1 + delta) = ratio, delta = ratio - 1
+        // Therefore deltaY = -(ratio - 1) / 0.01 = -(ratio - 1) * 100
+        const deltaY = -(msg.ratio - 1) * 100
+        // centerX/centerY are in screen coordinates (immune to CSS transforms).
+        // Convert to parent viewport client coords using window.screenX/screenY
+        // plus chrome offsets (outerWidth/Height - innerWidth/Height).
+        const chromeLeft = (window.outerWidth - window.innerWidth) / 2
+        const chromeTop = window.outerHeight - window.innerHeight - chromeLeft
+        const clientX = msg.centerX - window.screenX - chromeLeft
+        const clientY = msg.centerY - window.screenY - chromeTop
+        const syntheticWheel = new WheelEvent('wheel', {
+          deltaY,
+          clientX,
+          clientY,
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        })
+        document.dispatchEvent(syntheticWheel)
+      }
+    }
+
+    window.addEventListener('message', handleZoomMessage)
+    return () => window.removeEventListener('message', handleZoomMessage)
+  }, [])
+
   // Handle messages from plugin iframe
   useEffect(() => {
     const handleMessage = (event: MessageEvent<PluginMessage>) => {

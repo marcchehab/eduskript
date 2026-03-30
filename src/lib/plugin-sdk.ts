@@ -116,6 +116,84 @@ export const PLUGIN_SDK_SOURCE = `
   };
 })();
 
+// Forward zoom gestures to host so they don't trigger browser viewport zoom.
+// The host's annotation-layer handles zoom via CSS transform on #paper.
+(function() {
+  // Ctrl+wheel / trackpad pinch (fires as wheel with ctrlKey=true)
+  document.addEventListener('wheel', function(e) {
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    window.parent.postMessage({
+      type: 'plugin:zoomWheel',
+      deltaY: e.deltaY,
+      clientX: e.clientX,
+      clientY: e.clientY
+    }, '*');
+  }, { passive: false });
+
+  // Touch pinch zoom — coalesce via rAF so we send exactly one message per
+  // animation frame with the accumulated ratio. Without this, multiple touchmove
+  // events per frame each trigger an async postMessage, causing visible stutter.
+  var prevDist = 0;
+  var pendingRatio = 1;
+  var pendingCX = 0;
+  var pendingCY = 0;
+  var rafId = 0;
+
+  function flushPinch() {
+    if (pendingRatio !== 1) {
+      window.parent.postMessage({
+        type: 'plugin:zoomTouchMove',
+        ratio: pendingRatio,
+        centerX: pendingCX,
+        centerY: pendingCY
+      }, '*');
+      pendingRatio = 1;
+    }
+    rafId = 0;
+  }
+
+  document.addEventListener('touchstart', function(e) {
+    if (e.touches.length >= 2) {
+      e.preventDefault();
+      // Use screenX/screenY for distance — immune to parent CSS transform changes.
+      // clientX/clientY shifts when the parent applies scale(), creating a feedback loop
+      // where each zoom-in causes the next frame to measure a phantom zoom-out.
+      var dx = e.touches[0].screenX - e.touches[1].screenX;
+      var dy = e.touches[0].screenY - e.touches[1].screenY;
+      prevDist = Math.sqrt(dx * dx + dy * dy);
+      pendingRatio = 1;
+    }
+  }, { passive: false });
+
+  document.addEventListener('touchmove', function(e) {
+    if (e.touches.length >= 2 && prevDist > 0) {
+      e.preventDefault();
+      var dx = e.touches[0].screenX - e.touches[1].screenX;
+      var dy = e.touches[0].screenY - e.touches[1].screenY;
+      var dist = Math.sqrt(dx * dx + dy * dy);
+      // Accumulate incremental ratio (multiplicative) across touchmoves within one frame
+      pendingRatio *= dist / prevDist;
+      prevDist = dist;
+      // Use screenX/screenY for center too — clientX/clientY is in iframe CSS space
+      // which is distorted by the parent's CSS transform
+      pendingCX = (e.touches[0].screenX + e.touches[1].screenX) / 2;
+      pendingCY = (e.touches[0].screenY + e.touches[1].screenY) / 2;
+      if (!rafId) {
+        rafId = requestAnimationFrame(flushPinch);
+      }
+    }
+  }, { passive: false });
+
+  document.addEventListener('touchend', function(e) {
+    if (e.touches.length < 2) {
+      // Flush any pending ratio before ending the gesture
+      if (rafId) { cancelAnimationFrame(rafId); flushPinch(); }
+      prevDist = 0;
+    }
+  }, { passive: false });
+})();
+
 // Auto-resize: report content height to host whenever layout changes
 (function() {
   var lastHeight = 0;
