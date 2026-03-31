@@ -1784,6 +1784,10 @@ export const CodeEditor = memo(function CodeEditor({
         '.cm-scroller': {
           overflow: 'auto'
         },
+        // Extra bottom padding so the floating Run/Stop button doesn't obscure code
+        '.cm-content': {
+          paddingBottom: '2.5rem'
+        },
       }),
       // Dynamic compartments — reconfigured without destroying the editor
       fontSizeCompartment.current.of(EditorView.theme({
