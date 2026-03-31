@@ -61,7 +61,7 @@ import { generatePseudonym, isStudentEmail } from '@/lib/privacy/pseudonym'
 import { PrivacyAdapter, type SignupContext } from '@/lib/privacy-adapter'
 import { cookies } from 'next/headers'
 import { createLogger } from '@/lib/logger'
-import { expireTrialIfNeeded } from '@/lib/trial'
+import { expireSubscriptionIfNeeded } from '@/lib/trial'
 
 const log = createLogger('auth:student-detect')
 
@@ -418,7 +418,7 @@ export const authOptions: NextAuthOptions = {
       // Expire trial if past due — runs before billingPlan refresh so the
       // token picks up the downgrade immediately
       if (token.id && trigger !== 'update') {
-        await expireTrialIfNeeded(token.id as string)
+        await expireSubscriptionIfNeeded(token.id as string)
       }
 
       // Always refresh billingPlan and isAdmin from DB — these gate UI access

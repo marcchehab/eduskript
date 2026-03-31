@@ -58,25 +58,33 @@ export async function createTrialSubscription(
 }
 
 /**
- * Expire a user's trial if currentPeriodEnd has passed.
- * Returns true if a trial was expired.
+ * Expire subscriptions that have passed their currentPeriodEnd:
+ * - Trials (status 'trialing') past their end date
+ * - Cancelled paid subscriptions (status 'active', cancelledAt set) past their period end
+ *
+ * Returns true if a subscription was expired.
  */
-export async function expireTrialIfNeeded(userId: string): Promise<boolean> {
-  const trial = await prisma.subscription.findFirst({
+export async function expireSubscriptionIfNeeded(userId: string): Promise<boolean> {
+  const now = new Date()
+
+  const sub = await prisma.subscription.findFirst({
     where: {
       userId,
-      status: 'trialing',
-      currentPeriodEnd: { lt: new Date() },
+      currentPeriodEnd: { lt: now },
+      OR: [
+        { status: 'trialing' },
+        { status: 'active', cancelledAt: { not: null } },
+      ],
     },
   })
 
-  if (!trial) return false
+  if (!sub) return false
 
   await prisma.subscription.update({
-    where: { id: trial.id },
+    where: { id: sub.id },
     data: {
       status: 'cancelled',
-      cancelledAt: new Date(),
+      cancelledAt: sub.cancelledAt ?? now,
     },
   })
 
@@ -87,3 +95,6 @@ export async function expireTrialIfNeeded(userId: string): Promise<boolean> {
 
   return true
 }
+
+/** @deprecated Use expireSubscriptionIfNeeded instead */
+export const expireTrialIfNeeded = expireSubscriptionIfNeeded

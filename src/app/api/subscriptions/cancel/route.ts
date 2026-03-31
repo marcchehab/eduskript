@@ -39,22 +39,31 @@ export async function POST() {
       }
     }
 
-    // Mark as cancelled locally — keep active until period end
+    const now = new Date()
+
+    // Trials cancel immediately; paid subscriptions stay active until period end
+    if (subscription.status === 'trialing' || !subscription.currentPeriodEnd) {
+      await prisma.subscription.update({
+        where: { id: subscription.id },
+        data: { status: 'cancelled', cancelledAt: now },
+      })
+      await prisma.user.update({
+        where: { id: session.user.id },
+        data: { billingPlan: 'free' },
+      })
+      return NextResponse.json({ success: true, immediate: true })
+    }
+
+    // Mark as cancelled but keep plan active until period end
     await prisma.subscription.update({
       where: { id: subscription.id },
-      data: {
-        status: 'cancelled',
-        cancelledAt: new Date(),
-      },
+      data: { cancelledAt: now },
     })
 
-    // Reset user billing plan
-    await prisma.user.update({
-      where: { id: session.user.id },
-      data: { billingPlan: 'free' },
+    return NextResponse.json({
+      success: true,
+      activeUntil: subscription.currentPeriodEnd,
     })
-
-    return NextResponse.json({ success: true })
   } catch (error) {
     console.error('[subscriptions/cancel] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

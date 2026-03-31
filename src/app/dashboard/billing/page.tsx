@@ -96,8 +96,12 @@ export default function BillingPage() {
       const res = await fetch('/api/subscriptions/cancel', { method: 'POST' })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to cancel')
-      setSubscription(null)
-      setSuccessMessage('Subscription cancelled.')
+      if (data.activeUntil) {
+        setSuccessMessage(`Subscription cancelled. You'll keep access until ${formatDate(data.activeUntil)}.`)
+      } else {
+        setSuccessMessage('Subscription cancelled.')
+      }
+      await fetchData()
       await updateSession()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to cancel subscription')
@@ -173,8 +177,8 @@ export default function BillingPage() {
               <p>Trial ends in {daysUntil(subscription.trialEndsAt)} days ({formatDate(subscription.trialEndsAt)})</p>
             ) : subscription.currentPeriodEnd ? (
               <p>
-                {subscription.status === 'cancelled'
-                  ? `Access until ${formatDate(subscription.currentPeriodEnd)}`
+                {subscription.cancelledAt
+                  ? `Cancelled — access until ${formatDate(subscription.currentPeriodEnd)}`
                   : `Next billing date: ${formatDate(subscription.currentPeriodEnd)}`}
               </p>
             ) : null}
@@ -200,7 +204,7 @@ export default function BillingPage() {
             </div>
           )}
 
-          {subscription.status === 'active' && (
+          {subscription.status === 'active' && !subscription.cancelledAt && (
             <Button
               variant="outline"
               onClick={handleCancel}
