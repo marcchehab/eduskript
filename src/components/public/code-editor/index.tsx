@@ -2528,8 +2528,8 @@ export const CodeEditor = memo(function CodeEditor({
       // Configure turtle graphics if canvas exists
       if (canvas) {
         ;(Sk.TurtleGraphics ||= {
-          width: canvas.clientWidth || 500,
-          height: canvas.clientHeight || 400,
+          width: 2000,
+          height: 2000,
         }).target = canvas
 
         // Center the canvas after Skulpt creates it
