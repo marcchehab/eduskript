@@ -331,8 +331,8 @@ body {
  * - Y-axis repositioning still handled by section-based algorithm
  */
 .paper-responsive {
-  width: 1024px;
-  max-width: 1024px;
+  width: 1280px;
+  max-width: 1280px;
   box-sizing: border-box;
   position: relative;
   /* Use clip instead of hidden - clips overflow without creating a scroll container */
@@ -341,11 +341,11 @@ body {
   margin: 0 auto;
 
   /* Fixed padding - same on all devices for consistent annotation coordinates */
-  @apply px-24; /* 96px horizontal padding - generous margins on wider paper */
+  @apply px-48; /* 192px horizontal padding */
 }
 
 /* On narrow screens, JavaScript applies transform scale via --paper-scale CSS variable */
-@media (max-width: 1024px) {
+@media (max-width: 1280px) {
   .paper-responsive {
     /* Scale from top-left so paper aligns to viewport edge */
     transform-origin: top left;

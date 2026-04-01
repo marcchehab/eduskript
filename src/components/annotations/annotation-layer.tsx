@@ -1218,6 +1218,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
   }, [])
   const contentRef = useRef<HTMLDivElement>(null)
   const mainRef = useRef<HTMLElement | null>(null)
+  const [eraserMarkedIds, setEraserMarkedIds] = useState<Set<string>>(new Set())
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const isClearingRef = useRef(false)
   const performSaveRef = useRef<(() => Promise<void>) | null>(null)
@@ -1421,7 +1422,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
   const [paperElement, setPaperElement] = useState<HTMLElement | null>(null)
 
 
-  const [paperWidth, setPaperWidth] = useState(1024) // Fixed paper width (matches .paper-responsive)
+  const [paperWidth, setPaperWidth] = useState(1280) // Fixed paper width (matches .paper-responsive)
 
   // Get paper element for portal and measure its width
   useEffect(() => {
@@ -1742,7 +1743,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
 
       // Use offsetWidth to get the untransformed width (ignores CSS transform scale)
       // getBoundingClientRect().width returns the scaled size on mobile, but we need
-      // the actual 1024px width for canvas coordinates to align with content
+      // the actual 1280px width for canvas coordinates to align with content
       setPaperWidth(paperElement.offsetWidth)
     }
 
@@ -2594,39 +2595,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
     }
   }, [stylusModeActive, mode])
 
-  // CSS transform: scale() doesn't affect layout, so the scroll container has no idea
-  // the content grew. This helper injects an invisible spacer sibling of <main> that
-  // forces the scroll container to have the correct scrollable dimensions, and overrides
-  // the overflow-x:clip on <main> that would otherwise hide the scaled content.
-  const updateZoomSpacer = useCallback((zoomLevel: number) => {
-    const container = scrollContainerRef.current
-    const main = mainRef.current
-    if (!container || !main) return
-
-    let spacer = document.getElementById('zoom-spacer')
-
-    if (zoomLevel <= 1) {
-      spacer?.remove()
-      main.style.maxWidth = ''
-      return
-    }
-
-    if (!spacer) {
-      spacer = document.createElement('div')
-      spacer.id = 'zoom-spacer'
-      spacer.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none'
-      spacer.ariaHidden = 'true'
-      container.style.position = 'relative'
-      container.appendChild(spacer)
-    }
-
-    spacer.style.width = `${main.scrollWidth * zoomLevel}px`
-    spacer.style.height = `${main.scrollHeight * zoomLevel}px`
-
-    main.style.maxWidth = 'none'
-  }, [])
-
-  // Helper function to apply zoom transform using RAF (no re-renders)
+  // Helper function to apply zoom using CSS zoom (affects layout, no spacer needed)
   // With native scroll, we only need to handle zoom - scroll is handled by browser
   const applyZoom = useCallback((newZoom: number, focalX?: number, focalY?: number) => {
     // Use renderedZoomRef (actual DOM state) not zoomRef (which may already be ahead of the DOM
@@ -2639,14 +2608,12 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
       cancelAnimationFrame(rafIdRef.current)
     }
 
-    // Apply transform in next frame
+    // Apply zoom in next frame
     rafIdRef.current = requestAnimationFrame(() => {
       if (mainRef.current) {
-        mainRef.current.style.transform = `scale(${newZoom})`
+        mainRef.current.style.zoom = `${newZoom}`
         renderedZoomRef.current = newZoom
       }
-
-      updateZoomSpacer(newZoom)
 
       // Adjust scroll position to keep focal point stationary
       if (scrollContainerRef.current && focalX !== undefined && focalY !== undefined) {
@@ -2671,18 +2638,17 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
 
       rafIdRef.current = null
     })
-  }, [updateZoomSpacer])
+  }, [])
 
   // Handle zoom reset
   const handleResetZoom = useCallback(() => {
     applyZoom(1.0)
     setZoom(1.0)
-    updateZoomSpacer(1.0)
     // Scroll to top
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTop = 0
     }
-  }, [applyZoom, updateZoomSpacer])
+  }, [applyZoom])
 
   // Custom pinch-zoom handling (native scroll handles single-finger pan)
   const handleTouchStart = useCallback((e: TouchEvent) => {
@@ -2756,17 +2722,16 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
       const newScrollX = initialContentPointRef.current.x * newZoom - relativeX
       const newScrollY = initialContentPointRef.current.y * newZoom - relativeY
 
-      // Apply transform and scroll synchronously (no RAF) for smooth gesture handling
+      // Apply zoom and scroll synchronously (no RAF) for smooth gesture handling
       zoomRef.current = newZoom
       renderedZoomRef.current = newZoom
       if (mainRef.current) {
-        mainRef.current.style.transform = `scale(${newZoom})`
+        mainRef.current.style.zoom = `${newZoom}`
       }
-      updateZoomSpacer(newZoom)
       container.scrollLeft = Math.max(0, newScrollX)
       container.scrollTop = Math.max(0, newScrollY)
     }
-  }, [updateZoomSpacer])
+  }, [])
 
   const handleTouchEnd = useCallback((e: TouchEvent) => {
     // Remove ended touches
@@ -2826,10 +2791,8 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
 
     if (!mainRef.current) return
 
-    // Set transform properties once - scale only, no translate (scroll handles panning)
-    mainRef.current.style.transformOrigin = 'top left'
-    mainRef.current.style.transition = 'none'
-    mainRef.current.style.transform = `scale(${zoomRef.current})`
+    // Set zoom once - CSS zoom affects layout, so scroll container dimensions update automatically
+    mainRef.current.style.zoom = `${zoomRef.current}`
   }, [])
 
 
@@ -2899,6 +2862,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
             strokes={parsedStrokes}
             width={paperWidth}
             height={pageHeight}
+            markedForDeletion={eraserMarkedIds}
             sectionTransforms={computeSectionTransforms(
               storedHeadingOffsets,
               headingPositions,
@@ -2916,6 +2880,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
             onUpdate={handleCanvasUpdate}
             onTelemetry={handleTelemetry}
             onDrawStart={ensureActiveLayerVisible}
+            onEraserMarksChange={setEraserMarkedIds}
             initialData={canvasData}
             strokeColor={penColors[activePen]}
             strokeWidth={penSizes[activePen]}

@@ -259,10 +259,10 @@ export function PublicSiteLayout({
     return () => nav.removeEventListener('scroll', handleScroll)
   }, [SIDEBAR_SCROLL_KEY])
 
-  // Apply paper scale for narrow viewports (< 1024px)
+  // Apply paper scale for narrow viewports (< 1280px)
   // This scales the paper to fit viewport width while maintaining fixed internal dimensions
   useEffect(() => {
-    const PAPER_WIDTH = 1024
+    const PAPER_WIDTH = 1280
 
     const updatePaperScale = () => {
       const vw = window.innerWidth

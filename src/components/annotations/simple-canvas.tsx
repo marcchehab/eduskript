@@ -138,6 +138,7 @@ interface SimpleCanvasProps {
   onNonStylusInput?: () => void
   onPenStateChange?: (active: boolean) => void  // Notify parent when pen is actively drawing
   onDrawStart?: () => void  // Called when user starts drawing (pointer down in draw mode)
+  onEraserMarksChange?: (markedIds: Set<string>) => void  // Stroke IDs marked for deletion (eraser preview)
   onTelemetry?: (telemetry: StrokeTelemetry) => void  // Optional telemetry callback (sampled)
   zoom?: number
   headingPositions?: HeadingPosition[]
@@ -152,7 +153,7 @@ export interface SimpleCanvasHandle {
 }
 
 export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
-  ({ width, height, mode, onUpdate, initialData, strokeWidth = 2, strokeColor = '#000000', stylusModeActive = false, onStylusDetected, onNonStylusInput, onPenStateChange, onDrawStart, onTelemetry, zoom = 1.0, headingPositions = [], readOnly = false, svgHandlesDisplay = false, scrollContainer = null }, ref) => {
+  ({ width, height, mode, onUpdate, initialData, strokeWidth = 2, strokeColor = '#000000', stylusModeActive = false, onStylusDetected, onNonStylusInput, onPenStateChange, onDrawStart, onEraserMarksChange, onTelemetry, zoom = 1.0, headingPositions = [], readOnly = false, svgHandlesDisplay = false, scrollContainer = null }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const isDrawingRef = useRef(false)
     const [isPenDrawing, setIsPenDrawing] = useState(false) // Track if pen is actively drawing
@@ -241,7 +242,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
     }, [width, height])
 
     // Check if a point is near a stroke (for eraser collision detection)
-    const isPointNearStroke = useCallback((px: number, py: number, stroke: typeof pathsRef.current[0], threshold: number = 20): boolean => {
+    const isPointNearStroke = useCallback((px: number, py: number, stroke: typeof pathsRef.current[0], threshold: number = 11): boolean => {
       for (let i = 0; i < stroke.points.length - 1; i++) {
         const p1 = stroke.points[i]
         const p2 = stroke.points[i + 1]
@@ -676,9 +677,21 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
               }
             }
           })
-          // Only redraw canvas when we mark a NEW stroke (to show it as transparent)
           if (markedNewStroke) {
-            scheduleEraserRedraw()
+            if (svgHandlesDisplay) {
+              // SVG layer shows committed strokes — notify parent to update opacity there
+              if (onEraserMarksChange) {
+                const markedIds = new Set<string>()
+                strokesMarkedForDeletionRef.current.forEach(idx => {
+                  const stroke = pathsRef.current[idx]
+                  if (stroke) markedIds.add(stroke.id)
+                })
+                onEraserMarksChange(markedIds)
+              }
+            } else {
+              // Canvas shows committed strokes — redraw with reduced opacity
+              scheduleEraserRedraw()
+            }
           }
         }
       })
@@ -756,6 +769,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
 
           // Clear the marked strokes set
           strokesMarkedForDeletionRef.current.clear()
+          onEraserMarksChange?.(new Set())
 
           // Notify parent with updated data
           const data = JSON.stringify(pathsRef.current)
