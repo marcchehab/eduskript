@@ -1666,21 +1666,14 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
   }
 }
 
-/* Ensure CodeMirror cursor is visible regardless of OS color-scheme.
-   drawSelection() hides the native caret and draws .cm-cursor divs,
-   but some browsers/OS dark-mode combos can still render a white
-   native caret on a light background. */
-.cm-cursor, .cm-dropCursor {
-  border-left-color: #000 !important;
+/* Prevent OS dark-mode color-scheme from leaking into the editor.
+   Without this, Edge/Windows shows a white I-beam mouse cursor over
+   the editor's white background when the OS is in dark mode. */
+.cm-editor {
+  color-scheme: light;
 }
-.dark .cm-cursor, .dark .cm-dropCursor {
-  border-left-color: #c6c6c6 !important;
-}
-.cm-content {
-  caret-color: #000 !important;
-}
-.dark .cm-content {
-  caret-color: #c6c6c6 !important;
+.dark .cm-editor {
+  color-scheme: dark;
 }
 
 /* CodeMirror Merge View Styles */
