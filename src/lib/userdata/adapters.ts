@@ -168,6 +168,8 @@ export interface SnapData {
   height: number
   sectionId?: string  // Section heading ID for vertical repositioning
   sectionOffsetY?: number  // Y offset of section when snap was created
+  color?: string     // Header/border tint color (default: 'blue')
+  minimized?: boolean // Collapse to titlebar only
 }
 
 /**

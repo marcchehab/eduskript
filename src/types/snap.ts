@@ -1,3 +1,5 @@
+export type SnapColor = 'blue' | 'yellow' | 'green' | 'pink' | 'purple'
+
 export interface Snap {
   id: string
   name: string
@@ -8,4 +10,6 @@ export interface Snap {
   height: number // Display height in logical pixels
   sectionId?: string
   sectionOffsetY?: number
+  color?: SnapColor    // Header/border tint (default: 'blue')
+  minimized?: boolean  // Collapse to titlebar only
 }

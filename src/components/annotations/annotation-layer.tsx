@@ -1241,6 +1241,8 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
       height: snapData.height,
       sectionId: snapData.sectionId,
       sectionOffsetY: snapData.sectionOffsetY,
+      color: snapData.color as Snap['color'],
+      minimized: snapData.minimized,
     }))
   }, [snapsData?.snaps])
 
@@ -2501,19 +2503,19 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
     })
   }, [snapsData, updateSnapsData])
 
+  // Handle snap update (color, minimized, etc.)
+  const handleUpdateSnap = useCallback((id: string, updates: Partial<Snap>) => {
+    const currentSnaps = snapsData?.snaps || []
+    updateSnapsData({
+      snaps: currentSnaps.map(snap =>
+        snap.id === id ? { ...snap, ...updates } : snap
+      )
+    })
+  }, [snapsData, updateSnapsData])
+
   // Handle snap reorder
   const handleReorderSnaps = useCallback((reorderedSnaps: Snap[]) => {
-    // Convert Snap[] to SnapData[]
-    const reorderedSnapData = reorderedSnaps.map(snap => ({
-      id: snap.id,
-      name: snap.name,
-      imageUrl: snap.imageUrl,
-      top: snap.top,
-      left: snap.left,
-      width: snap.width,
-      height: snap.height,
-    }))
-    updateSnapsData({ snaps: reorderedSnapData })
+    updateSnapsData({ snaps: reorderedSnaps })
   }, [updateSnapsData])
 
   // Handle stylus detection
@@ -3388,6 +3390,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
           snaps={filteredSnaps}
           onRemoveSnap={handleRemoveSnap}
           onRenameSnap={handleRenameSnap}
+          onUpdateSnap={handleUpdateSnap}
           onReorderSnaps={handleReorderSnaps}
           teacherSnaps={allTeacherSnaps}
           studentWorkSnaps={studentWorkSnapsData}

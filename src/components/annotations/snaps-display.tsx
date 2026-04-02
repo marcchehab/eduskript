@@ -1,9 +1,46 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback, memo, useMemo } from 'react'
-import { GripVertical, Trash2, Globe, Users, User } from 'lucide-react'
-import type { Snap } from '@/types/snap'
+import { GripVertical, Trash2, Globe, Users, User, Image, Palette, Minus, Plus } from 'lucide-react'
+import type { Snap, SnapColor } from '@/types/snap'
 import { SnapViewerOverlay } from './snap-viewer-overlay'
+
+const SNAP_COLORS: SnapColor[] = ['blue', 'yellow', 'green', 'pink', 'purple']
+
+const SNAP_COLOR_CONFIG: Record<SnapColor, {
+  bg: string; header: string; border: string; dot: string
+}> = {
+  blue: {
+    bg: 'bg-sky-50 dark:bg-sky-950/50',
+    header: 'bg-sky-100 dark:bg-sky-900/70',
+    border: 'border-sky-200 dark:border-sky-800',
+    dot: 'bg-sky-400',
+  },
+  yellow: {
+    bg: 'bg-yellow-50 dark:bg-yellow-950/50',
+    header: 'bg-yellow-100 dark:bg-yellow-900/70',
+    border: 'border-yellow-200 dark:border-yellow-800',
+    dot: 'bg-yellow-400',
+  },
+  green: {
+    bg: 'bg-emerald-50 dark:bg-emerald-950/50',
+    header: 'bg-emerald-100 dark:bg-emerald-900/70',
+    border: 'border-emerald-200 dark:border-emerald-800',
+    dot: 'bg-emerald-400',
+  },
+  pink: {
+    bg: 'bg-rose-50 dark:bg-rose-950/50',
+    header: 'bg-rose-100 dark:bg-rose-900/70',
+    border: 'border-rose-200 dark:border-rose-800',
+    dot: 'bg-rose-400',
+  },
+  purple: {
+    bg: 'bg-violet-50 dark:bg-violet-950/50',
+    header: 'bg-violet-100 dark:bg-violet-900/70',
+    border: 'border-violet-200 dark:border-violet-800',
+    dot: 'bg-violet-400',
+  },
+}
 
 // Teacher snap type includes layer info
 export interface TeacherSnap extends Snap {
@@ -45,6 +82,7 @@ interface SnapsDisplayProps {
   snaps: Snap[]
   onRemoveSnap: (id: string) => void
   onRenameSnap: (id: string, newName: string) => void
+  onUpdateSnap: (id: string, updates: Partial<Snap>) => void
   onReorderSnaps: (snaps: Snap[]) => void
   teacherSnaps?: TeacherSnap[]
   studentWorkSnaps?: StudentWorkSnap[]
@@ -267,7 +305,7 @@ const StudentWorkSnapItem = memo(function StudentWorkSnapItem({
   return (
     <div
       ref={elementRef}
-      className={`absolute z-50 bg-card border-2 ${borderClass} shadow-lg rounded-lg overflow-hidden group student-work-snap-fade-in`}
+      className="absolute z-50 bg-sky-50 dark:bg-sky-950/50 border border-sky-200 dark:border-sky-800 shadow-md rounded-xl overflow-hidden group transition-shadow duration-150 hover:shadow-xl student-work-snap-fade-in"
       style={{
         top: position.top,
         left: position.left,
@@ -275,25 +313,25 @@ const StudentWorkSnapItem = memo(function StudentWorkSnapItem({
         willChange: 'transform',
       }}
     >
-      {/* Drag handle - styled for student work snaps */}
+      {/* Drag handle */}
       <div
-        className="px-3 py-2 bg-muted/50 border-b border-border flex items-center gap-2 cursor-grab active:cursor-grabbing select-none"
+        className="flex items-center gap-1 px-2 py-1.5 bg-sky-100 dark:bg-sky-900/70 border-b border-sky-200 dark:border-sky-800 cursor-grab active:cursor-grabbing select-none"
         style={{ touchAction: 'none' }}
         onPointerDown={handleDragStart}
       >
-        <GripVertical className={`w-4 h-4 ${colorClass} flex-shrink-0`} />
-        <span className="text-sm font-medium text-foreground truncate flex-1">
+        <GripVertical className="w-3 h-3 opacity-30 shrink-0" />
+        <Image className="w-3 h-3 opacity-50 shrink-0" />
+        <span className="text-xs opacity-60 truncate flex-1 min-w-0">
           {snap.name}
         </span>
-        <span className={`text-xs ${colorClass} flex items-center gap-1 flex-shrink-0`}>
+        <span className={`text-xs ${colorClass} flex items-center gap-1 shrink-0`}>
           <Icon className="w-3 h-3" />
-          {snap.layerName}
         </span>
       </div>
 
       {/* Image */}
       <div
-        className="relative cursor-pointer hover:opacity-90 transition-opacity overflow-hidden rounded-b-lg -m-px"
+        className="relative cursor-pointer hover:opacity-90 transition-opacity overflow-hidden"
         onClick={() => onExpand(snap.id)}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -301,7 +339,7 @@ const StudentWorkSnapItem = memo(function StudentWorkSnapItem({
           ref={imageRef}
           src={snap.imageUrl}
           alt={snap.name}
-          className="block rounded-b-lg"
+          className="block"
           style={{
             width: position.width,
             height: position.height,
@@ -312,12 +350,12 @@ const StudentWorkSnapItem = memo(function StudentWorkSnapItem({
 
       {/* Resize handle */}
       <div
-        className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize opacity-0 group-hover:opacity-100 transition-opacity z-20"
+        className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize opacity-30 hover:opacity-70 flex items-end justify-end pb-0.5 pr-0.5 transition-opacity"
         style={{ touchAction: 'none' }}
         onPointerDown={handleResizeStart}
       >
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className={colorClass}>
-          <path d="M15 10L10 15M15 5L5 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" className="text-sky-500">
+          <path d="M15 10L10 15M15 5L5 15" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
         </svg>
       </div>
     </div>
@@ -530,7 +568,7 @@ const TeacherSnapItem = memo(function TeacherSnapItem({
   return (
     <div
       ref={elementRef}
-      className={`absolute z-50 bg-card border-2 ${borderClass} shadow-lg rounded-lg overflow-hidden group teacher-snap-fade-in`}
+      className="absolute z-50 bg-sky-50 dark:bg-sky-950/50 border border-sky-200 dark:border-sky-800 shadow-md rounded-xl overflow-hidden group transition-shadow duration-150 hover:shadow-xl teacher-snap-fade-in"
       style={{
         top: position.top,
         left: position.left,
@@ -538,25 +576,25 @@ const TeacherSnapItem = memo(function TeacherSnapItem({
         willChange: 'transform',
       }}
     >
-      {/* Drag handle - styled for teacher snaps */}
+      {/* Drag handle */}
       <div
-        className="px-3 py-2 bg-muted/50 border-b border-border flex items-center gap-2 cursor-grab active:cursor-grabbing select-none"
+        className="flex items-center gap-1 px-2 py-1.5 bg-sky-100 dark:bg-sky-900/70 border-b border-sky-200 dark:border-sky-800 cursor-grab active:cursor-grabbing select-none"
         style={{ touchAction: 'none' }}
         onPointerDown={handleDragStart}
       >
-        <GripVertical className={`w-4 h-4 ${colorClass} flex-shrink-0`} />
-        <span className="text-sm font-medium text-foreground truncate flex-1">
+        <GripVertical className="w-3 h-3 opacity-30 shrink-0" />
+        <Image className="w-3 h-3 opacity-50 shrink-0" />
+        <span className="text-xs opacity-60 truncate flex-1 min-w-0">
           {snap.name}
         </span>
-        <span className={`text-xs ${colorClass} flex items-center gap-1 flex-shrink-0`}>
+        <span className={`text-xs ${colorClass} flex items-center gap-1 shrink-0`}>
           <Icon className="w-3 h-3" />
-          {snap.layerName}
         </span>
       </div>
 
       {/* Image */}
       <div
-        className="relative cursor-pointer hover:opacity-90 transition-opacity overflow-hidden rounded-b-lg -m-px"
+        className="relative cursor-pointer hover:opacity-90 transition-opacity overflow-hidden"
         onClick={() => onExpand(snap.id)}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -564,7 +602,7 @@ const TeacherSnapItem = memo(function TeacherSnapItem({
           ref={imageRef}
           src={snap.imageUrl}
           alt={snap.name}
-          className="block rounded-b-lg"
+          className="block"
           style={{
             width: position.width,
             height: position.height,
@@ -575,12 +613,12 @@ const TeacherSnapItem = memo(function TeacherSnapItem({
 
       {/* Resize handle */}
       <div
-        className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize opacity-0 group-hover:opacity-100 transition-opacity z-20"
+        className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize opacity-30 hover:opacity-70 flex items-end justify-end pb-0.5 pr-0.5 transition-opacity"
         style={{ touchAction: 'none' }}
         onPointerDown={handleResizeStart}
       >
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className={colorClass}>
-          <path d="M15 10L10 15M15 5L5 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" className="text-sky-500">
+          <path d="M15 10L10 15M15 5L5 15" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
         </svg>
       </div>
     </div>
@@ -593,6 +631,7 @@ const SnapItem = memo(function SnapItem({
   isNew,
   onRemove,
   onRename,
+  onUpdate,
   onReorder,
   onExpand,
   onBringToFront,
@@ -605,6 +644,7 @@ const SnapItem = memo(function SnapItem({
   isNew: boolean
   onRemove: (id: string) => void
   onRename: (id: string, newName: string) => void
+  onUpdate: (id: string, updates: Partial<Snap>) => void
   onReorder: (snaps: Snap[]) => void
   onExpand: (id: string) => void
   onBringToFront: (id: string) => void
@@ -617,6 +657,10 @@ const SnapItem = memo(function SnapItem({
 
   const [isEditing, setIsEditing] = useState(false)
   const [editName, setEditName] = useState('')
+  const [showColorPicker, setShowColorPicker] = useState(false)
+
+  const color = snap.color || 'blue'
+  const cfg = SNAP_COLOR_CONFIG[color]
   const elementRef = useRef<HTMLDivElement>(null)
   const imageRef = useRef<HTMLImageElement>(null)
 
@@ -886,42 +930,31 @@ const SnapItem = memo(function SnapItem({
   return (
     <div
       ref={elementRef}
-      className="absolute bg-background border-2 border-primary shadow-lg rounded-lg overflow-hidden group"
+      className={`absolute ${cfg.bg} border ${cfg.border} shadow-md rounded-xl overflow-hidden group transition-shadow duration-150 hover:shadow-xl`}
       style={{
         top: snap.top,
         left: snap.left,
-        width: snap.width,
+        width: snap.minimized ? 'auto' : snap.width,
         willChange: 'transform',
         animation: isNew ? 'snap-fade-in 0.05s ease-out forwards' : undefined,
         zIndex: zIndex,
       }}
     >
-      {/* Control buttons */}
-      <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-        <button
-          onClick={() => onRemove(snap.id)}
-          className="p-1 bg-background/90 backdrop-blur border border-border rounded hover:bg-destructive/10 hover:text-destructive transition-colors"
-          title="Remove snap"
-        >
-          <Trash2 className="w-3 h-3" />
-        </button>
-      </div>
-
       {/* Drag handle / titlebar */}
       <div
-        className="px-3 py-2 bg-muted/30 border-b border-border flex items-center gap-2 cursor-grab active:cursor-grabbing select-none"
+        className={`flex items-center gap-1 px-2 py-1.5 ${cfg.header} border-b ${cfg.border} cursor-grab active:cursor-grabbing select-none`}
         style={{ touchAction: 'none' }}
         onPointerDown={(e) => {
           const target = e.target as HTMLElement
           if (!target.closest('.snap-title')) {
             handleDragStart(e)
           } else {
-            // Clicking on titlebar (not editing) should bring to front
             onBringToFront(snap.id)
           }
         }}
       >
-        <GripVertical className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+        <GripVertical className="w-3 h-3 opacity-30 shrink-0" />
+        <Image className="w-3 h-3 opacity-50 shrink-0" />
 
         {isEditing ? (
           <input
@@ -934,7 +967,7 @@ const SnapItem = memo(function SnapItem({
             }}
             onBlur={handleSaveEdit}
             onPointerDown={(e) => e.stopPropagation()}
-            className="snap-title px-2 py-1 text-sm border border-border rounded bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+            className="snap-title px-2 py-1 text-xs border border-border rounded bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
             autoFocus
           />
         ) : (
@@ -944,49 +977,97 @@ const SnapItem = memo(function SnapItem({
               handleStartEdit()
             }}
             onPointerDown={(e) => e.stopPropagation()}
-            className="snap-title text-sm font-medium text-foreground cursor-text hover:text-primary transition-colors"
+            className="snap-title text-xs opacity-60 truncate flex-1 min-w-0 cursor-text hover:opacity-100 transition-opacity"
           >
             {snap.name}
           </span>
         )}
+
+        {/* Action buttons */}
+        <div className="flex items-center gap-0.5 ml-1 shrink-0" onPointerDown={(e) => e.stopPropagation()}>
+          <button
+            onClick={() => setShowColorPicker(v => !v)}
+            className="w-5 h-5 rounded flex items-center justify-center opacity-40 hover:opacity-80 transition-opacity"
+            title="Change colour"
+          >
+            <Palette className="w-3 h-3" />
+          </button>
+          <button
+            onClick={() => onUpdate(snap.id, { minimized: !snap.minimized })}
+            className="w-5 h-5 rounded flex items-center justify-center opacity-40 hover:opacity-80 transition-opacity"
+            title={snap.minimized ? 'Expand' : 'Minimize'}
+          >
+            {snap.minimized ? <Plus className="w-3 h-3" /> : <Minus className="w-3 h-3" />}
+          </button>
+          <button
+            onClick={() => onRemove(snap.id)}
+            className="w-5 h-5 rounded flex items-center justify-center opacity-40 hover:opacity-100 hover:text-red-500 transition-all"
+            title="Remove snap"
+          >
+            <Trash2 className="w-3 h-3" />
+          </button>
+        </div>
       </div>
+
+      {/* Colour picker row */}
+      {showColorPicker && (
+        <div
+          className={`flex items-center gap-1.5 px-2.5 py-2 shrink-0 border-b ${cfg.border}`}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          {SNAP_COLORS.map(c => (
+            <button
+              key={c}
+              onClick={() => { onUpdate(snap.id, { color: c }); setShowColorPicker(false) }}
+              className={`w-5 h-5 rounded-full border-2 transition-all duration-100 hover:scale-110 ${SNAP_COLOR_CONFIG[c].dot} ${
+                color === c ? 'border-foreground scale-110 shadow-sm' : 'border-transparent opacity-70 hover:opacity-100'
+              }`}
+              title={c.charAt(0).toUpperCase() + c.slice(1)}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Image - click to expand, drag to move */}
-      <div
-        className="relative cursor-pointer hover:opacity-90 transition-opacity overflow-hidden rounded-b-lg -m-px"
-        style={{ touchAction: 'none' }}
-        onPointerDown={handleImagePointerDown}
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          ref={imageRef}
-          src={snap.imageUrl}
-          alt={snap.name}
-          className="block rounded-b-lg pointer-events-none"
-          style={{
-            width: snap.width,
-            height: snap.height,
-            border: 'none',
-          }}
-          draggable={false}
-        />
-      </div>
+      {!snap.minimized && (
+        <div
+          className="relative cursor-pointer hover:opacity-90 transition-opacity overflow-hidden"
+          style={{ touchAction: 'none' }}
+          onPointerDown={handleImagePointerDown}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            ref={imageRef}
+            src={snap.imageUrl}
+            alt={snap.name}
+            className="block pointer-events-none"
+            style={{
+              width: snap.width,
+              height: snap.height,
+              border: 'none',
+            }}
+            draggable={false}
+          />
+        </div>
+      )}
 
       {/* Resize handle */}
-      <div
-        className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize opacity-0 group-hover:opacity-100 transition-opacity z-20"
-        style={{ touchAction: 'none' }}
-        onPointerDown={handleResizeStart}
-      >
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-primary">
-          <path d="M15 10L10 15M15 5L5 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-        </svg>
-      </div>
+      {!snap.minimized && (
+        <div
+          className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize opacity-30 hover:opacity-70 flex items-end justify-end pb-0.5 pr-0.5 transition-opacity"
+          style={{ touchAction: 'none' }}
+          onPointerDown={handleResizeStart}
+        >
+          <svg width="10" height="10" viewBox="0 0 16 16" fill="none" className="text-foreground/50">
+            <path d="M15 10L10 15M15 5L5 15" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+          </svg>
+        </div>
+      )}
     </div>
   )
 })
 
-export function SnapsDisplay({ snaps, onRemoveSnap, onRenameSnap, onReorderSnaps, teacherSnaps = [], studentWorkSnaps = [], snapOverrides, onTeacherSnapOverride, onStudentWorkSnapOverride, zoom, paperWidth, initialLoadComplete = true }: SnapsDisplayProps) {
+export function SnapsDisplay({ snaps, onRemoveSnap, onRenameSnap, onUpdateSnap, onReorderSnaps, teacherSnaps = [], studentWorkSnaps = [], snapOverrides, onTeacherSnapOverride, onStudentWorkSnapOverride, zoom, paperWidth, initialLoadComplete = true }: SnapsDisplayProps) {
   if (DEBUG_STATE) console.log(`[SnapsDisplay] Render - ${snaps.length} snaps, ${teacherSnaps.length} teacher snaps, ${studentWorkSnaps.length} student work snaps`)
 
   const [expandedSnapIndex, setExpandedSnapIndex] = useState<number | null>(null)
@@ -1108,6 +1189,7 @@ export function SnapsDisplay({ snaps, onRemoveSnap, onRenameSnap, onReorderSnaps
                 isNew={newSnapIds.has(snap.id)}
                 onRemove={onRemoveSnap}
                 onRename={onRenameSnap}
+                onUpdate={onUpdateSnap}
                 onReorder={onReorderSnaps}
                 onExpand={handleExpand}
                 onBringToFront={handleBringToFront}
