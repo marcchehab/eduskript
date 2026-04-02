@@ -159,6 +159,49 @@ export function remarkCodeEditor() {
         parent.children.splice(idx, 1)
       }
     }
+
+    // Phase 3: Process python-check blocks.
+    // These blocks contain assert statements that test student code.
+    // They inject data-check-* attributes into their target code-editor
+    // and are removed from the output (never rendered).
+    const indicesToRemove: number[] = []
+
+    for (let i = 0; i < parent.children.length; i++) {
+      const node = parent.children[i] as CodeNode
+      if (node.type !== 'code' || node.lang !== 'python-check') continue
+
+      const meta = node.meta || ''
+      const forMatch = meta.match(/for="([^"]*)"/)
+      const pointsMatch = meta.match(/points="([^"]*)"/)
+      const maxChecksMatch = meta.match(/max-checks="([^"]*)"/)
+
+      if (!forMatch) continue // No target editor — skip
+
+      const forId = forMatch[1]
+      const checkCode = escapeHtml(node.value || '')
+      const checkPoints = pointsMatch ? pointsMatch[1] : ''
+      const maxChecks = maxChecksMatch ? maxChecksMatch[1] : ''
+
+      // Find the matching code-editor HTML node by looking for data-id="forId"
+      for (let j = 0; j < parent.children.length; j++) {
+        const target = parent.children[j] as any
+        if (target.type === 'html' && typeof target.value === 'string' && target.value.includes(`data-id="${forId}"`)) {
+          // Inject check attributes before the closing >
+          let extra = ` data-check-code="${checkCode}"`
+          if (checkPoints) extra += ` data-check-points="${checkPoints}"`
+          if (maxChecks) extra += ` data-max-checks="${maxChecks}"`
+          target.value = target.value.replace('></code-editor>', `${extra}></code-editor>`)
+          break
+        }
+      }
+
+      indicesToRemove.push(i)
+    }
+
+    // Remove python-check nodes in reverse order
+    for (let i = indicesToRemove.length - 1; i >= 0; i--) {
+      parent.children.splice(indicesToRemove[i], 1)
+    }
   }
 }
 

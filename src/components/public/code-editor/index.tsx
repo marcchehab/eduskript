@@ -25,7 +25,7 @@ import { useSyncedUserData, type SyncedUserDataOptions } from '@/lib/userdata/pr
 import { useTeacherClass } from '@/contexts/teacher-class-context'
 import { useTeacherBroadcast } from '@/hooks/use-teacher-broadcast'
 import { useSession } from 'next-auth/react'
-import type { CodeEditorData, CodeHighlight, HighlightColor, HighlightComment, SqlVerificationData, GlobalImportsData } from '@/lib/userdata/types'
+import type { CodeEditorData, CodeHighlight, HighlightColor, HighlightComment, SqlVerificationData, GlobalImportsData, PythonCheckData } from '@/lib/userdata/types'
 
 /** Data structure for broadcast highlights (separate from personal code data) */
 interface BroadcastHighlightsData {
@@ -50,6 +50,10 @@ import {
   SqlResultSet
 } from './types'
 import { SqlProgressBar } from './sql-progress-bar'
+import { PythonProgressBar } from './python-progress-bar'
+import { PythonTestResults } from './python-test-results'
+import { runPythonChecks } from './python-check-runner'
+import type { PythonCheckResult } from './types'
 
 /**
  * Strip Pyodide/internal traceback frames from Python errors, keeping only
@@ -94,6 +98,9 @@ interface CodeEditorProps {
   singleFile?: boolean // Hide file tabs for simple single-file examples
   solution?: string // Expected SQL solution for automatic pass/fail verification
   exam?: boolean // Exam mode: verification runs silently but no feedback or solution shown to student
+  checkCode?: string // Hidden assert statements for Python checking
+  checkPoints?: number // Total points for this exercise
+  maxChecks?: number // Max submission attempts (undefined = unlimited)
 }
 
 // Custom annotation to mark programmatic changes (defined once outside component)
@@ -230,6 +237,9 @@ export const CodeEditor = memo(function CodeEditor({
   singleFile = false,
   solution,
   exam = false,
+  checkCode,
+  checkPoints,
+  maxChecks,
 }: CodeEditorProps) {
   const { resolvedTheme } = useTheme()
   const { data: session } = useSession()
@@ -240,6 +250,11 @@ export const CodeEditor = memo(function CodeEditor({
   const [verificationResult, setVerificationResult] = useState<{ isCorrect: boolean; showSolution: boolean } | null>(null)
   const [fullscreen, setFullscreen] = useState(false)
   const [editorReady, setEditorReady] = useState(false)
+
+  // Python check state
+  const [checkResults, setCheckResults] = useState<PythonCheckResult[] | null>(null)
+  const [checksUsed, setChecksUsed] = useState(0)
+  const [isChecking, setIsChecking] = useState(false)
 
   const debugTag = `[CodeEditor:${id}]`
   const dbName = db ? db.split('/').pop() || db : 'Database'
@@ -261,6 +276,22 @@ export const CodeEditor = memo(function CodeEditor({
     verificationComponentId,
     null
   )
+
+  // Persist Python check results for teacher dashboard
+  const pythonCheckComponentId = `python-check-${id}`
+  const { data: savedCheckData, updateData: savePythonCheck } = useSyncedUserData<PythonCheckData>(
+    pageId && checkCode ? pageId : '',
+    pythonCheckComponentId,
+    null
+  )
+
+  // Restore checksUsed from persisted data on mount
+  useEffect(() => {
+    if (savedCheckData && savedCheckData.checksUsed > 0) {
+      setChecksUsed(savedCheckData.checksUsed)
+      setCheckResults(savedCheckData.lastResults)
+    }
+  }, [savedCheckData])
 
   // Compute targeting options for broadcast highlights
   // ARCHITECTURE: Mirrors annotation-layer.tsx pattern for consistency.
@@ -2770,6 +2801,35 @@ plots
       setShowSuccessFlash(true)
       setTimeout(() => setShowSuccessFlash(false), 1500)
       setRunState(RunState.STOPPED)
+
+      // Exam mode: silently run checks after each execution (no UI feedback)
+      if (exam && checkCode && pyodide) {
+        const localFiles = filesRef.current
+        const importFiles = [...(skriptImportsRef.current?.files || []), ...(globalImportsRef.current?.files || [])]
+        const allAuxFiles = [...(localFiles.length > 1 ? localFiles : []), ...importFiles]
+        try {
+          const results = await runPythonChecks(pyodide, code, checkCode, allAuxFiles)
+          // Restore stdout/stderr
+          pyodide.setStdout({ batched: (text: string) => addOutput(text, OutputLevel.OUTPUT) })
+          pyodide.setStderr({ batched: (text: string) => addOutput(text, OutputLevel.ERROR) })
+          const newChecksUsed = checksUsed + 1
+          setChecksUsed(newChecksUsed)
+          const totalTests = results.length
+          const passedTests = results.filter(r => r.passed).length
+          const totalPoints = checkPoints ?? totalTests
+          const earned = totalTests > 0 ? Math.round((passedTests / totalTests) * totalPoints) : 0
+          if (pageId) {
+            savePythonCheck({
+              checksUsed: newChecksUsed,
+              maxChecks: maxChecks ?? null,
+              points: totalPoints,
+              earnedPoints: earned,
+              lastResults: results,
+              lastCheckedAt: Date.now(),
+            }, { immediate: true })
+          }
+        } catch { /* silent in exam mode */ }
+      }
     } catch (error: any) {
       const errorMessage = cleanPythonError(error.message || String(error))
       addOutput(errorMessage, OutputLevel.ERROR)
@@ -2789,6 +2849,62 @@ plots
     }
     setRunState(RunState.STOPPED)
     addOutput('Program stopped', OutputLevel.WARNING)
+  }
+
+  // Run Python checks (assert statements against student code)
+  const runPythonCheck = async () => {
+    if (!checkCode || !editorViewRef.current) return
+    if (maxChecks !== undefined && checksUsed >= maxChecks) return
+
+    setIsChecking(true)
+    saveCurrentFile()
+
+    const code = editorViewRef.current.state.doc.toString()
+
+    try {
+      const pyodide = await ensurePyodideLoaded()
+      if (!pyodide) {
+        addOutput('Pyodide runtime not loaded', OutputLevel.ERROR)
+        return
+      }
+
+      // Collect auxiliary files
+      const localFiles = filesRef.current
+      const importFiles = [...(skriptImportsRef.current?.files || []), ...(globalImportsRef.current?.files || [])]
+      const allAuxFiles = [...(localFiles.length > 1 ? localFiles : []), ...importFiles]
+
+      const results = await runPythonChecks(pyodide, code, checkCode, allAuxFiles)
+
+      // Restore stdout/stderr for normal output
+      pyodide.setStdout({ batched: (text: string) => addOutput(text, OutputLevel.OUTPUT) })
+      pyodide.setStderr({ batched: (text: string) => addOutput(text, OutputLevel.ERROR) })
+
+      const newChecksUsed = checksUsed + 1
+      setCheckResults(results)
+      setChecksUsed(newChecksUsed)
+
+      // Calculate points
+      const totalTests = results.length
+      const passedTests = results.filter(r => r.passed).length
+      const totalPoints = checkPoints ?? totalTests
+      const earned = totalTests > 0 ? Math.round((passedTests / totalTests) * totalPoints) : 0
+
+      // Persist for teacher dashboard
+      if (pageId) {
+        savePythonCheck({
+          checksUsed: newChecksUsed,
+          maxChecks: maxChecks ?? null,
+          points: totalPoints,
+          earnedPoints: earned,
+          lastResults: results,
+          lastCheckedAt: Date.now(),
+        }, { immediate: true })
+      }
+    } catch (error: any) {
+      addOutput(`Check error: ${error.message || String(error)}`, OutputLevel.ERROR)
+    } finally {
+      setIsChecking(false)
+    }
   }
 
   // Restart Python kernel
@@ -3477,6 +3593,23 @@ plots
                     </Tooltip>
                   </TooltipProvider>
                 )}
+                {checkCode && !exam && (
+                  <Button
+                    onClick={runPythonCheck}
+                    size="sm"
+                    variant="outline"
+                    className="h-7 px-2 shadow-lg"
+                    disabled={isChecking || (maxChecks !== undefined && checksUsed >= maxChecks)}
+                  >
+                    <CheckCircle2 className="w-3 h-3 mr-1" />
+                    {isChecking ? '...' : 'Check'}
+                    {maxChecks !== undefined && (
+                      <span className="ml-1 text-[10px] text-muted-foreground">
+                        {checksUsed}/{maxChecks}
+                      </span>
+                    )}
+                  </Button>
+                )}
               </div>
               {/* Floating Control Buttons - Bottom Right */}
               {pageId && (
@@ -4097,6 +4230,19 @@ plots
       )}
     </div>
 
+    {/* Python check test results */}
+    {checkCode && checkResults && !exam && (
+      <PythonTestResults
+        results={checkResults}
+        points={checkPoints ?? checkResults.length}
+        earnedPoints={checkResults.length > 0
+          ? Math.round((checkResults.filter(r => r.passed).length / checkResults.length) * (checkPoints ?? checkResults.length))
+          : 0}
+        checksUsed={checksUsed}
+        maxChecks={maxChecks ?? null}
+      />
+    )}
+
     {/* Teacher class progress for SQL verification exercises */}
     {solution && pageId && isTeacher && selectedClass && (
       <SqlProgressBar
@@ -4104,6 +4250,16 @@ plots
         className={selectedClass.name}
         pageId={pageId}
         componentId={verificationComponentId}
+      />
+    )}
+
+    {/* Teacher class progress for Python check exercises */}
+    {checkCode && pageId && isTeacher && selectedClass && (
+      <PythonProgressBar
+        classId={selectedClass.id}
+        className={selectedClass.name}
+        pageId={pageId}
+        componentId={pythonCheckComponentId}
       />
     )}
     </>

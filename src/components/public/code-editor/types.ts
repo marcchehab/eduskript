@@ -58,3 +58,21 @@ export interface SkulptConfig {
   python3?: boolean
   execLimit?: number
 }
+
+// Python check types
+
+export interface PythonCheckResult {
+  index: number
+  passed: boolean
+  label: string    // assertion message or auto-generated
+  error?: string   // error details on failure
+}
+
+export interface PythonCheckData {
+  checksUsed: number
+  maxChecks: number | null
+  points: number
+  earnedPoints: number
+  lastResults: PythonCheckResult[]
+  lastCheckedAt: number
+}

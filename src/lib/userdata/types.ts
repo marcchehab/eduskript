@@ -69,6 +69,26 @@ export interface SqlVerificationData {
 }
 
 /**
+ * Python check exercise result — tracks per-assertion pass/fail,
+ * submission count, and points earned.
+ */
+export interface PythonCheckData {
+  checksUsed: number
+  maxChecks: number | null
+  points: number
+  earnedPoints: number
+  lastResults: PythonCheckResult[]
+  lastCheckedAt: number
+}
+
+export interface PythonCheckResult {
+  index: number
+  passed: boolean
+  label: string
+  error?: string
+}
+
+/**
  * Quiz question-specific data structure
  */
 export interface QuizData {

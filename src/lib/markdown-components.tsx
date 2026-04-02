@@ -246,6 +246,16 @@ export function createMarkdownComponents(
     const single = (props['dataSingle'] as string) || (props['data-single'] as string)
     const solution = (props['dataSolution'] as string) || (props['data-solution'] as string)
     const exam = (props['dataExam'] as string) || (props['data-exam'] as string)
+    const checkCode = (props['dataCheckCode'] as string) || (props['data-check-code'] as string)
+    const checkPoints = (props['dataCheckPoints'] as string) || (props['data-check-points'] as string)
+    const maxChecks = (props['dataMaxChecks'] as string) || (props['data-max-checks'] as string)
+
+    // Debug: log all props to find attribute naming
+    if (typeof window !== 'undefined') {
+      const checkProps = Object.keys(props).filter(k => k.toLowerCase().includes('check'))
+      if (checkProps.length > 0) console.log('[CodeEditor] check props:', checkProps, checkProps.map(k => props[k as keyof typeof props]))
+      else console.log('[CodeEditor] no check props found. All keys:', Object.keys(props))
+    }
 
     // Parse multi-file data if present, otherwise fall back to single-file initialCode
     let initialFiles: { name: string; content: string }[] | undefined
@@ -318,6 +328,9 @@ export function createMarkdownComponents(
           singleFile={initialFiles ? initialFiles.length <= 1 && single === 'true' : single === 'true'}
           solution={decodedSolution}
           exam={exam === 'true'}
+          checkCode={checkCode ? decodeHtmlEntities(checkCode) : undefined}
+          checkPoints={checkPoints ? parseInt(checkPoints, 10) : undefined}
+          maxChecks={maxChecks ? parseInt(maxChecks, 10) : undefined}
         />
       </div>
     )
