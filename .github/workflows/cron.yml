@@ -1,0 +1,17 @@
+name: Daily cron jobs
+
+on:
+  schedule:
+    # Run daily at 03:00 UTC
+    - cron: '0 3 * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  cron:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run cron tasks
+        run: |
+          curl -sf -X POST "https://eduskript.org/api/cron" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json"
