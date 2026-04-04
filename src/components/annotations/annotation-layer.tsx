@@ -1225,6 +1225,9 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
   const [pageHeight, setPageHeight] = useState(0)
   const [orphanedStrokesCount, setOrphanedStrokesCount] = useState(0)
   const [storedHeadingOffsets, setStoredHeadingOffsets] = useState<Record<string, number>>({})
+  // Original offsets from annotation data — never overwritten by snap repositioning.
+  // Used by computeSectionTransforms for accurate stroke repositioning.
+  const originalHeadingOffsetsRef = useRef<Record<string, number>>({})
   const [storedPaddingLeft, setStoredPaddingLeft] = useState<number | undefined>(undefined)
   const [currentPaddingLeft, setCurrentPaddingLeft] = useState<number>(0)
 
@@ -1672,7 +1675,12 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
         if (strokes.length > 0) {
           setHasAnnotations(true)
           setCanvasData(annotationData.canvasData)
-          setStoredHeadingOffsets(annotationData.headingOffsets || {})
+          log('loaded strokes sectionIds:', strokes.map(s => s.sectionId).join(', '))
+          log('loaded storedHeadingOffsets:', JSON.stringify(annotationData.headingOffsets))
+          hasLoadedAnnotationOffsets.current = true
+          const offsets = annotationData.headingOffsets || {}
+          originalHeadingOffsetsRef.current = offsets
+          setStoredHeadingOffsets(offsets)
           setStoredPaddingLeft(annotationData.paddingLeft)
         }
       } catch {
@@ -1682,11 +1690,17 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
   }, [annotationData, canvasData, targetingKey])
 
   // Initialize storedHeadingOffsets when heading positions are first available
+  // BUT only if there are no annotations loaded (which carry their own saved offsets).
+  // Using a ref to avoid the race condition where this effect's stale closure
+  // overwrites offsets that the annotationData effect just set.
+  const hasLoadedAnnotationOffsets = useRef(false)
   useEffect(() => {
-    if (headingPositions.length > 0 && Object.keys(storedHeadingOffsets).length === 0) {
+    if (headingPositions.length > 0 && Object.keys(storedHeadingOffsets).length === 0
+        && !hasLoadedAnnotationOffsets.current) {
       const currentOffsets = Object.fromEntries(
         headingPositions.map(h => [h.sectionId, h.offsetY])
       )
+      originalHeadingOffsetsRef.current = currentOffsets
       setStoredHeadingOffsets(currentOffsets)
     }
   }, [headingPositions, storedHeadingOffsets])
@@ -1790,6 +1804,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
       }
     })
 
+    log('recalcHeadingPositions:', positions.map(p => `${p.sectionId}@${Math.round(p.offsetY)}`).join(', '))
     setHeadingPositions(positions)
   }, [])
 
@@ -2191,6 +2206,10 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
       const headingOffsets = Object.fromEntries(
         currentHeadingPositions.map(h => [h.sectionId, h.offsetY])
       )
+
+      // Update the original offsets baseline — after saving, the stored data
+      // will have these offsets, so they become the new baseline for transforms.
+      originalHeadingOffsetsRef.current = headingOffsets
 
       const data: AnnotationData = {
         canvasData: currentCanvasData,
@@ -2866,7 +2885,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
             height={pageHeight}
             markedForDeletion={eraserMarkedIds}
             sectionTransforms={computeSectionTransforms(
-              storedHeadingOffsets,
+              originalHeadingOffsetsRef.current,
               headingPositions,
               storedPaddingLeft,
               currentPaddingLeft

@@ -179,7 +179,39 @@ export function repositionStrokes(
     const currentHeading = currentHeadingPositions.find(h => h.sectionId === strokeSection)
 
     if (!currentHeading) {
-      // Section was deleted - mark as orphaned
+      // Section was deleted (e.g., plugin removed). Find nearest surviving neighbor
+      // and derive a transform from it, rather than orphaning the stroke.
+      const oldY = oldHeadingOffsets[strokeSection]
+      if (oldY !== undefined) {
+        let bestDy = 0
+        let bestDist = Infinity
+        for (const [neighborId, neighborOldY] of Object.entries(oldHeadingOffsets)) {
+          if (neighborId === strokeSection) continue
+          const neighborCurrent = currentHeadingPositions.find(h => h.sectionId === neighborId)
+          if (!neighborCurrent) continue
+          const dist = Math.abs(neighborOldY - oldY)
+          if (dist < bestDist) {
+            bestDist = dist
+            bestDy = neighborCurrent.offsetY - oldY
+          }
+        }
+        if (bestDist < Infinity && (bestDy !== 0 || deltaX !== 0)) {
+          const transformedPoints = stroke.points.map(point => ({
+            ...point,
+            x: point.x + deltaX,
+            y: point.y + bestDy
+          }))
+          repositioned.push({
+            ...stroke,
+            points: transformedPoints,
+            sectionId: strokeSection,
+            sectionOffsetY: (stroke.sectionOffsetY ?? 0) + bestDy
+          })
+          return
+        }
+      }
+
+      // No neighbor found — truly orphaned
       orphanedCount++
       repositioned.push({
         ...stroke,

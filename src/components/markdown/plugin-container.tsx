@@ -101,11 +101,16 @@ export function PluginContainer({
     return () => { cancelled = true }
   }, [validSrc, ownerSlug, pluginSlug, src])
 
-  // Extract config from remaining props (filter out internal/React props)
+  // Extract config from remaining props (filter out internal/React props and data-* attributes)
   const config = Object.fromEntries(
     Object.entries(configProps).filter(
       ([key]) => !key.startsWith('data-') && key !== 'className' && key !== 'style',
     ),
+  )
+
+  // Extract data-* attributes to forward to wrapper div (for annotation system tracking)
+  const dataAttrs = Object.fromEntries(
+    Object.entries(configProps).filter(([key]) => key.startsWith('data-')),
   )
 
   // Send message to iframe
@@ -341,7 +346,7 @@ export function PluginContainer({
   const srcdoc = pluginHtml ? buildPluginSrcdoc(pluginHtml, resolvedTheme) : undefined
 
   return (
-    <div className="my-4">
+    <div className="my-4" {...dataAttrs}>
       {status === 'loading' && (
         <div className="flex items-center justify-center rounded-lg border border-muted bg-muted/20 p-8 text-sm text-muted-foreground"
           style={{ height: iframeHeight }}

@@ -8,6 +8,7 @@ import type { Root, Element } from 'hast'
  * - h1, h2 headings (using their slug as ID)
  * - pre (code blocks)
  * - code-editor (interactive editors) - dynamic height due to console output
+ * - plugin (iframe plugins) - dynamic height due to iframe auto-resize
  * - blockquote.callout (callouts) - dynamic height when collapsed/expanded
  * - figure (images)
  * - table (tables)
@@ -20,6 +21,7 @@ export function rehypeHeadingSectionIds() {
   const counters: Record<string, number> = {
     pre: 0,
     'code-editor': 0,
+    plugin: 0,
     callout: 0,
     figure: 0,
     table: 0,
@@ -54,6 +56,18 @@ export function rehypeHeadingSectionIds() {
         const sectionId = `editor-${counters['code-editor']++}`
         node.properties['data-section-id'] = sectionId
         node.properties['data-dynamic-height'] = 'true' // Console output can change height
+        return
+      }
+
+      // Plugin iframes (custom element) - dynamic height due to iframe auto-resize
+      // Uses src attribute for stable IDs (sequential counters break when plugins are added/removed)
+      if (node.tagName === 'plugin') {
+        const src = node.properties?.src as string | undefined
+        const sectionId = src
+          ? `plugin-${src.replace(/[^a-zA-Z0-9-]/g, '-')}`
+          : `plugin-${counters.plugin++}`
+        node.properties['data-section-id'] = sectionId
+        node.properties['data-dynamic-height'] = 'true'
         return
       }
 

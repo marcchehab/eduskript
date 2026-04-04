@@ -13,6 +13,9 @@
 
 import { getStroke } from 'perfect-freehand'
 import type { StrokeOptions } from 'perfect-freehand'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('annotations:transforms')
 
 export { getStroke }
 
@@ -91,10 +94,41 @@ export function computeSectionTransforms(
   // Build lookup for current positions
   const currentMap = new Map(currentHeadingPositions.map(h => [h.sectionId, h.offsetY]))
 
-  for (const [sectionId, oldY] of Object.entries(oldHeadingOffsets)) {
+  // Sort old sections by Y for nearest-neighbor fallback when sections are deleted
+  const oldSorted = Object.entries(oldHeadingOffsets).sort((a, b) => a[1] - b[1])
+
+  for (const [sectionId, oldY] of oldSorted) {
     const currentY = currentMap.get(sectionId)
-    if (currentY === undefined) continue // section deleted — orphaned strokes stay put
-    transforms.set(sectionId, { dx: deltaX, dy: currentY - oldY })
+    if (currentY !== undefined) {
+      transforms.set(sectionId, { dx: deltaX, dy: currentY - oldY })
+      if (currentY - oldY !== 0) log(`${sectionId}: old=${Math.round(oldY)} cur=${Math.round(currentY)} dy=${Math.round(currentY - oldY)}`)
+      continue
+    }
+
+    // Section was deleted (e.g., plugin removed). Find the nearest old neighbor
+    // that still exists in current layout and derive a transform from it.
+    // dy = neighborCurrentY - oldY captures the layout shift at this position.
+    log(`${sectionId}: DELETED (old=${Math.round(oldY)}), finding neighbor...`)
+    let bestDy = 0
+    let bestDist = Infinity
+    let bestNeighborId = ''
+    for (const [neighborId, neighborOldY] of oldSorted) {
+      if (neighborId === sectionId) continue
+      const neighborCurrentY = currentMap.get(neighborId)
+      if (neighborCurrentY === undefined) continue
+      const dist = Math.abs(neighborOldY - oldY)
+      if (dist < bestDist) {
+        bestDist = dist
+        bestDy = neighborCurrentY - oldY
+        bestNeighborId = neighborId
+      }
+    }
+    if (bestDist < Infinity) {
+      log(`  → neighbor=${bestNeighborId} bestDy=${Math.round(bestDy)}`)
+      transforms.set(sectionId, { dx: deltaX, dy: bestDy })
+    } else {
+      log(`  → no surviving neighbor found`)
+    }
   }
 
   return transforms
