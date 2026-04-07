@@ -53,13 +53,8 @@ plugin.resize(height);
 
 ## Output Format
 
-Return a JSON object with these fields:
-- name: Display name for the plugin (string)
-- slug: URL-safe slug, lowercase with hyphens (string)
-- description: One-line description (string)
-- entryHtml: The HTML content (string — the <style>, <div>, and <script> content)
-
-Return ONLY the JSON object, no markdown fences, no explanation.`
+Return ONLY raw HTML content (the <style>, <div>, and <script> tags).
+Do NOT wrap in JSON. Do NOT wrap in markdown fences. Just the HTML.`
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -83,7 +78,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Rate limit exceeded. Please wait.' }, { status: 429 })
   }
 
-  const { prompt } = await request.json()
+  const { prompt, currentHtml } = await request.json()
   if (!prompt?.trim()) {
     return NextResponse.json({ error: 'Prompt is required' }, { status: 400 })
   }
@@ -109,42 +104,53 @@ export async function POST(request: NextRequest) {
     },
   })
 
-  try {
-    const response = await openai.chat.completions.create({
-      model: process.env.OPENROUTER_MODEL ?? 'z-ai/glm-5',
-      max_tokens: 8192,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: prompt },
-      ],
-    })
-
-    const text = response.choices[0]?.message?.content ?? ''
-
-    // Parse JSON response — strip markdown fences if present
-    const cleaned = text.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim()
-
-    let parsed: { name?: string; slug?: string; description?: string; entryHtml?: string }
-    try {
-      parsed = JSON.parse(cleaned)
-    } catch {
-      // If not valid JSON, treat the entire response as HTML
-      return NextResponse.json({
-        name: 'Generated Plugin',
-        slug: 'generated-plugin',
-        description: '',
-        entryHtml: text,
-      })
-    }
-
-    return NextResponse.json({
-      name: parsed.name || 'Generated Plugin',
-      slug: parsed.slug || 'generated-plugin',
-      description: parsed.description || '',
-      entryHtml: parsed.entryHtml || text,
-    })
-  } catch (error) {
-    console.error('Plugin generation failed:', error)
-    return NextResponse.json({ error: 'AI generation failed' }, { status: 500 })
+  // Build user message: if there's existing HTML, this is an edit request
+  let userMessage: string
+  if (currentHtml?.trim()) {
+    userMessage = `Here is the current plugin HTML:\n\n\`\`\`html\n${currentHtml}\n\`\`\`\n\nApply this change: ${prompt}`
+  } else {
+    userMessage = prompt
   }
+
+  const MAX_RETRIES = 3
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await openai.chat.completions.create({
+        model: process.env.OPENROUTER_MODEL ?? 'z-ai/glm-5',
+        max_tokens: 16384,
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: userMessage },
+        ],
+      })
+
+      const text = response.choices[0]?.message?.content ?? ''
+      const finishReason = response.choices[0]?.finish_reason
+
+      // If truncated, retry
+      if (finishReason === 'length') {
+        console.warn(`Plugin generation attempt ${attempt}/${MAX_RETRIES} truncated at ${text.length} chars`)
+        if (attempt < MAX_RETRIES) continue
+        return NextResponse.json({ error: 'Generated plugin was too large. Try simplifying your description.' }, { status: 422 })
+      }
+
+      if (!text.trim()) {
+        if (attempt < MAX_RETRIES) continue
+        return NextResponse.json({ error: 'AI returned an empty response. Please try again.' }, { status: 500 })
+      }
+
+      // Strip markdown fences if the model wrapped the response
+      const cleaned = text.replace(/^```(?:html)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim()
+
+      return NextResponse.json({ entryHtml: cleaned })
+    } catch (error) {
+      console.error(`Plugin generation attempt ${attempt} failed:`, error)
+      if (attempt >= MAX_RETRIES) {
+        return NextResponse.json({ error: 'AI generation failed' }, { status: 500 })
+      }
+    }
+  }
+
+  return NextResponse.json({ error: 'AI generation failed after retries' }, { status: 500 })
 }

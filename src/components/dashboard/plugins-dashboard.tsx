@@ -193,7 +193,7 @@ export function PluginsDashboard({ userId, userPageSlug }: PluginsDashboardProps
       const res = await fetch('/api/plugins/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: aiPrompt }),
+        body: JSON.stringify({ prompt: aiPrompt, currentHtml: editorHtml || undefined }),
       })
 
       if (!res.ok) {
@@ -204,9 +204,6 @@ export function PluginsDashboard({ userId, userPageSlug }: PluginsDashboardProps
       const json = await res.json()
       if (json.entryHtml) {
         setEditorHtml(json.entryHtml)
-        if (json.name) setEditorName(json.name)
-        if (json.slug) setEditorSlug(json.slug)
-        if (json.description) setEditorDescription(json.description)
       }
     } catch (err) {
       setAiError(err instanceof Error ? err.message : 'Generation failed')
@@ -385,7 +382,7 @@ export function PluginsDashboard({ userId, userPageSlug }: PluginsDashboardProps
           <Input
             value={aiPrompt}
             onChange={(e) => setAiPrompt(e.target.value)}
-            placeholder="Describe your plugin... (e.g., 'interactive flashcard quiz with flip animation')"
+            placeholder="Prompt AI to create or change your plugin..."
             onKeyDown={(e) => e.key === 'Enter' && !aiGenerating && handleAiGenerate()}
             className="flex-1"
           />
