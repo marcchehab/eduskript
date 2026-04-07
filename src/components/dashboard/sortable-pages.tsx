@@ -7,12 +7,6 @@ import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { EditModal } from './edit-modal'
 import { PublishToggle } from './publish-toggle'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
 import { GripVertical, Trash2, Edit } from 'lucide-react'
 import Link from 'next/link'
 
@@ -108,23 +102,15 @@ function SortablePageItem({ page, index, skriptSlug, onPageUpdated, canEdit = tr
                   item={page}
                   onItemUpdated={onPageUpdated || (() => {})}
                 />
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleDeletePage}
-                        className="text-destructive hover:text-destructive/80 hover:bg-destructive/10 h-8 w-8 p-0"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Delete page</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleDeletePage}
+                  className="text-destructive hover:text-destructive/80 hover:bg-destructive/10 h-8 w-8 p-0"
+                  title="Delete page"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </Button>
               </>
             )}
           </div>
@@ -202,23 +188,15 @@ function StaticPageItem({ page, index, skriptSlug, onPageUpdated, canEdit = true
               item={page}
               onItemUpdated={onPageUpdated || (() => {})}
             />
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleDeletePage}
-                    className="text-destructive hover:text-destructive/80 hover:bg-destructive/10 h-8 w-8 p-0"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Delete page</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleDeletePage}
+              className="text-destructive hover:text-destructive/80 hover:bg-destructive/10 h-8 w-8 p-0"
+              title="Delete page"
+            >
+              <Trash2 className="w-3 h-3" />
+            </Button>
           </>
         )}
       </div>

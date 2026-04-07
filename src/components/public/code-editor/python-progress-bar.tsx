@@ -116,23 +116,23 @@ export function PythonProgressBar({ classId, className, pageId, componentId }: P
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <span className="font-medium text-foreground">{className}</span>
             <span>&bull;</span>
-            <span>{attempted}/{stats.total} versucht</span>
+            <span>{attempted}/{stats.total} attempted</span>
             {stats.fullPass > 0 && (
               <>
                 <span>&bull;</span>
-                <span className="text-green-600 dark:text-green-400">{stats.fullPass} alle bestanden</span>
+                <span className="text-green-600 dark:text-green-400">{stats.fullPass} all passed</span>
               </>
             )}
             {stats.partialPass > 0 && (
               <>
                 <span>&bull;</span>
-                <span className="text-yellow-600 dark:text-yellow-400">{stats.partialPass} teilweise</span>
+                <span className="text-yellow-600 dark:text-yellow-400">{stats.partialPass} partial</span>
               </>
             )}
             {stats.averageScore > 0 && (
               <>
                 <span>&bull;</span>
-                <span>{Math.round(stats.averageScore)}% Durchschnitt</span>
+                <span>{Math.round(stats.averageScore)}% average</span>
               </>
             )}
           </div>
@@ -162,7 +162,7 @@ export function PythonProgressBar({ classId, className, pageId, componentId }: P
         <div className="max-h-64 overflow-y-auto border-t border-border divide-y divide-border">
           {responses.length === 0 ? (
             <div className="p-4 text-center text-muted-foreground text-sm">
-              Keine Schüler in dieser Klasse
+              No students in this class
             </div>
           ) : (
             responses
@@ -194,7 +194,7 @@ export function PythonProgressBar({ classId, className, pageId, componentId }: P
                     <div className="flex-shrink-0 w-32 truncate font-medium">{r.displayName}</div>
                     <div className="flex-1 text-xs text-muted-foreground">
                       {r.totalTests === null
-                        ? 'Noch kein Versuch'
+                        ? 'Not attempted yet'
                         : `${r.testsPassed}/${r.totalTests} Tests (${percentage}%)`}
                     </div>
                   </div>

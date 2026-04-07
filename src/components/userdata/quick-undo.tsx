@@ -9,7 +9,7 @@
 
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+
 import { useRestoreVersion } from '@/lib/userdata/hooks'
 import { Undo2 } from 'lucide-react'
 
@@ -49,31 +49,23 @@ export function QuickUndo({
   }
 
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            size={size}
-            variant={variant}
-            disabled={disabled || isRestoring}
-            onClick={handleUndo}
-            className="flex items-center gap-1"
-          >
-            {isRestoring ? (
-              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current" />
-            ) : (
-              <Undo2 className="h-3 w-3" />
-            )}
-            {justRestored && size !== 'sm' && (
-              <span className="text-xs text-green-600">Restored</span>
-            )}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p>Undo to previous version</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <Button
+      size={size}
+      variant={variant}
+      disabled={disabled || isRestoring}
+      onClick={handleUndo}
+      className="flex items-center gap-1"
+      title="Undo to previous version"
+    >
+      {isRestoring ? (
+        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current" />
+      ) : (
+        <Undo2 className="h-3 w-3" />
+      )}
+      {justRestored && size !== 'sm' && (
+        <span className="text-xs text-green-600">Restored</span>
+      )}
+    </Button>
   )
 }
 
@@ -104,24 +96,16 @@ export function VersionActions({
         disabled={disabled}
       />
       {onViewHistory && (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={disabled}
-                onClick={onViewHistory}
-                className="flex items-center gap-1"
-              >
-                <span className="text-xs">History</span>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>View full version history</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={disabled}
+          onClick={onViewHistory}
+          className="flex items-center gap-1"
+          title="View full version history"
+        >
+          <span className="text-xs">History</span>
+        </Button>
       )}
     </div>
   )

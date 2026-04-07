@@ -10,12 +10,6 @@ import { EditModal } from './edit-modal'
 import { PublishToggle } from './publish-toggle'
 import { CreatePageModal } from './create-page-modal'
 import { SortablePages } from './sortable-pages'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
 import { GripVertical, Trash2, Eye, Edit, Globe, ExternalLink, Loader2 } from 'lucide-react'
 import { usePublicUrl } from '@/hooks/use-public-url'
 
@@ -173,46 +167,30 @@ function SortableSkriptItem({
             <div className="flex gap-2 items-center">
               {canEditSkript && (
                 <>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handlePublishAll}
-                          disabled={isPublishingAll}
-                          className="text-green-600 border-green-600 hover:bg-green-50 dark:hover:bg-green-950"
-                        >
-                          {isPublishingAll ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Globe className="w-4 h-4" />
-                          )}
-                          <span className="ml-1.5">Publish All</span>
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Publish skript and all pages</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handlePublishAll}
+                    disabled={isPublishingAll}
+                    className="text-green-600 border-green-600 hover:bg-green-50 dark:hover:bg-green-950"
+                    title="Publish skript and all pages"
+                  >
+                    {isPublishingAll ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Globe className="w-4 h-4" />
+                    )}
+                    <span className="ml-1.5">Publish All</span>
+                  </Button>
                   {username && skript.pages.length > 0 && (
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={handlePreview}
-                          >
-                            <ExternalLink className="w-4 h-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Preview skript</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handlePreview}
+                      title="Preview skript"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </Button>
                   )}
                   <PublishToggle
                     type="skript"
@@ -231,23 +209,15 @@ function SortableSkriptItem({
                     skriptId={skript.id}
                     onPageCreated={onSkriptUpdated}
                   />
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={handleDeleteSkript}
-                          className="text-destructive hover:text-destructive/80 hover:bg-destructive/10"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Delete skript</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleDeleteSkript}
+                    className="text-destructive hover:text-destructive/80 hover:bg-destructive/10"
+                    title="Delete skript"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
                 </>
               )}
               {isViewOnly && (
@@ -391,46 +361,30 @@ function StaticSkriptItem({
         <div className="flex gap-2 items-center">
           {canEditSkript && (
             <>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handlePublishAll}
-                      disabled={isPublishingAll}
-                      className="text-green-600 border-green-600 hover:bg-green-50 dark:hover:bg-green-950"
-                    >
-                      {isPublishingAll ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Globe className="w-4 h-4" />
-                      )}
-                      <span className="ml-1.5">Publish All</span>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Publish skript and all pages</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handlePublishAll}
+                disabled={isPublishingAll}
+                className="text-green-600 border-green-600 hover:bg-green-50 dark:hover:bg-green-950"
+                title="Publish skript and all pages"
+              >
+                {isPublishingAll ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Globe className="w-4 h-4" />
+                )}
+                <span className="ml-1.5">Publish All</span>
+              </Button>
               {username && skript.pages.length > 0 && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={handlePreview}
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Preview skript</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handlePreview}
+                  title="Preview skript"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                </Button>
               )}
               <PublishToggle
                 type="skript"
@@ -449,23 +403,15 @@ function StaticSkriptItem({
                 skriptId={skript.id}
                 onPageCreated={onSkriptUpdated}
               />
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleDeleteSkript}
-                      className="text-destructive hover:text-destructive/80 hover:bg-destructive/10"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Delete skript</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleDeleteSkript}
+                className="text-destructive hover:text-destructive/80 hover:bg-destructive/10"
+                title="Delete skript"
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
             </>
           )}
           {isViewOnly && (

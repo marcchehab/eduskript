@@ -381,7 +381,7 @@ export function StickyNotesLayer({ pageId, children, isExamStudent }: StickyNote
             pointerEvents: 'auto',
           }}
           onClick={handlePlacementClick}
-          aria-label="Click to place sticky note"
+          title="Click to place sticky note"
         />,
         paperEl,
       )}
@@ -596,7 +596,6 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly }: StickyN
               onClick={() => setShowColorPicker(v => !v)}
               className="w-5 h-5 rounded flex items-center justify-center opacity-40 hover:opacity-80 transition-opacity"
               title="Change colour"
-              aria-label="Change note colour"
             >
               <Palette className="w-3 h-3" aria-hidden />
             </button>
@@ -606,7 +605,6 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly }: StickyN
               onClick={() => onUpdate?.({ minimized: !note.minimized })}
               className="w-5 h-5 rounded flex items-center justify-center opacity-40 hover:opacity-80 transition-opacity"
               title={note.minimized ? 'Expand' : 'Minimize'}
-              aria-label={note.minimized ? 'Expand note' : 'Minimize note'}
             >
               {note.minimized
                 ? <Plus className="w-3 h-3" aria-hidden />
@@ -619,7 +617,6 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly }: StickyN
               onClick={onDelete}
               className="w-5 h-5 rounded flex items-center justify-center opacity-40 hover:opacity-100 hover:text-red-500 transition-all"
               title="Delete note"
-              aria-label="Delete note"
             >
               <X className="w-3 h-3" aria-hidden />
             </button>
@@ -645,8 +642,6 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly }: StickyN
                   : 'border-transparent opacity-70 hover:opacity-100',
               )}
               title={c.charAt(0).toUpperCase() + c.slice(1)}
-              aria-label={`${c.charAt(0).toUpperCase() + c.slice(1)} note`}
-              aria-pressed={note.color === c}
             />
           ))}
         </div>
@@ -680,7 +675,6 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly }: StickyN
               className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize opacity-30 hover:opacity-70 flex items-end justify-end pb-0.5 pr-0.5 transition-opacity"
               onMouseDown={handleResizeStart}
               title="Resize"
-              aria-label="Resize note"
             >
               <ChevronsDownUp className="w-2.5 h-2.5 rotate-[135deg]" aria-hidden />
             </div>

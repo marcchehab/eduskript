@@ -1105,7 +1105,6 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
                 : 'text-muted-foreground hover:text-foreground hover:bg-accent'
             )}
             title="Erase"
-            aria-label="Toggle eraser mode"
           >
             <Eraser className="w-4 h-4" />
           </button>
@@ -1122,7 +1121,6 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
               onModeChange(mode === 'spacer' ? 'view' : 'spacer')
             }}
             title="Insert spacer"
-            aria-label="Toggle spacer mode"
           >
             <SeparatorHorizontal className="w-4 h-4" />
           </button>
@@ -1138,8 +1136,6 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
               )}
               onClick={onStickyNotePlacementToggle}
               title={stickyNotePlacementMode ? 'Cancel sticky note placement (Esc)' : 'Add sticky note'}
-              aria-label={stickyNotePlacementMode ? 'Cancel sticky note placement' : 'Add sticky note'}
-              aria-pressed={stickyNotePlacementMode}
             >
               <StickyNoteIcon className="w-4 h-4" />
               {stickyNoteCount > 0 && !stickyNotePlacementMode && (
@@ -1161,7 +1157,6 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
               )}
               onClick={() => setShowMoreTools(!showMoreTools)}
               title="More tools"
-              aria-label="More tools"
             >
               <Ellipsis className="w-4 h-4" />
             </button>

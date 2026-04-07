@@ -18,7 +18,6 @@ import { autocompletion } from '@codemirror/autocomplete'
 import { createPythonCompletions } from './python-completions'
 import { Button } from '@/components/ui/button'
 import { Play, Square, RotateCcw, Maximize2, Minimize2, Camera, X, Plus, FileText, ZoomIn, ZoomOut, Save, History, Highlighter, MessageSquare, WrapText, Circle, CheckCircle2, Package, Trash2 } from 'lucide-react'
-import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 import { useUserData, useCreateVersion, useVersionHistory, useRestoreVersion, useDeleteVersion, useUpdateVersionLabel } from '@/lib/userdata/hooks'
 import { userDataService } from '@/lib/userdata'
 import { useSyncedUserData, type SyncedUserDataOptions } from '@/lib/userdata/provider'
@@ -3568,30 +3567,22 @@ plots
                   </Button>
                 )}
                 {language === 'sql' && db && (
-                  <TooltipProvider delayDuration={300}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className="flex items-center justify-center w-5 h-5 cursor-default opacity-50 hover:opacity-100 transition-opacity">
-                          {dbStatus === 'idle' && (
-                            <Circle className="w-3.5 h-3.5 text-muted-foreground/40" />
-                          )}
-                          {dbStatus === 'loading' && (
-                            <span
-                              className="block w-3.5 h-3.5 rounded-full animate-spin border-2 border-muted-foreground/30 border-t-muted-foreground/70"
-                            />
-                          )}
-                          {dbStatus === 'ready' && (
-                            <CheckCircle2 className="w-3.5 h-3.5 text-green-600/70" />
-                          )}
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="text-xs">
-                        {dbStatus === 'idle' && `${dbName} — loads on first run`}
-                        {dbStatus === 'loading' && `Loading ${dbName}...`}
-                        {dbStatus === 'ready' && `${dbName} ready`}
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                  <span
+                    className="flex items-center justify-center w-5 h-5 cursor-default opacity-50 hover:opacity-100 transition-opacity"
+                    title={dbStatus === 'idle' ? `${dbName} — loads on first run` : dbStatus === 'loading' ? `Loading ${dbName}...` : `${dbName} ready`}
+                  >
+                    {dbStatus === 'idle' && (
+                      <Circle className="w-3.5 h-3.5 text-muted-foreground/40" />
+                    )}
+                    {dbStatus === 'loading' && (
+                      <span
+                        className="block w-3.5 h-3.5 rounded-full animate-spin border-2 border-muted-foreground/30 border-t-muted-foreground/70"
+                      />
+                    )}
+                    {dbStatus === 'ready' && (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-green-600/70" />
+                    )}
+                  </span>
                 )}
                 {checkCode && !exam && (
                   <Button
@@ -3614,21 +3605,13 @@ plots
               {/* Floating Control Buttons - Bottom Right */}
               {pageId && (
                 <div className="absolute bottom-2 right-2 flex items-center gap-1 z-10">
-                  <TooltipProvider delayDuration={0}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          onClick={() => { navigator.clipboard.writeText(componentId) }}
-                          className="h-7 w-7 flex items-center justify-center text-[10px] font-mono opacity-15 hover:opacity-60 active:opacity-100 transition-opacity cursor-pointer"
-                        >
-                          #
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="text-xs font-mono">
-                        {componentId}
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(componentId) }}
+                    className="h-7 w-7 flex items-center justify-center text-[10px] font-mono opacity-15 hover:opacity-60 active:opacity-100 transition-opacity cursor-pointer"
+                    title={componentId}
+                  >
+                    #
+                  </button>
                   <Button
                     onClick={resetCode}
                     size="sm"

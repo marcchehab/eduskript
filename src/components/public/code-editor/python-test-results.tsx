@@ -50,17 +50,17 @@ export function PythonTestResults({ results, points, earnedPoints, checksUsed, m
       <div className="flex items-center justify-between px-3 py-2">
         <div data-header-text className="flex items-center gap-2">
           <span className={`font-medium ${allPassed ? 'text-green-600 dark:text-green-400' : ''}`}>
-            {passed}/{total} Tests bestanden ({percentage}%)
+            {passed}/{total} tests passed ({percentage}%)
           </span>
           {points > 0 && (
             <span className="text-muted-foreground">
-              &middot; {earnedPoints}/{points} Punkte
+              &middot; {earnedPoints}/{points} points
             </span>
           )}
         </div>
         {maxChecks !== null && (
           <span className="text-xs text-muted-foreground">
-            Versuche: {checksUsed}/{maxChecks}
+            Attempts: {checksUsed}/{maxChecks}
           </span>
         )}
       </div>

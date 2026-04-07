@@ -27,7 +27,6 @@ import {
   ShieldUser,
   Pencil,
 } from 'lucide-react'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { UpgradePrompt } from '@/components/dashboard/upgrade-prompt'
 import {
   Dialog,
@@ -545,8 +544,7 @@ export default function ClassesPage() {
   }
 
   return (
-    <TooltipProvider>
-      <>
+    <>
         {/* Result Dialog */}
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogContent>
@@ -681,22 +679,16 @@ export default function ClassesPage() {
                           <Users className="w-4 h-4" />
                           <span>{classItem.memberCount}</span>
                         </div>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div className="text-muted-foreground">
-                              {classItem.allowAnonymous ? (
-                                <ShieldOff className="w-4 h-4" />
-                              ) : (
-                                <ShieldUser className="w-4 h-4" />
-                              )}
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            {classItem.allowAnonymous
-                              ? 'Anonymous joins allowed'
-                              : 'Identity required to join'}
-                          </TooltipContent>
-                        </Tooltip>
+                        <div
+                          className="text-muted-foreground"
+                          title={classItem.allowAnonymous ? 'Anonymous joins allowed' : 'Identity required to join'}
+                        >
+                          {classItem.allowAnonymous ? (
+                            <ShieldOff className="w-4 h-4" />
+                          ) : (
+                            <ShieldUser className="w-4 h-4" />
+                          )}
+                        </div>
                       </div>
                     </button>
 
@@ -770,37 +762,27 @@ export default function ClassesPage() {
                               <Upload className="w-4 h-4" />
                               Add Students
                             </Label>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span className="inline-block">
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      if (classItem.allowAnonymous) {
-                                        copyInviteLink(classItem.inviteCode)
-                                      }
-                                    }}
-                                    disabled={!classItem.allowAnonymous}
-                                    className={!classItem.allowAnonymous ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}
-                                  >
-                                    {copiedCode === classItem.inviteCode ? (
-                                      <Check className="w-4 h-4 text-green-600" />
-                                    ) : classItem.allowAnonymous ? (
-                                      <LinkIcon className="w-4 h-4" />
-                                    ) : (
-                                      <Link2Off className="w-4 h-4" />
-                                    )}
-                                  </Button>
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                {classItem.allowAnonymous
-                                  ? 'Copy invite link'
-                                  : 'Invite links are disabled for classes that require identity'}
-                              </TooltipContent>
-                            </Tooltip>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                if (classItem.allowAnonymous) {
+                                  copyInviteLink(classItem.inviteCode)
+                                }
+                              }}
+                              disabled={!classItem.allowAnonymous}
+                              className={!classItem.allowAnonymous ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}
+                              title={classItem.allowAnonymous ? 'Copy invite link' : 'Invite links are disabled for classes that require identity'}
+                            >
+                              {copiedCode === classItem.inviteCode ? (
+                                <Check className="w-4 h-4 text-green-600" />
+                              ) : classItem.allowAnonymous ? (
+                                <LinkIcon className="w-4 h-4" />
+                              ) : (
+                                <Link2Off className="w-4 h-4" />
+                              )}
+                            </Button>
                           </div>
                           <Textarea
                             value={emailInputs[classItem.id] || ''}
@@ -1001,7 +983,6 @@ export default function ClassesPage() {
           )}
         </div>
       </div>
-      </>
-    </TooltipProvider>
+    </>
   )
 }

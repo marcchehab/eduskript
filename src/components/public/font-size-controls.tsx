@@ -2,12 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { Minus, Plus } from 'lucide-react'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
 
 const FONT_SIZE_KEY = 'eduskript-font-size'
 const MIN_SIZE = 14
@@ -96,60 +90,44 @@ export function FontSizeControls({ orientation = 'horizontal' }: FontSizeControl
   const isVertical = orientation === 'vertical'
 
   return (
-    <TooltipProvider>
-      <div className={`flex border border-border bg-card ${
-        isVertical
-          ? 'flex-col rounded-lg'
-          : 'items-center rounded-full'
-      }`}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              onClick={handleDecrease}
-              disabled={!canDecrease}
-              aria-label="Decrease font size"
-              className={`p-2 hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                isVertical ? 'rounded-t-lg' : 'rounded-l-full'
-              }`}
-            >
-              <Minus className="h-4 w-4" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>Decrease text size</p>
-          </TooltipContent>
-        </Tooltip>
+    <div className={`flex border border-border bg-card ${
+      isVertical
+        ? 'flex-col rounded-lg'
+        : 'items-center rounded-full'
+    }`}>
+      <button
+        onClick={handleDecrease}
+        disabled={!canDecrease}
+        title="Decrease text size"
+        className={`p-2 hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+          isVertical ? 'rounded-t-lg' : 'rounded-l-full'
+        }`}
+      >
+        <Minus className="h-4 w-4" />
+      </button>
 
-        <div className={isVertical ? 'h-[1px] w-4 bg-border mx-auto' : 'w-[1px] h-4 bg-border'} />
+      <div className={isVertical ? 'h-[1px] w-4 bg-border mx-auto' : 'w-[1px] h-4 bg-border'} />
 
-        {/* Show font size number in development */}
-        {process.env.NODE_ENV === 'development' && (
-          <>
-            <span className="text-xs text-muted-foreground tabular-nums px-1 min-w-[24px] text-center">
-              {fontSize}
-            </span>
-            <div className={isVertical ? 'h-[1px] w-4 bg-border mx-auto' : 'w-[1px] h-4 bg-border'} />
-          </>
-        )}
+      {/* Show font size number in development */}
+      {process.env.NODE_ENV === 'development' && (
+        <>
+          <span className="text-xs text-muted-foreground tabular-nums px-1 min-w-[24px] text-center">
+            {fontSize}
+          </span>
+          <div className={isVertical ? 'h-[1px] w-4 bg-border mx-auto' : 'w-[1px] h-4 bg-border'} />
+        </>
+      )}
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              onClick={handleIncrease}
-              disabled={!canIncrease}
-              aria-label="Increase font size"
-              className={`p-2 hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                isVertical ? 'rounded-b-lg' : 'rounded-r-full'
-              }`}
-            >
-              <Plus className="h-4 w-4" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>Increase text size</p>
-          </TooltipContent>
-        </Tooltip>
-      </div>
-    </TooltipProvider>
+      <button
+        onClick={handleIncrease}
+        disabled={!canIncrease}
+        title="Increase text size"
+        className={`p-2 hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+          isVertical ? 'rounded-b-lg' : 'rounded-r-full'
+        }`}
+      >
+        <Plus className="h-4 w-4" />
+      </button>
+    </div>
   )
 }

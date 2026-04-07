@@ -2,12 +2,6 @@
 
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
 import { CircleCheckBig, CircleMinus, EyeOff } from 'lucide-react'
 
 type VisibilityState = 'draft' | 'published' | 'unlisted'
@@ -110,28 +104,20 @@ export function PublishToggle({
   const Icon = config.icon
 
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size={buttonSize}
-            onClick={handleToggle}
-            disabled={isLoading}
-            className={`${config.color} px-2`}
-          >
-            <Icon className={iconSize} />
-            {showText && (
-              <span className="ml-1 text-xs">
-                {config.label}
-              </span>
-            )}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p>{config.tooltip} {type}</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <Button
+      variant="ghost"
+      size={buttonSize}
+      onClick={handleToggle}
+      disabled={isLoading}
+      className={`${config.color} px-2`}
+      title={`${config.tooltip} ${type}`}
+    >
+      <Icon className={iconSize} />
+      {showText && (
+        <span className="ml-1 text-xs">
+          {config.label}
+        </span>
+      )}
+    </Button>
   )
 }

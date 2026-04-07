@@ -112,17 +112,17 @@ export function SqlProgressBar({ classId, className, pageId, componentId }: SqlP
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <span className="font-medium text-foreground">{className}</span>
             <span>&bull;</span>
-            <span>{attempted}/{stats.total} versucht</span>
+            <span>{attempted}/{stats.total} attempted</span>
             {stats.correct > 0 && (
               <>
                 <span>&bull;</span>
-                <span className="text-green-600 dark:text-green-400">{stats.correct} korrekt</span>
+                <span className="text-green-600 dark:text-green-400">{stats.correct} correct</span>
               </>
             )}
             {stats.incorrect > 0 && (
               <>
                 <span>&bull;</span>
-                <span className="text-red-600 dark:text-red-400">{stats.incorrect} falsch</span>
+                <span className="text-red-600 dark:text-red-400">{stats.incorrect} incorrect</span>
               </>
             )}
           </div>
@@ -149,7 +149,7 @@ export function SqlProgressBar({ classId, className, pageId, componentId }: SqlP
         <div className="max-h-64 overflow-y-auto border-t border-border divide-y divide-border">
           {responses.length === 0 ? (
             <div className="p-4 text-center text-muted-foreground text-sm">
-              Keine Schüler in dieser Klasse
+              No students in this class
             </div>
           ) : (
             responses
@@ -177,10 +177,10 @@ export function SqlProgressBar({ classId, className, pageId, componentId }: SqlP
                   <div className="flex-shrink-0 w-32 truncate font-medium">{r.displayName}</div>
                   <div className="flex-1 text-xs text-muted-foreground">
                     {r.isCorrect === null
-                      ? 'Noch kein Versuch'
+                      ? 'Not attempted yet'
                       : r.isCorrect
-                        ? 'Korrekt'
-                        : 'Falsch (letzter Versuch)'}
+                        ? 'Correct'
+                        : 'Incorrect (last attempt)'}
                   </div>
                 </div>
               ))

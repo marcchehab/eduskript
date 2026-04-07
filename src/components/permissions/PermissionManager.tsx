@@ -6,7 +6,6 @@ import { Users, ArrowLeft, ArrowRight, Plus, X, GripVertical } from 'lucide-reac
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ConfirmationDialog } from '@/components/ui/confirmation-dialog'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
 
 interface User {
@@ -110,36 +109,28 @@ function UserCard({
           Last author
         </div>
       ) : (
-        <TooltipProvider>
-          <ConfirmationDialog
-            title="Revoke Access?"
-            description={`Revoke all rights to this collection for ${userPermission.user.name || userPermission.user.email || 'this user'}?${isCurrentUser ? ' You will no longer have access to it.' : ''}`}
-            confirmText="Revoke Access"
-            variant="destructive"
-            onConfirm={handleRemoveUser}
-            trigger={
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={isRemoving}
-                    className="h-8 w-8 p-0 hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
-                  >
-                    {isRemoving ? (
-                      <div className="w-4 h-4 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
-                    ) : (
-                      <X className="w-4 h-4" />
-                    )}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Revoke access</p>
-                </TooltipContent>
-              </Tooltip>
-            }
-          />
-        </TooltipProvider>
+        <ConfirmationDialog
+          title="Revoke Access?"
+          description={`Revoke all rights to this collection for ${userPermission.user.name || userPermission.user.email || 'this user'}?${isCurrentUser ? ' You will no longer have access to it.' : ''}`}
+          confirmText="Revoke Access"
+          variant="destructive"
+          onConfirm={handleRemoveUser}
+          trigger={
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={isRemoving}
+              className="h-8 w-8 p-0 hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+              title="Revoke access"
+            >
+              {isRemoving ? (
+                <div className="w-4 h-4 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
+              ) : (
+                <X className="w-4 h-4" />
+              )}
+            </Button>
+          }
+        />
       )}
     </div>
   )
