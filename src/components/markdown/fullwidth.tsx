@@ -7,10 +7,10 @@
  *     <img src="wide-image.jpg" />
  *   </fullwidth>
  */
-export function Fullwidth({ children }: { children?: React.ReactNode }) {
+export function Fullwidth({ children, className }: { children?: React.ReactNode; className?: string }) {
   return (
     <div
-      className="fullwidth"
+      className={className ? `fullwidth ${className}` : 'fullwidth'}
       style={{
         marginLeft: '-192px',
         marginRight: '-192px',

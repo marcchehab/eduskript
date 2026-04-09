@@ -205,12 +205,12 @@ export function createMarkdownComponents(
       )
     }
 
-    // Regular image
+    // Regular image — check data- prefixed, camelCase, and bare attribute names
     const originalSrc = (dataProps['data-original-src'] as string) || (dataProps['dataOriginalSrc'] as string)
-    const dataAlign = (dataProps['data-align'] as string) || (dataProps['dataAlign'] as string) || 'center'
-    const dataWrap = (dataProps['data-wrap'] as string) || (dataProps['dataWrap'] as string)
-    const dataInvert = (dataProps['data-invert'] as string) || (dataProps['dataInvert'] as string)
-    const dataSaturate = (dataProps['data-saturate'] as string) || (dataProps['dataSaturate'] as string)
+    const dataAlign = (dataProps['data-align'] as string) || (dataProps['dataAlign'] as string) || (dataProps['align'] as string) || 'center'
+    const dataWrap = (dataProps['data-wrap'] as string) || (dataProps['dataWrap'] as string) || (dataProps['wrap'] as string)
+    const dataInvert = (dataProps['data-invert'] as string) || (dataProps['dataInvert'] as string) || (dataProps['invert'] as string)
+    const dataSaturate = (dataProps['data-saturate'] as string) || (dataProps['dataSaturate'] as string) || (dataProps['saturate'] as string)
 
     const srcStr = typeof src === 'string' ? src : ''
 
@@ -474,65 +474,6 @@ export function createMarkdownComponents(
     return <Option correct={correct as 'true' | 'false' | undefined} feedback={feedback}>{children}</Option>
   }
 
-  // Image component - for use as <Image src="..." /> in markdown
-  interface ImageComponentProps {
-    src: string
-    alt?: string
-    width?: string
-    align?: 'left' | 'center' | 'right'
-    wrap?: boolean
-    invert?: 'dark' | 'light' | 'always'
-    saturate?: string
-    // Source line tracking (passed through from HTML)
-    'data-source-line-start'?: string
-    'data-source-line-end'?: string
-    dataSourceLineStart?: string
-    dataSourceLineEnd?: string
-  }
-
-  function ImageComponent(props: ImageComponentProps) {
-    const { src, alt = '', width, align = 'center', wrap = false, invert, saturate } = props
-
-    // Extract source line tracking (check both kebab-case and camelCase)
-    const sourceLineStart = props['data-source-line-start'] || props.dataSourceLineStart
-    const sourceLineEnd = props['data-source-line-end'] || props.dataSourceLineEnd
-
-    // Check if this is an excalidraw file
-    if (src.endsWith('.excalidraw') || src.endsWith('.excalidraw.md')) {
-      return (
-        <ExcalidrawImage
-          src={src}
-          alt={alt}
-          style={width ? { width } : undefined}
-          align={align}
-          wrap={wrap}
-          files={files}
-          onWidthChange={onImageWidthChange ? (markdown) => onImageWidthChange(src, markdown) : undefined}
-          onEdit={onExcalidrawEdit}
-          sourceLineStart={sourceLineStart}
-          sourceLineEnd={sourceLineEnd}
-        />
-      )
-    }
-
-    return (
-      <ContentImage
-        src={src}
-        alt={alt}
-        style={width ? { width } : undefined}
-        align={align}
-        wrap={wrap}
-        invert={invert}
-        saturate={saturate}
-        files={files}
-        optimizeImages={optimizeImages}
-        onWidthChange={onImageWidthChange ? (markdown) => onImageWidthChange(src, markdown) : undefined}
-        sourceLineStart={sourceLineStart}
-        sourceLineEnd={sourceLineEnd}
-      />
-    )
-  }
-
   // Anchor component - resolves relative file links to /api/files/{id} URLs
   function AnchorComponent({ href, children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement> & Record<string, unknown>) {
     const originalHref = (props['data-original-href'] as string) || (props['dataOriginalHref'] as string)
@@ -623,8 +564,8 @@ export function createMarkdownComponents(
         />
       )
     },
-    // <image> component for images with layout props (width, align, wrap, etc.)
-    'image': ImageComponent,
+    // <image> is an alias for <img> — both use the same handler
+    'image': ImgElementComponent,
 
     // Organization components
     'ourteachers': function OurTeachersComponent(props: {

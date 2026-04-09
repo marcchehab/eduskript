@@ -1422,7 +1422,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                         )
 
                         const imgTags = filenames.map((name, i) => `![${i + 1}](${name})`).join('\n')
-                        const insertText = `<fullwidth>\n\n${imgTags}\n\n</fullwidth>`
+                        const insertText = `<fullwidth class="invert-dark">\n\n${imgTags}\n\n</fullwidth>`
 
                         if (file.position !== undefined) {
                           setContent((prev: string) => prev.slice(0, file.position) + insertText + prev.slice(file.position))

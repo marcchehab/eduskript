@@ -72,7 +72,7 @@ export const sanitizeSchema = {
     'ourteachers',
     'yt',
     'mark',  // <mark> for text highlighting showcase
-    'image', // <image> custom component for images with layout props
+    'image', // Alias for <img> — passes through sanitizer, mapped to img handler
     'excali', // <excali> shorthand for excalidraw drawings
     'flex', // <flex> layout container
     'flex-item', // <flex-item> child of flex
@@ -129,9 +129,10 @@ export const sanitizeSchema = {
     'ourteachers': ['roles', 'limit', 'className'],
     'flex': ['gap', 'wrap', 'direction', 'justify', 'align', 'className'],
     'flex-item': ['width', 'grow', 'className'],
-    // Extended img attributes for our plugins (both camelCase and kebab-case)
+    // Extended img attributes — bare names (user-facing) and data- variants (pipeline/compat)
     'img': [
       ...(defaultSchema.attributes?.['img'] || []),
+      'align', 'wrap', 'invert', 'saturate',
       'dataOriginalSrc', 'data-original-src',
       'dataAlign', 'data-align',
       'dataWrap', 'data-wrap',

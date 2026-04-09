@@ -128,22 +128,24 @@ $$
 
 **Basic markdown:** \`![alt text](image.png)\` — renders centered at full width
 
-**With size/layout control:** Use HTML \`<img>\` tags with \`style\` and \`data-*\` attributes:
+**With size/layout control:** Use HTML \`<img>\` tags with attributes:
 
 \`\`\`html
 <img src="image.png" alt="Description" style="width: 50%" />
 
-<img src="image.png" alt="Left-aligned" style="width: 40%" data-align="left" />
+<img src="image.png" alt="Left-aligned" style="width: 40%" align="left" />
 
-<img src="image.png" alt="Floated left with text wrap" style="width: 40%" data-align="left" data-wrap="true" />
+<img src="image.png" alt="Floated left with text wrap" style="width: 40%" align="left" wrap="true" />
+
+<img src="diagram.png" alt="Dark-mode friendly" invert="dark" />
 \`\`\`
 
 **Attributes:**
 - \`style="width: X%"\` — Image width (percentage)
-- \`data-align="left|center|right"\` — Alignment (default: center)
-- \`data-wrap="true"\` — Float image so text wraps around it
-- \`data-invert="dark|light|always"\` — Invert colors (useful for diagrams)
-- \`data-saturate="70"\` — Saturation adjustment when inverted
+- \`align="left|center|right"\` — Alignment (default: center)
+- \`wrap="true"\` — Float image so text wraps around it
+- \`invert="dark|light|always"\` — Invert colors (useful for diagrams)
+- \`saturate="70"\` — Saturation adjustment when inverted
 
 **Do NOT use** the \`{width=;align=}\` attribute syntax — it is not implemented.
 
@@ -258,7 +260,7 @@ export function getCondensedSyntaxReference(): string {
 
 **Math:** \`$inline$\` and \`$$display$$\` (KaTeX)
 
-**Images:** \`![alt](img.png)\` or \`<img src="img.png" alt="alt" style="width: 50%" data-align="left" data-wrap="true" />\`
+**Images:** \`![alt](img.png)\` or \`<img src="img.png" alt="alt" style="width: 50%" align="left" wrap="true" />\`
 
 **Custom CSS:** \`<style>.my-class { ... }</style>\` — scoped CSS blocks are supported. Inline \`style="..."\` also works on any element.
 

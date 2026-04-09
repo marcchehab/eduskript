@@ -60,8 +60,8 @@ export function rehypeImageWrapper() {
       const caption = alt // Only show caption if alt text is provided
 
       // Get alignment and wrap attributes
-      const dataAlign = props['dataAlign'] || props['data-align'] || 'center'
-      const dataWrap = props['dataWrap'] || props['data-wrap']
+      const dataAlign = props['dataAlign'] || props['data-align'] || props['align'] || 'center'
+      const dataWrap = props['dataWrap'] || props['data-wrap'] || props['wrap']
       const style = props.style as string | undefined
 
       // Determine alignment classes
