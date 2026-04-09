@@ -352,7 +352,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
 
     // Handle PDFs - embed using custom element, filename resolved at render time
     if (extension === 'pdf' && insertionType === 'pdf-page') {
-      insertText = `<pdf-embed src="${file.name}" height="1267"></pdf-embed>`
+      insertText = `<pdf src="${file.name}" height="1267"></pdf>`
     } else
     // Handle databases specially
     if (['sqlite', 'db'].includes(extension || '')) {

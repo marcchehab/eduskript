@@ -19,6 +19,8 @@ import { Sketch } from '@uiw/react-color'
 import { ExcalidrawEditor } from './excalidraw-editor'
 import { PluginPicker } from './plugin-picker'
 import { InteractivePreview } from './interactive-preview'
+import { autocompletion } from '@codemirror/autocomplete'
+import { createMarkdownCompletions } from './markdown-completions'
 import type { EditorView } from '@codemirror/view'
 import type { ViewUpdate } from '@codemirror/view'
 import { fromMarkdown } from 'mdast-util-from-markdown'
@@ -110,6 +112,8 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   // distinguish internal changes (which should NOT be dispatched back)
   // from external changes (image resize, version restore) that must be.
   const lastEmittedContentRef = useRef(content || '')
+  const fileListRef = useRef(fileList)
+  fileListRef.current = fileList
 
   // Calculate visibility based on width
   const showEditor = editorWidth > 0
@@ -407,7 +411,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
     
     if (extension === 'pdf') {
       // PDF - embed using custom element, filename resolved at render time
-      insertText = `<pdf-embed src="${fileName}" height="1267"></pdf-embed>`
+      insertText = `<pdf src="${fileName}" height="1267"></pdf>`
     } else if (['sqlite', 'db'].includes(extension || '')) {
       // Database file - insert SQL editor block
       insertText = `\`\`\`sql editor id="${generateId()}" db="${fileName}"\n-- Show all tables in the database\nSELECT name FROM sqlite_master WHERE type='table' ORDER BY name;\n\`\`\``
@@ -631,6 +635,11 @@ const CodeMirrorEditor = function CodeMirrorEditor({
             basicSetup,
             keymap.of([indentWithTab, { key: 'Mod-Shift-.', run: toggleBlockquoteCmd }]), // Tab + blockquote toggle
             markdownExtension,
+            autocompletion({
+              override: [createMarkdownCompletions(() => fileListRef.current || [])],
+              activateOnTyping: true,
+              maxRenderedOptions: 15,
+            }),
             ...(isDark ? [vsCodeDark] : [vsCodeLight]),
             EditorView.updateListener.of((update: ViewUpdate) => {
               if (update.docChanged) {

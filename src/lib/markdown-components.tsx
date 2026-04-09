@@ -590,7 +590,7 @@ export function createMarkdownComponents(
     'fullwidth': Fullwidth,
 
     // PDF embed - resolves filename to URL and renders in an iframe
-    'pdf-embed': (props: { src?: string; height?: string }) => {
+    'pdf': (props: { src?: string; height?: string }) => {
       return (
         <PdfEmbed
           src={props.src || ''}
