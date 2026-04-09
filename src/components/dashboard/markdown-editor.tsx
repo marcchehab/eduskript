@@ -18,6 +18,7 @@ interface MarkdownEditorProps {
     name: string
     url?: string
     isDirectory?: boolean
+    rawFile?: File
   }, position: number, screenX: number, screenY: number) => void
   skriptId?: string
   pageId?: string

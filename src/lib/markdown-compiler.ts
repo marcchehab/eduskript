@@ -76,6 +76,8 @@ export const sanitizeSchema = {
     'excali', // <excali> shorthand for excalidraw drawings
     'flex', // <flex> layout container
     'flex-item', // <flex-item> child of flex
+    'fullwidth', // Breaks out of #paper padding for edge-to-edge content
+    'pdf-embed', // PDF embed using browser's native PDF viewer
     'plugin', // User-created plugins rendered in sandboxed iframes
     'style', // <style> blocks for scoped CSS in markdown
     // SVG elements
@@ -119,6 +121,7 @@ export const sanitizeSchema = {
       'autoplay', 'loop', 'muted', 'controls', 'disabled', 'readonly',
       'data', 'config', 'options', 'items', 'columns', 'format',
     ],
+    'pdf-embed': ['src', 'height'],
     'question': ['id', 'type', 'showfeedback', 'allowupdate', 'minvalue', 'maxvalue', 'step'],
     'quiz-option': ['correct', 'is', 'feedback'],
     'answer': ['correct', 'is', 'feedback'],

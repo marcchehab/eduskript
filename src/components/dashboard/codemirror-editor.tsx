@@ -42,6 +42,7 @@ interface CodeMirrorEditorProps {
     name: string
     url?: string
     isDirectory?: boolean
+    rawFile?: File
   }, position: number, screenX: number, screenY: number) => void
   onExcalidrawEdit?: (filename: string, fileId: string) => void
   onAIEdit?: () => void
@@ -77,7 +78,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   const [isMounted, setIsMounted] = useState(false)
   const [useSimpleEditor, setUseSimpleEditor] = useState(false)
   const [textareaContent, setTextareaContent] = useState(content || '')
-  const [dragOver, setDragOver] = useState(false)
+  const [dragOver, setDragOver] = useState<false | 'generic' | 'docx' | 'pdf'>(false)
   const [excalidrawOpen, setExcalidrawOpen] = useState(false)
   const [pluginPickerOpen, setPluginPickerOpen] = useState(false)
   const [excalidrawInitialData, setExcalidrawInitialData] = useState<{
@@ -122,8 +123,23 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   // Handle file drag and drop
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
-    setDragOver(true)
-    
+
+    // Detect file type from drag items for contextual hint
+    const items = Array.from(e.dataTransfer.items)
+    const hasDocx = items.some(item =>
+      item.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+      item.type === 'application/msword'
+    )
+    const hasPdf = items.some(item => item.type === 'application/pdf')
+
+    if (hasDocx) {
+      setDragOver('docx')
+    } else if (hasPdf) {
+      setDragOver('pdf')
+    } else {
+      setDragOver('generic')
+    }
+
     // Update cursor position based on mouse position during drag
     if (editorViewRef.current && !useSimpleEditor) {
       const view = editorViewRef.current
@@ -208,6 +224,79 @@ const CodeMirrorEditor = function CodeMirrorEditor({
 
       try {
         for (const file of files) {
+          const extension = file.name.split('.').pop()?.toLowerCase()
+
+          // DOCX: extract content as markdown and insert directly
+          if (extension === 'docx') {
+            try {
+              const arrayBuffer = await file.arrayBuffer()
+              const mammoth = await import('mammoth')
+              const result = await mammoth.convertToHtml({ arrayBuffer })
+              if (result.messages.length > 0) {
+                console.warn('Mammoth conversion warnings:', result.messages)
+              }
+              const TurndownService = (await import('turndown')).default
+              const { gfm } = await import('turndown-plugin-gfm')
+              const turndown = new TurndownService({
+                headingStyle: 'atx',
+                codeBlockStyle: 'fenced',
+              })
+              turndown.use(gfm)
+              const markdown = turndown.turndown(result.value)
+
+              if (editorViewRef.current && !useSimpleEditor) {
+                const view = editorViewRef.current
+                const insertPos = dropPosition !== null && dropPosition !== undefined ? dropPosition : view.state.selection.main.head
+                const transaction = view.state.update({
+                  changes: { from: insertPos, insert: markdown },
+                  selection: { anchor: insertPos + markdown.length }
+                })
+                view.dispatch(transaction)
+                onChange(view.state.doc.toString())
+              } else if (useSimpleEditor) {
+                const textarea = document.querySelector('textarea') as HTMLTextAreaElement
+                if (textarea) {
+                  const start = textarea.selectionStart
+                  const newContent = textareaContent.substring(0, start) + markdown + textareaContent.substring(start)
+                  setTextareaContent(newContent)
+                  onChange(newContent)
+                }
+              }
+            } catch (error) {
+              console.error('Error extracting DOCX content:', error)
+              alert.showError('Failed to extract DOCX content. The file may be corrupted.')
+            }
+            continue
+          }
+
+          // PDF: show context menu without uploading — upload deferred to menu handler
+          if (extension === 'pdf') {
+            if (onFileDrop && dropPosition !== null) {
+              onFileDrop({ id: '', name: file.name, rawFile: file }, dropPosition, e.clientX, e.clientY)
+            } else {
+              // Fallback: upload and insert directly as single-page embed
+              let uploadedFile
+              if (file.size > DIRECT_UPLOAD_THRESHOLD) {
+                uploadedFile = await uploadDirectToS3(file, skriptId)
+              } else {
+                const formData = new FormData()
+                formData.append('file', file)
+                formData.append('uploadType', 'skript')
+                formData.append('skriptId', skriptId)
+                const response = await fetch('/api/upload', { method: 'POST', body: formData })
+                if (!response.ok) {
+                  const errorData = await response.json().catch(() => ({ error: 'Upload failed' }))
+                  throw new Error(errorData.error || 'Upload failed')
+                }
+                uploadedFile = await response.json()
+              }
+              insertFileAtPosition(uploadedFile, dropPosition)
+              if (onFileUpload) onFileUpload()
+            }
+            continue
+          }
+
+          // Standard file upload for everything else
           let uploadedFile
 
           if (file.size > DIRECT_UPLOAD_THRESHOLD) {
@@ -236,6 +325,10 @@ const CodeMirrorEditor = function CodeMirrorEditor({
             }
 
             uploadedFile = await response.json()
+          }
+
+          if (uploadedFile.existed) {
+            alert.showInfo('A file with this name already existed in this skript and was embedded. Rename or delete the existing file to re-upload.', 'Existing file used')
           }
 
           insertFileAtPosition(uploadedFile, dropPosition)
@@ -312,7 +405,10 @@ const CodeMirrorEditor = function CodeMirrorEditor({
     }
     const extension = fileName.split('.').pop()?.toLowerCase()
     
-    if (['sqlite', 'db'].includes(extension || '')) {
+    if (extension === 'pdf') {
+      // PDF - embed using custom element, filename resolved at render time
+      insertText = `<pdf-embed src="${fileName}" height="1267"></pdf-embed>`
+    } else if (['sqlite', 'db'].includes(extension || '')) {
       // Database file - insert SQL editor block
       insertText = `\`\`\`sql editor id="${generateId()}" db="${fileName}"\n-- Show all tables in the database\nSELECT name FROM sqlite_master WHERE type='table' ORDER BY name;\n\`\`\``
     } else if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(extension || '')) {
@@ -1723,11 +1819,15 @@ const CodeMirrorEditor = function CodeMirrorEditor({
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-primary/10 border-2 border-dashed border-primary rounded">
             <div className="text-center">
               <div className="text-primary text-lg font-semibold">
-                Drop files here to insert
+                {dragOver === 'docx' ? 'Drop DOCX to extract and insert content' :
+                 dragOver === 'pdf' ? 'Drop PDF to upload and embed' :
+                 'Drop files here to insert'}
               </div>
-              <div className="text-primary/80 text-sm">
-                Images, documents, videos, and more
-              </div>
+              {dragOver === 'generic' && (
+                <div className="text-primary/80 text-sm">
+                  Images, documents, videos, and more
+                </div>
+              )}
             </div>
           </div>
         )}

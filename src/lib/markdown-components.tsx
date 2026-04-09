@@ -25,6 +25,8 @@ import { ColorTitleHeading } from '@/components/markdown/color-title-heading'
 import { YT } from '@/components/markdown/youtube'
 import { Flex, FlexItem } from '@/components/markdown/flex'
 import { PluginContainer } from '@/components/markdown/plugin-container'
+import { Fullwidth } from '@/components/markdown/fullwidth'
+import { PdfEmbed } from '@/components/markdown/pdf-embed'
 
 // Simple hash function for generating stable IDs
 function hashCode(str: string): string {
@@ -642,6 +644,20 @@ export function createMarkdownComponents(
     // Layout components
     'flex': Flex,
     'flex-item': FlexItem,
+
+    // Full-width container - breaks out of #paper padding
+    'fullwidth': Fullwidth,
+
+    // PDF embed - resolves filename to URL and renders in an iframe
+    'pdf-embed': (props: { src?: string; height?: string }) => {
+      return (
+        <PdfEmbed
+          src={props.src || ''}
+          height={props.height}
+          files={files}
+        />
+      )
+    },
 
     // User-created plugins (sandboxed iframes)
     // Inner text content is passed as config.content to the plugin

@@ -27,6 +27,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import { AIEditModal } from '@/components/ai'
+import { extractAndUploadPdfPages } from '@/lib/pdf-extract'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import {
@@ -204,10 +205,14 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
     name: string
     url?: string
     isDirectory?: boolean
+    rawFile?: File // Raw File object for deferred upload (e.g. PDF)
     position?: number // Character position in editor
     x?: number // Screen X coordinate
     y?: number // Screen Y coordinate
   } | null>(null)
+
+  // PDF page extraction state
+  const [pdfExtracting, setPdfExtracting] = useState<string | null>(null) // progress message or null
 
   // Excalidraw editor state
   const [excalidrawEditorOpen, setExcalidrawEditorOpen] = useState(false)
@@ -337,7 +342,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
     url?: string
     isDirectory?: boolean
     position?: number
-  }, insertionType: 'embed' | 'link' | 'sql-editor' = 'embed') => {
+  }, insertionType: 'embed' | 'link' | 'sql-editor' | 'pdf-page' = 'embed') => {
     if (file.isDirectory) return // Don't insert directories
 
     let insertText = ''
@@ -345,6 +350,10 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
     // Determine the type of insert based on file extension and insertion type
     const extension = file.name.split('.').pop()?.toLowerCase()
 
+    // Handle PDFs - embed using custom element, filename resolved at render time
+    if (extension === 'pdf' && insertionType === 'pdf-page') {
+      insertText = `<pdf-embed src="${file.name}" height="1267"></pdf-embed>`
+    } else
     // Handle databases specially
     if (['sqlite', 'db'].includes(extension || '')) {
       if (insertionType === 'sql-editor') {
@@ -1205,7 +1214,8 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                   const extension = file.name.split('.').pop()?.toLowerCase()
                   const hasMultipleOptions =
                     ['sqlite', 'db'].includes(extension || '') ||
-                    ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(extension || '')
+                    ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(extension || '') ||
+                    extension === 'pdf'
 
                   if (hasMultipleOptions) {
                     setInsertionMenuFile({ ...file, position, x: screenX, y: screenY })
@@ -1285,6 +1295,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
         const extension = insertionMenuFile.name.split('.').pop()?.toLowerCase()
         const isDatabase = ['sqlite', 'db'].includes(extension || '')
         const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(extension || '')
+        const isPdf = extension === 'pdf'
 
         return (
           <>
@@ -1351,10 +1362,103 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                   </button>
                 </>
               )}
+              {isPdf && (
+                <>
+                  <button
+                    className="w-full px-3 py-1.5 text-sm text-left hover:bg-accent hover:text-accent-foreground flex items-center gap-2"
+                    onClick={async () => {
+                      const file = insertionMenuFile
+                      setInsertionMenuFile(null)
+
+                      // Upload the PDF if it hasn't been uploaded yet
+                      if (file.rawFile) {
+                        const formData = new FormData()
+                        formData.append('file', file.rawFile)
+                        formData.append('uploadType', 'skript')
+                        formData.append('skriptId', skript.id)
+                        try {
+                          const response = await fetch('/api/upload', { method: 'POST', body: formData })
+                          if (!response.ok) {
+                            const err = await response.json().catch(() => ({ error: 'Upload failed' }))
+                            throw new Error(err.error || 'Upload failed')
+                          }
+                          const uploaded = await response.json()
+                          if (uploaded.existed) {
+                            alert.showInfo('A file with this name already existed in this skript and was embedded. Rename or delete the existing file to re-upload.', 'Existing file used')
+                          }
+                          handleFileInsert({ ...file, id: uploaded.id, url: uploaded.url }, 'pdf-page')
+                        } catch (error) {
+                          console.error('PDF upload failed:', error)
+                          alert.showError(error instanceof Error ? error.message : 'Failed to upload PDF')
+                          return
+                        }
+                      } else {
+                        handleFileInsert(file, 'pdf-page')
+                      }
+                      refreshFileList()
+                    }}
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    Embed PDF
+                  </button>
+                  <button
+                    className="w-full px-3 py-1.5 text-sm text-left hover:bg-accent hover:text-accent-foreground flex items-center gap-2"
+                    onClick={async () => {
+                      const file = insertionMenuFile
+                      setInsertionMenuFile(null)
+
+                      // Use local object URL from rawFile if available, otherwise fetch from server
+                      const pdfUrl = file.rawFile
+                        ? URL.createObjectURL(file.rawFile)
+                        : (file.url || `/api/files/${file.id}`)
+                      setPdfExtracting('Loading PDF…')
+
+                      try {
+                        const filenames = await extractAndUploadPdfPages(
+                          pdfUrl,
+                          file.name,
+                          skript.id,
+                          (current, total) => setPdfExtracting(`Extracting page ${current}/${total}…`)
+                        )
+
+                        const imgTags = filenames.map((name, i) => `![${i + 1}](${name})`).join('\n')
+                        const insertText = `<fullwidth>\n\n${imgTags}\n\n</fullwidth>`
+
+                        if (file.position !== undefined) {
+                          setContent((prev: string) => prev.slice(0, file.position) + insertText + prev.slice(file.position))
+                        } else {
+                          setContent((prev: string) => prev + '\n\n' + insertText)
+                        }
+                        setHasUnsavedChanges(true)
+                        refreshFileList()
+                      } catch (error) {
+                        console.error('PDF extraction failed:', error)
+                        alert.showError(error instanceof Error ? error.message : 'Failed to extract PDF pages')
+                      } finally {
+                        if (file.rawFile) URL.revokeObjectURL(pdfUrl)
+                        setPdfExtracting(null)
+                      }
+                    }}
+                  >
+                    <Maximize2 className="w-3.5 h-3.5" />
+                    Embed pages as images
+                  </button>
+                </>
+              )}
             </div>
           </>
         )
       })()}
+
+      {/* PDF page extraction progress overlay */}
+      {pdfExtracting && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-sm">
+          <div className="flex items-center gap-3 bg-popover border border-border rounded-lg px-5 py-3 shadow-lg">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span className="text-sm">{pdfExtracting}</span>
+          </div>
+        </div>
+      )}
 
       <AlertDialogModal
         open={alert.open}

@@ -101,17 +101,39 @@ export async function POST(request: NextRequest) {
     }
 
     // Save file using new file storage system (with sanitized filename)
-    const savedFile = await saveFile({
-      buffer,
-      filename: sanitizedFilename,
-      skriptId,
-      userId: session.user.id,
-      parentId: parentId || null,
-      contentType: file.type,
-      overwrite,
-      width: imageWidth,
-      height: imageHeight,
-    })
+    let savedFile
+    let existed = false
+    try {
+      savedFile = await saveFile({
+        buffer,
+        filename: sanitizedFilename,
+        skriptId,
+        userId: session.user.id,
+        parentId: parentId || null,
+        contentType: file.type,
+        overwrite,
+        width: imageWidth,
+        height: imageHeight,
+      })
+    } catch (err) {
+      // If file already exists, return the existing file instead of erroring
+      if (err instanceof Error && err.message.includes('File already exists')) {
+        const existing = await prisma.file.findFirst({
+          where: { name: sanitizedFilename, skriptId, parentId: parentId || null, isDirectory: false },
+        })
+        if (!existing) throw err
+        const existingUrl = existing.hash ? getTeacherFileUrl(getS3Key(existing.hash, getFileExtension(existing.name)!)) : undefined
+        savedFile = {
+          id: existing.id,
+          size: Number(existing.size),
+          hash: existing.hash,
+          url: existingUrl,
+        }
+        existed = true
+      } else {
+        throw err
+      }
+    }
 
     // Return file info
     const fileInfo = {
@@ -126,7 +148,8 @@ export async function POST(request: NextRequest) {
       uploadType: 'skript',
       skriptId: skriptId,
       parentId: parentId || null,
-      uploadedAt: new Date().toISOString()
+      uploadedAt: new Date().toISOString(),
+      existed, // true if an existing file with the same name was reused
     }
 
     return NextResponse.json(fileInfo)
