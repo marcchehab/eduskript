@@ -5,7 +5,13 @@ import { useSession } from 'next-auth/react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LogIn, UserCheck, FilePen } from 'lucide-react'
+import { LogIn, UserCheck, FilePen, Copy, BookOpen, Loader2 } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 interface AuthButtonProps {
   pageId?: string // Page ID to check edit permissions (lazy loaded)
@@ -18,6 +24,12 @@ export function AuthButton({ pageId, teacherPageSlug, isOrgPage, orgSlug }: Auth
   const pathname = usePathname() ?? '/'
   const { data: session, status } = useSession()
   const [editUrl, setEditUrl] = useState<string | null>(null)
+  const [canCopy, setCanCopy] = useState(false)
+  const [copyDialogOpen, setCopyDialogOpen] = useState(false)
+  const [skripts, setSkripts] = useState<{ id: string; title: string; slug: string }[]>([])
+  const [skriptsLoading, setSkriptsLoading] = useState(false)
+  const [copyResult, setCopyResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [copying, setCopying] = useState(false)
   // Extract pageSlug from pathname (first segment after /)
   // e.g., /chris/collection/skript/page -> "chris"
   // On custom domains, use the passed teacherPageSlug instead
@@ -37,11 +49,13 @@ export function AuthButton({ pageId, teacherPageSlug, isOrgPage, orgSlug }: Auth
       .then(data => {
         if (!cancelled) {
           setEditUrl(data.canEdit && data.editUrl ? data.editUrl : null)
+          setCanCopy(!data.canEdit && !!data.canCopy)
         }
       })
       .catch(() => {
         if (!cancelled) {
           setEditUrl(null)
+          setCanCopy(false)
         }
       })
 
@@ -135,6 +149,107 @@ export function AuthButton({ pageId, teacherPageSlug, isOrgPage, orgSlug }: Auth
           <FilePen className="h-4 w-4 text-primary" />
         )}
       </Link>
+    )
+  }
+
+  // Teacher viewing another teacher's copyable page — show copy button
+  if (canCopy && !isStudent) {
+    const openCopyDialog = () => {
+      setCopyDialogOpen(true)
+      setCopyResult(null)
+      setSkriptsLoading(true)
+      fetch('/api/skripts/list')
+        .then(res => res.ok ? res.json() : [])
+        .then(data => setSkripts(data))
+        .catch(() => setSkripts([]))
+        .finally(() => setSkriptsLoading(false))
+    }
+
+    const handleCopy = async (targetSkriptId: string) => {
+      setCopying(true)
+      setCopyResult(null)
+      try {
+        const res = await fetch(`/api/pages/${pageId}/copy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetSkriptId }),
+        })
+        const data = await res.json()
+        if (!res.ok) {
+          setCopyResult({ success: false, message: data.error || 'Failed to copy page' })
+        } else {
+          setCopyResult({ success: true, message: `Copied as draft to your skript` })
+        }
+      } catch {
+        setCopyResult({ success: false, message: 'Network error' })
+      } finally {
+        setCopying(false)
+      }
+    }
+
+    return (
+      <>
+        <button
+          onClick={openCopyDialog}
+          title="Copy this page to your skripts"
+          className="relative h-8 w-8 rounded-md border border-border bg-card hover:bg-muted transition-colors overflow-hidden inline-flex items-center justify-center"
+        >
+          {session.user?.image ? (
+            <>
+              <Image src={session.user.image} alt={userName} fill className="object-cover" />
+              <div className="absolute inset-0 flex items-center justify-center bg-primary/70">
+                <Copy className="h-4 w-4 text-primary-foreground" />
+              </div>
+            </>
+          ) : (
+            <Copy className="h-4 w-4 text-primary" />
+          )}
+        </button>
+
+        <Dialog open={copyDialogOpen} onOpenChange={setCopyDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Copy this page to your skripts</DialogTitle>
+            </DialogHeader>
+            {copyResult ? (
+              <p className={`text-sm p-3 rounded-md ${
+                copyResult.success
+                  ? 'bg-green-50 text-green-800 dark:bg-green-950 dark:text-green-200'
+                  : 'bg-red-50 text-red-800 dark:bg-red-950 dark:text-red-200'
+              }`}>
+                {copyResult.message}
+              </p>
+            ) : skriptsLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : skripts.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4">
+                You don&apos;t have any skripts to copy into. Create a skript first.
+              </p>
+            ) : (
+              <div className="space-y-1 max-h-64 overflow-y-auto">
+                <p className="text-sm text-muted-foreground mb-2">Select a skript:</p>
+                {skripts.map(skript => (
+                  <button
+                    key={skript.id}
+                    onClick={() => handleCopy(skript.id)}
+                    disabled={copying}
+                    className="flex items-center gap-2 w-full text-left px-3 py-2 rounded-md text-sm hover:bg-muted transition-colors disabled:opacity-50"
+                  >
+                    {copying ? (
+                      <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                    ) : (
+                      <BookOpen className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    )}
+                    {skript.title}
+                  </button>
+                ))}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+      </>
     )
   }
 

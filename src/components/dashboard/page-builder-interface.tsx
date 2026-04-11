@@ -9,6 +9,14 @@ import { useSession } from 'next-auth/react'
 import { checkSkriptPermissions } from '@/lib/permissions'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
+import { generateSlug } from '@/lib/markdown'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { BookOpen, Plus, Loader2 } from 'lucide-react'
 
 interface PageItem {
   id: string
@@ -67,6 +75,11 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
   const [libraryData, setLibraryData] = useState<{ collections: any[], skripts: any[] }>({ collections: [], skripts: [] })
   const [refreshTrigger, setRefreshTrigger] = useState(0)
   const alert = useAlertDialog()
+
+  // State for "add skript to collection" dialog (shown when dropping a skript at root level)
+  const [pendingSkriptDrop, setPendingSkriptDrop] = useState<DragData | null>(null)
+  const [newCollectionName, setNewCollectionName] = useState('')
+  const [placementLoading, setPlacementLoading] = useState(false)
 
   // Load existing page layout on component mount
   useEffect(() => {
@@ -259,6 +272,97 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
     }
   }
 
+  // Handle placing a skript into a new or existing collection (from root-level drop)
+  const handlePlaceSkript = async (collectionId: string | 'new') => {
+    if (!pendingSkriptDrop) return
+    setPlacementLoading(true)
+
+    try {
+      let targetCollectionId = collectionId
+      let targetCollection: PageItem | undefined
+
+      if (collectionId === 'new') {
+        if (!newCollectionName.trim()) return
+
+        // Create collection via API
+        const slug = generateSlug(newCollectionName.trim())
+        const res = await fetch('/api/collections', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: newCollectionName.trim(), slug }),
+        })
+        if (!res.ok) {
+          const data = await res.json()
+          alert.showInfo(data.error || 'Failed to create collection', 'Error')
+          return
+        }
+        const { data: created } = await res.json()
+        targetCollectionId = created.id
+
+        // Add new collection to page items
+        targetCollection = {
+          id: created.id,
+          type: 'collection',
+          title: created.title,
+          slug: created.slug,
+          order: pageItems.length,
+          permissions: { canEdit: true, canView: true },
+          skripts: [],
+        }
+      } else {
+        targetCollection = pageItems.find(
+          (item) => item.id === collectionId && item.type === 'collection'
+        )
+      }
+
+      if (!targetCollection) return
+
+      // Build the skript item
+      const skriptData = pendingSkriptDrop.fromLibrary
+        ? libraryData.skripts.find((s: any) => s.id === pendingSkriptDrop.id)
+        : null
+      const skriptPermissions = session?.user?.id && skriptData?.authors
+        ? checkSkriptPermissions(session.user.id, skriptData.authors)
+        : pendingSkriptDrop.permissions || { canEdit: true, canView: true }
+
+      const newSkript: PageItem = {
+        id: pendingSkriptDrop.id,
+        type: 'skript',
+        title: pendingSkriptDrop.title,
+        description: pendingSkriptDrop.description,
+        order: targetCollection.skripts?.length ?? 0,
+        parentId: targetCollectionId as string,
+        slug: skriptData?.slug,
+        collectionSlug: targetCollection.slug,
+        permissions: skriptPermissions,
+      }
+
+      // Update items
+      let updatedItems: PageItem[]
+      if (collectionId === 'new') {
+        targetCollection.skripts = [newSkript]
+        updatedItems = [...pageItems, targetCollection]
+      } else {
+        updatedItems = pageItems.map((item) => {
+          if (item.id === collectionId && item.type === 'collection') {
+            return { ...item, skripts: [...(item.skripts || []), newSkript] }
+          }
+          return item
+        })
+      }
+
+      const changedCollectionIds = new Set([targetCollectionId as string])
+      setPageItems(updatedItems)
+      handleItemsChange(updatedItems, changedCollectionIds)
+      setExpandedCollections((prev) => [...new Set([...prev, targetCollectionId as string])])
+    } catch {
+      alert.showInfo('Failed to place skript', 'Error')
+    } finally {
+      setPlacementLoading(false)
+      setPendingSkriptDrop(null)
+    }
+  }
+
   const handleDragStart = (start: DragStart) => {
     // Parse the draggable ID to get drag data
     const draggableId = start.draggableId
@@ -383,9 +487,11 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
 
     const destinationId = destination.droppableId
 
-    // Check if trying to drop a skript at root level (not allowed)
+    // Skript dropped at root level — prompt user to pick/create a collection
     if (destinationId === 'page-builder' && dragData?.type === 'skript') {
-      return // Skripts can only be in collections
+      setPendingSkriptDrop(dragData)
+      setNewCollectionName('')
+      return
     }
 
     // Simple insertion logic based on drop target
@@ -733,6 +839,67 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
         title={alert.title}
         message={alert.message}
       />
+
+      {/* Skript Placement Dialog — shown when dropping a skript at root level */}
+      <Dialog open={!!pendingSkriptDrop} onOpenChange={(open) => { if (!open) setPendingSkriptDrop(null) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add &ldquo;{pendingSkriptDrop?.title}&rdquo; to a collection</DialogTitle>
+          </DialogHeader>
+
+          {placementLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {/* Create new collection */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="New collection name..."
+                  value={newCollectionName}
+                  onChange={(e) => setNewCollectionName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && newCollectionName.trim()) handlePlaceSkript('new') }}
+                  className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  autoFocus
+                />
+                <button
+                  onClick={() => handlePlaceSkript('new')}
+                  disabled={!newCollectionName.trim()}
+                  className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                >
+                  <Plus className="h-4 w-4" />
+                  Create
+                </button>
+              </div>
+
+              {/* Existing collections */}
+              {pageItems.filter(item => item.type === 'collection' && item.permissions?.canEdit).length > 0 && (
+                <>
+                  <div className="text-xs text-muted-foreground uppercase tracking-wide">
+                    Or add to existing collection
+                  </div>
+                  <div className="space-y-1 max-h-48 overflow-y-auto">
+                    {pageItems
+                      .filter(item => item.type === 'collection' && item.permissions?.canEdit)
+                      .map(collection => (
+                        <button
+                          key={collection.id}
+                          onClick={() => handlePlaceSkript(collection.id)}
+                          className="flex items-center gap-2 w-full text-left px-3 py-2 rounded-md text-sm hover:bg-muted transition-colors"
+                        >
+                          <BookOpen className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          {collection.title}
+                        </button>
+                      ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </DragDropContext>
   )
 }

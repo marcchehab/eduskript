@@ -176,9 +176,8 @@ export function PageBuilder({
         </p>
       </CardHeader>
       <CardContent>
-        <Droppable 
-          droppableId="page-builder" 
-          isDropDisabled={draggedItem?.type === 'skript'}
+        <Droppable
+          droppableId="page-builder"
         >
           {(provided) => (
             <div

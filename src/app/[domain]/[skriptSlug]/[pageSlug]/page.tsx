@@ -20,6 +20,7 @@ import { buildSiteStructure } from '@/lib/site-structure'
 import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { ForkAttribution } from '@/components/public/fork-attribution'
 
 interface PageProps {
   params: Promise<{
@@ -479,7 +480,15 @@ export default async function PublicPage({ params, searchParams }: PageProps) {
         />
       )}
 
-      <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border">
+      <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border relative">
+        {(page.forkedFromPageId || page.forkedFromAuthorId) && (
+          <div className="absolute top-16 right-16">
+            <ForkAttribution
+              forkedFromPageId={page.forkedFromPageId}
+              forkedFromAuthorId={page.forkedFromAuthorId}
+            />
+          </div>
+        )}
         <article className="prose-theme">
           <AnnotationWrapper pageId={page.id} content={page.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} isPageAuthor={isPageAuthor}>
             <ServerMarkdownRenderer
@@ -489,7 +498,6 @@ export default async function PublicPage({ params, searchParams }: PageProps) {
             />
           </AnnotationWrapper>
         </article>
-
       </div>
 
     </PublicSiteLayout>

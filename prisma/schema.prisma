@@ -173,6 +173,9 @@ model User {
   // Plugins
   plugins Plugin[]
 
+  // Pages forked from this user's content
+  forkedPages Page[] @relation("ForkedPages")
+
   @@unique([oauthProvider, oauthProviderId]) // Students identified by OAuth provider
   @@map("users")
 }
@@ -294,10 +297,20 @@ model Page {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  // Provenance (fork tracking)
+  forkedFromPageId   String?   @map("forked_from_page_id")
+  forkedFromAuthorId String?   @map("forked_from_author_id")
+  forkedAt           DateTime? @map("forked_at")
+
   // Relations
   skriptId    String
   skript      Skript   @relation(fields: [skriptId], references: [id], onDelete: Cascade)
   versions    PageVersion[]
+
+  // Fork relations
+  forkedFromPage   Page? @relation("PageForks", fields: [forkedFromPageId], references: [id], onDelete: SetNull)
+  forks            Page[] @relation("PageForks")
+  forkedFromAuthor User?  @relation("ForkedPages", fields: [forkedFromAuthorId], references: [id], onDelete: SetNull)
 
   // Many-to-many relation for multiple authors
   authors     PageAuthor[]

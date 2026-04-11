@@ -60,7 +60,9 @@ export async function GET(
     )
 
     if (!permissions.canEdit) {
-      return NextResponse.json({ canEdit: false })
+      // Can't edit — check if the page is copyable (published, non-exam)
+      const canCopy = page.isPublished && page.pageType !== 'exam'
+      return NextResponse.json({ canEdit: false, canCopy })
     }
 
     const editUrl = `/dashboard/skripts/${page.skript.slug}/pages/${page.slug}/edit`

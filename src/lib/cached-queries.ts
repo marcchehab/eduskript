@@ -316,6 +316,9 @@ export const getPublishedPage = (
               isUnlisted: true,
               pageType: true,
               examSettings: true,
+              forkedFromPageId: true,
+              forkedFromAuthorId: true,
+              forkedAt: true,
             }
           }
         }
