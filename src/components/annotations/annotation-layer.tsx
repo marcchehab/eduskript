@@ -2637,24 +2637,23 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
       }
 
       // Adjust scroll position to keep focal point stationary
+      // CSS zoom makes getBoundingClientRect() return screen-space coordinates,
+      // but scrollLeft/scrollTop are in the zoomed content coordinate space.
       if (scrollContainerRef.current && focalX !== undefined && focalY !== undefined) {
         const container = scrollContainerRef.current
         const containerRect = container.getBoundingClientRect()
 
-        // Convert client coordinates to container-relative coordinates
-        const relativeX = focalX - containerRect.left
-        const relativeY = focalY - containerRect.top
+        // Screen-space offset of cursor within the container
+        const screenX = focalX - containerRect.left
+        const screenY = focalY - containerRect.top
 
-        // Find the content point under the focal point (in unscaled coordinates)
-        const contentX = (relativeX + container.scrollLeft) / oldZoom
-        const contentY = (relativeY + container.scrollTop) / oldZoom
+        // Content point under cursor before zoom (scroll values are in old-zoom space)
+        const contentX = container.scrollLeft / oldZoom + screenX / oldZoom
+        const contentY = container.scrollTop / oldZoom + screenY / oldZoom
 
-        // Calculate new scroll so the same content point stays under the focal point
-        const newScrollX = contentX * newZoom - relativeX
-        const newScrollY = contentY * newZoom - relativeY
-
-        container.scrollLeft = Math.max(0, newScrollX)
-        container.scrollTop = Math.max(0, newScrollY)
+        // New scroll so the same content point stays under the cursor
+        container.scrollLeft = Math.max(0, contentX * newZoom - screenX)
+        container.scrollTop = Math.max(0, contentY * newZoom - screenY)
       }
 
       rafIdRef.current = null
@@ -2782,9 +2781,11 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
 
     e.preventDefault()
 
-    // Calculate zoom delta (negative deltaY means zoom in)
-    const delta = -e.deltaY * 0.01
-    const newZoom = Math.max(0.5, Math.min(50, zoomRef.current * (1 + delta)))
+    // Calculate zoom factor (negative deltaY means zoom in)
+    // Normalize: scroll wheels send large deltaY (~100px), trackpads send small values
+    // Use multiplicative scaling for consistent feel at any zoom level
+    const factor = Math.pow(1.002, -e.deltaY)
+    const newZoom = Math.max(0.5, Math.min(10, zoomRef.current * factor))
 
     // Apply zoom with focal point at cursor position
     applyZoom(newZoom, e.clientX, e.clientY)
