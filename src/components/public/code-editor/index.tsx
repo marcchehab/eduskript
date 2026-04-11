@@ -567,6 +567,7 @@ export const CodeEditor = memo(function CodeEditor({
       const target = e.target as Node
       if (importsDropdownRef.current?.contains(target)) return
       if (importsDropdownPortalRef.current?.contains(target)) return
+      if (importContextMenuRef.current?.contains(target)) return
       setShowImportsDropdown(false)
     }
     document.addEventListener('mousedown', handleClick)
@@ -578,16 +579,27 @@ export const CodeEditor = memo(function CodeEditor({
   const tabContextMenuRef = useRef<HTMLDivElement>(null)
   const tabLongPressRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Import file context menu (right-click on import tabs and dropdown items)
+  const [importContextMenu, setImportContextMenu] = useState<{ scope: 'skript' | 'global'; name: string; x: number; y: number } | null>(null)
+  const importContextMenuRef = useRef<HTMLDivElement>(null)
+  const [renamingImport, setRenamingImport] = useState<{ scope: 'skript' | 'global'; name: string } | null>(null)
+
   // Close tab context menu on outside click
   useEffect(() => {
-    if (!tabContextMenu) return
+    if (!tabContextMenu && !importContextMenu) return
     const handleClick = (e: MouseEvent) => {
-      if (tabContextMenuRef.current?.contains(e.target as Node)) return
+      if (tabContextMenuRef.current?.contains(e.target as Node)) {
+        return
+      }
+      if (importContextMenuRef.current?.contains(e.target as Node)) {
+        return
+      }
       setTabContextMenu(null)
+      setImportContextMenu(null)
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
-  }, [tabContextMenu])
+  }, [tabContextMenu, importContextMenu])
 
   // Highlighter state
   const [highlighterMode, setHighlighterMode] = useState(false)
@@ -2299,6 +2311,82 @@ export const CodeEditor = memo(function CodeEditor({
     }
   }
 
+  // Rename an import file
+  const renameImportFile = (scope: 'skript' | 'global', oldName: string) => {
+    if (!renameValue.trim()) {
+      setRenamingImport(null)
+      return
+    }
+
+    const ext = getFileExtension(language)
+    const newName = renameValue.trim().endsWith(ext)
+      ? renameValue.trim()
+      : renameValue.trim() + ext
+
+    if (newName === oldName) {
+      setRenamingImport(null)
+      return
+    }
+
+    const store = scope === 'skript' ? skriptImports : globalImports
+    const updater = scope === 'skript' ? saveSkriptImports : saveGlobalImports
+    if (!store) { setRenamingImport(null); return }
+
+    // Check for duplicate names within the same scope
+    if (store.files.some(f => f.name !== oldName && f.name === newName)) {
+      addOutput('A file with that name already exists', OutputLevel.WARNING)
+      return
+    }
+
+    updater({ files: store.files.map(f => f.name === oldName ? { ...f, name: newName } : f) })
+    setOpenImports(prev => prev.map(i =>
+      i.scope === scope && i.name === oldName ? { ...i, name: newName } : i
+    ))
+    if (activeTab.type === 'import' && activeTab.scope === scope && activeTab.name === oldName) {
+      setActiveTab({ type: 'import', scope, name: newName })
+    }
+    setRenamingImport(null)
+  }
+
+  // Start renaming an import file
+  const startImportRename = (scope: 'skript' | 'global', name: string) => {
+    setRenamingImport({ scope, name })
+    const ext = getFileExtension(language)
+    const extPattern = new RegExp(`\\${ext}$`)
+    setRenameValue(name.replace(extPattern, ''))
+  }
+
+  // Move an import file back to local files
+  const makeLocal = (scope: 'skript' | 'global', name: string) => {
+    const store = scope === 'skript' ? skriptImports : globalImports
+    const updater = scope === 'skript' ? saveSkriptImports : saveGlobalImports
+    if (!store) return
+
+    let file = store.files.find(f => f.name === name)
+    if (!file) return
+
+    // If this file is currently open in the editor, grab the live content
+    if (editorViewRef.current && activeTab.type === 'import' && activeTab.scope === scope && activeTab.name === name) {
+      file = { ...file, content: editorViewRef.current.state.doc.toString() }
+    }
+
+    // Check for duplicate name in local files
+    if (files.some(f => f.name === file!.name)) {
+      addOutput(`A file named "${file.name}" already exists in local files`, OutputLevel.WARNING)
+      return
+    }
+
+    // Remove from import store
+    updater({ files: store.files.filter(f => f.name !== name) })
+    // Remove the import tab without saving back (closeImportTab would re-save)
+    setOpenImports(prev => prev.filter(i => !(i.scope === scope && i.name === name)))
+    // Add to local files
+    setFiles(prev => [...prev, { name: file!.name, content: file!.content }])
+    // Switch to the newly added local file
+    setActiveTab({ type: 'local', index: files.length })
+    setActiveFileIndex(files.length)
+  }
+
   // Start renaming a file
   const startRename = (index: number) => {
     setRenamingIndex(index)
@@ -3200,6 +3288,10 @@ plots
                               draggable
                               onDragStart={(e) => e.dataTransfer.setData('text/plain', JSON.stringify({ name: f.name, scope: 'skript' }))}
                               onClick={() => { switchToImport('skript', f.name); setShowImportsDropdown(false) }}
+                              onContextMenu={(e) => {
+                                e.preventDefault()
+                                setImportContextMenu({ scope: 'skript', name: f.name, x: e.clientX, y: e.clientY })
+                              }}
                             >
                               <span className="flex items-center gap-1.5">
                                 <Package className="w-3 h-3 text-blue-500" />
@@ -3251,6 +3343,10 @@ plots
                           draggable
                           onDragStart={(e) => e.dataTransfer.setData('text/plain', JSON.stringify({ name: f.name, scope: 'global' }))}
                           onClick={() => { switchToImport('global', f.name); setShowImportsDropdown(false) }}
+                          onContextMenu={(e) => {
+                            e.preventDefault()
+                            setImportContextMenu({ scope: 'global', name: f.name, x: e.clientX, y: e.clientY })
+                          }}
                         >
                           <span className="flex items-center gap-1.5">
                             <Package className="w-3 h-3 text-blue-500" />
@@ -3454,14 +3550,39 @@ plots
                     {/* Open import tabs (visually distinct) */}
                     {isPython && openImports.map((imp) => {
                       const isActive = activeTab.type === 'import' && activeTab.scope === imp.scope && activeTab.name === imp.name
-                      return (
+                      const isRenaming = renamingImport?.scope === imp.scope && renamingImport?.name === imp.name
+                      return isRenaming ? (
+                        <input
+                          key={`import-rename-${imp.scope}-${imp.name}`}
+                          type="text"
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onBlur={() => renameImportFile(imp.scope, imp.name)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              renameImportFile(imp.scope, imp.name)
+                            } else if (e.key === 'Escape') {
+                              setRenamingImport(null)
+                              setRenameValue('')
+                            }
+                          }}
+                          autoFocus
+                          className="h-7 px-2 text-xs border rounded bg-background"
+                          style={{ width: '120px' }}
+                        />
+                      ) : (
                         <Button
                           key={`import-${imp.scope}-${imp.name}`}
                           size="sm"
                           variant={isActive ? 'secondary' : 'ghost'}
                           onClick={() => switchToImport(imp.scope, imp.name)}
+                          onDoubleClick={() => startImportRename(imp.scope, imp.name)}
+                          onContextMenu={(e) => {
+                            e.preventDefault()
+                            setImportContextMenu({ scope: imp.scope, name: imp.name, x: e.clientX, y: e.clientY })
+                          }}
                           className={`h-7 pl-2 pr-1 text-xs gap-1 group/tab ${isActive ? 'bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-900/50' : 'text-blue-600 dark:text-blue-400'}`}
-                          title={`${imp.scope === 'skript' ? 'Skript scope' : 'Global scope'}`}
+                          title={`${imp.scope === 'skript' ? 'Skript scope' : 'Global scope'} · Double-click to rename · Right-click for options`}
                         >
                           <Package className="w-3 h-3" />
                           {imp.name}
@@ -3534,6 +3655,52 @@ plots
                     </button>
                   </>
                 )}
+              </div>,
+              document.body
+            )}
+
+            {/* Import tab context menu - rendered via portal */}
+            {importContextMenu && typeof document !== 'undefined' && createPortal(
+              <div
+                ref={importContextMenuRef}
+                className="fixed bg-popover border rounded-lg shadow-lg py-1 min-w-[160px] z-[9999]"
+                style={{ top: `${importContextMenu.y}px`, left: `${importContextMenu.x}px` }}
+              >
+                <button
+                  onClick={() => { startImportRename(importContextMenu.scope, importContextMenu.name); setImportContextMenu(null) }}
+                  className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted"
+                >
+                  Rename
+                </button>
+                <button
+                  onClick={() => { makeLocal(importContextMenu.scope, importContextMenu.name); setImportContextMenu(null) }}
+                  className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted"
+                >
+                  Make local
+                </button>
+                {importContextMenu.scope !== 'global' && (
+                  <button
+                    onClick={() => { moveImportScope(importContextMenu.name, importContextMenu.scope, 'global'); setImportContextMenu(null) }}
+                    className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted"
+                  >
+                    Move to Global scope
+                  </button>
+                )}
+                {importContextMenu.scope !== 'skript' && skriptId && (
+                  <button
+                    onClick={() => { moveImportScope(importContextMenu.name, importContextMenu.scope, 'skript'); setImportContextMenu(null) }}
+                    className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted"
+                  >
+                    Move to Skript scope
+                  </button>
+                )}
+                <div className="border-t my-1" />
+                <button
+                  onClick={() => { deleteImportFile(importContextMenu.scope, importContextMenu.name); setImportContextMenu(null) }}
+                  className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted text-destructive"
+                >
+                  Delete
+                </button>
               </div>,
               document.body
             )}
