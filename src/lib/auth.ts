@@ -260,7 +260,18 @@ export const authOptions: NextAuthOptions = {
     },
   } : undefined,
   callbacks: {
-    async signIn() {
+    async signIn({ user }) {
+      // Record last login timestamp. Failure must not block sign-in.
+      if (user?.id) {
+        try {
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { lastLoginAt: new Date() },
+          })
+        } catch (err) {
+          console.error('Failed to update lastLoginAt:', err)
+        }
+      }
       return true
     },
     async jwt({ token, user, trigger, account, profile }) {

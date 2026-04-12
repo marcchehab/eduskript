@@ -156,6 +156,9 @@ model User {
   billingPlan String @default("free") @map("billing_plan") // "free" | "pro" | etc.
   subscriptions Subscription[]
 
+  // Last successful sign-in (updated in NextAuth signIn callback)
+  lastLoginAt DateTime? @map("last_login_at")
+
   // SEB exam tokens and sessions
   examTokens   ExamToken[]   @relation("ExamTokens")
   examSessions ExamSession[] @relation("ExamSessions")

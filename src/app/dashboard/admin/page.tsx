@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -60,8 +61,10 @@ interface User {
   studentPseudonym: string | null
   createdAt: Date
   updatedAt: Date
+  lastLoginAt: string | null
   accounts: OAuthAccount[]
   subscriptions: { status: string; currentPeriodEnd: string | null }[]
+  _count?: { pageAuthors: number }
 }
 
 export default function AdminPanelPage() {
@@ -651,8 +654,27 @@ export default function AdminPanelPage() {
                   </div>
                   <p className="text-sm text-muted-foreground">{user.email}</p>
                   <p className="text-sm text-muted-foreground">
-                    Page Slug: {user.pageSlug}
+                    Page Slug:{' '}
+                    {user.pageSlug ? (
+                      <Link
+                        href={`/${user.pageSlug}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline hover:text-foreground"
+                      >
+                        {user.pageSlug}
+                      </Link>
+                    ) : (
+                      '—'
+                    )}
+                    {' • '}
+                    {user._count?.pageAuthors ?? 0} page
+                    {(user._count?.pageAuthors ?? 0) === 1 ? '' : 's'}
                     {user.title && ` • ${user.title}`}
+                    {' • '}
+                    {user.lastLoginAt
+                      ? `last login ${new Date(user.lastLoginAt).toLocaleDateString()}`
+                      : 'never signed in'}
                   </p>
                 </div>
                 <div className="flex items-center gap-4">

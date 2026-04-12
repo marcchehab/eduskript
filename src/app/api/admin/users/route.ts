@@ -24,6 +24,7 @@ export async function GET() {
         studentPseudonym: true,
         createdAt: true,
         updatedAt: true,
+        lastLoginAt: true,
         accounts: {
           select: {
             id: true,
@@ -39,6 +40,9 @@ export async function GET() {
           },
           orderBy: { createdAt: 'desc' },
           take: 1,
+        },
+        _count: {
+          select: { pageAuthors: true },
         },
       },
       orderBy: {
