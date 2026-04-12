@@ -15,9 +15,12 @@ interface VideoUploadModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onUploadComplete?: () => void
+  // Skript to associate the uploaded video with via SkriptVideos.
+  // Omit for admin uploads that aren't tied to a specific skript.
+  skriptId?: string
 }
 
-export function VideoUploadModal({ open, onOpenChange, onUploadComplete }: VideoUploadModalProps) {
+export function VideoUploadModal({ open, onOpenChange, onUploadComplete, skriptId }: VideoUploadModalProps) {
   const [state, setState] = useState<UploadState>('idle')
   const [filename, setFilename] = useState('')
   const [file, setFile] = useState<File | null>(null)
@@ -87,7 +90,7 @@ export function VideoUploadModal({ open, onOpenChange, onUploadComplete }: Video
       const res = await fetch('/api/videos/upload-url', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: filename.trim() }),
+        body: JSON.stringify({ filename: filename.trim(), skriptId }),
       })
 
       if (!res.ok) {

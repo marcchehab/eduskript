@@ -239,8 +239,9 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // Also fetch all videos (they're global, not per-skript)
+    // Fetch videos connected to this skript via the SkriptVideos M2M
     const videos = await prisma.video.findMany({
+      where: { skripts: { some: { id: skriptId } } },
       select: {
         id: true,
         filename: true,

@@ -28,7 +28,7 @@ export function extractReferencedFilenames(content: string): string[] {
   for (const match of content.matchAll(imageRegex)) {
     const ref = match[1]
     if (!isLocalRef(ref)) continue
-    if (VIDEO_EXTENSIONS.test(ref)) continue // videos are global, skip
+    if (VIDEO_EXTENSIONS.test(ref)) continue // videos live in the Video table, handled separately
     filenames.add(ref)
 
     // Excalidraw: also add light/dark SVG variants
@@ -64,6 +64,25 @@ export function extractReferencedFilenames(content: string): string[] {
   for (const match of content.matchAll(linkRegex)) {
     const ref = match[1]
     if (!isLocalRef(ref)) continue
+    filenames.add(ref)
+  }
+
+  return [...filenames]
+}
+
+/**
+ * Extracts video filenames (.mp4, .mov) referenced in markdown content.
+ * Videos are stored in the Video table (not File), so they're handled separately
+ * from extractReferencedFilenames.
+ */
+export function extractReferencedVideoFilenames(content: string): string[] {
+  const filenames = new Set<string>()
+
+  const imageRegex = /!\[[^\]]*\]\(([^)\s]+)\)/g
+  for (const match of content.matchAll(imageRegex)) {
+    const ref = match[1]
+    if (!isLocalRef(ref)) continue
+    if (!VIDEO_EXTENSIONS.test(ref)) continue
     filenames.add(ref)
   }
 

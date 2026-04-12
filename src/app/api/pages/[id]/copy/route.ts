@@ -3,7 +3,10 @@ import { getServerSession } from 'next-auth'
 import { revalidatePath } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { extractReferencedFilenames } from '@/lib/extract-file-references'
+import {
+  extractReferencedFilenames,
+  extractReferencedVideoFilenames,
+} from '@/lib/extract-file-references'
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -13,6 +16,8 @@ interface RouteParams {
  * POST /api/pages/[id]/copy — Copy a published page into the caller's skript.
  * Creates a draft copy with provenance tracking (forkedFromPageId, forkedFromAuthorId).
  * Referenced files are duplicated as DB rows pointing to the same S3 objects (content-addressed).
+ * Referenced videos are duplicated as Video rows pointing to the same Mux asset
+ * (same playbackId, null muxAssetId to avoid @unique collision).
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
@@ -112,6 +117,27 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         : []
     const existingNames = new Set(existingTargetFiles.map((f) => f.name))
 
+    // Collect referenced videos from the source skript. Videos live in the
+    // Video table (not File), so we duplicate a DB row pointing to the same
+    // Mux asset — mirrors how files are content-addressed and shared.
+    const referencedVideoFilenames = extractReferencedVideoFilenames(page.content)
+
+    const sourceVideos =
+      referencedVideoFilenames.length > 0
+        ? await prisma.video.findMany({
+            where: {
+              filename: { in: referencedVideoFilenames },
+              skripts: { some: { id: page.skriptId } },
+            },
+            select: {
+              id: true,
+              filename: true,
+              provider: true,
+              metadata: true,
+            },
+          })
+        : []
+
     // Determine original author for provenance
     const originalAuthorId = page.authors[0]?.user.id ?? null
 
@@ -139,6 +165,41 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             createdBy: session.user.id,
           })),
         })
+      }
+
+      // Copy/connect videos referenced by the page.
+      // If the caller already owns a Video with the same filename (per the
+      // @@unique([filename, provider, uploadedById]) constraint), connect
+      // their existing row to the target skript. Otherwise create a new row
+      // pointing at the same Mux asset via the shared playbackId in metadata.
+      // muxAssetId / muxUploadId are NOT copied — they're globally unique
+      // webhook-lookup handles, not content references.
+      for (const src of sourceVideos) {
+        const existing = await tx.video.findFirst({
+          where: {
+            filename: src.filename,
+            provider: src.provider,
+            uploadedById: session.user.id,
+          },
+          select: { id: true },
+        })
+
+        if (existing) {
+          await tx.video.update({
+            where: { id: existing.id },
+            data: { skripts: { connect: { id: targetSkriptId } } },
+          })
+        } else {
+          await tx.video.create({
+            data: {
+              filename: src.filename,
+              provider: src.provider,
+              metadata: src.metadata ?? {},
+              uploadedById: session.user.id,
+              skripts: { connect: { id: targetSkriptId } },
+            },
+          })
+        }
       }
 
       // Resolve slug conflict

@@ -30,9 +30,9 @@ export async function getSkriptFiles(skriptId: string): Promise<SkriptFilesData>
     },
   })
 
-  // Also fetch videos by filename that might not be associated yet
-  // This helps during the transition period
+  // Fetch videos connected to this skript via the SkriptVideos M2M
   const allVideos = await prisma.video.findMany({
+    where: { skripts: { some: { id: skriptId } } },
     select: {
       id: true,
       filename: true,

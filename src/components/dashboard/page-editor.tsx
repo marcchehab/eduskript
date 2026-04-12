@@ -958,6 +958,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                 videos={videoList}
                 loading={fileListLoading}
                 isAdmin={session?.user?.isAdmin}
+                skriptId={skript.id}
                 onVideoAdded={refreshFileList}
                 onUploadComplete={() => {
                   refreshFileList()

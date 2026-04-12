@@ -12,9 +12,11 @@ interface VideoBrowserProps {
   isAdmin?: boolean
   onVideoAdded?: () => void
   onUploadComplete?: () => void
+  // Skript to associate uploaded videos with via SkriptVideos.
+  skriptId?: string
 }
 
-export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded, onUploadComplete }: VideoBrowserProps) {
+export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded, onUploadComplete, skriptId }: VideoBrowserProps) {
   const [query, setQuery] = useState('')
   const [copiedFilename, setCopiedFilename] = useState<string | null>(null)
   const [copiedPlaybackId, setCopiedPlaybackId] = useState<string | null>(null)
@@ -171,6 +173,7 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
           open={showUploadModal}
           onOpenChange={setShowUploadModal}
           onUploadComplete={onUploadComplete}
+          skriptId={skriptId}
         />
       </div>
     )
@@ -351,6 +354,7 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
         open={showUploadModal}
         onOpenChange={setShowUploadModal}
         onUploadComplete={onUploadComplete}
+        skriptId={skriptId}
       />
     </div>
   )
