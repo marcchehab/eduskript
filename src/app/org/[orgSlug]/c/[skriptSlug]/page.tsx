@@ -225,6 +225,7 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
         sidebarBehavior={organization.sidebarBehavior as 'contextual' | 'full' || 'contextual'}
         typographyPreference="modern"
         routePrefix={`/org/${orgSlug}/c`}
+        homeUrl={`/org/${orgSlug}`}
       >
         <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border">
           {isPreviewMode && (

@@ -168,6 +168,7 @@ export default async function OrgPublicPage({ params }: PageProps) {
       sidebarBehavior={organization.sidebarBehavior as 'contextual' | 'full' || 'contextual'}
       typographyPreference="modern"
       routePrefix={`/org/${orgSlug}/c`}
+      homeUrl={`/org/${orgSlug}`}
       pageId={page.id}
     >
       <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border">

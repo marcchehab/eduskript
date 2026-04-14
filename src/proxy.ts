@@ -156,6 +156,16 @@ export async function proxy(request: NextRequest) {
   return rewriteToOrg(request, DEFAULT_ORG_SLUG)
 }
 
+function rewriteWithStripPrefix(request: NextRequest, url: URL, stripPrefix: string) {
+  // Forward the prepended prefix to downstream server components via a
+  // request header so PublicSiteLayout can strip it from client-built URLs
+  // (otherwise links would double up: /org/slug/org/slug/...). Read by the
+  // server wrapper in src/components/public/layout.tsx.
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set('x-proxy-strip-prefix', stripPrefix)
+  return NextResponse.rewrite(url, { request: { headers: requestHeaders } })
+}
+
 function rewriteToOrg(request: NextRequest, orgSlug: string) {
   const url = request.nextUrl.clone()
   const path = url.pathname
@@ -165,7 +175,7 @@ function rewriteToOrg(request: NextRequest, orgSlug: string) {
   // /about -> /org/eduskript/about (if sub-pages exist in future)
   url.pathname = `/org/${orgSlug}${path === '/' ? '' : path}`
 
-  return NextResponse.rewrite(url)
+  return rewriteWithStripPrefix(request, url, `/org/${orgSlug}`)
 }
 
 function rewriteToTeacher(request: NextRequest, pageSlug: string) {
@@ -177,7 +187,7 @@ function rewriteToTeacher(request: NextRequest, pageSlug: string) {
   // /about -> /teacher-name/about
   url.pathname = `/${pageSlug}${path === '/' ? '' : path}`
 
-  return NextResponse.rewrite(url)
+  return rewriteWithStripPrefix(request, url, `/${pageSlug}`)
 }
 
 export const config = {
