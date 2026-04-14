@@ -92,13 +92,23 @@ function getPathFromStroke(outlinePoints: number[][]): Path2D {
 
 // Map our stroke params to perfect-freehand options.
 // Our width is radius-like; perfect-freehand size is diameter, hence * 2.
-function getStrokeOptions(width: number): StrokeOptions {
+// `last` must be true for finalized strokes — without it the terminus is
+// rendered as a wide round cap (visible blob). Pass false for in-progress
+// pointermove rendering. `end.taper` cancels the velocity-driven width
+// spike when the pen decelerates before lift-off (otherwise leaves a
+// clubbed terminus even with last:true). Keep in sync with the SVG
+// layer's copy: src/lib/annotations/svg-path.ts.
+function getStrokeOptions(width: number, last = false): StrokeOptions {
   return {
     size: width * 2,
     thinning: 0.6,
     smoothing: 0.5,
     streamline: 0.3,
     simulatePressure: false,
+    last,
+    // See svg-path.ts copy for rationale. t^(1/8) keeps width near
+    // full for most of the taper region and drops sharply at the tip.
+    end: { taper: true, easing: (t) => Math.pow(t, 1 / 8) },
   }
 }
 
@@ -297,7 +307,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
 
         // Convert {x,y,pressure} objects to [x,y,pressure] arrays for perfect-freehand
         const inputPoints = path.points.map(p => [p.x, p.y, p.pressure])
-        const outline = getStroke(inputPoints, getStrokeOptions(path.width))
+        const outline = getStroke(inputPoints, getStrokeOptions(path.width, true))
         const pathObj = getPathFromStroke(outline)
 
         ctx.fillStyle = path.color

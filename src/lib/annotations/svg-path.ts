@@ -22,14 +22,31 @@ export { getStroke }
 /**
  * Map stroke width to perfect-freehand options.
  * Width is radius-like; perfect-freehand size is diameter, hence * 2.
+ *
+ * `last` MUST be true for finalized strokes. Without it, perfect-freehand
+ * assumes more points may arrive and pads the terminus with a wide round
+ * cap, which renders as a visible blob at the end of the stroke. Pass
+ * false (the default) for in-progress rendering during pointermove.
+ *
+ * `taperEnd` cancels the velocity-driven width spike at stroke end. Pens
+ * always decelerate before lift-off, which thinning amplifies into a
+ * clubbed terminus; tapering forces the end to thin to a point.
  */
-export function getStrokeOptions(width: number): StrokeOptions {
+export function getStrokeOptions(width: number, last = false): StrokeOptions {
   return {
     size: width * 2,
     thinning: 0.6,
     smoothing: 0.5,
     streamline: 0.3,
     simulatePressure: false,
+    last,
+    // Taper the terminus to cancel the velocity-driven width spike that
+    // appears as a clubbed end (pens always decelerate before lift-off).
+    // perfect-freehand's `t` runs 1 (start of taper) → 0 (terminus) and
+    // its result multiplies the radius. t^(1/8) holds ~92% width at the
+    // halfway point and only collapses near the very tip — visually a
+    // crisp snap rather than a soft fade.
+    end: { taper: true, easing: (t) => Math.pow(t, 1 / 8) },
   }
 }
 

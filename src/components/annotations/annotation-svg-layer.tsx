@@ -66,7 +66,7 @@ export const AnnotationSvgLayer = memo(function AnnotationSvgLayer({
       .filter(s => s.mode !== 'erase' && s.points.length >= 2)
       .map((stroke): PathDatum => {
         const inputPoints = stroke.points.map(p => [p.x, p.y, p.pressure])
-        const outline = getStroke(inputPoints, getStrokeOptions(stroke.width))
+        const outline = getStroke(inputPoints, getStrokeOptions(stroke.width, true))
         const d = getSvgPathFromStroke(outline)
         return {
           id: stroke.id,
