@@ -2200,7 +2200,15 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
       // Parse canvas data to check if we have strokes
       const strokes = JSON.parse(currentCanvasData) as StrokeData[]
 
-      if (strokes.length === 0) return
+      if (strokes.length === 0) {
+        // User erased every stroke — persist the empty state. Without this
+        // the beforeunload-triggered performSave would silently drop and the
+        // original strokes return on reload. Route through deleteAnnotationData
+        // so the server receives the proper "no annotations" payload (empty
+        // canvasData + zeroed pageVersion) instead of a stroke-less array.
+        await deleteAnnotationData()
+        return
+      }
 
       // Build heading offsets map
       const headingOffsets = Object.fromEntries(
@@ -2238,7 +2246,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
       // Reset to idle after showing error briefly
       setTimeout(() => setSaveState('idle'), 3000)
     }
-  }, [updateAnnotationData, viewMode, syncOptions, targetingKey])
+  }, [updateAnnotationData, deleteAnnotationData, viewMode, syncOptions, targetingKey])
 
   // Keep ref in sync for use in effects that can't depend on the function directly
   // eslint-disable-next-line react-hooks/immutability -- Intentional: sync ref with callback for effects
@@ -2307,7 +2315,12 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
         ensureActiveLayerVisible()
       }
 
-      if (!hasData) return
+      // When trash button triggers this path it has already set isClearingRef
+      // and will run its own deleteAnnotationData; skip to avoid a redundant
+      // scheduled save. For the eraser-to-empty case isClearingRef is false,
+      // so we fall through to the normal save path below — performSave routes
+      // empty arrays to deleteAnnotationData itself.
+      if (!hasData && isClearingRef.current) return
 
       // Update the class indicator when teacher draws on class broadcast
       if (isTeacher && viewMode === 'class-broadcast' && selectedClass) {
