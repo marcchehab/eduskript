@@ -25,8 +25,8 @@ const KNOWN_ORG_DOMAINS: Record<string, string> = {
 
 // Known domains that map directly to teacher pageSlugs (no DB lookup needed)
 const KNOWN_TEACHER_DOMAINS: Record<string, string> = {
-  'informatikgarten.ch': 'ig',
-  'www.informatikgarten.ch': 'ig',
+  'informatikgarten.ch': 'informatikgarten',
+  'www.informatikgarten.ch': 'informatikgarten',
 }
 
 export async function proxy(request: NextRequest) {

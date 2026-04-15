@@ -104,7 +104,7 @@ describe('proxy routing', () => {
   })
 
   describe('known domains (no DB lookup)', () => {
-    it('should rewrite informatikgarten.ch to /ig', async () => {
+    it('should rewrite informatikgarten.ch to /informatikgarten', async () => {
       const { proxy } = await import('@/proxy')
       const { NextResponse } = await import('next/server')
 
@@ -113,11 +113,11 @@ describe('proxy routing', () => {
 
       expect(NextResponse.rewrite).toHaveBeenCalled()
       const rewriteCall = (NextResponse.rewrite as any).mock.calls[0][0]
-      expect(rewriteCall.pathname).toBe('/ig')
+      expect(rewriteCall.pathname).toBe('/informatikgarten')
       expect(mockFetch).not.toHaveBeenCalled()
     })
 
-    it('should rewrite www.informatikgarten.ch to /ig', async () => {
+    it('should rewrite www.informatikgarten.ch to /informatikgarten', async () => {
       const { proxy } = await import('@/proxy')
       const { NextResponse } = await import('next/server')
 
@@ -126,7 +126,7 @@ describe('proxy routing', () => {
 
       expect(NextResponse.rewrite).toHaveBeenCalled()
       const rewriteCall = (NextResponse.rewrite as any).mock.calls[0][0]
-      expect(rewriteCall.pathname).toBe('/ig/grundjahr')
+      expect(rewriteCall.pathname).toBe('/informatikgarten/grundjahr')
       expect(mockFetch).not.toHaveBeenCalled()
     })
 
