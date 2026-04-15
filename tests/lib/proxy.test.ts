@@ -103,33 +103,7 @@ describe('proxy routing', () => {
     })
   })
 
-  describe('known domains (no DB lookup)', () => {
-    it('should rewrite informatikgarten.ch to /informatikgarten', async () => {
-      const { proxy } = await import('@/proxy')
-      const { NextResponse } = await import('next/server')
-
-      const request = createMockRequest('informatikgarten.ch', '/')
-      await proxy(request as any)
-
-      expect(NextResponse.rewrite).toHaveBeenCalled()
-      const rewriteCall = (NextResponse.rewrite as any).mock.calls[0][0]
-      expect(rewriteCall.pathname).toBe('/informatikgarten')
-      expect(mockFetch).not.toHaveBeenCalled()
-    })
-
-    it('should rewrite www.informatikgarten.ch to /informatikgarten', async () => {
-      const { proxy } = await import('@/proxy')
-      const { NextResponse } = await import('next/server')
-
-      const request = createMockRequest('www.informatikgarten.ch', '/grundjahr')
-      await proxy(request as any)
-
-      expect(NextResponse.rewrite).toHaveBeenCalled()
-      const rewriteCall = (NextResponse.rewrite as any).mock.calls[0][0]
-      expect(rewriteCall.pathname).toBe('/informatikgarten/grundjahr')
-      expect(mockFetch).not.toHaveBeenCalled()
-    })
-
+  describe('app domains (no DB lookup)', () => {
     it('should rewrite eduskript.org to /org/eduskript', async () => {
       const { proxy } = await import('@/proxy')
       const { NextResponse } = await import('next/server')

@@ -17,16 +17,12 @@ const NEGATIVE_CACHE_TTL = 30 * 1000 // 30 seconds for "not found" results
 // Default organization slug - all unknown domains fall back to this org
 const DEFAULT_ORG_SLUG = process.env.DEFAULT_ORG_SLUG || 'eduskript'
 
-// Known domains that map directly to org slugs (no DB lookup needed)
-const KNOWN_ORG_DOMAINS: Record<string, string> = {
+// The app's own hostnames — hardcoded so the site can't be taken
+// offline by a bad DB row. Every other custom domain (teacher or org)
+// is resolved via the DB through /api/internal/resolve-domain.
+const APP_DOMAINS: Record<string, string> = {
   'eduskript.org': 'eduskript',
   'www.eduskript.org': 'eduskript',
-}
-
-// Known domains that map directly to teacher pageSlugs (no DB lookup needed)
-const KNOWN_TEACHER_DOMAINS: Record<string, string> = {
-  'informatikgarten.ch': 'informatikgarten',
-  'www.informatikgarten.ch': 'informatikgarten',
 }
 
 export async function proxy(request: NextRequest) {
@@ -71,12 +67,9 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // Check known domains first (no DB/API lookup needed)
-  if (KNOWN_TEACHER_DOMAINS[domain]) {
-    return rewriteToTeacher(request, KNOWN_TEACHER_DOMAINS[domain])
-  }
-  if (KNOWN_ORG_DOMAINS[domain]) {
-    return rewriteToOrg(request, KNOWN_ORG_DOMAINS[domain])
+  // Short-circuit for the app's own hostnames (no DB/API lookup needed)
+  if (APP_DOMAINS[domain]) {
+    return rewriteToOrg(request, APP_DOMAINS[domain])
   }
 
   // For localhost, only rewrite the root path to the default org.
