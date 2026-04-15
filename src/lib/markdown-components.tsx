@@ -27,6 +27,7 @@ import { Flex, FlexItem } from '@/components/markdown/flex'
 import { PluginContainer } from '@/components/markdown/plugin-container'
 import { Fullwidth } from '@/components/markdown/fullwidth'
 import { PdfEmbed } from '@/components/markdown/pdf-embed'
+import { MermaidDiagram } from '@/components/markdown/mermaid-diagram'
 
 // Simple hash function for generating stable IDs
 function hashCode(str: string): string {
@@ -532,6 +533,10 @@ export function createMarkdownComponents(
     'tabs-container': TabsContainerComponent,
     'tab-item': TabItem,
     'youtube-embed': YoutubeEmbedComponent,
+    'mermaid-diagram': (props: { 'data-definition'?: string }) => {
+      const encoded = props['data-definition'] ?? ''
+      return <MermaidDiagram definition={decodeHtmlEntities(encoded)} />
+    },
     'muxvideo': MuxVideoComponent,
     'excalidraw-image': ExcalidrawImageComponent,
     'question': QuizQuestionComponent,

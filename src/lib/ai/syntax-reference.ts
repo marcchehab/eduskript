@@ -106,7 +106,32 @@ SELECT * FROM movies LIMIT 10;
 \`\`\`javascript editor single
 console.log("Simple example");
 \`\`\`
-\`\`\``)
+\`\`\`
+
+### Python Checks (auto-grading)
+
+Pair a \`python editor\` with a \`python-check\` block to verify student code with \`assert\` statements. The editor MUST have an \`id\`, and the check block references it via \`for="<id>"\`. The check block is never rendered — it only runs when the student clicks "Check".
+
+\`\`\`markdown
+\`\`\`python editor id="fib"
+def fibonacci(n):
+    pass
+
+print(fibonacci(5))
+\`\`\`
+
+\`\`\`python-check for="fib" points="10" max-checks="5"
+assert fibonacci(0) == 0, "fibonacci(0) should return 0"
+assert fibonacci(5) == 5, "fibonacci(5) should return 5"
+\`\`\`
+\`\`\`
+
+**python-check attributes:**
+- \`for="<id>"\` — **required**, must match the editor's \`id\`
+- \`points="<n>"\` — optional score value
+- \`max-checks="<n>"\` — optional limit on check attempts
+
+If you omit \`for\` or the editor \`id\`, the check block is silently dropped.`)
 
   // Math
   sections.push(`## Math (KaTeX)
@@ -178,6 +203,64 @@ Inline \`style="..."\` attributes also work on any element.`)
 Reference video files by name. The system looks up the corresponding \`.json\` metadata file for Mux playback.
 
 \`![Video description](lecture.mp4)\``)
+
+  // YouTube
+  sections.push(`## YouTube Embeds
+
+Use the \`<youtube-embed>\` custom element (lowercase, data-prefixed attributes):
+
+\`\`\`html
+<youtube-embed data-id="dQw4w9WgXcQ"></youtube-embed>
+<youtube-embed data-id="dQw4w9WgXcQ" data-start-time="120"></youtube-embed>
+<youtube-embed data-playlist="PLxyz..."></youtube-embed>
+\`\`\`
+
+**Attributes:** \`data-id\` (video ID) OR \`data-playlist\` (playlist ID) — one is required. \`data-start-time\` is optional (seconds).`)
+
+  // Mermaid
+  sections.push(`## Mermaid Diagrams
+
+Use a \`\`\`mermaid\`\`\` code fence. Diagrams render directly in the page with automatic light/dark theme switching.
+
+\`\`\`markdown
+\`\`\`mermaid
+graph LR
+  A --> B --> C
+\`\`\`
+\`\`\`
+
+Supports all mermaid diagram types: flowcharts, sequence diagrams, class diagrams, state, ER, gantt, etc.`)
+
+  // Plugins
+  sections.push(`## Built-in Plugins
+
+Embed interactive plugins with \`<plugin src="<author>/<slug>" [attrs]></plugin>\`. Plugins are user-scoped; the canonical built-ins live under the \`eduadmin\` namespace.
+
+**Available built-in plugins:**
+
+- \`eduadmin/mod-calc\` — Modular exponentiation calculator (cryptography)
+  - \`formula="dlog|rsa-enc|rsa-dec"\`, \`base\`, \`exp\`, \`mod\`, \`lang="en|de"\`
+- \`eduadmin/color-sliders\` — RGB/hex color picker (no attrs)
+- \`eduadmin/cipher-lab\` — Caesar/Vigenère cipher tool
+  - \`cipher="caesar|vigenere"\`, \`cipherkey\`, \`text\`, \`lang="en|de"\`
+- \`eduadmin/mod-clock\` — Modular arithmetic clock
+  - \`mod\` (default 7), \`max\` (default 500), \`font\` (default 7), \`lang\`
+- \`eduadmin/diffie-hellman\` — DH key exchange simulator
+  - \`p\` (default 23), \`g\` (default 5), \`a\` (default 4), \`b\` (default 3), \`lang\`
+- \`eduadmin/dijkstra-visualizer\` — Dijkstra's algorithm on a draggable graph
+  - \`initialnodecount\` (default 7), \`initialdirected\` (default false), \`lang\`
+- \`eduadmin/data-cube-visualizer\` — 3D RGB data cube for image quantization
+  - \`lang="en|de"\`
+
+**Universal attribute:** \`height="500"\` (optional, pixels) overrides the plugin's default height.
+
+Example:
+\`\`\`html
+<plugin src="eduadmin/mod-clock" mod="12" max="144" lang="de" height="500"></plugin>
+<plugin src="eduadmin/cipher-lab" cipher="caesar" text="HELLO" lang="en"></plugin>
+\`\`\`
+
+All attributes are lowercase string values (not JSX expressions). Self-closing form \`<plugin ... />\` is also valid.`)
 
   // Tabs
   sections.push(`## Tabs
@@ -258,6 +341,10 @@ export function getCondensedSyntaxReference(): string {
   - Languages: python, javascript, sql, java, cpp, go, rust, etc.
   - \`solution="SELECT ..."\`: SQL only — shows pass/fail after each run. Multi-line: use \`\\n\` literals inside the quotes.
 
+**Python Checks:** pair \`\`\`python editor id="x"\`\`\` with \`\`\`python-check for="x"\`\`\` containing \`assert\` statements.
+  - \`for="<id>"\` is REQUIRED and must match the editor's \`id\` — otherwise the check block is silently dropped.
+  - Optional: \`points="10"\`, \`max-checks="5"\`. Check block is never rendered, only runs on "Check".
+
 **Math:** \`$inline$\` and \`$$display$$\` (KaTeX)
 
 **Images:** \`![alt](img.png)\` or \`<img src="img.png" alt="alt" style="width: 50%" align="left" wrap="true" />\`
@@ -270,5 +357,14 @@ export function getCondensedSyntaxReference(): string {
 **Quiz:** \`<question id="q1" type="single"><answer correct="true">Right</answer><answer feedback="Nope">Wrong</answer></question>\`
   - Use \`correct="true"\` to mark the correct answer
   - If you see \`<Option>\` or \`<quiz-option>\`, convert to \`<answer>\`
-  - Do NOT use \`:::quiz\` syntax — it is not implemented`
+  - Do NOT use \`:::quiz\` syntax — it is not implemented
+
+**YouTube:** \`<youtube-embed data-id="VIDEO_ID" data-start-time="120"></youtube-embed>\` (or \`data-playlist="..."\`). Lowercase, data-prefixed attrs only.
+
+**Mermaid:** \`\`\`mermaid fenced code block — renders natively, theme-aware.
+
+**Built-in plugins:** \`<plugin src="eduadmin/<slug>" [attrs] [height="500"]></plugin>\` — user-scoped; canonical built-ins under \`eduadmin\`:
+  - \`mod-calc\` (\`formula\`, \`base\`, \`exp\`, \`mod\`, \`lang\`), \`color-sliders\`, \`cipher-lab\` (\`cipher\`, \`cipherkey\`, \`text\`, \`lang\`)
+  - \`mod-clock\` (\`mod\`, \`max\`, \`font\`, \`lang\`), \`diffie-hellman\` (\`p\`, \`g\`, \`a\`, \`b\`, \`lang\`)
+  - \`dijkstra-visualizer\` (\`initialnodecount\`, \`initialdirected\`, \`lang\`), \`data-cube-visualizer\` (\`lang\`)`
 }

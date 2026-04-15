@@ -12,8 +12,9 @@ interface ParentNode extends Node {
 }
 
 /**
- * Remark plugin to convert ```mermaid code blocks into <plugin> elements.
- * The diagram definition is passed as inner text content (read via config.content in the plugin SDK).
+ * Remark plugin to convert ```mermaid code blocks into <mermaid-diagram>
+ * custom elements. Rendering happens in the React markdown tree via the
+ * MermaidDiagram component (see src/components/markdown/mermaid-diagram.tsx).
  *
  * Example markdown:
  * ```mermaid
@@ -33,15 +34,16 @@ export function remarkMermaid() {
       const definition = (node.value || '').trim()
       if (!definition) continue
 
-      // Encode content to survive HTML serialization
+      // Encode definition for safe inclusion in the data attribute
       const encoded = definition
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
 
       parent.children[i] = {
         type: 'html',
-        value: `<plugin src="eduadmin/mermaid-diagram">${encoded}</plugin>`,
+        value: `<mermaid-diagram data-definition="${encoded}"></mermaid-diagram>`,
       } as Node
     }
   }

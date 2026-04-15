@@ -69,18 +69,6 @@ const PLUGINS = [
     file: 'cipher-lab.html',
   },
   {
-    slug: 'mermaid-diagram',
-    name: 'Mermaid Diagram',
-    description: 'Renders Mermaid diagrams (flowcharts, sequences, etc.) with theme support',
-    manifest: {
-      defaultHeight: 400,
-      configSchema: {
-        definition: { type: 'string', description: 'Mermaid diagram definition' },
-      },
-    },
-    file: 'mermaid-diagram.html',
-  },
-  {
     slug: 'data-cube-visualizer',
     name: 'Data Cube Visualizer',
     description: 'Interactive 3D RGB data cube for teaching image quantization',
