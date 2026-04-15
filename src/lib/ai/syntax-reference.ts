@@ -6,6 +6,13 @@
 import { calloutTypes } from '@/lib/remark-plugins/callouts'
 
 /**
+ * pageSlug of the user that owns the built-in plugins (mod-calc, cipher-lab, etc.).
+ * Configurable via BUILTIN_PLUGIN_OWNER env var; defaults to "eduadmin",
+ * which is autoseeded on every deployment.
+ */
+const BUILTIN_PLUGIN_OWNER = process.env.BUILTIN_PLUGIN_OWNER || 'eduadmin'
+
+/**
  * Generates markdown syntax documentation for the AI assistant.
  * This ensures the AI always knows about current supported features.
  */
@@ -232,32 +239,33 @@ graph LR
 Supports all mermaid diagram types: flowcharts, sequence diagrams, class diagrams, state, ER, gantt, etc.`)
 
   // Plugins
+  const owner = BUILTIN_PLUGIN_OWNER
   sections.push(`## Built-in Plugins
 
-Embed interactive plugins with \`<plugin src="<author>/<slug>" [attrs]></plugin>\`. Plugins are user-scoped; the canonical built-ins live under the \`eduadmin\` namespace.
+Embed interactive plugins with \`<plugin src="<author>/<slug>" [attrs]></plugin>\`. Plugins are user-scoped; on this deployment the built-ins live under the \`${owner}\` namespace.
 
 **Available built-in plugins:**
 
-- \`eduadmin/mod-calc\` — Modular exponentiation calculator (cryptography)
+- \`${owner}/mod-calc\` — Modular exponentiation calculator (cryptography)
   - \`formula="dlog|rsa-enc|rsa-dec"\`, \`base\`, \`exp\`, \`mod\`, \`lang="en|de"\`
-- \`eduadmin/color-sliders\` — RGB/hex color picker (no attrs)
-- \`eduadmin/cipher-lab\` — Caesar/Vigenère cipher tool
+- \`${owner}/color-sliders\` — RGB/hex color picker (no attrs)
+- \`${owner}/cipher-lab\` — Caesar/Vigenère cipher tool
   - \`cipher="caesar|vigenere"\`, \`cipherkey\`, \`text\`, \`lang="en|de"\`
-- \`eduadmin/mod-clock\` — Modular arithmetic clock
+- \`${owner}/mod-clock\` — Modular arithmetic clock
   - \`mod\` (default 7), \`max\` (default 500), \`font\` (default 7), \`lang\`
-- \`eduadmin/diffie-hellman\` — DH key exchange simulator
+- \`${owner}/diffie-hellman\` — DH key exchange simulator
   - \`p\` (default 23), \`g\` (default 5), \`a\` (default 4), \`b\` (default 3), \`lang\`
-- \`eduadmin/dijkstra-visualizer\` — Dijkstra's algorithm on a draggable graph
+- \`${owner}/dijkstra-visualizer\` — Dijkstra's algorithm on a draggable graph
   - \`initialnodecount\` (default 7), \`initialdirected\` (default false), \`lang\`
-- \`eduadmin/data-cube-visualizer\` — 3D RGB data cube for image quantization
+- \`${owner}/data-cube-visualizer\` — 3D RGB data cube for image quantization
   - \`lang="en|de"\`
 
 **Universal attribute:** \`height="500"\` (optional, pixels) overrides the plugin's default height.
 
 Example:
 \`\`\`html
-<plugin src="eduadmin/mod-clock" mod="12" max="144" lang="de" height="500"></plugin>
-<plugin src="eduadmin/cipher-lab" cipher="caesar" text="HELLO" lang="en"></plugin>
+<plugin src="${owner}/mod-clock" mod="12" max="144" lang="de" height="500"></plugin>
+<plugin src="${owner}/cipher-lab" cipher="caesar" text="HELLO" lang="en"></plugin>
 \`\`\`
 
 All attributes are lowercase string values (not JSX expressions). Self-closing form \`<plugin ... />\` is also valid.`)
@@ -363,7 +371,7 @@ export function getCondensedSyntaxReference(): string {
 
 **Mermaid:** \`\`\`mermaid fenced code block — renders natively, theme-aware.
 
-**Built-in plugins:** \`<plugin src="eduadmin/<slug>" [attrs] [height="500"]></plugin>\` — user-scoped; canonical built-ins under \`eduadmin\`:
+**Built-in plugins:** \`<plugin src="${BUILTIN_PLUGIN_OWNER}/<slug>" [attrs] [height="500"]></plugin>\` — user-scoped; built-ins on this deployment under \`${BUILTIN_PLUGIN_OWNER}\`:
   - \`mod-calc\` (\`formula\`, \`base\`, \`exp\`, \`mod\`, \`lang\`), \`color-sliders\`, \`cipher-lab\` (\`cipher\`, \`cipherkey\`, \`text\`, \`lang\`)
   - \`mod-clock\` (\`mod\`, \`max\`, \`font\`, \`lang\`), \`diffie-hellman\` (\`p\`, \`g\`, \`a\`, \`b\`, \`lang\`)
   - \`dijkstra-visualizer\` (\`initialnodecount\`, \`initialdirected\`, \`lang\`), \`data-cube-visualizer\` (\`lang\`)`
