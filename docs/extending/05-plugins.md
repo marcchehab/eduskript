@@ -70,13 +70,12 @@ Inside the plugin, `ctx.config.formula` will be `"rsa-enc"`.
 Text between tags is available as `ctx.config.content`:
 
 ```markdown
-<plugin src="yourPageSlug/mermaid-diagram">
-graph TD
-    A[Start] --> B[End]
+<plugin src="yourPageSlug/my-diagram">
+start -> middle -> end
 </plugin>
 ```
 
-Inside the plugin, `ctx.config.content` will be the diagram definition.
+Inside the plugin, `ctx.config.content` will be the text between the tags.
 
 ## SDK Reference
 
@@ -237,7 +236,6 @@ See `scripts/seed-plugins/` for reference implementations at various complexity 
 | `color-sliders.html` | Simple | Pure vanilla JS, no dependencies |
 | `mod-calc.html` | Simple | Config via attributes (`formula`), BigInt math |
 | `cipher-lab.html` | Medium | Multiple modes, clipboard API, tabs |
-| `mermaid-diagram.html` | Medium | CDN library, inner content (`config.content`) |
 | `data-cube-visualizer.html` | Complex | Three.js via ES module importmap, 3D rendering |
 | `dijkstra-visualizer.html` | Complex | SVG canvas, algorithm visualization, drag/zoom |
 
