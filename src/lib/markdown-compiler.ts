@@ -67,6 +67,7 @@ export const sanitizeSchema = {
     'question',
     'quiz-option',
     'answer',
+    'mermaid-diagram',
     'stickme',
     'demoeditor',
     'ourteachers',
@@ -103,6 +104,7 @@ export const sanitizeSchema = {
     'code-editor': ['dataLanguage', 'dataCode', 'dataFiles', 'dataId', 'dataDb', 'dataSchemaImage', 'dataSingle', 'dataShowCanvas', 'dataSolution', 'dataExam', 'dataCheckCode', 'dataCheckPoints', 'dataMaxChecks', 'data-language', 'data-code', 'data-files', 'data-id', 'data-db', 'data-schema-image', 'data-single', 'data-show-canvas', 'data-solution', 'data-exam', 'data-check-code', 'data-check-points', 'data-max-checks'],
     'tabs-container': ['dataItems', 'data-items'],
     'youtube-embed': ['dataId', 'dataPlaylist', 'dataStartTime', 'data-id', 'data-playlist', 'data-start-time'],
+    'mermaid-diagram': ['dataDefinition', 'data-definition'],
     'muxvideo': ['src', 'alt'],
     'excalidraw-image': ['src', 'alt', 'dataAlign', 'dataWrap', 'data-align', 'data-wrap'],
     // <excali> component - shorthand for excalidraw (src without .excalidraw extension)
