@@ -6,7 +6,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogPortal, DialogOverlay, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import * as DialogPrimitive from '@radix-ui/react-dialog'
+import { X } from 'lucide-react'
 import { Save } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import { useTheme } from 'next-themes'
@@ -174,49 +176,61 @@ export function ExcalidrawEditor({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-[95vw] max-h-[95vh] w-[1400px] h-[900px] p-0 flex flex-col">
-        <DialogHeader className="p-4 border-b border-border shrink-0">
-          <DialogTitle>Edit Drawing</DialogTitle>
-          <div className="flex items-center gap-4 mt-4">
-            <div className="flex-1">
-              <Label htmlFor="drawing-name">Drawing Name</Label>
-              <Input
-                id="drawing-name"
-                value={drawingName}
-                onChange={(e) => setDrawingName(e.target.value)}
-                placeholder="my-drawing"
-                className="mt-1"
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                Will be saved as: {drawingName || 'my-drawing'}.excalidraw
-              </p>
-            </div>
-            <Button
-              onClick={handleSave}
-              disabled={isSaving || !drawingName.trim()}
-              className="mt-6"
-            >
-              <Save className="w-4 h-4 mr-2" />
-              {isSaving ? 'Saving...' : 'Save Drawing'}
-            </Button>
-          </div>
-        </DialogHeader>
+      {/* Use flexbox centering instead of CSS transform centering.
+         Transforms create a new coordinate space that shifts Excalidraw's
+         pointer events by ~100px, causing cursor offset issues. */}
+      <DialogPortal>
+        <DialogOverlay className="flex items-center justify-center">
+          <DialogPrimitive.Content className="z-50 w-[1400px] h-[900px] max-w-[95vw] max-h-[95vh] border bg-background shadow-lg sm:rounded-lg p-0 flex flex-col relative">
+            <DialogHeader className="p-4 border-b border-border shrink-0">
+              <DialogTitle>Edit Drawing</DialogTitle>
+              <div className="flex items-center gap-4 mt-4">
+                <div className="flex-1">
+                  <Label htmlFor="drawing-name">Drawing Name</Label>
+                  <Input
+                    id="drawing-name"
+                    value={drawingName}
+                    onChange={(e) => setDrawingName(e.target.value)}
+                    placeholder="my-drawing"
+                    className="mt-1"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Will be saved as: {drawingName || 'my-drawing'}.excalidraw
+                  </p>
+                </div>
+                <Button
+                  onClick={handleSave}
+                  disabled={isSaving || !drawingName.trim()}
+                  className="mt-6"
+                >
+                  <Save className="w-4 h-4 mr-2" />
+                  {isSaving ? 'Saving...' : 'Save Drawing'}
+                </Button>
+              </div>
+            </DialogHeader>
 
-        <div className="flex-1 min-h-0">
-          {open && (
-            <Excalidraw
-              key={editorKey} // Force remount with latest data on every open
-              excalidrawAPI={(api) => setExcalidrawAPI(api as ExcalidrawImperativeAPI)}
-              initialData={(initialData ? {
-                elements: initialData.elements,
-                appState: initialData.appState,
-                files: initialData.files,  // Include embedded images
-              } : undefined) as never}
-              theme={isDark ? 'dark' : 'light'}
-            />
-          )}
-        </div>
-      </DialogContent>
+            <div className="flex-1 min-h-0">
+              {open && (
+                <Excalidraw
+                  key={editorKey} // Force remount with latest data on every open
+                  excalidrawAPI={(api) => setExcalidrawAPI(api as ExcalidrawImperativeAPI)}
+                  initialData={(initialData ? {
+                    elements: initialData.elements,
+                    appState: initialData.appState,
+                    files: initialData.files,  // Include embedded images
+                  } : undefined) as never}
+                  theme={isDark ? 'dark' : 'light'}
+                />
+              )}
+            </div>
+
+            <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
+              <X className="h-4 w-4" />
+              <span className="sr-only">Close</span>
+            </DialogPrimitive.Close>
+          </DialogPrimitive.Content>
+        </DialogOverlay>
+      </DialogPortal>
       <AlertDialogModal
         open={alert.open}
         onOpenChange={alert.setOpen}
