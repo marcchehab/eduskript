@@ -48,5 +48,5 @@ export function MermaidDiagram({ definition }: { definition: string }) {
     return <div className="mermaid-loading my-4 h-24" aria-busy="true" />
   }
 
-  return <div className="mermaid my-4 flex justify-center" dangerouslySetInnerHTML={{ __html: svg }} />
+  return <div className="mermaid not-prose my-4 flex justify-center" dangerouslySetInnerHTML={{ __html: svg }} />
 }
