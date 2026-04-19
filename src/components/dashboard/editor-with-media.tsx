@@ -443,8 +443,11 @@ export function EditorWithMedia({
           controls (e.g. the fullscreen toggle itself) need to stay reachable. */}
       {metadataSlot}
 
-      {/* Editor card */}
-      <Card className={fullscreen ? 'border-0 shadow-none flex-1 flex flex-col' : ''}>
+      {/* Editor card. In fullscreen, `min-h-0` is the magic bit: without it
+          the flex child defaults to min-height:auto and refuses to shrink
+          below its content, which breaks the inner panes' ability to scroll
+          within their own bounds. */}
+      <Card className={fullscreen ? 'border-0 shadow-none flex-1 min-h-0 flex flex-col' : ''}>
         {!fullscreen && (description !== null) && (
           <CardHeader className="pb-2 flex-row items-center justify-between gap-2">
             <CardDescription className="flex-1">

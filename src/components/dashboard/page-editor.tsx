@@ -586,7 +586,17 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
   ]
 
   return (
-    <div className={`space-y-6 ${isFullscreen ? 'fixed inset-0 z-50 bg-background p-6 overflow-auto' : ''}`}>
+    <div
+      className={
+        isFullscreen
+          // Flex column locks the layout to viewport height so the editor card
+          // can flex-1 into the remaining space and let its internal panes
+          // (CodeMirror scroller + preview pane) handle their own scroll.
+          // No `overflow-auto` here — that would push the toolbar offscreen.
+          ? 'fixed inset-0 z-50 bg-background p-6 flex flex-col gap-4'
+          : 'space-y-6'
+      }
+    >
 
       {/* ── SKRIPT HEADER ── (hidden in fullscreen) */}
       {!isFullscreen && (
