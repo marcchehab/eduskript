@@ -10,14 +10,46 @@
 
 import type { PythonCheckResult, PythonFile } from './types'
 
+export interface ParsedAssertion {
+  line: string
+  /** Label shown to the student when the assertion FAILS. */
+  failLabel: string
+  /** Label shown when the assertion PASSES. Defaults to the fail label. */
+  passLabel: string
+}
+
+/**
+ * Strip `{interpolation}` parts from a label string (so f-string interpolations
+ * don't render literally as `{var}` in the displayed test name). Falls back to
+ * the original string if stripping leaves nothing meaningful — better to show
+ * the raw `{detail}` body than an `…`-only label.
+ */
+function cleanLabel(s: string): string {
+  const stripped = s.replace(/\{[^{}]*\}/g, '…').trim()
+  // If stripping interpolations leaves only the `…` placeholder(s), the
+  // original message had no static text. Show the raw body instead so the
+  // student sees something concrete rather than an opaque ellipsis.
+  const meaningful = stripped.replace(/…/g, '').trim()
+  return meaningful.length > 0 ? stripped : s
+}
+
 /**
  * Parse assertion lines from check code and extract labels.
  * Lines starting with `assert ` are test cases.
  * Non-assert lines are setup code (runs before assertions).
+ *
+ * Message syntax:
+ *   - `"single message"`        — used for both pass and fail
+ *   - `"fail message|pass msg"` — pipe splits fail (left) and pass (right)
+ *   - f/r/b string prefixes are accepted; `{interpolations}` are stripped
+ *     from the displayed label (the rendered string still surfaces in
+ *     `error` when an f-string assert actually fires)
+ *
+ * Exported for testing.
  */
-function parseAssertions(checkCode: string): { setupLines: string[]; assertions: { line: string; label: string }[] } {
+export function parseAssertions(checkCode: string): { setupLines: string[]; assertions: ParsedAssertion[] } {
   const lines = checkCode.split('\n')
-  const assertions: { line: string; label: string }[] = []
+  const assertions: ParsedAssertion[] = []
   const setupLines: string[] = []
 
   for (const line of lines) {
@@ -28,12 +60,26 @@ function parseAssertions(checkCode: string): { setupLines: string[]; assertions:
     }
 
     if (trimmed.startsWith('assert ')) {
-      // Extract message: assert expr, "message"
-      const msgMatch = trimmed.match(/,\s*["'](.+?)["']\s*$/)
-      const label = msgMatch
-        ? msgMatch[1]
-        : `Test ${assertions.length + 1}: \`${trimmed}\``
-      assertions.push({ line: trimmed, label })
+      // Extract message: `assert expr, "message"` — also accepts Python string
+      // prefixes (f-string is the common case for AI-generated checks).
+      const msgMatch = trimmed.match(/,\s*[fFrRbB]{0,2}["'](.+?)["']\s*$/)
+      if (msgMatch) {
+        const raw = msgMatch[1]
+        // Pipe split: "fail|pass". Only the FIRST pipe matters; later pipes
+        // stay in the pass message. Without a pipe, both states share the
+        // same label (backward compatible).
+        const pipeIdx = raw.indexOf('|')
+        const failRaw = pipeIdx === -1 ? raw : raw.slice(0, pipeIdx)
+        const passRaw = pipeIdx === -1 ? raw : raw.slice(pipeIdx + 1)
+        assertions.push({
+          line: trimmed,
+          failLabel: cleanLabel(failRaw),
+          passLabel: cleanLabel(passRaw),
+        })
+      } else {
+        const fallback = `Test ${assertions.length + 1}: \`${trimmed}\``
+        assertions.push({ line: trimmed, failLabel: fallback, passLabel: fallback })
+      }
     } else {
       setupLines.push(line)
     }
@@ -81,8 +127,12 @@ export async function runPythonChecks(
     pyodide.FS.writeFile(`__eduskript_assert_${i}.py`, assertions[i].line)
   }
 
-  // Write assertion labels as JSON
-  pyodide.FS.writeFile('__eduskript_labels.json', JSON.stringify(assertions.map(a => a.label)))
+  // Write assertion labels as JSON. Each entry carries both fail and pass
+  // labels; the harness picks the right one based on the result.
+  pyodide.FS.writeFile(
+    '__eduskript_labels.json',
+    JSON.stringify(assertions.map((a) => ({ fail: a.failLabel, pass: a.passLabel }))),
+  )
 
   // The harness script reads files from FS and runs them
   const harness = `
@@ -90,6 +140,10 @@ import json
 
 with open('__eduskript_labels.json') as f:
     __labels = json.load(f)
+
+def __pick(__i, __ok):
+    __entry = __labels[__i]
+    return __entry["pass" if __ok else "fail"]
 
 __count = ${assertions.length}
 __results = []
@@ -105,7 +159,7 @@ except Exception as __e:
     # Student code failed — all tests fail with this error
     __err = str(__e)
     for __i in range(__count):
-        __results.append({"index": __i, "passed": False, "label": __labels[__i], "error": "Code error: " + __err})
+        __results.append({"index": __i, "passed": False, "label": __pick(__i, False), "error": "Code error: " + __err})
 
 if not __results:
     # Run setup code in the student namespace
@@ -124,7 +178,7 @@ if not __results:
             __assert_code = f.read()
         try:
             exec(compile(__assert_code, '<check>', 'exec'), __ns)
-            __results.append({"index": __i, "passed": True, "label": __labels[__i]})
+            __results.append({"index": __i, "passed": True, "label": __pick(__i, True)})
         except AssertionError as __e:
             __err_msg = str(__e) if str(__e) else None
             # Try to extract actual value from failed == comparison
@@ -137,9 +191,9 @@ if not __results:
                     __err_msg = f"Expected {__expected!r}, got {__actual!r}"
                 except Exception:
                     pass
-            __results.append({"index": __i, "passed": False, "label": __labels[__i], "error": __err_msg})
+            __results.append({"index": __i, "passed": False, "label": __pick(__i, False), "error": __err_msg})
         except Exception as __e:
-            __results.append({"index": __i, "passed": False, "label": __labels[__i], "error": str(__e)})
+            __results.append({"index": __i, "passed": False, "label": __pick(__i, False), "error": str(__e)})
 
 json.dumps(__results)
 `
@@ -157,7 +211,7 @@ json.dumps(__results)
     return assertions.map((a, i) => ({
       index: i,
       passed: false,
-      label: a.label,
+      label: a.failLabel,
       error: `Check runner error: ${error.message || String(error)}`
     }))
   } finally {

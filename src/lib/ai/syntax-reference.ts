@@ -122,14 +122,14 @@ Pair a \`python editor\` with a \`python-check\` block to verify student code wi
 \`\`\`markdown
 \`\`\`python editor id="fib"
 def fibonacci(n):
+    # Your code here
     pass
-
-print(fibonacci(5))
 \`\`\`
 
 \`\`\`python-check for="fib" points="10" max-checks="5"
-assert fibonacci(0) == 0, "fibonacci(0) should return 0"
-assert fibonacci(5) == 5, "fibonacci(5) should return 5"
+assert fibonacci(0) == 0, "fibonacci(0) should return 0."
+assert fibonacci(1) == 1, "fibonacci(1) should return 1."
+assert fibonacci(5) == 5, "fibonacci(5) should return 5."
 \`\`\`
 \`\`\`
 
@@ -137,6 +137,15 @@ assert fibonacci(5) == 5, "fibonacci(5) should return 5"
 - \`for="<id>"\` — **required**, must match the editor's \`id\`
 - \`points="<n>"\` — optional score value
 - \`max-checks="<n>"\` — optional limit on check attempts
+
+**Writing good checks — DOs and DON'Ts:**
+
+- ✅ **Test behavior directly.** Each \`assert\` should test one observable outcome (an output, a return value, a side effect).
+- ✅ **Use plain string messages** rather than f-strings: \`assert fn(5) == 25, "fn(5) should return 25."\` The message becomes the test name shown to the student. F-strings work too, but their \`{interpolations}\` are stripped from the displayed name (the rendered string still appears as the error message after a failure).
+- ✅ **Optional pass message** via a \`|\` separator: \`"fail message|pass message"\`. Without \`|\` the same message is shown for both states. Use this for "feel-good" feedback on harder problems; don't bother for trivial checks. Example: \`assert fn(5) == 25, "fn(5) should return 25.|Nice — fn(5) = 25!"\`
+- ❌ **Don't add preflight checks that pass on stub code**, e.g. \`assert "fn_name" in globals()\` or \`assert result is not None\`. These pass *before the student does anything*, inflating the score from 0% to ~30% and giving false reassurance. If the student's function is missing, the runner already surfaces a clear error on every test that uses it — that's enough.
+- ✅ **For open challenges with multiple valid solutions**, test *behavior* with multiple inputs/edge cases, not implementation form. Example: \`assert "umbrella" in advise(10, True).lower(), "Cold rainy weather should suggest an umbrella."\`
+- ❌ **Don't repeat the same test path with different inputs**. Three asserts that all hit the same code branch waste score signal.
 
 If you omit \`for\` or the editor \`id\`, the check block is silently dropped.`)
 
