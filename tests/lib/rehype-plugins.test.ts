@@ -2,10 +2,17 @@ import { describe, it, expect } from 'vitest'
 import { unified } from 'unified'
 import remarkParse from 'remark-parse'
 import remarkRehype from 'remark-rehype'
+import rehypeRaw from 'rehype-raw'
+import rehypeSanitize from 'rehype-sanitize'
 import rehypeSlug from 'rehype-slug'
 import { rehypeHeadingSectionIds } from '@/lib/rehype-plugins/heading-section-ids'
 import { rehypeImageWrapper } from '@/lib/rehype-plugins/image-wrapper'
 import { rehypeInteractiveElements } from '@/lib/rehype-plugins/interactive-elements'
+import {
+  rehypePluginAttrsRestore,
+  rehypePluginAttrsStash,
+} from '@/lib/rehype-plugins/plugin-attrs'
+import { sanitizeSchema } from '@/lib/markdown-compiler'
 
 describe('Rehype Plugins', () => {
   describe('rehypeHeadingSectionIds', () => {
@@ -370,6 +377,53 @@ console.log("second")
       const img = findNode(hast, (node: any) => node.tagName === 'img')
 
       expect(img?.properties?.['data-image-src']).toBe('path/to/image.jpg')
+    })
+  })
+
+  describe('rehypePluginAttrs (stash + restore around sanitize)', () => {
+    // Build the full pipeline used by compileMarkdown around <plugin>: parse,
+    // raw-HTML, stash, sanitize, restore. The interesting question is whether
+    // arbitrary plugin config attrs (like `font`, `mod`) survive sanitization.
+    function runPluginPipeline(markdown: string) {
+      const processor = unified()
+        .use(remarkParse)
+        .use(remarkRehype, { allowDangerousHtml: true })
+        .use(rehypeRaw)
+        .use(rehypePluginAttrsStash)
+        .use(rehypeSanitize, sanitizeSchema)
+        .use(rehypePluginAttrsRestore)
+
+      const tree = processor.parse(markdown)
+      return processor.run(tree)
+    }
+
+    it('preserves arbitrary plugin config attrs that aren\'t in the sanitize allowlist', async () => {
+      const hast = await runPluginPipeline(
+        '<plugin src="acme/clock" font="12" mod="7" lang="de"></plugin>',
+      )
+      const plugin = findNode(hast, (n: any) => n.tagName === 'plugin')
+      expect(plugin?.properties?.font).toBe('12')
+      expect(plugin?.properties?.mod).toBe('7')
+      expect(plugin?.properties?.lang).toBe('de')
+      // Stash attribute should not leak into the final tree
+      expect(plugin?.properties?.['data-plugin-attrs']).toBeUndefined()
+    })
+
+    it('keeps intrinsic attrs (src, height, width) as real attributes and lets sanitize handle id', async () => {
+      const hast = await runPluginPipeline(
+        '<plugin src="acme/x" id="foo" height="200" width="400" custom="yes"></plugin>',
+      )
+      const plugin = findNode(hast, (n: any) => n.tagName === 'plugin')
+      expect(plugin?.properties?.src).toBe('acme/x')
+      // height/width get number-coerced by HAST since they're known HTML attrs;
+      // PluginContainer parses them via parseInt either way.
+      expect(plugin?.properties?.height).toBe(200)
+      expect(plugin?.properties?.width).toBe(400)
+      expect(plugin?.properties?.custom).toBe('yes')
+      // rehype-sanitize prefixes `id` with `user-content-` to prevent
+      // clobber attacks. We don't fight that — the PluginContainer reads
+      // `id` as an opaque string and uses it for UserData persistence.
+      expect(plugin?.properties?.id).toMatch(/foo$/)
     })
   })
 })

@@ -34,6 +34,7 @@ import { rehypeSourceLine } from './rehype-plugins/source-line'
 import { rehypeColorTitle } from './rehype-plugins/color-title'
 import { rehypeHeadingSectionIds } from './rehype-plugins/heading-section-ids'
 import { rehypeMarkdownChildren } from './rehype-plugins/markdown-children'
+import { rehypePluginAttrsStash, rehypePluginAttrsRestore } from './rehype-plugins/plugin-attrs'
 
 // Re-export remarkPlugins for backward compatibility
 export { remarkPlugins }
@@ -111,18 +112,11 @@ export const sanitizeSchema = {
     'excali': ['src', 'alt', 'width', 'align', 'wrap'],
     // <image> component attributes (src, alt, width, align, wrap, invert, saturate)
     'image': ['src', 'alt', 'width', 'align', 'wrap', 'invert', 'saturate'],
-    // Plugin: attributes are config for a sandboxed iframe, not rendered as HTML.
-    // List known plugin configs + common names. Extend as new plugins are added.
-    'plugin': [
-      'src', 'id', 'height', 'width', 'name', 'version',
-      // Known plugin configs
-      'formula', 'definition', 'cipher', 'cipherkey', 'text', 'mode', 'type',
-      'initialnodecount', 'initialdirected',
-      'label', 'value', 'count', 'theme', 'lang', 'title', 'placeholder',
-      'min', 'max', 'step', 'rows', 'cols', 'size', 'color', 'variant',
-      'autoplay', 'loop', 'muted', 'controls', 'disabled', 'readonly',
-      'data', 'config', 'options', 'items', 'columns', 'format',
-    ],
+    // Plugin: only intrinsic attrs are real HTML. All other config attrs are
+    // stashed into `data-plugin-attrs` (a JSON blob) before sanitize and
+    // restored after — see rehype-plugins/plugin-attrs.ts. This keeps the
+    // allowlist closed while letting plugins use any config keys.
+    'plugin': ['src', 'id', 'height', 'width', 'data-plugin-attrs', 'dataPluginAttrs'],
     'pdf': ['src', 'height'],
     'question': ['id', 'type', 'showfeedback', 'allowupdate', 'minvalue', 'maxvalue', 'step'],
     'quiz-option': ['correct', 'is', 'feedback'],
@@ -273,7 +267,9 @@ export async function compileMarkdown(
     .use(remarkRehype, { allowDangerousHtml: true })
     .use(rehypeRaw)
     .use(rehypeMarkdownChildren) // Re-parse markdown inside custom elements like <stickme>
+    .use(rehypePluginAttrsStash) // Bundle <plugin> config attrs so the sanitizer doesn't drop them
     .use(rehypeSanitize, sanitizeSchema)
+    .use(rehypePluginAttrsRestore) // Unpack them back into individual attrs for React
     .use(rehypePlugins)
     .use(rehypeReact, {
       ...production,
