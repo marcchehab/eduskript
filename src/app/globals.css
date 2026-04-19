@@ -1915,3 +1915,77 @@ mark.text-highlight-blue {
 mark.text-highlight-purple {
   background-color: var(--text-highlight-purple);
 }
+
+/* ===== Theme-aware named color palette =====
+ * Foreground (text) and background (highlight) tokens that all three
+ * producers use:
+ *   - KaTeX `\textcolor{NAME}{...}`  (rewritten by rehypeColorClasses)
+ *   - Toolbar text-color and highlight-color buttons
+ *   - Author-written <span class="es-color-NAME"> / <span class="es-bg-NAME">
+ *
+ * Names + light/dark values were chosen from the prod corpus (the colors
+ * authors actually use today). Names match what authors already type in
+ * `\textcolor{}` so legacy content auto-themes via the rewriter.
+ *
+ * Targets: text colors >= 4.5:1 contrast on the active background.
+ * Light values are typically Tailwind 700; dark values typically Tailwind 300.
+ */
+:root {
+  /* Foreground colors */
+  --es-color-cyan: #0e7490;       /* cyan-700 */
+  --es-color-lightgreen: #15803d; /* green-700 — "lightgreen" was unreadable on white, so we map it to a darker green */
+  --es-color-green: #15803d;      /* green-700 */
+  --es-color-orange: #c2410c;     /* orange-700 */
+  --es-color-red: #b91c1c;        /* red-700 */
+  --es-color-blue: #1d4ed8;       /* blue-700 */
+  --es-color-violet: #6d28d9;     /* violet-700 */
+  --es-color-purple: #9333ea;     /* purple-600 — kept as-is, it's the house color and reads on both modes */
+  --es-color-lightblue: #0369a1;  /* sky-700 */
+
+  /* Background highlight colors (translucent in light mode) */
+  --es-bg-yellow: rgba(250, 204, 21, 0.4);
+  --es-bg-green: rgba(74, 222, 128, 0.35);
+  --es-bg-blue: rgba(96, 165, 250, 0.35);
+  --es-bg-pink: rgba(236, 72, 153, 0.35);
+  --es-bg-orange: rgba(251, 146, 60, 0.35);
+  --es-bg-red: rgba(239, 68, 68, 0.3);
+  --es-bg-purple: rgba(168, 85, 247, 0.3);
+}
+
+.dark {
+  --es-color-cyan: #67e8f9;       /* cyan-300 */
+  --es-color-lightgreen: #86efac; /* green-300 — keeps the "light" feel in dark mode */
+  --es-color-green: #86efac;      /* green-300 */
+  --es-color-orange: #fdba74;     /* orange-300 */
+  --es-color-red: #fca5a5;        /* red-300 */
+  --es-color-blue: #93c5fd;       /* blue-300 */
+  --es-color-violet: #c4b5fd;     /* violet-300 */
+  --es-color-purple: #d8b4fe;     /* purple-300 */
+  --es-color-lightblue: #bae6fd;  /* sky-200 */
+
+  --es-bg-yellow: rgba(250, 204, 21, 0.6);
+  --es-bg-green: rgba(74, 222, 128, 0.5);
+  --es-bg-blue: rgba(96, 165, 250, 0.5);
+  --es-bg-pink: rgba(236, 72, 153, 0.5);
+  --es-bg-orange: rgba(251, 146, 60, 0.5);
+  --es-bg-red: rgba(239, 68, 68, 0.5);
+  --es-bg-purple: rgba(168, 85, 247, 0.5);
+}
+
+.es-color-cyan       { color: var(--es-color-cyan); }
+.es-color-lightgreen { color: var(--es-color-lightgreen); }
+.es-color-green      { color: var(--es-color-green); }
+.es-color-orange     { color: var(--es-color-orange); }
+.es-color-red        { color: var(--es-color-red); }
+.es-color-blue       { color: var(--es-color-blue); }
+.es-color-violet     { color: var(--es-color-violet); }
+.es-color-purple     { color: var(--es-color-purple); }
+.es-color-lightblue  { color: var(--es-color-lightblue); }
+
+.es-bg-yellow { background-color: var(--es-bg-yellow); border-radius: 2px; padding: 0 1px; }
+.es-bg-green  { background-color: var(--es-bg-green);  border-radius: 2px; padding: 0 1px; }
+.es-bg-blue   { background-color: var(--es-bg-blue);   border-radius: 2px; padding: 0 1px; }
+.es-bg-pink   { background-color: var(--es-bg-pink);   border-radius: 2px; padding: 0 1px; }
+.es-bg-orange { background-color: var(--es-bg-orange); border-radius: 2px; padding: 0 1px; }
+.es-bg-red    { background-color: var(--es-bg-red);    border-radius: 2px; padding: 0 1px; }
+.es-bg-purple { background-color: var(--es-bg-purple); border-radius: 2px; padding: 0 1px; }

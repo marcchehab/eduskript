@@ -1386,8 +1386,38 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   const insertNumberedList = () => insertAtCursor('\n1. ')
   const insertLink = () => wrapSelection('[', '](url)')
 
-  // Text color and highlight helpers
-  const insertTextColor = (color: string) => {
+  // Text color and highlight helpers.
+  // Palette items use the *-ByName helpers (emit class-based spans that pick
+  // up theme-aware CSS vars from globals.css). The "Custom color…" picker
+  // falls back to the *-ByHex helpers (inline style — escape hatch for
+  // colors outside the palette; not theme-aware by design).
+  const insertTextColorByName = (name: string) => {
+    if (!editorViewRef.current || useSimpleEditor) return
+    const view = editorViewRef.current
+    const { from, to } = view.state.selection.main
+    const text = view.state.doc.sliceString(from, to)
+    const styled = `<span class="es-color-${name}">${text}</span>`
+    view.dispatch({
+      changes: { from, to, insert: styled },
+      selection: { anchor: from + styled.length }
+    })
+    view.focus()
+  }
+
+  const insertHighlightByName = (name: string) => {
+    if (!editorViewRef.current || useSimpleEditor) return
+    const view = editorViewRef.current
+    const { from, to } = view.state.selection.main
+    const text = view.state.doc.sliceString(from, to)
+    const styled = `<span class="es-bg-${name}">${text}</span>`
+    view.dispatch({
+      changes: { from, to, insert: styled },
+      selection: { anchor: from + styled.length }
+    })
+    view.focus()
+  }
+
+  const insertTextColorByHex = (color: string) => {
     if (!editorViewRef.current || useSimpleEditor) return
     const view = editorViewRef.current
     const { from, to } = view.state.selection.main
@@ -1400,7 +1430,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
     view.focus()
   }
 
-  const insertHighlight = (color: string) => {
+  const insertHighlightByHex = (color: string) => {
     if (!editorViewRef.current || useSimpleEditor) return
     const view = editorViewRef.current
     const { from, to } = view.state.selection.main
@@ -1618,20 +1648,35 @@ const CodeMirrorEditor = function CodeMirrorEditor({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start">
-                    <DropdownMenuItem onClick={() => insertTextColor('#dc2626')}>
-                      <span className="w-4 h-4 rounded-full bg-red-600 mr-2" /> Red
+                    {/* Swatch reads the same CSS var the rendered class uses,
+                        so the picker preview matches what authors will see in
+                        the current theme. */}
+                    <DropdownMenuItem onClick={() => insertTextColorByName('red')}>
+                      <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: 'var(--es-color-red)' }} /> Red
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertTextColor('#2563eb')}>
-                      <span className="w-4 h-4 rounded-full bg-blue-600 mr-2" /> Blue
+                    <DropdownMenuItem onClick={() => insertTextColorByName('orange')}>
+                      <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: 'var(--es-color-orange)' }} /> Orange
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertTextColor('#16a34a')}>
-                      <span className="w-4 h-4 rounded-full bg-green-600 mr-2" /> Green
+                    <DropdownMenuItem onClick={() => insertTextColorByName('lightgreen')}>
+                      <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: 'var(--es-color-lightgreen)' }} /> Light green
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertTextColor('#9333ea')}>
-                      <span className="w-4 h-4 rounded-full bg-purple-600 mr-2" /> Purple
+                    <DropdownMenuItem onClick={() => insertTextColorByName('green')}>
+                      <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: 'var(--es-color-green)' }} /> Green
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertTextColor('#ea580c')}>
-                      <span className="w-4 h-4 rounded-full bg-orange-600 mr-2" /> Orange
+                    <DropdownMenuItem onClick={() => insertTextColorByName('cyan')}>
+                      <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: 'var(--es-color-cyan)' }} /> Cyan
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => insertTextColorByName('lightblue')}>
+                      <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: 'var(--es-color-lightblue)' }} /> Light blue
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => insertTextColorByName('blue')}>
+                      <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: 'var(--es-color-blue)' }} /> Blue
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => insertTextColorByName('violet')}>
+                      <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: 'var(--es-color-violet)' }} /> Violet
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => insertTextColorByName('purple')}>
+                      <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: 'var(--es-color-purple)' }} /> Purple
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => setShowTextColorPicker(true)}>
@@ -1652,20 +1697,26 @@ const CodeMirrorEditor = function CodeMirrorEditor({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start">
-                    <DropdownMenuItem onClick={() => insertHighlight('#fef08a')}>
-                      <span className="w-4 h-4 rounded-full bg-yellow-200 mr-2" /> Yellow
+                    <DropdownMenuItem onClick={() => insertHighlightByName('yellow')}>
+                      <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: 'var(--es-bg-yellow)' }} /> Yellow
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertHighlight('#bbf7d0')}>
-                      <span className="w-4 h-4 rounded-full bg-green-200 mr-2" /> Green
+                    <DropdownMenuItem onClick={() => insertHighlightByName('green')}>
+                      <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: 'var(--es-bg-green)' }} /> Green
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertHighlight('#bfdbfe')}>
-                      <span className="w-4 h-4 rounded-full bg-blue-200 mr-2" /> Blue
+                    <DropdownMenuItem onClick={() => insertHighlightByName('blue')}>
+                      <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: 'var(--es-bg-blue)' }} /> Blue
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertHighlight('#fbcfe8')}>
-                      <span className="w-4 h-4 rounded-full bg-pink-200 mr-2" /> Pink
+                    <DropdownMenuItem onClick={() => insertHighlightByName('pink')}>
+                      <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: 'var(--es-bg-pink)' }} /> Pink
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertHighlight('#fed7aa')}>
-                      <span className="w-4 h-4 rounded-full bg-orange-200 mr-2" /> Orange
+                    <DropdownMenuItem onClick={() => insertHighlightByName('orange')}>
+                      <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: 'var(--es-bg-orange)' }} /> Orange
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => insertHighlightByName('red')}>
+                      <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: 'var(--es-bg-red)' }} /> Red
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => insertHighlightByName('purple')}>
+                      <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: 'var(--es-bg-purple)' }} /> Purple
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => setShowHighlightPicker(true)}>
@@ -1922,7 +1973,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
           <Sketch
             color="#000000"
             onChange={(color) => {
-              insertTextColor(color.hex)
+              insertTextColorByHex(color.hex)
               setShowTextColorPicker(false)
             }}
           />
@@ -1938,7 +1989,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
           <Sketch
             color="#fef08a"
             onChange={(color) => {
-              insertHighlight(color.hex)
+              insertHighlightByHex(color.hex)
               setShowHighlightPicker(false)
             }}
           />

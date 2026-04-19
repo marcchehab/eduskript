@@ -9,7 +9,8 @@ import { rehypeHeadingSectionIds } from '@/lib/rehype-plugins/heading-section-id
 import { rehypeImageWrapper } from '@/lib/rehype-plugins/image-wrapper'
 import { rehypeInteractiveElements } from '@/lib/rehype-plugins/interactive-elements'
 import { rehypeAllowPluginAttrs } from '@/lib/rehype-plugins/plugin-attrs'
-import { sanitizeSchema } from '@/lib/markdown-compiler'
+import { rehypeColorClasses } from '@/lib/rehype-plugins/color-classes'
+import { compileMarkdown, sanitizeSchema } from '@/lib/markdown-compiler'
 
 describe('Rehype Plugins', () => {
   describe('rehypeHeadingSectionIds', () => {
@@ -451,7 +452,98 @@ console.log("second")
       expect(findNode(second, (n: any) => n.tagName === 'plugin')?.properties?.glyph).toBe('@')
     })
   })
+
+  describe('rehypeColorClasses (palette-aware style → class rewrite)', () => {
+    // Unit-level: feed a HAST element directly through the plugin and inspect
+    // the result. Avoids dragging in the full markdown pipeline for the
+    // attribute-level checks.
+    async function runOnElement(properties: Record<string, unknown>): Promise<any> {
+      const tree: any = {
+        type: 'root',
+        children: [{ type: 'element', tagName: 'span', properties, children: [] }],
+      }
+      const transformer = rehypeColorClasses() as (t: any) => void
+      transformer(tree)
+      return tree.children[0]
+    }
+
+    it('rewrites a known palette name in `color:` to es-color-* class', async () => {
+      const node = await runOnElement({ style: 'color: cyan' })
+      expect(node.properties.className).toEqual(['es-color-cyan'])
+      expect(node.properties.style).toBeUndefined()
+    })
+
+    it('rewrites a hex alias to its palette token', async () => {
+      // #9333ea is the most-used color in prod (469 uses) — it must map to purple.
+      const node = await runOnElement({ style: 'color: #9333ea' })
+      expect(node.properties.className).toEqual(['es-color-purple'])
+      expect(node.properties.style).toBeUndefined()
+    })
+
+    it('rewrites background-color to es-bg-* class', async () => {
+      const node = await runOnElement({ style: 'background-color: #fef08a' })
+      expect(node.properties.className).toEqual(['es-bg-yellow'])
+      expect(node.properties.style).toBeUndefined()
+    })
+
+    it('preserves other declarations in the style attribute', async () => {
+      const node = await runOnElement({ style: 'color: cyan; font-weight: bold' })
+      expect(node.properties.className).toEqual(['es-color-cyan'])
+      expect(node.properties.style).toBe('font-weight: bold')
+    })
+
+    it('handles both color and background-color in the same span', async () => {
+      const node = await runOnElement({ style: 'color: red; background-color: yellow' })
+      expect(node.properties.className).toEqual(['es-color-red', 'es-bg-yellow'])
+      expect(node.properties.style).toBeUndefined()
+    })
+
+    it('leaves unknown colors and unaliased hex untouched', async () => {
+      // papayawhip is a valid CSS color name but not in our palette — keep as-is.
+      const node = await runOnElement({ style: 'color: papayawhip' })
+      expect(node.properties.className).toBeUndefined()
+      expect(node.properties.style).toBe('color: papayawhip')
+    })
+
+    it('does not match `border-color:` (negative lookbehind on color decl)', async () => {
+      // Sanity-check the regex: only stand-alone `color:` should rewrite.
+      const node = await runOnElement({ style: 'border-color: cyan' })
+      expect(node.properties.className).toBeUndefined()
+      expect(node.properties.style).toBe('border-color: cyan')
+    })
+
+    it('appends to existing className instead of replacing', async () => {
+      const node = await runOnElement({ className: ['existing'], style: 'color: cyan' })
+      expect(node.properties.className).toEqual(['existing', 'es-color-cyan'])
+    })
+
+    it('end-to-end: KaTeX \\textcolor{cyan}{...} ends up with es-color-cyan after compileMarkdown', async () => {
+      // KaTeX emits <span style="color: cyan"> inside its rendered output;
+      // rehypeColorClasses runs after rehypeKatex and rewrites it.
+      const result = await compileMarkdown('$\\textcolor{cyan}{x}$')
+      // result is a React tree; walk it for the expected className.
+      const found = findInReact(result, (el: any) =>
+        typeof el?.props?.className === 'string'
+          ? el.props.className.split(/\s+/).includes('es-color-cyan')
+          : Array.isArray(el?.props?.className)
+            ? el.props.className.includes('es-color-cyan')
+            : false,
+      )
+      expect(found).toBe(true)
+    })
+  })
 })
+
+// Recursively search a React tree (returned by compileMarkdown) for any node
+// matching the predicate. Used by the end-to-end KaTeX test above.
+function findInReact(node: any, predicate: (n: any) => boolean): boolean {
+  if (!node || typeof node !== 'object') return false
+  if (Array.isArray(node)) return node.some((n) => findInReact(n, predicate))
+  if (predicate(node)) return true
+  const children = node.props?.children
+  if (children !== undefined) return findInReact(children, predicate)
+  return false
+}
 
 /**
  * Helper function to find a node in the AST

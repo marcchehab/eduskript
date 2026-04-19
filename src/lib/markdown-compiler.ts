@@ -35,6 +35,7 @@ import { rehypeColorTitle } from './rehype-plugins/color-title'
 import { rehypeHeadingSectionIds } from './rehype-plugins/heading-section-ids'
 import { rehypeMarkdownChildren } from './rehype-plugins/markdown-children'
 import { rehypeAllowPluginAttrs } from './rehype-plugins/plugin-attrs'
+import { rehypeColorClasses } from './rehype-plugins/color-classes'
 
 // Re-export remarkPlugins for backward compatibility
 export { remarkPlugins }
@@ -47,6 +48,9 @@ export const rehypePlugins: PluggableList = [
   rehypeHeadingSectionIds,
   rehypeColorTitle,
   rehypeKatex,
+  // Must run AFTER rehypeKatex so it can rewrite the spans KaTeX emits for
+  // \textcolor{NAME}{…} into themed class names.
+  rehypeColorClasses,
   rehypeSourceLine,
 ]
 
