@@ -8,7 +8,7 @@ import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { CollapsibleDrawer } from '@/components/ui/collapsible-drawer'
 import { EditorWithMedia } from '@/components/dashboard/editor-with-media'
-import { ArrowLeft, Save, History, Eye, Files, BookA } from 'lucide-react'
+import { ArrowLeft, Save, History, Eye, Files, BookA, Maximize2, Minimize2 } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import { usePublicUrl } from '@/hooks/use-public-url'
 
@@ -68,6 +68,7 @@ export function FrontPageEditor({
   const [frontPageId, setFrontPageId] = useState(frontPage?.id || null)
   const [isPublished, setIsPublished] = useState(frontPage?.isPublished || false)
   const [fileSkriptId, setFileSkriptId] = useState<string | null>(frontPage?.fileSkriptId || null)
+  const [isFullscreen, setIsFullscreen] = useState(false)
   const contentRef = useRef(content)
   const { data: session } = useSession()
   const pageSlug = (session?.user as { pageSlug?: string })?.pageSlug
@@ -238,17 +239,21 @@ export function FrontPageEditor({
     }
   }, [hasUnsavedChanges, handleSave])
 
-  // Save with Ctrl+S
+  // Save with Ctrl+S, Escape exits fullscreen.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault()
         handleSave()
       }
+      if (e.key === 'Escape' && isFullscreen) {
+        e.preventDefault()
+        setIsFullscreen(false)
+      }
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [handleSave])
+  }, [handleSave, isFullscreen])
 
   // Load version history on mount and when frontPageId changes
   useEffect(() => {
@@ -338,11 +343,30 @@ export function FrontPageEditor({
           <div className="absolute top-1 right-1 w-2 h-2 bg-warning rounded-full" />
         )}
       </Button>
+
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => setIsFullscreen(!isFullscreen)}
+        title={isFullscreen ? 'Exit fullscreen (Esc)' : 'Fullscreen editor'}
+      >
+        {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+      </Button>
     </div>
   )
 
   return (
-    <div className="space-y-6">
+    <div
+      className={
+        isFullscreen
+          // Same fullscreen layout the page editor uses: viewport-locked flex
+          // column so the editor card can flex-1 into the remaining space and
+          // its inner panes scroll independently. No `overflow-auto` here —
+          // that would push the toolbar offscreen.
+          ? 'fixed inset-0 z-50 bg-background p-6 flex flex-col gap-4'
+          : 'space-y-6'
+      }
+    >
       {/* Front page header — mirrors the page editor's topbar style: bordered
           section with back button + label + title on the left, action cluster on
           the right. Hidden when the parent (e.g. OrgNav) provides its own nav. */}
@@ -409,11 +433,13 @@ export function FrontPageEditor({
           }
         }}
         isAdmin={(session?.user as { isAdmin?: boolean })?.isAdmin}
+        fullscreen={isFullscreen}
       />
 
       {/* File storage CTA — only for user/org frontpages that haven't enabled
-          storage yet. Skript frontpages always have storage (their own skript). */}
-      {!effectiveSkriptId && type !== 'skript' && (
+          storage yet. Skript frontpages always have storage (their own skript).
+          Hidden in fullscreen so the editor takes the whole viewport. */}
+      {!effectiveSkriptId && type !== 'skript' && !isFullscreen && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
@@ -443,8 +469,9 @@ export function FrontPageEditor({
       )}
 
       {/* Version history — only show if we have any. Uses the FrontPageVersion
-          API (different from the page editor's PageVersion API). */}
-      {frontPageId && versions.length > 0 && (
+          API (different from the page editor's PageVersion API). Hidden in
+          fullscreen. */}
+      {frontPageId && versions.length > 0 && !isFullscreen && (
         <CollapsibleDrawer
           title={
             <div className="flex items-center gap-2">
