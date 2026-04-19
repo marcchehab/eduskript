@@ -1,70 +1,42 @@
 /**
- * <plugin> attribute pass-through.
+ * Auto-allow `<plugin>` config attributes.
  *
- * `<plugin>` elements render in a sandboxed iframe and their attributes are
- * just config keys forwarded over postMessage — they're never written to the
- * DOM as real HTML attributes. The sanitizer otherwise can't tell a plugin's
- * `font="12"` from a malicious `onclick="…"`, so without help it would either
- * (a) need a hand-maintained allowlist of every config name across every
- * plugin (the prior approach — it dropped `font` and any other unlisted name
- * silently), or (b) allow arbitrary attributes everywhere (XSS).
+ * `<plugin>` elements render in a sandboxed iframe via PluginContainer; their
+ * attributes are forwarded to the iframe over postMessage and never end up as
+ * real DOM attributes. The previous design hand-maintained an allowlist of
+ * every config name across every plugin in the sanitize schema — anything
+ * not in the list (e.g. `font`, `mod`) was silently stripped.
  *
- * Workaround: stash all custom attrs into a single allowed `data-plugin-attrs`
- * JSON blob before sanitize, restore them after. The sanitizer only has to
- * trust one attribute name; plugin authors can use any config keys they want.
+ * This plugin walks the tree once before sanitize and adds whatever attribute
+ * names it finds on `<plugin>` elements to the schema's plugin allowlist.
+ * The sanitizer then lets them through naturally — no encoding round-trip,
+ * no per-element rewriting. It mutates the supplied schema in place; callers
+ * must pass a per-request clone so concurrent renders don't pollute each
+ * other's allowlists.
+ *
+ * Security note: this widens the allowlist for `<plugin>` only. Attribute
+ * *values* still go through rehype-sanitize's normal rules (URL protocols,
+ * etc.), and the iframe sandbox is the actual security boundary for the
+ * plugin's behavior.
  */
 import { visit } from 'unist-util-visit'
-import type { Properties, Root } from 'hast'
+import type { Root } from 'hast'
 
-// Attributes the React PluginContainer reads as named props (not as plugin
-// config). These stay as real attributes so the sanitizer can apply its
-// normal URL/value rules to `src` etc.
-const INTRINSIC_ATTRS = new Set(['src', 'id', 'height', 'width'])
+type AttrEntry = string | [string, ...unknown[]]
 
-const STASH_ATTR = 'data-plugin-attrs'
-
-export function rehypePluginAttrsStash() {
-  return (tree: Root) => {
-    visit(tree, 'element', (node) => {
-      if (node.tagName !== 'plugin') return
-      const props = node.properties || {}
-      const stash: Record<string, unknown> = {}
-      const kept: Properties = {}
-      for (const [k, v] of Object.entries(props)) {
-        // className / style are already allowed for `*` and shouldn't be stashed
-        if (INTRINSIC_ATTRS.has(k.toLowerCase()) || k === 'className' || k === 'style') {
-          kept[k] = v
-        } else {
-          stash[k] = v
-        }
-      }
-      if (Object.keys(stash).length > 0) {
-        kept[STASH_ATTR] = JSON.stringify(stash)
-      }
-      node.properties = kept
-    })
-  }
+interface MutableSchema {
+  attributes?: Record<string, AttrEntry[]>
 }
 
-export function rehypePluginAttrsRestore() {
+export function rehypeAllowPluginAttrs(schema: MutableSchema) {
   return (tree: Root) => {
+    const existing = schema.attributes?.plugin ?? []
+    const allowed = new Set<string>(existing.map((a) => (Array.isArray(a) ? a[0] : a)))
     visit(tree, 'element', (node) => {
-      if (node.tagName !== 'plugin') return
-      const props = node.properties
-      if (!props) return
-      const raw = props[STASH_ATTR]
-      if (typeof raw !== 'string') return
-      try {
-        const stash = JSON.parse(raw) as Properties
-        delete props[STASH_ATTR]
-        for (const [k, v] of Object.entries(stash)) {
-          props[k] = v
-        }
-      } catch {
-        // Malformed stash — drop it silently rather than leaking the JSON
-        // string into the DOM as an attribute.
-        delete props[STASH_ATTR]
-      }
+      if (node.tagName !== 'plugin' || !node.properties) return
+      for (const attr of Object.keys(node.properties)) allowed.add(attr)
     })
+    if (!schema.attributes) schema.attributes = {}
+    schema.attributes.plugin = [...allowed]
   }
 }

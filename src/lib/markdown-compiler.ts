@@ -34,7 +34,7 @@ import { rehypeSourceLine } from './rehype-plugins/source-line'
 import { rehypeColorTitle } from './rehype-plugins/color-title'
 import { rehypeHeadingSectionIds } from './rehype-plugins/heading-section-ids'
 import { rehypeMarkdownChildren } from './rehype-plugins/markdown-children'
-import { rehypePluginAttrsStash, rehypePluginAttrsRestore } from './rehype-plugins/plugin-attrs'
+import { rehypeAllowPluginAttrs } from './rehype-plugins/plugin-attrs'
 
 // Re-export remarkPlugins for backward compatibility
 export { remarkPlugins }
@@ -112,11 +112,10 @@ export const sanitizeSchema = {
     'excali': ['src', 'alt', 'width', 'align', 'wrap'],
     // <image> component attributes (src, alt, width, align, wrap, invert, saturate)
     'image': ['src', 'alt', 'width', 'align', 'wrap', 'invert', 'saturate'],
-    // Plugin: only intrinsic attrs are real HTML. All other config attrs are
-    // stashed into `data-plugin-attrs` (a JSON blob) before sanitize and
-    // restored after — see rehype-plugins/plugin-attrs.ts. This keeps the
-    // allowlist closed while letting plugins use any config keys.
-    'plugin': ['src', 'id', 'height', 'width', 'data-plugin-attrs', 'dataPluginAttrs'],
+    // Plugin: intrinsic attrs the React PluginContainer reads as named props.
+    // Per-document custom config attrs (font, mod, …) are added on the fly by
+    // rehypeAllowPluginAttrs before sanitize — see rehype-plugins/plugin-attrs.ts.
+    'plugin': ['src', 'id', 'height', 'width'],
     'pdf': ['src', 'height'],
     'question': ['id', 'type', 'showfeedback', 'allowupdate', 'minvalue', 'maxvalue', 'step'],
     'quiz-option': ['correct', 'is', 'feedback'],
@@ -261,15 +260,19 @@ export async function compileMarkdown(
 
   const processed = expandSelfClosingTags(content)
 
+  // Clone the schema per call: rehypeAllowPluginAttrs mutates the plugin
+  // allowlist based on the attrs found in *this* document, so concurrent
+  // renders can't pollute each other.
+  const schema = structuredClone(sanitizeSchema)
+
   const processor = unified()
     .use(remarkParse)
     .use(remarkPlugins)
     .use(remarkRehype, { allowDangerousHtml: true })
     .use(rehypeRaw)
     .use(rehypeMarkdownChildren) // Re-parse markdown inside custom elements like <stickme>
-    .use(rehypePluginAttrsStash) // Bundle <plugin> config attrs so the sanitizer doesn't drop them
-    .use(rehypeSanitize, sanitizeSchema)
-    .use(rehypePluginAttrsRestore) // Unpack them back into individual attrs for React
+    .use(rehypeAllowPluginAttrs, schema) // Add this document's <plugin> attrs to the sanitize allowlist
+    .use(rehypeSanitize, schema)
     .use(rehypePlugins)
     .use(rehypeReact, {
       ...production,

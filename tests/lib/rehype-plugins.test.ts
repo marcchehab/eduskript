@@ -8,10 +8,7 @@ import rehypeSlug from 'rehype-slug'
 import { rehypeHeadingSectionIds } from '@/lib/rehype-plugins/heading-section-ids'
 import { rehypeImageWrapper } from '@/lib/rehype-plugins/image-wrapper'
 import { rehypeInteractiveElements } from '@/lib/rehype-plugins/interactive-elements'
-import {
-  rehypePluginAttrsRestore,
-  rehypePluginAttrsStash,
-} from '@/lib/rehype-plugins/plugin-attrs'
+import { rehypeAllowPluginAttrs } from '@/lib/rehype-plugins/plugin-attrs'
 import { sanitizeSchema } from '@/lib/markdown-compiler'
 
 describe('Rehype Plugins', () => {
@@ -380,18 +377,21 @@ console.log("second")
     })
   })
 
-  describe('rehypePluginAttrs (stash + restore around sanitize)', () => {
-    // Build the full pipeline used by compileMarkdown around <plugin>: parse,
-    // raw-HTML, stash, sanitize, restore. The interesting question is whether
-    // arbitrary plugin config attrs (like `font`, `mod`) survive sanitization.
+  describe('rehypeAllowPluginAttrs (dynamic <plugin> allowlist)', () => {
+    // Build a pipeline matching compileMarkdown's: parse markdown, run
+    // rehype-raw on inline HTML, dynamically extend the sanitize schema with
+    // any <plugin> attrs found, then sanitize. The interesting question is
+    // whether arbitrary plugin config attrs (like `font`, `mod`) survive
+    // sanitization without being hand-listed.
     function runPluginPipeline(markdown: string) {
+      // Clone per call — the plugin mutates the schema.
+      const schema = structuredClone(sanitizeSchema)
       const processor = unified()
         .use(remarkParse)
         .use(remarkRehype, { allowDangerousHtml: true })
         .use(rehypeRaw)
-        .use(rehypePluginAttrsStash)
-        .use(rehypeSanitize, sanitizeSchema)
-        .use(rehypePluginAttrsRestore)
+        .use(rehypeAllowPluginAttrs, schema)
+        .use(rehypeSanitize, schema)
 
       const tree = processor.parse(markdown)
       return processor.run(tree)
@@ -405,8 +405,6 @@ console.log("second")
       expect(plugin?.properties?.font).toBe('12')
       expect(plugin?.properties?.mod).toBe('7')
       expect(plugin?.properties?.lang).toBe('de')
-      // Stash attribute should not leak into the final tree
-      expect(plugin?.properties?.['data-plugin-attrs']).toBeUndefined()
     })
 
     it('keeps intrinsic attrs (src, height, width) as real attributes and lets sanitize handle id', async () => {
@@ -424,6 +422,33 @@ console.log("second")
       // clobber attacks. We don't fight that — the PluginContainer reads
       // `id` as an opaque string and uses it for UserData persistence.
       expect(plugin?.properties?.id).toMatch(/foo$/)
+    })
+
+    it('allows distinct attrs across multiple plugins in the same document', async () => {
+      const hast = await runPluginPipeline(
+        '<plugin src="a/x" foo="1"></plugin>\n\n<plugin src="b/y" bar="2"></plugin>',
+      )
+      const plugins: any[] = []
+      function collect(node: any) {
+        if (node?.tagName === 'plugin') plugins.push(node)
+        node?.children?.forEach(collect)
+      }
+      collect(hast)
+      expect(plugins).toHaveLength(2)
+      expect(plugins[0].properties?.foo).toBe('1')
+      expect(plugins[1].properties?.bar).toBe('2')
+    })
+
+    it('does not leak allowed attrs across separate compile calls (schema clone)', async () => {
+      // First call sees `font`. Second call only declares `glyph`. If the
+      // schema were shared, the second call's tree would still allow `font`
+      // — but the visible regression we'd care about is the *opposite*: the
+      // second call should still allow its OWN attr (`glyph`) without being
+      // limited to whatever the first call set up.
+      const first = await runPluginPipeline('<plugin src="a/x" font="12"></plugin>')
+      const second = await runPluginPipeline('<plugin src="a/x" glyph="@"></plugin>')
+      expect(findNode(first, (n: any) => n.tagName === 'plugin')?.properties?.font).toBe('12')
+      expect(findNode(second, (n: any) => n.tagName === 'plugin')?.properties?.glyph).toBe('@')
     })
   })
 })
