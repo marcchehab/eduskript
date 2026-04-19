@@ -1,14 +1,15 @@
 'use client'
 
-import { useEffect, useLayoutEffect, useRef, useCallback } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react'
 import { EditorView, basicSetup } from 'codemirror'
 import { EditorState } from '@codemirror/state'
-import { unifiedMergeView, acceptChunk, rejectChunk, getChunks } from '@codemirror/merge'
+import { unifiedMergeView, rejectChunk, getChunks } from '@codemirror/merge'
 import { markdown } from '@codemirror/lang-markdown'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { useTheme } from 'next-themes'
 import { Button } from '@/components/ui/button'
-import { CheckCheck, XCircle } from 'lucide-react'
+import { XCircle, Check } from 'lucide-react'
+import { normalizeContent } from '@/lib/ai/normalize-content'
 
 interface MergeEditorProps {
   original: string
@@ -27,37 +28,36 @@ export function MergeEditor({ original, proposed, onChange, className = '' }: Me
   }, [onChange])
 
   const { resolvedTheme } = useTheme()
-
   const isDark = resolvedTheme === 'dark'
 
-  // Accept all remaining chunks
-  const handleAcceptAll = useCallback(() => {
-    if (!viewRef.current) return
-    const view = viewRef.current
+  // Normalize defensively — content from older jobs (or any source that
+  // bypassed the backend normalization step) might still have CRLF / trailing
+  // whitespace / decomposed unicode, which makes the diff explode into
+  // spurious chunks.
+  const normalizedOriginal = useMemo(() => normalizeContent(original), [original])
+  const normalizedProposed = useMemo(() => normalizeContent(proposed), [proposed])
+  const isNoop = normalizedOriginal === normalizedProposed
 
-    // Keep accepting chunks until none remain
-    // Use fromB (position in editor doc), not fromA (position in original)
-    let safety = 100
-    while (safety-- > 0) {
-      const chunks = getChunks(view.state)
-      if (!chunks || chunks.chunks.length === 0) break
-      acceptChunk(view, chunks.chunks[0].fromB)
-    }
-
-    onChangeRef.current(view.state.doc.toString())
-  }, [])
-
-  // Reject all remaining chunks
+  // Reject all remaining chunks. Defensive loop: if the chunk count stops
+  // decreasing (because rejectChunk returned false on a problematic chunk),
+  // bail out instead of looping until the safety limit. Same pattern would
+  // apply to "accept all" if we surfaced one — but we don't, since the
+  // proposed text is the editor's starting state (everything already kept).
   const handleRejectAll = useCallback(() => {
     if (!viewRef.current) return
     const view = viewRef.current
 
-    // Keep rejecting chunks until none remain
-    let safety = 100
+    let lastChunkCount = -1
+    let safety = 1000
     while (safety-- > 0) {
       const chunks = getChunks(view.state)
       if (!chunks || chunks.chunks.length === 0) break
-      rejectChunk(view, chunks.chunks[0].fromB)
+      // Non-progress guard: if the chunk count didn't drop after the last
+      // reject, the next reject won't either — stop instead of spinning.
+      if (chunks.chunks.length === lastChunkCount) break
+      lastChunkCount = chunks.chunks.length
+      const ok = rejectChunk(view, chunks.chunks[0].fromB)
+      if (!ok) break
     }
 
     onChangeRef.current(view.state.doc.toString())
@@ -69,15 +69,22 @@ export function MergeEditor({ original, proposed, onChange, className = '' }: Me
     // Clean up previous view
     if (viewRef.current) {
       viewRef.current.destroy()
+      viewRef.current = null
     }
 
-    // Create unified merge view
-    // doc = proposed (AI's changes), original = current page content
-    // This way: Accept = keep AI change, Reject = revert to original
+    // Skip building the editor entirely when there's nothing to diff. The
+    // "no changes" panel below renders instead.
+    if (isNoop) return
+
+    // Create unified merge view.
+    //   doc      = proposed (AI's suggested text)
+    //   original = current page content (the revert target)
+    // The proposed text is the starting state, so by default ALL suggestions
+    // are kept. The gutter buttons let the user revert individual chunks.
     const view = new EditorView({
       parent: containerRef.current,
       state: EditorState.create({
-        doc: proposed,
+        doc: normalizedProposed,
         extensions: [
           basicSetup,
           markdown(),
@@ -101,7 +108,7 @@ export function MergeEditor({ original, proposed, onChange, className = '' }: Me
             },
           }),
           unifiedMergeView({
-            original: original,
+            original: normalizedOriginal,
             mergeControls: true,
             highlightChanges: true,
             gutter: true,
@@ -120,21 +127,33 @@ export function MergeEditor({ original, proposed, onChange, className = '' }: Me
     return () => {
       view.destroy()
     }
-  }, [original, proposed, isDark])
+  }, [normalizedOriginal, normalizedProposed, isNoop, isDark])
+
+  // Hand the normalized proposed text up on mount/change so the parent
+  // doesn't save the pre-normalization version when there's no diff.
+  useEffect(() => {
+    if (isNoop) onChangeRef.current(normalizedProposed)
+  }, [isNoop, normalizedProposed])
+
+  if (isNoop) {
+    return (
+      <div className={`flex flex-col ${className}`}>
+        <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/30">
+          <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+          <span className="text-xs text-muted-foreground">
+            No changes — the AI returned content identical to the current page.
+          </span>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className={`flex flex-col ${className}`}>
-      {/* Toolbar */}
+      {/* Toolbar — note that "accept" is the *default*: the editor starts
+          with the AI's suggested text. The user only needs to act if they
+          want to revert something. */}
       <div className="flex items-center gap-2 px-2 py-1.5 border-b bg-muted/30">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleAcceptAll}
-          className="h-7 text-xs gap-1.5 text-green-600 hover:text-green-700 hover:bg-green-100 dark:text-green-400 dark:hover:bg-green-900/30"
-        >
-          <CheckCheck className="h-3.5 w-3.5" />
-          Accept All
-        </Button>
         <Button
           variant="ghost"
           size="sm"
@@ -142,10 +161,10 @@ export function MergeEditor({ original, proposed, onChange, className = '' }: Me
           className="h-7 text-xs gap-1.5 text-red-600 hover:text-red-700 hover:bg-red-100 dark:text-red-400 dark:hover:bg-red-900/30"
         >
           <XCircle className="h-3.5 w-3.5" />
-          Reject All
+          Revert all to original
         </Button>
         <span className="text-xs text-muted-foreground ml-auto">
-          Click chunks to accept/reject individual changes
+          Suggestions are kept by default — use the gutter buttons to revert individual changes.
         </span>
       </div>
 

@@ -330,6 +330,15 @@ export function AIEditModal({
               )}
             </div>
 
+            {/* Helper note — explains that the default is "kept", to remove
+                the "did Save actually do something?" anxiety the older
+                Accept-All framing caused. */}
+            {(completedEdits.length > 0 || (proposal?.edits?.length ?? 0) > 0) && (
+              <div className="flex-shrink-0 px-4 py-2 border-b bg-blue-50/50 dark:bg-blue-950/10 text-xs text-blue-900 dark:text-blue-200">
+                AI suggestions are kept by default — use the gutter buttons inside each edit to revert individual changes. Click <span className="font-medium">Apply</span> below when you&apos;re happy.
+              </div>
+            )}
+
             {/* Edit list - progressive with merge editors */}
             <div className="flex-1 overflow-y-auto">
               {(() => { log(`Rendering edits: proposal=${proposal?.edits?.length ?? 'none'}, completedEdits=${completedEdits.length}`); return null })()}
@@ -492,13 +501,21 @@ export function AIEditModal({
                 <Button
                   onClick={handleSave}
                   disabled={isSaving || (completedEdits.length === 0 && !proposal)}
+                  title={isFrontpageMode
+                    ? "Apply the AI's content to your front page editor (you still need to save the page)"
+                    : "Write the kept changes to the page(s)"}
                 >
                   {isSaving ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   ) : (
                     <Check className="h-4 w-4 mr-2" />
                   )}
-                  Save {isComplete ? 'Changes' : `${completedEdits.length} Ready`}
+                  {(() => {
+                    const n = completedEdits.length || proposal?.edits?.length || 0
+                    const noun = isFrontpageMode ? 'to editor' : (n === 1 ? 'to page' : `to ${n} pages`)
+                    if (isSaving) return 'Applying…'
+                    return `Apply ${noun}`
+                  })()}
                 </Button>
               </div>
             </div>

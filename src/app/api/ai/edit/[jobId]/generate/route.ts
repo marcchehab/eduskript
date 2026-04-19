@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { assembleSinglePageEditPrompt } from '@/lib/ai/prompts'
 import type { SkriptContext } from '@/lib/ai/types'
 import { loadFrontPageContext } from '@/lib/ai/frontpage-context'
+import { normalizeContent } from '@/lib/ai/normalize-content'
 import OpenAI from 'openai'
 import { createLogger } from '@/lib/logger'
 
@@ -269,13 +270,19 @@ export async function POST(
       proposedContent = proposedContent.replace(/^```(?:markdown)?\s*\n/i, '').replace(/\n```\s*$/, '')
     }
 
+    // Normalize whitespace, line endings, and unicode form so the merge view
+    // doesn't show huge spurious diff chunks for cosmetic differences. Apply
+    // the same normalization to BOTH sides so the diff baseline matches.
+    proposedContent = normalizeContent(proposedContent)
+    const normalizedOriginal = normalizeContent(isNew ? '' : originalContent)
+
     // 5. Build edit result
     const edit = {
       index: pageIndex,
       pageId: isNew ? null : actualPageId,
       pageTitle: originalPage?.title || plannedEdit.pageTitle,
       pageSlug: originalPage?.slug || plannedEdit.pageSlug,
-      originalContent: isNew ? '' : originalContent,
+      originalContent: normalizedOriginal,
       proposedContent,
       summary: plannedEdit.summary,
       isNew,
