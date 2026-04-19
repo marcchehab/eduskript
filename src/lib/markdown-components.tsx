@@ -343,12 +343,17 @@ export function createMarkdownComponents(
   function MuxVideoComponent({ ...props }: React.HTMLAttributes<HTMLElement> & Record<string, unknown>) {
     const src = (props['src'] as string) || ''
     const alt = (props['alt'] as string) || ''
+    // poster: optional override — accepts a filename (resolved via files) or
+    // an absolute URL. When omitted, the MuxVideo component falls back to the
+    // auto-generated Mux thumbnail (frame at time=0).
+    const poster = (props['poster'] as string) || undefined
 
     return (
       <span className="block my-6">
         <MuxVideo
           src={src}
           alt={alt}
+          poster={poster}
           files={files}
           className="w-full rounded-lg overflow-hidden"
         />

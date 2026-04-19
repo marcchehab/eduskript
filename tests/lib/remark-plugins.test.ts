@@ -4,6 +4,7 @@ import remarkParse from 'remark-parse'
 import remarkCodeEditor from '@/lib/remark-plugins/code-editor'
 import { remarkImageResolver } from '@/lib/remark-plugins/image-resolver'
 import { remarkExcalidraw } from '@/lib/remark-plugins/excalidraw'
+import { remarkMuxVideo } from '@/lib/remark-plugins/mux-video'
 
 // Helper to extract attribute value from HTML string
 function getHtmlAttr(html: string, attr: string): string | undefined {
@@ -499,6 +500,52 @@ console.log("second")
 
       expect(img?.url).toBe('https://example.com/diagram.excalidraw')
       expect(htmlNode).toBeUndefined()
+    })
+  })
+
+  describe('remarkMuxVideo', () => {
+    async function runMux(markdown: string) {
+      const processor = unified().use(remarkParse).use(remarkMuxVideo)
+      const tree = processor.parse(markdown)
+      await processor.run(tree)
+      return tree
+    }
+
+    it('transforms a basic ![](video.mp4) into a <muxvideo> element', async () => {
+      const tree = await runMux('![](lecture.mp4)')
+      const html = findNode(tree, (n: any) => n.type === 'html')?.value as string | undefined
+      expect(html).toBeDefined()
+      expect(getHtmlAttr(html!, 'src')).toBe('lecture.mp4')
+      expect(html).not.toMatch(/poster=/)
+    })
+
+    it('extracts the markdown image-title field as the poster attribute', async () => {
+      // Standard markdown title syntax: ![alt](url "title")
+      const tree = await runMux('![](lecture.mp4 "thumbnail.jpg")')
+      const html = findNode(tree, (n: any) => n.type === 'html')?.value as string | undefined
+      expect(getHtmlAttr(html!, 'src')).toBe('lecture.mp4')
+      expect(getHtmlAttr(html!, 'poster')).toBe('thumbnail.jpg')
+    })
+
+    it('keeps alt-text flags (autoplay/loop) alongside the poster', async () => {
+      const tree = await runMux('![autoplay loop](bg.mp4 "first-frame.png")')
+      const html = findNode(tree, (n: any) => n.type === 'html')?.value as string | undefined
+      expect(getHtmlAttr(html!, 'alt')).toBe('autoplay loop')
+      expect(getHtmlAttr(html!, 'poster')).toBe('first-frame.png')
+    })
+
+    it('escapes HTML in alt and title to prevent attribute injection', async () => {
+      // Markdown title with a quote — pre-escape would break the attribute.
+      const tree = await runMux('![<bad>](lecture.mp4 "evil\\"poster.png")')
+      const html = findNode(tree, (n: any) => n.type === 'html')?.value as string | undefined
+      expect(html).toContain('alt="&lt;bad&gt;"')
+      expect(html).toContain('poster="evil&quot;poster.png"')
+    })
+
+    it('does not transform non-video images', async () => {
+      const tree = await runMux('![](photo.jpg "thumbnail.jpg")')
+      const img = findNode(tree, (n: any) => n.type === 'image')
+      expect(img).toBeDefined()
     })
   })
 })

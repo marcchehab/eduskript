@@ -110,7 +110,7 @@ export const sanitizeSchema = {
     'tabs-container': ['dataItems', 'data-items'],
     'youtube-embed': ['dataId', 'dataPlaylist', 'dataStartTime', 'data-id', 'data-playlist', 'data-start-time'],
     'mermaid-diagram': ['dataDefinition', 'data-definition'],
-    'muxvideo': ['src', 'alt'],
+    'muxvideo': ['src', 'alt', 'poster'],
     'excalidraw-image': ['src', 'alt', 'dataAlign', 'dataWrap', 'data-align', 'data-wrap'],
     // <excali> component - shorthand for excalidraw (src without .excalidraw extension)
     'excali': ['src', 'alt', 'width', 'align', 'wrap'],
