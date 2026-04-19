@@ -36,6 +36,7 @@ export async function GET(
     failedPages: result?.failedPages ?? [],
     instruction: result?.instruction ?? null,
     skriptId: result?.skriptId ?? null,
+    frontPageId: result?.frontPageId ?? null,
   })
 }
 

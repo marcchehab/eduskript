@@ -62,10 +62,14 @@ export interface EditProposal {
   overallSummary: string // High-level description of all changes
 }
 
+// EditRequest: exactly one of skriptId or frontPageId must be set.
+// - skriptId mode: edit one or more pages in a skript (multi-page proposal)
+// - frontPageId mode: edit a single FrontPage content blob (single-edit proposal)
 export interface EditRequest {
-  skriptId: string
-  pageId?: string // Optional: focus edits on specific page
-  instruction: string // What the user wants changed
+  skriptId?: string
+  pageId?: string // Optional: focus edits on specific page (skript mode only)
+  frontPageId?: string // When set, edits the FrontPage's content instead of a skript
+  instruction: string
 }
 
 export interface EditResponse {

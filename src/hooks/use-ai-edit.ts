@@ -6,9 +6,19 @@ import { createLogger } from '@/lib/logger'
 
 const log = createLogger('ai:edit')
 
+/**
+ * Where AI edits are targeted.
+ * - 'page': edit one or more pages within a skript (multi-page proposal flow)
+ * - 'frontpage': edit a single FrontPage content blob (single-edit flow; the
+ *   parent component is responsible for actually saving the new content via
+ *   the FrontPage save API — the hook does not write to the server)
+ */
+export type AIEditTarget =
+  | { mode: 'page'; skriptId: string; pageId?: string }
+  | { mode: 'frontpage'; frontPageId: string }
+
 interface UseAIEditOptions {
-  skriptId: string
-  pageId?: string
+  target: AIEditTarget
   currentContent?: string
 }
 
@@ -22,11 +32,9 @@ interface EditPlan {
     summary: string
     isNew?: boolean
   }>
-  // Overflow info when AI response had text outside JSON
   overflowBefore?: string | null
   overflowAfter?: string | null
   fullResponse?: string
-  // AI message when it returned text instead of JSON
   aiMessage?: string
 }
 
@@ -45,18 +53,13 @@ interface UseAIEditReturn {
   proposal: EditProposal | null
   isLoading: boolean
   error: string | null
-  // Progressive state
   plan: EditPlan | null
   currentEditIndex: number
   completedEdits: PageEdit[]
   failedPages: FailedPage[]
-  // Overflow info (when AI response had malformed output)
   overflow: OverflowInfo | null
-  // AI message (when AI returned text instead of JSON edits)
   aiMessage: string | null
-  // Job ID for recovery
   jobId: string | null
-  // Actions
   requestEdit: (instruction: string) => Promise<void>
   applyEdits: (edits: PageEdit[]) => Promise<void>
   clearProposal: () => void
@@ -65,17 +68,25 @@ interface UseAIEditReturn {
   recoverJob: (jobId: string) => Promise<void>
 }
 
-// Session storage key for persisting active job ID
-function getJobStorageKey(skriptId: string): string {
-  return `ai-edit-job:${skriptId}`
+// Session storage key — namespaced by mode so a frontpage job can't be picked
+// up by a skript-mode modal opened with the same skript ID, and vice versa.
+function getJobStorageKey(target: AIEditTarget): string {
+  return target.mode === 'frontpage'
+    ? `ai-edit-job:frontpage:${target.frontPageId}`
+    : `ai-edit-job:${target.skriptId}`
 }
 
-export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions): UseAIEditReturn {
+// Opaque string used as proposal.skriptId — never displayed; only kept for the
+// EditProposal type contract. For frontpage mode we use a synthetic prefix.
+function proposalScopeId(target: AIEditTarget): string {
+  return target.mode === 'frontpage' ? `frontpage:${target.frontPageId}` : target.skriptId
+}
+
+export function useAIEdit({ target, currentContent }: UseAIEditOptions): UseAIEditReturn {
   const [proposal, setProposal] = useState<EditProposal | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Progressive state
   const [plan, setPlan] = useState<EditPlan | null>(null)
   const [currentEditIndex, setCurrentEditIndex] = useState(-1)
   const [completedEdits, setCompletedEdits] = useState<PageEdit[]>([])
@@ -84,13 +95,12 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
   const [aiMessage, setAiMessage] = useState<string | null>(null)
   const [jobId, setJobId] = useState<string | null>(null)
 
-  // AbortController ref for cancellation
   const abortControllerRef = useRef<AbortController | null>(null)
 
-  /**
-   * Generate a single page edit, updating state progressively.
-   * Returns true on success, false on failure.
-   */
+  // Stable scope ID for the current target
+  const scopeId = proposalScopeId(target)
+  const storageKey = getJobStorageKey(target)
+
   const generatePage = useCallback(
     async (currentJobId: string, pageIndex: number, signal: AbortSignal): Promise<PageEdit | null> => {
       const response = await fetch(`/api/ai/edit/${currentJobId}/generate`, {
@@ -105,7 +115,6 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
       if (log.enabled) {
         log(`Page ${pageIndex} body:`, text.slice(0, 500))
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let data: any
       try {
         data = JSON.parse(text)
@@ -137,9 +146,6 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
     []
   )
 
-  /**
-   * Run page generation sequentially for all pages in the plan.
-   */
   const generateAllPages = useCallback(
     async (currentJobId: string, planPages: EditPlan['pages'], signal: AbortSignal) => {
       const edits: PageEdit[] = []
@@ -156,22 +162,20 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
         }
       }
 
-      // All done — build proposal
       setCurrentEditIndex(planPages.length)
       if (edits.length > 0) {
         setProposal({
-          skriptId,
+          skriptId: scopeId,
           edits,
-          overallSummary: '', // Will be filled from plan
+          overallSummary: '',
         })
       }
     },
-    [skriptId, generatePage]
+    [scopeId, generatePage]
   )
 
   const requestEdit = useCallback(
     async (instruction: string) => {
-      // Cancel any existing request
       if (abortControllerRef.current) {
         log('Aborting previous request')
         abortControllerRef.current.abort()
@@ -191,14 +195,22 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
       const controller = new AbortController()
       abortControllerRef.current = controller
 
-      log('Starting edit request', { skriptId, pageId, instructionLength: instruction.length })
+      log('Starting edit request', { target, instructionLength: instruction.length })
 
       try {
-        // Phase 1: Create job + get plan
+        // Build the request body based on mode — exactly one of skriptId/frontPageId
+        const body: Record<string, unknown> = { instruction, currentContent }
+        if (target.mode === 'frontpage') {
+          body.frontPageId = target.frontPageId
+        } else {
+          body.skriptId = target.skriptId
+          if (target.pageId) body.pageId = target.pageId
+        }
+
         const response = await fetch('/api/ai/edit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ skriptId, pageId, instruction, currentContent }),
+          body: JSON.stringify(body),
           signal: controller.signal,
         })
 
@@ -209,14 +221,12 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
             const data = JSON.parse(text)
             errorMsg = data.error || errorMsg
           } catch {
-            // Non-JSON error response (e.g. proxy timeout HTML page)
             log.error('Non-JSON error response:', text.slice(0, 200))
           }
           throw new Error(errorMsg)
         }
 
         const text = await response.text()
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let data: any
         try {
           data = JSON.parse(text)
@@ -225,24 +235,21 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
           throw new Error('Server returned an invalid response. Please try again.')
         }
 
-        // Handle AI text-only response (no job created)
         if (data.aiMessage) {
           setAiMessage(data.aiMessage)
           setPlan(data.plan)
-          setProposal({ skriptId, edits: [], overallSummary: data.plan.overallSummary })
+          setProposal({ skriptId: scopeId, edits: [], overallSummary: data.plan.overallSummary })
           setIsLoading(false)
           return
         }
 
-        // No edits planned
         if (!data.jobId || data.plan.totalEdits === 0) {
           setPlan(data.plan)
-          setProposal({ skriptId, edits: [], overallSummary: data.plan.overallSummary })
+          setProposal({ skriptId: scopeId, edits: [], overallSummary: data.plan.overallSummary })
           setIsLoading(false)
           return
         }
 
-        // Capture overflow info
         if (data.overflowBefore || data.overflowAfter) {
           setOverflow({
             overflowBefore: data.overflowBefore || null,
@@ -256,17 +263,14 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
         setJobId(data.jobId)
         setCurrentEditIndex(0)
 
-        // Store job ID for recovery
         try {
-          sessionStorage.setItem(getJobStorageKey(skriptId), data.jobId)
+          sessionStorage.setItem(storageKey, data.jobId)
         } catch {
           // sessionStorage may not be available
         }
 
-        // Phase 2: Generate each page edit sequentially
         await generateAllPages(data.jobId, editPlan.pages, controller.signal)
 
-        // Update proposal with overall summary from plan
         setProposal(prev => prev ? { ...prev, overallSummary: editPlan.overallSummary } : prev)
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') {
@@ -281,12 +285,9 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
         abortControllerRef.current = null
       }
     },
-    [skriptId, pageId, currentContent, generateAllPages]
+    [target, currentContent, scopeId, storageKey, generateAllPages]
   )
 
-  /**
-   * Retry a single failed page.
-   */
   const retryPage = useCallback(
     async (pageIndex: number) => {
       if (!jobId) return
@@ -294,7 +295,6 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
       const controller = new AbortController()
       abortControllerRef.current = controller
 
-      // Remove from failed list
       setFailedPages(prev => prev.filter(f => f.pageIndex !== pageIndex))
 
       try {
@@ -302,11 +302,9 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
         if (edit) {
           setCompletedEdits(prev => {
             const updated = [...prev, edit]
-            // Sort by page index to maintain order
-            // (index is stored in the edit via the API response)
             setProposal(current => current
               ? { ...current, edits: updated }
-              : { skriptId, edits: updated, overallSummary: plan?.overallSummary || '' }
+              : { skriptId: scopeId, edits: updated, overallSummary: plan?.overallSummary || '' }
             )
             return updated
           })
@@ -318,12 +316,9 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
         abortControllerRef.current = null
       }
     },
-    [jobId, skriptId, plan, generatePage]
+    [jobId, scopeId, plan, generatePage]
   )
 
-  /**
-   * Recover a job after disconnect — fetch status from DB and resume.
-   */
   const recoverJob = useCallback(
     async (recoveryJobId: string) => {
       setIsLoading(true)
@@ -332,8 +327,7 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
       try {
         const response = await fetch(`/api/ai/edit/${recoveryJobId}`)
         if (!response.ok) {
-          // Job not found or expired — clear storage
-          try { sessionStorage.removeItem(getJobStorageKey(skriptId)) } catch {}
+          try { sessionStorage.removeItem(storageKey) } catch {}
           setIsLoading(false)
           return
         }
@@ -341,12 +335,24 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
         const data = await response.json()
 
         if (data.status === 'cancelled' || !data.plan) {
-          try { sessionStorage.removeItem(getJobStorageKey(skriptId)) } catch {}
+          try { sessionStorage.removeItem(storageKey) } catch {}
           setIsLoading(false)
           return
         }
 
-        // Restore state
+        // Sanity-check that the recovered job matches the current target. A
+        // mode mismatch shouldn't normally happen because storage keys are
+        // namespaced by mode, but a stale frontpage job under a now-skript
+        // editor (or vice versa) would corrupt state — clear and bail.
+        const recoveredIsFrontpage = !!data.frontPageId
+        const targetIsFrontpage = target.mode === 'frontpage'
+        if (recoveredIsFrontpage !== targetIsFrontpage) {
+          log.warn('Recovered job mode mismatch — discarding', { recoveredIsFrontpage, targetIsFrontpage })
+          try { sessionStorage.removeItem(storageKey) } catch {}
+          setIsLoading(false)
+          return
+        }
+
         setJobId(recoveryJobId)
         setPlan(data.plan)
 
@@ -366,29 +372,21 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
         const doneCount = recovered.length + (data.failedPages?.length || 0)
 
         if (doneCount >= totalPages || data.status === 'completed') {
-          // Job is done
           setCurrentEditIndex(totalPages)
           if (recovered.length > 0) {
             setProposal({
-              skriptId,
+              skriptId: scopeId,
               edits: recovered,
               overallSummary: data.plan.overallSummary,
             })
           }
           setIsLoading(false)
         } else {
-          // Resume generating remaining pages
           const controller = new AbortController()
           abortControllerRef.current = controller
 
           setCurrentEditIndex(doneCount)
 
-          const completedIndices = new Set([
-            ...recovered.map((_: PageEdit, i: number) => i),
-            ...(data.failedPages || []).map((f: FailedPage) => f.pageIndex),
-          ])
-
-          // Figure out which page indices from completedEdits
           const completedPageIndices = new Set<number>()
           for (const edit of data.completedEdits || []) {
             const idx = (edit as Record<string, unknown>).index as number
@@ -416,7 +414,7 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
           setCurrentEditIndex(totalPages)
           if (edits.length > 0) {
             setProposal({
-              skriptId,
+              skriptId: scopeId,
               edits,
               overallSummary: data.plan.overallSummary,
             })
@@ -430,29 +428,48 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
         setIsLoading(false)
       }
     },
-    [skriptId, generatePage]
+    [target.mode, scopeId, storageKey, generatePage]
   )
 
-  // Check for recoverable job on mount
+  // Restore a stored job ID for this scope on mount (modal will call recoverJob).
   useEffect(() => {
     try {
-      const storedJobId = sessionStorage.getItem(getJobStorageKey(skriptId))
+      const storedJobId = sessionStorage.getItem(storageKey)
       if (storedJobId) {
         setJobId(storedJobId)
       }
     } catch {
       // sessionStorage not available
     }
-  }, [skriptId])
+  }, [storageKey])
 
   const applyEdits = useCallback(
     async (edits: PageEdit[]) => {
       log(`Applying ${edits.length} edits`)
-      // Separate new pages from existing page edits
+
+      // Frontpage mode: the hook does NOT save server-side. The modal hands the
+      // proposed content back to the parent via `onEditsApplied(newContent)` and
+      // the parent's existing FrontPage save endpoint persists it. Just clean up
+      // the job and reset state here.
+      if (target.mode === 'frontpage') {
+        if (jobId) {
+          try { await fetch(`/api/ai/edit/${jobId}`, { method: 'DELETE' }) } catch {}
+          try { sessionStorage.removeItem(storageKey) } catch {}
+        }
+
+        setProposal(null)
+        setPlan(null)
+        setCompletedEdits([])
+        setFailedPages([])
+        setCurrentEditIndex(-1)
+        setJobId(null)
+        return
+      }
+
+      // Skript mode: write existing pages via PATCH and create new pages via POST.
       const newPages = edits.filter((e) => e.isNew)
       const existingEdits = edits.filter((e) => !e.isNew)
 
-      // Apply edits to existing pages
       const editResults = await Promise.allSettled(
         existingEdits.map(async (edit) => {
           const response = await fetch(`/api/pages/${edit.pageId}`, {
@@ -470,14 +487,13 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
         })
       )
 
-      // Create new pages
       const createResults = await Promise.allSettled(
         newPages.map(async (edit) => {
           const response = await fetch('/api/pages', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              skriptId,
+              skriptId: target.skriptId,
               title: edit.pageTitle,
               slug: edit.pageSlug,
               content: edit.proposedContent,
@@ -493,7 +509,6 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
         })
       )
 
-      // Check for failures
       const allResults = [...editResults, ...createResults]
       const failures = allResults.filter(
         (r): r is PromiseRejectedResult => r.status === 'rejected'
@@ -504,13 +519,11 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
         throw new Error(`Some edits failed: ${messages.join(', ')}`)
       }
 
-      // Clean up job and session storage
       if (jobId) {
         try { await fetch(`/api/ai/edit/${jobId}`, { method: 'DELETE' }) } catch {}
-        try { sessionStorage.removeItem(getJobStorageKey(skriptId)) } catch {}
+        try { sessionStorage.removeItem(storageKey) } catch {}
       }
 
-      // Clear proposal on success
       setProposal(null)
       setPlan(null)
       setCompletedEdits([])
@@ -518,14 +531,13 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
       setCurrentEditIndex(-1)
       setJobId(null)
     },
-    [skriptId, jobId]
+    [target, jobId, storageKey]
   )
 
   const clearProposal = useCallback(() => {
-    // Cancel job on server if active
     if (jobId) {
       fetch(`/api/ai/edit/${jobId}`, { method: 'DELETE' }).catch(() => {})
-      try { sessionStorage.removeItem(getJobStorageKey(skriptId)) } catch {}
+      try { sessionStorage.removeItem(storageKey) } catch {}
     }
 
     setProposal(null)
@@ -537,7 +549,7 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
     setOverflow(null)
     setAiMessage(null)
     setJobId(null)
-  }, [jobId, skriptId])
+  }, [jobId, storageKey])
 
   const cancelRequest = useCallback(() => {
     log('Cancel requested', { hasController: !!abortControllerRef.current })
@@ -545,13 +557,12 @@ export function useAIEdit({ skriptId, pageId, currentContent }: UseAIEditOptions
       abortControllerRef.current.abort()
       abortControllerRef.current = null
     }
-    // Cancel job on server
     if (jobId) {
       fetch(`/api/ai/edit/${jobId}`, { method: 'DELETE' }).catch(() => {})
-      try { sessionStorage.removeItem(getJobStorageKey(skriptId)) } catch {}
+      try { sessionStorage.removeItem(storageKey) } catch {}
     }
     setIsLoading(false)
-  }, [jobId, skriptId])
+  }, [jobId, storageKey])
 
   return {
     proposal,

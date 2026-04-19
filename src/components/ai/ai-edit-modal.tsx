@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
-import { useAIEdit } from '@/hooks/use-ai-edit'
+import { useAIEdit, type AIEditTarget } from '@/hooks/use-ai-edit'
 import { createLogger } from '@/lib/logger'
 
 const log = createLogger('ai:edit-modal')
@@ -22,13 +22,15 @@ import type { PageEdit } from '@/lib/ai/types'
 interface AIEditModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  skriptId: string
-  skriptTitle: string
-  pageId?: string
-  pageTitle?: string
+  /** Discriminated target — page (in a skript) or single front page */
+  target: AIEditTarget
+  /** Display title for the target — used in the header and recovery storage scope */
+  targetTitle: string
+  /** Optional secondary label (e.g. skript title when editing a page within it) */
+  targetSubtitle?: string
   /** Current editor content (may have unsaved changes) */
   currentContent?: string
-  /** Called after edits are applied, with the new content for the focused page */
+  /** Called after edits are applied, with the new content for the focused edit */
   onEditsApplied?: (newContent?: string) => void
 }
 
@@ -40,10 +42,9 @@ function getEditKey(edit: PageEdit): string {
 export function AIEditModal({
   open,
   onOpenChange,
-  skriptId,
-  skriptTitle,
-  pageId,
-  pageTitle,
+  target,
+  targetTitle,
+  targetSubtitle,
   currentContent,
   onEditsApplied,
 }: AIEditModalProps) {
@@ -65,7 +66,17 @@ export function AIEditModal({
     cancelRequest,
     retryPage,
     recoverJob,
-  } = useAIEdit({ skriptId, pageId, currentContent })
+  } = useAIEdit({ target, currentContent })
+
+  // The "focused" id we use to find which edit's new content to hand back to
+  // the parent after apply. In page mode it's the pageId (may be undefined when
+  // editing a whole skript), in frontpage mode it's the frontPageId.
+  const focusedId = target.mode === 'frontpage' ? target.frontPageId : target.pageId
+  // For sessionStorage recovery key — keep modal-side recovery scoped per target.
+  const recoveryScope = target.mode === 'frontpage'
+    ? `frontpage:${target.frontPageId}`
+    : target.skriptId
+  const isFrontpageMode = target.mode === 'frontpage'
 
   // Track merged content for each page (user can edit while streaming)
   const [mergedContent, setMergedContent] = useState<Record<string, string>>({})
@@ -74,12 +85,13 @@ export function AIEditModal({
   const [showFullResponse, setShowFullResponse] = useState(false)
   const [recoveryChecked, setRecoveryChecked] = useState(false)
 
-  // Check for recoverable job when modal opens
+  // Check for recoverable job when modal opens. The storage key is namespaced
+  // by mode so a frontpage job and a skript job can coexist for the same scope.
   useEffect(() => {
     if (open && !recoveryChecked && !isLoading && !proposal && completedEdits.length === 0) {
       setRecoveryChecked(true)
       try {
-        const storedJobId = sessionStorage.getItem(`ai-edit-job:${skriptId}`)
+        const storedJobId = sessionStorage.getItem(`ai-edit-job:${recoveryScope}`)
         if (storedJobId) {
           log('Found recoverable job:', storedJobId)
           recoverJob(storedJobId)
@@ -88,7 +100,7 @@ export function AIEditModal({
         // sessionStorage not available
       }
     }
-  }, [open, recoveryChecked, isLoading, proposal, completedEdits.length, skriptId, recoverJob])
+  }, [open, recoveryChecked, isLoading, proposal, completedEdits.length, recoveryScope, recoverJob])
 
   // Reset recovery check when modal closes (to retry recovery on next open)
   useEffect(() => {
@@ -116,7 +128,7 @@ export function AIEditModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!instruction.trim() || isLoading) return
-    log('Submitting edit request', { instructionLength: instruction.trim().length, skriptId, pageId })
+    log('Submitting edit request', { instructionLength: instruction.trim().length, target })
     // Reset state for new request
     setMergedContent({})
     setExpandedEdits(new Set())
@@ -139,8 +151,12 @@ export function AIEditModal({
     setIsSaving(true)
     try {
       await applyEdits(editsToApply)
-      // Find the edit for the focused page and pass its content back
-      const focusedEdit = pageId ? editsToApply.find(e => e.pageId === pageId) : undefined
+      // Find the edit whose new content should be handed back to the parent
+      // editor. In page mode that's keyed by pageId; in frontpage mode there's
+      // exactly one edit so we just use the first.
+      const focusedEdit = isFrontpageMode
+        ? editsToApply[0]
+        : (focusedId ? editsToApply.find(e => e.pageId === focusedId) : undefined)
       log('Edits applied successfully', { focusedPageId: focusedEdit?.pageId })
       onEditsApplied?.(focusedEdit?.proposedContent)
       onOpenChange(false)
@@ -172,9 +188,9 @@ export function AIEditModal({
     onOpenChange(open)
   }
 
-  const contextLabel = pageTitle
-    ? `Editing: ${pageTitle} (in ${skriptTitle})`
-    : `Editing: ${skriptTitle}`
+  const contextLabel = isFrontpageMode
+    ? `Editing front page: ${targetTitle}`
+    : (targetSubtitle ? `Editing: ${targetTitle} (in ${targetSubtitle})` : `Editing: ${targetTitle}`)
 
   // Calculate progress
   const totalEdits = plan?.totalEdits || 0
@@ -469,17 +485,21 @@ export function AIEditModal({
                   value={instruction}
                   onChange={(e) => setInstruction(e.target.value)}
                   placeholder={
-                    pageId
-                      ? 'e.g., "Add more examples to explain recursion" or "Translate this page to German"'
-                      : 'e.g., "Add learning objectives to each page" or "Improve the introduction"'
+                    isFrontpageMode
+                      ? 'e.g., "Make this more welcoming" or "Add a section listing my courses"'
+                      : focusedId
+                        ? 'e.g., "Add more examples to explain recursion" or "Translate this page to German"'
+                        : 'e.g., "Add learning objectives to each page" or "Improve the introduction"'
                   }
                   className="flex-1 min-h-[120px] resize-none"
                   disabled={isLoading}
                 />
                 <p className="text-xs text-muted-foreground">
-                  {pageId
-                    ? 'The AI will focus on the current page but has access to the entire skript for context.'
-                    : 'The AI can propose changes to any pages in this skript.'}
+                  {isFrontpageMode
+                    ? 'The AI will rewrite the front page based on your instruction. The new content lands in the editor — review and save it from there.'
+                    : focusedId
+                      ? 'The AI will focus on the current page but has access to the entire skript for context.'
+                      : 'The AI can propose changes to any pages in this skript.'}
                 </p>
               </div>
 

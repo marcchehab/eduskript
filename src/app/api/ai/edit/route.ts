@@ -5,6 +5,7 @@ import { checkSkriptPermissions } from '@/lib/permissions'
 import { assembleEditPrompt } from '@/lib/ai/prompts'
 import type { EditRequest, SkriptContext } from '@/lib/ai/types'
 import { parseJsonResponse, isValidEditPlan, type ParseJsonResponse } from '@/lib/ai/parse-json-response'
+import { loadFrontPageContext } from '@/lib/ai/frontpage-context'
 import OpenAI from 'openai'
 import { createLogger } from '@/lib/logger'
 
@@ -47,187 +48,229 @@ export async function POST(request: Request): Promise<Response> {
     )
   }
 
-  // 4. Parse request
+  // 4. Parse request — exactly one of skriptId or frontPageId must be provided
   const body = (await request.json()) as EditRequest & { currentContent?: string }
-  const { skriptId, pageId, instruction, currentContent } = body
+  const { skriptId, pageId, frontPageId, instruction, currentContent } = body
 
-  if (!skriptId || !instruction?.trim()) {
+  if (!instruction?.trim()) {
     return Response.json(
-      { success: false, error: 'Missing required fields: skriptId and instruction' },
+      { success: false, error: 'Missing required field: instruction' },
       { status: 400 }
     )
   }
 
-  // 5. Fetch skript
-  const skript = await prisma.skript.findUnique({
-    where: { id: skriptId },
-    include: {
-      pages: { orderBy: { order: 'asc' } },
-      authors: { include: { user: true } },
-      files: { select: { id: true, name: true, contentType: true } },
-    },
-  })
-
-  if (!skript) {
-    return Response.json({ success: false, error: 'Skript not found' }, { status: 404 })
+  if ((!skriptId && !frontPageId) || (skriptId && frontPageId)) {
+    return Response.json(
+      { success: false, error: 'Provide exactly one of skriptId or frontPageId' },
+      { status: 400 }
+    )
   }
 
-  // 6. Check permissions
-  const permissions = checkSkriptPermissions(userId, skript.authors, undefined, !!session.user.isAdmin)
-  if (!permissions.canEdit) {
-    return Response.json({ success: false, error: 'Edit access denied' }, { status: 403 })
-  }
-
-  // 7. Cancel any existing active ai-edit jobs for this user+skript
-  await prisma.importJob.updateMany({
-    where: {
+  // 5/6. Build SkriptContext — either real skript pages or the single virtual frontpage
+  let skriptContext: SkriptContext
+  if (frontPageId) {
+    const ctx = await loadFrontPageContext({
+      frontPageId,
       userId,
-      type: 'ai-edit',
-      status: { in: ['pending', 'processing'] },
-      result: { path: ['skriptId'], equals: skriptId },
-    },
-    data: { status: 'cancelled' },
-  })
+      isAdmin: !!session.user.isAdmin,
+      currentContent,
+    })
+    if (!ctx.ok) {
+      return Response.json({ success: false, error: ctx.error }, { status: ctx.status })
+    }
+    skriptContext = ctx.skriptContext
 
-  // 8. Build context
-  const pageContentMap = new Map<string, string>()
-  skript.pages.forEach((p) => {
-    const content = (pageId && p.id === pageId && currentContent !== undefined)
-      ? currentContent
-      : p.content
-    pageContentMap.set(p.id, content)
-  })
-
-  const skriptContext: SkriptContext = {
-    skript: {
-      id: skript.id,
-      title: skript.title,
-      description: skript.description,
-      slug: skript.slug,
-      isPublished: skript.isPublished,
-    },
-    pages: skript.pages.map((p) => ({
-      id: p.id,
-      title: p.title,
-      slug: p.slug,
-      content: pageContentMap.get(p.id) || p.content,
-      order: p.order,
-      isPublished: p.isPublished,
-    })),
-    files: skript.files,
-    focusedPageId: pageId,
-  }
-
-  // 9. Get the edit plan from AI (with retry)
-  const openai = new OpenAI({
-    apiKey: process.env.OPENROUTER_API_KEY,
-    baseURL: 'https://openrouter.ai/api/v1',
-    defaultHeaders: { 'HTTP-Referer': 'https://eduskript.org', 'X-Title': 'Eduskript' },
-  })
-
-  // Fetch user and organization custom AI prompts
-  let orgPrompt: string | undefined
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      aiSystemPrompt: true,
-      organizationMemberships: {
-        include: { organization: true },
+    // Cancel any other active frontpage-mode jobs for this user+frontpage
+    await prisma.importJob.updateMany({
+      where: {
+        userId,
+        type: 'ai-edit',
+        status: { in: ['pending', 'processing'] },
+        result: { path: ['frontPageId'], equals: frontPageId },
       },
-    },
-  })
+      data: { status: 'cancelled' },
+    })
+  } else {
+    const skript = await prisma.skript.findUnique({
+      where: { id: skriptId! },
+      include: {
+        pages: { orderBy: { order: 'asc' } },
+        authors: { include: { user: true } },
+        files: { select: { id: true, name: true, contentType: true } },
+      },
+    })
 
-  const orgWithPrompt = user?.organizationMemberships.find(
-    (m) => m.organization.aiSystemPrompt
-  )?.organization
+    if (!skript) {
+      return Response.json({ success: false, error: 'Skript not found' }, { status: 404 })
+    }
 
-  const prompts: string[] = []
-  if (orgWithPrompt?.aiSystemPrompt) {
-    prompts.push(`## Organization Guidelines\n${orgWithPrompt.aiSystemPrompt}`)
+    const permissions = checkSkriptPermissions(userId, skript.authors, undefined, !!session.user.isAdmin)
+    if (!permissions.canEdit) {
+      return Response.json({ success: false, error: 'Edit access denied' }, { status: 403 })
+    }
+
+    await prisma.importJob.updateMany({
+      where: {
+        userId,
+        type: 'ai-edit',
+        status: { in: ['pending', 'processing'] },
+        result: { path: ['skriptId'], equals: skriptId! },
+      },
+      data: { status: 'cancelled' },
+    })
+
+    const pageContentMap = new Map<string, string>()
+    skript.pages.forEach((p) => {
+      const content = (pageId && p.id === pageId && currentContent !== undefined)
+        ? currentContent
+        : p.content
+      pageContentMap.set(p.id, content)
+    })
+
+    skriptContext = {
+      skript: {
+        id: skript.id,
+        title: skript.title,
+        description: skript.description,
+        slug: skript.slug,
+        isPublished: skript.isPublished,
+      },
+      pages: skript.pages.map((p) => ({
+        id: p.id,
+        title: p.title,
+        slug: p.slug,
+        content: pageContentMap.get(p.id) || p.content,
+        order: p.order,
+        isPublished: p.isPublished,
+      })),
+      files: skript.files,
+      focusedPageId: pageId,
+    }
   }
-  if (user?.aiSystemPrompt) {
-    prompts.push(`## Teacher Preferences\n${user.aiSystemPrompt}`)
-  }
-  if (prompts.length > 0) {
-    orgPrompt = prompts.join('\n\n')
-  }
 
-  const planPrompt = assembleEditPrompt({
-    orgPrompt,
-    skriptContext,
-    planOnly: true,
-  })
-
-  const MAX_PLAN_RETRIES = 3
+  // Plan generation: skript mode asks the AI to plan edits across pages;
+  // frontpage mode is trivially one edit and we synthesize the plan locally to
+  // avoid an unnecessary AI round-trip.
   let parseResult: ParseJsonResponse<{ edits: Array<{ pageId: string | null; pageTitle: string; pageSlug: string; summary: string; isNew?: boolean }>; overallSummary: string }> | undefined
   let lastPlanText = ''
+  let planData: { edits: Array<{ pageId: string | null; pageTitle: string; pageSlug: string; summary: string; isNew?: boolean }>; overallSummary: string }
 
-  for (let attempt = 1; attempt <= MAX_PLAN_RETRIES; attempt++) {
-    const planMessage = await openai.chat.completions.create({
-      model: process.env.OPENROUTER_MODEL ?? 'z-ai/glm-5',
-      max_tokens: 8192,
-      messages: [{ role: 'system', content: planPrompt }, { role: 'user', content: instruction }],
+  if (frontPageId) {
+    planData = {
+      overallSummary: instruction.length > 120 ? `${instruction.slice(0, 117)}…` : instruction,
+      edits: [{
+        pageId: frontPageId,
+        pageTitle: 'Front Page',
+        pageSlug: 'frontpage',
+        summary: instruction,
+        isNew: false,
+      }],
+    }
+  } else {
+    // Skript mode: load org/user custom prompts, then ask the AI for a plan.
+    const openai = new OpenAI({
+      apiKey: process.env.OPENROUTER_API_KEY,
+      baseURL: 'https://openrouter.ai/api/v1',
+      defaultHeaders: { 'HTTP-Referer': 'https://eduskript.org', 'X-Title': 'Eduskript' },
     })
 
-    lastPlanText = planMessage.choices[0]?.message?.content ?? ''
-    const finishReason = planMessage.choices[0]?.finish_reason
-
-    log(`Plan attempt ${attempt}/${MAX_PLAN_RETRIES}, length: ${lastPlanText.length}, finish_reason: ${finishReason}`)
-
-    // If truncated, don't bother parsing — retry immediately
-    if (finishReason === 'length') {
-      log(`Plan attempt ${attempt} truncated at ${lastPlanText.length} chars, retrying...`)
-      parseResult = { success: false, error: 'Response truncated', fullResponse: lastPlanText }
-      continue
-    }
-
-    if (lastPlanText.length > 0) {
-      log('Plan response preview:', lastPlanText.slice(0, 300))
-    }
-
-    parseResult = parseJsonResponse(lastPlanText, isValidEditPlan)
-
-    if (parseResult.success) break
-
-    const failReason = lastPlanText.length === 0
-      ? 'empty response'
-      : !parseResult.success ? `parse error: ${parseResult.error}` : 'unknown'
-    log(`Plan attempt ${attempt} failed: ${failReason}`)
-
-    if (attempt >= MAX_PLAN_RETRIES) {
-      log('All plan attempts exhausted, last response:', lastPlanText.slice(0, 500))
-    }
-  }
-
-  // 10. Handle plan failure — no job created
-  if (!parseResult || !parseResult.success) {
-    return Response.json({
-      success: true,
-      jobId: null,
-      plan: {
-        totalEdits: 0,
-        overallSummary: 'The AI provided an explanation instead of edit suggestions.',
-        pages: [],
-      },
-      aiMessage: (parseResult && !parseResult.success ? parseResult.fullResponse : null) || lastPlanText || 'The AI returned an empty response. Please try again.',
-    })
-  }
-
-  const planData = parseResult.data
-
-  if (!planData.edits || planData.edits.length === 0) {
-    return Response.json({
-      success: true,
-      jobId: null,
-      plan: {
-        totalEdits: 0,
-        overallSummary: planData.overallSummary || 'No changes needed',
-        pages: [],
+    let orgPrompt: string | undefined
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        aiSystemPrompt: true,
+        organizationMemberships: { include: { organization: true } },
       },
     })
+
+    const orgWithPrompt = user?.organizationMemberships.find(
+      (m) => m.organization.aiSystemPrompt
+    )?.organization
+
+    const prompts: string[] = []
+    if (orgWithPrompt?.aiSystemPrompt) {
+      prompts.push(`## Organization Guidelines\n${orgWithPrompt.aiSystemPrompt}`)
+    }
+    if (user?.aiSystemPrompt) {
+      prompts.push(`## Teacher Preferences\n${user.aiSystemPrompt}`)
+    }
+    if (prompts.length > 0) {
+      orgPrompt = prompts.join('\n\n')
+    }
+
+    const planPrompt = assembleEditPrompt({
+      orgPrompt,
+      skriptContext,
+      planOnly: true,
+    })
+
+    const MAX_PLAN_RETRIES = 3
+
+    for (let attempt = 1; attempt <= MAX_PLAN_RETRIES; attempt++) {
+      const planMessage = await openai.chat.completions.create({
+        model: process.env.OPENROUTER_MODEL ?? 'z-ai/glm-5',
+        max_tokens: 8192,
+        messages: [{ role: 'system', content: planPrompt }, { role: 'user', content: instruction }],
+      })
+
+      lastPlanText = planMessage.choices[0]?.message?.content ?? ''
+      const finishReason = planMessage.choices[0]?.finish_reason
+
+      log(`Plan attempt ${attempt}/${MAX_PLAN_RETRIES}, length: ${lastPlanText.length}, finish_reason: ${finishReason}`)
+
+      if (finishReason === 'length') {
+        log(`Plan attempt ${attempt} truncated at ${lastPlanText.length} chars, retrying...`)
+        parseResult = { success: false, error: 'Response truncated', fullResponse: lastPlanText }
+        continue
+      }
+
+      if (lastPlanText.length > 0) {
+        log('Plan response preview:', lastPlanText.slice(0, 300))
+      }
+
+      parseResult = parseJsonResponse(lastPlanText, isValidEditPlan)
+
+      if (parseResult.success) break
+
+      const failReason = lastPlanText.length === 0
+        ? 'empty response'
+        : !parseResult.success ? `parse error: ${parseResult.error}` : 'unknown'
+      log(`Plan attempt ${attempt} failed: ${failReason}`)
+
+      if (attempt >= MAX_PLAN_RETRIES) {
+        log('All plan attempts exhausted, last response:', lastPlanText.slice(0, 500))
+      }
+    }
+
+    if (!parseResult || !parseResult.success) {
+      return Response.json({
+        success: true,
+        jobId: null,
+        plan: {
+          totalEdits: 0,
+          overallSummary: 'The AI provided an explanation instead of edit suggestions.',
+          pages: [],
+        },
+        aiMessage: (parseResult && !parseResult.success ? parseResult.fullResponse : null) || lastPlanText || 'The AI returned an empty response. Please try again.',
+      })
+    }
+
+    planData = parseResult.data
+
+    if (!planData.edits || planData.edits.length === 0) {
+      return Response.json({
+        success: true,
+        jobId: null,
+        plan: {
+          totalEdits: 0,
+          overallSummary: planData.overallSummary || 'No changes needed',
+          pages: [],
+        },
+      })
+    }
   }
 
-  // 11. Create ImportJob with plan
+  // Build the persisted plan
   const plan = {
     totalEdits: planData.edits.length,
     overallSummary: planData.overallSummary,
@@ -240,10 +283,13 @@ export async function POST(request: Request): Promise<Response> {
     })),
   }
 
+  // Job carries either skriptId (multi-page mode) or frontPageId (single-page mode).
+  // The generate route branches on which one is present.
   const jobResult = {
-    skriptId,
+    skriptId: skriptId ?? null,
+    frontPageId: frontPageId ?? null,
     instruction,
-    focusedPageId: pageId || null,
+    focusedPageId: frontPageId ?? pageId ?? null,
     currentContent: currentContent || null,
     plan,
     completedEdits: [] as Array<Record<string, unknown>>,
@@ -263,13 +309,20 @@ export async function POST(request: Request): Promise<Response> {
 
   log(`Job created: ${job.id}, plan: ${plan.totalEdits} pages`)
 
+  // Overflow info only exists when the AI was actually asked to plan (skript mode)
+  // and the response was successfully parsed (success branch carries overflow fields).
+  const overflowBefore = parseResult?.success ? parseResult.overflowBefore : undefined
+  const overflowAfter = parseResult?.success ? parseResult.overflowAfter : undefined
+  const fullResponse = parseResult?.success && (parseResult.overflowBefore || parseResult.overflowAfter)
+    ? parseResult.fullResponse
+    : undefined
+
   return Response.json({
     success: true,
     jobId: job.id,
     plan,
-    // Include overflow info if present
-    overflowBefore: parseResult.overflowBefore,
-    overflowAfter: parseResult.overflowAfter,
-    fullResponse: (parseResult.overflowBefore || parseResult.overflowAfter) ? parseResult.fullResponse : undefined,
+    overflowBefore,
+    overflowAfter,
+    fullResponse,
   })
 }

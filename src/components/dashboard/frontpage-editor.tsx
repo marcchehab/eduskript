@@ -1,18 +1,14 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
-import { MarkdownEditor } from '@/components/dashboard/markdown-editor'
-import { FileBrowser } from '@/components/dashboard/file-browser'
-import { ExcalidrawEditor } from '@/components/dashboard/excalidraw-editor'
 import { CollapsibleDrawer } from '@/components/ui/collapsible-drawer'
-import { PublishToggle } from '@/components/dashboard/publish-toggle'
-import { ArrowLeft, Save, History, Eye, Files } from 'lucide-react'
+import { EditorWithMedia } from '@/components/dashboard/editor-with-media'
+import { ArrowLeft, Save, History, Eye, Files, BookA } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import { usePublicUrl } from '@/hooks/use-public-url'
 
@@ -73,7 +69,6 @@ export function FrontPageEditor({
   const [isPublished, setIsPublished] = useState(frontPage?.isPublished || false)
   const [fileSkriptId, setFileSkriptId] = useState<string | null>(frontPage?.fileSkriptId || null)
   const contentRef = useRef(content)
-  const router = useRouter()
   const { data: session } = useSession()
   const pageSlug = (session?.user as { pageSlug?: string })?.pageSlug
   const { isCustomDomain } = usePublicUrl(pageSlug)
@@ -81,7 +76,6 @@ export function FrontPageEditor({
   // On custom domains, the proxy prepends the pageSlug, so strip it from previewUrl
   const resolvedPreviewUrl = (() => {
     if (!previewUrl || !isCustomDomain || !pageSlug) return previewUrl
-    // Strip leading /{pageSlug} — proxy will add it back
     const prefix = `/${pageSlug}`
     if (previewUrl.startsWith(prefix)) {
       return previewUrl.slice(prefix.length) || '/'
@@ -90,266 +84,21 @@ export function FrontPageEditor({
   })()
   const alert = useAlertDialog()
 
-  // File list state for file browser
-  const [fileList, setFileList] = useState<Array<{
-    id: string
-    name: string
-    size?: number
-    url?: string
-    isDirectory?: boolean
-    contentType?: string
-    createdAt: Date
-    updatedAt: Date
-  }>>([])
-  const [fileListLoading, setFileListLoading] = useState(false)
-
-  // Excalidraw editor state
-  const [excalidrawOpen, setExcalidrawOpen] = useState(false)
-  const [excalidrawInitialData, setExcalidrawInitialData] = useState<{
-    name: string
-    elements: readonly unknown[]
-    appState?: unknown
-    files?: Record<string, unknown>  // Embedded images
-  } | undefined>(undefined)
-
   // Effective skript ID for file storage:
-  // - Skript FrontPages use their skript's files
-  // - User/Org FrontPages use their dedicated fileSkriptId
+  // - Skript FrontPages use their skript's own files
+  // - User/Org FrontPages use their dedicated fileSkriptId (created on demand)
   const effectiveSkriptId = type === 'skript' ? skript?.id : fileSkriptId
 
-  // Update ref when content changes
+  // Update ref when content changes — used by save/auto-save handlers so they
+  // always send the latest content even if React state hasn't propagated.
   useEffect(() => {
     contentRef.current = content
   }, [content])
 
-  const handleContentChange = (newContent: string) => {
-    setContent(newContent)
+  const handleContentChange = useCallback((next: string) => {
+    setContent(next)
     setHasUnsavedChanges(true)
-  }
-
-  // Fetch file list from API
-  const refreshFileList = useCallback(async () => {
-    if (!effectiveSkriptId) return
-
-    setFileListLoading(true)
-    try {
-      const response = await fetch(`/api/upload?skriptId=${effectiveSkriptId}`)
-      if (response.ok) {
-        const data = await response.json()
-        setFileList(data.files || [])
-      }
-    } catch (error) {
-      console.error('Error fetching file list:', error)
-    } finally {
-      setFileListLoading(false)
-    }
-  }, [effectiveSkriptId])
-
-  // Fetch file list on mount and when skriptId changes
-  useEffect(() => {
-    if (effectiveSkriptId) {
-      refreshFileList()
-    }
-  }, [effectiveSkriptId, refreshFileList])
-
-  // Handle file insertion into content
-  const handleFileInsert = (file: {
-    id: string
-    name: string
-    url?: string
-    isDirectory?: boolean
-    position?: number
-  }, insertionType: 'embed' | 'link' | 'sql-editor' = 'embed') => {
-    if (file.isDirectory) return
-
-    let insertText = ''
-    const extension = file.name.split('.').pop()?.toLowerCase()
-
-    if (['sqlite', 'db'].includes(extension || '')) {
-      if (insertionType === 'sql-editor') {
-        // Start with a query to show all tables - helps users discover the schema
-        insertText = `\`\`\`sql editor db="${file.name}"\n-- Show all tables in the database\nSELECT name FROM sqlite_master WHERE type='table' ORDER BY name;\n\`\`\``
-      } else {
-        insertText = `[${file.name}](${file.url || file.name})`
-      }
-    } else if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(extension || '')) {
-      if (insertionType === 'embed') {
-        const altText = file.name.replace(/\.[^/.]+$/, '')
-        insertText = `![${altText}](${file.name})`
-      } else {
-        insertText = `[${file.name}](${file.url || file.name})`
-      }
-    } else if (extension === 'excalidraw') {
-      insertText = `![](${file.name})`
-    } else if (['mp4', 'avi', 'mov', 'wmv'].includes(extension || '')) {
-      insertText = `<video controls>\n  <source src="${file.url || file.name}" type="video/${extension}">\n  Your browser does not support the video tag.\n</video>`
-    } else if (['mp3', 'wav', 'ogg'].includes(extension || '')) {
-      insertText = `<audio controls>\n  <source src="${file.url || file.name}" type="audio/${extension}">\n  Your browser does not support the audio tag.\n</audio>`
-    } else {
-      insertText = `[${file.name}](${file.url || file.name})`
-    }
-
-    if (file.position !== undefined) {
-      setContent((prev: string) => prev.slice(0, file.position) + insertText + prev.slice(file.position))
-    } else {
-      setContent((prev: string) => prev + '\n\n' + insertText)
-    }
-    setHasUnsavedChanges(true)
-  }
-
-  // Handle file renames - update content references
-  const handleFileRenamed = (oldFilename: string, newFilename: string) => {
-    const updatedContent = content
-      .replace(
-        new RegExp(`!\\[([^\\]]*)\\]\\(${oldFilename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)`, 'g'),
-        `![$1](${newFilename})`
-      )
-      .replace(
-        new RegExp(`\\[([^\\]]*)\\]\\(${oldFilename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)`, 'g'),
-        `[$1](${newFilename})`
-      )
-
-    if (updatedContent !== content) {
-      setContent(updatedContent)
-      setHasUnsavedChanges(true)
-    }
-  }
-
-  // Ensure file storage exists for user/org FrontPages
-  const [isCreatingFileStorage, setIsCreatingFileStorage] = useState(false)
-  const ensureFileStorage = async () => {
-    if (!frontPageId) {
-      alert.showError('Please save the front page first before adding files')
-      return
-    }
-
-    setIsCreatingFileStorage(true)
-    try {
-      const response = await fetch(`/api/frontpage/${frontPageId}/ensure-file-storage`, {
-        method: 'POST'
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setFileSkriptId(data.fileSkriptId)
-        // Refresh file list with the new skript
-        if (data.fileSkriptId) {
-          const filesResponse = await fetch(`/api/upload?skriptId=${data.fileSkriptId}`)
-          if (filesResponse.ok) {
-            const filesData = await filesResponse.json()
-            setFileList(filesData.files || [])
-          }
-        }
-      } else {
-        const data = await response.json()
-        alert.showError(data.error || 'Failed to enable file storage')
-      }
-    } catch (error) {
-      console.error('Error ensuring file storage:', error)
-      alert.showError('Failed to enable file storage')
-    } finally {
-      setIsCreatingFileStorage(false)
-    }
-  }
-
-  // Handle Excalidraw save (for both new and existing drawings)
-  const handleExcalidrawSave = async (name: string, excalidrawData: string, lightSvg: string, darkSvg: string) => {
-    if (!effectiveSkriptId) {
-      alert.showError('No file storage available')
-      return
-    }
-
-    try {
-      const response = await fetch('/api/excalidraw', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name,
-          excalidrawData,
-          lightSvg,
-          darkSvg,
-          skriptId: effectiveSkriptId,
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to save drawing')
-      }
-
-      // Refresh file list
-      refreshFileList()
-    } catch (error) {
-      console.error('Error saving drawing:', error)
-      alert.showError('Failed to save drawing')
-    }
-  }
-
-  // Handle editing an existing Excalidraw drawing or creating a new one
-  const handleExcalidrawEdit = async (file: { id: string; name: string; url?: string; skriptId?: string }) => {
-    const targetSkriptId = file.skriptId || effectiveSkriptId
-    if (!targetSkriptId) {
-      alert.showError('Cannot edit drawing: no file storage')
-      return
-    }
-
-    try {
-      // If file ID is empty, it's a new file - open editor with empty data
-      if (!file.id) {
-        setExcalidrawInitialData({
-          name: file.name,
-          elements: [],
-          appState: undefined
-        })
-        setExcalidrawOpen(true)
-        return
-      }
-
-      // Fetch the existing .excalidraw file data (direct S3 URL, CORS configured)
-      const baseUrl = file.url || `/api/files/${file.id}`
-      const separator = baseUrl.includes('?') ? '&' : '?'
-      const fileUrl = `${baseUrl}${separator}v=${Date.now()}`
-      const response = await fetch(fileUrl)
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch drawing data')
-      }
-
-      const text = await response.text()
-      let data
-
-      // Try parsing as pure JSON first
-      try {
-        data = JSON.parse(text)
-      } catch {
-        // Try extracting from Obsidian Excalidraw format: ```json { ... } ```
-        const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/)
-        if (jsonMatch) {
-          data = JSON.parse(jsonMatch[1])
-        } else {
-          throw new Error('Could not parse Excalidraw data')
-        }
-      }
-
-      setExcalidrawInitialData({
-        name: file.name,
-        elements: data.elements || [],
-        appState: data.appState,
-        files: data.files  // Include embedded images
-      })
-      setExcalidrawOpen(true)
-    } catch (error) {
-      console.error('Error loading drawing:', error)
-      alert.showError('Failed to load drawing for editing')
-    }
-  }
-
-  // Adapter for FileBrowser which uses file object (directly compatible now)
-  const handleFileBrowserExcalidrawEdit = handleExcalidrawEdit
-
-  // Adapter for MarkdownEditor which uses (filename, fileId) signature
-  const handleMarkdownEditorExcalidrawEdit = (filename: string, fileId: string) => {
-    handleExcalidrawEdit({ id: fileId, name: filename })
-  }
+  }, [])
 
   // Determine the API endpoint based on type
   const getApiEndpoint = useCallback(() => {
@@ -416,13 +165,13 @@ export function FrontPageEditor({
     setIsSaving(false)
   }, [getApiEndpoint, isPublished, frontPageId, loadVersions, alert])
 
-  // Handle publish toggle
+  // Toggle publish state and save in one shot. Reverts the optimistic update
+  // if the server rejects it.
   const handlePublishToggle = async () => {
     const newPublishedState = !isPublished
     setIsPublished(newPublishedState)
     setHasUnsavedChanges(true)
 
-    // Auto-save when toggling publish state
     try {
       const response = await fetch(getApiEndpoint(), {
         method: 'PATCH',
@@ -442,7 +191,6 @@ export function FrontPageEditor({
           setFrontPageId(data.frontPage.id)
         }
       } else {
-        // Revert on error
         setIsPublished(!newPublishedState)
         const data = await response.json()
         alert.showError(data.error || 'Failed to update publish state')
@@ -454,7 +202,8 @@ export function FrontPageEditor({
     }
   }
 
-  // Handle version restoration
+  // Restore a previous version by hitting the FrontPage version-restore endpoint
+  // and copying the restored content back into the editor.
   const handleRestoreVersion = async (versionId: string, versionContent: string) => {
     if (!frontPageId) return
 
@@ -504,16 +253,46 @@ export function FrontPageEditor({
   // Load version history on mount and when frontPageId changes
   useEffect(() => {
     if (frontPageId) {
-       
       loadVersions()
     }
   }, [frontPageId, loadVersions])
 
+  // For user/org frontpages, the file storage skript is created on demand.
+  // POST /api/frontpage/[id]/ensure-file-storage creates a hidden skript and
+  // wires its id back into the FrontPage row.
+  const [isCreatingFileStorage, setIsCreatingFileStorage] = useState(false)
+  const ensureFileStorage = async () => {
+    if (!frontPageId) {
+      alert.showError('Please save the front page first before adding files')
+      return
+    }
+
+    setIsCreatingFileStorage(true)
+    try {
+      const response = await fetch(`/api/frontpage/${frontPageId}/ensure-file-storage`, {
+        method: 'POST'
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setFileSkriptId(data.fileSkriptId)
+      } else {
+        const data = await response.json()
+        alert.showError(data.error || 'Failed to enable file storage')
+      }
+    } catch (error) {
+      console.error('Error ensuring file storage:', error)
+      alert.showError('Failed to enable file storage')
+    } finally {
+      setIsCreatingFileStorage(false)
+    }
+  }
+
   const title = type === 'user'
-    ? 'Your Front Page'
+    ? 'Your front page'
     : type === 'organization'
-    ? `Front Page: ${organization?.name || 'Organization'}`
-    : `Front Page: ${skript?.title || 'Skript'}`
+    ? organization?.name || 'Organization front page'
+    : skript?.title || 'Skript front page'
 
   const description = type === 'user'
     ? 'Customize your public landing page. This is what visitors see when they visit your profile.'
@@ -521,137 +300,128 @@ export function FrontPageEditor({
     ? 'Customize your organization\'s public landing page. This is what visitors see when they visit your organization.'
     : 'Customize the introduction page for this skript. Visitors will see this before the list of pages.'
 
-  return (
-    <div className="space-y-6">
-      {/* Header - can be hidden when parent provides its own nav */}
-      {!hideHeader && (
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <Link href={backUrl}>
-              <Button variant="ghost" size="sm">
-                <ArrowLeft className="w-4 h-4" />
-              </Button>
-            </Link>
-            <div>
-              <h1 className="text-2xl font-semibold">{title}</h1>
-              <p className="text-sm text-muted-foreground">{description}</p>
-            </div>
-          </div>
+  // Action cluster shared between the full header and the hideHeader toolbar.
+  const actionCluster = (
+    <div className="flex gap-2 items-center">
+      <Button
+        variant={isPublished ? 'default' : 'outline'}
+        size="sm"
+        onClick={handlePublishToggle}
+        title={isPublished ? 'Published - click to unpublish' : 'Draft - click to publish'}
+      >
+        {isPublished ? 'Published' : 'Draft'}
+      </Button>
 
-          <div className="flex gap-2 items-center">
-            {/* Custom Publish Toggle */}
-            <Button
-              variant={isPublished ? 'default' : 'outline'}
-              size="sm"
-              onClick={handlePublishToggle}
-              title={isPublished ? 'Published - click to unpublish' : 'Draft - click to publish'}
-            >
-              {isPublished ? 'Published' : 'Draft'}
-            </Button>
-
-            {resolvedPreviewUrl && (
-              <Link
-                href={resolvedPreviewUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                prefetch={false}
-              >
-                <Button variant="ghost" size="sm" title="Preview front page">
-                  <Eye className="w-4 h-4" />
-                </Button>
-              </Link>
-            )}
-
-            <Button
-              onClick={handleSave}
-              disabled={isSaving}
-              size="sm"
-              className="relative"
-              title={isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save changes (Ctrl+S)' : 'No changes to save'}
-            >
-              <Save className="w-4 h-4 mr-2" />
-              {isSaving ? 'Saving...' : 'Save'}
-              {hasUnsavedChanges && (
-                <div className="absolute top-1 right-1 w-2 h-2 bg-warning rounded-full" />
-              )}
-            </Button>
-          </div>
-        </div>
+      {resolvedPreviewUrl && (
+        <Link
+          href={resolvedPreviewUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          prefetch={false}
+        >
+          <Button variant="ghost" size="sm" title="Preview front page">
+            <Eye className="w-4 h-4" />
+          </Button>
+        </Link>
       )}
 
-      {/* Toolbar when header is hidden */}
+      <Button
+        onClick={handleSave}
+        disabled={isSaving}
+        size="sm"
+        className="relative"
+        title={isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save changes (Ctrl+S)' : 'No changes to save'}
+      >
+        <Save className="w-4 h-4 mr-2" />
+        {isSaving ? 'Saving...' : 'Save'}
+        {hasUnsavedChanges && (
+          <div className="absolute top-1 right-1 w-2 h-2 bg-warning rounded-full" />
+        )}
+      </Button>
+    </div>
+  )
+
+  return (
+    <div className="space-y-6">
+      {/* Front page header — mirrors the page editor's topbar style: bordered
+          section with back button + label + title on the left, action cluster on
+          the right. Hidden when the parent (e.g. OrgNav) provides its own nav. */}
+      {!hideHeader && (
+        <section className="border rounded-lg">
+          <div className="flex items-center gap-2 px-3 py-2">
+            <div className="flex items-center justify-between w-[7.5rem] flex-shrink-0">
+              <Link href={backUrl}>
+                <Button variant="ghost" size="sm">
+                  <ArrowLeft className="w-4 h-4" />
+                </Button>
+              </Link>
+              <div className="flex items-center gap-1.5">
+                <BookA className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                <span className="text-sm text-muted-foreground">Front page:</span>
+              </div>
+            </div>
+            <span className="text-3xl font-semibold truncate">{title}</span>
+            <div className="ml-auto flex-shrink-0">{actionCluster}</div>
+          </div>
+        </section>
+      )}
+
+      {/* Toolbar when header is hidden — keeps publish/preview/save reachable
+          while letting the parent (org nav) own the page chrome. */}
       {hideHeader && (
         <div className="flex items-center justify-between gap-4">
           <p className="text-sm text-muted-foreground">{description}</p>
-          <div className="flex gap-2 items-center">
-            <Button
-              variant={isPublished ? 'default' : 'outline'}
-              size="sm"
-              onClick={handlePublishToggle}
-              title={isPublished ? 'Published - click to unpublish' : 'Draft - click to publish'}
-            >
-              {isPublished ? 'Published' : 'Draft'}
-            </Button>
-
-            {resolvedPreviewUrl && (
-              <Link
-                href={resolvedPreviewUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                prefetch={false}
-              >
-                <Button variant="ghost" size="sm" title="Preview front page">
-                  <Eye className="w-4 h-4" />
-                </Button>
-              </Link>
-            )}
-
-            <Button
-              onClick={handleSave}
-              disabled={isSaving}
-              size="sm"
-              className="relative"
-              title={isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save changes (Ctrl+S)' : 'No changes to save'}
-            >
-              <Save className="w-4 h-4 mr-2" />
-              {isSaving ? 'Saving...' : 'Save'}
-              {hasUnsavedChanges && (
-                <div className="absolute top-1 right-1 w-2 h-2 bg-warning rounded-full" />
-              )}
-            </Button>
-          </div>
+          {actionCluster}
         </div>
       )}
 
-      {/* Files Section */}
-      {effectiveSkriptId ? (
-        <CollapsibleDrawer
-          title="Files"
-          icon={<Files className="w-5 h-5" />}
-          defaultOpen={false}
-        >
-          <FileBrowser
-            skriptId={effectiveSkriptId}
-            files={fileList}
-            loading={fileListLoading}
-            onFileSelect={(file) => {
-              handleFileInsert(file)
-              refreshFileList()
-            }}
-            onUploadComplete={refreshFileList}
-            onFileRenamed={handleFileRenamed}
-            onExcalidrawEdit={handleFileBrowserExcalidrawEdit}
-          />
-        </CollapsibleDrawer>
-      ) : type !== 'skript' && (
+      {/* Editor shell — always rendered. When effectiveSkriptId is missing
+          (user/org frontpage without file storage yet), the shell hides its
+          manage tabs but the markdown editor and AI Edit (if a frontPageId
+          exists) still work. */}
+      <EditorWithMedia
+        content={content}
+        onChange={handleContentChange}
+        onSave={handleSave}
+        description={
+          effectiveSkriptId
+            ? 'Drag files or videos from the drawers to insert them. Ctrl+S to save.'
+            : frontPageId
+              ? 'Enable file storage below to add images and videos. Ctrl+S to save.'
+              : 'Save first to enable AI Edit and file storage. Ctrl+S to save.'
+        }
+        skriptId={effectiveSkriptId || undefined}
+        pageId={frontPageId || undefined}
+        domain={pageSlug}
+        manageLabel="Manage:"
+        tabStorageKey="eduskript:frontpage-editor-tab"
+        aiEdit={frontPageId ? {
+          target: { mode: 'frontpage', frontPageId },
+          targetTitle: title,
+        } : undefined}
+        onAIEditApplied={(newContent) => {
+          // The frontpage AI flow doesn't save server-side — the hook hands
+          // back the rewritten content and we drop it into the editor with
+          // the dirty flag set, so the user can review and Ctrl+S.
+          if (newContent !== undefined) {
+            setContent(newContent)
+            setHasUnsavedChanges(true)
+          }
+        }}
+        isAdmin={(session?.user as { isAdmin?: boolean })?.isAdmin}
+      />
+
+      {/* File storage CTA — only for user/org frontpages that haven't enabled
+          storage yet. Skript frontpages always have storage (their own skript). */}
+      {!effectiveSkriptId && type !== 'skript' && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Files className="w-5 h-5" />
-              Files
+              Files & videos
             </CardTitle>
             <CardDescription>
-              Enable file storage to upload and embed images in your front page.
+              Enable file storage to upload images, videos, and other media to embed in your front page.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -661,7 +431,7 @@ export function FrontPageEditor({
               variant="outline"
               size="sm"
             >
-              {isCreatingFileStorage ? 'Enabling...' : 'Enable File Storage'}
+              {isCreatingFileStorage ? 'Enabling...' : 'Enable file storage'}
             </Button>
             {!frontPageId && (
               <p className="text-xs text-muted-foreground mt-2">
@@ -672,31 +442,8 @@ export function FrontPageEditor({
         </Card>
       )}
 
-      {/* Content Editor */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Content</CardTitle>
-          <CardDescription>
-            Write your front page content using markdown.
-            {effectiveSkriptId ? ' Drag files from the Files drawer to insert them.' : ''} Ctrl+S to save.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <MarkdownEditor
-            content={content}
-            onChange={handleContentChange}
-            onSave={handleSave}
-            skriptId={effectiveSkriptId || undefined}
-            domain={(session?.user as { pageSlug?: string })?.pageSlug || undefined}
-            fileList={fileList}
-            fileListLoading={fileListLoading}
-            onFileUpload={refreshFileList}
-            onExcalidrawEdit={handleMarkdownEditorExcalidrawEdit}
-          />
-        </CardContent>
-      </Card>
-
-      {/* Version History - Only show if we have a frontPageId */}
+      {/* Version history — only show if we have any. Uses the FrontPageVersion
+          API (different from the page editor's PageVersion API). */}
       {frontPageId && versions.length > 0 && (
         <CollapsibleDrawer
           title={
@@ -736,20 +483,6 @@ export function FrontPageEditor({
             ))}
           </div>
         </CollapsibleDrawer>
-      )}
-
-      {/* Excalidraw Editor Modal */}
-      {effectiveSkriptId && (
-        <ExcalidrawEditor
-          open={excalidrawOpen}
-          onClose={() => {
-            setExcalidrawOpen(false)
-            setExcalidrawInitialData(undefined)
-          }}
-          onSave={handleExcalidrawSave}
-          skriptId={effectiveSkriptId}
-          initialData={excalidrawInitialData}
-        />
       )}
 
       <AlertDialogModal

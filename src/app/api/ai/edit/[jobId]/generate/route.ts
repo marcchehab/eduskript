@@ -3,6 +3,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assembleSinglePageEditPrompt } from '@/lib/ai/prompts'
 import type { SkriptContext } from '@/lib/ai/types'
+import { loadFrontPageContext } from '@/lib/ai/frontpage-context'
 import OpenAI from 'openai'
 import { createLogger } from '@/lib/logger'
 
@@ -24,7 +25,10 @@ interface AiEditPlan {
 }
 
 interface AiEditJobResult {
-  skriptId: string
+  // Exactly one of skriptId or frontPageId is set, mirroring the shape stored
+  // by /api/ai/edit POST.
+  skriptId: string | null
+  frontPageId: string | null
   instruction: string
   focusedPageId: string | null
   currentContent: string | null
@@ -83,64 +87,93 @@ export async function POST(
 
   const plannedEdit = jobResult.plan.pages[pageIndex]
 
-  // 2. Fetch fresh skript context
-  const skript = await prisma.skript.findUnique({
-    where: { id: jobResult.skriptId },
-    include: {
-      pages: { orderBy: { order: 'asc' } },
-      files: { select: { id: true, name: true, contentType: true } },
-    },
-  })
+  // 2. Build context — branch on job mode (skript vs frontpage).
+  let skriptContext: SkriptContext
+  let originalPage: { id: string; title: string; slug: string; content: string } | undefined
+  let isNew: boolean
+  let actualPageId: string | null
+  let originalContent: string
 
-  if (!skript) {
-    return Response.json({ error: 'Skript not found' }, { status: 404 })
-  }
+  if (jobResult.frontPageId) {
+    // Frontpage mode: re-permission and rebuild the single-page virtual context.
+    const ctx = await loadFrontPageContext({
+      frontPageId: jobResult.frontPageId,
+      userId,
+      isAdmin: !!session.user.isAdmin,
+      currentContent: jobResult.currentContent,
+    })
+    if (!ctx.ok) {
+      return Response.json({ error: ctx.error }, { status: ctx.status })
+    }
+    skriptContext = ctx.skriptContext
+    originalContent = ctx.content
+    originalPage = {
+      id: jobResult.frontPageId,
+      title: 'Front Page',
+      slug: 'frontpage',
+      content: originalContent,
+    }
+    isNew = false
+    actualPageId = jobResult.frontPageId
+  } else if (jobResult.skriptId) {
+    const skript = await prisma.skript.findUnique({
+      where: { id: jobResult.skriptId },
+      include: {
+        pages: { orderBy: { order: 'asc' } },
+        files: { select: { id: true, name: true, contentType: true } },
+      },
+    })
 
-  // Build page content map, using currentContent for the focused page
-  const pageContentMap = new Map<string, string>()
-  skript.pages.forEach((p) => {
-    const content = (jobResult.focusedPageId && p.id === jobResult.focusedPageId && jobResult.currentContent)
+    if (!skript) {
+      return Response.json({ error: 'Skript not found' }, { status: 404 })
+    }
+
+    const pageContentMap = new Map<string, string>()
+    skript.pages.forEach((p) => {
+      const content = (jobResult.focusedPageId && p.id === jobResult.focusedPageId && jobResult.currentContent)
+        ? jobResult.currentContent
+        : p.content
+      pageContentMap.set(p.id, content)
+    })
+
+    skriptContext = {
+      skript: {
+        id: skript.id,
+        title: skript.title,
+        description: skript.description,
+        slug: skript.slug,
+        isPublished: skript.isPublished,
+      },
+      pages: skript.pages.map((p) => ({
+        id: p.id,
+        title: p.title,
+        slug: p.slug,
+        content: pageContentMap.get(p.id) || p.content,
+        order: p.order,
+        isPublished: p.isPublished,
+      })),
+      files: skript.files,
+      focusedPageId: jobResult.focusedPageId || undefined,
+    }
+
+    const pageByIdMap = new Map(skript.pages.map(p => [p.id, p]))
+    const pageBySlugMap = new Map(skript.pages.map(p => [p.slug, p]))
+
+    originalPage = plannedEdit.pageId ? pageByIdMap.get(plannedEdit.pageId) : undefined
+    if (!originalPage && plannedEdit.pageSlug) {
+      originalPage = pageBySlugMap.get(plannedEdit.pageSlug)
+    }
+
+    isNew = plannedEdit.isNew === true || (!originalPage && plannedEdit.pageId === null)
+    actualPageId = originalPage?.id ?? plannedEdit.pageId
+
+    const isFocusedPage = jobResult.focusedPageId && actualPageId === jobResult.focusedPageId
+    originalContent = (isFocusedPage && jobResult.currentContent)
       ? jobResult.currentContent
-      : p.content
-    pageContentMap.set(p.id, content)
-  })
-
-  const skriptContext: SkriptContext = {
-    skript: {
-      id: skript.id,
-      title: skript.title,
-      description: skript.description,
-      slug: skript.slug,
-      isPublished: skript.isPublished,
-    },
-    pages: skript.pages.map((p) => ({
-      id: p.id,
-      title: p.title,
-      slug: p.slug,
-      content: pageContentMap.get(p.id) || p.content,
-      order: p.order,
-      isPublished: p.isPublished,
-    })),
-    files: skript.files,
-    focusedPageId: jobResult.focusedPageId || undefined,
+      : (originalPage?.content ?? '')
+  } else {
+    return Response.json({ error: 'Job has neither skriptId nor frontPageId' }, { status: 400 })
   }
-
-  // 3. Find original page
-  const pageByIdMap = new Map(skript.pages.map(p => [p.id, p]))
-  const pageBySlugMap = new Map(skript.pages.map(p => [p.slug, p]))
-
-  let originalPage = plannedEdit.pageId ? pageByIdMap.get(plannedEdit.pageId) : undefined
-  if (!originalPage && plannedEdit.pageSlug) {
-    originalPage = pageBySlugMap.get(plannedEdit.pageSlug)
-  }
-
-  const isNew = plannedEdit.isNew === true || (!originalPage && plannedEdit.pageId === null)
-  const actualPageId = originalPage?.id ?? plannedEdit.pageId
-
-  const isFocusedPage = jobResult.focusedPageId && actualPageId === jobResult.focusedPageId
-  const originalContent = (isFocusedPage && jobResult.currentContent)
-    ? jobResult.currentContent
-    : (originalPage?.content ?? '')
 
   // 4. Call AI
   const openai = new OpenAI({
