@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
-import { Wand2, Loader2, X, Check, FileText, Plus, ChevronDown, ChevronRight, AlertTriangle, RotateCcw } from 'lucide-react'
+import { Wand2, Loader2, X, Check, FileText, Plus, ChevronDown, ChevronRight, AlertTriangle, RotateCcw, Copy } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -84,6 +84,45 @@ export function AIEditModal({
   const [isSaving, setIsSaving] = useState(false)
   const [showFullResponse, setShowFullResponse] = useState(false)
   const [recoveryChecked, setRecoveryChecked] = useState(false)
+
+  // "Copy context" button state. `null` = idle, string = transient label
+  // shown briefly after a successful copy or a failure.
+  const [copyState, setCopyState] = useState<{ kind: 'idle' } | { kind: 'loading' } | { kind: 'copied'; tokens: number } | { kind: 'error'; message: string }>({ kind: 'idle' })
+
+  const handleCopyContext = useCallback(async () => {
+    setCopyState({ kind: 'loading' })
+    try {
+      // Mirror the body shape requestEdit builds: exactly one of skriptId or
+      // frontPageId, plus optional pageId and the editor's current content
+      // (so the copied context reflects unsaved changes).
+      const body: Record<string, unknown> = { currentContent }
+      if (target.mode === 'frontpage') {
+        body.frontPageId = target.frontPageId
+      } else {
+        body.skriptId = target.skriptId
+        if (target.pageId) body.pageId = target.pageId
+      }
+
+      const res = await fetch('/api/ai/edit/context', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to load context')
+      }
+
+      await navigator.clipboard.writeText(data.context as string)
+      setCopyState({ kind: 'copied', tokens: data.estimatedTokens as number })
+      setTimeout(() => setCopyState({ kind: 'idle' }), 2500)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Copy failed'
+      log.error('Copy context failed:', err)
+      setCopyState({ kind: 'error', message })
+      setTimeout(() => setCopyState({ kind: 'idle' }), 3000)
+    }
+  }, [target, currentContent])
 
   // Check for recoverable job when modal opens. The storage key is namespaced
   // by mode so a frontpage job and a skript job can coexist for the same scope.
@@ -551,27 +590,59 @@ export function AIEditModal({
                 </div>
               )}
 
-              <div className="flex justify-end gap-3">
+              <div className="flex items-center justify-between gap-3">
+                {/* Copy the same skript/frontpage content the AI would see, so
+                    users can paste it into their own external chatbot. */}
                 <Button
                   variant="outline"
-                  onClick={() => handleClose(false)}
-                  disabled={isLoading}
+                  onClick={handleCopyContext}
+                  disabled={copyState.kind === 'loading' || isLoading}
+                  title="Copy the skript content the AI sees, so you can paste it into your own chatbot"
                 >
-                  Cancel
-                </Button>
-                <Button onClick={handleSubmit} disabled={!instruction.trim() || isLoading}>
-                  {isLoading ? (
+                  {copyState.kind === 'loading' ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Generating...
+                      Loading…
+                    </>
+                  ) : copyState.kind === 'copied' ? (
+                    <>
+                      <Check className="h-4 w-4 mr-2 text-green-600" />
+                      Copied! (~{copyState.tokens.toLocaleString()} tokens)
+                    </>
+                  ) : copyState.kind === 'error' ? (
+                    <>
+                      <AlertTriangle className="h-4 w-4 mr-2 text-destructive" />
+                      {copyState.message}
                     </>
                   ) : (
                     <>
-                      <Wand2 className="h-4 w-4 mr-2" />
-                      Generate Changes
+                      <Copy className="h-4 w-4 mr-2" />
+                      Copy context
                     </>
                   )}
                 </Button>
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={() => handleClose(false)}
+                    disabled={isLoading}
+                  >
+                    Cancel
+                  </Button>
+                  <Button onClick={handleSubmit} disabled={!instruction.trim() || isLoading}>
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Wand2 className="h-4 w-4 mr-2" />
+                        Generate Changes
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
           </>
