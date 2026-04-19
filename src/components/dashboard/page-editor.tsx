@@ -534,9 +534,11 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
             >
               <FileText className="w-4 h-4 flex-shrink-0" />
               <span className="truncate">{p.title}</span>
-              {!p.isPublished && (
+              {!p.isPublished ? (
                 <span className="ml-auto text-xs text-muted-foreground">(draft)</span>
-              )}
+              ) : p.isUnlisted ? (
+                <span className="ml-auto text-xs text-muted-foreground">(unlisted)</span>
+              ) : null}
             </Link>
             {canEdit && (
               <>
