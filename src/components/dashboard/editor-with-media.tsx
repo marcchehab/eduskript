@@ -30,6 +30,9 @@ export interface ExtraManageTab {
   label: string
   icon: React.ReactNode
   content: React.ReactNode
+  /** Where in the strip this tab sits relative to the built-in Files/Videos tabs.
+   *  'start' renders before Files; 'end' (default) renders after Videos. */
+  position?: 'start' | 'end'
 }
 
 export interface AIEditConfig {
@@ -365,14 +368,15 @@ export function EditorWithMedia({
     }
   }, [handleFileInsert, refreshFileList])
 
-  // Tab strip — built-in tabs first, then any extras from the parent.
-  // Using a ref so the strip array reference is stable across renders that don't
-  // change extras.
+  // Tab strip — extras with `position: 'start'` (e.g. Pages in the page editor)
+  // come first, then the built-in Files/Videos, then end-positioned extras.
   const builtInTabs: ExtraManageTab[] = [
     { id: 'files', label: 'Files', icon: <Files className="w-3.5 h-3.5" />, content: null },
     { id: 'videos', label: 'Videos', icon: <Film className="w-3.5 h-3.5" />, content: null },
   ]
-  const allTabs = [...builtInTabs, ...(extraTabs ?? [])]
+  const startExtras = (extraTabs ?? []).filter(t => t.position === 'start')
+  const endExtras = (extraTabs ?? []).filter(t => t.position !== 'start')
+  const allTabs = [...startExtras, ...builtInTabs, ...endExtras]
 
   return (
     <>

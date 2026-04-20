@@ -583,7 +583,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
   )
 
   const extraTabs: ExtraManageTab[] = [
-    { id: 'pages', label: 'Pages', icon: <FileText className="w-3.5 h-3.5" />, content: pagesTabContent },
+    { id: 'pages', label: 'Pages', icon: <FileText className="w-3.5 h-3.5" />, content: pagesTabContent, position: 'start' },
     { id: 'access', label: 'Access', icon: <Users className="w-3.5 h-3.5" />, content: accessTabContent },
   ]
 
