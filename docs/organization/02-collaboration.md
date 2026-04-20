@@ -45,7 +45,7 @@ Collection (Author: you, Maria)
 
 | Share level | Collaborator can access |
 |-------------|------------------------|
-| **Collection** | The collection metadata + all published skripts in it |
+| **Collection** | The collection metadata + every skript in it (published and draft alike) |
 | **Skript** | That skript's metadata + all its pages (published and draft) |
 | **Page** | Just that page |
 
@@ -97,7 +97,7 @@ They lose access immediately. Their past contributions remain in the content (an
 
 ## Forking — for adapting someone else's published work
 
-If a colleague's skript is published and you want to adapt it (translate, re-order, add exercises) without becoming a collaborator:
+Any published skript on the platform is forkable — by anyone, no relationship to the original author required. If you want to adapt one (translate, re-order, add exercises) without becoming a collaborator:
 
 1. Open the skript's public page
 2. Click **Fork**

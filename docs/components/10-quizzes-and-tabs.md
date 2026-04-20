@@ -11,7 +11,7 @@ A quiz is a `<question>` block with one or more `<answer>` children. Marking an 
 ### Single-choice (radio buttons)
 
 ```html
-<question id="q1" type="single">
+<question id="q-single-demo" type="single">
   <p>Which keyword defines a function in Python?</p>
   <answer>function</answer>
   <answer correct>def</answer>
@@ -20,12 +20,22 @@ A quiz is a `<question>` block with one or more `<answer>` children. Marking an 
 </question>
 ```
 
+Renders as:
+
+<question id="q-single-demo" type="single">
+  <p>Which keyword defines a function in Python?</p>
+  <answer>function</answer>
+  <answer correct>def</answer>
+  <answer>fn</answer>
+  <answer>lambda</answer>
+</question>
+
 Students see a list with radio buttons; can pick one. Click **Check** to see if it's right.
 
 ### Multi-choice (checkboxes)
 
 ```html
-<question id="q2" type="multi">
+<question id="q-multi-demo" type="multi">
   <p>Which of these are immutable in Python?</p>
   <answer correct>tuple</answer>
   <answer>list</answer>
@@ -35,26 +45,52 @@ Students see a list with radio buttons; can pick one. Click **Check** to see if 
 </question>
 ```
 
+Renders as:
+
+<question id="q-multi-demo" type="multi">
+  <p>Which of these are immutable in Python?</p>
+  <answer correct>tuple</answer>
+  <answer>list</answer>
+  <answer correct>str</answer>
+  <answer correct>frozenset</answer>
+  <answer>dict</answer>
+</question>
+
 Students must pick **all and only** the correct answers to be marked correct.
 
 ### Free-text answer
 
 ```html
-<question id="q3" type="text">
-  <p>What is the output of `print(2 ** 10)`?</p>
+<question id="q-text-demo" type="text">
+  <p>What is the output of <code>print(2 ** 10)</code>?</p>
   <answer correct>1024</answer>
 </question>
 ```
 
+Renders as:
+
+<question id="q-text-demo" type="text">
+  <p>What is the output of <code>print(2 ** 10)</code>?</p>
+  <answer correct>1024</answer>
+</question>
+
 Student types an answer; case-insensitive comparison against the `correct` answer(s). You can list multiple `<answer correct>` to accept variations:
 
 ```html
-<question id="q3" type="text">
+<question id="q-text-variants-demo" type="text">
   <p>What is the capital of Switzerland?</p>
   <answer correct>Bern</answer>
   <answer correct>Berne</answer>
 </question>
 ```
+
+Renders as:
+
+<question id="q-text-variants-demo" type="text">
+  <p>What is the capital of Switzerland?</p>
+  <answer correct>Bern</answer>
+  <answer correct>Berne</answer>
+</question>
 
 ### Question attributes
 
@@ -67,7 +103,7 @@ Student types an answer; case-insensitive comparison against the `correct` answe
 | `feedback-incorrect` | string | Custom message shown on incorrect answer |
 
 ```html
-<question id="q1" type="single" points="2"
+<question id="q-feedback-demo" type="single" points="2"
           feedback-correct="Genau! In Python ist `def` das Schlüsselwort."
           feedback-incorrect="Hinweis: Die Antwort beginnt mit dem Buchstaben d.">
   <p>Welches Schlüsselwort definiert eine Funktion in Python?</p>
@@ -76,6 +112,17 @@ Student types an answer; case-insensitive comparison against the `correct` answe
   <answer>fn</answer>
 </question>
 ```
+
+Renders as:
+
+<question id="q-feedback-demo" type="single" points="2"
+          feedback-correct="Genau! In Python ist `def` das Schlüsselwort."
+          feedback-incorrect="Hinweis: Die Antwort beginnt mit dem Buchstaben d.">
+  <p>Welches Schlüsselwort definiert eine Funktion in Python?</p>
+  <answer>function</answer>
+  <answer correct>def</answer>
+  <answer>fn</answer>
+</question>
 
 ### What students see
 
@@ -95,33 +142,65 @@ Tabbed containers group related content with switchable views. Useful for: langu
 
 ### Basic syntax
 
-```html
+````html
 <tabs-container>
   <tab-item label="Python">
     Standard Python solution.
 
-    ` ```python `
+    ```python
     print("Hello")
-    ` ``` `
+    ```
   </tab-item>
 
   <tab-item label="JavaScript">
     JavaScript equivalent.
 
-    ` ```javascript `
+    ```javascript
     console.log("Hello")
-    ` ``` `
+    ```
   </tab-item>
 
   <tab-item label="Rust">
     Rust version (compiled).
 
-    ` ```rust `
+    ```rust
     println!("Hello");
-    ` ``` `
+    ```
   </tab-item>
 </tabs-container>
+````
+
+Renders as:
+
+<tabs-container>
+  <tab-item label="Python">
+
+Standard Python solution.
+
+```python
+print("Hello")
 ```
+
+  </tab-item>
+  <tab-item label="JavaScript">
+
+JavaScript equivalent.
+
+```javascript
+console.log("Hello")
+```
+
+  </tab-item>
+  <tab-item label="Rust">
+
+Rust version (compiled).
+
+```rust
+println!("Hello");
+```
+
+  </tab-item>
+</tabs-container>
 
 Students see a tab bar at the top with the three labels; clicking switches between them.
 
@@ -129,7 +208,7 @@ Students see a tab bar at the top with the three labels; clicking switches betwe
 
 Markdown, code blocks, code editors, callouts, images, math — anything that works in the body of a page works inside a `<tab-item>`.
 
-```html
+````html
 <tabs-container>
   <tab-item label="Description">
     The Pythagorean theorem states that for a right triangle:
@@ -137,11 +216,11 @@ Markdown, code blocks, code editors, callouts, images, math — anything that wo
   </tab-item>
 
   <tab-item label="Try it">
-    ` ```python editor id="pythagoras" `
+    ```python editor id="pythagoras"
     a, b = 3, 4
     c = (a**2 + b**2) ** 0.5
     print(f"c = {c}")
-    ` ``` `
+    ```
   </tab-item>
 
   <tab-item label="Proof">
@@ -149,7 +228,7 @@ Markdown, code blocks, code editors, callouts, images, math — anything that wo
     > Take four right triangles with legs $a$ and $b$ ...
   </tab-item>
 </tabs-container>
-```
+````
 
 ### Default open tab
 

@@ -1,6 +1,6 @@
 # Publish and Share
 
-Three states control who can see content: **draft**, **published**, and **unlisted**. Plus a public/private toggle at every level (page, skript, collection). Most of the time you'll just toggle Publish and move on — but here's the full picture for when you need it.
+Three states control who can see content: **draft**, **published**, and **unlisted**. The state lives at the page and skript level (collections are just organizers — they don't have a publish state of their own). Most of the time you'll just toggle Publish and move on — but here's the full picture for when you need it.
 
 ---
 
@@ -22,12 +22,12 @@ Drafts are completely private. Published pages show up in your skript's table of
 
 ---
 
-## Publishing at three levels
+## Publishing at two levels
 
-Publishing happens at the **page**, **skript**, and **collection** level — independently:
+Publishing happens at the **page** and **skript** level — independently. Collections are purely organizational containers; they don't have their own publish state.
 
 ```
-Collection (published)
+Collection (organizational only — no publish state)
  ├── Skript A (published)
  │    ├── Page 1 (published)  ← visible
  │    ├── Page 2 (draft)      ← invisible
@@ -36,10 +36,10 @@ Collection (published)
  └── Skript B (draft)         ← entire skript invisible regardless of pages
 ```
 
-A page is only publicly visible if **the page**, **its skript**, and **its collection** are all published. This means you can take a whole skript offline temporarily by toggling its publish status, without touching any individual page.
+A page is only publicly visible if **the page** AND **its skript** are both published. You can take a whole skript offline temporarily by toggling its publish status, without touching any individual page.
 
 > [!warning] Common gotcha
-> A published page inside a draft skript is **not** visible. Students get a 404. Always publish from the bottom up (page → skript → collection) when launching new content, and from the top down (collection → skript) when taking it offline.
+> A published page inside a draft skript is **not** visible. Students get a 404. When launching new content, publish from the bottom up: pages first, then the skript. To take content offline, flip the skript to draft — every page inside disappears at once.
 
 ---
 
@@ -51,7 +51,7 @@ Three places to toggle the state:
 2. **Page list in the manage drawer** — quick toggle next to each page
 3. **Page builder dashboard** — bulk view, drag-and-drop reorder, batch toggles
 
-For skripts and collections, use the editors at those levels (or the dashboard).
+For skripts, use the skript editor or the dashboard.
 
 In the page list, the state is shown as `(draft)` or `(unlisted)` after the title. Published pages show no marker — they're the default expectation.
 
@@ -128,4 +128,4 @@ Toggle published → draft. The page disappears immediately. Students hitting th
 | Publish/unpublish a whole skript | Skript editor or dashboard |
 | Share a link | Click the share icon, or copy URL bar |
 | Link to a specific section | Click the heading, or paste URL with `#anchor` |
-| Take a section offline temporarily | Toggle the parent skript or collection to draft |
+| Take a section offline temporarily | Toggle the parent skript to draft |

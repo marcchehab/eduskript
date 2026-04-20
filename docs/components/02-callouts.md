@@ -7,12 +7,14 @@ Callouts are colored framed boxes that draw the eye to specific content — warn
 ## Basic syntax
 
 ```markdown
-> [!note]
+> [!note] Heads up
 > This is a note callout.
 ```
 
-> [!note]
+> [!note] Heads up
 > This is a note callout.
+
+The first line after `[!type]` is the title. Omit it and the callout falls back to the type name as a default heading.
 
 ---
 
@@ -139,16 +141,16 @@ Useful for examples that include caveats — but use sparingly; deeply nested ca
 
 ### Hidden hints
 
-```markdown
+````markdown
 > [!tip]- Stuck?
 > Try thinking about base cases first.
 
 > [!solution]- Solution
-> ` ```python `
+> ```python
 > def factorial(n):
 >     return 1 if n <= 1 else n * factorial(n - 1)
-> ` ``` `
-```
+> ```
+````
 
 The `-` keeps it collapsed; students click to reveal.
 
@@ -164,20 +166,20 @@ The `-` keeps it collapsed; students click to reveal.
 
 ### Predict-then-verify exercises
 
-```markdown
+````markdown
 > [!question] Predict
 > What does this code print?
-> ` ```python `
+> ```python
 > for i in range(3, 0, -1):
 >     print(i)
-> ` ``` `
+> ```
 
 > [!solution]- Verify
-> ` ```python editor `
+> ```python editor
 > for i in range(3, 0, -1):
 >     print(i)
-> ` ``` `
-```
+> ```
+````
 
 A code block (just shown), then a runnable editor (collapsed) for verification.
 

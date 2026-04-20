@@ -20,11 +20,11 @@ You don't need to know any of this to use components — but it explains why two
 
 ### Markdown style (preferred for code blocks)
 
-```markdown
-` ```python editor `
+````markdown
+```python editor
 print("Hello")
-` ``` `
 ```
+````
 
 Used for code editors and code blocks. Compact, natural to read.
 
@@ -96,6 +96,8 @@ assert square(5) == 25, "square(5) should return 25.|Nice!"
 ```
 
 ### SQL editor
+
+Query a SQLite database in the browser. The example below pulls the five most recently released TV shows from `netflix.db` — ordered by `release_date` descending, capped at 5 rows. Try editing the `LIMIT` or swapping `tv_show` for `movie`:
 
 ```sql editor db="netflix.db"
 SELECT title, release_date

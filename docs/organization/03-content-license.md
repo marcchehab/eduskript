@@ -34,7 +34,7 @@ Eduskript allows teachers to fork each other's published work. When you fork a s
 - Your version inherits the CC BY-NC-SA license (required by the share-alike clause)
 - A "Forked from" link is shown automatically, satisfying the attribution requirement
 
-This makes it easy to build on colleagues' work — adapt a lesson to your class, translate it, extend it with new exercises, or take it in a different direction entirely.
+This makes it easy to build on anyone else's work — colleague, complete stranger, teacher in another country. Adapt a lesson to your class, translate it, extend it with new exercises, or take it in a different direction entirely. The original author doesn't need to know you or grant permission; the CC BY-NC-SA license already covers it.
 
 ### Provenance
 
@@ -49,7 +49,7 @@ Only the immediate parent is stored. If someone wants to trace further back, the
 
 | Action | Allowed? |
 |--------|----------|
-| Fork a colleague's skript and modify it | Yes |
+| Fork anyone's published skript and modify it | Yes |
 | Use forked content in your classes | Yes |
 | Share your fork with other teachers on Eduskript | Yes |
 | Publish your fork on your Eduskript page | Yes |

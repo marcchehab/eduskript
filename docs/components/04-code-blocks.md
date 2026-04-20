@@ -119,12 +119,12 @@ Long code blocks just work — students can scroll within the block. For very lo
 
 Code blocks work inside callouts, tabs, list items, table cells, and pretty much anywhere markdown allows nested content. Note that fenced code blocks inside a callout need each line prefixed with `>`:
 
-```markdown
+````markdown
 > [!example] An example
-> ` ```python `
+> ```python
 > print("Hello")
-> ` ``` `
-```
+> ```
+````
 
 ---
 
