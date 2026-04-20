@@ -98,8 +98,8 @@ Drafts are private — only you (and collaborators with edit rights) can fetch t
 Database files (`.db`, `.sqlite`) get full SQL Studio integration. Drag a `.db` into the editor; the drop menu offers "Insert SQL editor" which writes the right markdown:
 
 ````markdown
-```sql editor db="movies.db"
-SELECT * FROM films LIMIT 10;
+```sql editor db="netflix.db"
+SELECT * FROM tv_show LIMIT 10;
 ```
 ````
 

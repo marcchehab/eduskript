@@ -104,15 +104,16 @@ The schema image appears as a side panel that students can collapse if they want
 Same pattern as Python (see previous chapter) — consecutive blocks with the same `id` become tabs:
 
 ````markdown
-```sql editor id="rentals" db="library.db" file="example.sql"
--- Find books rented this month
-SELECT title, rented_at
-FROM rentals
-WHERE rented_at > date('now', '-30 days');
+```sql editor id="netflix-demo" db="netflix.db" file="example.sql"
+-- Worked example: most-recently-released TV shows
+SELECT title, release_date
+FROM tv_show
+ORDER BY release_date DESC
+LIMIT 10;
 ```
 
-```sql editor id="rentals" db="library.db" file="your-turn.sql"
--- Your turn: count rentals per genre this year
+```sql editor id="netflix-demo" db="netflix.db" file="your-turn.sql"
+-- Your turn: list the 10 longest movies
 ```
 ````
 

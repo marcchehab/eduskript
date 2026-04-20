@@ -48,12 +48,12 @@ So students can `DROP TABLE`, `UPDATE`, `INSERT` freely. Nothing they do affects
 Same pattern as Python: consecutive blocks with the same `id` → tabs.
 
 ````markdown
-```sql editor id="rentals" db="library.db" file="example.sql"
-SELECT title FROM rentals LIMIT 5;
+```sql editor id="netflix-demo" db="netflix.db" file="example.sql"
+SELECT title FROM tv_show LIMIT 5;
 ```
 
-```sql editor id="rentals" db="library.db" file="your-turn.sql"
--- Your turn: count rentals per genre
+```sql editor id="netflix-demo" db="netflix.db" file="your-turn.sql"
+-- Your turn: list the 10 longest movies
 ```
 ````
 

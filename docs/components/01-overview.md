@@ -85,7 +85,10 @@ A code editor + a `python-check` block that grades the student's code:
 
 ```python editor id="square-it"
 def square(x):
-    return x  # student fills in
+    return x * 2  # wrong
+
+# Example
+print("The area of a square with side 3 is:", square(3))
 ```
 
 ```python-check for="square-it"
@@ -94,8 +97,11 @@ assert square(5) == 25, "square(5) should return 25.|Nice!"
 
 ### SQL editor
 
-```sql editor db="sample.db"
-SELECT * FROM users LIMIT 5;
+```sql editor db="netflix.db"
+SELECT title, release_date
+FROM tv_show
+ORDER BY release_date DESC
+LIMIT 5;
 ```
 
 ### Video
