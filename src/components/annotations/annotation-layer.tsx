@@ -2629,8 +2629,40 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
     }
   }, [stylusModeActive, mode])
 
-  // Helper function to apply zoom using CSS zoom (affects layout, no spacer needed)
-  // With native scroll, we only need to handle zoom - scroll is handled by browser
+  // CSS transform: scale() doesn't affect layout, so the scroll container has no idea
+  // the content grew. This helper injects an invisible spacer sibling of <main> that
+  // forces the scroll container to have the correct scrollable dimensions, and overrides
+  // the overflow-x:clip on <main> that would otherwise hide the scaled content.
+  const updateZoomSpacer = useCallback((zoomLevel: number) => {
+    const container = scrollContainerRef.current
+    const main = mainRef.current
+    if (!container || !main) return
+
+    let spacer = document.getElementById('zoom-spacer')
+
+    if (zoomLevel <= 1) {
+      spacer?.remove()
+      main.style.maxWidth = ''
+      return
+    }
+
+    if (!spacer) {
+      spacer = document.createElement('div')
+      spacer.id = 'zoom-spacer'
+      spacer.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none'
+      spacer.ariaHidden = 'true'
+      container.style.position = 'relative'
+      container.appendChild(spacer)
+    }
+
+    spacer.style.width = `${main.scrollWidth * zoomLevel}px`
+    spacer.style.height = `${main.scrollHeight * zoomLevel}px`
+
+    main.style.maxWidth = 'none'
+  }, [])
+
+  // Helper function to apply zoom transform using RAF (no re-renders)
+  // Uses CSS transform: scale() which is paint/composite-only — no layout reflow.
   const applyZoom = useCallback((newZoom: number, focalX?: number, focalY?: number) => {
     // Use renderedZoomRef (actual DOM state) not zoomRef (which may already be ahead of the DOM
     // due to rapid wheel events cancelling each other's RAFs before they execute).
@@ -2642,46 +2674,50 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
       cancelAnimationFrame(rafIdRef.current)
     }
 
-    // Apply zoom in next frame
+    // Apply transform in next frame
     rafIdRef.current = requestAnimationFrame(() => {
       if (mainRef.current) {
-        mainRef.current.style.zoom = `${newZoom}`
+        mainRef.current.style.transform = `scale(${newZoom})`
         renderedZoomRef.current = newZoom
       }
 
+      updateZoomSpacer(newZoom)
+
       // Adjust scroll position to keep focal point stationary
-      // CSS zoom makes getBoundingClientRect() return screen-space coordinates,
-      // but scrollLeft/scrollTop are in the zoomed content coordinate space.
       if (scrollContainerRef.current && focalX !== undefined && focalY !== undefined) {
         const container = scrollContainerRef.current
         const containerRect = container.getBoundingClientRect()
 
-        // Screen-space offset of cursor within the container
-        const screenX = focalX - containerRect.left
-        const screenY = focalY - containerRect.top
+        // Convert client coordinates to container-relative coordinates
+        const relativeX = focalX - containerRect.left
+        const relativeY = focalY - containerRect.top
 
-        // Content point under cursor before zoom (scroll values are in old-zoom space)
-        const contentX = container.scrollLeft / oldZoom + screenX / oldZoom
-        const contentY = container.scrollTop / oldZoom + screenY / oldZoom
+        // Find the content point under the focal point (in unscaled coordinates)
+        const contentX = (relativeX + container.scrollLeft) / oldZoom
+        const contentY = (relativeY + container.scrollTop) / oldZoom
 
-        // New scroll so the same content point stays under the cursor
-        container.scrollLeft = Math.max(0, contentX * newZoom - screenX)
-        container.scrollTop = Math.max(0, contentY * newZoom - screenY)
+        // Calculate new scroll so the same content point stays under the focal point
+        const newScrollX = contentX * newZoom - relativeX
+        const newScrollY = contentY * newZoom - relativeY
+
+        container.scrollLeft = Math.max(0, newScrollX)
+        container.scrollTop = Math.max(0, newScrollY)
       }
 
       rafIdRef.current = null
     })
-  }, [])
+  }, [updateZoomSpacer])
 
   // Handle zoom reset
   const handleResetZoom = useCallback(() => {
     applyZoom(1.0)
     setZoom(1.0)
+    updateZoomSpacer(1.0)
     // Scroll to top
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTop = 0
     }
-  }, [applyZoom])
+  }, [applyZoom, updateZoomSpacer])
 
   // Custom pinch-zoom handling (native scroll handles single-finger pan)
   const handleTouchStart = useCallback((e: TouchEvent) => {
@@ -2755,16 +2791,17 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
       const newScrollX = initialContentPointRef.current.x * newZoom - relativeX
       const newScrollY = initialContentPointRef.current.y * newZoom - relativeY
 
-      // Apply zoom and scroll synchronously (no RAF) for smooth gesture handling
+      // Apply transform and scroll synchronously (no RAF) for smooth gesture handling
       zoomRef.current = newZoom
       renderedZoomRef.current = newZoom
       if (mainRef.current) {
-        mainRef.current.style.zoom = `${newZoom}`
+        mainRef.current.style.transform = `scale(${newZoom})`
       }
+      updateZoomSpacer(newZoom)
       container.scrollLeft = Math.max(0, newScrollX)
       container.scrollTop = Math.max(0, newScrollY)
     }
-  }, [])
+  }, [updateZoomSpacer])
 
   const handleTouchEnd = useCallback((e: TouchEvent) => {
     // Remove ended touches
@@ -2826,8 +2863,10 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
 
     if (!mainRef.current) return
 
-    // Set zoom once - CSS zoom affects layout, so scroll container dimensions update automatically
-    mainRef.current.style.zoom = `${zoomRef.current}`
+    // Set transform properties once - scale only, no translate (scroll handles panning)
+    mainRef.current.style.transformOrigin = 'top left'
+    mainRef.current.style.transition = 'none'
+    mainRef.current.style.transform = `scale(${zoomRef.current})`
   }, [])
 
 

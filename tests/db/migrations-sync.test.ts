@@ -4,7 +4,9 @@ import { resolve } from 'path'
 import { config } from 'dotenv'
 
 describe('Database Migrations', () => {
-  it('migrations are in sync with schema', () => {
+  // Spawns `prisma migrate diff` as a subprocess; cold start + CPU contention
+  // from parallel test files regularly exceeds Vitest's 5s default.
+  it('migrations are in sync with schema', { timeout: 30_000 }, () => {
     const rootDir = resolve(__dirname, '../..')
     const migrationsDir = resolve(rootDir, 'prisma/migrations')
     const schemaPath = resolve(rootDir, 'prisma/schema.prisma')
