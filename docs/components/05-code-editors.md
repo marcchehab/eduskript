@@ -36,11 +36,25 @@ The HTML form lets you set extra attributes that don't fit cleanly in a fence in
 
 | Language | Runtime | Notes |
 |----------|---------|-------|
-| **Python** | [Pyodide](https://pyodide.org) (CPython compiled to WebAssembly) | Real Python 3, full standard library, NumPy / Pandas / Matplotlib / scikit-learn available |
+| **Python** | [Pyodide](https://pyodide.org) + [Skulpt](https://skulpt.org) | Automatic: Skulpt for `turtle` and `input()`, Pyodide for everything else |
 | **JavaScript** | The student's browser, sandboxed | Modern JS, no DOM access |
 | **SQL** | [SQL.js](https://sql.js.org) (SQLite compiled to WebAssembly) | See **SQL Editors** chapter |
 
-Python's first run loads the Pyodide runtime (~5 seconds, cached after that). Subsequent runs are instant. JavaScript and SQL are near-instant on first run.
+Python's first run loads the runtime (~5 seconds, cached after that). Subsequent runs are instant. JavaScript and SQL are near-instant on first run.
+
+### Two Python runtimes, transparently
+
+Eduskript runs Python in one of two browser engines and picks the right one based on your code:
+
+| Feature used | Runtime | Why |
+|--------------|---------|-----|
+| `import turtle` or `from turtle import ...` | **Skulpt** | Native async suspension for animated turtle graphics |
+| Calls to `input("...")` | **Skulpt** | Clean sync-looking `input()` via Skulpt's coroutines |
+| Anything else (NumPy, pandas, matplotlib, file I/O, standard library) | **Pyodide** | Real CPython on WebAssembly — full library support |
+
+No flag to set, no editor attribute — the editor inspects the code and switches. Write the code you want to write; the right runtime loads. Both are preloaded lazily when the student scrolls near an editor.
+
+One practical consequence: because Skulpt is a Python-to-JS compiler (not CPython), some edge cases behave slightly differently from desktop Python when `turtle` or `input()` is in use. If you hit a Skulpt-specific quirk, avoid the two trigger features and you'll land back on Pyodide.
 
 ---
 

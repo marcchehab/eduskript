@@ -10,11 +10,10 @@ Drop a `.db` or `.sqlite` file into your skript, then:
 
 ````markdown
 ```sql editor db="netflix.db"
-SELECT title, country, release_year
+SELECT title, release_date
 FROM tv_show
-WHERE country = 'United States'
-ORDER BY release_year DESC
-LIMIT 20;
+ORDER BY release_date DESC
+LIMIT 10;
 ```
 ````
 
