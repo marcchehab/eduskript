@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react'
 import Image from 'next/image'
-import { Image as ImageIcon, Video, Music, FileText, Archive, File, Trash2, ExternalLink, Pencil, TextCursor, Database, FileCode, Link2 } from 'lucide-react'
+import { Image as ImageIcon, Video, Music, FileText, Archive, File, Trash2, ExternalLink, Pencil, TextCursor, Database, FileCode, Link2, Import } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
@@ -10,6 +10,7 @@ import { Dialog } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useTheme } from 'next-themes'
+import { FileImportDialog } from '@/components/dashboard/file-import-dialog'
 
 interface FileItem {
   id: string
@@ -48,6 +49,7 @@ export function FileBrowser({ skriptId, onFileSelect, className = '', onUploadCo
   const [duplicateUpload, setDuplicateUpload] = useState<{file: File, existingFile: FileItem} | null>(null)
   const [newUploadName, setNewUploadName] = useState('')
   const [uploadProgress, setUploadProgress] = useState<number | null>(null) // 0-100 or null
+  const [importDialogOpen, setImportDialogOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { resolvedTheme } = useTheme()
   const alert = useAlertDialog()
@@ -388,7 +390,22 @@ export function FileBrowser({ skriptId, onFileSelect, className = '', onUploadCo
 
       {/* Skript Files Section */}
       {skriptId && (
-        <div>
+        <div className="space-y-2">
+          {/* Import from another skript — sits above the drop zone so it's discoverable
+              whether or not files already exist. Imports use content-addressed dedup,
+              so no S3 re-upload happens. */}
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs gap-1.5"
+              onClick={() => setImportDialogOpen(true)}
+            >
+              <Import className="w-3.5 h-3.5" />
+              Import from another skript
+            </Button>
+          </div>
           <div
             className={`border-2 border-dashed rounded-lg p-3 transition-colors cursor-pointer relative ${
               dragOver ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/10' : 'border-border'
@@ -742,6 +759,14 @@ export function FileBrowser({ skriptId, onFileSelect, className = '', onUploadCo
         title={alert.title}
         message={alert.message}
       />
+      {skriptId && (
+        <FileImportDialog
+          open={importDialogOpen}
+          onOpenChange={setImportDialogOpen}
+          targetSkriptId={skriptId}
+          onImported={onUploadComplete}
+        />
+      )}
     </div>
   )
 }
