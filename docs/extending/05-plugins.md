@@ -1,14 +1,18 @@
 # Plugins
 
-Create custom interactive components that run in sandboxed iframes. No code review needed — plugins are isolated from the host page.
+Custom interactive components that run in sandboxed iframes. A plugin is a single HTML file with inline CSS and JS, isolated from the host page via strict CSP — safe to embed untrusted code because it can't escape its iframe.
 
-## Quick Start
+For the user-facing side (embedding in pages), see the **Plugins** chapter in the Components skript. This page covers **building** a plugin from scratch.
 
-### 1. Create a Plugin
+---
 
-Go to **Dashboard > Plugins > New Plugin**, or use the AI generator to describe what you want.
+## Quick start
 
-A plugin is a single HTML file with inline CSS and JS:
+### 1. Create a plugin
+
+Go to **Dashboard → Plugins → New Plugin**, or use the **AI generator** to describe what you want and get a starting HTML file.
+
+A plugin is a single HTML fragment with inline CSS and JS:
 
 ```html
 <style>
@@ -28,8 +32,8 @@ A plugin is a single HTML file with inline CSS and JS:
     // ctx.config  — attributes from the <plugin> tag
     // ctx.data    — previously saved state, or null
     // ctx.theme   — "light" or "dark"
-    if (ctx.data && ctx.data.state) {
-      count = ctx.data.state.count || 0;
+    if (ctx.data && typeof ctx.data.count === 'number') {
+      count = ctx.data.count;
     }
     document.getElementById('btn').textContent = 'Count: ' + count;
   });
@@ -42,12 +46,14 @@ A plugin is a single HTML file with inline CSS and JS:
   document.getElementById('btn').addEventListener('click', function() {
     count++;
     document.getElementById('btn').textContent = 'Count: ' + count;
-    plugin.setData({ state: { count: count }, updatedAt: Date.now() });
+    plugin.setData({ count: count });
   });
 </script>
 ```
 
-### 2. Use in Markdown
+Don't include `<!DOCTYPE>`, `<html>`, `<head>`, or `<body>` — the host injects those.
+
+### 2. Use in markdown
 
 ```markdown
 <plugin src="yourPageSlug/counter"></plugin>
@@ -55,7 +61,7 @@ A plugin is a single HTML file with inline CSS and JS:
 
 The `src` format is `ownerPageSlug/pluginSlug` — like GitHub repos.
 
-### 3. Pass Configuration
+### 3. Pass configuration
 
 Attributes on the `<plugin>` tag become `config` properties:
 
@@ -65,7 +71,7 @@ Attributes on the `<plugin>` tag become `config` properties:
 
 Inside the plugin, `ctx.config.formula` will be `"rsa-enc"`.
 
-### 4. Pass Content
+### 4. Pass content
 
 Text between tags is available as `ctx.config.content`:
 
@@ -77,9 +83,11 @@ start -> middle -> end
 
 Inside the plugin, `ctx.config.content` will be the text between the tags.
 
-## SDK Reference
+---
 
-The host injects the eduskript SDK into every plugin iframe. Use it like this:
+## SDK reference
+
+The host injects the `eduskript` SDK into every plugin iframe:
 
 ```javascript
 var plugin = eduskript.init();
@@ -87,7 +95,7 @@ var plugin = eduskript.init();
 
 ### `plugin.onReady(callback)`
 
-Called once when the host sends initial data. Always use this as your entry point.
+Called once when the host sends initial data. Always use this as your entry point — don't assume `ctx` is available before `onReady` fires.
 
 ```javascript
 plugin.onReady(function(ctx) {
@@ -99,10 +107,10 @@ plugin.onReady(function(ctx) {
 
 ### `plugin.setData(data)`
 
-Persist state. Data is stored per-user per-page via the UserData service. Max 1MB, rate-limited to 2 calls/second.
+Persist state. Data is stored per-user per-page via the `UserData` service. Max 1MB, rate-limited to 2 calls/second.
 
 ```javascript
-plugin.setData({ state: { score: 42 }, updatedAt: Date.now() });
+plugin.setData({ count: 42, updatedAt: Date.now() });
 ```
 
 ### `plugin.getData()`
@@ -111,9 +119,11 @@ Request current saved state. Returns a Promise.
 
 ```javascript
 plugin.getData().then(function(data) {
-  console.log(data); // { state: { score: 42 }, updatedAt: ... }
+  console.log(data);
 });
 ```
+
+Usually redundant with `onReady` — most plugins don't need this.
 
 ### `plugin.onThemeChange(callback)`
 
@@ -137,19 +147,39 @@ plugin.onDataChanged(function(newData) {
 
 ### `plugin.resize(height)`
 
-Manually set iframe height. Usually not needed — the SDK auto-detects content height via `ResizeObserver`. Use this only if auto-detection doesn't work for your layout.
+Manually set iframe height in pixels. Usually not needed — the SDK auto-detects content height via `ResizeObserver`. Use this only if auto-detection doesn't work for your layout (e.g. absolutely-positioned content).
 
 ```javascript
 plugin.resize(500);
 ```
 
-## Auto-Height
+### `plugin.requestFullscreen()` / `plugin.exitFullscreen()`
 
-Plugin iframes automatically resize to match their content. The SDK uses a `ResizeObserver` on `document.documentElement` to detect layout changes and reports the new height to the host. This is debounced (100ms) and deduped (only sends when height actually changes).
+Toggle plugin fullscreen mode. The iframe takes over the browser viewport; escape key and your own exit UI return to inline.
 
-You don't need to do anything for this to work. If your plugin has dynamic content that changes height (accordions, tabs, etc.), the iframe will adjust automatically.
+```javascript
+document.getElementById('fullscreen-btn').onclick = function() {
+  plugin.requestFullscreen();
+};
 
-## Security Model
+plugin.onFullscreenChange(function(isFullscreen) {
+  // Update UI if needed
+});
+```
+
+Useful for visualization plugins (graphs, simulations, maps) that need more space than a page allows.
+
+---
+
+## Auto-height
+
+Plugin iframes automatically resize to match their content. The SDK uses `ResizeObserver` on `document.documentElement` to detect layout changes and reports the new height to the host. This is debounced (100ms) and deduped (only sends when height actually changes).
+
+You don't need to do anything for this to work. If your plugin has dynamic content that changes height (accordions, tabs, expanded sections), the iframe adjusts automatically.
+
+---
+
+## Security model
 
 Plugins run in sandboxed iframes with a strict Content-Security-Policy:
 
@@ -165,6 +195,7 @@ You can load libraries from these CDNs:
 - `https://cdn.jsdelivr.net`
 - `https://unpkg.com`
 - `https://cdnjs.cloudflare.com`
+- Google Fonts CSS (`https://fonts.googleapis.com`, `https://fonts.gstatic.com`)
 
 Example with Three.js:
 
@@ -189,9 +220,17 @@ Example with Mermaid:
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 ```
 
-## Theme Support
+Example with D3:
 
-Plugins should support both light and dark modes. The theme is provided in `onReady` and updated via `onThemeChange`.
+```html
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+```
+
+---
+
+## Theme support
+
+Plugins should support both light and dark modes. Theme is provided in `onReady` and updated via `onThemeChange`.
 
 The iframe's `<html>` element has `color-scheme: light` or `color-scheme: dark` set automatically, so browser defaults (scrollbars, form controls) match the theme.
 
@@ -209,30 +248,50 @@ plugin.onReady(function(ctx) { applyTheme(ctx.theme); });
 plugin.onThemeChange(applyTheme);
 ```
 
+---
+
+## AI-generated plugins
+
+The **Plugins → New Plugin** form has a "Generate with AI" option. Describe what you want, get a starting HTML file. Under the hood it uses Claude with access to the plugin SDK reference.
+
+Useful for:
+- Rapid prototyping ("give me a counter that shows primes")
+- Exploring what's possible when you're not sure
+- Creating variations on existing plugins
+
+Always review and test the generated code before publishing — AI can produce plausible but broken output.
+
+---
+
 ## Sharing
 
-All plugins are visible to all teachers. Reference any teacher's plugin by `ownerPageSlug/pluginSlug`:
+All plugins are visible to all teachers by default. Reference any teacher's plugin by `ownerPageSlug/pluginSlug`:
 
 ```markdown
 <plugin src="marie/periodic-table"></plugin>
 ```
 
-If Marie updates her plugin, everyone using it gets the update immediately. To customize someone else's plugin, fork it from the dashboard — this creates a copy under your namespace.
+If Marie updates her plugin, everyone using it gets the update immediately. To customize someone else's plugin, **fork** it from the dashboard — this creates a copy under your namespace.
 
-## Coding Guidelines
+---
 
-- Use `var` instead of `let`/`const` for maximum compatibility in the sandbox
+## Coding guidelines
+
+- Use `var` instead of `let`/`const` for maximum compatibility in the sandbox (some older browsers still hit this)
 - Always call `eduskript.init()` and use `plugin.onReady()` as your entry point
 - Support both light and dark themes
 - Don't include `<!DOCTYPE>`, `<html>`, `<head>`, or `<body>` tags — the host wraps your output
 - Keep it self-contained — all CSS and JS inline
+- Test at different iframe widths — the host doesn't guarantee a minimum width
 
-## Example Plugins
+---
 
-See `scripts/seed-plugins/` for reference implementations at various complexity levels:
+## Reference implementations
 
-| File | Complexity | Key Pattern |
-|---|---|---|
+See `scripts/seed-plugins/` for plugins at various complexity levels:
+
+| File | Complexity | Key pattern |
+|------|------------|-------------|
 | `color-sliders.html` | Simple | Pure vanilla JS, no dependencies |
 | `mod-calc.html` | Simple | Config via attributes (`formula`), BigInt math |
 | `cipher-lab.html` | Medium | Multiple modes, clipboard API, tabs |
@@ -241,14 +300,31 @@ See `scripts/seed-plugins/` for reference implementations at various complexity 
 
 Run `node scripts/seed-plugins.mjs [pageSlug]` to seed these into your local database.
 
-## API
+---
 
-Plugins are stored in the database and managed via REST API:
+## API endpoints
 
-- `GET /api/plugins` — list all plugins (optional `?author=pageSlug` filter)
-- `POST /api/plugins` — create a plugin
-- `GET /api/plugins/:ownerSlug/:pluginSlug` — get plugin details
-- `PUT /api/plugins/:ownerSlug/:pluginSlug` — update (author only)
-- `DELETE /api/plugins/:ownerSlug/:pluginSlug` — delete (author only)
-- `POST /api/plugins/:ownerSlug/:pluginSlug/fork` — fork to your library
-- `POST /api/plugins/generate` — AI-generate a plugin from a description
+Plugins are stored in the database and managed via REST:
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/plugins` | List plugins (optional `?author=pageSlug` filter) |
+| POST | `/api/plugins` | Create a plugin |
+| GET | `/api/plugins/:ownerSlug/:pluginSlug` | Get plugin details |
+| PUT | `/api/plugins/:ownerSlug/:pluginSlug` | Update (author only) |
+| DELETE | `/api/plugins/:ownerSlug/:pluginSlug` | Delete (author only) |
+| POST | `/api/plugins/:ownerSlug/:pluginSlug/fork` | Fork to your library |
+| POST | `/api/plugins/generate` | AI-generate a plugin from a description |
+
+---
+
+## Lifecycle summary
+
+1. Teacher writes HTML + JS with the SDK
+2. Saves via dashboard → stored in DB with `slug` and `ownerPageSlug`
+3. Another teacher embeds `<plugin src="owner/slug" />` in a page
+4. Rendered page loads iframe with CSP, host injects SDK
+5. Plugin calls `eduskript.init().onReady(...)` to register
+6. Host responds with `{ config, data, theme }` — plugin renders
+7. On interaction, plugin calls `setData({...})` → host persists to UserData
+8. On theme toggle, host sends `onThemeChange` → plugin re-renders
