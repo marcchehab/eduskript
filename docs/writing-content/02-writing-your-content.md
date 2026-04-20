@@ -6,30 +6,7 @@ The Eduskript editor is split-screen: **markdown source on the left, live previe
 
 ## The editor at a glance
 
-<!-- EXCALIDRAW PLACEHOLDER: editor-layout.excalidraw
-     Suggested drawing: split-screen editor mockup.
-     Top bar with toolbar buttons (Save, Preview, Publish, formatting icons, Files, AI wand ✨).
-     Below: two panels side by side — "markdown source" left (showing ## Mean and Median with ** markers)
-     and "live preview" right (showing the rendered result). Labels below: "markdown source" / "live preview".
-     Hand-drawn sketch feel. Once uploaded as editor-layout.excalidraw.{light,dark}.svg,
-     replace the code block below with:
-     ![Editor layout: source on the left, live preview on the right](editor-layout.excalidraw) -->
-
-```
-┌────────────────────────────────────────────────────────────────┐
-│  [Save]  [Preview]  [Publish]  [B I U H1 H2 ⋯]  [Files] [AI ✨] │  ← top toolbar
-├──────────────────────────────┬─────────────────────────────────┤
-│                              │                                 │
-│   ## Mean and Median         │   Mean and Median               │
-│                              │                                 │
-│   The **mean** is the sum    │   The mean is the sum divided   │
-│   divided by the count...    │   by the count...               │
-│                              │                                 │
-│                              │   [✨ wand button on hover]     │
-│                              │                                 │
-└──────────────────────────────┴─────────────────────────────────┘
-        markdown source                  live preview
-```
+![Editor layout: source on the left, live preview on the right](editor-layout.excalidraw)
 
 The toolbar covers the basics: bold, italic, headings, lists, links, images, code blocks, callouts, math, color picker, file insertions. Most teachers settle into a workflow of typing markdown by hand for the small stuff and clicking the toolbar for the bigger components (Excalidraw drawings, code editors, callouts).
 

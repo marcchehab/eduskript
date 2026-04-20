@@ -53,31 +53,7 @@ The original page stays untouched — the snap is a separate annotated overlay.
 
 This is where it gets interesting for the classroom.
 
-<!-- EXCALIDRAW PLACEHOLDER: broadcast-fanout.excalidraw
-     Suggested drawing: a teacher's tablet/laptop at the top with a pen
-     drawing strokes on it. Arrows fan out to 3-4 student devices below
-     (phone, laptop, tablet) each showing the same strokes appearing in
-     real time. Labels: "Your screen (draws)" and "Students see it live"
-     on each device. Hand-drawn, friendly feel.
-     Once uploaded as broadcast-fanout.excalidraw.{light,dark}.svg, replace
-     the code block below with:
-     ![Your strokes fan out to every student's device in real time](broadcast-fanout.excalidraw) -->
-
-```
-            ┌──────────────┐
-            │  Your screen │
-            │              │
-            │   ✏️ draws    │
-            └──────┬───────┘
-                   │
-        ┌──────────┼──────────┐
-        ▼          ▼          ▼
-   ┌────────┐ ┌────────┐ ┌────────┐
-   │Student │ │Student │ │Student │
-   │  sees  │ │  sees  │ │  sees  │
-   │  live  │ │  live  │ │  live  │
-   └────────┘ └────────┘ └────────┘
-```
+![Your strokes fan out to every student's device in real time](broadcast-fanout.excalidraw)
 
 Switch your annotations to **broadcast mode** during class. Every stroke you draw appears in real time on every student's device — no projector needed, no "can the back row see this?" Students keep your annotations after class for review.
 
