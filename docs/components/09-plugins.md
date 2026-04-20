@@ -74,6 +74,17 @@ Sets the iframe's initial height in pixels. After load, the plugin auto-resizes 
 
 ## How plugins work, in one diagram
 
+<!-- EXCALIDRAW PLACEHOLDER: plugin-sandbox.excalidraw
+     Suggested drawing: an outer box labeled "Eduskript page" containing an
+     inner box labeled "sandboxed iframe" with a plugin icon inside. An
+     arrow from the inner iframe goes down to a "Host" box via a labeled
+     "postMessage" arrow. Labels on the outer arrow could indicate:
+     "state persistence", "theme updates", "config in". A small lock icon
+     on the iframe hints at the CSP / sandbox boundary. Hand-drawn.
+     Once uploaded as plugin-sandbox.excalidraw.{light,dark}.svg, replace
+     the code block below with:
+     ![Plugins run in sandboxed iframes, communicating with the host via postMessage](plugin-sandbox.excalidraw) -->
+
 ```
 ┌────────────────────────────────────────────┐
 │  Eduskript page                            │

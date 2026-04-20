@@ -6,6 +6,15 @@ The Eduskript editor is split-screen: **markdown source on the left, live previe
 
 ## The editor at a glance
 
+<!-- EXCALIDRAW PLACEHOLDER: editor-layout.excalidraw
+     Suggested drawing: split-screen editor mockup.
+     Top bar with toolbar buttons (Save, Preview, Publish, formatting icons, Files, AI wand ✨).
+     Below: two panels side by side — "markdown source" left (showing ## Mean and Median with ** markers)
+     and "live preview" right (showing the rendered result). Labels below: "markdown source" / "live preview".
+     Hand-drawn sketch feel. Once uploaded as editor-layout.excalidraw.{light,dark}.svg,
+     replace the code block below with:
+     ![Editor layout: source on the left, live preview on the right](editor-layout.excalidraw) -->
+
 ```
 ┌────────────────────────────────────────────────────────────────┐
 │  [Save]  [Preview]  [Publish]  [B I U H1 H2 ⋯]  [Files] [AI ✨] │  ← top toolbar

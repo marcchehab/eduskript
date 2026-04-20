@@ -8,6 +8,15 @@ Welcome — this manual walks you through everything Eduskript can do, top to bo
 
 Eduskript content has three levels:
 
+<!-- EXCALIDRAW PLACEHOLDER: content-hierarchy.excalidraw
+     Suggested drawing: a tree diagram with three levels — one Collection
+     at top branching to 2 Skripts, each Skript branching to 2-3 Pages.
+     Use example labels like "CS 101" → "Functions" / "Lists" →
+     "Defining Functions" / "Recursion" / etc. Hand-drawn feel.
+     Once uploaded as content-hierarchy.excalidraw.{light,dark}.svg,
+     replace the entire code block below with:
+     ![Content hierarchy: Collection → Skript → Page](content-hierarchy.excalidraw) -->
+
 ```
 Collection ─┐  e.g. "Computer Science 101"
             │
