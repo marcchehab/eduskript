@@ -81,7 +81,11 @@ export function PythonTestResults({ results, points, earnedPoints, checksUsed, m
                 {r.label}
               </span>
               {r.error && (
-                <div className="text-xs text-muted-foreground mt-0.5 font-mono">
+                <div className={`text-xs mt-0.5 ${
+                  r.passed
+                    ? 'text-green-600/80 dark:text-green-500/80 italic'
+                    : 'text-muted-foreground font-mono'
+                }`}>
                   {r.error}
                 </div>
               )}

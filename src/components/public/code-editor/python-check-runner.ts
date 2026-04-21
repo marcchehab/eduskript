@@ -141,9 +141,18 @@ import json
 with open('__eduskript_labels.json') as f:
     __labels = json.load(f)
 
-def __pick(__i, __ok):
+# Label design:
+#   label  = always the failLabel (describes what the test checks)
+#   detail = passLabel on success (iff teacher wrote one distinct from fail),
+#            "Expected X, got Y" on failed ==, else None
+# This way the student always sees what was tested; the detail line carries
+# the reaction or the value mismatch, and collapses when there's nothing new.
+
+def __detail_pass(__i):
     __entry = __labels[__i]
-    return __entry["pass" if __ok else "fail"]
+    __f = __entry.get("fail")
+    __p = __entry.get("pass")
+    return __p if (__p and __p != __f) else None
 
 __count = ${assertions.length}
 __results = []
@@ -159,7 +168,7 @@ except Exception as __e:
     # Student code failed — all tests fail with this error
     __err = str(__e)
     for __i in range(__count):
-        __results.append({"index": __i, "passed": False, "label": __pick(__i, False), "error": "Code error: " + __err})
+        __results.append({"index": __i, "passed": False, "label": __labels[__i]["fail"], "error": "Code error: " + __err})
 
 if not __results:
     # Run setup code in the student namespace
@@ -178,9 +187,12 @@ if not __results:
             __assert_code = f.read()
         try:
             exec(compile(__assert_code, '<check>', 'exec'), __ns)
-            __results.append({"index": __i, "passed": True, "label": __pick(__i, True)})
-        except AssertionError as __e:
-            __err_msg = str(__e) if str(__e) else None
+            __results.append({"index": __i, "passed": True, "label": __labels[__i]["fail"], "error": __detail_pass(__i)})
+        except AssertionError:
+            # Default to no error detail — str(AssertionError) is just the
+            # assert's custom message, which we already show as the label.
+            # Only the == branch below produces genuinely new info.
+            __err_msg = None
             # Try to extract actual value from failed == comparison
             # Pattern: assert expr == expected  or  assert expr == expected, "msg"
             __m = __re.match(r'assert\\s+(.+?)\\s*==\\s*(.+?)(?:\\s*,\\s*["\\']|$)', __assert_code.strip())
@@ -191,9 +203,9 @@ if not __results:
                     __err_msg = f"Expected {__expected!r}, got {__actual!r}"
                 except Exception:
                     pass
-            __results.append({"index": __i, "passed": False, "label": __pick(__i, False), "error": __err_msg})
+            __results.append({"index": __i, "passed": False, "label": __labels[__i]["fail"], "error": __err_msg})
         except Exception as __e:
-            __results.append({"index": __i, "passed": False, "label": __pick(__i, False), "error": str(__e)})
+            __results.append({"index": __i, "passed": False, "label": __labels[__i]["fail"], "error": str(__e)})
 
 json.dumps(__results)
 `
