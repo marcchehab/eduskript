@@ -1695,15 +1695,21 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
   // overwrites offsets that the annotationData effect just set.
   const hasLoadedAnnotationOffsets = useRef(false)
   useEffect(() => {
-    if (headingPositions.length > 0 && Object.keys(storedHeadingOffsets).length === 0
-        && !hasLoadedAnnotationOffsets.current) {
-      const currentOffsets = Object.fromEntries(
-        headingPositions.map(h => [h.sectionId, h.offsetY])
-      )
-      originalHeadingOffsetsRef.current = currentOffsets
-      setStoredHeadingOffsets(currentOffsets)
-    }
-  }, [headingPositions, storedHeadingOffsets])
+    // While the user has no content yet, keep the baseline tracking the
+    // current layout. Dynamic-height elements (code editors, callouts) can
+    // grow AFTER the initial 500ms recalc but BEFORE the user draws — if we
+    // froze the baseline at page load, the first stroke would render with
+    // dy = (post-grow current) - (pre-grow baseline) and visibly shift until
+    // performSave rebases the baseline 2s later.
+    if (headingPositions.length === 0) return
+    if (hasLoadedAnnotationOffsets.current) return
+    if (hasAnnotations) return
+    const currentOffsets = Object.fromEntries(
+      headingPositions.map(h => [h.sectionId, h.offsetY])
+    )
+    originalHeadingOffsetsRef.current = currentOffsets
+    setStoredHeadingOffsets(currentOffsets)
+  }, [headingPositions, hasAnnotations])
 
   // Reposition snaps when heading positions change (snaps use CSS top/left, not SVG transforms).
   // Strokes no longer need repositioning here — the SVG layer handles it via per-stroke
@@ -2304,6 +2310,33 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
     try {
       const strokes = JSON.parse(data) as StrokeData[]
       hasData = strokes && strokes.length > 0
+
+      // Transitioning from empty → has strokes: the user just committed their
+      // first stroke. Re-measure layout synchronously and rebase the baseline
+      // so the stroke's initial render has dy=0. Without this, a layout shift
+      // that happened during the stroke (CodeMirror completing its measure
+      // mid-draw, a callout toggling, an image loading) leaves the baseline
+      // at a stale pre-shift value — the stroke visibly jumps by the shift
+      // delta until performSave rebases the baseline 2 s later.
+      if (hasData && !hasAnnotations && !hasLoadedAnnotationOffsets.current && contentRef.current) {
+        const paperElement = document.getElementById('paper')
+        if (paperElement) {
+          const paperRect = paperElement.getBoundingClientRect()
+          const scale = (paperRect.height / paperElement.offsetHeight) || 1
+          const sectionElements = contentRef.current.querySelectorAll<HTMLElement>('[data-section-id]')
+          const freshOffsets: Record<string, number> = {}
+          sectionElements.forEach(el => {
+            const sectionId = el.getAttribute('data-section-id')
+            if (!sectionId) return
+            const rect = el.getBoundingClientRect()
+            freshOffsets[sectionId] = (rect.top - paperRect.top) / scale
+            if (el.getAttribute('data-dynamic-height') === 'true') {
+              freshOffsets[`${sectionId}-end`] = (rect.bottom - paperRect.top) / scale
+            }
+          })
+          originalHeadingOffsetsRef.current = freshOffsets
+        }
+      }
 
       setHasAnnotations(hasData)
 
