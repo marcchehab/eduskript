@@ -1,0 +1,26 @@
+{
+  "_source": "Artificial Analysis Index — https://artificialanalysis.ai/leaderboards/models",
+  "_updated": "2026-04-21",
+  "_note": "Manual cache. Update by hand when AA publishes new figures (~monthly cadence). Keys are OpenRouter model slugs. Numbers below 40 are kept so --no-floor can rank them too; some lower-tier numbers are estimates pending verification on AA.",
+  "models": {
+    "anthropic/claude-opus-4.7": 57.3,
+    "google/gemini-3.1-pro-preview": 57.2,
+    "openai/gpt-5.4": 56.8,
+    "openai/gpt-5.3-codex": 53.6,
+    "anthropic/claude-opus-4.6": 53.0,
+    "anthropic/claude-sonnet-4.6": 51.7,
+    "z-ai/glm-5.1": 51.4,
+    "openai/gpt-5.2": 51.3,
+    "qwen/qwen3.6-plus": 50.0,
+    "z-ai/glm-5": 49.8,
+    "x-ai/grok-4-fast": 45.0,
+    "z-ai/glm-4.7": 42.0,
+    "moonshotai/kimi-k2-0905": 41.0,
+    "moonshotai/kimi-k2.6": 44.0,
+    "google/gemini-2.5-flash-lite": 36.0,
+    "openai/gpt-oss-120b": 33.0,
+    "openai/gpt-oss-20b": 26.0,
+    "meta-llama/llama-3.3-70b-instruct": 35.0,
+    "qwen/qwen3-32b": 38.0
+  }
+}
