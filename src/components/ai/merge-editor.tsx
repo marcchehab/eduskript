@@ -112,6 +112,13 @@ export function MergeEditor({ original, proposed, onChange, className = '' }: Me
             mergeControls: true,
             highlightChanges: true,
             gutter: true,
+            // Default scanLimit (500) makes the Myers diff give up on larger
+            // rewrites and fall back to an imprecise algorithm that can clip
+            // a few lines off the edges of the deletion block. Markdown pages
+            // routinely exceed that in a single AI rewrite. Raise it so the
+            // precise diff actually runs. Complexity is quadratic in the
+            // scan window, so we don't remove the cap entirely.
+            diffConfig: { scanLimit: 10_000 },
           }),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) {
