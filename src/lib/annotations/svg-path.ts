@@ -42,7 +42,11 @@ export { getStroke }
 export function getStrokeOptions(width: number, last = false, simulate = false): StrokeOptions {
   return {
     size: width * 2,
-    thinning: 0.6,
+    // Lower thinning on simulated pressure: velocity-derived pressure
+    // fluctuates with coalesced-event batching, and at thinning 0.6 those
+    // fluctuations show up as visible width wobble / S-curves along the
+    // outline. 0.25 keeps a subtle end taper without modulating the body.
+    thinning: simulate ? 0.25 : 0.6,
     smoothing: 0.5,
     // Heavier streamline on mouse/synthetic input to compensate for the
     // sparse sample rate; stylus keeps the tighter 0.3 for responsiveness.
@@ -72,6 +76,38 @@ export function hasUniformPressure(points: Array<{ pressure: number }>): boolean
     if (points[i].pressure !== first) return false
   }
   return true
+}
+
+/**
+ * Symmetric 5-point moving-average smoothing on the x/y channels of a point
+ * series. Endpoints are preserved (visual start/end of the stroke) and the
+ * window tapers near them. perfect-freehand's streamline only applies an EMA
+ * filter, which has phase lag and leaves sub-pixel mouse jitter as visible
+ * waves along the spine; a symmetric MA has zero phase and removes that
+ * jitter without lagging the output. Pressure is left untouched.
+ *
+ * Intended for uniform-pressure (mouse) input; real pen digitizers produce
+ * much cleaner coordinates and don't need this extra smoothing.
+ */
+export function smoothPoints<P extends { x: number; y: number; pressure: number }>(points: P[]): P[] {
+  const n = points.length
+  if (n < 3) return points
+  const out: P[] = new Array(n)
+  out[0] = points[0]
+  out[n - 1] = points[n - 1]
+  const radius = 2
+  for (let i = 1; i < n - 1; i++) {
+    const lo = Math.max(0, i - radius)
+    const hi = Math.min(n - 1, i + radius)
+    let sx = 0, sy = 0, cnt = 0
+    for (let j = lo; j <= hi; j++) {
+      sx += points[j].x
+      sy += points[j].y
+      cnt++
+    }
+    out[i] = { ...points[i], x: sx / cnt, y: sy / cnt }
+  }
+  return out
 }
 
 /**

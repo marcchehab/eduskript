@@ -65,6 +65,7 @@ import { useRef, useEffect, useCallback, forwardRef, useImperativeHandle, useSta
 import { getStroke } from 'perfect-freehand'
 import type { StrokeOptions } from 'perfect-freehand'
 import { determineSectionFromY, type HeadingPosition } from '@/lib/annotations/reposition-strokes'
+import { smoothPoints } from '@/lib/annotations/svg-path'
 import type { StrokeTelemetry } from '@/lib/userdata/types'
 
 export type DrawMode = 'draw' | 'erase'
@@ -103,7 +104,9 @@ function getPathFromStroke(outlinePoints: number[][]): Path2D {
 function getStrokeOptions(width: number, last = false, simulate = false): StrokeOptions {
   return {
     size: width * 2,
-    thinning: 0.6,
+    // See svg-path.ts copy for rationale — velocity-derived pressure with
+    // thinning 0.6 produces visible width wobble on mouse strokes.
+    thinning: simulate ? 0.25 : 0.6,
     smoothing: 0.5,
     streamline: simulate ? 0.5 : 0.3,
     simulatePressure: simulate,
@@ -320,8 +323,10 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         ctx.globalAlpha = isMarkedForDeletion ? 0.3 : 1
 
         // Convert {x,y,pressure} objects to [x,y,pressure] arrays for perfect-freehand
-        const inputPoints = path.points.map(p => [p.x, p.y, p.pressure])
-        const outline = getStroke(inputPoints, getStrokeOptions(path.width, true, hasUniformPressure(path.points)))
+        const isUniform = hasUniformPressure(path.points)
+        const sourcePoints = isUniform ? smoothPoints(path.points) : path.points
+        const inputPoints = sourcePoints.map(p => [p.x, p.y, p.pressure])
+        const outline = getStroke(inputPoints, getStrokeOptions(path.width, true, isUniform))
         const pathObj = getPathFromStroke(outline)
 
         ctx.fillStyle = path.color
@@ -740,10 +745,12 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         // Draw current in-progress stroke with perfect-freehand.
         // In viewport mode, offset points to canvas-local coordinates.
         const vp = viewportRef.current
+        const isUniform = hasUniformPressure(currentPathRef.current)
+        const sourcePoints = isUniform ? smoothPoints(currentPathRef.current) : currentPathRef.current
         const inputPoints = vp
-          ? currentPathRef.current.map(p => [p.x - vp.x, p.y - vp.y, p.pressure])
-          : currentPathRef.current.map(p => [p.x, p.y, p.pressure])
-        const outline = getStroke(inputPoints, getStrokeOptions(strokeWidth, false, hasUniformPressure(currentPathRef.current)))
+          ? sourcePoints.map(p => [p.x - vp.x, p.y - vp.y, p.pressure])
+          : sourcePoints.map(p => [p.x, p.y, p.pressure])
+        const outline = getStroke(inputPoints, getStrokeOptions(strokeWidth, false, isUniform))
         const pathObj = getPathFromStroke(outline)
         ctx.fillStyle = strokeColor
         ctx.fill(pathObj)
