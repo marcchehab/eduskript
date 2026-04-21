@@ -96,20 +96,34 @@ function getPathFromStroke(outlinePoints: number[][]): Path2D {
 // rendered as a wide round cap (visible blob). Pass false for in-progress
 // pointermove rendering. `end.taper` cancels the velocity-driven width
 // spike when the pen decelerates before lift-off (otherwise leaves a
-// clubbed terminus even with last:true). Keep in sync with the SVG
-// layer's copy: src/lib/annotations/svg-path.ts.
-function getStrokeOptions(width: number, last = false): StrokeOptions {
+// clubbed terminus even with last:true). `simulate` enables velocity-based
+// pressure simulation for mouse-drawn strokes (constant 0.5 pressure at
+// ~60 Hz sample rate renders as visibly polygonal outlines otherwise).
+// Keep in sync with the SVG layer's copy: src/lib/annotations/svg-path.ts.
+function getStrokeOptions(width: number, last = false, simulate = false): StrokeOptions {
   return {
     size: width * 2,
     thinning: 0.6,
     smoothing: 0.5,
-    streamline: 0.3,
-    simulatePressure: false,
+    streamline: simulate ? 0.5 : 0.3,
+    simulatePressure: simulate,
     last,
     // See svg-path.ts copy for rationale. t^(1/8) keeps width near
     // full for most of the taper region and drops sharply at the tip.
     end: { taper: true, easing: (t) => Math.pow(t, 1 / 8) },
   }
+}
+
+// Constant pressure across all samples is a reliable mouse/touch marker:
+// pen digitizers always produce varying pressure between samples, while
+// mouse/touch PointerEvents fill pressure with the default 0.5 each time.
+function hasUniformPressure(points: Array<{ pressure: number }>): boolean {
+  if (points.length < 2) return false
+  const first = points[0].pressure
+  for (let i = 1; i < points.length; i++) {
+    if (points[i].pressure !== first) return false
+  }
+  return true
 }
 
 // Generate stable content-based ID for strokes without IDs (backward compat)
@@ -307,7 +321,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
 
         // Convert {x,y,pressure} objects to [x,y,pressure] arrays for perfect-freehand
         const inputPoints = path.points.map(p => [p.x, p.y, p.pressure])
-        const outline = getStroke(inputPoints, getStrokeOptions(path.width, true))
+        const outline = getStroke(inputPoints, getStrokeOptions(path.width, true, hasUniformPressure(path.points)))
         const pathObj = getPathFromStroke(outline)
 
         ctx.fillStyle = path.color
@@ -729,7 +743,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         const inputPoints = vp
           ? currentPathRef.current.map(p => [p.x - vp.x, p.y - vp.y, p.pressure])
           : currentPathRef.current.map(p => [p.x, p.y, p.pressure])
-        const outline = getStroke(inputPoints, getStrokeOptions(strokeWidth))
+        const outline = getStroke(inputPoints, getStrokeOptions(strokeWidth, false, hasUniformPressure(currentPathRef.current)))
         const pathObj = getPathFromStroke(outline)
         ctx.fillStyle = strokeColor
         ctx.fill(pathObj)

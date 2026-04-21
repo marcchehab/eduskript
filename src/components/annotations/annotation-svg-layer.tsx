@@ -25,7 +25,7 @@
 
 import { memo, useMemo } from 'react'
 import { getStroke } from 'perfect-freehand'
-import { getSvgPathFromStroke, getStrokeOptions, type SectionTransform } from '@/lib/annotations/svg-path'
+import { getSvgPathFromStroke, getStrokeOptions, hasUniformPressure, type SectionTransform } from '@/lib/annotations/svg-path'
 import type { AnimatedStroke } from '@/hooks/use-stroke-animation'
 
 interface AnnotationSvgLayerProps {
@@ -66,7 +66,7 @@ export const AnnotationSvgLayer = memo(function AnnotationSvgLayer({
       .filter(s => s.mode !== 'erase' && s.points.length >= 2)
       .map((stroke): PathDatum => {
         const inputPoints = stroke.points.map(p => [p.x, p.y, p.pressure])
-        const outline = getStroke(inputPoints, getStrokeOptions(stroke.width, true))
+        const outline = getStroke(inputPoints, getStrokeOptions(stroke.width, true, hasUniformPressure(stroke.points)))
         const d = getSvgPathFromStroke(outline)
         return {
           id: stroke.id,

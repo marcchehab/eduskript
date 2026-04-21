@@ -31,14 +31,23 @@ export { getStroke }
  * `taperEnd` cancels the velocity-driven width spike at stroke end. Pens
  * always decelerate before lift-off, which thinning amplifies into a
  * clubbed terminus; tapering forces the end to thin to a point.
+ *
+ * `simulate` enables perfect-freehand's velocity-based pressure simulation.
+ * Use it for mouse-drawn strokes: mouse events carry constant (0.5) pressure
+ * and sparse (~60 Hz) sample rate, so raw stroke outlines are visibly
+ * polygonal; simulatePressure adds organic width variation and effectively
+ * lets the smoothing/streamline filters produce curvier outlines. Leave it
+ * off for stylus input, which has real pressure + high-freq coalesced events.
  */
-export function getStrokeOptions(width: number, last = false): StrokeOptions {
+export function getStrokeOptions(width: number, last = false, simulate = false): StrokeOptions {
   return {
     size: width * 2,
     thinning: 0.6,
     smoothing: 0.5,
-    streamline: 0.3,
-    simulatePressure: false,
+    // Heavier streamline on mouse/synthetic input to compensate for the
+    // sparse sample rate; stylus keeps the tighter 0.3 for responsiveness.
+    streamline: simulate ? 0.5 : 0.3,
+    simulatePressure: simulate,
     last,
     // Taper the terminus to cancel the velocity-driven width spike that
     // appears as a clubbed end (pens always decelerate before lift-off).
@@ -48,6 +57,21 @@ export function getStrokeOptions(width: number, last = false): StrokeOptions {
     // crisp snap rather than a soft fade.
     end: { taper: true, easing: (t) => Math.pow(t, 1 / 8) },
   }
+}
+
+/**
+ * True when every point's pressure matches the first point's. Mouse events
+ * always produce the same default pressure (0.5) for every sample, so this
+ * reliably distinguishes mouse-drawn strokes from pen-drawn ones without
+ * having to store pointerType on the stroke data.
+ */
+export function hasUniformPressure(points: Array<{ pressure: number }>): boolean {
+  if (points.length < 2) return false
+  const first = points[0].pressure
+  for (let i = 1; i < points.length; i++) {
+    if (points[i].pressure !== first) return false
+  }
+  return true
 }
 
 /**
