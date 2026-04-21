@@ -6,6 +6,7 @@ import { assembleEditPrompt } from '@/lib/ai/prompts'
 import type { EditRequest, SkriptContext } from '@/lib/ai/types'
 import { parseJsonResponse, isValidEditPlan, type ParseJsonResponse } from '@/lib/ai/parse-json-response'
 import { loadFrontPageContext } from '@/lib/ai/frontpage-context'
+import { openrouterProviderRouting } from '@/lib/ai/openrouter'
 import OpenAI from 'openai'
 import { createLogger } from '@/lib/logger'
 
@@ -211,6 +212,9 @@ export async function POST(request: Request): Promise<Response> {
         model: process.env.OPENROUTER_MODEL ?? 'z-ai/glm-5',
         max_tokens: 8192,
         messages: [{ role: 'system', content: planPrompt }, { role: 'user', content: instruction }],
+        // OpenRouter-specific: pin preferred providers via OPENROUTER_PROVIDERS env.
+        // Field is unknown to the OpenAI SDK types but forwarded in the body.
+        ...(openrouterProviderRouting() as Record<string, unknown>),
       })
 
       lastPlanText = planMessage.choices[0]?.message?.content ?? ''

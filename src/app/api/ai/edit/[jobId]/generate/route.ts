@@ -5,6 +5,7 @@ import { assembleSinglePageEditPrompt } from '@/lib/ai/prompts'
 import type { SkriptContext } from '@/lib/ai/types'
 import { loadFrontPageContext } from '@/lib/ai/frontpage-context'
 import { normalizeContent } from '@/lib/ai/normalize-content'
+import { openrouterProviderRouting } from '@/lib/ai/openrouter'
 import OpenAI from 'openai'
 import { createLogger } from '@/lib/logger'
 
@@ -234,6 +235,7 @@ export async function POST(
           { role: 'system', content: newPagePrompt },
           { role: 'user', content: `Create the content for the new page "${plannedEdit.pageTitle}". ${plannedEdit.summary}` },
         ],
+        ...(openrouterProviderRouting() as Record<string, unknown>),
       })
 
       proposedContent = (newPageMessage.choices[0]?.message?.content ?? '').trim()
@@ -260,6 +262,7 @@ export async function POST(
           { role: 'system', content: editPrompt },
           { role: 'user', content: `Apply the following change to the page "${originalPage?.title || plannedEdit.pageTitle}": ${plannedEdit.summary}` },
         ],
+        ...(openrouterProviderRouting() as Record<string, unknown>),
       })
 
       proposedContent = (editMessage.choices[0]?.message?.content ?? '').trim()
