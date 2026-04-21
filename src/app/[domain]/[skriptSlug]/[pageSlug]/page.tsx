@@ -1,6 +1,5 @@
 import { notFound, redirect } from 'next/navigation'
 import { headers } from 'next/headers'
-import { PublicSiteLayout } from '@/components/public/layout'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
 import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
 import { ExamLockedPage } from '@/components/exam/exam-locked-page'
@@ -14,9 +13,7 @@ import type { Metadata } from 'next'
 import {
   getTeacherByUsernameDeduped,
   getPublishedPage,
-  getFullSiteStructure,
 } from '@/lib/cached-queries'
-import { buildSiteStructure } from '@/lib/site-structure'
 import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -162,7 +159,7 @@ export default async function PublicPage({ params, searchParams }: PageProps) {
     notFound()
   }
 
-  const { collection, skript, page, allPages } = content
+  const { collection, skript, page } = content
 
   // EXAM ACCESS CONTROL
   let isTeacherViewingExam = false
@@ -413,66 +410,12 @@ export default async function PublicPage({ params, searchParams }: PageProps) {
     }
   }
 
-  // Build site structure for contextual navigation
-  const siteStructure = collection
-    ? buildSiteStructure([{
-        id: collection.id,
-        title: collection.title,
-        slug: collection.slug,
-        accentColor: collection.accentColor,
-        collectionSkripts: [{
-          order: skript.order,
-          skript: {
-            id: skript.id,
-            title: skript.title,
-            slug: skript.slug,
-            isPublished: skript.isPublished,
-            pages: allPages
-          }
-        }]
-      }], { onlyPublished: !isPageAuthor })
-    : [{
-        id: 'standalone',
-        title: skript.title,
-        slug: skript.slug,
-        skripts: [{
-          id: skript.id,
-          title: skript.title,
-          slug: skript.slug,
-          order: 0,
-          pages: allPages.map(p => ({ id: p.id, title: p.title, slug: p.slug }))
-        }]
-      }]
-
-  // Fetch full site structure if sidebar behavior is "full" (cached)
-  const fullSiteStructure = teacher.sidebarBehavior === 'full'
-    ? await getFullSiteStructure(teacher.id, domain)
-    : undefined
-
-  // Prepare teacher data for the layout component
-  const teacherForLayout = {
-    name: teacher.name || teacher.pageSlug || 'Unknown',
-    pageSlug: teacher.pageSlug || domain,
-    pageName: teacher.pageName || null,
-    pageDescription: teacher.pageDescription || null,
-    pageIcon: teacher.pageIcon || null,
-    bio: teacher.bio || null,
-    title: teacher.title || null
-  }
-
-  const currentPath = `/${skriptSlug}/${pageSlug}`
-
+  // The sidebar/layout shell is provided by
+  // src/app/[domain]/[skriptSlug]/layout.tsx. This page only renders the page
+  // content; the shared layout stays mounted across page-to-page navigation,
+  // so the sidebar's expanded state is preserved (no collapse/re-expand flash).
   return (
-    <PublicSiteLayout
-      teacher={teacherForLayout}
-      siteStructure={siteStructure}
-      currentPath={currentPath}
-      fullSiteStructure={fullSiteStructure}
-      sidebarBehavior={teacher.sidebarBehavior as 'contextual' | 'full' || 'contextual'}
-      typographyPreference={teacher.typographyPreference as 'modern' | 'classic' || 'modern'}
-      pageId={page.id}
-      hideSidebar={page.pageType === 'exam'}
-    >
+    <>
       {isTeacherViewingExam && (
         <TeacherExamToolbar
           pageId={page.id}
@@ -499,7 +442,6 @@ export default async function PublicPage({ params, searchParams }: PageProps) {
           </AnnotationWrapper>
         </article>
       </div>
-
-    </PublicSiteLayout>
+    </>
   )
 }

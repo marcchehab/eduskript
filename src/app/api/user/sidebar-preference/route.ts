@@ -17,7 +17,7 @@ export async function GET() {
     })
 
     return NextResponse.json({ 
-      sidebarBehavior: user?.sidebarBehavior || 'contextual' 
+      sidebarBehavior: user?.sidebarBehavior || 'full'
     })
   } catch (error) {
     console.error('Error fetching sidebar preference:', error)

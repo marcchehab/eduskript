@@ -131,7 +131,7 @@ export default async function PreviewPage({ params }: PageProps) {
       teacher={teacherForLayout}
       siteStructure={siteStructure}
       currentPath={currentPath}
-      sidebarBehavior={teacher.sidebarBehavior as 'contextual' | 'full' || 'contextual'}
+      sidebarBehavior={teacher.sidebarBehavior as 'contextual' | 'full' || 'full'}
       typographyPreference={teacher.typographyPreference as 'modern' | 'classic' || 'modern'}
       pageId={page.id}
     >

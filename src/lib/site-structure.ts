@@ -33,6 +33,8 @@ export interface SiteStructurePage {
   id: string
   title: string
   slug: string
+  // Only 'exam' has sidebar consequences (hideSidebar); other types pass through unused.
+  pageType?: string | null
 }
 
 // Input type for raw collection data from Prisma queries
@@ -44,6 +46,7 @@ interface RawPage {
   isPublished?: boolean
   isUnlisted?: boolean
   order?: number
+  pageType?: string | null
 }
 
 interface RawSkript {
@@ -124,7 +127,8 @@ export function buildSiteStructure(
             .map(p => ({
               id: p.id,
               title: p.title,
-              slug: p.slug
+              slug: p.slug,
+              pageType: p.pageType ?? null
             }))
         }))
         // Remove skripts with no visible pages

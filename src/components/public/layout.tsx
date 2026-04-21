@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, useMemo, useRef } from 'react'
+import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useSession } from 'next-auth/react'
 import { ChevronDown, ChevronRight, Menu, X, ChevronLeft, NotebookPen } from 'lucide-react'
@@ -42,6 +42,7 @@ interface SiteStructure {
       id: string
       title: string
       slug: string
+      pageType?: string | null
     }[]
   }[]
 }
@@ -116,16 +117,80 @@ export function PublicSiteLayout({
   siteStructure,
   rootSkripts = [],
   children,
-  currentPath,
+  currentPath: currentPathProp,
   fullSiteStructure,
-  sidebarBehavior = 'contextual',
+  sidebarBehavior = 'full',
   typographyPreference = 'modern',
-  pageId,
+  pageId: pageIdProp,
   routePrefix,
   homeUrl,
-  hideSidebar = false
+  hideSidebar: hideSidebarProp
 }: PublicSiteLayoutProps) {
   const router = useRouter()
+
+  // Route-derived state — preferred over props when the layout sits above the
+  // page component (App Router shared layout), because the params change with
+  // each navigation without unmounting the sidebar. Props still win when
+  // explicitly passed (used by org/preview routes that haven't been lifted).
+  const routeParams = useParams<{
+    skriptSlug?: string
+    pageSlug?: string
+    contentPageSlug?: string
+  }>()
+  const paramSkriptSlug = routeParams?.skriptSlug
+  const paramPageSlug = routeParams?.pageSlug ?? routeParams?.contentPageSlug
+
+  const derivedCurrentPath = paramSkriptSlug
+    ? `/${paramSkriptSlug}${paramPageSlug ? `/${paramPageSlug}` : ''}`
+    : undefined
+
+  const currentPath = currentPathProp ?? derivedCurrentPath
+
+  // Locate current page in siteStructure to derive pageId + hideSidebar.
+  // Only used when caller didn't pass them explicitly.
+  const currentPage = useMemo(() => {
+    if (!paramSkriptSlug || !paramPageSlug) return undefined
+    for (const col of siteStructure) {
+      for (const skript of col.skripts) {
+        if (skript.slug !== paramSkriptSlug) continue
+        const found = skript.pages.find(p => p.slug === paramPageSlug)
+        if (found) return found
+      }
+    }
+    return undefined
+  }, [siteStructure, paramSkriptSlug, paramPageSlug])
+
+  const pageId = pageIdProp ?? currentPage?.id
+  const hideSidebar = hideSidebarProp ?? currentPage?.pageType === 'exam'
+
+  // Contextual sidebar: from the full tenant siteStructure, show only the
+  // collection + skript the user is currently viewing. On the homepage (no
+  // skriptSlug), fall back to the full structure so visitors still see the
+  // tenant's content. In full mode, no filtering — the sidebar is identical
+  // across every route, which is what lets state persist across all
+  // navigation under /[domain]/.
+  const displayStructure = useMemo(() => {
+    if (sidebarBehavior !== 'contextual') return siteStructure
+    if (!paramSkriptSlug) return siteStructure
+    for (const col of siteStructure) {
+      const match = col.skripts.find(s => s.slug === paramSkriptSlug)
+      if (match) {
+        return [{ ...col, skripts: [match] }]
+      }
+    }
+    // Current skript is a root skript (rendered in its own section below) —
+    // hide the collection list.
+    return []
+  }, [sidebarBehavior, siteStructure, paramSkriptSlug])
+
+  // In contextual mode, also hide any non-current root skripts so only the
+  // skript being viewed shows.
+  const displayRootSkripts = useMemo(() => {
+    if (sidebarBehavior !== 'contextual') return rootSkripts
+    if (!paramSkriptSlug) return rootSkripts
+    const match = rootSkripts.find(s => s.slug === paramSkriptSlug)
+    return match ? [match] : []
+  }, [sidebarBehavior, rootSkripts, paramSkriptSlug])
 
   // Base prefix for nav URLs. routePrefix is the full internal server path;
   // we strip whatever the proxy prepended for the current hostname so links
@@ -532,16 +597,14 @@ export function PublicSiteLayout({
             ) : (
               /* Full navigation when expanded */
               <nav className="space-y-2">
-              {/* Determine which structure to show based on sidebarBehavior */}
+              {/* displayStructure + displayRootSkripts are memoized above — in
+                  full mode they are the full tenant structure; in contextual
+                  mode they are filtered to the current skript. */}
               {(() => {
-                const displayStructure = sidebarBehavior === 'full' && fullSiteStructure
-                  ? fullSiteStructure
-                  : siteStructure
-
                 // In contextual mode with single skript, chevron is just decorative (always expanded)
                 const isContextualSingleSkript = sidebarBehavior === 'contextual' &&
-                  siteStructure.length === 1 &&
-                  siteStructure[0]?.skripts?.length === 1
+                  displayStructure.length === 1 &&
+                  displayStructure[0]?.skripts?.length === 1
 
                 return (
                   <>
@@ -637,13 +700,13 @@ export function PublicSiteLayout({
               })()}
               
               {/* Root-level skripts */}
-              {rootSkripts.length > 0 && (
+              {displayRootSkripts.length > 0 && (
                 <div className="mt-5 mb-4">
                   <div className="py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     Individual Skripts
                   </div>
                   <div className="space-y-1.5 mt-1">
-                  {rootSkripts.map((skript, skriptIndex) => (
+                  {displayRootSkripts.map((skript, skriptIndex) => (
                     <div key={skript.id}>
                       {/* Root Skript Title - letter marker, title, chevron */}
                       <div

@@ -3,15 +3,9 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { PublicSiteLayout } from '@/components/public/layout'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
 import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
-import {
-  getTeacherByUsernameDeduped,
-  getTeacherWithLayout,
-  getTeacherHomepageContent,
-  getFullSiteStructure,
-} from '@/lib/cached-queries'
+import { getTeacherByUsernameDeduped } from '@/lib/cached-queries'
 import { prisma } from '@/lib/prisma'
 
 // Enable ISR - pages are cached until explicitly invalidated
@@ -71,24 +65,16 @@ export async function generateMetadata({ params }: DomainIndexProps): Promise<Me
 export default async function DomainIndex({ params }: DomainIndexProps) {
   const { domain } = await params
 
-  // Filter out obviously invalid domain values (browser/system requests)
-  const invalidDomains = ['.well-known', '_next', 'api', 'favicon', 'robots', 'sitemap', 'apple-touch-icon', 'manifest']
-  if (invalidDomains.some(invalid => domain.startsWith(invalid) || domain.includes('.'))) {
-    notFound()
-  }
+  // The parent layout (src/app/[domain]/layout.tsx) already validates the
+  // domain and renders the PublicSiteLayout shell. This page only produces
+  // the homepage content that slots into children.
 
-  // Get teacher with layout using cached query
-  const teacher = await getTeacherWithLayout(domain)
+  const teacher = await getTeacherByUsernameDeduped(domain)
+  if (!teacher) notFound()
 
-  if (!teacher) {
-    notFound()
-  }
-
-  // Check if current user is the owner
   const session = await getServerSession(authOptions)
   const isOwner = session?.user?.id === teacher.id
 
-  // Check for frontpage
   const frontPage = await prisma.frontPage.findFirst({
     where: { userId: teacher.id },
     select: {
@@ -99,7 +85,6 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
     }
   })
 
-  // Fetch public annotations and snaps for this front page
   const [publicAnnotations, publicSnaps] = frontPage ? await Promise.all([
     prisma.userData.findMany({
       where: {
@@ -130,80 +115,43 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
   // Owner can create public annotations on their own front page
   const isPageAuthor = isOwner
 
-  // Get page layout items
-  const pageItems = teacher.pageLayout?.items || []
-
-  // Fetch homepage content using cached query
-  const { collections, rootSkripts } = pageItems.length > 0
-    ? await getTeacherHomepageContent(
-        teacher.id,
-        domain,
-        pageItems.map(item => ({ type: item.type, contentId: item.contentId }))
-      )
-    : { collections: [], rootSkripts: [] }
-
-  // Fetch full site structure when sidebar is in "full" mode
-  const fullSiteStructure = teacher.sidebarBehavior === 'full'
-    ? await getFullSiteStructure(teacher.id, domain)
-    : undefined
-
-  const teacherData = {
-    name: teacher.name || 'Teacher',
-    pageSlug: teacher.pageSlug || '',
-    pageName: teacher.pageName || null,
-    pageDescription: teacher.pageDescription || null,
-    pageIcon: teacher.pageIcon || null,
-    bio: teacher.bio || null,
-    title: teacher.title || null
-  }
-
   return (
-    <PublicSiteLayout
-      teacher={teacherData}
-      siteStructure={collections}
-      rootSkripts={rootSkripts}
-      fullSiteStructure={fullSiteStructure}
-      sidebarBehavior={teacher.sidebarBehavior as 'contextual' | 'full' || 'contextual'}
-      typographyPreference={teacher.typographyPreference as 'modern' | 'classic' || 'modern'}
-    >
-      <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border">
-        {/* Frontpage content or empty state for owners */}
-        {frontPage?.content ? (
-          <article className="prose-theme">
-            <AnnotationWrapper pageId={frontPage.id} content={frontPage.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} isPageAuthor={isPageAuthor}>
-              <ServerMarkdownRenderer
-                content={frontPage.content}
-                pageId={frontPage.id}
-                skriptId={frontPage.fileSkriptId || undefined}
-              />
-            </AnnotationWrapper>
-          </article>
-        ) : isOwner ? (
-          <div className="text-center py-12">
-            <h1 className="text-3xl font-bold mb-4">Your Frontpage</h1>
-            <p className="text-muted-foreground mb-6">
-              You haven&apos;t created a frontpage yet.
+    <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border">
+      {frontPage?.content ? (
+        <article className="prose-theme">
+          <AnnotationWrapper pageId={frontPage.id} content={frontPage.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} isPageAuthor={isPageAuthor}>
+            <ServerMarkdownRenderer
+              content={frontPage.content}
+              pageId={frontPage.id}
+              skriptId={frontPage.fileSkriptId || undefined}
+            />
+          </AnnotationWrapper>
+        </article>
+      ) : isOwner ? (
+        <div className="text-center py-12">
+          <h1 className="text-3xl font-bold mb-4">Your Frontpage</h1>
+          <p className="text-muted-foreground mb-6">
+            You haven&apos;t created a frontpage yet.
+          </p>
+          <Link
+            href="/dashboard/frontpage"
+            className="inline-flex items-center px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+          >
+            Create Frontpage
+          </Link>
+        </div>
+      ) : (
+        <div className="text-center py-12">
+          <h1 className="text-3xl font-bold mb-4">
+            {teacher.name}&apos;s Educational Platform
+          </h1>
+          {teacher.bio && (
+            <p className="text-muted-foreground">
+              {teacher.bio}
             </p>
-            <Link
-              href="/dashboard/frontpage"
-              className="inline-flex items-center px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
-            >
-              Create Frontpage
-            </Link>
-          </div>
-        ) : (
-          <div className="text-center py-12">
-            <h1 className="text-3xl font-bold mb-4">
-              {teacher.name}&apos;s Educational Platform
-            </h1>
-            {teacher.bio && (
-              <p className="text-muted-foreground">
-                {teacher.bio}
-              </p>
-            )}
-          </div>
-        )}
-      </div>
-    </PublicSiteLayout>
+          )}
+        </div>
+      )}
+    </div>
   )
 }

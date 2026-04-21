@@ -16,7 +16,7 @@ import { InlineMarkdown } from '@/components/ui/inline-markdown'
 export function PageSettings() {
   const { data: session, update } = useSession()
   const router = useRouter()
-  const [sidebarBehavior, setSidebarBehavior] = useState<string>('contextual')
+  const [sidebarBehavior, setSidebarBehavior] = useState<string>('full')
   const [typographyPreference, setTypographyPreference] = useState<string>('modern')
   const [loading, setLoading] = useState(false)
   const [typographyLoading, setTypographyLoading] = useState(false)
@@ -57,7 +57,7 @@ export function PageSettings() {
 
         if (sidebarResponse.ok) {
           const data = await sidebarResponse.json()
-          setSidebarBehavior(data.sidebarBehavior || 'contextual')
+          setSidebarBehavior(data.sidebarBehavior || 'full')
         }
 
         if (typographyResponse.ok) {
@@ -148,7 +148,7 @@ export function PageSettings() {
       } else {
         // Revert on error
         const data = await response.json()
-        setSidebarBehavior(data.sidebarBehavior || 'contextual')
+        setSidebarBehavior(data.sidebarBehavior || 'full')
       }
     } catch (error) {
       console.error('Failed to update preference:', error)
@@ -557,28 +557,6 @@ export function PageSettings() {
             <div className="flex items-start space-x-3">
               <input
                 type="radio"
-                id="contextual"
-                name="sidebarBehavior"
-                value="contextual"
-                checked={sidebarBehavior === 'contextual'}
-                onChange={(e) => handleSidebarBehaviorChange(e.target.value)}
-                disabled={loading}
-                className="mt-1"
-              />
-              <div className="space-y-1">
-                <Label htmlFor="contextual" className="font-normal cursor-pointer">
-                  Contextual Navigation
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  When viewing content inside a collection, only show that collection in the sidebar.
-                  This provides a focused reading experience.
-                </p>
-              </div>
-            </div>
-            
-            <div className="flex items-start space-x-3">
-              <input
-                type="radio"
                 id="full"
                 name="sidebarBehavior"
                 value="full"
@@ -594,6 +572,28 @@ export function PageSettings() {
                 <p className="text-sm text-muted-foreground">
                   Always show all collections in the sidebar, regardless of current page.
                   This allows quick navigation between all your content.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start space-x-3">
+              <input
+                type="radio"
+                id="contextual"
+                name="sidebarBehavior"
+                value="contextual"
+                checked={sidebarBehavior === 'contextual'}
+                onChange={(e) => handleSidebarBehaviorChange(e.target.value)}
+                disabled={loading}
+                className="mt-1"
+              />
+              <div className="space-y-1">
+                <Label htmlFor="contextual" className="font-normal cursor-pointer">
+                  Contextual Navigation
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  When viewing content inside a collection, only show that collection in the sidebar.
+                  This provides a focused reading experience.
                 </p>
               </div>
             </div>

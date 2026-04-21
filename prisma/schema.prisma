@@ -78,7 +78,7 @@ model User {
 
   // User preferences
   themePreference String? @default("system") // "light", "dark", or "system"
-  sidebarBehavior String? @default("contextual") // "contextual" (default - show only current collection) or "full" (always show all)
+  sidebarBehavior String? @default("full") // "full" (default - always show all collections) or "contextual" (show only current collection)
   typographyPreference String? @default("modern") // "modern" (Roboto Slab + Barlow Condensed) or "classic" (EB Garamond + Barlow Condensed)
 
   // AI customization
