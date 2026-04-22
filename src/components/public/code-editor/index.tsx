@@ -441,6 +441,10 @@ export const CodeEditor = memo(function CodeEditor({
   const [isDraggingHorizontalSplitter, setIsDraggingHorizontalSplitter] = useState(false)
   const MIN_OUTPUT_HEIGHT = 0 // allow collapsing completely
   const MAX_OUTPUT_HEIGHT = 800 // maximum output panel height (generous to allow large result sets)
+  const SPLITTER_HEIGHT = 8 // actual rendered height of horizontal splitter (minHeight: 8px)
+  // Drag start state for splitter/resize — delta-based to avoid scroll-induced feedback loops
+  const splitterDragStartRef = useRef<{ startY: number; startEditor: number; startOutput: number } | null>(null)
+  const resizeDragStartRef = useRef<{ startY: number; startHeight: number } | null>(null)
 
   // Run button success flash state
   const [showSuccessFlash, setShowSuccessFlash] = useState(false)
@@ -676,7 +680,7 @@ export const CodeEditor = memo(function CodeEditor({
   const [userEditorHeight, setUserEditorHeight] = useState<number | null>(null)
   const editorHeight = userEditorHeight ?? calculatedEditorHeight
   // Output panel adds to total height when visible
-  const totalHeight = editorHeight + (panelVisible ? outputPanelHeight + 4 : 0) // +4 for horizontal splitter
+  const totalHeight = editorHeight + (panelVisible ? outputPanelHeight + SPLITTER_HEIGHT : 0)
 
   // Font size state
   const [fontSize, setFontSize] = useState<number>(defaultData.fontSize ?? 14)
@@ -1433,85 +1437,88 @@ export const CodeEditor = memo(function CodeEditor({
   }, [isDraggingSplitter])
 
   // Handle horizontal splitter dragging (between main content and output panel)
+  // Delta-based: capture start state on mousedown, compute cursor-delta on move.
+  // Avoids the feedback loop where re-measuring wrapperRect each frame compounds
+  // with page auto-scroll as the wrapper grows.
   const handleHorizontalSplitterMouseDown = (e: React.MouseEvent) => {
     e.preventDefault()
+    splitterDragStartRef.current = {
+      startY: e.clientY,
+      startEditor: editorHeight,
+      startOutput: outputPanelHeight,
+    }
     setIsDraggingHorizontalSplitter(true)
   }
 
   const handleHorizontalSplitterTouchStart = (e: React.TouchEvent) => {
     e.preventDefault()
+    if (!e.touches[0]) return
+    splitterDragStartRef.current = {
+      startY: e.touches[0].clientY,
+      startEditor: editorHeight,
+      startOutput: outputPanelHeight,
+    }
     setIsDraggingHorizontalSplitter(true)
   }
 
   useEffect(() => {
     if (!isDraggingHorizontalSplitter) return
 
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!wrapperRef.current) return
+    const applyDelta = (clientY: number) => {
+      const start = splitterDragStartRef.current
+      if (!start) return
+      const delta = clientY - start.startY
+      const newEditorHeight = start.startEditor + delta
+      const newOutputHeight = start.startOutput - delta
 
-      const wrapperRect = wrapperRef.current.getBoundingClientRect()
-      const currentTotalHeight = wrapperRect.height
-
-      // Calculate new output height from cursor position
-      const newOutputHeight = Math.max(MIN_OUTPUT_HEIGHT, Math.min(MAX_OUTPUT_HEIGHT, wrapperRect.bottom - e.clientY))
-
-      // Calculate new editor height to keep total constant
-      const splitterHeight = 4
-      const newEditorHeight = currentTotalHeight - newOutputHeight - splitterHeight
-
-      // Only apply if editor height is reasonable
-      if (newEditorHeight >= MIN_EDITOR_HEIGHT) {
-        setOutputPanelHeight(newOutputHeight)
+      // Clamp: both ends must stay within bounds simultaneously
+      if (
+        newEditorHeight >= MIN_EDITOR_HEIGHT &&
+        newOutputHeight >= MIN_OUTPUT_HEIGHT &&
+        newOutputHeight <= MAX_OUTPUT_HEIGHT
+      ) {
         setUserEditorHeight(newEditorHeight)
+        setOutputPanelHeight(newOutputHeight)
       }
     }
 
+    const handleMouseMove = (e: MouseEvent) => applyDelta(e.clientY)
     const handleTouchMove = (e: TouchEvent) => {
-      if (!wrapperRef.current || !e.touches[0]) return
-
-      const wrapperRect = wrapperRef.current.getBoundingClientRect()
-      const currentTotalHeight = wrapperRect.height
-
-      // Calculate new output height from touch position
-      const newOutputHeight = Math.max(MIN_OUTPUT_HEIGHT, Math.min(MAX_OUTPUT_HEIGHT, wrapperRect.bottom - e.touches[0].clientY))
-
-      // Calculate new editor height to keep total constant
-      const splitterHeight = 4
-      const newEditorHeight = currentTotalHeight - newOutputHeight - splitterHeight
-
-      // Only apply if editor height is reasonable
-      if (newEditorHeight >= MIN_EDITOR_HEIGHT) {
-        setOutputPanelHeight(newOutputHeight)
-        setUserEditorHeight(newEditorHeight)
-      }
+      if (!e.touches[0]) return
+      applyDelta(e.touches[0].clientY)
     }
 
-    const handleMouseUp = () => {
-      setIsDraggingHorizontalSplitter(false)
-    }
-
-    const handleTouchEnd = () => {
+    const handleEnd = () => {
+      splitterDragStartRef.current = null
       setIsDraggingHorizontalSplitter(false)
     }
 
     document.addEventListener('mousemove', handleMouseMove)
-    document.addEventListener('mouseup', handleMouseUp)
+    document.addEventListener('mouseup', handleEnd)
     document.addEventListener('touchmove', handleTouchMove, { passive: false })
-    document.addEventListener('touchend', handleTouchEnd)
-    document.addEventListener('touchcancel', handleTouchEnd)
+    document.addEventListener('touchend', handleEnd)
+    document.addEventListener('touchcancel', handleEnd)
 
     return () => {
       document.removeEventListener('mousemove', handleMouseMove)
-      document.removeEventListener('mouseup', handleMouseUp)
+      document.removeEventListener('mouseup', handleEnd)
       document.removeEventListener('touchmove', handleTouchMove)
-      document.removeEventListener('touchend', handleTouchEnd)
-      document.removeEventListener('touchcancel', handleTouchEnd)
+      document.removeEventListener('touchend', handleEnd)
+      document.removeEventListener('touchcancel', handleEnd)
     }
   }, [isDraggingHorizontalSplitter])
 
   // Handle resize handle dragging (bottom-right corner)
+  // Delta-based: avoid re-reading wrapperRect each frame. If the page auto-scrolls
+  // as the wrapper grows, wrapperRect.top shifts and re-reading would compound into
+  // a runaway growth loop even without cursor movement.
   const handleResizeMouseDown = (e: React.MouseEvent) => {
     e.preventDefault()
+    const currentHeight = wrapperRef.current?.getBoundingClientRect().height ?? (manualHeight ?? totalHeight)
+    resizeDragStartRef.current = {
+      startY: e.clientY,
+      startHeight: currentHeight,
+    }
     setIsDraggingResize(true)
   }
 
@@ -1519,17 +1526,14 @@ export const CodeEditor = memo(function CodeEditor({
     if (!isDraggingResize) return
 
     const handleMouseMove = (e: MouseEvent) => {
-      if (!wrapperRef.current) return
-
-      const wrapperRect = wrapperRef.current.getBoundingClientRect()
-      // Calculate new height based on mouse position relative to wrapper top
-      const newHeight = e.clientY - wrapperRect.top
-
-      // Clamp between min and a reasonable max
+      const start = resizeDragStartRef.current
+      if (!start) return
+      const newHeight = start.startHeight + (e.clientY - start.startY)
       setManualHeight(Math.max(MIN_EDITOR_HEIGHT, Math.min(800, newHeight)))
     }
 
     const handleMouseUp = () => {
+      resizeDragStartRef.current = null
       setIsDraggingResize(false)
     }
 
