@@ -1835,9 +1835,12 @@ export const CodeEditor = memo(function CodeEditor({
           paddingBottom: '2.5rem'
         },
       }),
-      // Dynamic compartments — reconfigured without destroying the editor
+      // Dynamic compartments — reconfigured without destroying the editor.
+      // Scaling the gutters alongside the content keeps line numbers sized and
+      // line-height-aligned with the code when the user zooms the editor.
       fontSizeCompartment.current.of(EditorView.theme({
-        '.cm-content': { fontSize: `${fontSize}px` }
+        '.cm-content': { fontSize: `${fontSize}px` },
+        '.cm-gutters': { fontSize: `${fontSize}px` }
       })),
       themeCompartment.current.of(isDark ? vsCodeDark : vsCodeLight),
       lineWrappingCompartment.current.of(lineWrapping ? EditorView.lineWrapping : []),
@@ -2018,7 +2021,10 @@ export const CodeEditor = memo(function CodeEditor({
     if (!view) return
     view.dispatch({
       effects: fontSizeCompartment.current.reconfigure(
-        EditorView.theme({ '.cm-content': { fontSize: `${fontSize}px` } })
+        EditorView.theme({
+          '.cm-content': { fontSize: `${fontSize}px` },
+          '.cm-gutters': { fontSize: `${fontSize}px` }
+        })
       )
     })
   }, [fontSize])
