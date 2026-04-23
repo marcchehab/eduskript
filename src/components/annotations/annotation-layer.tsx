@@ -1833,21 +1833,22 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
     }
   }, [classBroadcastData?.canvasData, recalculateHeadingPositions])
 
-  // EXPERIMENTAL: Track heading positions on window resize for live repositioning
-  // This allows real-time annotation repositioning when window width changes and text reflows
+  // Track heading positions on window resize / font-size change.
+  // Trailing debounce: the browser fires ~48 resize events across different frames
+  // during initial load (SQL editors mounting, KaTeX, images settling). A per-frame
+  // rAF guard still let each of those through; a 300ms trailing debounce collapses
+  // the whole burst into one recalc after the layout settles. The annotation layer
+  // fades in over ~500ms anyway, so a 300ms delay is invisible to the user.
   useEffect(() => {
-    let rafId: number | null = null
-    let isScheduled = false
+    const DEBOUNCE_MS = 300
+    let timerId: ReturnType<typeof setTimeout> | null = null
 
     const handleResize = () => {
-      // Use requestAnimationFrame for smooth updates
-      if (!isScheduled) {
-        isScheduled = true
-        rafId = requestAnimationFrame(() => {
-          recalculateHeadingPositions()
-          isScheduled = false
-        })
-      }
+      if (timerId !== null) clearTimeout(timerId)
+      timerId = setTimeout(() => {
+        timerId = null
+        recalculateHeadingPositions()
+      }, DEBOUNCE_MS)
     }
 
     window.addEventListener('resize', handleResize)
@@ -1856,27 +1857,26 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
     return () => {
       window.removeEventListener('resize', handleResize)
       window.removeEventListener('eduskript:fontsize-change', handleResize)
-      if (rafId !== null) cancelAnimationFrame(rafId)
+      if (timerId !== null) clearTimeout(timerId)
     }
   }, [recalculateHeadingPositions])
 
   // Watch the entire content container for size changes.
   // Any element growing/shrinking (callouts, editors, images, datacube, etc.)
   // triggers recalculation so annotations reposition correctly.
+  // Same 300ms trailing debounce as the window-resize handler above.
   useEffect(() => {
     if (!contentRef.current) return
 
-    let rafId: number | null = null
-    let isScheduled = false
+    const DEBOUNCE_MS = 300
+    let timerId: ReturnType<typeof setTimeout> | null = null
 
     const scheduleRecalculation = () => {
-      if (!isScheduled) {
-        isScheduled = true
-        rafId = requestAnimationFrame(() => {
-          recalculateHeadingPositions()
-          isScheduled = false
-        })
-      }
+      if (timerId !== null) clearTimeout(timerId)
+      timerId = setTimeout(() => {
+        timerId = null
+        recalculateHeadingPositions()
+      }, DEBOUNCE_MS)
     }
 
     const resizeObserver = new ResizeObserver(scheduleRecalculation)
@@ -1884,7 +1884,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
 
     return () => {
       resizeObserver.disconnect()
-      if (rafId !== null) cancelAnimationFrame(rafId)
+      if (timerId !== null) clearTimeout(timerId)
     }
   }, [children, recalculateHeadingPositions])
 
