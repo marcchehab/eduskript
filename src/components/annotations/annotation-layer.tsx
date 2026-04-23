@@ -1814,17 +1814,6 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
     setHeadingPositions(positions)
   }, [])
 
-  // Track heading positions and page height (after markdown renders)
-  useEffect(() => {
-    if (!contentRef.current) return
-
-    const timer = setTimeout(() => {
-      recalculateHeadingPositions()
-    }, 500) // Wait for markdown to render
-
-    return () => clearTimeout(timer)
-  }, [children, recalculateHeadingPositions]) // Re-run when children change (markdown re-renders)
-
   // Recalculate heading positions when teacher broadcast data arrives
   // This fixes a timing issue on iPad where page height may not be fully calculated yet
   useEffect(() => {
@@ -1952,8 +1941,10 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
     // Remove previously injected spacer elements
     container.querySelectorAll('[data-spacer-id]').forEach(el => el.remove())
 
+    // No spacers to inject: any pre-existing spacers were just removed above;
+    // ResizeObserver on the content container picks up the resulting size change
+    // and triggers the recalc — no need to call it directly here.
     if (allSpacersToInject.length === 0) {
-      recalculateHeadingPositions()
       return
     }
 
