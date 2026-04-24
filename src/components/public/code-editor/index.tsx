@@ -442,9 +442,11 @@ export const CodeEditor = memo(function CodeEditor({
   const MIN_OUTPUT_HEIGHT = 0 // allow collapsing completely
   const MAX_OUTPUT_HEIGHT = 800 // maximum output panel height (generous to allow large result sets)
   const SPLITTER_HEIGHT = 8 // actual rendered height of horizontal splitter (minHeight: 8px)
-  // Drag start state for splitter/resize — delta-based to avoid scroll-induced feedback loops
-  const splitterDragStartRef = useRef<{ startY: number; startEditor: number; startOutput: number } | null>(null)
-  const resizeDragStartRef = useRef<{ startY: number; startHeight: number } | null>(null)
+  // Drag start state for splitter/resize — delta-based to avoid scroll-induced feedback loops.
+  // `zoom` captures any ancestor `transform: scale()` (e.g. annotation-layer page zoom)
+  // so cursor-pixel deltas can be converted to logical-pixel heights.
+  const splitterDragStartRef = useRef<{ startY: number; startEditor: number; startOutput: number; zoom: number } | null>(null)
+  const resizeDragStartRef = useRef<{ startY: number; startHeight: number; zoom: number } | null>(null)
 
   // Run button success flash state
   const [showSuccessFlash, setShowSuccessFlash] = useState(false)
@@ -1436,6 +1438,18 @@ export const CodeEditor = memo(function CodeEditor({
     }
   }, [isDraggingSplitter])
 
+  // Detect ancestor zoom by comparing visual vs logical height of the wrapper.
+  // Annotation-layer applies `transform: scale(z)` to <main>; without correcting
+  // for it, cursor-pixel deltas over-shoot wrapper height by factor `z`.
+  const detectAncestorZoom = (): number => {
+    const w = wrapperRef.current
+    if (!w) return 1
+    const logical = w.clientHeight
+    if (logical <= 0) return 1
+    const visual = w.getBoundingClientRect().height
+    return visual / logical
+  }
+
   // Handle horizontal splitter dragging (between main content and output panel)
   // Delta-based: capture start state on mousedown, compute cursor-delta on move.
   // Avoids the feedback loop where re-measuring wrapperRect each frame compounds
@@ -1446,6 +1460,7 @@ export const CodeEditor = memo(function CodeEditor({
       startY: e.clientY,
       startEditor: editorHeight,
       startOutput: outputPanelHeight,
+      zoom: detectAncestorZoom(),
     }
     setIsDraggingHorizontalSplitter(true)
   }
@@ -1457,6 +1472,7 @@ export const CodeEditor = memo(function CodeEditor({
       startY: e.touches[0].clientY,
       startEditor: editorHeight,
       startOutput: outputPanelHeight,
+      zoom: detectAncestorZoom(),
     }
     setIsDraggingHorizontalSplitter(true)
   }
@@ -1467,7 +1483,10 @@ export const CodeEditor = memo(function CodeEditor({
     const applyDelta = (clientY: number) => {
       const start = splitterDragStartRef.current
       if (!start) return
-      const delta = clientY - start.startY
+      // Cursor delta is in viewport pixels; wrapper heights are logical CSS
+      // pixels. Divide by the captured zoom so the bar tracks the cursor 1:1
+      // visually under any ancestor `transform: scale()`.
+      const delta = (clientY - start.startY) / start.zoom
       const newEditorHeight = start.startEditor + delta
       const newOutputHeight = start.startOutput - delta
 
@@ -1514,10 +1533,13 @@ export const CodeEditor = memo(function CodeEditor({
   // a runaway growth loop even without cursor movement.
   const handleResizeMouseDown = (e: React.MouseEvent) => {
     e.preventDefault()
-    const currentHeight = wrapperRef.current?.getBoundingClientRect().height ?? (manualHeight ?? totalHeight)
+    // Read logical (layout) height — clientHeight is unaffected by ancestor
+    // CSS transforms, unlike getBoundingClientRect which returns visual size.
+    const logicalHeight = wrapperRef.current?.clientHeight ?? (manualHeight ?? totalHeight)
     resizeDragStartRef.current = {
       startY: e.clientY,
-      startHeight: currentHeight,
+      startHeight: logicalHeight,
+      zoom: detectAncestorZoom(),
     }
     setIsDraggingResize(true)
   }
@@ -1528,7 +1550,10 @@ export const CodeEditor = memo(function CodeEditor({
     const handleMouseMove = (e: MouseEvent) => {
       const start = resizeDragStartRef.current
       if (!start) return
-      const newHeight = start.startHeight + (e.clientY - start.startY)
+      // Convert viewport-pixel cursor delta into the wrapper's logical-pixel
+      // space; otherwise zoom > 1 over-shoots the height by factor `zoom`.
+      const deltaLogical = (e.clientY - start.startY) / start.zoom
+      const newHeight = start.startHeight + deltaLogical
       setManualHeight(Math.max(MIN_EDITOR_HEIGHT, Math.min(800, newHeight)))
     }
 
