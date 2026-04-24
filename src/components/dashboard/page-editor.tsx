@@ -738,7 +738,13 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                         rel="noopener noreferrer"
                         prefetch={false}
                       >
-                        <Button variant="ghost" size="sm" title="View public page">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          title={page.isUnlisted || skript.isUnlisted
+                            ? 'View public page (unlisted — URL works but hidden from sidebar/search)'
+                            : 'View public page'}
+                        >
                           <Eye className="w-4 h-4" />
                         </Button>
                       </Link>
