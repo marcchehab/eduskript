@@ -11,15 +11,19 @@ interface PythonTestResultsProps {
   earnedPoints: number
   checksUsed: number
   maxChecks: number | null
+  /** Monotonically increasing token. Each bump triggers a celebration.
+   *  Parent decides when to bump (only on real false→true transitions),
+   *  so restored saved state and repeated Test clicks stay silent. */
+  celebrationToken?: number
 }
 
-export function PythonTestResults({ results, points, earnedPoints, checksUsed, maxChecks }: PythonTestResultsProps) {
+export function PythonTestResults({ results, points, earnedPoints, checksUsed, maxChecks, celebrationToken = 0 }: PythonTestResultsProps) {
   const passed = results.filter(r => r.passed).length
   const total = results.length
   const percentage = total > 0 ? Math.round((passed / total) * 100) : 0
   const allPassed = passed === total && total > 0
   const containerRef = useRef<HTMLDivElement>(null)
-  const lastCelebratedCheck = useRef(0)
+  const lastCelebratedToken = useRef(0)
 
   // Compute a rect: width from container left to end of header text, top to bottom of last test row
   const getContentRect = (): DOMRect | undefined => {
@@ -36,13 +40,17 @@ export function PythonTestResults({ results, points, earnedPoints, checksUsed, m
     return new DOMRect(containerRect.left, containerRect.top, width, testsRect.bottom - containerRect.top)
   }
 
-  // Fire random celebration when all tests pass on a new check
+  // Fire celebration whenever the parent bumps `celebrationToken`.
+  // Token starts at 0 and is only incremented by the parent on real
+  // false→true transitions, so repeated Test clicks while already passing
+  // and reload-from-saved-state both stay silent.
   useEffect(() => {
-    if (allPassed && checksUsed > lastCelebratedCheck.current && containerRef.current) {
-      lastCelebratedCheck.current = checksUsed
+    if (celebrationToken <= lastCelebratedToken.current) return
+    lastCelebratedToken.current = celebrationToken
+    if (containerRef.current) {
       playRandomEffect(containerRef.current, getContentRect())
     }
-  }, [allPassed, checksUsed])
+  }, [celebrationToken])
 
   return (
     <div ref={containerRef} className="relative text-sm">

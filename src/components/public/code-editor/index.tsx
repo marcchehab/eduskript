@@ -254,6 +254,12 @@ export const CodeEditor = memo(function CodeEditor({
   const [checkResults, setCheckResults] = useState<PythonCheckResult[] | null>(null)
   const [checksUsed, setChecksUsed] = useState(0)
   const [isChecking, setIsChecking] = useState(false)
+  // Celebration trigger: bumped only when a fresh check transitions from
+  // not-all-passing to all-passing. `prevAllPassedRef` tracks the previous
+  // outcome (including state restored from save) so we don't re-celebrate
+  // on reload or when the student re-clicks Test while already passing.
+  const [celebrationToken, setCelebrationToken] = useState(0)
+  const prevAllPassedRef = useRef(false)
 
   const debugTag = `[CodeEditor:${id}]`
   const dbName = db ? db.split('/').pop() || db : 'Database'
@@ -289,6 +295,10 @@ export const CodeEditor = memo(function CodeEditor({
     if (savedCheckData && savedCheckData.checksUsed > 0) {
       setChecksUsed(savedCheckData.checksUsed)
       setCheckResults(savedCheckData.lastResults)
+      // Seed prev-allPassed so a restored passing state doesn't re-celebrate
+      // when the student clicks Test once more with the same passing code.
+      const restored = savedCheckData.lastResults
+      prevAllPassedRef.current = restored.length > 0 && restored.every(r => r.passed)
     }
   }, [savedCheckData])
 
@@ -3011,6 +3021,14 @@ plots
       const totalPoints = checkPoints ?? totalTests
       const earned = totalTests > 0 ? Math.round((passedTests / totalTests) * totalPoints) : 0
 
+      // Trigger celebration only on a not-passing → passing transition.
+      // Skips: repeat clicks while already passing, and runs that don't pass.
+      const allPassedNow = totalTests > 0 && passedTests === totalTests
+      if (allPassedNow && !prevAllPassedRef.current) {
+        setCelebrationToken(t => t + 1)
+      }
+      prevAllPassedRef.current = allPassedNow
+
       // Persist for teacher dashboard
       if (pageId) {
         savePythonCheck({
@@ -4425,6 +4443,7 @@ plots
           : 0}
         checksUsed={checksUsed}
         maxChecks={maxChecks ?? null}
+        celebrationToken={celebrationToken}
       />
     )}
 
