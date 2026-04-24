@@ -26,14 +26,14 @@ describe('usePublicUrl', () => {
     vi.restoreAllMocks()
   })
 
-  describe('buildPageUrl (published content)', () => {
+  describe('buildPageUrl', () => {
     it('should include pageSlug on main domain', () => {
       const { buildPageUrl } = usePublicUrl('eduadmin')
       expect(buildPageUrl('markdown-basics', 'headings-text'))
         .toBe('/eduadmin/markdown-basics/headings-text')
     })
 
-    it('should omit pageSlug on custom domain', () => {
+    it('should omit pageSlug on custom domain (proxy prepends it)', () => {
       mockIsCustomDomain = true
       const { buildPageUrl } = usePublicUrl('ig')
       expect(buildPageUrl('grundlagen', 'intro'))
@@ -47,57 +47,7 @@ describe('usePublicUrl', () => {
     })
   })
 
-  describe('buildPreviewUrl (unpublished content)', () => {
-    it('should always use /preview/ prefix with pageSlug', () => {
-      const { buildPreviewUrl } = usePublicUrl('eduadmin')
-      expect(buildPreviewUrl('markdown-basics', 'headings-text'))
-        .toBe('/preview/eduadmin/markdown-basics/headings-text')
-    })
-
-    it('should use /preview/ prefix even on custom domain', () => {
-      mockIsCustomDomain = true
-      const { buildPreviewUrl } = usePublicUrl('ig')
-      expect(buildPreviewUrl('grundlagen', 'intro'))
-        .toBe('/preview/ig/grundlagen/intro')
-    })
-  })
-
-  describe('buildViewUrl (auto-selects based on publish state)', () => {
-    it('should use public URL when fully published on main domain', () => {
-      const { buildViewUrl } = usePublicUrl('eduadmin')
-      expect(buildViewUrl('markdown-basics', 'headings-text', true))
-        .toBe('/eduadmin/markdown-basics/headings-text')
-    })
-
-    it('should use preview URL when not fully published on main domain', () => {
-      const { buildViewUrl } = usePublicUrl('eduadmin')
-      expect(buildViewUrl('markdown-basics', 'headings-text', false))
-        .toBe('/preview/eduadmin/markdown-basics/headings-text')
-    })
-
-    it('should use public URL without pageSlug when published on custom domain', () => {
-      mockIsCustomDomain = true
-      const { buildViewUrl } = usePublicUrl('ig')
-      expect(buildViewUrl('grundlagen', 'intro', true))
-        .toBe('/grundlagen/intro')
-    })
-
-    it('should use preview URL with pageSlug when unpublished on custom domain', () => {
-      mockIsCustomDomain = true
-      const { buildViewUrl } = usePublicUrl('ig')
-      expect(buildViewUrl('grundlagen', 'intro', false))
-        .toBe('/preview/ig/grundlagen/intro')
-    })
-  })
-
   describe('URL structure matches route expectations', () => {
-    it('preview URL should match /preview/[domain]/[skriptSlug]/[pageSlug] route', () => {
-      const { buildPreviewUrl } = usePublicUrl('myteacher')
-      const url = buildPreviewUrl('my-skript', 'my-page')
-      const segments = url.split('/').filter(Boolean)
-      expect(segments).toEqual(['preview', 'myteacher', 'my-skript', 'my-page'])
-    })
-
     it('public URL should match /[domain]/[skriptSlug]/[pageSlug] route', () => {
       const { buildPageUrl } = usePublicUrl('myteacher')
       const url = buildPageUrl('my-skript', 'my-page')

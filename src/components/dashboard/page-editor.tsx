@@ -108,7 +108,11 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
   const contentRef = useRef(content)
   const router = useRouter()
   const { data: session, status: sessionStatus } = useSession()
-  const { buildPreviewUrl } = usePublicUrl((session?.user as { pageSlug?: string })?.pageSlug)
+  const sessionPageSlug = (session?.user as { pageSlug?: string })?.pageSlug
+  // The editor only loads for users who have an author relation to this
+  // skript (verified server-side), so the session pageSlug always resolves
+  // to a valid public URL for the skript via checkSkriptPermissions.
+  const { buildPageUrl } = usePublicUrl(sessionPageSlug)
   const alert = useAlertDialog()
 
   // Exam settings state
@@ -726,17 +730,28 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                     showText={false}
                     size="sm"
                   />
-                  {sessionStatus === 'authenticated' && (session?.user as { pageSlug?: string })?.pageSlug && (
-                    <Link
-                      href={buildPreviewUrl(skript.slug, page.slug)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      prefetch={false}
-                    >
-                      <Button variant="ghost" size="sm" title="Preview page (works for unpublished)">
+                  {sessionPageSlug && (
+                    page.isPublished && skript.isPublished ? (
+                      <Link
+                        href={buildPageUrl(skript.slug, page.slug)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        prefetch={false}
+                      >
+                        <Button variant="ghost" size="sm" title="View public page">
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                      </Link>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled
+                        title={!skript.isPublished ? 'Publish the skript to view publicly' : 'Publish the page to view publicly'}
+                      >
                         <Eye className="w-4 h-4" />
                       </Button>
-                    </Link>
+                    )
                   )}
                   {canEdit && !isFullscreen && (
                     <Button

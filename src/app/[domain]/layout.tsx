@@ -16,8 +16,8 @@ import {
 //   - contextual: PublicSiteLayout filters to the current skript via
 //     useParams() on the client.
 //
-// Author-unpublished content is redirected to /preview/ in the child pages,
-// so fullSiteStructure (published-only) is sufficient here.
+// Only published content is reachable at public URLs; authors view drafts
+// via the editor's built-in live preview. fullSiteStructure is published-only.
 
 interface DomainLayoutProps {
   params: Promise<{ domain: string }>

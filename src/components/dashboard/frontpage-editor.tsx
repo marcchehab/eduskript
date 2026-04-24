@@ -318,16 +318,22 @@ export function FrontPageEditor({
       </Button>
 
       {resolvedPreviewUrl && (
-        <Link
-          href={resolvedPreviewUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          prefetch={false}
-        >
-          <Button variant="ghost" size="sm" title="Preview front page">
+        isPublished ? (
+          <Link
+            href={resolvedPreviewUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            prefetch={false}
+          >
+            <Button variant="ghost" size="sm" title="View front page">
+              <Eye className="w-4 h-4" />
+            </Button>
+          </Link>
+        ) : (
+          <Button variant="ghost" size="sm" disabled title="Publish to view publicly">
             <Eye className="w-4 h-4" />
           </Button>
-        </Link>
+        )
       )}
 
       <Button
@@ -390,7 +396,7 @@ export function FrontPageEditor({
         </section>
       )}
 
-      {/* Toolbar when header is hidden — keeps publish/preview/save reachable
+      {/* Toolbar when header is hidden — keeps publish/view/save reachable
           while letting the parent (org nav) own the page chrome. */}
       {hideHeader && (
         <div className="flex items-center justify-between gap-4">

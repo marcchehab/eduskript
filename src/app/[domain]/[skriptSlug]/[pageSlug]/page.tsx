@@ -112,30 +112,6 @@ export default async function PublicPage({ params, searchParams }: PageProps) {
     pageSlug,
     domain
   )
-  // If the author visits a public URL for unpublished content, redirect to the preview URL
-  // so they see the "not published" warning instead of a 404
-  if (!content) {
-    const session = await getServerSession(authOptions)
-    if (session?.user?.id === teacher.id) {
-      const unpublishedPage = await prisma.page.findFirst({
-        where: {
-          slug: pageSlug,
-          skript: {
-            slug: skriptSlug,
-            OR: [
-              { authors: { some: { userId: teacher.id } } },
-              { collectionSkripts: { some: { collection: { authors: { some: { userId: teacher.id } } } } } }
-            ]
-          }
-        },
-        select: { id: true }
-      })
-      if (unpublishedPage) {
-        redirect(`/preview/${domain}/${skriptSlug}/${pageSlug}`)
-      }
-    }
-  }
-
   // TODO: Remove in spring 2026. Temporary legacy redirect for old URLs
   // that included the collection slug: /{domain}/{collectionSlug}/{skriptSlug} → /{domain}/{skriptSlug}
   if (!content) {

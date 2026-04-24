@@ -166,41 +166,6 @@ describe('proxy routing', () => {
     })
   })
 
-  describe('preview route bypass', () => {
-    it('should skip proxy for /preview routes on localhost', async () => {
-      const { proxy } = await import('@/proxy')
-      const { NextResponse } = await import('next/server')
-
-      const request = createMockRequest('localhost:3000', '/preview/eduadmin/markdown-basics/headings-text')
-      await proxy(request as any)
-
-      expect(NextResponse.next).toHaveBeenCalled()
-      expect(NextResponse.rewrite).not.toHaveBeenCalled()
-    })
-
-    it('should skip proxy for /preview routes on eduskript.org', async () => {
-      const { proxy } = await import('@/proxy')
-      const { NextResponse } = await import('next/server')
-
-      const request = createMockRequest('eduskript.org', '/preview/eduadmin/markdown-basics/headings-text')
-      await proxy(request as any)
-
-      expect(NextResponse.next).toHaveBeenCalled()
-      expect(NextResponse.rewrite).not.toHaveBeenCalled()
-    })
-
-    it('should skip proxy for /preview routes on custom domains', async () => {
-      const { proxy } = await import('@/proxy')
-      const { NextResponse } = await import('next/server')
-
-      const request = createMockRequest('informatikgarten.ch', '/preview/ig/grundlagen/intro')
-      await proxy(request as any)
-
-      expect(NextResponse.next).toHaveBeenCalled()
-      expect(NextResponse.rewrite).not.toHaveBeenCalled()
-    })
-  })
-
   describe('eduskript.org teacher page routing', () => {
     it('should rewrite teacher page paths to org on eduskript.org', async () => {
       const { proxy } = await import('@/proxy')

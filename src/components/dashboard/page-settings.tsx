@@ -441,7 +441,7 @@ export function PageSettings() {
                   variant="outline"
                   size="icon"
                   asChild
-                  title="Preview your public page"
+                  title="View your public page"
                 >
                   <a href={`/${session.user.pageSlug}`} target="_blank" rel="noopener noreferrer">
                     <ExternalLink className="h-4 w-4" />
