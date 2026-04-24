@@ -158,17 +158,30 @@ __count = ${assertions.length}
 __results = []
 __ns = {}
 
-# Run student code in a fresh namespace
+# Run student code in a fresh namespace.
+# Capture stdout into a buffer so assertions can check what the student
+# printed (exposed below as 'output'). Lets teachers test print-loop
+# exercises without forcing students to wrap their code in a function or
+# accumulate into a list.
+import io as __io, contextlib as __cl
+__stdout_buf = __io.StringIO()
+
 with open('__eduskript_student.py') as f:
     __student_code = f.read()
 
 try:
-    exec(compile(__student_code, '<student>', 'exec'), __ns)
+    with __cl.redirect_stdout(__stdout_buf):
+        exec(compile(__student_code, '<student>', 'exec'), __ns)
 except Exception as __e:
     # Student code failed — all tests fail with this error
     __err = str(__e)
     for __i in range(__count):
         __results.append({"index": __i, "passed": False, "label": __labels[__i]["fail"], "error": "Code error: " + __err})
+
+# Expose captured stdout to setup + asserts as 'output'.
+# Set even on student-error so assertions referencing 'output' get a
+# defined value (empty string) rather than NameError.
+__ns['output'] = __stdout_buf.getvalue()
 
 if not __results:
     # Run setup code in the student namespace
