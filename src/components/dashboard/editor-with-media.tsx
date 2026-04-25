@@ -326,13 +326,14 @@ export function EditorWithMedia({
     name: string,
     excalidrawData: string,
     lightSvg: string,
-    darkSvg: string
+    darkSvg: string,
+    originalName: string | undefined,
   ) => {
     try {
       const response = await fetch('/api/excalidraw', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, excalidrawData, lightSvg, darkSvg, skriptId }),
+        body: JSON.stringify({ name, excalidrawData, lightSvg, darkSvg, skriptId, originalName }),
       })
       if (!response.ok) {
         const error = await response.json()

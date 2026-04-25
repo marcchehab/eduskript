@@ -1072,62 +1072,67 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   }
 
   // Handle Excalidraw save
-  const handleExcalidrawSave = async (name: string, excalidrawData: string, lightSvg: string, darkSvg: string) => {
+  const handleExcalidrawSave = async (
+    name: string,
+    excalidrawData: string,
+    lightSvg: string,
+    darkSvg: string,
+    originalName: string | undefined,
+  ) => {
     if (!skriptId) {
       alert.showError('Skript ID is required to save drawings')
       return
     }
 
-    try {
-      const response = await fetch('/api/excalidraw', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name,
-          excalidrawData,
-          lightSvg,
-          darkSvg,
-          skriptId,
-        }),
-      })
+    const response = await fetch('/api/excalidraw', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name,
+        excalidrawData,
+        lightSvg,
+        darkSvg,
+        skriptId,
+        originalName,
+      }),
+    })
 
-      if (!response.ok) {
-        throw new Error('Failed to save drawing')
-      }
+    if (!response.ok) {
+      // Re-throw with the server's message so the editor's alert shows the
+      // real reason (e.g. filename collision) instead of a generic string.
+      const data = await response.json().catch(() => ({}))
+      throw new Error(data.error || 'Failed to save drawing')
+    }
 
-      // Only insert reference for NEW drawings, not when editing existing ones
-      if (!isEditingExistingExcalidraw) {
-        const insertText = `![](${name}.excalidraw)\n`
+    // Only insert reference for NEW drawings, not when editing existing ones
+    if (!isEditingExistingExcalidraw) {
+      const insertText = `![](${name}.excalidraw)\n`
 
-        if (editorViewRef.current && !useSimpleEditor) {
-          const view = editorViewRef.current
-          const insertPos = view.state.selection.main.head
-          const transaction = view.state.update({
-            changes: { from: insertPos, insert: insertText },
-            selection: { anchor: insertPos + insertText.length }
-          })
-          view.dispatch(transaction)
-          onChange(view.state.doc.toString())
-        } else if (useSimpleEditor) {
-          const textarea = document.querySelector('textarea') as HTMLTextAreaElement
-          if (textarea) {
-            const start = textarea.selectionStart
-            const newContent = textareaContent.substring(0, start) + insertText + textareaContent.substring(start)
-            setTextareaContent(newContent)
-            onChange(newContent)
-          }
+      if (editorViewRef.current && !useSimpleEditor) {
+        const view = editorViewRef.current
+        const insertPos = view.state.selection.main.head
+        const transaction = view.state.update({
+          changes: { from: insertPos, insert: insertText },
+          selection: { anchor: insertPos + insertText.length }
+        })
+        view.dispatch(transaction)
+        onChange(view.state.doc.toString())
+      } else if (useSimpleEditor) {
+        const textarea = document.querySelector('textarea') as HTMLTextAreaElement
+        if (textarea) {
+          const start = textarea.selectionStart
+          const newContent = textareaContent.substring(0, start) + insertText + textareaContent.substring(start)
+          setTextareaContent(newContent)
+          onChange(newContent)
         }
       }
+    }
 
-      // Refresh file list
-      if (onFileUpload) {
-        onFileUpload()
-      }
-    } catch (error) {
-      console.error('Error saving drawing:', error)
-      alert.showError('Failed to save drawing. Please try again.')
+    // Refresh file list
+    if (onFileUpload) {
+      onFileUpload()
     }
   }
 

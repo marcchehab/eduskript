@@ -15,7 +15,11 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { name, excalidrawData, lightSvg, darkSvg, skriptId } = body
+    // `originalName` is the filename the drawing was loaded as. Editing the
+    // same drawing keeps `name === originalName` and overwrites freely.
+    // Renaming or creating a new drawing → `name !== originalName`, and we
+    // refuse to overwrite an existing file (returns 409 below).
+    const { name, excalidrawData, lightSvg, darkSvg, skriptId, originalName } = body
 
     if (!name || !excalidrawData || !lightSvg || !darkSvg || !skriptId) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -41,6 +45,24 @@ export async function POST(request: NextRequest) {
 
     // Ensure name doesn't already include .excalidraw extension
     const baseName = name.replace(/\.excalidraw$/, '')
+    const originalBaseName = typeof originalName === 'string'
+      ? originalName.replace(/\.excalidraw$/, '')
+      : null
+
+    // Reject if the chosen filename collides with an existing file in this
+    // skript (unless we're re-saving the same drawing under its current name).
+    if (baseName !== originalBaseName) {
+      const existing = await prisma.file.findFirst({
+        where: { skriptId, name: `${baseName}.excalidraw` },
+        select: { id: true }
+      })
+      if (existing) {
+        return NextResponse.json(
+          { error: `A drawing named "${baseName}" already exists. Please choose a different name.` },
+          { status: 409 }
+        )
+      }
+    }
 
     // Extract dimensions from SVG markup to prevent layout shift on load
     const parseSvgDimensions = (svg: string): { width?: number; height?: number } => {
