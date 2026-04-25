@@ -4,6 +4,7 @@ import "./globals.css";
 import { Providers } from '@/components/providers'
 import { GitInfo } from '@/components/GitInfo'
 import { DevConsole } from '@/components/dev/dev-console'
+import { getCurrentTenant } from '@/lib/tenant'
 
 const inter = Inter({
   subsets: ["latin"],
@@ -44,13 +45,18 @@ export const viewport = {
   userScalable: false,
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Per-tenant <html lang>: informatikgarten.ch is German, eduskript.org is
+  // English. Both are served by this same app; the lang must match the
+  // request host or Google will treat the site as mistranslated.
+  const tenant = await getCurrentTenant()
+
   return (
-    <html lang="en" suppressHydrationWarning data-scroll-behavior="smooth">
+    <html lang={tenant.lang} suppressHydrationWarning data-scroll-behavior="smooth">
       <head>
         <link
           rel="stylesheet"

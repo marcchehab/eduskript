@@ -7,6 +7,7 @@ import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.
 import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
 import { getTeacherByUsernameDeduped } from '@/lib/cached-queries'
 import { prisma } from '@/lib/prisma'
+import { getRequestHost, getTenantForHost } from '@/lib/tenant'
 
 // Enable ISR - pages are cached until explicitly invalidated
 export const revalidate = false
@@ -32,8 +33,19 @@ export async function generateMetadata({ params }: DomainIndexProps): Promise<Me
       }
     }
 
-    const title = teacher.pageName || teacher.name || 'Eduskript'
+    // The `domain` path param is the rewritten pageSlug (e.g. "informatikgarten"),
+    // not the public hostname — using it for og:url drops the TLD and produces
+    // a broken canonical (`https://informatikgarten` instead of
+    // `https://informatikgarten.ch`). Read the host header instead.
+    const requestHost = await getRequestHost()
+    const tenant = getTenantForHost(requestHost)
+    const publicHost = (requestHost.split(':')[0] || tenant.host).toLowerCase()
+    const isTenantHome = publicHost === tenant.host
+
+    const baseTitle = teacher.pageName || teacher.name || 'Eduskript'
+    const title = isTenantHome ? tenant.homeTitle : baseTitle
     const description = teacher.pageDescription || teacher.bio || `Educational content by ${teacher.pageName || teacher.name}`
+    const canonicalUrl = `https://${publicHost}`
 
     return {
       title,
@@ -45,7 +57,7 @@ export async function generateMetadata({ params }: DomainIndexProps): Promise<Me
         description,
         type: 'website',
         siteName: teacher.pageName || teacher.name || 'Eduskript',
-        url: `https://${domain}`
+        url: canonicalUrl
       },
       twitter: {
         card: 'summary_large_image',

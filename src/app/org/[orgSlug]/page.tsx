@@ -9,6 +9,7 @@ import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
 import { getOrgMembership } from '@/lib/org-auth'
 import { getOrgWithLayout, getOrgHomepageContent, getOrgFullSiteStructure } from '@/lib/cached-queries'
 import { prisma } from '@/lib/prisma'
+import { getRequestHost, getTenantForHost } from '@/lib/tenant'
 
 export const dynamic = 'force-dynamic'
 export const dynamicParams = true
@@ -36,14 +37,26 @@ export async function generateMetadata({ params }: OrgPageProps): Promise<Metada
       }
     }
 
+    // When the org is being served as the home page of a known tenant host
+    // (e.g. eduskript.org → org "eduskript"), use the SEO-tuned home title
+    // instead of the bare org name.
+    const requestHost = await getRequestHost()
+    const tenant = getTenantForHost(requestHost)
+    const publicHost = (requestHost.split(':')[0] || tenant.host).toLowerCase()
+    const isTenantHome = publicHost === tenant.host
+    const title = isTenantHome ? tenant.homeTitle : organization.name
+    const description = organization.description || `${organization.name} on Eduskript`
+    const canonicalUrl = `https://${publicHost}`
+
     return {
-      title: organization.name,
-      description: organization.description || `${organization.name} on Eduskript`,
+      title,
+      description,
       openGraph: {
-        title: organization.name,
-        description: organization.description || `${organization.name} on Eduskript`,
+        title,
+        description,
         type: 'website',
         siteName: organization.name,
+        url: canonicalUrl,
         ...(organization.showIcon && organization.iconUrl && { images: [organization.iconUrl] }),
       },
     }
