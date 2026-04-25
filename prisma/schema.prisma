@@ -71,6 +71,8 @@ model User {
   pageName        String?   // Display name for the public page
   pageDescription String?   // Description shown below page title in sidebar
   pageIcon        String?   // URL to page icon image (displayed in sidebar)
+  pageLanguage    String?   @map("page_language") // BCP-47 tag for <html lang> when teacher has a custom domain (e.g. "de-CH"); null = "en"
+  pageTagline     String?   @map("page_tagline")  // Short SEO tagline appended to pageName as the home <title> on the teacher's custom domain
 
   // Profile fields (shown to collaborators)
   bio           String?
@@ -746,6 +748,8 @@ model Organization {
   description String?
   showIcon    Boolean  @default(true) @map("show_icon")
   iconUrl     String?  @map("icon_url")
+  pageLanguage String? @map("page_language")  // BCP-47 tag for <html lang> on the org's custom domain; null = "en"
+  pageTagline  String? @map("page_tagline")   // Short SEO tagline appended to org name as the home <title> on the org's custom domain
 
   // Settings
   allowMemberPages          Boolean @default(true) @map("allow_member_pages")  // Members can have personal pages

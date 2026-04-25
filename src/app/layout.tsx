@@ -4,7 +4,6 @@ import "./globals.css";
 import { Providers } from '@/components/providers'
 import { GitInfo } from '@/components/GitInfo'
 import { DevConsole } from '@/components/dev/dev-console'
-import { getCurrentTenant } from '@/lib/tenant'
 
 const inter = Inter({
   subsets: ["latin"],
@@ -45,18 +44,17 @@ export const viewport = {
   userScalable: false,
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Per-tenant <html lang>: informatikgarten.ch is German, eduskript.org is
-  // English. Both are served by this same app; the lang must match the
-  // request host or Google will treat the site as mistranslated.
-  const tenant = await getCurrentTenant()
-
+  // <html lang> is set to "en" at SSR for ISR compatibility — reading
+  // headers() here would opt every downstream ISR page out of static
+  // generation. Per-tenant lang (e.g. "de-CH") is applied client-side via
+  // <HtmlLangSetter> in the deeper layouts that already know the tenant.
   return (
-    <html lang={tenant.lang} suppressHydrationWarning data-scroll-behavior="smooth">
+    <html lang="en" suppressHydrationWarning data-scroll-behavior="smooth">
       <head>
         <link
           rel="stylesheet"

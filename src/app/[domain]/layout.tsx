@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
 import { PublicSiteLayout } from '@/components/public/layout'
+import { HtmlLangSetter } from '@/components/seo/html-lang-setter'
 import {
   getTeacherWithLayout,
   getFullSiteStructure,
@@ -64,14 +65,17 @@ export default async function DomainLayout({ params, children }: DomainLayoutPro
   }
 
   return (
-    <PublicSiteLayout
-      teacher={teacherForLayout}
-      siteStructure={fullSiteStructure}
-      rootSkripts={rootSkripts}
-      sidebarBehavior={effectiveSidebarBehavior as 'contextual' | 'full'}
-      typographyPreference={(teacher.typographyPreference as 'modern' | 'classic') || 'modern'}
-    >
-      {children}
-    </PublicSiteLayout>
+    <>
+      <HtmlLangSetter lang={teacher.pageLanguage} />
+      <PublicSiteLayout
+        teacher={teacherForLayout}
+        siteStructure={fullSiteStructure}
+        rootSkripts={rootSkripts}
+        sidebarBehavior={effectiveSidebarBehavior as 'contextual' | 'full'}
+        typographyPreference={(teacher.typographyPreference as 'modern' | 'classic') || 'modern'}
+      >
+        {children}
+      </PublicSiteLayout>
+    </>
   )
 }

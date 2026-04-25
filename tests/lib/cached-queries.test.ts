@@ -127,8 +127,15 @@ describe('cached-queries', () => {
           pageName: true,
           pageDescription: true,
           pageIcon: true,
+          pageLanguage: true,
+          pageTagline: true,
           sidebarBehavior: true,
           typographyPreference: true,
+          customDomains: {
+            where: { isVerified: true, isPrimary: true },
+            select: { domain: true },
+            take: 1,
+          },
         },
       })
       expect(result).toEqual(mockTeacher)

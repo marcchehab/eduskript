@@ -41,10 +41,17 @@ export const getTeacherByPageSlug = (pageSlug: string) =>
           pageName: true,
           pageDescription: true,
           pageIcon: true,
+          pageLanguage: true,
+          pageTagline: true,
           title: true,
           bio: true,
           sidebarBehavior: true,
           typographyPreference: true,
+          customDomains: {
+            where: { isVerified: true, isPrimary: true },
+            select: { domain: true },
+            take: 1,
+          },
         }
       })
     },

@@ -6,10 +6,10 @@ import { authOptions } from '@/lib/auth'
 import { PublicSiteLayout } from '@/components/public/layout'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
 import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
+import { HtmlLangSetter } from '@/components/seo/html-lang-setter'
 import { getOrgMembership } from '@/lib/org-auth'
 import { getOrgWithLayout, getOrgHomepageContent, getOrgFullSiteStructure } from '@/lib/cached-queries'
 import { prisma } from '@/lib/prisma'
-import { getRequestHost, getTenantForHost } from '@/lib/tenant'
 
 export const dynamic = 'force-dynamic'
 export const dynamicParams = true
@@ -27,7 +27,18 @@ export async function generateMetadata({ params }: OrgPageProps): Promise<Metada
   try {
     const organization = await prisma.organization.findUnique({
       where: { slug: orgSlug },
-      select: { name: true, description: true, showIcon: true, iconUrl: true },
+      select: {
+        name: true,
+        description: true,
+        showIcon: true,
+        iconUrl: true,
+        pageTagline: true,
+        customDomains: {
+          where: { isVerified: true, isPrimary: true },
+          select: { domain: true },
+          take: 1,
+        },
+      },
     })
 
     if (!organization) {
@@ -37,16 +48,28 @@ export async function generateMetadata({ params }: OrgPageProps): Promise<Metada
       }
     }
 
-    // When the org is being served as the home page of a known tenant host
-    // (e.g. eduskript.org → org "eduskript"), use the SEO-tuned home title
-    // instead of the bare org name.
-    const requestHost = await getRequestHost()
-    const tenant = getTenantForHost(requestHost)
-    const publicHost = (requestHost.split(':')[0] || tenant.host).toLowerCase()
-    const isTenantHome = publicHost === tenant.host
-    const title = isTenantHome ? tenant.homeTitle : organization.name
+    // ISR-safe canonical: prefer the org's primary verified custom domain;
+    // fall back to eduskript.org/<orgSlug>. SEO-tuned home title kicks in
+    // only when the org has its own custom domain AND has set a tagline,
+    // otherwise stay with the plain org name.
+    const primaryDomain = organization.customDomains?.[0]?.domain
+    // The hardcoded default for the canonical app host is intentional: the
+    // root org "eduskript" is the only org served on eduskript.org and is
+    // surfaced via the proxy rather than a CustomDomain row.
+    const canonicalHost = primaryDomain ?? (orgSlug === 'eduskript' ? 'eduskript.org' : `eduskript.org/org/${orgSlug}`)
+    const canonicalUrl = `https://${canonicalHost}`
+
+    // SEO-tuned title source order:
+    //   1. Tenant on a custom domain with a configured pageTagline.
+    //   2. The canonical app org (eduskript) — hardcoded once here per the
+    //      "only eduskript.org may be hardcoded" rule.
+    //   3. Plain org name.
+    const title = primaryDomain && organization.pageTagline
+      ? `${organization.name} — ${organization.pageTagline}`
+      : orgSlug === 'eduskript'
+        ? 'Eduskript — Open-Source Platform for Interactive Lessons'
+        : organization.name
     const description = organization.description || `${organization.name} on Eduskript`
-    const canonicalUrl = `https://${publicHost}`
 
     return {
       title,
@@ -156,6 +179,8 @@ export default async function OrgPage({ params }: OrgPageProps) {
     : undefined
 
   return (
+    <>
+      <HtmlLangSetter lang={organization.pageLanguage} />
     <PublicSiteLayout
       teacher={orgAsTeacher}
       siteStructure={collections}
@@ -217,5 +242,6 @@ export default async function OrgPage({ params }: OrgPageProps) {
         ) : null}
       </div>
     </PublicSiteLayout>
+    </>
   )
 }

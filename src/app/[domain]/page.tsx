@@ -7,7 +7,6 @@ import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.
 import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
 import { getTeacherByUsernameDeduped } from '@/lib/cached-queries'
 import { prisma } from '@/lib/prisma'
-import { getRequestHost, getTenantForHost } from '@/lib/tenant'
 
 // Enable ISR - pages are cached until explicitly invalidated
 export const revalidate = false
@@ -33,19 +32,21 @@ export async function generateMetadata({ params }: DomainIndexProps): Promise<Me
       }
     }
 
-    // The `domain` path param is the rewritten pageSlug (e.g. "informatikgarten"),
-    // not the public hostname — using it for og:url drops the TLD and produces
-    // a broken canonical (`https://informatikgarten` instead of
-    // `https://informatikgarten.ch`). Read the host header instead.
-    const requestHost = await getRequestHost()
-    const tenant = getTenantForHost(requestHost)
-    const publicHost = (requestHost.split(':')[0] || tenant.host).toLowerCase()
-    const isTenantHome = publicHost === tenant.host
+    // ISR-safe SEO metadata: derive everything from cached DB data, never
+    // from request headers. Reading headers() here would opt this route
+    // out of static generation. The teacher's primary verified custom
+    // domain is the canonical home host; absent that, we canonicalize to
+    // eduskript.org/{pageSlug}. Either way the answer is stable per
+    // pageSlug, so ISR keeps a single cached render per teacher.
+    const primaryDomain = teacher.customDomains?.[0]?.domain
+    const canonicalHost = primaryDomain ?? `eduskript.org/${teacher.pageSlug ?? domain}`
+    const canonicalUrl = `https://${canonicalHost}`
 
     const baseTitle = teacher.pageName || teacher.name || 'Eduskript'
-    const title = isTenantHome ? tenant.homeTitle : baseTitle
+    const title = primaryDomain && teacher.pageTagline
+      ? `${baseTitle} — ${teacher.pageTagline}`
+      : baseTitle
     const description = teacher.pageDescription || teacher.bio || `Educational content by ${teacher.pageName || teacher.name}`
-    const canonicalUrl = `https://${publicHost}`
 
     return {
       title,
