@@ -133,15 +133,15 @@ export function ExcalidrawEditor({
       })
       const darkSvg = darkSvgElement.outerHTML
 
-      // Save all three files
+      // Save all three files. The modal intentionally stays open after a
+      // successful save so the user can keep iterating; only the X button
+      // closes it (see DialogPrimitive.Content interactOutside/escape blocks).
       await onSave(
         drawingName.trim(),
         JSON.stringify(excalidrawData, null, 2),
         lightSvg,
         darkSvg
       )
-
-      onClose()
     } catch (error) {
       console.error('Error saving drawing:', error)
       alert.showError('Failed to save drawing. Please try again.')
@@ -181,7 +181,11 @@ export function ExcalidrawEditor({
          pointer events by ~100px, causing cursor offset issues. */}
       <DialogPortal>
         <DialogOverlay className="flex items-center justify-center">
-          <DialogPrimitive.Content className="z-50 w-[1400px] h-[900px] max-w-[95vw] max-h-[95vh] border bg-background shadow-lg sm:rounded-lg p-0 flex flex-col relative">
+          <DialogPrimitive.Content
+            onInteractOutside={(e) => e.preventDefault()}
+            onEscapeKeyDown={(e) => e.preventDefault()}
+            className="z-50 w-[1400px] h-[900px] max-w-[95vw] max-h-[95vh] border bg-background shadow-lg sm:rounded-lg p-0 flex flex-col relative"
+          >
             <DialogHeader className="p-4 border-b border-border shrink-0">
               <DialogTitle>Edit Drawing</DialogTitle>
               <div className="flex items-center gap-4 mt-4">

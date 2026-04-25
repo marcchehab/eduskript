@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
+import { revalidateTag } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { CACHE_TAGS } from '@/lib/cached-queries'
 import { saveFile, getS3Key, getFileExtension } from '@/lib/file-storage'
 import { downloadTeacherFile } from '@/lib/s3'
 
@@ -88,6 +90,30 @@ export async function POST(request: NextRequest) {
         height: darkDims.height,
       })
     ])
+
+    // Invalidate ISR cache for every page that references this drawing.
+    // Pages reference Excalidraw files by basename — `.excalidraw`,
+    // `.excalidraw.light.svg`, and `.excalidraw.dark.svg` all begin with
+    // `${baseName}.excalidraw`, so a single substring check catches every form.
+    const fileRef = `${baseName}.excalidraw`
+    const candidatePages = await prisma.page.findMany({
+      where: { skriptId },
+      select: { slug: true, content: true }
+    })
+    const editor = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { pageSlug: true }
+    })
+    if (editor?.pageSlug) {
+      for (const page of candidatePages) {
+        if (page.content.includes(fileRef)) {
+          revalidateTag(
+            CACHE_TAGS.pageBySlug(editor.pageSlug, skript.slug, page.slug),
+            { expire: 0 }
+          )
+        }
+      }
+    }
 
     return NextResponse.json({
       success: true,
