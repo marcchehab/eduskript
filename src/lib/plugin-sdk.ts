@@ -257,3 +257,140 @@ ${entryHtml}
 </body>
 </html>`;
 }
+
+/**
+ * Standalone SDK — drop-in replacement for the iframe-host SDK above, used when the
+ * plugin is served as the top-level document of /embed/[owner]/[slug] (e.g. iframed
+ * into exam.net). There is no eduskript host here, so we resolve config and theme
+ * from URL query params and persist setData/getData to localStorage. The
+ * `window.eduskript.init()` API surface is identical so plugins work unchanged.
+ *
+ * Reserved query params: `theme` (light|dark, overrides prefers-color-scheme) and
+ * `id` (instance id used to namespace localStorage). Everything else flows into
+ * the plugin's `config`.
+ */
+export const PLUGIN_STANDALONE_SDK_SOURCE = `
+(function() {
+  'use strict';
+
+  var url = new URL(window.location.href);
+  var config = {};
+  var explicitTheme = null;
+  var instanceId = 'default';
+  url.searchParams.forEach(function(value, key) {
+    if (key === 'theme') {
+      if (value === 'dark' || value === 'light') explicitTheme = value;
+    } else if (key === 'id') {
+      instanceId = value;
+    } else {
+      config[key] = value;
+    }
+  });
+
+  function currentTheme() {
+    if (explicitTheme) return explicitTheme;
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
+    return 'light';
+  }
+
+  var storageKey = 'eduskript-plugin:' + window.location.pathname + ':' + instanceId;
+  var data = null;
+  try {
+    var raw = localStorage.getItem(storageKey);
+    if (raw) data = JSON.parse(raw);
+  } catch (e) { /* localStorage unavailable or parse error — start with null */ }
+
+  var _themeCallback = null;
+  var _dataChangedCallback = null;
+  var _fullscreenCallback = null;
+
+  // Track prefers-color-scheme changes when theme isn't pinned via URL.
+  if (window.matchMedia) {
+    var mq = window.matchMedia('(prefers-color-scheme: dark)');
+    var mqHandler = function() {
+      if (!explicitTheme && _themeCallback) _themeCallback(currentTheme());
+    };
+    if (mq.addEventListener) mq.addEventListener('change', mqHandler);
+    else if (mq.addListener) mq.addListener(mqHandler);
+  }
+
+  // Cross-tab sync via storage event.
+  window.addEventListener('storage', function(e) {
+    if (e.key !== storageKey) return;
+    try {
+      data = e.newValue ? JSON.parse(e.newValue) : null;
+    } catch (err) { data = null; }
+    if (_dataChangedCallback) _dataChangedCallback(data);
+  });
+
+  document.addEventListener('fullscreenchange', function() {
+    if (_fullscreenCallback) _fullscreenCallback(!!document.fullscreenElement);
+  });
+
+  window.eduskript = {
+    init: function() {
+      return {
+        onReady: function(cb) {
+          // Defer one tick so plugin can register other handlers first.
+          setTimeout(function() {
+            cb({ config: config, data: data, theme: currentTheme() });
+          }, 0);
+        },
+        onThemeChange: function(cb) { _themeCallback = cb; },
+        onDataChanged: function(cb) { _dataChangedCallback = cb; },
+        getData: function() { return Promise.resolve(data); },
+        setData: function(next) {
+          data = next;
+          try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch (e) { /* quota / private mode */ }
+        },
+        resize: function() { /* no-op: we are the page */ },
+        requestFullscreen: function() {
+          var el = document.documentElement;
+          if (el.requestFullscreen) el.requestFullscreen().catch(function(){});
+        },
+        exitFullscreen: function() {
+          if (document.fullscreenElement) document.exitFullscreen().catch(function(){});
+        },
+        onFullscreenChange: function(cb) { _fullscreenCallback = cb; }
+      };
+    }
+  };
+})();
+`;
+
+/**
+ * HTML escape for inserting plain text into HTML attribute / element contexts.
+ * Used for <title> in the standalone embed — the plugin's own entryHtml is trusted
+ * (only the author can write it) and is inlined as-is.
+ */
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+/**
+ * Build the full standalone HTML document served at /embed/[owner]/[slug].
+ * Unlike buildPluginSrcdoc, this is the *whole page* — no React shell, no Next.js
+ * Providers (no SessionProvider → no NextAuth cookies blocked in cross-site iframes),
+ * no iframe wrapper. Just the plugin's HTML wrapped with the standalone SDK.
+ */
+export function buildStandaloneEmbedHtml(entryHtml: string, name: string): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="${PLUGIN_CSP}">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>${escapeHtml(name)}</title>
+<style>html,body{margin:0;padding:0;width:100%;height:100%;}</style>
+<script>${PLUGIN_STANDALONE_SDK_SOURCE}</script>
+</head>
+<body>
+${entryHtml}
+</body>
+</html>`;
+}
