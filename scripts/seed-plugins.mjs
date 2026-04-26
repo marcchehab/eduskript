@@ -118,6 +118,7 @@ const PLUGINS = [
       defaultHeight: 750,
       configSchema: {
         mod: { type: 'number', default: 7 },
+        modmax: { type: 'number', default: 29 },
         max: { type: 'number', default: 500 },
         font: { type: 'number', default: 7 },
         lang: { type: 'string', enum: ['en', 'de'], default: 'en' },

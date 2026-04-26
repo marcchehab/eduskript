@@ -261,7 +261,7 @@ Embed interactive plugins with \`<plugin src="<author>/<slug>" [attrs]></plugin>
 - \`${owner}/cipher-lab\` — Caesar/Vigenère cipher tool
   - \`cipher="caesar|vigenere"\`, \`cipherkey\`, \`text\`, \`lang="en|de"\`
 - \`${owner}/mod-clock\` — Modular arithmetic clock
-  - \`mod\` (default 7), \`max\` (default 500), \`font\` (default 7), \`lang\`
+  - \`mod\` (default 7), \`modmax\` (default 29, slider cap, max 200), \`max\` (default 500), \`font\` (default 7), \`lang\`
 - \`${owner}/diffie-hellman\` — DH key exchange simulator
   - \`p\` (default 23), \`g\` (default 5), \`a\` (default 4), \`b\` (default 3), \`lang\`
 - \`${owner}/dijkstra-visualizer\` — Dijkstra's algorithm on a draggable graph
@@ -382,6 +382,6 @@ export function getCondensedSyntaxReference(): string {
 
 **Built-in plugins:** \`<plugin src="${BUILTIN_PLUGIN_OWNER}/<slug>" [attrs] [height="500"]></plugin>\` — user-scoped; built-ins on this deployment under \`${BUILTIN_PLUGIN_OWNER}\`:
   - \`mod-calc\` (\`formula\`, \`base\`, \`exp\`, \`mod\`, \`lang\`), \`color-sliders\`, \`cipher-lab\` (\`cipher\`, \`cipherkey\`, \`text\`, \`lang\`)
-  - \`mod-clock\` (\`mod\`, \`max\`, \`font\`, \`lang\`), \`diffie-hellman\` (\`p\`, \`g\`, \`a\`, \`b\`, \`lang\`)
+  - \`mod-clock\` (\`mod\`, \`modmax\`, \`max\`, \`font\`, \`lang\`), \`diffie-hellman\` (\`p\`, \`g\`, \`a\`, \`b\`, \`lang\`)
   - \`dijkstra-visualizer\` (\`initialnodecount\`, \`initialdirected\`, \`lang\`), \`data-cube-visualizer\` (\`lang\`)`
 }

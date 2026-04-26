@@ -37,7 +37,7 @@
 
 <div class="wrapper" id="wrapper">
   <div class="controls" id="controls">
-    <label id="lbl-mod">Modulus <input type="range" id="modSlider" min="3" max="19" value="7" step="1"><span id="modVal">7</span></label>
+    <label id="lbl-mod">Modulus <input type="range" id="modSlider" min="3" max="29" value="7" step="1"><span id="modVal">7</span></label>
     <label id="lbl-max">Max <input type="range" id="maxSlider" min="20" max="500" value="500" step="10"><span id="maxVal">500</span></label>
     <label id="lbl-font">Font <input type="range" id="fontSlider" min="4" max="14" value="7" step="1"><span id="fontVal">7</span></label>
   </div>
@@ -166,15 +166,18 @@
 
     // Apply config defaults
     if (ctx.config) {
-      if (ctx.config.mod) modSlider.value = Math.max(3, Math.min(19, parseInt(ctx.config.mod)));
+      // Hard ceiling: 200 spokes is the point past which labels collide.
+      if (ctx.config.modmax) modSlider.max = Math.max(3, Math.min(200, parseInt(ctx.config.modmax)));
+      var modCap = parseInt(modSlider.max);
+      if (ctx.config.mod) modSlider.value = Math.max(3, Math.min(modCap, parseInt(ctx.config.mod)));
       if (ctx.config.max) maxSlider.value = Math.max(20, Math.min(500, parseInt(ctx.config.max)));
       if (ctx.config.font) fontSlider.value = Math.max(4, Math.min(14, parseInt(ctx.config.font)));
     }
 
-    // Restore saved state
+    // Restore saved state — clamp to current slider cap in case modmax was lowered.
     if (ctx.data && ctx.data.state) {
       var s = ctx.data.state;
-      if (s.mod) modSlider.value = s.mod;
+      if (s.mod) modSlider.value = Math.min(parseInt(modSlider.max), s.mod);
       if (s.max) maxSlider.value = s.max;
       if (s.font) fontSlider.value = s.font;
     }
