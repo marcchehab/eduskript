@@ -5,7 +5,7 @@ import { useTheme } from 'next-themes'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { buildPluginSrcdoc } from '@/lib/plugin-sdk'
-import { Plus, Pencil, Trash2, Copy, Search, ArrowLeft, Eye, Sparkles } from 'lucide-react'
+import { Plus, Pencil, Trash2, Copy, Search, ArrowLeft, Eye, Sparkles, Check } from 'lucide-react'
 
 interface Plugin {
   id: string
@@ -53,6 +53,9 @@ export function PluginsDashboard({ userId, userPageSlug }: PluginsDashboardProps
   const [aiPrompt, setAiPrompt] = useState('')
   const [aiGenerating, setAiGenerating] = useState(false)
   const [aiError, setAiError] = useState<string | null>(null)
+
+  // Embed-link copy feedback (plugin id whose link was just copied)
+  const [copiedPluginId, setCopiedPluginId] = useState<string | null>(null)
 
   // Preview
   const { resolvedTheme } = useTheme()
@@ -184,6 +187,21 @@ export function PluginsDashboard({ userId, userPageSlug }: PluginsDashboardProps
     }
   }
 
+  const handleCopyEmbedLink = async (plugin: Plugin) => {
+    const ownerSlug = plugin.author.pageSlug
+    if (!ownerSlug) return
+    const url = `${window.location.origin}/embed/${ownerSlug}/${plugin.slug}`
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopiedPluginId(plugin.id)
+      setTimeout(() => {
+        setCopiedPluginId((current) => (current === plugin.id ? null : current))
+      }, 1500)
+    } catch (err) {
+      console.error('Failed to copy embed link:', err)
+    }
+  }
+
   const handleAiGenerate = async () => {
     if (!aiPrompt.trim()) return
     setAiGenerating(true)
@@ -282,6 +300,31 @@ export function PluginsDashboard({ userId, userPageSlug }: PluginsDashboardProps
                     </div>
                     {plugin.description && (
                       <p className="text-sm text-muted-foreground mt-1 truncate">{plugin.description}</p>
+                    )}
+                    {plugin.author.pageSlug && (
+                      <div className="mt-1.5 flex items-center gap-2 text-xs">
+                        <span className="font-medium text-muted-foreground">Public URL:</span>
+                        <a
+                          href={`/embed/${plugin.author.pageSlug}/${plugin.slug}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline truncate font-mono"
+                        >
+                          /embed/{plugin.author.pageSlug}/{plugin.slug}
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyEmbedLink(plugin)}
+                          title="Copy public URL"
+                          className="inline-flex items-center justify-center h-5 w-5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          {copiedPluginId === plugin.id ? (
+                            <Check className="h-3.5 w-3.5 text-green-600" />
+                          ) : (
+                            <Copy className="h-3.5 w-3.5" />
+                          )}
+                        </button>
+                      </div>
                     )}
                     <p className="text-xs text-muted-foreground mt-1">
                       by {authorLabel} · v{plugin.version}

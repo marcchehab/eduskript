@@ -92,6 +92,7 @@ export const RESERVED_SLUGS = [
   'consent',
   'test',
   'health',
+  'embed',
   '_next',
   'static',
   'public',
