@@ -59,6 +59,7 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith('/auth') ||
     pathname.startsWith('/org/') ||
     pathname.startsWith('/dashboard') ||
+    pathname.startsWith('/embed/') ||
     pathname.startsWith('/exam-complete') ||
     pathname.startsWith('/impressum') ||
     pathname.startsWith('/terms')

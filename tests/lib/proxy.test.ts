@@ -80,6 +80,28 @@ describe('proxy routing', () => {
       expect(NextResponse.rewrite).not.toHaveBeenCalled()
     })
 
+    it('should skip /embed routes on app domain', async () => {
+      const { proxy } = await import('@/proxy')
+      const { NextResponse } = await import('next/server')
+
+      const request = createMockRequest('eduskript.org', '/embed/eduadmin/mod-clock')
+      await proxy(request as any)
+
+      expect(NextResponse.next).toHaveBeenCalled()
+      expect(NextResponse.rewrite).not.toHaveBeenCalled()
+    })
+
+    it('should skip /embed routes on custom teacher domain', async () => {
+      const { proxy } = await import('@/proxy')
+      const { NextResponse } = await import('next/server')
+
+      const request = createMockRequest('informatikgarten.ch', '/embed/informatikgarten/mod-calc')
+      await proxy(request as any)
+
+      expect(NextResponse.next).toHaveBeenCalled()
+      expect(NextResponse.rewrite).not.toHaveBeenCalled()
+    })
+
     it('should skip explicit /org/ routes', async () => {
       const { proxy } = await import('@/proxy')
       const { NextResponse } = await import('next/server')
