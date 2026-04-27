@@ -374,7 +374,7 @@ export class SyncEngine {
 
     try {
       const response = await fetch(
-        `/api/user-data/${serverItem.adapter}/${encodeURIComponent(serverItem.itemId)}`
+        `/api/user-data/${encodeURIComponent(serverItem.adapter)}/${encodeURIComponent(serverItem.itemId)}`
       )
 
       // 404 means the item doesn't exist on the server yet - that's fine, just skip

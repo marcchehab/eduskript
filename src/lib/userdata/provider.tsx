@@ -265,7 +265,7 @@ export function useSyncedUserData<T>(
         if (isBroadcastMode) {
           try {
             const response = await fetch(
-              `/api/user-data/${componentId}/${encodeURIComponent(pageId)}?targetType=${targetType}&targetId=${targetId}`
+              `/api/user-data/${encodeURIComponent(componentId)}/${encodeURIComponent(pageId)}?targetType=${targetType}&targetId=${targetId}`
             )
             if (response.ok) {
               const serverData = await response.json()
