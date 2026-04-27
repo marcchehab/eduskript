@@ -1,4 +1,7 @@
 import type { TextHighlight } from './types'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('text-highlights:anchor')
 
 /** Tags whose text content should be skipped when building the virtual text map */
 const SKIP_TAGS = new Set(['PRE', 'CODE', 'CODE-EDITOR'])
@@ -157,6 +160,15 @@ export function anchorHighlight(
   highlight: TextHighlight,
   articleRoot: Element,
 ): Range | null {
+  log('anchor start', {
+    id: highlight.id,
+    text: highlight.text,
+    textLen: highlight.text.length,
+    sectionId: highlight.sectionId,
+    prefix: highlight.prefix,
+    suffix: highlight.suffix,
+  })
+
   // Try section-scoped search first
   const searchRoots: Element[] = []
 
@@ -164,7 +176,11 @@ export function anchorHighlight(
     const section = articleRoot.querySelector(
       `[data-section-id="${CSS.escape(highlight.sectionId)}"]`,
     )
-    if (section) searchRoots.push(section)
+    if (section) {
+      searchRoots.push(section)
+    } else {
+      log('section not found, will fall back to article', { sectionId: highlight.sectionId })
+    }
   }
 
   // Fallback to whole article
@@ -172,10 +188,19 @@ export function anchorHighlight(
 
   for (const root of searchRoots) {
     const textMap = buildTextMap(root)
+    const rootKind = root === articleRoot ? 'article' : 'section'
 
     // Exact match
     const exactMatches = findAllOccurrences(textMap.text, highlight.text)
+    log('search root', {
+      rootKind,
+      rootTag: root.tagName,
+      mapTextLen: textMap.text.length,
+      exactMatches: exactMatches.length,
+    })
+
     if (exactMatches.length === 1) {
+      log('matched exact (unique)', { id: highlight.id, idx: exactMatches[0], rootKind })
       return virtualRangeToDomRange(
         exactMatches[0],
         exactMatches[0] + highlight.text.length,
@@ -186,6 +211,7 @@ export function anchorHighlight(
       // Disambiguate with context
       let bestIdx = exactMatches[0]
       let bestScore = -1
+      const scored: Array<{ idx: number; score: number }> = []
       for (const idx of exactMatches) {
         const score = contextScore(
           textMap.text,
@@ -194,10 +220,27 @@ export function anchorHighlight(
           highlight.prefix,
           highlight.suffix,
         )
+        scored.push({ idx, score })
         if (score > bestScore) {
           bestScore = score
           bestIdx = idx
         }
+      }
+      log('matched exact (disambiguated)', {
+        id: highlight.id,
+        rootKind,
+        chosen: bestIdx,
+        chosenScore: bestScore,
+        scored,
+        prefixLen: highlight.prefix.length,
+        suffixLen: highlight.suffix.length,
+      })
+      if (bestScore === 0) {
+        log.warn('disambiguation had no signal — first match picked by default', {
+          id: highlight.id,
+          text: highlight.text,
+          candidates: exactMatches,
+        })
       }
       return virtualRangeToDomRange(
         bestIdx,
@@ -215,15 +258,29 @@ export function anchorHighlight(
       // Find the original text that corresponds to the normalized match
       const origIdx = textMap.text.indexOf(highlight.text.trim())
       if (origIdx !== -1) {
+        log('matched normalized', { id: highlight.id, rootKind, origIdx })
         return virtualRangeToDomRange(
           origIdx,
           origIdx + highlight.text.trim().length,
           textMap.mapping,
         )
+      } else {
+        log('normalized match found but original text not located', {
+          id: highlight.id,
+          normalizedMatches: normalizedMatches.length,
+          trimmedText: highlight.text.trim(),
+        })
       }
     }
   }
 
+  log.warn('anchor failed', {
+    id: highlight.id,
+    text: highlight.text,
+    sectionId: highlight.sectionId,
+    prefix: highlight.prefix,
+    suffix: highlight.suffix,
+  })
   return null
 }
 
@@ -249,7 +306,18 @@ export function extractContext(
       break
     }
   }
-  if (virtualStart === -1) return { prefix: '', suffix: '' }
+  if (virtualStart === -1) {
+    // startContainer is an Element (selection at a child boundary), not in mapping.
+    // Without a virtualStart we return empty context — anchoring may then fail to
+    // disambiguate identical text occurrences.
+    log.warn('extractContext: range startContainer not in text map — empty prefix/suffix', {
+      startContainerNodeType: range.startContainer.nodeType,
+      startContainerName: (range.startContainer as Element).tagName ?? '#text',
+      startOffset: range.startOffset,
+      selectedText,
+    })
+    return { prefix: '', suffix: '' }
+  }
 
   const prefix = textMap.text.slice(Math.max(0, virtualStart - CONTEXT_LENGTH), virtualStart)
   const suffix = textMap.text.slice(
@@ -257,6 +325,7 @@ export function extractContext(
     virtualStart + selectedText.length + CONTEXT_LENGTH,
   )
 
+  log('extractContext', { prefixLen: prefix.length, suffixLen: suffix.length, prefix, suffix })
   return { prefix, suffix }
 }
 

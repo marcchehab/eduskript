@@ -1,4 +1,7 @@
 import type { TextHighlight } from './types'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('text-highlights:render')
 
 /**
  * Wrap a DOM Range in <mark> elements with highlight styling.
@@ -15,20 +18,30 @@ export function applyHighlightMark(range: Range, highlight: TextHighlight): void
   ) {
     const mark = createMark(className, highlightId)
     range.surroundContents(mark)
+    log('apply single-node', { id: highlightId, text: range.toString() })
     return
   }
 
   // Multi-node range: collect all text nodes within the range, then wrap each
   const textNodes = getTextNodesInRange(range)
+  let wrapped = 0
+  let skipped = 0
+  let fellBack = 0
 
   for (const { node, start, end } of textNodes) {
     const text = node.nodeValue ?? ''
-    if (start >= end || start >= text.length) continue
+    if (start >= end || start >= text.length) {
+      skipped++
+      continue
+    }
 
     // Skip whitespace-only segments (e.g. newlines between <p> tags) —
     // wrapping these creates visible empty highlight blocks between paragraphs.
     const segment = text.slice(start, end)
-    if (!segment.trim()) continue
+    if (!segment.trim()) {
+      skipped++
+      continue
+    }
 
     const mark = createMark(className, highlightId)
     const wrappedRange = document.createRange()
@@ -37,14 +50,30 @@ export function applyHighlightMark(range: Range, highlight: TextHighlight): void
 
     try {
       wrappedRange.surroundContents(mark)
-    } catch {
+      wrapped++
+    } catch (err) {
       // surroundContents can fail if the range partially selects a non-text node.
       // Fall back to extracting and appending.
+      log('surroundContents threw, using extract/insert fallback', {
+        id: highlightId,
+        segment,
+        parentTag: node.parentElement?.tagName,
+        error: (err as Error)?.message,
+      })
       const fragment = wrappedRange.extractContents()
       mark.appendChild(fragment)
       wrappedRange.insertNode(mark)
+      fellBack++
     }
   }
+
+  log('apply multi-node', {
+    id: highlightId,
+    segments: textNodes.length,
+    wrapped,
+    skipped,
+    fellBack,
+  })
 }
 
 function createMark(className: string, highlightId: string): HTMLElement {

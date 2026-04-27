@@ -8,6 +8,9 @@ import { useSyncedUserData } from '@/lib/userdata'
 import type { TextHighlightsData, TextHighlightColor, TextHighlight } from '@/lib/text-highlights/types'
 import { anchorHighlight, extractContext, findSectionId } from '@/lib/text-highlights/anchoring'
 import { applyHighlightMark, removeHighlightMark, clearAllHighlightMarks } from '@/lib/text-highlights/rendering'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('text-highlights:layer')
 
 const HIGHLIGHT_COLORS: TextHighlightColor[] = ['yellow', 'red', 'green', 'blue', 'purple']
 
@@ -122,6 +125,17 @@ export function HighlightLayer({ pageId, children }: HighlightLayerProps) {
         // Save the range — on touch devices, tapping a color button clears the
         // selection before onClick fires, so we need the range preserved.
         savedRangeRef.current = range.cloneRange()
+        log('selection captured', {
+          text: selectedText,
+          startContainerName: (range.startContainer as Element).tagName ?? '#text',
+          startContainerNodeType: range.startContainer.nodeType,
+          startOffset: range.startOffset,
+          endContainerName: (range.endContainer as Element).tagName ?? '#text',
+          endContainerNodeType: range.endContainer.nodeType,
+          endOffset: range.endOffset,
+          crossNode: range.startContainer !== range.endContainer,
+          commonAncestorName: (range.commonAncestorContainer as Element).tagName ?? '#text',
+        })
         setPanel({ type: 'create' })
       }, 200)
     }
@@ -199,6 +213,8 @@ export function HighlightLayer({ pageId, children }: HighlightLayerProps) {
         createdAt: Date.now(),
       }
 
+      log('createHighlight', { id: highlight.id, color, text, prefix, suffix, sectionId })
+
       const current = dataRef.current ?? { highlights: [] }
       updateData({ highlights: [...current.highlights, highlight] })
 
@@ -206,6 +222,8 @@ export function HighlightLayer({ pageId, children }: HighlightLayerProps) {
       const newRange = anchorHighlight(highlight, articleRoot)
       if (newRange) {
         applyHighlightMark(newRange, highlight)
+      } else {
+        log.warn('createHighlight: re-anchoring returned null — mark not applied', { id: highlight.id })
       }
 
       window.getSelection()?.removeAllRanges()
