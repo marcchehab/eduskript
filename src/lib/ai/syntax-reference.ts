@@ -138,6 +138,14 @@ assert fibonacci(5) == 5, "fibonacci(5) should return 5."
 - \`points="<n>"\` — optional score value
 - \`max-checks="<n>"\` — optional limit on check attempts
 
+**Available in checks:**
+- All names defined by the student's code (variables, functions) are accessible directly.
+- \`output\` — the student's captured **stdout as a single string** (not a list). Includes trailing newlines from \`print()\`. To compare line-by-line, use \`output.splitlines()\` against a list of strings, or compare \`output\` against a literal string with \`\\n\` separators. **Never** compare \`output\` directly to a list — \`str == list\` is always \`False\`.
+  - ✅ \`assert output.splitlines() == ["0", "1", "Done!"], "..."\`
+  - ✅ \`assert output == "0\\n1\\nDone!\\n", "..."\`
+  - ✅ \`assert "Done!" in output, "..."\`  (substring check)
+  - ❌ \`assert output == ["0", "1", "Done!"], "..."\`  (always fails)
+
 **Writing good checks — DOs and DON'Ts:**
 
 - ✅ **Test behavior directly.** Each \`assert\` should test one observable outcome (an output, a return value, a side effect).
