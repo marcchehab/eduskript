@@ -4,6 +4,7 @@ import "./globals.css";
 import { Providers } from '@/components/providers'
 import { GitInfo } from '@/components/GitInfo'
 import { DevConsole } from '@/components/dev/dev-console'
+import { ChunkErrorRecovery } from '@/components/chunk-error-recovery'
 
 const inter = Inter({
   subsets: ["latin"],
@@ -64,6 +65,7 @@ export default function RootLayout({
       </head>
       <body className={`${inter.className} ${modernBody.variable} ${classicBody.variable} ${headingFont.variable} antialiased`} suppressHydrationWarning>
         <Providers>
+          <ChunkErrorRecovery />
           {children}
           <GitInfo />
           <DevConsole />
