@@ -108,7 +108,7 @@ export const sanitizeSchema = {
     // Custom component attributes (camelCase for HAST, kebab-case for raw HTML)
     'code-editor': ['dataLanguage', 'dataCode', 'dataFiles', 'dataId', 'dataDb', 'dataSchemaImage', 'dataSingle', 'dataShowCanvas', 'dataSolution', 'dataExam', 'dataCheckCode', 'dataCheckPoints', 'dataMaxChecks', 'data-language', 'data-code', 'data-files', 'data-id', 'data-db', 'data-schema-image', 'data-single', 'data-show-canvas', 'data-solution', 'data-exam', 'data-check-code', 'data-check-points', 'data-max-checks'],
     'tabs-container': ['dataItems', 'data-items'],
-    'youtube-embed': ['dataId', 'dataPlaylist', 'dataStartTime', 'data-id', 'data-playlist', 'data-start-time'],
+    'youtube-embed': ['dataId', 'dataPlaylist', 'dataStartTime', 'dataCaption', 'data-id', 'data-playlist', 'data-start-time', 'data-caption'],
     'mermaid-diagram': ['dataDefinition', 'data-definition'],
     'muxvideo': ['src', 'alt', 'poster'],
     'excalidraw-image': ['src', 'alt', 'dataAlign', 'dataWrap', 'data-align', 'data-wrap'],

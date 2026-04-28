@@ -39,6 +39,7 @@ const TAG_COMPLETIONS: TagDef[] = [
   { label: 'tabs-container', info: 'Tabbed content sections', apply: '<tabs-container>\n<tab-item label="Tab 1">\n\n</tab-item>\n<tab-item label="Tab 2">\n\n</tab-item>\n</tabs-container>' },
   { label: 'tab-item', info: 'Tab inside a <tabs-container>', apply: '<tab-item label="">\n\n</tab-item>' },
   { label: 'yt', info: 'YouTube timestamp link', apply: '<yt time="" label="" />' },
+  { label: 'youtube', info: 'Embed a YouTube video (also works as ![caption](youtube-url))', apply: '<youtube id="" />', cursorOffset: 13 },
 ]
 
 // ── Attribute definitions per tag ────────────────────────────────────
@@ -115,6 +116,12 @@ const TAG_ATTRS: Record<string, AttrDef[]> = {
     { label: 'time', info: 'Timestamp (e.g. 1:23)' },
     { label: 'videoid', info: 'YouTube video ID' },
     { label: 'label', info: 'Link text' },
+  ],
+  'youtube': [
+    { label: 'id', info: 'YouTube video ID (e.g. dQw4w9WgXcQ)' },
+    { label: 'playlist', info: 'YouTube playlist ID (e.g. PLxyz...)' },
+    { label: 'startTime', info: 'Start time in seconds' },
+    { label: 'caption', info: 'Caption shown beneath the video' },
   ],
   'stickme': [],
   'fullwidth': [],

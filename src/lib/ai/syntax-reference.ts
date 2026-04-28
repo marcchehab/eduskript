@@ -231,15 +231,33 @@ Reference video files by name. The system looks up the corresponding \`.json\` m
   // YouTube
   sections.push(`## YouTube Embeds
 
-Use the \`<youtube-embed>\` custom element (lowercase, data-prefixed attributes):
+Three equivalent forms — all render the same player. Pick whichever reads best.
+
+**Markdown image syntax** (recognised YouTube URL → embed; alt becomes a caption beneath):
+
+\`\`\`markdown
+![](https://www.youtube.com/watch?v=dQw4w9WgXcQ)
+![Caption shown beneath](https://youtu.be/dQw4w9WgXcQ?t=120)
+![](https://www.youtube.com/playlist?list=PLxyz)
+\`\`\`
+
+**JSX-style tag** (case-insensitive):
+
+\`\`\`html
+<youtube id="dQw4w9WgXcQ" />
+<youtube id="dQw4w9WgXcQ" startTime={120} caption="Caption" />
+<youtube playlist="PLxyz..." />
+\`\`\`
+
+**Custom element** (the underlying form, data-prefixed attributes):
 
 \`\`\`html
 <youtube-embed data-id="dQw4w9WgXcQ"></youtube-embed>
-<youtube-embed data-id="dQw4w9WgXcQ" data-start-time="120"></youtube-embed>
+<youtube-embed data-id="dQw4w9WgXcQ" data-start-time="120" data-caption="Caption"></youtube-embed>
 <youtube-embed data-playlist="PLxyz..."></youtube-embed>
 \`\`\`
 
-**Attributes:** \`data-id\` (video ID) OR \`data-playlist\` (playlist ID) — one is required. \`data-start-time\` is optional (seconds).`)
+**Attributes:** \`id\`/\`data-id\` (video ID) OR \`playlist\`/\`data-playlist\` — one is required. \`startTime\`/\`data-start-time\` (seconds) and \`caption\`/\`data-caption\` are optional.`)
 
   // Mermaid
   sections.push(`## Mermaid Diagrams
@@ -384,7 +402,7 @@ export function getCondensedSyntaxReference(): string {
   - If you see \`<Option>\` or \`<quiz-option>\`, convert to \`<answer>\`
   - Do NOT use \`:::quiz\` syntax — it is not implemented
 
-**YouTube:** \`<youtube-embed data-id="VIDEO_ID" data-start-time="120"></youtube-embed>\` (or \`data-playlist="..."\`). Lowercase, data-prefixed attrs only.
+**YouTube:** \`![caption](https://youtu.be/VIDEO_ID?t=120)\` is the simplest form (alt becomes caption). Or \`<youtube id="VIDEO_ID" startTime={120} caption="..." />\`, or the underlying \`<youtube-embed data-id="VIDEO_ID" data-start-time="120" data-caption="..."></youtube-embed>\`. Use \`playlist\`/\`data-playlist\` for playlists.
 
 **Mermaid:** \`\`\`mermaid fenced code block — renders natively, theme-aware.
 

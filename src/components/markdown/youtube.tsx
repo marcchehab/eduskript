@@ -8,9 +8,10 @@ interface YoutubeProps {
   id?: string
   playlist?: string
   startTime?: number
+  caption?: string
 }
 
-export function Youtube({ id, playlist, startTime }: YoutubeProps) {
+export function Youtube({ id, playlist, startTime, caption }: YoutubeProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -111,6 +112,10 @@ export function Youtube({ id, playlist, startTime }: YoutubeProps) {
   // Early return after all hooks
   if (!id && !playlist) return <div>No video id or playlist provided</div>
 
+  const captionNode = caption
+    ? <span className="block text-center text-sm text-muted-foreground mt-2">{caption}</span>
+    : null
+
   if (!isOpen) {
     return (
       <span className="block my-6">
@@ -154,6 +159,7 @@ export function Youtube({ id, playlist, startTime }: YoutubeProps) {
             )}
           </span>
         </span>
+        {captionNode}
       </span>
     )
   }
@@ -168,6 +174,7 @@ export function Youtube({ id, playlist, startTime }: YoutubeProps) {
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         allowFullScreen
       />
+      {captionNode}
     </span>
   )
 }

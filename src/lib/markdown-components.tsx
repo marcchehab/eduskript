@@ -397,12 +397,14 @@ export function createMarkdownComponents(
     const playlist = (props['data-playlist'] as string) || (props['dataPlaylist'] as string) || ''
     const startTimeStr = (props['data-start-time'] as string) || (props['dataStartTime'] as string) || ''
     const startTime = startTimeStr ? parseInt(startTimeStr, 10) : undefined
+    const caption = (props['data-caption'] as string) || (props['dataCaption'] as string) || ''
 
     return (
       <Youtube
         id={id || undefined}
         playlist={playlist || undefined}
         startTime={startTime}
+        caption={caption || undefined}
       />
     )
   }

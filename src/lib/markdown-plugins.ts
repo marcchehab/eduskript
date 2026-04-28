@@ -15,6 +15,7 @@ import { remarkCodeEditor } from './remark-plugins/code-editor'
 import { remarkCallouts } from './remark-plugins/callouts'
 import { remarkMuxVideo } from './remark-plugins/mux-video'
 import { remarkYoutube } from './remark-plugins/youtube'
+import { remarkYoutubeImage } from './remark-plugins/youtube-image'
 import { remarkQuiz } from './remark-plugins/quiz'
 import { remarkFileLinkResolver } from './remark-plugins/file-link-resolver'
 import { remarkMermaid } from './remark-plugins/mermaid'
@@ -27,6 +28,7 @@ export const remarkPlugins: PluggableList = [
   remarkQuiz,
   remarkGfm,
   remarkMath,
+  remarkYoutubeImage,
   remarkImageResolver,
   remarkExcalidraw,
   remarkMuxVideo,
