@@ -428,9 +428,10 @@ const CodeMirrorEditor = function CodeMirrorEditor({
       // Database file - insert SQL editor block
       insertText = `\`\`\`sql editor id="${generateId()}" db="${fileName}"\n-- Show all tables in the database\nSELECT name FROM sqlite_master WHERE type='table' ORDER BY name;\n\`\`\``
     } else if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(extension || '')) {
-      // Image - use regular markdown syntax with just filename for path resolution
-      const altText = fileName.replace(/\.[^/.]+$/, '')
-      insertText = `![${altText}](${fileName})`
+      // Image - empty alt by default. The markdown pipeline renders alt as a
+      // figcaption beneath the image; the basename is rarely the right
+      // caption. Authors add one manually when they want one.
+      insertText = `![](${fileName})`
     } else if (extension === 'excalidraw') {
       // Excalidraw drawing - use image syntax with just filename
       insertText = `![](${fileName})`

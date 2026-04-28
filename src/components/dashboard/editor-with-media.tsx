@@ -3,6 +3,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { MarkdownEditor } from '@/components/dashboard/markdown-editor'
@@ -100,6 +110,16 @@ export interface EditorWithMediaProps {
 const DEFAULT_EDITOR_HEIGHT = 500
 const EDITOR_HEIGHT_STORAGE_KEY = 'eduskript:editor-height'
 
+/** Derive an image file extension from a pasted blob.
+ *  Prefers the original filename's extension (preserved when copying off a
+ *  webpage); falls back to the MIME type, then 'png' as a last resort. */
+function deriveImageExtension(file: File): string {
+  const fromName = file.name?.match(/\.([^/.]+)$/)?.[1]
+  if (fromName) return fromName.toLowerCase()
+  const fromMime = file.type?.split('/')[1]
+  return (fromMime || 'png').toLowerCase()
+}
+
 export function EditorWithMedia({
   content,
   onChange,
@@ -156,6 +176,16 @@ export function EditorWithMedia({
     position: number
     x: number
     y: number
+  } | null>(null)
+
+  // Pasted image awaiting filename + confirmation. The user types a name in
+  // the dialog and clicks Save; only then does the upload run. `name` is the
+  // basename without extension (UX matches the Excalidraw editor).
+  const [pasteImagePending, setPasteImagePending] = useState<{
+    file: File
+    position: number
+    ext: string
+    name: string
   } | null>(null)
 
   const [pdfExtracting, setPdfExtracting] = useState<string | null>(null)
@@ -262,8 +292,11 @@ export function EditorWithMedia({
       }
     } else if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(extension || '')) {
       if (insertionType === 'embed') {
-        const altText = file.name.replace(/\.[^/.]+$/, '')
-        insertText = `![${altText}](${file.name})`
+        // Empty alt by default — the markdown pipeline turns alt into a
+        // figcaption shown beneath the image, and the basename is rarely
+        // what the author wants to display. Authors add a caption manually
+        // when they want one.
+        insertText = `![](${file.name})`
       } else {
         insertText = `[${file.name}](${file.url || file.name})`
       }
@@ -400,10 +433,12 @@ export function EditorWithMedia({
     setPasteMenu(null)
   }, [content, onChange])
 
-  // Image-blob paste — upload to skript files, then insert ![](filename).
-  // Reuses the same /api/upload endpoint as drag-drop. Without a skriptId
-  // we surface an error rather than silently dropping the paste.
-  const handlePasteImageUpload = useCallback(async (file: File, position: number) => {
+  // Image-blob paste — open a small "Save pasted image" dialog so the user
+  // names the file before upload. Browsers hand pasted screenshots the
+  // generic name "image.png", so without this prompt every screenshot would
+  // collide on the second paste. The dialog also doubles as a confirmation
+  // step (explicit Save click) before any upload happens.
+  const handlePasteImageUpload = useCallback((file: File, position: number) => {
     if (!skriptId) {
       alert.showError('Paste an image into a skript editor to upload it. There is no file storage attached here.')
       return
@@ -413,9 +448,36 @@ export function EditorWithMedia({
       alert.showError(`Image is too large (${Math.round(file.size / 1024 / 1024)}MB). Maximum size is 500MB.`)
       return
     }
+    const ext = deriveImageExtension(file)
+    // Browsers usually hand clipboard images a generic name like "image.png".
+    // Treat those as "no name" so the user types one; preserve real names
+    // (e.g. "mountain" from a right-click-copy on a webpage).
+    const baseName = (file.name || '').replace(/\.[^/.]+$/, '')
+    const generic = !baseName || /^(image|paste|screenshot|untitled|unknown)$/i.test(baseName)
+    setPasteImagePending({ file, position, ext, name: generic ? '' : baseName })
+  }, [skriptId, alert])
+
+  // Confirm-and-upload from the dialog. Builds a renamed File so the
+  // existing /api/upload endpoint stores it under the user's chosen name.
+  const performPasteImageUpload = useCallback(async () => {
+    if (!pasteImagePending || !skriptId) return
+    const { file, position, ext, name } = pasteImagePending
+    const trimmed = name.trim()
+    if (!trimmed) return
+    const finalName = `${trimmed}.${ext}`
+
+    // Defensive collision check; the Save button is disabled when we already
+    // know there's a clash, but fileList may have been refreshed in the
+    // background between render and click.
+    if (fileList.some(f => f.name.toLowerCase() === finalName.toLowerCase())) {
+      alert.showError(`A file named "${finalName}" already exists. Please choose a different name.`)
+      return
+    }
+
     try {
+      const renamedFile = new File([file], finalName, { type: file.type })
       const formData = new FormData()
-      formData.append('file', file)
+      formData.append('file', renamedFile)
       formData.append('uploadType', 'skript')
       formData.append('skriptId', skriptId)
       const response = await fetch('/api/upload', { method: 'POST', body: formData })
@@ -424,16 +486,14 @@ export function EditorWithMedia({
         throw new Error(err.error || 'Upload failed')
       }
       const uploaded = await response.json()
-      if (uploaded.existed) {
-        alert.showInfo('A file with this name already existed and was embedded. Rename or delete the existing file to re-upload.', 'Existing file used')
-      }
       handleFileInsert({ ...uploaded, position }, 'embed')
       refreshFileList()
+      setPasteImagePending(null)
     } catch (error) {
       console.error('Paste upload failed:', error)
       alert.showError(error instanceof Error ? error.message : 'Failed to upload pasted image')
     }
-  }, [skriptId, alert, handleFileInsert, refreshFileList])
+  }, [pasteImagePending, skriptId, alert, fileList, handleFileInsert, refreshFileList])
 
   // Tab strip — extras with `position: 'start'` (e.g. Pages in the page editor)
   // come first, then the built-in Files/Videos, then end-positioned extras.
@@ -752,6 +812,71 @@ export function EditorWithMedia({
           </>
         )
       })()}
+
+      {/* Paste-image rename dialog — pasted screenshots are uploaded under the
+          user's chosen filename. Mirrors the Excalidraw editor's name+save UX:
+          the basename is typed by hand and the extension is appended. The
+          live collision check against fileList disables Save when the name
+          would clash, so we never round-trip just to discover a conflict. */}
+      <Dialog
+        open={!!pasteImagePending}
+        onOpenChange={(o) => { if (!o) setPasteImagePending(null) }}
+      >
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle>Save pasted image</DialogTitle>
+            <DialogDescription>
+              Pick a filename for the pasted image. It will be uploaded to this skript&apos;s files and embedded at the cursor.
+            </DialogDescription>
+          </DialogHeader>
+          {pasteImagePending && (() => {
+            const trimmed = pasteImagePending.name.trim()
+            const fullName = trimmed ? `${trimmed}.${pasteImagePending.ext}` : null
+            const collides = !!fullName && fileList.some(f => f.name.toLowerCase() === fullName.toLowerCase())
+            const canSave = !!fullName && !collides
+            return (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="paste-image-name">Filename</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="paste-image-name"
+                      value={pasteImagePending.name}
+                      onChange={(e) =>
+                        setPasteImagePending(p => p ? { ...p, name: e.target.value } : p)
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && canSave) {
+                          e.preventDefault()
+                          performPasteImageUpload()
+                        }
+                      }}
+                      placeholder="my-image"
+                      autoFocus
+                    />
+                    <span className="text-sm text-muted-foreground whitespace-nowrap">.{pasteImagePending.ext}</span>
+                  </div>
+                  {collides ? (
+                    <p className="text-xs text-destructive">
+                      A file named &quot;{fullName}&quot; already exists. Choose a different name.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Will be saved as: {fullName || `your-name.${pasteImagePending.ext}`}
+                    </p>
+                  )}
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setPasteImagePending(null)}>Cancel</Button>
+                  <Button onClick={performPasteImageUpload} disabled={!canSave}>
+                    Save and embed
+                  </Button>
+                </DialogFooter>
+              </>
+            )
+          })()}
+        </DialogContent>
+      </Dialog>
 
       {/* Paste-helper menu — shown when classifyPaste returns a 'menu' intent
           (currently image URL paste). Mirrors the drag-drop popup shape. */}
