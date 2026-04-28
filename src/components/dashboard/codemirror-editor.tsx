@@ -26,6 +26,7 @@ import type { ViewUpdate } from '@codemirror/view'
 import { fromMarkdown } from 'mdast-util-from-markdown'
 import type { Strong, Emphasis, Parent } from 'mdast'
 import type { VideoInfo } from '@/lib/skript-files'
+import { classifyPaste, type PasteMenuOption } from '@/lib/paste-rules'
 
 interface CodeMirrorEditorProps {
   content: string
@@ -46,6 +47,8 @@ interface CodeMirrorEditorProps {
     isDirectory?: boolean
     rawFile?: File
   }, position: number, screenX: number, screenY: number) => void
+  onPasteMenu?: (options: PasteMenuOption[], position: number, screenX: number, screenY: number) => void
+  onPasteImageUpload?: (file: File, position: number) => void
   onExcalidrawEdit?: (filename: string, fileId: string) => void
   onAIEdit?: () => void
 }
@@ -60,6 +63,8 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   videoList,
   onFileUpload,
   onFileDrop,
+  onPasteMenu,
+  onPasteImageUpload,
   onExcalidrawEdit: onExcalidrawEditProp,
   onAIEdit
 }: CodeMirrorEditorProps) {
@@ -114,6 +119,13 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   const lastEmittedContentRef = useRef(content || '')
   const fileListRef = useRef(fileList)
   fileListRef.current = fileList
+
+  // Refs for paste callbacks so the CodeMirror paste extension (built once
+  // during editor init) sees fresh handlers without rebuilding the editor.
+  const onPasteMenuRef = useRef(onPasteMenu)
+  onPasteMenuRef.current = onPasteMenu
+  const onPasteImageUploadRef = useRef(onPasteImageUpload)
+  onPasteImageUploadRef.current = onPasteImageUpload
 
   // Calculate visibility based on width
   const showEditor = editorWidth > 0
@@ -716,6 +728,54 @@ const CodeMirrorEditor = function CodeMirrorEditor({
               },
             }),
             EditorView.lineWrapping, // Add line wrapping extension
+            // Paste-helper: classify clipboard contents, then either insert
+            // markdown directly, open the contextual menu, or upload an
+            // image blob. See src/lib/paste-rules.ts for the rules. Returns
+            // false (and does not preventDefault) when no rule matches, so
+            // plain-text paste keeps its default behaviour.
+            EditorView.domEventHandlers({
+              paste(event, view) {
+                if (!event.clipboardData) return false
+                const intent = classifyPaste(event.clipboardData)
+                if (!intent) return false
+
+                const cursor = view.state.selection.main.head
+
+                if (intent.kind === 'insert') {
+                  view.dispatch(view.state.update({
+                    changes: { from: cursor, insert: intent.text },
+                    selection: { anchor: cursor + intent.text.length },
+                    userEvent: 'input.paste',
+                  }))
+                  event.preventDefault()
+                  return true
+                }
+
+                if (intent.kind === 'menu') {
+                  const cb = onPasteMenuRef.current
+                  if (!cb) return false
+                  const coords = view.coordsAtPos(cursor)
+                  // coordsAtPos can return null if the position is off-screen.
+                  // Fall back to the editor's top-left corner in that case.
+                  const rect = view.dom.getBoundingClientRect()
+                  const x = coords?.left ?? rect.left
+                  const y = coords?.bottom ?? rect.top
+                  cb(intent.options, cursor, x, y)
+                  event.preventDefault()
+                  return true
+                }
+
+                if (intent.kind === 'upload-image') {
+                  const cb = onPasteImageUploadRef.current
+                  if (!cb) return false
+                  cb(intent.file, cursor)
+                  event.preventDefault()
+                  return true
+                }
+
+                return false
+              },
+            }),
             // Catch CM tile tree crashes ("parents.pop() is undefined") and recover
             // by forcing a full re-measure. Without this, the editor becomes unusable
             // after the error (offset cursor, phantom lines, visual corruption).

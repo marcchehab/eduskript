@@ -13,6 +13,7 @@ import { AIEditModal } from '@/components/ai'
 import type { AIEditTarget } from '@/hooks/use-ai-edit'
 import type { VideoInfo } from '@/lib/skript-files'
 import { extractAndUploadPdfPages } from '@/lib/pdf-extract'
+import type { PasteMenuOption } from '@/lib/paste-rules'
 import {
   Files,
   Film,
@@ -23,6 +24,7 @@ import {
   Loader2,
   Maximize2,
   Wand2,
+  Youtube,
 } from 'lucide-react'
 
 export interface ExtraManageTab {
@@ -144,6 +146,16 @@ export function EditorWithMedia({
     position?: number
     x?: number
     y?: number
+  } | null>(null)
+
+  // Paste-helper menu — shown when classifyPaste returns a 'menu' intent
+  // (currently: image URL paste). Position is the document offset; x/y are
+  // viewport screen coords for popup placement.
+  const [pasteMenu, setPasteMenu] = useState<{
+    options: PasteMenuOption[]
+    position: number
+    x: number
+    y: number
   } | null>(null)
 
   const [pdfExtracting, setPdfExtracting] = useState<string | null>(null)
@@ -369,6 +381,60 @@ export function EditorWithMedia({
     }
   }, [handleFileInsert, refreshFileList])
 
+  // Paste-helper menu handler — fired by codemirror-editor when classifyPaste
+  // returns a multi-option intent (e.g. image URL: embed vs. link).
+  const handlePasteMenu = useCallback((
+    options: PasteMenuOption[],
+    position: number,
+    screenX: number,
+    screenY: number,
+  ) => {
+    setPasteMenu({ options, position, x: screenX, y: screenY })
+  }, [])
+
+  // Insert pasted-menu choice at the original caret position. Mirrors
+  // handleFileInsert's slice-based string update so the parent's content
+  // state stays the source of truth.
+  const handlePasteMenuPick = useCallback((option: PasteMenuOption, position: number) => {
+    onChange(content.slice(0, position) + option.insert + content.slice(position))
+    setPasteMenu(null)
+  }, [content, onChange])
+
+  // Image-blob paste — upload to skript files, then insert ![](filename).
+  // Reuses the same /api/upload endpoint as drag-drop. Without a skriptId
+  // we surface an error rather than silently dropping the paste.
+  const handlePasteImageUpload = useCallback(async (file: File, position: number) => {
+    if (!skriptId) {
+      alert.showError('Paste an image into a skript editor to upload it. There is no file storage attached here.')
+      return
+    }
+    const MAX_FILE_SIZE = 500 * 1024 * 1024
+    if (file.size > MAX_FILE_SIZE) {
+      alert.showError(`Image is too large (${Math.round(file.size / 1024 / 1024)}MB). Maximum size is 500MB.`)
+      return
+    }
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('uploadType', 'skript')
+      formData.append('skriptId', skriptId)
+      const response = await fetch('/api/upload', { method: 'POST', body: formData })
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Upload failed' }))
+        throw new Error(err.error || 'Upload failed')
+      }
+      const uploaded = await response.json()
+      if (uploaded.existed) {
+        alert.showInfo('A file with this name already existed and was embedded. Rename or delete the existing file to re-upload.', 'Existing file used')
+      }
+      handleFileInsert({ ...uploaded, position }, 'embed')
+      refreshFileList()
+    } catch (error) {
+      console.error('Paste upload failed:', error)
+      alert.showError(error instanceof Error ? error.message : 'Failed to upload pasted image')
+    }
+  }, [skriptId, alert, handleFileInsert, refreshFileList])
+
   // Tab strip — extras with `position: 'start'` (e.g. Pages in the page editor)
   // come first, then the built-in Files/Videos, then end-positioned extras.
   const builtInTabs: ExtraManageTab[] = [
@@ -484,6 +550,8 @@ export function EditorWithMedia({
               onFileDrop={(file, position, screenX, screenY) =>
                 showInsertionMenu(file, position, screenX, screenY)
               }
+              onPasteMenu={handlePasteMenu}
+              onPasteImageUpload={handlePasteImageUpload}
               skriptId={skriptId}
               pageId={pageId}
               domain={domain}
@@ -684,6 +752,38 @@ export function EditorWithMedia({
           </>
         )
       })()}
+
+      {/* Paste-helper menu — shown when classifyPaste returns a 'menu' intent
+          (currently image URL paste). Mirrors the drag-drop popup shape. */}
+      {pasteMenu && (
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setPasteMenu(null)}
+          />
+          <div
+            className="fixed z-50 bg-popover border border-border rounded-md shadow-lg py-1 min-w-[140px]"
+            style={{ left: `${pasteMenu.x}px`, top: `${pasteMenu.y}px` }}
+          >
+            {pasteMenu.options.map((option, idx) => {
+              const Icon =
+                option.icon === 'image' ? ImageIcon
+                : option.icon === 'youtube' ? Youtube
+                : Link2
+              return (
+                <button
+                  key={idx}
+                  className="w-full px-3 py-1.5 text-sm text-left hover:bg-accent hover:text-accent-foreground flex items-center gap-2"
+                  onClick={() => handlePasteMenuPick(option, pasteMenu.position)}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  {option.label}
+                </button>
+              )
+            })}
+          </div>
+        </>
+      )}
 
       {/* PDF page extraction progress overlay */}
       {pdfExtracting && (

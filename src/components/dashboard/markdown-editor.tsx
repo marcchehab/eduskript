@@ -2,6 +2,7 @@
 
 import dynamic from 'next/dynamic'
 import type { VideoInfo } from '@/lib/skript-files'
+import type { PasteMenuOption } from '@/lib/paste-rules'
 
 interface MarkdownEditorProps {
   content: string
@@ -20,6 +21,8 @@ interface MarkdownEditorProps {
     isDirectory?: boolean
     rawFile?: File
   }, position: number, screenX: number, screenY: number) => void
+  onPasteMenu?: (options: PasteMenuOption[], position: number, screenX: number, screenY: number) => void
+  onPasteImageUpload?: (file: File, position: number) => void
   skriptId?: string
   pageId?: string
   domain?: string
