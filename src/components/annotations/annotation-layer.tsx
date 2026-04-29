@@ -377,12 +377,13 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
 
     const fetchStudents = async () => {
       try {
-        // Resolve student identities by combining two consent-gated sources:
-        // 1) server `revealedEmail` — set when ClassMembership.identityConsent is true
-        //    AND the student has an email column populated (rare for OAuth-only students).
-        // 2) local IndexedDB roster mapping — populated by the dashboard's "paste roster"
-        //    flow, which only stores entries the server matched against consenting students
-        //    via /api/classes/[id]/resolve-emails. Privacy gate already enforced server-side.
+        // Resolve student identities from two consent-gated sources, fetched in parallel:
+        // 1) Local IndexedDB roster mapping (primary in practice) — populated by the
+        //    dashboard's paste-roster flow, which only stores entries the server
+        //    matched against consenting students via /api/classes/[id]/resolve-emails.
+        //    OAuth-only students (no User.email column) live exclusively here.
+        // 2) Server `revealedEmail` — set when identityConsent is true AND the student
+        //    has a populated email column. Rare in production, mostly seed/dev data.
         const [res, reverseMap] = await Promise.all([
           fetch(`/api/classes/${selectedClass.id}/students?pageId=${encodeURIComponent(pageId)}`),
           getReverseMappingsForClass(selectedClass.id).catch(() => ({} as Record<string, string>)),
@@ -393,8 +394,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
             id: s.id,
             displayName: s.displayName,
             pseudonym: s.pseudonym,
-            // Prefer the server's revealedEmail; fall back to the teacher's local roster mapping.
-            revealedEmail: s.revealedEmail ?? (s.pseudonym ? reverseMap[s.pseudonym] ?? null : null),
+            revealedEmail: (s.pseudonym ? reverseMap[s.pseudonym] : null) ?? s.revealedEmail ?? null,
             hasAnnotationsOnPage: s.hasAnnotationsOnPage
           })) || [])
         }
