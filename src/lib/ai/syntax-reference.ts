@@ -92,7 +92,8 @@ Syntax: \`\`\`language editor [options]\`\`\`
 
 **Options:**
 - \`single\` - Hide file tabs for simple examples
-- \`id="unique-id"\` - Persistent state across page loads
+- \`exam\` - Exam mode: pair with a \`python-check\` block to grade silently. The student runs the code but does NOT see whether checks passed (no green/red feedback, no solution reveal). Use for graded assessments; use plain \`python editor\` (no \`exam\`) for practice exercises where students should see immediate feedback.
+- \`id="unique-id"\` - Persistent state across page loads. **Required** when pairing with \`python-check\` (the check uses \`for="<id>"\`).
 - \`db="database.db"\` - For SQL: specify database file
 - \`solution="SELECT ..."\` - For SQL: expected solution query. Enables automatic pass/fail verification after each run. Multi-line solutions use \`\\n\` literals: \`solution="SELECT a, b\\nFROM t"\`
 
@@ -380,8 +381,10 @@ export function getCondensedSyntaxReference(): string {
   - Collapsible: \`> [!type]-\` (closed) or \`> [!type]+\` (open)
   - WRONG: \`> [!tip]\\n> **Title**\` - NEVER put title on new line!
 
-**Code Editors:** \`\`\`language editor [single] [id="x"] [db="file.db"] [solution="SELECT ..."]\`\`\`
+**Code Editors:** \`\`\`language editor [single] [exam] [id="x"] [db="file.db"] [solution="SELECT ..."]\`\`\`
   - Languages: python, javascript, sql, java, cpp, go, rust, etc.
+  - \`single\`: hides file tabs (single-file mode).
+  - \`exam\`: silent grading — pair with python-check; student runs code but never sees pass/fail feedback. Use for assessments, NOT practice. Default (no \`exam\`) shows feedback after each "Check" click.
   - \`solution="SELECT ..."\`: SQL only — shows pass/fail after each run. Multi-line: use \`\\n\` literals inside the quotes.
 
 **Python Checks:** pair \`\`\`python editor id="x"\`\`\` with \`\`\`python-check for="x"\`\`\` containing \`assert\` statements.

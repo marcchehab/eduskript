@@ -173,6 +173,27 @@ export const bulkImportRateLimiter = new RateLimiter('bulk-import', {
 })
 
 /**
+ * MCP DCR (Dynamic Client Registration) rate limiter: 10 registrations per
+ * hour per IP. Per-IP because clients have no identity until they register.
+ * The plan's risk note is "DCR is open by spec; any client can register" —
+ * this is the throttle.
+ */
+export const mcpRegistrationRateLimiter = new RateLimiter('mcp-register', {
+  interval: 60 * 60 * 1000, // 1 hour
+  maxRequests: 10
+})
+
+/**
+ * MCP token endpoint rate limiter: 60 requests per minute per client_id.
+ * Defends against credential-stuffing-style probing of code/refresh-token
+ * exchanges from a registered client.
+ */
+export const mcpTokenRateLimiter = new RateLimiter('mcp-token', {
+  interval: 60 * 1000, // 1 minute
+  maxRequests: 60
+})
+
+/**
  * Extracts client identifier from request headers
  * Tries multiple headers to get the real IP address
  * @param request - The incoming request

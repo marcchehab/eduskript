@@ -22,7 +22,7 @@ model Account {
   refresh_token     String?
   access_token      String?
   expires_at        Int?
-  ext_expires_in    Int?    // Microsoft-specific: extended token expiration
+  ext_expires_in    Int? // Microsoft-specific: extended token expiration
   token_type        String?
   scope             String?
   id_token          String?
@@ -54,41 +54,41 @@ model VerificationToken {
 }
 
 model User {
-  id          String    @id @default(cuid())
-  name        String?
-  email       String?   @unique // Optional for students (OAuth-only)
-  emailVerified DateTime?
-  image       String?
+  id             String    @id @default(cuid())
+  name           String?
+  email          String?   @unique // Optional for students (OAuth-only)
+  emailVerified  DateTime?
+  image          String?
   hashedPassword String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   // User identity
-  username        String?   @unique // User's unique identifier (for login, collaboration)
+  username String? @unique // User's unique identifier (for login, collaboration)
 
   // Page-specific fields (for the user's public page)
-  pageSlug        String?   @unique // URL slug for public page (e.g., eduskript.org/mypage)
-  pageName        String?   // Display name for the public page
-  pageDescription String?   // Description shown below page title in sidebar
-  pageIcon        String?   // URL to page icon image (displayed in sidebar)
-  pageLanguage    String?   @map("page_language") // BCP-47 tag for <html lang> when teacher has a custom domain (e.g. "de-CH"); null = "en"
-  pageTagline     String?   @map("page_tagline")  // Short SEO tagline appended to pageName as the home <title> on the teacher's custom domain
+  pageSlug        String? @unique // URL slug for public page (e.g., eduskript.org/mypage)
+  pageName        String? // Display name for the public page
+  pageDescription String? // Description shown below page title in sidebar
+  pageIcon        String? // URL to page icon image (displayed in sidebar)
+  pageLanguage    String? @map("page_language") // BCP-47 tag for <html lang> when teacher has a custom domain (e.g. "de-CH"); null = "en"
+  pageTagline     String? @map("page_tagline") // Short SEO tagline appended to pageName as the home <title> on the teacher's custom domain
 
   // Profile fields (shown to collaborators)
-  bio           String?
-  title         String?
+  bio   String?
+  title String?
 
   // User preferences
-  themePreference String? @default("system") // "light", "dark", or "system"
-  sidebarBehavior String? @default("full") // "full" (default - always show all collections) or "contextual" (show only current collection)
+  themePreference      String? @default("system") // "light", "dark", or "system"
+  sidebarBehavior      String? @default("full") // "full" (default - always show all collections) or "contextual" (show only current collection)
   typographyPreference String? @default("modern") // "modern" (Roboto Slab + Barlow Condensed) or "classic" (EB Garamond + Barlow Condensed)
 
   // AI customization
   aiSystemPrompt String? @db.Text // Custom system prompt prepended to AI assistant messages
 
   // Admin and security
-  isAdmin Boolean @default(false)
-  requirePasswordReset Boolean @default(false)
+  isAdmin                Boolean @default(false)
+  requirePasswordReset   Boolean @default(false)
   needsProfileCompletion Boolean @default(false) // True for new OAuth teachers until they complete their profile
 
   // Privacy and account type
@@ -98,31 +98,31 @@ model User {
   lastSeenAt       DateTime? // For inactive account cleanup
 
   // OAuth identification (for students - replaces email storage)
-  oauthProvider    String?   // "github", "google", "microsoft", "azure-ad"
-  oauthProviderId  String?   // Provider's unique user ID
+  oauthProvider   String? // "github", "google", "microsoft", "azure-ad"
+  oauthProviderId String? // Provider's unique user ID
 
   // Relations
-  accounts      Account[]
-  sessions      Session[]
-  pageVersions  PageVersion[]
-  
+  accounts     Account[]
+  sessions     Session[]
+  pageVersions PageVersion[]
+
   // Many-to-many relations for authoring
-  collectionAuthors   CollectionAuthor[]
-  skriptAuthors SkriptAuthor[]
-  pageAuthors    PageAuthor[]
-  
+  collectionAuthors CollectionAuthor[]
+  skriptAuthors     SkriptAuthor[]
+  pageAuthors       PageAuthor[]
+
   // Collection-skript relationships (for root-level placements)
-  collectionSkripts   CollectionSkript[]
-  
+  collectionSkripts CollectionSkript[]
+
   // File uploads
-  files          File[]
-  
+  files File[]
+
   // Collaboration relations
   sentCollaborationRequests     CollaborationRequest[] @relation("SentRequests")
   receivedCollaborationRequests CollaborationRequest[] @relation("ReceivedRequests")
-  collaborationsAsRequester     Collaboration[] @relation("RequesterCollaborations")
-  collaborationsAsReceiver      Collaboration[] @relation("ReceiverCollaborations")
-  
+  collaborationsAsRequester     Collaboration[]        @relation("RequesterCollaborations")
+  collaborationsAsReceiver      Collaboration[]        @relation("ReceiverCollaborations")
+
   // Page layout
   pageLayout PageLayout?
 
@@ -131,12 +131,12 @@ model User {
   studentSubmissions StudentSubmission[] @relation("StudentSubmissions")
 
   // Class relations
-  teacherClasses     Class[]             @relation("TeacherClasses")
-  studentMemberships ClassMembership[]   @relation("StudentMemberships")
+  teacherClasses     Class[]           @relation("TeacherClasses")
+  studentMemberships ClassMembership[] @relation("StudentMemberships")
 
   // Exam unlock relations
-  studentUnlocks     PageUnlock[]        @relation("StudentUnlocks") // Pages unlocked for this student
-  teacherUnlocks     PageUnlock[]        @relation("TeacherUnlocks") // Pages this teacher has unlocked
+  studentUnlocks PageUnlock[] @relation("StudentUnlocks") // Pages unlocked for this student
+  teacherUnlocks PageUnlock[] @relation("TeacherUnlocks") // Pages this teacher has unlocked
 
   // User data (code, annotations, settings, etc.)
   userData UserData[] @relation("UserDataEntries")
@@ -155,7 +155,7 @@ model User {
   customDomains TeacherCustomDomain[]
 
   // Billing
-  billingPlan String @default("free") @map("billing_plan") // "free" | "pro" | etc.
+  billingPlan   String         @default("free") @map("billing_plan") // "free" | "pro" | etc.
   subscriptions Subscription[]
 
   // Last successful sign-in (updated in NextAuth signIn callback)
@@ -165,8 +165,13 @@ model User {
   examTokens   ExamToken[]   @relation("ExamTokens")
   examSessions ExamSession[] @relation("ExamSessions")
 
+  // MCP OAuth (per-teacher scoped API access for claude.ai / Claude Code / Cursor)
+  oauthAuthorizationCodes OAuthAuthorizationCode[] @relation("OAuthAuthorizationCodes")
+  oauthAccessTokens       OAuthAccessToken[]       @relation("OAuthAccessTokens")
+  oauthRefreshTokens      OAuthRefreshToken[]      @relation("OAuthRefreshTokens")
+
   // Exam submissions (student) and grading (teacher)
-  examSubmissions      ExamSubmission[] @relation("StudentExamSubmissions")
+  examSubmissions       ExamSubmission[] @relation("StudentExamSubmissions")
   gradedExamSubmissions ExamSubmission[] @relation("GradedExamSubmissions")
 
   // Cross-domain auth tokens
@@ -190,7 +195,7 @@ model Collection {
   title       String
   description String?
   slug        String
-  accentColor String?  // Hex color for sidebar letter markers (e.g., "#3b82f6")
+  accentColor String? // Hex color for sidebar letter markers (e.g., "#3b82f6")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -198,7 +203,7 @@ model Collection {
   collectionSkripts CollectionSkript[]
 
   // Many-to-many relation for multiple authors
-  authors     CollectionAuthor[]
+  authors CollectionAuthor[]
 
   @@index([slug])
   @@map("collections")
@@ -211,10 +216,10 @@ model CollectionAuthor {
   userId       String
   permission   String   @default("author") // "author" (can edit & manage), "viewer" (can only view)
   createdAt    DateTime @default(now())
-  
-  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([collectionId, userId])
   @@map("collection_authors")
 }
@@ -222,16 +227,16 @@ model CollectionAuthor {
 // Junction table for Collection-Skript many-to-many relationship
 model CollectionSkript {
   id           String   @id @default(cuid())
-  collectionId String?  // Nullable - null means root level
+  collectionId String? // Nullable - null means root level
   skriptId     String
-  userId       String?  // ONLY used for root level items (when collectionId is null)
-  order        Int      // Order within the collection or root level
+  userId       String? // ONLY used for root level items (when collectionId is null)
+  order        Int // Order within the collection or root level
   createdAt    DateTime @default(now())
-  
-  collection   Collection? @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  skript       Skript      @relation(fields: [skriptId], references: [id], onDelete: Cascade)
-  user         User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
+  collection Collection? @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  skript     Skript      @relation(fields: [skriptId], references: [id], onDelete: Cascade)
+  user       User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([collectionId, skriptId]) // One entry per skript per collection
   @@unique([skriptId, userId]) // One root entry per skript per user (when collectionId is null)
   @@map("collection_skripts")
@@ -250,19 +255,19 @@ model Skript {
 
   // Relations
   collectionSkripts CollectionSkript[]
-  pages            Page[]
+  pages             Page[]
 
   // Many-to-many relation for multiple authors
-  authors     SkriptAuthor[]
+  authors SkriptAuthor[]
 
   // Files associated with this skript
-  files       File[]
+  files File[]
 
   // Videos associated with this skript (many-to-many)
-  videos      Video[] @relation("SkriptVideos")
+  videos Video[] @relation("SkriptVideos")
 
   // Front page (intro/landing page for skript)
-  frontPage   FrontPage?
+  frontPage FrontPage?
 
   // File storage for user/org FrontPages (reverse relation)
   frontPageFileStorage FrontPage? @relation("FrontPageFileStorage")
@@ -276,31 +281,31 @@ model Skript {
 
 // Junction table for Skript-User many-to-many relationship
 model SkriptAuthor {
-  id        String   @id @default(cuid())
-  skriptId  String
-  userId    String
-  permission String  @default("author") // "author" (can edit & manage), "viewer" (can only view)
-  createdAt DateTime @default(now())
-  
-  skript    Skript   @relation(fields: [skriptId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id         String   @id @default(cuid())
+  skriptId   String
+  userId     String
+  permission String   @default("author") // "author" (can edit & manage), "viewer" (can only view)
+  createdAt  DateTime @default(now())
+
+  skript Skript @relation(fields: [skriptId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([skriptId, userId])
   @@map("skript_authors")
 }
 
 model Page {
-  id          String   @id @default(cuid())
-  title       String
-  slug        String
-  content     String
-  order       Int
-  isPublished Boolean  @default(false)
-  isUnlisted  Boolean  @default(false)
-  pageType    String   @default("normal") @map("page_type") // "normal", "exam"
-  examSettings Json?   @map("exam_settings") // { requireSEB: boolean, timeLimitMinutes?: number }
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String   @id @default(cuid())
+  title        String
+  slug         String
+  content      String
+  order        Int
+  isPublished  Boolean  @default(false)
+  isUnlisted   Boolean  @default(false)
+  pageType     String   @default("normal") @map("page_type") // "normal", "exam"
+  examSettings Json?    @map("exam_settings") // { requireSEB: boolean, timeLimitMinutes?: number }
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   // Provenance (fork tracking)
   forkedFromPageId   String?   @map("forked_from_page_id")
@@ -308,24 +313,24 @@ model Page {
   forkedAt           DateTime? @map("forked_at")
 
   // Relations
-  skriptId    String
-  skript      Skript   @relation(fields: [skriptId], references: [id], onDelete: Cascade)
-  versions    PageVersion[]
+  skriptId String
+  skript   Skript        @relation(fields: [skriptId], references: [id], onDelete: Cascade)
+  versions PageVersion[]
 
   // Fork relations
-  forkedFromPage   Page? @relation("PageForks", fields: [forkedFromPageId], references: [id], onDelete: SetNull)
+  forkedFromPage   Page?  @relation("PageForks", fields: [forkedFromPageId], references: [id], onDelete: SetNull)
   forks            Page[] @relation("PageForks")
   forkedFromAuthor User?  @relation("ForkedPages", fields: [forkedFromAuthorId], references: [id], onDelete: SetNull)
 
   // Many-to-many relation for multiple authors
-  authors     PageAuthor[]
+  authors PageAuthor[]
 
   // Student data
   studentProgress    StudentProgress[]   @relation("PageProgress")
   studentSubmissions StudentSubmission[] @relation("PageSubmissions")
 
   // Exam unlocks
-  unlocks     PageUnlock[]
+  unlocks PageUnlock[]
 
   // SEB exam tokens and sessions
   examTokens   ExamToken[]   @relation("ExamTokens")
@@ -341,15 +346,15 @@ model Page {
 
 // Junction table for Page-User many-to-many relationship
 model PageAuthor {
-  id        String   @id @default(cuid())
-  pageId    String
-  userId    String
-  permission String  @default("author") // "author" (can edit & manage), "viewer" (can only view)
-  createdAt DateTime @default(now())
-  
-  page      Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id         String   @id @default(cuid())
+  pageId     String
+  userId     String
+  permission String   @default("author") // "author" (can edit & manage), "viewer" (can only view)
+  createdAt  DateTime @default(now())
+
+  page Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([pageId, userId])
   @@map("page_authors")
 }
@@ -362,34 +367,34 @@ model PageVersion {
   authorId  String
   pageId    String
   createdAt DateTime @default(now())
-  
+
   author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
   page   Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
-  
+
   @@unique([pageId, version])
   @@map("page_versions")
 }
 
 model File {
-  id          String  @id @default(cuid())
+  id          String   @id @default(cuid())
   name        String
-  parentId    String? @map("parent_id")
-  isDirectory Boolean @default(false) @map("is_directory")
-  skriptId    String  @map("skript_id")
+  parentId    String?  @map("parent_id")
+  isDirectory Boolean  @default(false) @map("is_directory")
+  skriptId    String   @map("skript_id")
   hash        String?
-  contentType String? @map("content_type")
+  contentType String?  @map("content_type")
   size        BigInt?
-  width       Int?    // Image width in pixels (null for non-image files)
-  height      Int?    // Image height in pixels (null for non-image files)
-  createdBy   String  @map("created_by")
+  width       Int? // Image width in pixels (null for non-image files)
+  height      Int? // Image height in pixels (null for non-image files)
+  createdBy   String   @map("created_by")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   // Relations
-  parent   File?    @relation("FileParent", fields: [parentId], references: [id], onDelete: Cascade)
-  children File[]   @relation("FileParent")
-  skript   Skript   @relation(fields: [skriptId], references: [id], onDelete: Cascade)
-  creator  User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  parent   File?  @relation("FileParent", fields: [parentId], references: [id], onDelete: Cascade)
+  children File[] @relation("FileParent")
+  skript   Skript @relation(fields: [skriptId], references: [id], onDelete: Cascade)
+  creator  User   @relation(fields: [createdBy], references: [id], onDelete: Cascade)
 
   @@unique([parentId, name, skriptId], name: "unique_file_name_per_parent_skript")
   @@index([parentId, skriptId], name: "parent_skript_idx")
@@ -400,16 +405,16 @@ model File {
 // Video storage for hosted video files (Mux, etc.)
 // Uses JSONB for provider-specific metadata (flexible for future providers)
 model Video {
-  id           String   @id @default(cuid())
-  filename     String   // e.g., "lecture.mp4"
-  provider     String   @default("mux")  // "mux", future: "bunny", "cloudflare"
-  metadata     Json     // Provider-specific: { playbackId, poster, blurDataURL, aspectRatio, status }
-  uploadedById String?  @map("uploaded_by_id")
-  muxUploadId  String?  @unique @map("mux_upload_id")  // For webhook lookup after direct upload
-  muxAssetId   String?  @unique @map("mux_asset_id")   // For webhook lookup when asset ready
+  id           String  @id @default(cuid())
+  filename     String // e.g., "lecture.mp4"
+  provider     String  @default("mux") // "mux", future: "bunny", "cloudflare"
+  metadata     Json // Provider-specific: { playbackId, poster, blurDataURL, aspectRatio, status }
+  uploadedById String? @map("uploaded_by_id")
+  muxUploadId  String? @unique @map("mux_upload_id") // For webhook lookup after direct upload
+  muxAssetId   String? @unique @map("mux_asset_id") // For webhook lookup when asset ready
 
   uploadedBy User?    @relation("UploadedVideos", fields: [uploadedById], references: [id], onDelete: SetNull)
-  skripts    Skript[] @relation("SkriptVideos")  // Many-to-many
+  skripts    Skript[] @relation("SkriptVideos") // Many-to-many
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -425,7 +430,7 @@ model CollaborationRequest {
   id          String   @id @default(cuid())
   requesterId String   @map("requester_id")
   receiverId  String   @map("receiver_id")
-  message     String?  // Optional message from requester
+  message     String? // Optional message from requester
   status      String   @default("pending") // "pending", "accepted", "rejected"
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
@@ -441,8 +446,8 @@ model CollaborationRequest {
 // Collaboration model for accepted partnerships
 model Collaboration {
   id          String   @id @default(cuid())
-  requesterId String   @map("requester_id")  // User who sent the original request
-  receiverId  String   @map("receiver_id")   // User who accepted the request
+  requesterId String   @map("requester_id") // User who sent the original request
+  receiverId  String   @map("receiver_id") // User who accepted the request
   createdAt   DateTime @default(now()) @map("created_at")
 
   // Relations
@@ -455,11 +460,11 @@ model Collaboration {
 
 // Page layout for user's public page
 model PageLayout {
-  id        String   @id @default(cuid())
-  userId    String   @unique @map("user_id")
+  id        String           @id @default(cuid())
+  userId    String           @unique @map("user_id")
   items     PageLayoutItem[]
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -468,10 +473,10 @@ model PageLayout {
 
 // Individual items in a page layout
 model PageLayoutItem {
-  id           String @id @default(cuid())
-  pageLayoutId String @map("page_layout_id")
+  id           String   @id @default(cuid())
+  pageLayoutId String   @map("page_layout_id")
   type         String // "collection" or "skript"
-  contentId    String @map("content_id") // ID of the collection or skript
+  contentId    String   @map("content_id") // ID of the collection or skript
   order        Int
   createdAt    DateTime @default(now()) @map("created_at")
 
@@ -483,11 +488,11 @@ model PageLayoutItem {
 
 // Organization Page Layout - for org admin page builder
 model OrgPageLayout {
-  id             String   @id @default(cuid())
-  organizationId String   @unique @map("organization_id")
+  id             String              @id @default(cuid())
+  organizationId String              @unique @map("organization_id")
   items          OrgPageLayoutItem[]
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
@@ -498,7 +503,7 @@ model OrgPageLayout {
 model OrgPageLayoutItem {
   id              String   @id @default(cuid())
   orgPageLayoutId String   @map("org_page_layout_id")
-  type            String   // "collection" or "skript"
+  type            String // "collection" or "skript"
   contentId       String   @map("content_id")
   order           Int
   createdAt       DateTime @default(now()) @map("created_at")
@@ -537,8 +542,8 @@ model StudentSubmission {
   contentData String   @map("content_data") // JSON stringified data (annotations, code, etc.)
   submittedAt DateTime @default(now()) @map("submitted_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
-  grade       Float?   // Optional numeric grade
-  feedback    String?  // Optional teacher feedback
+  grade       Float? // Optional numeric grade
+  feedback    String? // Optional teacher feedback
 
   student User @relation("StudentSubmissions", fields: [studentId], references: [id], onDelete: Cascade)
   page    Page @relation("PageSubmissions", fields: [pageId], references: [id], onDelete: Cascade)
@@ -562,11 +567,11 @@ model Class {
   updatedAt      DateTime @updatedAt @map("updated_at")
 
   // Relations
-  teacher               User                      @relation("TeacherClasses", fields: [teacherId], references: [id], onDelete: Cascade)
+  teacher               User                   @relation("TeacherClasses", fields: [teacherId], references: [id], onDelete: Cascade)
   memberships           ClassMembership[]
   preAuthorizedStudents PreAuthorizedStudent[]
-  pageUnlocks           PageUnlock[]              @relation("ClassUnlocks") // Pages unlocked for this class
-  examStates            ExamState[]               @relation("ClassExamStates") // Exam states per class
+  pageUnlocks           PageUnlock[]           @relation("ClassUnlocks") // Pages unlocked for this class
+  examStates            ExamState[]            @relation("ClassExamStates") // Exam states per class
 
   @@index([teacherId])
   @@index([inviteCode])
@@ -575,10 +580,10 @@ model Class {
 
 // Junction table for Class-Student many-to-many
 model ClassMembership {
-  id              String    @id @default(cuid())
-  classId         String    @map("class_id")
-  studentId       String    @map("student_id")
-  joinedAt        DateTime  @default(now()) @map("joined_at")
+  id        String   @id @default(cuid())
+  classId   String   @map("class_id")
+  studentId String   @map("student_id")
+  joinedAt  DateTime @default(now()) @map("joined_at")
 
   // Privacy: Student consent for teacher to see their real identity
   identityConsent Boolean   @default(false) @map("identity_consent")
@@ -598,7 +603,7 @@ model ClassMembership {
 model PreAuthorizedStudent {
   id        String   @id @default(cuid())
   classId   String   @map("class_id")
-  pseudonym String   // Hashed email (before student signs up)
+  pseudonym String // Hashed email (before student signs up)
   addedAt   DateTime @default(now()) @map("added_at")
 
   // Relations
@@ -614,7 +619,7 @@ model PreAuthorizedStudent {
 model PageUnlock {
   id         String   @id @default(cuid())
   pageId     String   @map("page_id")
-  classId    String?  @map("class_id")   // Unlock for entire class (optional)
+  classId    String?  @map("class_id") // Unlock for entire class (optional)
   studentId  String?  @map("student_id") // OR unlock for individual student (optional)
   unlockedBy String   @map("unlocked_by")
   unlockedAt DateTime @default(now()) @map("unlocked_at")
@@ -640,9 +645,9 @@ model PageUnlock {
 model UserData {
   id        String   @id @default(cuid())
   userId    String   @map("user_id")
-  adapter   String   // Data type: 'code', 'annotations', 'settings', 'preferences', 'snaps'
+  adapter   String // Data type: 'code', 'annotations', 'settings', 'preferences', 'snaps'
   itemId    String   @map("item_id") // pageId for page-specific data, 'global' for user-wide data
-  data      Json     // JSONB - the actual data payload
+  data      Json // JSONB - the actual data payload
   version   Int      @default(1) // Optimistic concurrency control
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -673,18 +678,18 @@ model FrontPage {
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   // Owner - exactly one of these should be set
-  userId         String?  @unique @map("user_id")         // For user landing pages
-  skriptId       String?  @unique @map("skript_id")       // For skript intro pages
-  organizationId String?  @unique @map("organization_id") // For organization pages
+  userId         String? @unique @map("user_id") // For user landing pages
+  skriptId       String? @unique @map("skript_id") // For skript intro pages
+  organizationId String? @unique @map("organization_id") // For organization pages
 
   // File storage for user/org FrontPages (skript FrontPages use their skript's files)
-  fileSkriptId   String?  @unique @map("file_skript_id")
+  fileSkriptId String? @unique @map("file_skript_id")
 
   // Relations
-  user         User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  skript       Skript?       @relation(fields: [skriptId], references: [id], onDelete: Cascade)
-  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  fileSkript   Skript?       @relation("FrontPageFileStorage", fields: [fileSkriptId], references: [id])
+  user         User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skript       Skript?            @relation(fields: [skriptId], references: [id], onDelete: Cascade)
+  organization Organization?      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  fileSkript   Skript?            @relation("FrontPageFileStorage", fields: [fileSkriptId], references: [id])
   versions     FrontPageVersion[]
 
   @@map("front_pages")
@@ -710,25 +715,25 @@ model FrontPageVersion {
 // Import/Export Job Tracking
 // Tracks large file import/export operations with progress and one-per-user limit
 model ImportJob {
-  id          String   @id @default(cuid())
-  userId      String   @map("user_id")
-  type        String   // "import" or "export"
-  status      String   @default("pending") // "pending", "uploading", "processing", "completed", "failed", "cancelled"
-  progress    Int      @default(0) // 0-100
-  message     String?  // Current status message for UI
+  id       String  @id @default(cuid())
+  userId   String  @map("user_id")
+  type     String // "import" or "export"
+  status   String  @default("pending") // "pending", "uploading", "processing", "completed", "failed", "cancelled"
+  progress Int     @default(0) // 0-100
+  message  String? // Current status message for UI
 
   // File info
-  s3Key       String?  @map("s3_key") // S3 key for uploaded/exported file
-  fileName    String?  @map("file_name") // Original filename
-  fileSize    BigInt?  @map("file_size") // Size in bytes
+  s3Key    String? @map("s3_key") // S3 key for uploaded/exported file
+  fileName String? @map("file_name") // Original filename
+  fileSize BigInt? @map("file_size") // Size in bytes
 
   // Results
-  result      Json?    // Import: { skriptsCreated, pagesCreated, filesImported }, Export: { downloadUrl }
-  error       String?  // Error message if failed
+  result Json? // Import: { skriptsCreated, pagesCreated, filesImported }, Export: { downloadUrl }
+  error  String? // Error message if failed
 
   // Timestamps
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
   completedAt DateTime? @map("completed_at")
 
   // Relations
@@ -742,21 +747,21 @@ model ImportJob {
 
 // Organization model - schools, companies, or groups
 model Organization {
-  id          String   @id @default(cuid())
-  name        String                          // "Eduskript", "Springfield High"
-  slug        String   @unique                // URL slug for org page
-  description String?
-  showIcon    Boolean  @default(true) @map("show_icon")
-  iconUrl     String?  @map("icon_url")
-  pageLanguage String? @map("page_language")  // BCP-47 tag for <html lang> on the org's custom domain; null = "en"
-  pageTagline  String? @map("page_tagline")   // Short SEO tagline appended to org name as the home <title> on the org's custom domain
+  id           String  @id @default(cuid())
+  name         String // "Eduskript", "Springfield High"
+  slug         String  @unique // URL slug for org page
+  description  String?
+  showIcon     Boolean @default(true) @map("show_icon")
+  iconUrl      String? @map("icon_url")
+  pageLanguage String? @map("page_language") // BCP-47 tag for <html lang> on the org's custom domain; null = "en"
+  pageTagline  String? @map("page_tagline") // Short SEO tagline appended to org name as the home <title> on the org's custom domain
 
   // Settings
-  allowMemberPages          Boolean @default(true) @map("allow_member_pages")  // Members can have personal pages
+  allowMemberPages          Boolean @default(true) @map("allow_member_pages") // Members can have personal pages
   allowTeacherCustomDomains Boolean @default(false) @map("allow_teacher_custom_domains") // Teachers can have custom domains
-  requireEmailDomain        String? @map("require_email_domain")               // e.g., "@school.edu" - auto-join on signup
+  requireEmailDomain        String? @map("require_email_domain") // e.g., "@school.edu" - auto-join on signup
   sidebarBehavior           String? @default("contextual") @map("sidebar_behavior") // "contextual" or "full"
-  aiSystemPrompt            String? @map("ai_system_prompt") @db.Text          // Custom system prompt for AI assistant
+  aiSystemPrompt            String? @map("ai_system_prompt") @db.Text // Custom system prompt for AI assistant
 
   // Billing groundwork (payment provider TBD)
   billingPlan String @default("free") @map("billing_plan") // "free" | "school" | "enterprise"
@@ -775,10 +780,10 @@ model Organization {
 
 // Junction table for Organization-User many-to-many
 model OrganizationMember {
-  id             String   @id @default(cuid())
-  organizationId String   @map("organization_id")
-  userId         String   @map("user_id")
-  role           String   @default("member") // "owner" | "admin" | "member"
+  id             String @id @default(cuid())
+  organizationId String @map("organization_id")
+  userId         String @map("user_id")
+  role           String @default("member") // "owner" | "admin" | "member"
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -795,7 +800,7 @@ model OrganizationMember {
 // Allows orgs to use their own domains (e.g., eduskript.org, school.edu)
 model CustomDomain {
   id                String    @id @default(cuid())
-  domain            String    @unique                // "eduskript.org", "school.edu"
+  domain            String    @unique // "eduskript.org", "school.edu"
   organizationId    String    @map("organization_id")
   isPrimary         Boolean   @default(false) @map("is_primary")
   isVerified        Boolean   @default(false) @map("is_verified")
@@ -815,7 +820,7 @@ model CustomDomain {
 // Allows teachers to use their own domains (e.g., mr-smith.com)
 model TeacherCustomDomain {
   id                String    @id @default(cuid())
-  domain            String    @unique                // "mr-smith.com", "teacher.school.edu"
+  domain            String    @unique // "mr-smith.com", "teacher.school.edu"
   userId            String    @map("user_id")
   isPrimary         Boolean   @default(false) @map("is_primary")
   isVerified        Boolean   @default(false) @map("is_verified")
@@ -852,6 +857,90 @@ model ExamToken {
   @@map("exam_tokens")
 }
 
+// MCP OAuth: registered third-party clients (claude.ai, Claude Code, Cursor, etc.)
+// Created via RFC 7591 Dynamic Client Registration on /api/mcp/oauth/register
+// Public PKCE-only clients have null clientSecretHash; redirect_uris is the allowlist enforced at /authorize
+model OAuthClient {
+  id                 String   @id @default(cuid())
+  clientId           String   @unique @map("client_id")
+  clientSecretHash   String?  @map("client_secret_hash") // null for public PKCE-only clients
+  name               String
+  redirectUris       String[] @map("redirect_uris")
+  grantTypes         String[] @default(["authorization_code", "refresh_token"]) @map("grant_types")
+  scopes             String[] @default(["content:read", "content:write"])
+  registeredByUserId String?  @map("registered_by_user_id") // null for DCR-registered clients
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  authorizationCodes OAuthAuthorizationCode[]
+  accessTokens       OAuthAccessToken[]
+  refreshTokens      OAuthRefreshToken[]
+
+  @@index([clientId])
+  @@map("oauth_clients")
+}
+
+// MCP OAuth: short-lived authorization codes (10 min expiry, single-use via usedAt)
+model OAuthAuthorizationCode {
+  id                  String    @id @default(cuid())
+  codeHash            String    @unique @map("code_hash")
+  clientId            String    @map("client_id")
+  userId              String    @map("user_id")
+  redirectUri         String    @map("redirect_uri")
+  codeChallenge       String    @map("code_challenge")
+  codeChallengeMethod String    @map("code_challenge_method") // "S256"
+  scopes              String[]
+  expiresAt           DateTime  @map("expires_at")
+  usedAt              DateTime? @map("used_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+
+  client OAuthClient @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  user   User        @relation("OAuthAuthorizationCodes", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([codeHash])
+  @@map("oauth_authorization_codes")
+}
+
+// MCP OAuth: bearer access tokens (1h expiry; revocation via revokedAt)
+model OAuthAccessToken {
+  id          String    @id @default(cuid())
+  tokenHash   String    @unique @map("token_hash")
+  tokenPrefix String    @map("token_prefix") // first 12 chars of plaintext, for UI display only
+  clientId    String    @map("client_id")
+  userId      String    @map("user_id")
+  scopes      String[]
+  expiresAt   DateTime  @map("expires_at")
+  revokedAt   DateTime? @map("revoked_at")
+  lastUsedAt  DateTime? @map("last_used_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  client OAuthClient @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  user   User        @relation("OAuthAccessTokens", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tokenHash])
+  @@index([userId])
+  @@map("oauth_access_tokens")
+}
+
+// MCP OAuth: refresh tokens (30d expiry, rotate on use; replacedById tracks the rotation chain for audit)
+model OAuthRefreshToken {
+  id           String    @id @default(cuid())
+  tokenHash    String    @unique @map("token_hash")
+  clientId     String    @map("client_id")
+  userId       String    @map("user_id")
+  scopes       String[]
+  expiresAt    DateTime  @map("expires_at")
+  revokedAt    DateTime? @map("revoked_at")
+  replacedById String?   @map("replaced_by_id")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  client OAuthClient @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  user   User        @relation("OAuthRefreshTokens", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tokenHash])
+  @@index([userId])
+  @@map("oauth_refresh_tokens")
+}
+
 // Exam sessions for multi-page SEB exams
 // After token auth, an exam session is created to persist auth across page navigations
 // Session allows access to all pages within the same skript during the exam
@@ -859,8 +948,8 @@ model ExamSession {
   id        String   @id @default(cuid())
   sessionId String   @unique @map("session_id") // Random ID stored in cookie
   userId    String   @map("user_id")
-  pageId    String   @map("page_id")    // Initial exam page that started session
-  skriptId  String   @map("skript_id")  // Allow access to all pages in this skript
+  pageId    String   @map("page_id") // Initial exam page that started session
+  skriptId  String   @map("skript_id") // Allow access to all pages in this skript
   expiresAt DateTime @map("expires_at")
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -901,18 +990,18 @@ model ExamState {
 
 // Exam submission tracking - records when students hand in
 model ExamSubmission {
-  id          String    @id @default(cuid())
-  pageId      String    @map("page_id")
-  studentId   String    @map("student_id")
-  submittedAt DateTime  @default(now()) @map("submitted_at")
+  id          String   @id @default(cuid())
+  pageId      String   @map("page_id")
+  studentId   String   @map("student_id")
+  submittedAt DateTime @default(now()) @map("submitted_at")
 
   // Future: grading
   score    Float?
   gradedBy String?   @map("graded_by")
   gradedAt DateTime? @map("graded_at")
 
-  page    Page @relation("ExamSubmissions", fields: [pageId], references: [id], onDelete: Cascade)
-  student User @relation("StudentExamSubmissions", fields: [studentId], references: [id], onDelete: Cascade)
+  page    Page  @relation("ExamSubmissions", fields: [pageId], references: [id], onDelete: Cascade)
+  student User  @relation("StudentExamSubmissions", fields: [studentId], references: [id], onDelete: Cascade)
   grader  User? @relation("GradedExamSubmissions", fields: [gradedBy], references: [id])
 
   @@unique([pageId, studentId])
@@ -924,13 +1013,13 @@ model ExamSubmission {
 // Cross-domain authentication tokens
 // Used to transfer sessions from eduskript.org to custom domains
 model CrossDomainToken {
-  id        String   @id @default(cuid())
-  token     String   @unique
-  userId    String   @map("user_id")
-  domain    String   // Target custom domain
-  expiresAt DateTime @map("expires_at")
+  id        String    @id @default(cuid())
+  token     String    @unique
+  userId    String    @map("user_id")
+  domain    String // Target custom domain
+  expiresAt DateTime  @map("expires_at")
   usedAt    DateTime? @map("used_at") // Null until token is consumed
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime  @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -944,10 +1033,10 @@ model CrossDomainToken {
 // In-memory buffer handles minute-level data, flushed hourly to DB
 model MetricPoint {
   id        String   @id @default(cuid())
-  name      String   // e.g., "db_queries_per_request", "page_load_time_ms"
+  name      String // e.g., "db_queries_per_request", "page_load_time_ms"
   timestamp DateTime // Rounded to hour
-  avg       Float    // Average value for this hour
-  count     Int      // Number of samples (for weighted aggregation)
+  avg       Float // Average value for this hour
+  count     Int // Number of samples (for weighted aggregation)
   createdAt DateTime @default(now()) @map("created_at")
 
   @@unique([name, timestamp])
@@ -958,12 +1047,12 @@ model MetricPoint {
 
 // Subscription plans available for purchase
 model Plan {
-  id          String   @id @default(cuid())
-  name        String   // e.g., "Basic", "Pro"
-  slug        String   @unique // URL-safe identifier, e.g., "pro-monthly"
-  priceChf    Int      // Price in Rappen (cents), e.g., 990 = CHF 9.90
-  interval    String   // "monthly" | "yearly"
-  features    Json     // Feature flags, e.g., { maxSkripts: 50, customDomain: true }
+  id             String   @id @default(cuid())
+  name           String // e.g., "Basic", "Pro"
+  slug           String   @unique // URL-safe identifier, e.g., "pro-monthly"
+  priceChf       Int // Price in Rappen (cents), e.g., 990 = CHF 9.90
+  interval       String // "monthly" | "yearly"
+  features       Json // Feature flags, e.g., { maxSkripts: 50, customDomain: true }
   isActive       Boolean  @default(true) @map("is_active") // Soft-delete for retired plans
   trialDays      Int?     @map("trial_days") // null = no trial for this plan
   isDefaultTrial Boolean  @default(false) @map("is_default_trial") // Only one plan should have this set
@@ -977,17 +1066,17 @@ model Plan {
 
 // User subscriptions managed via Payrexx
 model Subscription {
-  id                String    @id @default(cuid())
-  userId            String    @map("user_id")
-  planId            String    @map("plan_id")
-  payrexxSubId      String?   @unique @map("payrexx_sub_id") // Payrexx subscription ID
-  payrexxCustomerId String?   @map("payrexx_customer_id") // Payrexx customer/contact ID
-  status            String    @default("incomplete") // "active" | "cancelled" | "past_due" | "trialing" | "incomplete"
+  id                 String    @id @default(cuid())
+  userId             String    @map("user_id")
+  planId             String    @map("plan_id")
+  payrexxSubId       String?   @unique @map("payrexx_sub_id") // Payrexx subscription ID
+  payrexxCustomerId  String?   @map("payrexx_customer_id") // Payrexx customer/contact ID
+  status             String    @default("incomplete") // "active" | "cancelled" | "past_due" | "trialing" | "incomplete"
   currentPeriodStart DateTime? @map("current_period_start")
   currentPeriodEnd   DateTime? @map("current_period_end")
-  cancelledAt       DateTime? @map("cancelled_at")
-  createdAt         DateTime  @default(now()) @map("created_at")
-  updatedAt         DateTime  @updatedAt @map("updated_at")
+  cancelledAt        DateTime? @map("cancelled_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   plan Plan @relation(fields: [planId], references: [id])
@@ -1002,13 +1091,13 @@ model Subscription {
 /// All plugins are globally visible — teachers reference them as ownerPageSlug/pluginSlug.
 model Plugin {
   id          String   @id @default(cuid())
-  slug        String   // Plugin slug (unique per author)
-  name        String   // Display name
+  slug        String // Plugin slug (unique per author)
+  name        String // Display name
   description String?  @db.Text
   version     String   @default("1.0.0")
   authorId    String
   author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  manifest    Json     // configSchema, defaultHeight, allowedCDNs, etc.
+  manifest    Json // configSchema, defaultHeight, allowedCDNs, etc.
   entryHtml   String   @db.Text // Self-contained HTML (rendered in sandboxed iframe)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

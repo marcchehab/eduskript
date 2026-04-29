@@ -57,6 +57,7 @@ export async function proxy(request: NextRequest) {
   if (
     isStaticOrInternal ||
     pathname.startsWith('/auth') ||
+    pathname.startsWith('/oauth/') ||
     pathname.startsWith('/org/') ||
     pathname.startsWith('/dashboard') ||
     pathname.startsWith('/embed/') ||

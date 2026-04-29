@@ -68,6 +68,23 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  // RFC 8414 + RFC 9728 metadata documents must be served from the literal
+  // /.well-known/... path AT THE ROOT (so the issuer URL stays as the bare
+  // host and matches the metadata URL — claude.ai rejects the doc otherwise).
+  // Next.js routes folders prefixed with a dot as private, so we rewrite the
+  // canonical paths onto routes without the dot.
+  async rewrites() {
+    return [
+      {
+        source: '/.well-known/oauth-authorization-server',
+        destination: '/well-known/oauth-authorization-server',
+      },
+      {
+        source: '/.well-known/oauth-protected-resource',
+        destination: '/well-known/oauth-protected-resource',
+      },
+    ]
+  },
   // Allow larger body sizes for import API (default is 10MB)
   experimental: {
     serverActions: {

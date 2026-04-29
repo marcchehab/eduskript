@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { Save, Loader2, FileText, Upload, X, ExternalLink, Globe, Wand2 } from 'lucide-react'
+import { Save, Loader2, FileText, Upload, X, ExternalLink, Globe, Wand2, KeyRound } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { InlineMarkdown } from '@/components/ui/inline-markdown'
@@ -549,6 +549,23 @@ export function PageSettings() {
           </Link>
         </div>
 
+        {/* Connected Apps Section (MCP / claude.ai / Cursor / Claude Code) */}
+        <div className="space-y-4 border-t pt-6">
+          <div>
+            <Label className="text-sm font-medium">Connected Apps</Label>
+            <p className="text-sm text-muted-foreground mt-1">
+              Manage AI assistants like claude.ai, Cursor, and Claude Code
+              that can read and edit your content via MCP.
+            </p>
+          </div>
+          <Link href="/dashboard/settings/connected-apps">
+            <Button variant="outline" className="gap-2">
+              <KeyRound className="w-4 h-4" />
+              Manage Connected Apps
+            </Button>
+          </Link>
+        </div>
+
         {/* Sidebar Behavior Section */}
         <div className="space-y-4 border-t pt-6">
           <Label className="text-sm font-medium">Sidebar Navigation Behavior</Label>
@@ -702,12 +719,17 @@ export function PageSettings() {
           )}
         </div>
 
-        {/* AI Assistant Section */}
+        {/* AI Assistants Section */}
         <div className="space-y-4 border-t pt-6">
           <div className="flex items-center gap-2">
             <Wand2 className="h-5 w-5" />
-            <Label className="text-sm font-medium">AI Assistant</Label>
+            <Label className="text-sm font-medium">AI Assistants</Label>
           </div>
+          <p className="text-sm text-muted-foreground -mt-2">
+            These instructions are sent to every AI that helps you author content —
+            both the in-product <em>AI Edit</em> in the dashboard and any external
+            assistant connected via MCP (claude.ai, Cursor, Claude Code).
+          </p>
           <div className="space-y-3">
             <div>
               <Label htmlFor="aiSystemPrompt" className="text-sm">Custom System Prompt</Label>
@@ -715,13 +737,13 @@ export function PageSettings() {
                 id="aiSystemPrompt"
                 value={aiSystemPrompt}
                 onChange={(e) => setAiSystemPrompt(e.target.value)}
-                placeholder="Add custom instructions for the AI assistant when editing your content..."
+                placeholder="Add custom instructions for any AI that edits your content..."
                 rows={5}
                 className="mt-1.5 font-mono text-sm"
               />
               <p className="text-sm text-muted-foreground mt-1">
-                This prompt is prepended to all AI interactions when editing your skripts.
-                Use it to set your preferred tone, teaching style, or subject-specific guidelines.
+                Set your preferred tone, teaching style, or subject-specific guidelines.
+                The same prompt applies whether you edit in-product or through an MCP connector.
               </p>
             </div>
             <Button
