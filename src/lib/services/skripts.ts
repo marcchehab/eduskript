@@ -16,7 +16,10 @@ interface ListOptions {
 }
 
 const skriptInclude = {
-  pages: { select: { id: true } },
+  pages: {
+    select: { id: true, title: true, slug: true, isPublished: true, order: true },
+    orderBy: { order: 'asc' as const },
+  },
   authors: {
     include: {
       user: { select: { id: true, name: true, email: true } },

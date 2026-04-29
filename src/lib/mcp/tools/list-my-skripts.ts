@@ -12,8 +12,10 @@ import { listSkriptsForUser } from '@/lib/services/skripts'
 export const listMySkriptsConfig = {
   title: 'List my skripts',
   description:
-    'List all Eduskript skripts the authenticated teacher authors or co-authors. ' +
-    'Returns id, title, slug, page count, and the parent collection title.',
+    "List all Eduskript skripts the authenticated teacher authors or co-authors. " +
+    "Returns each skript with its full pages array (id, title, slug, isPublished) — " +
+    "use the page IDs returned here to call read_page or update_page directly without " +
+    "needing search_my_content.",
   inputSchema: {
     includeShared: z
       .boolean()
@@ -36,7 +38,12 @@ export async function listMySkripts(args: { includeShared?: boolean }) {
     title: s.title,
     slug: s.slug,
     description: s.description ?? null,
-    pageCount: s.pages.length,
+    pages: s.pages.map((p) => ({
+      id: p.id,
+      title: p.title,
+      slug: p.slug,
+      isPublished: p.isPublished,
+    })),
     collections: s.collectionSkripts
       .map((cs) => cs.collection?.title ?? null)
       .filter((t): t is string => t != null),
