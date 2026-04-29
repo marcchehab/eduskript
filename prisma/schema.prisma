@@ -361,12 +361,17 @@ model PageAuthor {
 
 model PageVersion {
   id        String   @id @default(cuid())
-  content   String
-  version   Int
-  changeLog String?
-  authorId  String
-  pageId    String
-  createdAt DateTime @default(now())
+  content    String
+  version    Int
+  changeLog  String?
+  authorId   String
+  pageId     String
+  // Attribution for AI-assisted edits — null = direct dashboard edit.
+  // editSource is "mcp" (claude.ai / Cursor / Claude Code via /api/mcp) or "ai-edit"
+  // (in-product AI Edit feature). editClient snapshots OAuthClient.name when source=mcp.
+  editSource String?  @map("edit_source")
+  editClient String?  @map("edit_client")
+  createdAt  DateTime @default(now())
 
   author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
   page   Page @relation(fields: [pageId], references: [id], onDelete: Cascade)

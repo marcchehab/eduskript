@@ -164,7 +164,30 @@ describe('PATCH /api/pages/[id] — cache invalidation contract', () => {
         content: '# New content',
         version: 4,
         authorId: 'user-123',
+        editSource: null,
+        editClient: null,
       },
+    })
+  })
+
+  it('records editSource="ai-edit" when the dashboard AI Edit Apply tags it', async () => {
+    await PATCH(buildPatchRequest({ content: '# New content', editSource: 'ai-edit' }), {
+      params: Promise.resolve({ id: 'page-123' }),
+    })
+
+    expect(vi.mocked(prisma.pageVersion.create).mock.calls[0][0]).toMatchObject({
+      data: { editSource: 'ai-edit', editClient: null },
+    })
+  })
+
+  it('rejects editSource="mcp" from a REST body (cannot fake MCP attribution)', async () => {
+    await PATCH(buildPatchRequest({ content: '# New content', editSource: 'mcp' }), {
+      params: Promise.resolve({ id: 'page-123' }),
+    })
+
+    // Server normalises any non-"ai-edit" value to undefined → null in the row.
+    expect(vi.mocked(prisma.pageVersion.create).mock.calls[0][0]).toMatchObject({
+      data: { editSource: null, editClient: null },
     })
   })
 

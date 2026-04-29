@@ -10,10 +10,18 @@ interface PageVersion {
   version: number
   changeLog?: string
   createdAt: string
+  editSource?: string | null
+  editClient?: string | null
   author: {
     name?: string
     email: string
   }
+}
+
+function attribution(v: { editSource?: string | null; editClient?: string | null }) {
+  if (v.editSource === 'mcp' && v.editClient) return ` (${v.editClient} via MCP)`
+  if (v.editSource === 'ai-edit') return ' (via AI Edit)'
+  return ''
 }
 
 interface VersionHistoryProps {
@@ -91,7 +99,7 @@ export function VersionHistory({ versions, currentContent, onRestoreVersion }: V
 
                 <div className="mb-2">
                   <p className="text-sm text-muted-foreground">
-                    By {version.author.name || version.author.email}
+                    By {version.author.name || version.author.email}{attribution(version)}
                   </p>
                 </div>
 

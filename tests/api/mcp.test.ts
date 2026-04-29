@@ -55,12 +55,14 @@ import { updatePage } from '@/lib/mcp/tools/update-page'
 const ctxA = {
   userId: 'user-A',
   clientId: 'mcp_x',
+  clientName: 'Claude',
   scopes: ['content:read', 'content:write'],
   tokenId: 't1',
 }
 const ctxB = {
   userId: 'user-B',
   clientId: 'mcp_x',
+  clientName: 'Claude',
   scopes: ['content:read', 'content:write'],
   tokenId: 't2',
 }
@@ -158,6 +160,7 @@ describe('Tool isolation — account A vs account B', () => {
     expect(call[0]).toBe('user-A')
     expect(call[1]).toBe('page-1')
     expect(call[2]).toEqual({ title: 'New' })
+    expect(call[3]).toEqual({ editSource: 'mcp', editClient: 'Claude' })
   })
 
   it('update_page rejects without content:write scope', async () => {

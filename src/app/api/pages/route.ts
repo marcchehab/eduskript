@@ -18,11 +18,15 @@ export async function POST(request: NextRequest) {
   const body = await request.json()
   const { title, slug, content, skriptId } = body
 
+  // See PATCH handler in [id]/route.ts — only accept "ai-edit"; "mcp" must
+  // come through the actual MCP transport, not from a REST body.
+  const editSource = body?.editSource === 'ai-edit' ? 'ai-edit' : undefined
+
   try {
     const page = await createPageForUser(
       session.user.id,
       { title, slug, content, skriptId },
-      { isAdmin: session.user.isAdmin }
+      { isAdmin: session.user.isAdmin, editSource }
     )
     return NextResponse.json(page)
   } catch (error) {

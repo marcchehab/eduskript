@@ -72,6 +72,14 @@ export interface CreatePageInput {
 
 interface ActorContext {
   isAdmin?: boolean
+  /**
+   * Attribution for the version row this write produces. `null`/undefined →
+   * direct dashboard edit. `"mcp"` → set by the MCP transport on tool calls.
+   * `"ai-edit"` → set by the dashboard AI Edit "Apply" flow.
+   */
+  editSource?: 'mcp' | 'ai-edit'
+  /** Snapshot of OAuthClient.name; only meaningful when editSource === 'mcp'. */
+  editClient?: string
 }
 
 /**
@@ -149,7 +157,7 @@ export async function getPageForUser(
 export async function createPageForUser(
   userId: string,
   input: CreatePageInput,
-  _ctx: ActorContext = {}
+  ctx: ActorContext = {}
 ) {
   const { skriptId, title, slug, content = '' } = input
 
@@ -189,7 +197,14 @@ export async function createPageForUser(
   })
 
   await prisma.pageVersion.create({
-    data: { content, version: 1, authorId: userId, pageId: page.id },
+    data: {
+      content,
+      version: 1,
+      authorId: userId,
+      pageId: page.id,
+      editSource: ctx.editSource ?? null,
+      editClient: ctx.editSource === 'mcp' ? ctx.editClient ?? null : null,
+    },
   })
 
   revalidatePath('/dashboard')
@@ -271,6 +286,8 @@ export async function updatePageForUser(
         content: content || '',
         version: (currentVersion?.version || 0) + 1,
         authorId: userId,
+        editSource: ctx.editSource ?? null,
+        editClient: ctx.editSource === 'mcp' ? ctx.editClient ?? null : null,
       },
     })
   }

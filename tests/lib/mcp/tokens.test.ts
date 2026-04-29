@@ -82,6 +82,7 @@ describe('validateAccessToken', () => {
       userId: 'u1',
       clientId: 'mcp_x',
       scopes: ['content:read'],
+      client: { name: 'Claude' },
     } as never)
 
     const result = await validateAccessToken('plaintext-token')
@@ -89,6 +90,7 @@ describe('validateAccessToken', () => {
       tokenId: 't1',
       userId: 'u1',
       clientId: 'mcp_x',
+      clientName: 'Claude',
       scopes: ['content:read'],
     })
 

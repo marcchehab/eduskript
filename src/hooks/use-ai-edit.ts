@@ -475,7 +475,10 @@ export function useAIEdit({ target, currentContent }: UseAIEditOptions): UseAIEd
           const response = await fetch(`/api/pages/${edit.pageId}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ content: edit.proposedContent }),
+            body: JSON.stringify({
+              content: edit.proposedContent,
+              editSource: 'ai-edit',
+            }),
           })
 
           if (!response.ok) {
@@ -497,6 +500,7 @@ export function useAIEdit({ target, currentContent }: UseAIEditOptions): UseAIEd
               title: edit.pageTitle,
               slug: edit.pageSlug,
               content: edit.proposedContent,
+              editSource: 'ai-edit',
             }),
           })
 

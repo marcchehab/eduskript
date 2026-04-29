@@ -81,6 +81,7 @@ async function handle(request: NextRequest, transportSegment: string): Promise<R
       {
         userId: validated.userId,
         clientId: validated.clientId,
+        clientName: validated.clientName,
         scopes: validated.scopes,
         tokenId: validated.tokenId,
       },

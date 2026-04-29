@@ -36,7 +36,10 @@ export async function updatePage(args: {
   const ctx = getMcpContext()
 
   const { pageId, ...patch } = args
-  const updated = await updatePageForUser(ctx.userId, pageId, patch)
+  const updated = await updatePageForUser(ctx.userId, pageId, patch, {
+    editSource: 'mcp',
+    editClient: ctx.clientName,
+  })
 
   return {
     content: [

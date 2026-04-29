@@ -35,8 +35,11 @@ export async function createPage(args: {
 }) {
   requireScope('content:write')
   const ctx = getMcpContext()
-  console.log(`[mcp:create_page] userId=${ctx.userId} skriptId=${args.skriptId}`)
-  const page = await createPageForUser(ctx.userId, args)
+  console.log(`[mcp:create_page] userId=${ctx.userId} skriptId=${args.skriptId} client=${ctx.clientName}`)
+  const page = await createPageForUser(ctx.userId, args, {
+    editSource: 'mcp',
+    editClient: ctx.clientName,
+  })
 
   return {
     content: [

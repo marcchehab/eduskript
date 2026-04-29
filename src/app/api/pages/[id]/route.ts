@@ -40,9 +40,17 @@ export async function PATCH(
   const { id } = await params
   const body = await request.json()
 
+  // editSource may be sent by the dashboard's AI Edit Apply flow. Only honor
+  // the literal "ai-edit" — never accept "mcp" from REST (would let a malicious
+  // dashboard request fake an MCP attribution).
+  const editSource = body?.editSource === 'ai-edit' ? 'ai-edit' : undefined
+  // Strip from the patch so it doesn't reach prisma.page.update as a column.
+  const { editSource: _ignored, ...patch } = body ?? {}
+
   try {
-    const updated = await updatePageForUser(session.user.id, id, body, {
+    const updated = await updatePageForUser(session.user.id, id, patch, {
       isAdmin: session.user.isAdmin,
+      editSource,
     })
     return NextResponse.json(updated)
   } catch (error) {

@@ -42,6 +42,7 @@ export interface ValidatedAccessToken {
   tokenId: string
   userId: string
   clientId: string
+  clientName: string
   scopes: string[]
 }
 
@@ -119,6 +120,7 @@ export async function validateAccessToken(
       userId: true,
       clientId: true,
       scopes: true,
+      client: { select: { name: true } },
     },
   })
 
@@ -127,6 +129,7 @@ export async function validateAccessToken(
     tokenId: row.id,
     userId: row.userId,
     clientId: row.clientId,
+    clientName: row.client.name,
     scopes: row.scopes,
   }
 }

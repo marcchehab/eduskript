@@ -261,6 +261,8 @@ describe('Pages API', () => {
             version: 1,
             authorId: 'user-123',
             pageId: 'page-123',
+            editSource: null,
+            editClient: null,
           },
         })
       })

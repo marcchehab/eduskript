@@ -13,6 +13,8 @@ import { AsyncLocalStorage } from 'async_hooks'
 export interface McpContext {
   userId: string
   clientId: string
+  /** Display name registered via DCR — e.g. "Claude", "Cursor", "Claude Code". */
+  clientName: string
   scopes: string[]
   tokenId: string
 }
