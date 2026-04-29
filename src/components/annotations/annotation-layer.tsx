@@ -88,6 +88,7 @@ import { SimpleCanvas, type SimpleCanvasHandle, type DrawMode } from './simple-c
 import { AnnotationSvgLayer } from './annotation-svg-layer'
 import { computeSectionTransforms, type SectionTransform } from '@/lib/annotations/svg-path'
 import { AnnotationToolbar, formatStudentLabel, type AnnotationMode } from './annotation-toolbar'
+import { getReverseMappingsForClass } from '@/lib/email-mapping-db'
 import { useSyncedUserData, useUserDataContext, type SyncedUserDataOptions } from '@/lib/userdata/provider'
 import type { AnnotationData, StrokeTelemetry, TelemetryData } from '@/lib/userdata/types'
 import type { SnapsData, SpacersData } from '@/lib/userdata/adapters'
@@ -376,14 +377,24 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
 
     const fetchStudents = async () => {
       try {
-        const res = await fetch(`/api/classes/${selectedClass.id}/students?pageId=${encodeURIComponent(pageId)}`)
+        // Resolve student identities by combining two consent-gated sources:
+        // 1) server `revealedEmail` — set when ClassMembership.identityConsent is true
+        //    AND the student has an email column populated (rare for OAuth-only students).
+        // 2) local IndexedDB roster mapping — populated by the dashboard's "paste roster"
+        //    flow, which only stores entries the server matched against consenting students
+        //    via /api/classes/[id]/resolve-emails. Privacy gate already enforced server-side.
+        const [res, reverseMap] = await Promise.all([
+          fetch(`/api/classes/${selectedClass.id}/students?pageId=${encodeURIComponent(pageId)}`),
+          getReverseMappingsForClass(selectedClass.id).catch(() => ({} as Record<string, string>)),
+        ])
         if (res.ok) {
           const data = await res.json()
           setClassStudents(data.students?.map((s: { id: string; displayName: string; pseudonym?: string; revealedEmail?: string | null; hasAnnotationsOnPage?: boolean }) => ({
             id: s.id,
             displayName: s.displayName,
             pseudonym: s.pseudonym,
-            revealedEmail: s.revealedEmail ?? null,
+            // Prefer the server's revealedEmail; fall back to the teacher's local roster mapping.
+            revealedEmail: s.revealedEmail ?? (s.pseudonym ? reverseMap[s.pseudonym] ?? null : null),
             hasAnnotationsOnPage: s.hasAnnotationsOnPage
           })) || [])
         }
