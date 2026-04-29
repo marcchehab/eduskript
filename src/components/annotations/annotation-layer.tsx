@@ -87,7 +87,7 @@ import { cn } from '@/lib/utils'
 import { SimpleCanvas, type SimpleCanvasHandle, type DrawMode } from './simple-canvas'
 import { AnnotationSvgLayer } from './annotation-svg-layer'
 import { computeSectionTransforms, type SectionTransform } from '@/lib/annotations/svg-path'
-import { AnnotationToolbar, type AnnotationMode } from './annotation-toolbar'
+import { AnnotationToolbar, formatStudentLabel, type AnnotationMode } from './annotation-toolbar'
 import { useSyncedUserData, useUserDataContext, type SyncedUserDataOptions } from '@/lib/userdata/provider'
 import type { AnnotationData, StrokeTelemetry, TelemetryData } from '@/lib/userdata/types'
 import type { SnapsData, SpacersData } from '@/lib/userdata/adapters'
@@ -305,10 +305,10 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
 
   // State for classes and students lists (for toolbar broadcast controls)
   const [teacherClasses, setTeacherClasses] = useState<Array<{ id: string; name: string; hasAnnotationsOnPage?: boolean }>>([])
-  const [classStudents, setClassStudents] = useState<Array<{ id: string; displayName: string; pseudonym?: string; hasAnnotationsOnPage?: boolean }>>([])
+  const [classStudents, setClassStudents] = useState<Array<{ id: string; displayName: string; pseudonym?: string; revealedEmail?: string | null; hasAnnotationsOnPage?: boolean }>>([])
 
   // Track last selected student for quick-access and data loading when in class-broadcast mode
-  const [lastSelectedStudent, setLastSelectedStudent] = useState<{ id: string; displayName: string; pseudonym?: string } | null>(null)
+  const [lastSelectedStudent, setLastSelectedStudent] = useState<{ id: string; displayName: string; pseudonym?: string; revealedEmail?: string | null } | null>(null)
   // Store student feedback canvas data when switching from student-view to class-broadcast
   // This is used as a fallback until the studentFeedbackData hook catches up
   const studentFeedbackCanvasRef = useRef<string>('')
@@ -379,10 +379,11 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
         const res = await fetch(`/api/classes/${selectedClass.id}/students?pageId=${encodeURIComponent(pageId)}`)
         if (res.ok) {
           const data = await res.json()
-          setClassStudents(data.students?.map((s: { id: string; displayName: string; pseudonym?: string; hasAnnotationsOnPage?: boolean }) => ({
+          setClassStudents(data.students?.map((s: { id: string; displayName: string; pseudonym?: string; revealedEmail?: string | null; hasAnnotationsOnPage?: boolean }) => ({
             id: s.id,
             displayName: s.displayName,
             pseudonym: s.pseudonym,
+            revealedEmail: s.revealedEmail ?? null,
             hasAnnotationsOnPage: s.hasAnnotationsOnPage
           })) || [])
         }
@@ -934,7 +935,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
       return { layerId: `class-${selectedClass.id}`, layerName: selectedClass.name || 'Class', layerColor: 'blue' as const, icon: <Users className="w-3 h-3" /> }
     }
     if (activeLayerKey === 'student-feedback' && studentForFeedback) {
-      return { layerId: 'individual-feedback', layerName: studentForFeedback.displayName || 'Feedback', layerColor: 'orange' as const, icon: <MessageSquare className="w-3 h-3" /> }
+      return { layerId: 'individual-feedback', layerName: formatStudentLabel(studentForFeedback) || 'Feedback', layerColor: 'orange' as const, icon: <MessageSquare className="w-3 h-3" /> }
     }
     // Default: personal annotations
     return { layerId: 'personal', layerName: 'Personal', layerColor: 'blue' as const, icon: <User className="w-3 h-3" /> }
@@ -1063,7 +1064,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
       ? viewMode === 'class-broadcast' && selectedClass
         ? `Class: ${selectedClass.name}`
         : viewMode === 'student-view' && selectedStudent
-          ? `Feedback: ${selectedStudent.displayName || selectedStudent.pseudonym || 'Student'}`
+          ? `Feedback: ${formatStudentLabel(selectedStudent)}`
           : 'My annotations'
       : 'My annotations'
 
@@ -1338,7 +1339,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
     return snapsData.snaps.map(snap => ({
       ...snap,
       layerId: 'student-work',
-      layerName: `${studentForFeedback.displayName || 'Student'}'s work`,
+      layerName: `${formatStudentLabel(studentForFeedback)}'s work`,
       isStudentWorkSnap: true as const,
     }))
   }, [isTeacher, studentForFeedback, studentWorkData, isLayerVisible])
@@ -3149,7 +3150,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
                   <LayerBadges
                     canvasData={feedbackCanvasData}
                     layerId="individual-feedback"
-                    layerName={studentForFeedback?.displayName || 'Feedback'}
+                    layerName={studentForFeedback ? formatStudentLabel(studentForFeedback) : 'Feedback'}
                     layerColor="orange"
                     icon={<MessageSquare className="w-3 h-3" />}
                     zoom={zoom}
@@ -3199,7 +3200,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
                   <LayerBadges
                     canvasData={studentCanvasData}
                     layerId="student-work"
-                    layerName={studentForFeedback.displayName || 'Student'}
+                    layerName={formatStudentLabel(studentForFeedback)}
                     layerColor="purple"
                     icon={<User className="w-3 h-3" />}
                     zoom={zoom}

@@ -26,7 +26,22 @@ export interface StudentOption {
   id: string
   displayName: string
   pseudonym?: string
+  /** Real email — only present when ClassMembership.identityConsent is true. */
+  revealedEmail?: string | null
   hasAnnotationsOnPage?: boolean
+}
+
+/**
+ * Render label for a student in the annotation UI.
+ *
+ * If the student consented (`identityConsent: true` on the ClassMembership),
+ * the server returns `revealedEmail` — append it after the friendly displayName
+ * so the teacher can identify the real student. Otherwise show only the
+ * pseudonym-based displayName, preserving the privacy gate.
+ */
+export function formatStudentLabel(s: { displayName?: string | null; revealedEmail?: string | null; pseudonym?: string }): string {
+  const name = s.displayName || s.pseudonym || 'Student'
+  return s.revealedEmail ? `${name} (${s.revealedEmail})` : name
 }
 
 export type BroadcastMode = 'personal' | 'class' | 'student' | 'page'
@@ -719,7 +734,7 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
                   >
                     {selectedStudent ? <User className="w-4 h-4" /> : <Users className="w-4 h-4" />}
                     <span className="text-xs max-w-[100px] truncate">
-                      {selectedStudent ? selectedStudent.displayName : 'Entire class'}
+                      {selectedStudent ? formatStudentLabel(selectedStudent) : 'Entire class'}
                     </span>
                     <ChevronDown className="w-3 h-3" />
                   </button>
@@ -751,7 +766,7 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
                           <span className={cn('w-4 flex-shrink-0', !student.hasAnnotationsOnPage && 'invisible')}>
                             <BrushIndicator className="w-4 h-4" />
                           </span>
-                          <span className="truncate">{student.displayName}</span>
+                          <span className="truncate">{formatStudentLabel(student)}</span>
                         </button>
                       ))}
 
@@ -781,7 +796,7 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
                             <span className={cn('w-4 flex-shrink-0', !quickAccessStudent.hasAnnotationsOnPage && 'invisible')}>
                               <BrushIndicator className="w-4 h-4" />
                             </span>
-                            <span className="truncate">{quickAccessStudent.displayName}</span>
+                            <span className="truncate">{formatStudentLabel(quickAccessStudent)}</span>
                           </button>
                           <button
                             onClick={(e) => {

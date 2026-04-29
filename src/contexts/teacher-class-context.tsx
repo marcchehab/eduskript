@@ -19,6 +19,8 @@ interface SelectedStudent {
   id: string
   displayName: string
   pseudonym?: string
+  /** Real email — only present when ClassMembership.identityConsent is true. */
+  revealedEmail?: string | null
 }
 
 /**
