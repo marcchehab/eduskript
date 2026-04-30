@@ -3,6 +3,7 @@ import { unified } from 'unified'
 import remarkParse from 'remark-parse'
 import remarkCodeEditor from '@/lib/remark-plugins/code-editor'
 import { remarkImageResolver } from '@/lib/remark-plugins/image-resolver'
+import { remarkImageAttrs } from '@/lib/remark-plugins/image-attrs'
 import { remarkExcalidraw } from '@/lib/remark-plugins/excalidraw'
 import { remarkMuxVideo } from '@/lib/remark-plugins/mux-video'
 
@@ -425,6 +426,51 @@ console.log("second")
       // Should not be modified (videos handled by remarkMuxVideo)
       expect(img?.url).toBe('video.mp4')
       expect(img?.data?.hProperties?.['data-original-src']).toBeUndefined()
+    })
+  })
+
+  describe('remarkImageAttrs', () => {
+    function findImage(tree: any) {
+      return findNode(tree, (n: any) => n.type === 'image')
+    }
+    function findText(tree: any) {
+      return findNode(tree, (n: any) => n.type === 'text')
+    }
+
+    it('lifts bare {invert} into invert="dark"', async () => {
+      const processor = unified().use(remarkParse).use(remarkImageAttrs)
+      const tree = processor.parse('![](dna.png){invert}')
+      await processor.run(tree)
+      const img = findImage(tree)
+      expect(img?.data?.hProperties?.invert).toBe('dark')
+      // The trailing text node gets emptied (not removed) by design.
+      const text = findText(tree)
+      expect(text?.value).toBe('')
+    })
+
+    it('lifts {invert=light} verbatim', async () => {
+      const processor = unified().use(remarkParse).use(remarkImageAttrs)
+      const tree = processor.parse('![](dna.png){invert=light}')
+      await processor.run(tree)
+      const img = findImage(tree)
+      expect(img?.data?.hProperties?.invert).toBe('light')
+    })
+
+    it('parses semicolon-separated attributes', async () => {
+      const processor = unified().use(remarkParse).use(remarkImageAttrs)
+      const tree = processor.parse('![](dna.png){invert;saturate=70}')
+      await processor.run(tree)
+      const img = findImage(tree)
+      expect(img?.data?.hProperties?.invert).toBe('dark')
+      expect(img?.data?.hProperties?.saturate).toBe('70')
+    })
+
+    it('ignores images without a following {…} block', async () => {
+      const processor = unified().use(remarkParse).use(remarkImageAttrs)
+      const tree = processor.parse('![](dna.png) plain text')
+      await processor.run(tree)
+      const img = findImage(tree)
+      expect(img?.data?.hProperties).toBeUndefined()
     })
   })
 

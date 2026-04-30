@@ -10,6 +10,7 @@ import remarkMath from 'remark-math'
 import remarkGfm from 'remark-gfm'
 import { remarkTabs } from './remark-plugins/tabs'
 import { remarkImageResolver } from './remark-plugins/image-resolver'
+import { remarkImageAttrs } from './remark-plugins/image-attrs'
 import { remarkExcalidraw } from './remark-plugins/excalidraw'
 import { remarkCodeEditor } from './remark-plugins/code-editor'
 import { remarkCallouts } from './remark-plugins/callouts'
@@ -29,6 +30,7 @@ export const remarkPlugins: PluggableList = [
   remarkGfm,
   remarkMath,
   remarkYoutubeImage,
+  remarkImageAttrs,
   remarkImageResolver,
   remarkExcalidraw,
   remarkMuxVideo,
