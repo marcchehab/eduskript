@@ -6,7 +6,7 @@ import { useSession } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
-import { Eye, EyeOff, Pencil, Code, Bold, Italic, Heading, Heading1, Heading2, Heading3, List, ListOrdered, Link, Palette, Highlighter, Circle, Wand2, ChevronDown, FilePen, Minus, Plus, CircleHelp, TextQuote, Puzzle } from 'lucide-react'
+import { Eye, EyeOff, Pencil, Code, Bold, Italic, Heading, Heading1, Heading2, Heading3, List, ListOrdered, Link, Palette, Highlighter, Circle, Wand2, ChevronDown, FilePen, Minus, Plus, CircleHelp, TextQuote, Puzzle, Sigma, MousePointerClick } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1452,6 +1452,49 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   const insertNumberedList = () => insertAtCursor('\n1. ')
   const insertLink = () => wrapSelection('[', '](url)')
 
+  // Insert a styled button (rendered as <a> link with an es-btn class).
+  // Selects the label so the author can immediately overwrite "Click me".
+  const insertButton = (variant: 'primary' | 'secondary' | 'outline' = 'primary') => {
+    if (!editorViewRef.current || useSimpleEditor) return
+    const view = editorViewRef.current
+    const pos = view.state.selection.main.head
+    const label = 'Click me'
+    const opening = `<a class="es-btn es-btn-${variant}" href="https://example.com">`
+    const closing = `</a>`
+    const insertText = `${opening}${label}${closing}`
+    view.dispatch({
+      changes: { from: pos, insert: insertText },
+      selection: { anchor: pos + opening.length, head: pos + opening.length + label.length },
+    })
+    view.focus()
+  }
+
+  // Insert math. Inline wraps the current selection in $…$; display inserts a
+  // $$…$$ block on its own lines and places the cursor between the delimiters.
+  const insertMathInline = () => {
+    if (!editorViewRef.current || useSimpleEditor) return
+    const view = editorViewRef.current
+    const { from, to } = view.state.selection.main
+    const selected = view.state.doc.sliceString(from, to) || 'x'
+    const wrapped = `$${selected}$`
+    view.dispatch({
+      changes: { from, to, insert: wrapped },
+      selection: { anchor: from + 1, head: from + 1 + selected.length },
+    })
+    view.focus()
+  }
+  const insertMathDisplay = () => {
+    if (!editorViewRef.current || useSimpleEditor) return
+    const view = editorViewRef.current
+    const pos = view.state.selection.main.head
+    const insertText = `\n$$\n\n$$\n`
+    view.dispatch({
+      changes: { from: pos, insert: insertText },
+      selection: { anchor: pos + 4 },
+    })
+    view.focus()
+  }
+
   // Text color and highlight helpers.
   // Palette items use the *-ByName helpers (emit class-based spans that pick
   // up theme-aware CSS vars from globals.css). The "Custom color…" picker
@@ -1871,6 +1914,80 @@ const CodeMirrorEditor = function CodeMirrorEditor({
             >
               <Puzzle className="w-4 h-4" />
             </Button>
+            {/* Math (display by default; dropdown for inline) */}
+            <DropdownMenu>
+              <div className="flex items-center border rounded-md h-8">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={insertMathDisplay}
+                  title="Insert Math (display)"
+                  className="w-8 h-8 p-0 rounded-r-none border-0"
+                >
+                  <Sigma className="w-4 h-4" />
+                </Button>
+                <div className="h-4 w-px bg-border" />
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-5 h-8 p-0 rounded-l-none border-0"
+                    title="Math options"
+                  >
+                    <ChevronDown className="w-3 h-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+              </div>
+              <DropdownMenuContent align="start" className="min-w-[160px]">
+                <DropdownMenuItem onClick={insertMathDisplay} className="gap-2">
+                  <span className="font-serif italic">∑</span>
+                  <span>Display block ($$…$$)</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={insertMathInline} className="gap-2">
+                  <span className="font-serif italic">x</span>
+                  <span>Inline ($…$)</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {/* Button (link styled as a button; dropdown picks the variant) */}
+            <DropdownMenu>
+              <div className="flex items-center border rounded-md h-8">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => insertButton('primary')}
+                  title="Insert Button"
+                  className="w-8 h-8 p-0 rounded-r-none border-0"
+                >
+                  <MousePointerClick className="w-4 h-4" />
+                </Button>
+                <div className="h-4 w-px bg-border" />
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-5 h-8 p-0 rounded-l-none border-0"
+                    title="Button style"
+                  >
+                    <ChevronDown className="w-3 h-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+              </div>
+              <DropdownMenuContent align="start" className="min-w-[160px]">
+                <DropdownMenuItem onClick={() => insertButton('primary')} className="gap-2">
+                  <span className="es-btn es-btn-primary text-[10px] px-2 py-0.5 leading-none">Aa</span>
+                  <span>Primary</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => insertButton('secondary')} className="gap-2">
+                  <span className="es-btn es-btn-secondary text-[10px] px-2 py-0.5 leading-none">Aa</span>
+                  <span>Secondary</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => insertButton('outline')} className="gap-2">
+                  <span className="es-btn es-btn-outline text-[10px] px-2 py-0.5 leading-none">Aa</span>
+                  <span>Outline</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
 
           {/* Font size controls */}
