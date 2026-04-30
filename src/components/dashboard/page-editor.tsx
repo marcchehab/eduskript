@@ -734,8 +734,6 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                     page.isPublished && skript.isPublished ? (
                       <Link
                         href={buildPageUrl(skript.slug, page.slug)}
-                        target="_blank"
-                        rel="noopener noreferrer"
                         prefetch={false}
                       >
                         <Button
