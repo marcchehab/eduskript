@@ -44,6 +44,8 @@ interface PageBuilderProps {
     id: string
     title: string
     description?: string
+    parentId?: string
+    fromLibrary?: boolean
   } | null
   onRefresh?: () => void
   context?: PageBuilderContext
@@ -176,8 +178,16 @@ export function PageBuilder({
         </p>
       </CardHeader>
       <CardContent>
+        {/* Disable the outer droppable while reordering a skript that's already
+            inside a collection. @hello-pangea/dnd's getFurthestAway picks the
+            droppable whose center is furthest from drag-start when several
+            overlap; with nested droppables that's always the outer one, so
+            in-collection reorders would otherwise resolve to root and trigger
+            the "add to a collection" dialog. Library skripts (no parentId)
+            still hit this droppable, preserving that dialog. */}
         <Droppable
           droppableId="page-builder"
+          isDropDisabled={draggedItem?.type === 'skript' && !!draggedItem.parentId}
         >
           {(provided) => (
             <div
@@ -306,6 +316,8 @@ interface PageBuilderItemProps {
     id: string
     title: string
     description?: string
+    parentId?: string
+    fromLibrary?: boolean
   } | null
 }
 
@@ -419,53 +431,55 @@ function PageBuilderItem({ item, index, onRemove, expandedCollections, onToggleC
         {/* Nested skripts for collections - only show when expanded */}
         {item.type === 'collection' && expandedCollections.includes(item.id) && (
           <div className="px-3 pb-3">
-            <div className="ml-6 space-y-2 border-l-2 border-muted pl-4 min-h-[60px]">
-              {item.skripts && item.skripts.length > 0 ? (
-                <Droppable 
-                  droppableId={`skript-${item.id}`}
-                  isDropDisabled={draggedItem?.type === 'collection'}
-                >
-                  {(provided) => (
-                    <div 
-                      {...provided.droppableProps}
-                      ref={provided.innerRef}
-                      className="space-y-2"
-                    >
-                      {item.skripts!
-                        .sort((a, b) => a.order - b.order)
-                        .map((skript, skriptIndex) => (
-                          <SimpleSkriptItem
-                            key={skript.id}
-                            item={skript}
-                            index={skriptIndex}
-                            parentId={item.id}
-                            parentCanEdit={item.permissions?.canEdit}
-                            onRemove={onRemove}
-                          />
-                        ))}
-                      {provided.placeholder}
-                    </div>
-                  )}
-                </Droppable>
-              ) : (
-                <Droppable 
-                  droppableId={`empty-${item.id}`}
-                  isDropDisabled={draggedItem?.type === 'collection'}
-                >
-                  {(provided) => (
-                    <div 
-                      {...provided.droppableProps}
-                      ref={provided.innerRef}
-                      className="text-center py-4 text-muted-foreground text-xs"
-                    >
-                      <FileText className="w-8 h-8 mx-auto mb-2 text-muted-foreground/50" />
-                      <p>No skripts in this collection</p>
-                      {provided.placeholder}
-                    </div>
-                  )}
-                </Droppable>
-              )}
-            </div>
+            {/* The Droppable's innerRef element owns the visible drop-zone styles
+                (border, padding, min-height). If those sit on a wrapper instead,
+                the Droppable's bounding rect shrinks to its content and drops in
+                the visual gap fall through to the outer `page-builder` Droppable. */}
+            {item.skripts && item.skripts.length > 0 ? (
+              <Droppable
+                droppableId={`skript-${item.id}`}
+                isDropDisabled={draggedItem?.type === 'collection'}
+              >
+                {(provided) => (
+                  <div
+                    {...provided.droppableProps}
+                    ref={provided.innerRef}
+                    className="ml-6 space-y-2 border-l-2 border-muted pl-4 min-h-[60px]"
+                  >
+                    {item.skripts!
+                      .sort((a, b) => a.order - b.order)
+                      .map((skript, skriptIndex) => (
+                        <SimpleSkriptItem
+                          key={skript.id}
+                          item={skript}
+                          index={skriptIndex}
+                          parentId={item.id}
+                          parentCanEdit={item.permissions?.canEdit}
+                          onRemove={onRemove}
+                        />
+                      ))}
+                    {provided.placeholder}
+                  </div>
+                )}
+              </Droppable>
+            ) : (
+              <Droppable
+                droppableId={`empty-${item.id}`}
+                isDropDisabled={draggedItem?.type === 'collection'}
+              >
+                {(provided) => (
+                  <div
+                    {...provided.droppableProps}
+                    ref={provided.innerRef}
+                    className="ml-6 border-l-2 border-muted pl-4 min-h-[60px] text-center py-4 text-muted-foreground text-xs"
+                  >
+                    <FileText className="w-8 h-8 mx-auto mb-2 text-muted-foreground/50" />
+                    <p>No skripts in this collection</p>
+                    {provided.placeholder}
+                  </div>
+                )}
+              </Droppable>
+            )}
           </div>
         )}
         </div>
