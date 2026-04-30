@@ -10,6 +10,7 @@ import Image from 'next/image'
 import type { SkriptFilesData } from './skript-files'
 import { resolveFile, resolveExcalidraw } from './skript-files'
 import { CodeEditor } from '@/components/public/code-editor'
+import { HtmlPreviewEditor } from '@/components/public/code-editor/html-preview-editor'
 import { Tabs, TabItem } from '@/components/markdown/tabs'
 import { Youtube } from '@/components/markdown/youtube'
 import { MuxVideo } from '@/components/markdown/mux-video'
@@ -252,6 +253,7 @@ export function createMarkdownComponents(
     const checkCode = (props['dataCheckCode'] as string) || (props['data-check-code'] as string)
     const checkPoints = (props['dataCheckPoints'] as string) || (props['data-check-points'] as string)
     const maxChecks = (props['dataMaxChecks'] as string) || (props['data-max-checks'] as string)
+    const heightAttr = (props['dataHeight'] as string) || (props['data-height'] as string)
 
     // Debug: log all props to find attribute naming
     if (typeof window !== 'undefined') {
@@ -312,6 +314,25 @@ export function createMarkdownComponents(
           schemaImageUrl = schemaFile?.url
         }
       }
+    }
+
+    // HTML editor renders a sandboxed-iframe live preview instead of the
+    // Run-button + output panel that Python/JS/SQL share, so we route it to
+    // its own component rather than threading another branch through CodeEditor.
+    if (language === 'html') {
+      const parsedHeight = heightAttr ? parseInt(heightAttr, 10) : NaN
+      const height = Number.isFinite(parsedHeight) && parsedHeight > 0 ? parsedHeight : undefined
+      return (
+        <div {...props}>
+          <HtmlPreviewEditor
+            key={id}
+            id={id}
+            pageId={pageId}
+            initialCode={decodedCode}
+            height={height}
+          />
+        </div>
+      )
     }
 
     return (

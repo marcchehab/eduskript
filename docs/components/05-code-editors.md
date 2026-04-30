@@ -1,6 +1,6 @@
 # Interactive Code Editors
 
-Code editors students can edit and **run in the browser** — no installation, no server, no "please install Python first." Python and JavaScript both run client-side; SQL runs against per-student SQLite databases (covered in the next chapter).
+Code editors students can edit and **run in the browser** — no installation, no server, no "please install Python first." Python and JavaScript both run client-side; SQL runs against per-student SQLite databases (covered in the next chapter); HTML renders into a sandboxed live-preview iframe.
 
 ---
 
@@ -37,8 +37,9 @@ The HTML form lets you set extra attributes that don't fit cleanly in a fence in
 | Language | Runtime | Notes |
 |----------|---------|-------|
 | **Python** | [Pyodide](https://pyodide.org) + [Skulpt](https://skulpt.org) | Automatic: Skulpt for `turtle` and `input()`, Pyodide for everything else |
-| **JavaScript** | The student's browser, sandboxed | Modern JS, no DOM access |
+| **JavaScript** | A sandboxed Web Worker | Modern JS, no DOM access — for algorithms, not pages |
 | **SQL** | [SQL.js](https://sql.js.org) (SQLite compiled to WebAssembly) | See **SQL Editors** chapter |
+| **HTML** | A sandboxed iframe in the student's browser | Live preview pane next to the editor — for HTML/CSS/JS lessons |
 
 Python's first run loads the runtime (~5 seconds, cached after that). Subsequent runs are instant. JavaScript and SQL are near-instant on first run.
 
@@ -155,6 +156,54 @@ For Python turtle graphics, `import turtle` works — output appears as an inlin
 
 ---
 
+## HTML editor with live preview
+
+Use ` ```html editor ` for HTML/CSS/JS lessons. The editor splits into two panes — code on the left, a sandboxed iframe on the right that re-renders ~500 ms after each keystroke.
+
+````markdown
+```html editor
+<style>
+  body { font-family: system-ui; padding: 1rem }
+  h1 { color: crimson }
+</style>
+<h1>Hallo Welt</h1>
+<button onclick="alert('Klick!')">Klick mich</button>
+```
+````
+
+What works inside the iframe:
+
+- Inline event handlers (`onclick="..."`), `<script>` blocks, and DOM access from JavaScript
+- `alert()`, `confirm()`, `prompt()` for interactive demos
+- `<form>` submission (won't navigate away — the sandbox blocks top-level navigation)
+- External resources: CDN scripts, Google Fonts, remote images load normally
+
+What does not work, by design:
+
+- Reaching the parent Eduskript page — `window.parent`, cookies, `localStorage` of the host site are all blocked (no `allow-same-origin`)
+- Redirecting the student's tab away from the lesson (no `allow-top-navigation`)
+- Pairing with `python-check` or running in `exam` mode — the HTML editor is not auto-graded
+
+### Layout and options
+
+- **Default size:** 400 px tall, 50/50 horizontal split. The student can drag the divider.
+- **Stack on mobile:** below 768 px the panes stack vertically (editor on top, preview below).
+- **Custom height:** set `height="600"` (pixels) on the fence info-string.
+- **Fullscreen:** the toolbar's fullscreen button uses the browser's native fullscreen API.
+
+````markdown
+```html editor height="600" id="kitten-demo"
+<img src="https://placekitten.com/400/300">
+```
+````
+
+Persistence and reset behave exactly like the other editors — student edits are saved per `id` and `Reset` restores the original markdown.
+
+> [!note] Single-file for now
+> The HTML editor takes one block per editor. The multi-file `file="..."` pattern that Python and JavaScript support is not yet wired up for HTML — combine your HTML, CSS, and JS into a single block (use `<style>` and `<script>` inline).
+
+---
+
 ## What can Python do? What can JavaScript do?
 
 ### Python (Pyodide)
@@ -184,6 +233,8 @@ For runtime-specific things (file uploads, browser APIs, charting libraries), us
 |------|--------|
 | Standalone Python editor | ` ```python editor ` |
 | Standalone JavaScript editor | ` ```javascript editor ` |
+| HTML editor with live preview | ` ```html editor ` |
+| Taller HTML editor | ` ```html editor height="600" ` |
 | Persistent editor (recommended) | ` ```python editor id="my-stable-id" ` |
 | Multi-file editor (multiple blocks, same id) | ` ```python editor id="x" file="main.py" ` |
 | Hide the file tabs (single-file mode) | ` ```python editor single ` |

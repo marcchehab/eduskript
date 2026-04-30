@@ -157,6 +157,7 @@ LIMIT 5;
 | Code block | ` ``` ` | — |
 | Code editor | ` ```python editor ` | `<code-editor data-language="python">` |
 | SQL editor | ` ```sql editor db="..." ` | `<code-editor data-language="sql" data-db="...">` |
+| HTML editor (live preview) | ` ```html editor ` | `<code-editor data-language="html">` |
 | Auto-graded | ` ```python-check for="..." ` | — |
 | Image | `![alt](file.png)` | `<image src="file.png">` |
 | Excalidraw | `![alt](file.excalidraw)` | — |

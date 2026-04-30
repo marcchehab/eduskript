@@ -88,7 +88,13 @@ The title "Pro Tip" must be on the \`[!tip]\` line, not below it!`)
 
 Syntax: \`\`\`language editor [options]\`\`\`
 
-**Supported languages:** python, javascript, sql, java, cpp, go, rust, php, html, css, json, yaml, xml
+**Executable languages** (the editor actually runs the code):
+- \`python\` - Pyodide / Skulpt, runs in the browser
+- \`javascript\` - sandboxed Web Worker, no DOM access
+- \`sql\` - sql.js (SQLite WASM), needs \`db="..."\`
+- \`html\` - sandboxed iframe with a live preview pane (see below)
+
+Other language identifiers (java, cpp, go, rust, php, css, json, yaml, xml, …) only get syntax highlighting when used with \`editor\` — there is no runtime to execute them.
 
 **Options:**
 - \`single\` - Hide file tabs for simple examples
@@ -96,6 +102,7 @@ Syntax: \`\`\`language editor [options]\`\`\`
 - \`id="unique-id"\` - Persistent state across page loads. **Required** when pairing with \`python-check\` (the check uses \`for="<id>"\`).
 - \`db="database.db"\` - For SQL: specify database file
 - \`solution="SELECT ..."\` - For SQL: expected solution query. Enables automatic pass/fail verification after each run. Multi-line solutions use \`\\n\` literals: \`solution="SELECT a, b\\nFROM t"\`
+- \`height="500"\` - For HTML: total pixel height of editor + preview (default 400)
 
 Examples:
 \`\`\`markdown
@@ -115,6 +122,25 @@ SELECT * FROM movies LIMIT 10;
 console.log("Simple example");
 \`\`\`
 \`\`\`
+
+### HTML editor (live preview)
+
+\`\`\`html editor\`\`\` renders a split view: CodeMirror on the left, a sandboxed iframe on the right that re-renders ~500 ms after each keystroke. Use it to teach HTML/CSS/JS together — students see the page they are building as they type.
+
+\`\`\`markdown
+\`\`\`html editor
+<style>h1 { color: crimson }</style>
+<h1>Hallo</h1>
+<button onclick="alert('Klick!')">Klick</button>
+\`\`\`
+\`\`\`
+
+Behaviour and constraints (different from the other editors):
+- The iframe sandbox is \`allow-scripts allow-modals allow-forms\`. Inline event handlers, \`<script>\`, \`alert\`/\`prompt\`, and \`<form>\` work. There is no \`allow-same-origin\`, so user code cannot reach Eduskript's window, cookies, or storage. There is no \`allow-top-navigation\`, so the host tab cannot be redirected.
+- External resources (CDN scripts, Google Fonts, remote images) load normally — no CSP blocks them.
+- No \`exam\` mode and no \`python-check\` pairing — HTML editors are not auto-graded.
+- One file per editor for now; \`file=\` multi-block grouping is not yet wired up for HTML.
+- \`id\` and \`height\` work as documented above; persistence and Reset behave like the other editors.
 
 ### Python Checks (auto-grading)
 
@@ -381,11 +407,13 @@ export function getCondensedSyntaxReference(): string {
   - Collapsible: \`> [!type]-\` (closed) or \`> [!type]+\` (open)
   - WRONG: \`> [!tip]\\n> **Title**\` - NEVER put title on new line!
 
-**Code Editors:** \`\`\`language editor [single] [exam] [id="x"] [db="file.db"] [solution="SELECT ..."]\`\`\`
-  - Languages: python, javascript, sql, java, cpp, go, rust, etc.
+**Code Editors:** \`\`\`language editor [single] [exam] [id="x"] [db="file.db"] [solution="SELECT ..."] [height="500"]\`\`\`
+  - Executable: python, javascript, sql, html. Other language IDs only get syntax highlighting.
+  - \`html editor\` is special: split view with a sandboxed iframe live-preview (\`allow-scripts allow-modals allow-forms\`, no \`allow-same-origin\`). No exam/python-check pairing.
   - \`single\`: hides file tabs (single-file mode).
   - \`exam\`: silent grading — pair with python-check; student runs code but never sees pass/fail feedback. Use for assessments, NOT practice. Default (no \`exam\`) shows feedback after each "Check" click.
   - \`solution="SELECT ..."\`: SQL only — shows pass/fail after each run. Multi-line: use \`\\n\` literals inside the quotes.
+  - \`height="500"\`: HTML editor only — pixel height of the editor + preview pane (default 400).
 
 **Python Checks:** pair \`\`\`python editor id="x"\`\`\` with \`\`\`python-check for="x"\`\`\` containing \`assert\` statements.
   - \`for="<id>"\` is REQUIRED and must match the editor's \`id\` — otherwise the check block is silently dropped.

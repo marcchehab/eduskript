@@ -278,6 +278,7 @@ function getExtension(language: string): string {
     case 'python': return '.py'
     case 'javascript': return '.js'
     case 'sql': return '.sql'
+    case 'html': return '.html'
     default: return '.txt'
   }
 }

@@ -85,6 +85,27 @@ describe('Remark Plugins', () => {
       expect(getHtmlAttr(htmlNode?.value, 'data-language')).toBe('javascript')
     })
 
+    it('should convert html editor blocks and preserve markup in data-code', () => {
+      const markdown = '```html editor\n<h1>Hi</h1>\n<button onclick="alert(1)">x</button>\n```'
+
+      const processor = unified()
+        .use(remarkParse)
+        .use(remarkCodeEditor)
+
+      const tree = processor.parse(markdown)
+      processor.runSync(tree)
+
+      const htmlNode = findNode(tree, (node: any) => node.type === 'html' && node.value?.includes('code-editor'))
+
+      expect(htmlNode).toBeDefined()
+      expect(getHtmlAttr(htmlNode?.value, 'data-language')).toBe('html')
+      const code = getHtmlAttr(htmlNode?.value, 'data-code')
+      // HTML special chars must be escaped in the attribute so the markup
+      // round-trips intact when the editor decodes them client-side.
+      expect(code).toContain('&lt;h1&gt;Hi&lt;/h1&gt;')
+      expect(code).toContain('onclick=')
+    })
+
     it('should not modify code blocks without editor meta', async () => {
       const markdown = '```python\nprint("Hello")\n```'
 
