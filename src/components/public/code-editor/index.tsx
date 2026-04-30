@@ -407,6 +407,8 @@ export const CodeEditor = memo(function CodeEditor({
     reject: (reason: Error) => void
   } | null>(null)
   const pendingInputRef = useRef<typeof pendingInput>(null)
+  // Aborts the in-flight JS Worker run (Stop button → worker.terminate()).
+  const jsAbortControllerRef = useRef<AbortController | null>(null)
 
   // Output/History panel state
   const [activePanel, setActivePanel] = useState<'output' | 'history'>('output')
@@ -2524,8 +2526,51 @@ export const CodeEditor = memo(function CodeEditor({
     } else if (language === 'sql') {
       runSqlQuery(code)
     } else if (language === 'javascript') {
-      // TODO: Implement JavaScript execution
-      addOutput('JavaScript execution not yet implemented', OutputLevel.ERROR)
+      runJavaScriptCode(code)
+    }
+  }
+
+  // Run JavaScript code in a Web Worker.
+  // Multi-file: prepend sibling files (in tab order) above the active file's
+  // content so helpers defined in other tabs are in scope. ES module
+  // import/export between files is not supported in v1.
+  const runJavaScriptCode = async (code: string) => {
+    setRunState(RunState.RUNNING)
+    setOutput([])
+
+    const siblingFiles = filesRef.current.filter((_, idx) => idx !== activeFileIndex)
+    const combined = siblingFiles.length > 0
+      ? siblingFiles.map(f => f.content).join('\n;\n') + '\n;\n' + code
+      : code
+
+    const controller = new AbortController()
+    jsAbortControllerRef.current = controller
+
+    try {
+      const { executeJavaScript } = await import('@/lib/js-executor.client')
+      const result = await executeJavaScript(combined, {
+        signal: controller.signal,
+        onOutput: (level, text) => {
+          const mapped =
+            level === 'error' ? OutputLevel.ERROR :
+            level === 'warn' ? OutputLevel.WARNING :
+            OutputLevel.OUTPUT
+          addOutput(text, mapped)
+        },
+        onError: (message) => {
+          addOutput(message, OutputLevel.ERROR)
+        },
+      })
+      if (result.stopped) {
+        addOutput('Program stopped', OutputLevel.WARNING)
+      }
+    } catch (error: any) {
+      addOutput(error?.message || 'Failed to execute JavaScript', OutputLevel.ERROR)
+    } finally {
+      if (jsAbortControllerRef.current === controller) {
+        jsAbortControllerRef.current = null
+      }
+      setRunState(RunState.STOPPED)
     }
   }
 
@@ -2978,6 +3023,13 @@ plots
     }
     if (window.Sk) {
       window.Sk.execLimit = 1
+    }
+    // Aborting terminates the JS Worker. runJavaScriptCode reports "Program
+    // stopped" itself via the result.stopped branch, so don't double-log here.
+    if (jsAbortControllerRef.current) {
+      jsAbortControllerRef.current.abort()
+      setRunState(RunState.STOPPED)
+      return
     }
     setRunState(RunState.STOPPED)
     addOutput('Program stopped', OutputLevel.WARNING)
