@@ -128,6 +128,7 @@ export const HtmlPreviewEditor = memo(function HtmlPreviewEditor({
           html(),
           indentUnit.of('  '),
           EditorState.tabSize.of(2),
+          EditorView.lineWrapping,
           EditorView.theme({
             '&': { height: '100%', width: '100%' },
             '.cm-scroller': { overflow: 'auto' },
