@@ -43,6 +43,7 @@ export const HtmlPreviewEditor = memo(function HtmlPreviewEditor({
   const [editorWidth, setEditorWidth] = useState(50)
   const [isStacked, setIsStacked] = useState(false)
   const [fullscreen, setFullscreen] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
 
   const editorHostRef = useRef<HTMLDivElement | null>(null)
   const editorViewRef = useRef<EditorView | null>(null)
@@ -208,6 +209,7 @@ export const HtmlPreviewEditor = memo(function HtmlPreviewEditor({
     if (isStacked) return
     e.preventDefault()
     dragStateRef.current = { startX: e.clientX, startWidth: editorWidth }
+    setIsDragging(true)
     const onMove = (ev: MouseEvent) => {
       if (!dragStateRef.current || !containerRef.current) return
       const { startX, startWidth } = dragStateRef.current
@@ -219,6 +221,7 @@ export const HtmlPreviewEditor = memo(function HtmlPreviewEditor({
     }
     const onUp = () => {
       dragStateRef.current = null
+      setIsDragging(false)
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
     }
@@ -267,6 +270,12 @@ export const HtmlPreviewEditor = memo(function HtmlPreviewEditor({
             srcDoc={previewSrc}
             className="w-full h-full border-0 bg-white"
           />
+          {/* Iframes capture mouse events, so mousemove never reaches the window
+              listener once the cursor crosses the splitter. Cover the iframe
+              while dragging so events flow back through the parent document. */}
+          {isDragging && (
+            <div className="absolute inset-0 cursor-col-resize" />
+          )}
         </div>
       </div>
 
