@@ -329,6 +329,8 @@ export const getPublishedPage = (
               forkedFromPageId: true,
               forkedFromAuthorId: true,
               forkedAt: true,
+              createdAt: true,
+              updatedAt: true,
             }
           }
         }
@@ -767,6 +769,8 @@ export const getOrgPublishedPage = (
               isUnlisted: true,
               pageType: true,
               examSettings: true,
+              createdAt: true,
+              updatedAt: true,
             }
           }
         }

@@ -7,6 +7,7 @@ import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.
 import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
 import { getTeacherByUsernameDeduped } from '@/lib/cached-queries'
 import { prisma } from '@/lib/prisma'
+import { canonicalUrl } from '@/lib/seo/canonical'
 
 // Enable ISR - pages are cached until explicitly invalidated
 export const revalidate = false
@@ -34,36 +35,40 @@ export async function generateMetadata({ params }: DomainIndexProps): Promise<Me
 
     // ISR-safe SEO metadata: derive everything from cached DB data, never
     // from request headers. Reading headers() here would opt this route
-    // out of static generation. The teacher's primary verified custom
-    // domain is the canonical home host; absent that, we canonicalize to
-    // eduskript.org/{pageSlug}. Either way the answer is stable per
-    // pageSlug, so ISR keeps a single cached render per teacher.
+    // out of static generation.
     const primaryDomain = teacher.customDomains?.[0]?.domain
-    const canonicalHost = primaryDomain ?? `eduskript.org/${teacher.pageSlug ?? domain}`
-    const canonicalUrl = `https://${canonicalHost}`
+    const canonical = canonicalUrl({
+      type: 'teacher',
+      slug: teacher.pageSlug ?? domain,
+      customDomains: teacher.customDomains,
+    })
 
     const baseTitle = teacher.pageName || teacher.name || 'Eduskript'
     const title = primaryDomain && teacher.pageTagline
       ? `${baseTitle} — ${teacher.pageTagline}`
       : baseTitle
     const description = teacher.pageDescription || teacher.bio || `Educational content by ${teacher.pageName || teacher.name}`
+    const ogImage = teacher.pageIcon || '/og-default.svg'
 
     return {
       title,
       description,
       authors: [{ name: teacher.name || 'Unknown' }],
+      alternates: { canonical },
       ...(teacher.pageIcon ? { icons: { icon: teacher.pageIcon } } : {}),
       openGraph: {
         title,
         description,
         type: 'website',
         siteName: teacher.pageName || teacher.name || 'Eduskript',
-        url: canonicalUrl
+        url: canonical,
+        images: [ogImage]
       },
       twitter: {
         card: 'summary_large_image',
         title,
-        description
+        description,
+        images: [ogImage]
       }
     }
   } catch (error) {

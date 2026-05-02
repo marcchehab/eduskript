@@ -6,6 +6,9 @@ import type { Metadata } from 'next'
 import { prisma } from '@/lib/prisma'
 import { getOrgPublishedPage, getOrgFullSiteStructure } from '@/lib/cached-queries'
 import { buildSiteStructure } from '@/lib/site-structure'
+import { canonicalUrl } from '@/lib/seo/canonical'
+import { generateExcerpt } from '@/lib/markdown'
+import { JsonLd, learningResourceSchema, breadcrumbSchema } from '@/lib/seo/json-ld'
 
 interface PageProps {
   params: Promise<{
@@ -29,7 +32,15 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   try {
     const organization = await prisma.organization.findUnique({
       where: { slug: orgSlug },
-      select: { id: true, name: true }
+      select: {
+        id: true,
+        name: true,
+        customDomains: {
+          where: { isVerified: true, isPrimary: true },
+          select: { domain: true },
+          take: 1,
+        },
+      }
     })
 
     if (!organization) {
@@ -48,19 +59,33 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     }
 
     const title = `${content.page.title} | ${organization.name}`
-    const description = content.collection?.description || `${content.page.title} by ${organization.name}`
+    const description =
+      generateExcerpt(content.page.content, 160) ||
+      content.collection?.description ||
+      `${content.page.title} by ${organization.name}`
+    const ogImage = '/og-default.svg'
+    const canonical = canonicalUrl({
+      type: 'org',
+      slug: orgSlug,
+      customDomains: organization.customDomains,
+      path: `/c/${skriptSlug}/${pageSlug}`,
+    })
 
     return {
       title,
       description,
+      alternates: { canonical },
       openGraph: {
         title,
         description,
         type: 'article',
         siteName: organization.name,
-        url: `/org/${orgSlug}/c/${skriptSlug}/${pageSlug}`
+        url: canonical,
+        images: [ogImage],
+        publishedTime: content.page.createdAt.toISOString(),
+        modifiedTime: content.page.updatedAt.toISOString(),
       },
-      twitter: { card: 'summary_large_image', title, description }
+      twitter: { card: 'summary_large_image', title, description, images: [ogImage] }
     }
   } catch (error) {
     console.error('Error generating metadata:', error)
@@ -79,7 +104,13 @@ export default async function OrgPublicPage({ params }: PageProps) {
       description: true,
       showIcon: true,
       iconUrl: true,
-      sidebarBehavior: true
+      sidebarBehavior: true,
+      pageLanguage: true,
+      customDomains: {
+        where: { isVerified: true, isPrimary: true },
+        select: { domain: true },
+        take: 1,
+      },
     }
   })
 
@@ -159,7 +190,41 @@ export default async function OrgPublicPage({ params }: PageProps) {
     ? await getOrgFullSiteStructure(organization.id, orgSlug)
     : undefined
 
+  const canonical = canonicalUrl({
+    type: 'org',
+    slug: orgSlug,
+    customDomains: organization.customDomains,
+    path: `/c/${skriptSlug}/${pageSlug}`,
+  })
+  const orgHome = canonicalUrl({
+    type: 'org',
+    slug: orgSlug,
+    customDomains: organization.customDomains,
+  })
+  const description =
+    generateExcerpt(page.content, 160) ||
+    collection?.description ||
+    `${page.title} by ${organization.name}`
+  const ldSchemas = [
+    learningResourceSchema({
+      title: page.title,
+      description,
+      url: canonical,
+      inLanguage: organization.pageLanguage || 'en',
+      author: organization.name,
+      dateCreated: page.createdAt,
+      dateModified: page.updatedAt,
+    }),
+    breadcrumbSchema([
+      { name: organization.name, url: orgHome },
+      { name: skript.title, url: `${orgHome}/c/${skriptSlug}` },
+      { name: page.title, url: canonical },
+    ]),
+  ]
+
   return (
+    <>
+    <JsonLd schema={ldSchemas} />
     <PublicSiteLayout
       teacher={orgAsTeacher}
       siteStructure={siteStructure}
@@ -184,5 +249,6 @@ export default async function OrgPublicPage({ params }: PageProps) {
         </article>
       </div>
     </PublicSiteLayout>
+    </>
   )
 }

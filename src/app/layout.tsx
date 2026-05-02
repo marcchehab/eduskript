@@ -36,6 +36,15 @@ const headingFont = Barlow_Condensed({
 export const metadata: Metadata = {
   title: "Eduskript - Education Platform",
   description: "Create and manage educational content with ease",
+  openGraph: {
+    type: "website",
+    siteName: "Eduskript",
+    images: ["/og-default.svg"],
+  },
+  twitter: {
+    card: "summary_large_image",
+    images: ["/og-default.svg"],
+  },
 };
 
 export const viewport = {

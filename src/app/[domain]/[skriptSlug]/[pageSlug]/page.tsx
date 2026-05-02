@@ -6,6 +6,9 @@ import {
 } from '@/lib/cached-queries'
 import { PublicPageBody } from '@/components/public/public-page-body'
 import type { Metadata } from 'next'
+import { canonicalUrl } from '@/lib/seo/canonical'
+import { generateExcerpt } from '@/lib/markdown'
+import { JsonLd, learningResourceSchema, breadcrumbSchema } from '@/lib/seo/json-ld'
 
 interface PageProps {
   params: Promise<{
@@ -56,24 +59,42 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     }
 
     const title = `${content.page.title} | ${teacher.name || 'Eduskript'}`
-    const description = content.collection?.description || `${content.page.title} by ${teacher.name}`
+    // Prefer an excerpt from the actual page content over the collection's
+    // shared description — every page in a collection would otherwise share
+    // one og:description.
+    const description =
+      generateExcerpt(content.page.content, 160) ||
+      content.collection?.description ||
+      `${content.page.title} by ${teacher.name}`
+    const ogImage = teacher.pageIcon || '/og-default.svg'
+    const canonical = canonicalUrl({
+      type: 'teacher',
+      slug: teacher.pageSlug ?? domain,
+      customDomains: teacher.customDomains,
+      path: `/${skriptSlug}/${pageSlug}`,
+    })
 
     return {
       title,
       description,
       authors: [{ name: teacher.name || 'Unknown' }],
+      alternates: { canonical },
       ...(teacher.pageIcon ? { icons: { icon: teacher.pageIcon } } : {}),
       openGraph: {
         title,
         description,
         type: 'article',
         siteName: teacher.name || 'Eduskript',
-        url: `https://${domain}/${skriptSlug}/${pageSlug}`
+        url: canonical,
+        images: [ogImage],
+        publishedTime: content.page.createdAt.toISOString(),
+        modifiedTime: content.page.updatedAt.toISOString(),
       },
       twitter: {
         card: 'summary_large_image',
         title,
-        description
+        description,
+        images: [ogImage]
       }
     }
   } catch (error) {
@@ -129,14 +150,49 @@ export default async function PublicPage({ params }: PageProps) {
         })
       ])
 
+  const canonical = canonicalUrl({
+    type: 'teacher',
+    slug: teacher.pageSlug ?? domain,
+    customDomains: teacher.customDomains,
+    path: `/${skriptSlug}/${pageSlug}`,
+  })
+  const teacherHome = canonicalUrl({
+    type: 'teacher',
+    slug: teacher.pageSlug ?? domain,
+    customDomains: teacher.customDomains,
+  })
+  const description =
+    generateExcerpt(page.content, 160) ||
+    content.collection?.description ||
+    `${page.title} by ${teacher.name}`
+  const ldSchemas = [
+    learningResourceSchema({
+      title: page.title,
+      description,
+      url: canonical,
+      inLanguage: teacher.pageLanguage || 'en',
+      author: teacher.name || teacher.pageName || 'Eduskript',
+      dateCreated: page.createdAt,
+      dateModified: page.updatedAt,
+    }),
+    breadcrumbSchema([
+      { name: teacher.pageName || teacher.name || 'Home', url: teacherHome },
+      { name: skript.title, url: `${teacherHome}/${skriptSlug}` },
+      { name: page.title, url: canonical },
+    ]),
+  ]
+
   // Sidebar/layout chrome is provided by src/app/[domain]/[skriptSlug]/layout.tsx
   // (inherited at this segment). This page only renders the content body.
   return (
-    <PublicPageBody
-      page={page}
-      skriptId={skript.id}
-      publicAnnotations={publicAnnotations}
-      publicSnaps={publicSnaps}
-    />
+    <>
+      <JsonLd schema={ldSchemas} />
+      <PublicPageBody
+        page={page}
+        skriptId={skript.id}
+        publicAnnotations={publicAnnotations}
+        publicSnaps={publicSnaps}
+      />
+    </>
   )
 }

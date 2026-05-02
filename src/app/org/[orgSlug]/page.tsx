@@ -10,6 +10,8 @@ import { HtmlLangSetter } from '@/components/seo/html-lang-setter'
 import { getOrgMembership } from '@/lib/org-auth'
 import { getOrgWithLayout, getOrgHomepageContent, getOrgFullSiteStructure } from '@/lib/cached-queries'
 import { prisma } from '@/lib/prisma'
+import { canonicalUrl } from '@/lib/seo/canonical'
+import { JsonLd, organizationSchema } from '@/lib/seo/json-ld'
 
 export const dynamic = 'force-dynamic'
 export const dynamicParams = true
@@ -49,15 +51,13 @@ export async function generateMetadata({ params }: OrgPageProps): Promise<Metada
     }
 
     // ISR-safe canonical: prefer the org's primary verified custom domain;
-    // fall back to eduskript.org/<orgSlug>. SEO-tuned home title kicks in
-    // only when the org has its own custom domain AND has set a tagline,
-    // otherwise stay with the plain org name.
+    // fall back to eduskript.org (root org) or eduskript.org/org/<orgSlug>.
     const primaryDomain = organization.customDomains?.[0]?.domain
-    // The hardcoded default for the canonical app host is intentional: the
-    // root org "eduskript" is the only org served on eduskript.org and is
-    // surfaced via the proxy rather than a CustomDomain row.
-    const canonicalHost = primaryDomain ?? (orgSlug === 'eduskript' ? 'eduskript.org' : `eduskript.org/org/${orgSlug}`)
-    const canonicalUrl = `https://${canonicalHost}`
+    const canonical = canonicalUrl({
+      type: 'org',
+      slug: orgSlug,
+      customDomains: organization.customDomains,
+    })
 
     // SEO-tuned title source order:
     //   1. Tenant on a custom domain with a configured pageTagline.
@@ -70,17 +70,25 @@ export async function generateMetadata({ params }: OrgPageProps): Promise<Metada
         ? 'Eduskript — Open-Source Platform for Interactive Lessons'
         : organization.name
     const description = organization.description || `${organization.name} on Eduskript`
+    const ogImage = (organization.showIcon && organization.iconUrl) || '/og-default.svg'
 
     return {
       title,
       description,
+      alternates: { canonical },
       openGraph: {
         title,
         description,
         type: 'website',
         siteName: organization.name,
-        url: canonicalUrl,
-        ...(organization.showIcon && organization.iconUrl && { images: [organization.iconUrl] }),
+        url: canonical,
+        images: [ogImage],
+      },
+      twitter: {
+        card: 'summary_large_image',
+        title,
+        description,
+        images: [ogImage],
       },
     }
   } catch (error) {
@@ -181,6 +189,7 @@ export default async function OrgPage({ params }: OrgPageProps) {
   return (
     <>
       <HtmlLangSetter lang={organization.pageLanguage} />
+      {orgSlug === 'eduskript' && <JsonLd schema={organizationSchema()} />}
     <PublicSiteLayout
       teacher={orgAsTeacher}
       siteStructure={collections}

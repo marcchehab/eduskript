@@ -70,3 +70,6 @@ export-output/
 
 # obsidian
 .obsidian/
+
+# SEO strategy notes (lives in user's Obsidian vault — see .seo/README.md)
+.seo/
