@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
+import { useIsFreeTeacher } from '@/hooks/use-billing'
 import { Dialog, DialogPortal, DialogOverlay, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { X, Save, Sparkles } from 'lucide-react'
@@ -70,6 +71,7 @@ export function ExcalidrawEditor({
   const [mounted, setMounted] = useState(false)
   const [editorKey, setEditorKey] = useState(Date.now()) // Force remount on open
   const alert = useAlertDialog()
+  const isFreePlan = useIsFreeTeacher()
   // AI prompt panel state. Hidden until the user clicks "Generate with AI".
   const [showAIPanel, setShowAIPanel] = useState(false)
   const [aiPrompt, setAIPrompt] = useState('')
@@ -292,14 +294,26 @@ export function ExcalidrawEditor({
                       Will be saved as: {drawingName || 'my-drawing'}.excalidraw
                     </p>
                   </div>
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowAIPanel(v => !v)}
-                    title="Generate a diagram from a prompt"
-                  >
-                    <Sparkles className="w-4 h-4 mr-2" />
-                    Generate with AI
-                  </Button>
+                  {isFreePlan ? (
+                    <Button
+                      variant="outline"
+                      disabled
+                      title="AI generation is a paid feature. Upgrade in Billing."
+                      className="opacity-50"
+                    >
+                      <Sparkles className="w-4 h-4 mr-2" />
+                      Generate with AI (paid)
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowAIPanel(v => !v)}
+                      title="Generate a diagram from a prompt"
+                    >
+                      <Sparkles className="w-4 h-4 mr-2" />
+                      Generate with AI
+                    </Button>
+                  )}
                   <Button
                     onClick={handleSave}
                     disabled={isSaving || !drawingName.trim()}

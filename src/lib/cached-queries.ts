@@ -47,6 +47,9 @@ export const getTeacherByPageSlug = (pageSlug: string) =>
           bio: true,
           sidebarBehavior: true,
           typographyPreference: true,
+          // Used by public pages to skip annotation/snap/broadcast queries
+          // for free teachers, where those tables are empty by definition.
+          billingPlan: true,
           customDomains: {
             where: { isVerified: true, isPrimary: true },
             select: { domain: true },

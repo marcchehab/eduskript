@@ -97,7 +97,7 @@ export default async function SkriptPreviewPage({ params }: SkriptPreviewProps) 
 
     const teacher = await prisma.user.findUnique({
       where: { pageSlug: domain },
-      select: { id: true, email: true }
+      select: { id: true, email: true, billingPlan: true }
     })
 
     if (!teacher) {
@@ -105,6 +105,7 @@ export default async function SkriptPreviewPage({ params }: SkriptPreviewProps) 
     }
 
     const isAuthor = session?.user?.email === teacher.email
+    const isFreeTeacher = teacher.billingPlan === 'free'
 
     const skript = await prisma.skript.findFirst({
       where: {
@@ -147,7 +148,9 @@ export default async function SkriptPreviewPage({ params }: SkriptPreviewProps) 
       where: { skriptId: skript.id }
     })
 
-    const [publicAnnotations, publicSnaps] = frontPage ? await Promise.all([
+    // Free teachers can't write to UserData (sync endpoint returns 402), so
+    // these tables are empty by definition — skip the queries.
+    const [publicAnnotations, publicSnaps] = frontPage && !isFreeTeacher ? await Promise.all([
       prisma.userData.findMany({
         where: {
           adapter: 'annotations',

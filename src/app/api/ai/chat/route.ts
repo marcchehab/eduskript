@@ -2,6 +2,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { checkSkriptPermissions } from '@/lib/permissions'
+import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import { assembleSystemPrompt } from '@/lib/ai/prompts'
 import type { ChatRequest, SkriptContext } from '@/lib/ai/types'
 import OpenAI from 'openai'
@@ -41,7 +42,12 @@ export async function POST(request: Request) {
 
     const userId = session.user.id
 
-    // 2. Check API key is configured
+    // 2. Paid-plan gate
+    if (!isPaidUser(session.user)) {
+      return paidOnlyResponse('AI chat is a paid feature.')
+    }
+
+    // 3. Check API key is configured
     if (!process.env.OPENROUTER_API_KEY) {
       return Response.json(
         { error: 'AI service not configured' },

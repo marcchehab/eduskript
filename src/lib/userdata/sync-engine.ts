@@ -64,6 +64,10 @@ export class SyncEngine {
   private syncTimeout: ReturnType<typeof setTimeout> | null = null
   private retryTimeout: ReturnType<typeof setTimeout> | null = null
   private retryCount = 0
+  // Once true, the server has told us this user is on a free plan and
+  // cloud sync is not allowed. Stop hammering the endpoint; data stays
+  // in IndexedDB. Reset only on setUser() (e.g., after upgrade + re-login).
+  private gatedByPlan = false
   private readonly MAX_RETRIES = 5
   private readonly SYNC_DEBOUNCE_MS = 2000
   private readonly BASE_RETRY_MS = 5000
@@ -105,6 +109,8 @@ export class SyncEngine {
   public setUser(userId: string | null): void {
     const wasLoggedIn = this.userId !== null
     this.userId = userId
+    // New session — give cloud sync another chance (user may have upgraded).
+    this.gatedByPlan = false
 
     if (userId && !wasLoggedIn) {
       // User just logged in - do initial sync
@@ -184,6 +190,14 @@ export class SyncEngine {
       return
     }
 
+    // Free plan: server returned 402 once; stop syncing for this session.
+    // Data stays in IndexedDB (still readable, still durable per-device).
+    if (this.gatedByPlan) {
+      this.syncQueue.clear()
+      this.updateStatus({ pending: 0 })
+      return
+    }
+
     // Skip if offline (but items remain in queue)
     if (!this.status.online) {
       return
@@ -210,6 +224,18 @@ export class SyncEngine {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ items: batch }),
       })
+
+      // 402 Payment Required → free plan. Mark as gated, drop the batch
+      // (still safe in IndexedDB), and don't retry. Logged at info level.
+      if (response.status === 402) {
+        this.gatedByPlan = true
+        await this.markSynced(batch)
+        operationIds.forEach((id) => this.updateOperation(id, 'success'))
+        this.syncQueue.clear()
+        this.updateStatus({ pending: 0, syncing: false, error: null })
+        console.info('[SyncEngine] Cloud sync disabled (free plan). Data stays local.')
+        return
+      }
 
       if (!response.ok) {
         throw new Error(`Sync failed: ${response.status}`)

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import { generatePseudonym } from '@/lib/privacy/pseudonym'
 import { bulkImportRateLimiter } from '@/lib/rate-limit'
 import { eventBus } from '@/lib/events'
@@ -20,6 +21,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    if (!isPaidUser(session.user)) {
+      return paidOnlyResponse('Class management is a paid feature.')
     }
 
     // Rate limiting (per user, not IP)

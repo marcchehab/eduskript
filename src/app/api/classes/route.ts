@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import { randomBytes } from 'crypto'
 
 // GET /api/classes - List teacher's classes
@@ -114,6 +115,10 @@ export async function POST(request: NextRequest) {
         { error: 'Only teachers can create classes' },
         { status: 403 }
       )
+    }
+
+    if (!isPaidUser(session.user)) {
+      return paidOnlyResponse('Class management is a paid feature.')
     }
 
     const body = await request.json()

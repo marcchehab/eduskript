@@ -21,6 +21,8 @@ import { VideoBrowser } from '@/components/dashboard/video-browser'
 import { ExcalidrawEditor } from '@/components/dashboard/excalidraw-editor'
 import { AIEditModal } from '@/components/ai'
 import type { AIEditTarget } from '@/hooks/use-ai-edit'
+import { useIsFreeTeacher } from '@/hooks/use-billing'
+import Link from 'next/link'
 import type { VideoInfo } from '@/lib/skript-files'
 import { extractAndUploadPdfPages } from '@/lib/pdf-extract'
 import type { PasteMenuOption } from '@/lib/paste-rules'
@@ -138,6 +140,7 @@ export function EditorWithMedia({
   metadataSlot,
 }: EditorWithMediaProps) {
   const alert = useAlertDialog()
+  const isFreePlan = useIsFreeTeacher()
 
   const [fileList, setFileList] = useState<Array<{
     id: string
@@ -584,7 +587,7 @@ export function EditorWithMedia({
             <CardDescription className="flex-1">
               {description ?? 'Drag files or videos from the drawers to insert them. Ctrl+S to save.'}
             </CardDescription>
-            {aiEdit && (
+            {aiEdit && !isFreePlan && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -594,6 +597,17 @@ export function EditorWithMedia({
               >
                 <Wand2 className="w-4 h-4" />
               </Button>
+            )}
+            {aiEdit && isFreePlan && (
+              <Link
+                href="/dashboard/billing"
+                title="AI Edit is a paid feature — click to upgrade"
+                className="flex-shrink-0"
+              >
+                <Button variant="ghost" size="sm" className="opacity-50">
+                  <Wand2 className="w-4 h-4" />
+                </Button>
+              </Link>
             )}
           </CardHeader>
         )}
@@ -619,7 +633,7 @@ export function EditorWithMedia({
               videoList={videoList}
               fileListLoading={fileListLoading}
               onFileUpload={refreshFileList}
-              onAIEdit={aiEdit ? () => setAiEditModalOpen(true) : undefined}
+              onAIEdit={aiEdit && !isFreePlan ? () => setAiEditModalOpen(true) : undefined}
               onExcalidrawEdit={(filename, fileId) => handleExcalidrawEdit({ id: fileId, name: filename })}
             />
           </div>

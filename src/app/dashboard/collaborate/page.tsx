@@ -17,7 +17,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { ProfileSettings } from '@/components/dashboard/profile-settings'
-import { UpgradePrompt } from '@/components/dashboard/upgrade-prompt'
 
 interface User {
   id: string
@@ -198,10 +197,8 @@ export default function CollaboratePage() {
     }
   }
 
-  const billingPlan = session?.user?.billingPlan || 'free'
-  if (billingPlan === 'free' && !session?.user?.isAdmin) {
-    return <UpgradePrompt feature="collaboration features" />
-  }
+  // Collaboration is free — it's a workflow feature, not a resource-heavy one.
+  // Per-user AI/sync gates still apply to each collaborator individually.
 
   return (
     <div className="space-y-6">

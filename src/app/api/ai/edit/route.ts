@@ -2,6 +2,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { checkSkriptPermissions } from '@/lib/permissions'
+import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import { assembleEditPrompt } from '@/lib/ai/prompts'
 import type { EditRequest, SkriptContext } from '@/lib/ai/types'
 import { parseJsonResponse, isValidEditPlan, type ParseJsonResponse } from '@/lib/ai/parse-json-response'
@@ -29,7 +30,12 @@ export async function POST(request: Request): Promise<Response> {
 
   const userId = session.user.id
 
-  // 2. Check API key
+  // 2. Paid-plan gate
+  if (!isPaidUser(session.user)) {
+    return paidOnlyResponse('AI editing is a paid feature.')
+  }
+
+  // 3. Check API key
   if (!process.env.OPENROUTER_API_KEY) {
     return Response.json({ success: false, error: 'AI service not configured' }, { status: 503 })
   }

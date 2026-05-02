@@ -3,7 +3,6 @@ import { redirect } from 'next/navigation'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { FrontPageEditor } from '@/components/dashboard/frontpage-editor'
-import { UpgradePrompt } from '@/components/dashboard/upgrade-prompt'
 
 export default async function UserFrontPageEditPage() {
   const session = await getServerSession(authOptions)
@@ -17,11 +16,7 @@ export default async function UserFrontPageEditPage() {
     redirect('/dashboard')
   }
 
-  // Gate behind paid plan
-  const billingPlan = session?.user?.billingPlan || 'free'
-  if (billingPlan === 'free' && !session?.user?.isAdmin) {
-    return <UpgradePrompt feature="front page editing" />
-  }
+  // Front page editing is free — part of the core publish-and-be-read experience.
 
   // Get user's frontpage if it exists
   const frontPage = await prisma.frontPage.findUnique({

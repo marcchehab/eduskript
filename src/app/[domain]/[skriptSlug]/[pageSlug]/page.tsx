@@ -112,16 +112,22 @@ export default async function PublicPage({ params }: PageProps) {
   // Public annotations/snaps are broadcast to every visitor — same data for
   // everyone, so safe to fetch inside the ISR cache. Invalidated via
   // revalidateTag when content changes.
-  const [publicAnnotations, publicSnaps] = await Promise.all([
-    prisma.userData.findMany({
-      where: { adapter: 'annotations', itemId: page.id, targetType: 'page' },
-      select: { data: true, userId: true, user: { select: { name: true } } }
-    }),
-    prisma.userData.findMany({
-      where: { adapter: 'snaps', itemId: page.id, targetType: 'page' },
-      select: { data: true, userId: true, user: { select: { name: true } } }
-    })
-  ])
+  // Free teachers can't write to UserData (sync endpoint returns 402), so the
+  // tables are empty by definition — skip the queries to keep anonymous visits
+  // free of per-page DB roundtrips.
+  const isFreeTeacher = teacher.billingPlan === 'free'
+  const [publicAnnotations, publicSnaps] = isFreeTeacher
+    ? [[], []]
+    : await Promise.all([
+        prisma.userData.findMany({
+          where: { adapter: 'annotations', itemId: page.id, targetType: 'page' },
+          select: { data: true, userId: true, user: { select: { name: true } } }
+        }),
+        prisma.userData.findMany({
+          where: { adapter: 'snaps', itemId: page.id, targetType: 'page' },
+          select: { data: true, userId: true, user: { select: { name: true } } }
+        })
+      ])
 
   // Sidebar/layout chrome is provided by src/app/[domain]/[skriptSlug]/layout.tsx
   // (inherited at this segment). This page only renders the content body.

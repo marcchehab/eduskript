@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 
 // PATCH /api/classes/[id] - Update a class
 export async function PATCH(
@@ -13,6 +14,10 @@ export async function PATCH(
 
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    if (!isPaidUser(session.user)) {
+      return paidOnlyResponse('Class management is a paid feature.')
     }
 
     const { id } = await params

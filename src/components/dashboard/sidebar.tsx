@@ -195,8 +195,11 @@ export function DashboardSidebar() {
                 // Highlight page-builder for both /dashboard and /dashboard/page-builder
                 const isActive = pathname === item.href ||
                                (item.href === '/dashboard/page-builder' && pathname === '/dashboard')
-                // Items gated behind a paid plan
-                const gatedPaths = ['/dashboard/page-builder', '/dashboard/collaborate', '/dashboard/classes']
+                // Items gated behind a paid plan.
+                // Page Builder, Collaborate, and Plugins (browse) are free.
+                // Classes (student management) is paid — covers AI, cloud sync,
+                // student accounts, broadcasts, exam sessions, etc.
+                const gatedPaths = ['/dashboard/classes']
                 const isGated = isFreePlan && gatedPaths.includes(item.href)
 
                 return (

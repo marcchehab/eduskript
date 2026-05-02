@@ -62,6 +62,7 @@ export default async function DomainLayout({ params, children }: DomainLayoutPro
     pageIcon: teacher.pageIcon || null,
     bio: teacher.bio || null,
     title: teacher.title || null,
+    billingPlan: teacher.billingPlan,
   }
 
   return (

@@ -80,6 +80,39 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // Free-teacher early-return: if the page belongs to a free teacher, no
+    // broadcasts can exist (the teacher's sync endpoint returns 402). Skip the
+    // 10+ downstream queries and return an empty payload.
+    const pageOwner = await prisma.page.findUnique({
+      where: { id: pageId },
+      select: {
+        skript: {
+          select: {
+            authors: {
+              where: { permission: 'author' },
+              select: { user: { select: { billingPlan: true } } },
+              take: 1,
+            },
+          },
+        },
+      },
+    })
+    const ownerPlan = pageOwner?.skript?.authors[0]?.user?.billingPlan
+    if (ownerPlan === 'free') {
+      return NextResponse.json({
+        classAnnotations: [],
+        classSnaps: [],
+        classSpacers: [],
+        classCodeHighlights: [],
+        classStickyNotes: [],
+        individualFeedback: null,
+        individualSnapFeedback: null,
+        individualSpacerFeedback: null,
+        individualCodeHighlights: [],
+        individualStickyNotes: null,
+      })
+    }
+
     // Get all classes the student is enrolled in
     const memberships = await prisma.classMembership.findMany({
       where: { studentId: userId },

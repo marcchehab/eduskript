@@ -16,11 +16,12 @@ import {
 interface AuthButtonProps {
   pageId?: string // Page ID to check edit permissions (lazy loaded)
   teacherPageSlug?: string // Teacher's pageSlug for custom domain auth redirect
+  teacherBillingPlan?: string | null // Owner's plan; suppresses login icon when 'free' for unauthenticated visitors
   isOrgPage?: boolean // Whether the current page is an org page
   orgSlug?: string // Org slug for org page context
 }
 
-export function AuthButton({ pageId, teacherPageSlug, isOrgPage, orgSlug }: AuthButtonProps) {
+export function AuthButton({ pageId, teacherPageSlug, teacherBillingPlan, isOrgPage, orgSlug }: AuthButtonProps) {
   const pathname = usePathname() ?? '/'
   const { data: session, status } = useSession()
   const [editUrl, setEditUrl] = useState<string | null>(null)
@@ -105,6 +106,14 @@ export function AuthButton({ pageId, teacherPageSlug, isOrgPage, orgSlug }: Auth
   }, [pathname, pageSlug])
 
   if (!session) {
+    // Free teacher pages: no public sign-in entry. The owner signs in via
+    // eduskript.org/auth/signin directly; nobody else gains anything from
+    // an account on a free site (no classes, no broadcasts, no cloud sync).
+    // Org pages and paid-teacher pages still show the button.
+    if (!isOrgPage && teacherBillingPlan === 'free') {
+      return null
+    }
+
     // Not logged in - show login button
     return (
       <Link

@@ -1,6 +1,7 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import { assembleSinglePageEditPrompt } from '@/lib/ai/prompts'
 import type { SkriptContext } from '@/lib/ai/types'
 import { loadFrontPageContext } from '@/lib/ai/frontpage-context'
@@ -55,6 +56,10 @@ export async function POST(
 
   const userId = session.user.id
   const { jobId } = await params
+
+  if (!isPaidUser(session.user)) {
+    return paidOnlyResponse('AI editing is a paid feature.')
+  }
 
   if (!process.env.OPENROUTER_API_KEY) {
     return Response.json({ error: 'AI service not configured' }, { status: 503 })

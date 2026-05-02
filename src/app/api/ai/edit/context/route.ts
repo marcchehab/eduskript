@@ -2,6 +2,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { checkSkriptPermissions } from '@/lib/permissions'
+import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import { formatSkriptContext, estimateTokenCount } from '@/lib/ai/context-builder'
 import { loadFrontPageContext } from '@/lib/ai/frontpage-context'
 import type { EditRequest, SkriptContext } from '@/lib/ai/types'
@@ -27,6 +28,10 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const userId = session.user.id
+
+  if (!isPaidUser(session.user)) {
+    return paidOnlyResponse('AI editing is a paid feature.')
+  }
 
   const body = (await request.json()) as Partial<EditRequest> & { currentContent?: string }
   const { skriptId, pageId, frontPageId, currentContent } = body

@@ -131,6 +131,7 @@ describe('cached-queries', () => {
           pageTagline: true,
           sidebarBehavior: true,
           typographyPreference: true,
+          billingPlan: true,
           customDomains: {
             where: { isVerified: true, isPrimary: true },
             select: { domain: true },

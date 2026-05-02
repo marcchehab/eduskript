@@ -95,7 +95,7 @@ describe('Bulk Import API', () => {
 
       it('should return 404 when class not found', async () => {
         vi.mocked(getServerSession).mockResolvedValue({
-          user: { id: 'teacher-1' },
+          user: { id: 'teacher-1', billingPlan: 'pro' },
         } as never)
         vi.mocked(prisma.class.findUnique).mockResolvedValue(null)
 
@@ -109,7 +109,7 @@ describe('Bulk Import API', () => {
 
       it('should return 403 when user is not the class owner', async () => {
         vi.mocked(getServerSession).mockResolvedValue({
-          user: { id: 'other-teacher' },
+          user: { id: 'other-teacher', billingPlan: 'pro' },
         } as never)
         vi.mocked(prisma.class.findUnique).mockResolvedValue({
           id: 'class-1',
@@ -129,7 +129,7 @@ describe('Bulk Import API', () => {
     describe('Rate Limiting', () => {
       it('should return 429 when rate limit exceeded', async () => {
         vi.mocked(getServerSession).mockResolvedValue({
-          user: { id: 'teacher-1' },
+          user: { id: 'teacher-1', billingPlan: 'pro' },
         } as never)
         vi.mocked(bulkImportRateLimiter.check).mockReturnValue({
           allowed: false,
@@ -150,7 +150,7 @@ describe('Bulk Import API', () => {
     describe('Input Validation', () => {
       it('should return 400 when emails is not an array', async () => {
         vi.mocked(getServerSession).mockResolvedValue({
-          user: { id: 'teacher-1' },
+          user: { id: 'teacher-1', billingPlan: 'pro' },
         } as never)
         vi.mocked(prisma.class.findUnique).mockResolvedValue({
           id: 'class-1',
@@ -168,7 +168,7 @@ describe('Bulk Import API', () => {
 
       it('should return 400 when emails array is empty', async () => {
         vi.mocked(getServerSession).mockResolvedValue({
-          user: { id: 'teacher-1' },
+          user: { id: 'teacher-1', billingPlan: 'pro' },
         } as never)
         vi.mocked(prisma.class.findUnique).mockResolvedValue({
           id: 'class-1',
@@ -186,7 +186,7 @@ describe('Bulk Import API', () => {
 
       it('should return 400 when no valid emails provided', async () => {
         vi.mocked(getServerSession).mockResolvedValue({
-          user: { id: 'teacher-1' },
+          user: { id: 'teacher-1', billingPlan: 'pro' },
         } as never)
         vi.mocked(prisma.class.findUnique).mockResolvedValue({
           id: 'class-1',
@@ -206,7 +206,7 @@ describe('Bulk Import API', () => {
     describe('Successful Import', () => {
       beforeEach(() => {
         vi.mocked(getServerSession).mockResolvedValue({
-          user: { id: 'teacher-1' },
+          user: { id: 'teacher-1', billingPlan: 'pro' },
         } as never)
         vi.mocked(prisma.class.findUnique).mockResolvedValue({
           id: 'class-1',
@@ -334,7 +334,7 @@ describe('Bulk Import API', () => {
     describe('Error Handling', () => {
       it('should return 500 on database error', async () => {
         vi.mocked(getServerSession).mockResolvedValue({
-          user: { id: 'teacher-1' },
+          user: { id: 'teacher-1', billingPlan: 'pro' },
         } as never)
         vi.mocked(prisma.class.findUnique).mockRejectedValue(new Error('Database error'))
 
@@ -361,7 +361,7 @@ describe('Bulk Import API', () => {
 
       it('should return 404 when class not found', async () => {
         vi.mocked(getServerSession).mockResolvedValue({
-          user: { id: 'teacher-1' },
+          user: { id: 'teacher-1', billingPlan: 'pro' },
         } as never)
         vi.mocked(prisma.class.findUnique).mockResolvedValue(null)
 
@@ -373,7 +373,7 @@ describe('Bulk Import API', () => {
 
       it('should return 403 when not class owner', async () => {
         vi.mocked(getServerSession).mockResolvedValue({
-          user: { id: 'other-teacher' },
+          user: { id: 'other-teacher', billingPlan: 'pro' },
         } as never)
         vi.mocked(prisma.class.findUnique).mockResolvedValue({
           id: 'class-1',
@@ -390,7 +390,7 @@ describe('Bulk Import API', () => {
     describe('Input Validation', () => {
       it('should return 400 when email is missing', async () => {
         vi.mocked(getServerSession).mockResolvedValue({
-          user: { id: 'teacher-1' },
+          user: { id: 'teacher-1', billingPlan: 'pro' },
         } as never)
         vi.mocked(prisma.class.findUnique).mockResolvedValue({
           id: 'class-1',
@@ -409,7 +409,7 @@ describe('Bulk Import API', () => {
     describe('Successful Deletion', () => {
       it('should delete pre-authorization and return success', async () => {
         vi.mocked(getServerSession).mockResolvedValue({
-          user: { id: 'teacher-1' },
+          user: { id: 'teacher-1', billingPlan: 'pro' },
         } as never)
         vi.mocked(prisma.class.findUnique).mockResolvedValue({
           id: 'class-1',
@@ -427,7 +427,7 @@ describe('Bulk Import API', () => {
 
       it('should return 404 when pre-authorization not found', async () => {
         vi.mocked(getServerSession).mockResolvedValue({
-          user: { id: 'teacher-1' },
+          user: { id: 'teacher-1', billingPlan: 'pro' },
         } as never)
         vi.mocked(prisma.class.findUnique).mockResolvedValue({
           id: 'class-1',

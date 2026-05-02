@@ -1,5 +1,6 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import { openrouterProviderRouting } from '@/lib/ai/openrouter'
 import {
   EXCALIDRAW_SYSTEM_PROMPT,
@@ -47,6 +48,10 @@ export async function POST(request: Request) {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    if (!isPaidUser(session.user)) {
+      return paidOnlyResponse('AI Excalidraw generation is a paid feature.')
     }
 
     if (!process.env.OPENROUTER_API_KEY) {

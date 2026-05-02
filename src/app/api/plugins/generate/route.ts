@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import OpenAI from 'openai'
 
 export const dynamic = 'force-dynamic'
@@ -60,6 +61,10 @@ export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  if (!isPaidUser(session.user)) {
+    return paidOnlyResponse('AI plugin generation is a paid feature.')
   }
 
   if (!process.env.OPENROUTER_API_KEY) {

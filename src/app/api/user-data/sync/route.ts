@@ -14,6 +14,7 @@ import { getServerSession } from 'next-auth'
 import { cookies } from 'next/headers'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import { uploadSnapImage, deleteSnapImage, isS3Configured } from '@/lib/s3'
 import { eventBus } from '@/lib/events'
 
@@ -133,6 +134,15 @@ export async function POST(request: NextRequest) {
       userId = session.user.id
       isTeacher = session.user.accountType === 'teacher'
       isAdmin = !!session.user.isAdmin
+
+      // Free teachers stay IndexedDB-only — no cloud sync, no S3 snaps,
+      // no broadcasts. Students inherit their teacher's plan via class
+      // membership, so isPaidUser() returns true for them.
+      if (isTeacher && !isPaidUser(session.user)) {
+        return paidOnlyResponse(
+          'Cloud sync is a paid feature. Your data is saved locally on this device.'
+        )
+      }
     }
 
     // If no NextAuth session, try exam session cookie (for SEB mode)

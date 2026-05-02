@@ -1,6 +1,5 @@
 import { PageBuilderInterface } from '@/components/dashboard/page-builder-interface'
 import { AdminPageBuilderPlaceholder } from '@/components/dashboard/admin-page-builder-placeholder'
-import { UpgradePrompt } from '@/components/dashboard/upgrade-prompt'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { redirect } from 'next/navigation'
@@ -14,11 +13,8 @@ export default async function PageBuilderPage() {
     redirect('/dashboard/my-classes')
   }
 
-  // Gate behind paid plan
-  const billingPlan = session?.user?.billingPlan || 'free'
-  if (billingPlan === 'free' && !session?.user?.isAdmin) {
-    return <UpgradePrompt feature="the page builder" />
-  }
+  // Page builder is free — authoring is the core free experience.
+  // AI/classes/sync gating happens at the relevant call sites.
 
   // Show placeholder only for the default eduadmin account, not all admins
   if (session?.user?.pageSlug === 'eduadmin') {

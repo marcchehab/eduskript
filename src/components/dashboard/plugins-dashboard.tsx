@@ -2,9 +2,11 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTheme } from 'next-themes'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { buildPluginSrcdoc } from '@/lib/plugin-sdk'
+import { useIsFreeTeacher } from '@/hooks/use-billing'
 import { Plus, Pencil, Trash2, Copy, Search, ArrowLeft, Eye, Sparkles, Check } from 'lucide-react'
 
 interface Plugin {
@@ -34,6 +36,7 @@ interface PluginsDashboardProps {
 type View = 'list' | 'editor'
 
 export function PluginsDashboard({ userId, userPageSlug }: PluginsDashboardProps) {
+  const isFreePlan = useIsFreeTeacher()
   const [plugins, setPlugins] = useState<Plugin[]>([])
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState<View>('list')
@@ -420,7 +423,7 @@ export function PluginsDashboard({ userId, userPageSlug }: PluginsDashboardProps
       </div>
 
       {/* AI Generation */}
-      {canEdit && (
+      {canEdit && !isFreePlan && (
         <div className="flex gap-2">
           <Input
             value={aiPrompt}
@@ -438,6 +441,15 @@ export function PluginsDashboard({ userId, userPageSlug }: PluginsDashboardProps
             <Sparkles className="h-4 w-4 mr-1" />
             {aiGenerating ? 'Generating...' : 'Generate'}
           </Button>
+        </div>
+      )}
+      {canEdit && isFreePlan && (
+        <div className="text-xs text-muted-foreground bg-muted/50 rounded-md px-3 py-2 flex items-center gap-2">
+          <Sparkles className="h-3 w-3" />
+          AI plugin generation is a paid feature.{' '}
+          <Link href="/dashboard/billing" className="underline hover:text-foreground">
+            Upgrade
+          </Link>
         </div>
       )}
       {aiError && (

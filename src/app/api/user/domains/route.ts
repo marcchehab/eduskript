@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import { randomBytes } from 'crypto'
 
 // GET - List user's custom domains
@@ -51,6 +52,10 @@ export async function POST(request: NextRequest) {
         { error: 'Only teachers can have custom domains' },
         { status: 403 }
       )
+    }
+
+    if (!isPaidUser(session.user)) {
+      return paidOnlyResponse('Custom domains are a paid feature.')
     }
 
     // Check if user's organization allows teacher custom domains

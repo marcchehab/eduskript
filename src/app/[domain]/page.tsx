@@ -98,7 +98,10 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
     }
   })
 
-  const [publicAnnotations, publicSnaps] = frontPage ? await Promise.all([
+  // Free teachers can't write to UserData (sync endpoint returns 402), so the
+  // public-annotation/snap tables are empty by definition — skip the queries.
+  const isFreeTeacher = teacher.billingPlan === 'free'
+  const [publicAnnotations, publicSnaps] = frontPage && !isFreeTeacher ? await Promise.all([
     prisma.userData.findMany({
       where: {
         adapter: 'annotations',
