@@ -3093,13 +3093,15 @@ export const CodeEditor = memo(function CodeEditor({
         }
       })
 
-      // Load packages if needed. Pass our own messageCallback/errorCallback so
-      // Pyodide's "Loading numpy, pandas, …" progress lines route to *this* editor's
-      // output, not whatever editor most recently set the global console handler.
+      // Load packages if needed. We pass a no-op messageCallback to suppress
+      // Pyodide's chatty "Loading…/Loaded…/already loaded from default channel"
+      // lines (which would otherwise surface in the student's output panel on
+      // every Run). errorCallback still routes real errors to *this* editor's
+      // output, regardless of which editor most recently called setStdout.
       if (uniquePackages.length > 0) {
         try {
           await pyodide.loadPackage(uniquePackages, {
-            messageCallback: (msg: string) => addOutput(msg, OutputLevel.OUTPUT),
+            messageCallback: () => {},
             errorCallback: (msg: string) => addOutput(msg, OutputLevel.ERROR),
           })
         } catch (err) {
