@@ -787,10 +787,23 @@ export function PublicSiteLayout({
             <div className={`mt-auto pt-4 ${isSidebarCollapsed ? 'flex flex-col items-center gap-2' : ''}`}>
               <SyncStatusButton />
               {!isSidebarCollapsed && (
-                <div className="pt-2 text-center text-[11px] text-muted-foreground/40">
-                  <Link href="/impressum" className="hover:text-muted-foreground">Legal</Link>
-                  <span className="mx-1.5">·</span>
-                  <Link href="/terms" className="hover:text-muted-foreground">Terms (Mar 2026)</Link>
+                <div className="pt-2 text-center text-[11px] text-muted-foreground/40 space-y-1">
+                  <div>
+                    <Link href="/impressum" className="hover:text-muted-foreground">Legal</Link>
+                    <span className="mx-1.5">·</span>
+                    <Link href="/terms" className="hover:text-muted-foreground">Terms (Mar 2026)</Link>
+                  </div>
+                  <div>
+                    Built with{' '}
+                    <a
+                      href="https://eduskript.org"
+                      target="_blank"
+                      rel="noopener"
+                      className="hover:text-muted-foreground"
+                    >
+                      Eduskript
+                    </a>
+                  </div>
                 </div>
               )}
             </div>
