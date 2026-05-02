@@ -36,6 +36,18 @@ vi.mock('@/lib/services/pages', async () => {
 vi.mock('@/lib/services/skripts', () => ({
   listSkriptsForUser: vi.fn(),
   getSkriptForUser: vi.fn(),
+  updateSkriptForUser: vi.fn(),
+  auditSkriptSeoForUser: vi.fn(),
+}))
+
+vi.mock('@/lib/services/skript-frontpages', () => ({
+  getSkriptFrontPageForUser: vi.fn(),
+  upsertSkriptFrontPageForUser: vi.fn(),
+}))
+
+vi.mock('@/lib/services/collections', () => ({
+  getCollectionForUser: vi.fn(),
+  updateCollectionForUser: vi.fn(),
 }))
 
 import { validateAccessToken } from '@/lib/mcp/tokens'
@@ -46,11 +58,21 @@ import {
   searchPagesForUser,
   updatePageForUser,
 } from '@/lib/services/pages'
-import { listSkriptsForUser } from '@/lib/services/skripts'
+import {
+  listSkriptsForUser,
+  updateSkriptForUser,
+  auditSkriptSeoForUser,
+} from '@/lib/services/skripts'
+import { upsertSkriptFrontPageForUser } from '@/lib/services/skript-frontpages'
+import { updateCollectionForUser } from '@/lib/services/collections'
 import { listMySkripts } from '@/lib/mcp/tools/list-my-skripts'
 import { readPage } from '@/lib/mcp/tools/read-page'
 import { searchMyContent } from '@/lib/mcp/tools/search-my-content'
 import { updatePage } from '@/lib/mcp/tools/update-page'
+import { updateSkript } from '@/lib/mcp/tools/update-skript'
+import { updateSkriptFrontpage } from '@/lib/mcp/tools/update-skript-frontpage'
+import { updateCollection } from '@/lib/mcp/tools/update-collection'
+import { auditSkriptSeo } from '@/lib/mcp/tools/audit-skript-seo'
 
 const ctxA = {
   userId: 'user-A',
@@ -176,5 +198,119 @@ describe('Tool isolation — account A vs account B', () => {
       await searchMyContent({ query: 'foo' })
     })
     expect(vi.mocked(searchPagesForUser).mock.calls[0][0]).toBe('user-A')
+  })
+
+  it('update_skript passes the actor userId, not args', async () => {
+    vi.mocked(updateSkriptForUser).mockResolvedValue({
+      id: 'sk-1',
+      title: 'New',
+      description: null,
+      slug: 'new',
+      isPublished: false,
+      isUnlisted: false,
+      updatedAt: new Date(),
+    } as never)
+
+    await runWithMcpContext(ctxA, async () => {
+      await updateSkript({ skriptId: 'sk-1', title: 'New' })
+    })
+
+    const call = vi.mocked(updateSkriptForUser).mock.calls[0]
+    expect(call[0]).toBe('user-A')
+    expect(call[1]).toBe('sk-1')
+    expect(call[2]).toEqual({ title: 'New' })
+    expect(call[3]).toEqual({ editSource: 'mcp', editClient: 'Claude' })
+  })
+
+  it('update_skript rejects without content:write scope', async () => {
+    const readOnly = { ...ctxA, scopes: ['content:read'] }
+    await expect(
+      runWithMcpContext(readOnly, () =>
+        updateSkript({ skriptId: 'sk-1', title: 'x' })
+      )
+    ).rejects.toThrow(/Missing required scope: content:write/)
+  })
+
+  it('update_skript_frontpage passes the actor userId and editSource', async () => {
+    vi.mocked(upsertSkriptFrontPageForUser).mockResolvedValue({
+      frontPage: {
+        id: 'fp-1',
+        isPublished: true,
+        updatedAt: new Date(),
+      },
+      contentChanged: true,
+    } as never)
+
+    await runWithMcpContext(ctxA, async () => {
+      await updateSkriptFrontpage({
+        skriptId: 'sk-1',
+        content: '# hello',
+        isPublished: true,
+      })
+    })
+
+    const call = vi.mocked(upsertSkriptFrontPageForUser).mock.calls[0]
+    expect(call[0]).toBe('user-A')
+    expect(call[1]).toBe('sk-1')
+    expect(call[2]).toEqual({ content: '# hello', isPublished: true })
+    expect(call[3]).toEqual({ editSource: 'mcp', editClient: 'Claude' })
+  })
+
+  it('update_skript_frontpage rejects without content:write scope', async () => {
+    const readOnly = { ...ctxA, scopes: ['content:read'] }
+    await expect(
+      runWithMcpContext(readOnly, () =>
+        updateSkriptFrontpage({ skriptId: 'sk-1', content: 'x' })
+      )
+    ).rejects.toThrow(/Missing required scope: content:write/)
+  })
+
+  it('update_collection passes the actor userId and editSource', async () => {
+    vi.mocked(updateCollectionForUser).mockResolvedValue({
+      id: 'col-1',
+      title: 'New title',
+      description: null,
+      slug: 'new',
+      accentColor: null,
+      updatedAt: new Date(),
+    } as never)
+
+    await runWithMcpContext(ctxA, async () => {
+      await updateCollection({ collectionId: 'col-1', title: 'New title' })
+    })
+
+    const call = vi.mocked(updateCollectionForUser).mock.calls[0]
+    expect(call[0]).toBe('user-A')
+    expect(call[1]).toBe('col-1')
+    expect(call[2]).toEqual({ title: 'New title' })
+    expect(call[3]).toEqual({ editSource: 'mcp', editClient: 'Claude' })
+  })
+
+  it('audit_skript_seo scopes to the actor and surfaces typed errors', async () => {
+    vi.mocked(auditSkriptSeoForUser).mockResolvedValue({
+      skript: {
+        id: 'sk-1',
+        title: 't',
+        slug: 's',
+        description: null,
+        isPublished: true,
+        isUnlisted: false,
+      },
+      frontPage: null,
+      pages: [],
+      totals: { pages: 0, published: 0, withIssues: 0 },
+    } as never)
+
+    await runWithMcpContext(ctxA, async () => {
+      await auditSkriptSeo({ skriptId: 'sk-1' })
+    })
+    expect(vi.mocked(auditSkriptSeoForUser).mock.calls[0][0]).toBe('user-A')
+
+    vi.mocked(auditSkriptSeoForUser).mockRejectedValue(
+      new PermissionDeniedError('Cannot view this skript')
+    )
+    await expect(
+      runWithMcpContext(ctxB, () => auditSkriptSeo({ skriptId: 'sk-1' }))
+    ).rejects.toBeInstanceOf(PermissionDeniedError)
   })
 })

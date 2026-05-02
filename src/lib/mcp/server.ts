@@ -29,6 +29,25 @@ import { listMySkripts, listMySkriptsConfig } from '@/lib/mcp/tools/list-my-skri
 import { readPage, readPageConfig } from '@/lib/mcp/tools/read-page'
 import { searchMyContent, searchMyContentConfig } from '@/lib/mcp/tools/search-my-content'
 import { updatePage, updatePageConfig } from '@/lib/mcp/tools/update-page'
+import { readSkript, readSkriptConfig } from '@/lib/mcp/tools/read-skript'
+import { updateSkript, updateSkriptConfig } from '@/lib/mcp/tools/update-skript'
+import {
+  readSkriptFrontpage,
+  readSkriptFrontpageConfig,
+} from '@/lib/mcp/tools/read-skript-frontpage'
+import {
+  updateSkriptFrontpage,
+  updateSkriptFrontpageConfig,
+} from '@/lib/mcp/tools/update-skript-frontpage'
+import { readCollection, readCollectionConfig } from '@/lib/mcp/tools/read-collection'
+import {
+  updateCollection,
+  updateCollectionConfig,
+} from '@/lib/mcp/tools/update-collection'
+import {
+  auditSkriptSeo,
+  auditSkriptSeoConfig,
+} from '@/lib/mcp/tools/audit-skript-seo'
 
 type ToolResult = Awaited<ReturnType<typeof readPage>>
 
@@ -90,7 +109,7 @@ function buildServerInstructions(userPrompt?: string | null): string {
     getCondensedSyntaxReference(),
     '',
     '## MCP-specific guidance',
-    'You are connected to a teacher\'s Eduskript account via MCP. Use the available tools (list_my_skripts, search_my_content, read_page, create_page, update_page) to discover, read, and edit their content. The teacher only sees the natural-language reply — show edits in human-readable form rather than raw markdown dumps.',
+    'You are connected to a teacher\'s Eduskript account via MCP. Use the available tools to discover, read, and edit their content. Page-level: list_my_skripts, search_my_content, read_page, create_page, update_page. Skript-level: read_skript, update_skript, read_skript_frontpage, update_skript_frontpage. Collection-level: read_collection, update_collection. Bulk SEO scan: audit_skript_seo (returns excerpts + issue flags for every page in a skript — call this before sweeping descriptions). The teacher only sees the natural-language reply — show edits in human-readable form rather than raw markdown dumps.',
     '- Prefer interactive code editors (`editor` keyword) when an example is meant to be run by students.',
   ]
   if (userPrompt && userPrompt.trim()) {
@@ -125,6 +144,29 @@ export function buildMcpServer(opts: { userPrompt?: string | null } = {}): McpSe
   )
   server.registerTool('search_my_content', searchMyContentConfig, async (args) =>
     safe('search_my_content', () => searchMyContent(args)) as never
+  )
+  server.registerTool('read_skript', readSkriptConfig, async (args) =>
+    safe('read_skript', () => readSkript(args)) as never
+  )
+  server.registerTool('update_skript', updateSkriptConfig, async (args) =>
+    safe('update_skript', () => updateSkript(args)) as never
+  )
+  server.registerTool('read_skript_frontpage', readSkriptFrontpageConfig, async (args) =>
+    safe('read_skript_frontpage', () => readSkriptFrontpage(args)) as never
+  )
+  server.registerTool(
+    'update_skript_frontpage',
+    updateSkriptFrontpageConfig,
+    async (args) => safe('update_skript_frontpage', () => updateSkriptFrontpage(args)) as never
+  )
+  server.registerTool('read_collection', readCollectionConfig, async (args) =>
+    safe('read_collection', () => readCollection(args)) as never
+  )
+  server.registerTool('update_collection', updateCollectionConfig, async (args) =>
+    safe('update_collection', () => updateCollection(args)) as never
+  )
+  server.registerTool('audit_skript_seo', auditSkriptSeoConfig, async (args) =>
+    safe('audit_skript_seo', () => auditSkriptSeo(args)) as never
   )
 
   return server
