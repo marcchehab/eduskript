@@ -619,7 +619,12 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                 <span className="text-sm text-muted-foreground">Skript:</span>
               </div>
             </div>
-            <span className="text-3xl font-semibold truncate">{skript.title}</span>
+            <div className="flex flex-col min-w-0 flex-1">
+              <span className="text-3xl font-semibold truncate leading-tight">{skript.title}</span>
+              {skript.description && (
+                <span className="text-sm text-muted-foreground line-clamp-2 leading-snug">{skript.description}</span>
+              )}
+            </div>
             {canEdit && (
               <div className="flex items-center gap-1 ml-auto flex-shrink-0">
                 <PublishToggle

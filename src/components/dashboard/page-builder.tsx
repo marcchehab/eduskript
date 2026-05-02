@@ -343,7 +343,7 @@ function PageBuilderItem({ item, index, onRemove, expandedCollections, onToggleC
           )}
         >
           {/* Main content row */}
-          <div className="flex items-center gap-3 p-3 relative">
+          <div className="flex items-start gap-3 p-3 relative">
             {/* Drag Handle */}
             {item.permissions?.canView !== false && (
               <div 
@@ -411,7 +411,7 @@ function PageBuilderItem({ item, index, onRemove, expandedCollections, onToggleC
                   <h4 className="font-medium text-sm truncate">{item.title}</h4>
                 )}
                 {item.description && (
-                  <p className="text-xs text-muted-foreground truncate">{item.description}</p>
+                  <p className="text-xs text-muted-foreground line-clamp-2 leading-snug mt-0.5">{item.description}</p>
                 )}
               </>
             )}
@@ -515,18 +515,18 @@ function SimpleSkriptItem({ item, index, parentId, parentCanEdit = true, onRemov
             item.permissions?.canView === false && "border-red-200 bg-red-50"
           )}
         >
-          <div className="flex items-center gap-3 p-2">
+          <div className="flex items-start gap-3 p-2">
             {/* Drag Handle */}
             {item.permissions?.canView !== false && (
               <div
                 {...provided.dragHandleProps}
-                className="opacity-70 hover:opacity-100 cursor-grab active:cursor-grabbing transition-opacity"
+                className="opacity-70 hover:opacity-100 cursor-grab active:cursor-grabbing transition-opacity mt-0.5"
               >
                 <GripVertical className="w-4 h-4 text-muted-foreground" />
               </div>
             )}
 
-            <div className="relative">
+            <div className="relative mt-0.5">
               <FileText className={cn(
                 "w-4 h-4 flex-shrink-0",
                 !item.permissions?.canEdit ? "text-muted-foreground" : "text-primary"
@@ -571,7 +571,7 @@ function SimpleSkriptItem({ item, index, parentId, parentCanEdit = true, onRemov
                     )}
                   </div>
                   {item.description && (
-                    <p className="text-xs text-muted-foreground truncate">{item.description}</p>
+                    <p className="text-xs text-muted-foreground line-clamp-2 leading-snug mt-0.5">{item.description}</p>
                   )}
                 </>
               )}
