@@ -3568,6 +3568,131 @@ plots
     setIsDragging(false)
   }
 
+  // Touch gesture state. Single-finger = pan; two fingers = pinch + pan.
+  // We snapshot the start of a pinch so the math is anchored, not incremental
+  // (avoids drift). When fingers transition (e.g. one lifts mid-pinch), we
+  // recalibrate so the remaining gesture stays smooth.
+  const touchStateRef = useRef<
+    | { mode: 'pan'; offsetX: number; offsetY: number }
+    | { mode: 'pinch'; startDist: number; startScale: number; startCenterX: number; startCenterY: number; startTransformX: number; startTransformY: number }
+    | null
+  >(null)
+  // canvasTransform read inside native listeners — keep a ref so the listener
+  // closure always sees the latest values without re-attaching every change.
+  const canvasTransformRef = useRef(canvasTransform)
+  useLayoutEffect(() => { canvasTransformRef.current = canvasTransform }, [canvasTransform])
+
+  // Attach touch listeners *natively* on the canvas container. Reasons:
+  //   1. The page's annotation layer registers `touchstart`/`touchmove` at the
+  //      document level (annotation-layer.tsx) and uses two-finger pinch to
+  //      zoom #paper. Without intercepting at the canvas, the same gesture
+  //      pinches both the canvas and the page.
+  //   2. React synthetic events bubble through the React root, so calling
+  //      `stopPropagation` from a React handler stops the React handler from
+  //      firing too. A native listener on the actual canvas element runs in
+  //      the bubble phase before the event reaches `document`.
+  useEffect(() => {
+    const container = canvasContainerRef.current
+    if (!container) return
+
+    const onTouchStart = (e: TouchEvent) => {
+      e.stopPropagation()
+      if (e.touches.length === 1) {
+        const t = e.touches[0]
+        touchStateRef.current = {
+          mode: 'pan',
+          offsetX: t.clientX - canvasTransformRef.current.x,
+          offsetY: t.clientY - canvasTransformRef.current.y,
+        }
+        setIsDragging(true)
+      } else if (e.touches.length >= 2) {
+        const t1 = e.touches[0]
+        const t2 = e.touches[1]
+        touchStateRef.current = {
+          mode: 'pinch',
+          startDist: Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY),
+          startScale: canvasTransformRef.current.scale,
+          startCenterX: (t1.clientX + t2.clientX) / 2,
+          startCenterY: (t1.clientY + t2.clientY) / 2,
+          startTransformX: canvasTransformRef.current.x,
+          startTransformY: canvasTransformRef.current.y,
+        }
+        setIsDragging(false)
+      }
+    }
+
+    const onTouchMove = (e: TouchEvent) => {
+      e.stopPropagation()
+      const state = touchStateRef.current
+      if (!state) return
+
+      if (state.mode === 'pan' && e.touches.length === 1) {
+        const t = e.touches[0]
+        setCanvasTransform(prev => ({
+          ...prev,
+          x: t.clientX - state.offsetX,
+          y: t.clientY - state.offsetY,
+        }))
+      } else if (state.mode === 'pinch' && e.touches.length >= 2) {
+        const rect = container.getBoundingClientRect()
+        const t1 = e.touches[0]
+        const t2 = e.touches[1]
+        const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY)
+        const centerX = (t1.clientX + t2.clientX) / 2
+        const centerY = (t1.clientY + t2.clientY) / 2
+
+        const scaleRatio = dist / state.startDist
+        const newScale = Math.max(0.1, Math.min(5, state.startScale * scaleRatio))
+
+        // Keep the canvas point that was under the start midpoint roughly under
+        // the current midpoint (so pinch zooms about the gesture's anchor while
+        // the midpoint translation pans naturally with the fingers).
+        const canvasX = (state.startCenterX - rect.left - state.startTransformX) / state.startScale
+        const canvasY = (state.startCenterY - rect.top - state.startTransformY) / state.startScale
+        const newX = (centerX - rect.left) - canvasX * newScale
+        const newY = (centerY - rect.top) - canvasY * newScale
+
+        setCanvasTransform({ x: newX, y: newY, scale: newScale })
+      }
+    }
+
+    const onTouchEnd = (e: TouchEvent) => {
+      e.stopPropagation()
+      if (e.touches.length === 1) {
+        // Lifted from pinch back to single-finger pan. Recalibrate the offset
+        // so the remaining finger doesn't snap.
+        const t = e.touches[0]
+        touchStateRef.current = {
+          mode: 'pan',
+          offsetX: t.clientX - canvasTransformRef.current.x,
+          offsetY: t.clientY - canvasTransformRef.current.y,
+        }
+        setIsDragging(true)
+      } else if (e.touches.length === 0) {
+        touchStateRef.current = null
+        setIsDragging(false)
+      }
+    }
+
+    // passive: false so the browser knows we may preventDefault if needed
+    // (and stopPropagation is more reliably honored against the page-level
+    // pinch handler that also uses passive: false).
+    container.addEventListener('touchstart', onTouchStart, { passive: false })
+    container.addEventListener('touchmove', onTouchMove, { passive: false })
+    container.addEventListener('touchend', onTouchEnd, { passive: false })
+    container.addEventListener('touchcancel', onTouchEnd, { passive: false })
+
+    return () => {
+      container.removeEventListener('touchstart', onTouchStart)
+      container.removeEventListener('touchmove', onTouchMove)
+      container.removeEventListener('touchend', onTouchEnd)
+      container.removeEventListener('touchcancel', onTouchEnd)
+    }
+    // Re-run when the canvas mounts/unmounts: the container only exists when
+    // `canvasVisible && showGraphics` is true, so without these deps the
+    // effect would run once at mount with a null ref and never attach.
+  }, [canvasVisible, showGraphics])
+
   const resetCanvasView = () => {
     // Reset to centered position
     const canvas = canvasRef.current
