@@ -70,8 +70,9 @@ export async function generateMetadata({ params }: OrgPageProps): Promise<Metada
         ? 'Eduskript — Open-Source Platform for Interactive Lessons'
         : organization.name
     const description = organization.description || `${organization.name} on Eduskript`
-    const ogImage = (organization.showIcon && organization.iconUrl) || '/og-default.svg'
 
+    // og:image is provided by src/app/org/[orgSlug]/opengraph-image.tsx —
+    // passing images here would override the file-based OG, so we omit it.
     return {
       title,
       description,
@@ -82,13 +83,11 @@ export async function generateMetadata({ params }: OrgPageProps): Promise<Metada
         type: 'website',
         siteName: organization.name,
         url: canonical,
-        images: [ogImage],
       },
       twitter: {
         card: 'summary_large_image',
         title,
         description,
-        images: [ogImage],
       },
     }
   } catch (error) {

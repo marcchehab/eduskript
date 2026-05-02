@@ -48,8 +48,9 @@ export async function generateMetadata({ params }: DomainIndexProps): Promise<Me
       ? `${baseTitle} — ${teacher.pageTagline}`
       : baseTitle
     const description = teacher.pageDescription || teacher.bio || `Educational content by ${teacher.pageName || teacher.name}`
-    const ogImage = teacher.pageIcon || '/og-default.svg'
 
+    // og:image is provided by src/app/[domain]/opengraph-image.tsx — passing
+    // images here would override the file-based OG, so we omit it.
     return {
       title,
       description,
@@ -62,13 +63,11 @@ export async function generateMetadata({ params }: DomainIndexProps): Promise<Me
         type: 'website',
         siteName: teacher.pageName || teacher.name || 'Eduskript',
         url: canonical,
-        images: [ogImage]
       },
       twitter: {
         card: 'summary_large_image',
         title,
         description,
-        images: [ogImage]
       }
     }
   } catch (error) {

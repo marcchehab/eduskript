@@ -63,7 +63,6 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       generateExcerpt(content.page.content, 160) ||
       content.collection?.description ||
       `${content.page.title} by ${organization.name}`
-    const ogImage = '/og-default.svg'
     const canonical = canonicalUrl({
       type: 'org',
       slug: orgSlug,
@@ -71,6 +70,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       path: `/c/${skriptSlug}/${pageSlug}`,
     })
 
+    // og:image is provided by the colocated opengraph-image.tsx — passing
+    // images here would override the file-based OG, so we omit it.
     return {
       title,
       description,
@@ -81,11 +82,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
         type: 'article',
         siteName: organization.name,
         url: canonical,
-        images: [ogImage],
         publishedTime: content.page.createdAt.toISOString(),
         modifiedTime: content.page.updatedAt.toISOString(),
       },
-      twitter: { card: 'summary_large_image', title, description, images: [ogImage] }
+      twitter: { card: 'summary_large_image', title, description }
     }
   } catch (error) {
     console.error('Error generating metadata:', error)

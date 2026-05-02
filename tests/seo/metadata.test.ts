@@ -22,6 +22,8 @@
  */
 import { describe, it, expect, vi } from 'vitest'
 import type { Metadata } from 'next'
+import fs from 'node:fs'
+import path from 'node:path'
 
 // --- Mocks (must be declared before importing the route modules) --------
 // Public route modules pull in next-auth, prisma, the cached-query layer,
@@ -272,12 +274,38 @@ async function loadMetadata(mod: PageModule, params: Record<string, string>): Pr
 
 // --- The gate -----------------------------------------------------------
 
+// Pull `src/app/.../page.tsx` from a route label like
+// `src/app/[domain]/page.tsx (teacher home)`. The route file lives next to the
+// `opengraph-image.*` file convention, so the test can infer where to look.
+function routeFilePath(label: string): string | null {
+  const match = label.match(/^(\S+\.tsx?)/)
+  return match ? match[1] : null
+}
+
+// True when a Next.js opengraph-image file convention sits next to the route's
+// page.tsx — the framework auto-injects og:image / twitter:image and we
+// shouldn't also require them in generateMetadata (the manual values would
+// in fact override the file-based OG, see commit history).
+function hasFileOgImage(label: string): boolean {
+  const filePath = routeFilePath(label)
+  if (!filePath) return false
+  const dir = path.dirname(path.join(process.cwd(), filePath))
+  return ['tsx', 'ts', 'jsx', 'js'].some((ext) =>
+    fs.existsSync(path.join(dir, `opengraph-image.${ext}`)),
+  )
+}
+
 describe('SEO hygiene gate', () => {
   for (const route of PUBLIC_ROUTES) {
     it(`${route.label} declares required metadata fields`, async () => {
       const mod = await route.module()
       const meta = await loadMetadata(mod, route.params)
-      const required = REQUIRED_BY_CATEGORY[route.category]
+      let required = REQUIRED_BY_CATEGORY[route.category]
+      if (hasFileOgImage(route.label)) {
+        required = required.filter(
+          (f) => f !== 'openGraph.images' && f !== 'twitter.images',
+        )
+      }
       const missing = required.filter((field) => !isPresent(getNested(meta, field)))
       expect(
         missing,

@@ -39,11 +39,9 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: "Eduskript",
-    images: ["/og-default.svg"],
   },
   twitter: {
     card: "summary_large_image",
-    images: ["/og-default.svg"],
   },
 };
 

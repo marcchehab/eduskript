@@ -1,5 +1,5 @@
 import { ImageResponse } from 'next/og'
-import { OG_SIZE, OG_CONTENT_TYPE, OgLayout } from '@/lib/seo/og-layout'
+import { OG_SIZE, OG_CONTENT_TYPE, OgLayout, ogFonts } from '@/lib/seo/og-layout'
 import { getTeacherByUsernameDeduped } from '@/lib/cached-queries'
 
 export const runtime = 'nodejs'
@@ -23,7 +23,7 @@ export default async function Image({ params }: Params) {
     null
 
   return new ImageResponse(
-    <OgLayout title={title} subtitle={subtitle} />,
-    { ...size },
+    <OgLayout title={title} subtitle={subtitle} iconUrl={teacher?.pageIcon} />,
+    { ...size, fonts: await ogFonts() },
   )
 }

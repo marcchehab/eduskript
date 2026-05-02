@@ -66,7 +66,6 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       generateExcerpt(content.page.content, 160) ||
       content.collection?.description ||
       `${content.page.title} by ${teacher.name}`
-    const ogImage = teacher.pageIcon || '/og-default.svg'
     const canonical = canonicalUrl({
       type: 'teacher',
       slug: teacher.pageSlug ?? domain,
@@ -74,6 +73,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       path: `/${skriptSlug}/${pageSlug}`,
     })
 
+    // og:image is provided by the colocated opengraph-image.tsx — passing
+    // images here would override the file-based OG, so we omit it.
     return {
       title,
       description,
@@ -86,7 +87,6 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
         type: 'article',
         siteName: teacher.name || 'Eduskript',
         url: canonical,
-        images: [ogImage],
         publishedTime: content.page.createdAt.toISOString(),
         modifiedTime: content.page.updatedAt.toISOString(),
       },
@@ -94,7 +94,6 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
         card: 'summary_large_image',
         title,
         description,
-        images: [ogImage]
       }
     }
   } catch (error) {

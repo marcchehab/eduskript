@@ -2,6 +2,9 @@
 // Used by every opengraph-image.tsx file under public surfaces so all
 // social-share previews look like one product, not a patchwork.
 
+import fs from 'node:fs/promises'
+import path from 'node:path'
+
 export const OG_SIZE = { width: 1200, height: 630 } as const
 export const OG_CONTENT_TYPE = 'image/png'
 
@@ -9,14 +12,50 @@ export interface OgLayoutProps {
   title: string
   subtitle?: string | null
   footer?: string | null
+  // Absolute URL for an icon (teacher pageIcon, org iconUrl).
+  // Relative paths are resolved against `NEXTAUTH_URL` so the renderer can
+  // fetch from /api/files/... in addition to S3-style absolute URLs.
+  // Pass `null`, `undefined`, or the literal `'default'` (the value teachers
+  // pick when they want the platform's default avatar) to render no icon.
+  iconUrl?: string | null
 }
 
-// Returns the JSX for one OG card. Pass to `new ImageResponse(<OgLayout ... />, { ...OG_SIZE })`.
+// Cached so we only read the TTF once per process. Barlow Condensed Bold matches
+// the project's `--font-heading` (Barlow_Condensed weight 700 in src/app/layout.tsx).
+let fontPromise: Promise<ArrayBuffer> | null = null
+export function loadHeadingFont(): Promise<ArrayBuffer> {
+  if (!fontPromise) {
+    const fontPath = path.join(process.cwd(), 'src/lib/seo/fonts/barlow-condensed-700.ttf')
+    fontPromise = fs.readFile(fontPath).then(buf =>
+      buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer,
+    )
+  }
+  return fontPromise
+}
+
+export async function ogFonts() {
+  const data = await loadHeadingFont()
+  return [
+    { name: 'Barlow Condensed', data, weight: 700 as const, style: 'normal' as const },
+  ]
+}
+
+// Resolve a possibly-relative icon path to an absolute URL the OG renderer can fetch.
+// Returns null when there's no usable icon.
+export function resolveIconUrl(raw?: string | null): string | null {
+  if (!raw || raw === 'default') return null
+  if (/^https?:\/\//i.test(raw)) return raw
+  const base = process.env.NEXTAUTH_URL || 'http://localhost:3000'
+  return `${base.replace(/\/$/, '')}${raw.startsWith('/') ? '' : '/'}${raw}`
+}
+
+// Returns the JSX for one OG card. Pass to `new ImageResponse(<OgLayout ... />, { ...OG_SIZE, fonts: await ogFonts() })`.
 // Constraints: Satori (the renderer behind next/og) supports a CSS subset only — every visible
-// element needs an explicit `display`, no children-as-strings on flex parents, no className.
-export function OgLayout({ title, subtitle, footer }: OgLayoutProps) {
+// element needs an explicit `display`, no className, no children-as-strings on flex parents.
+export function OgLayout({ title, subtitle, footer, iconUrl }: OgLayoutProps) {
   // Drop title size when it gets long so it still fits without clamping.
-  const titleSize = title.length > 80 ? 64 : title.length > 50 ? 76 : 88
+  const titleSize = title.length > 80 ? 80 : title.length > 50 ? 96 : 112
+  const resolvedIcon = resolveIconUrl(iconUrl)
 
   return (
     <div
@@ -25,30 +64,21 @@ export function OgLayout({ title, subtitle, footer }: OgLayoutProps) {
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
-        backgroundColor: '#0f172a',
-        color: '#f8fafc',
+        backgroundColor: '#1a1a1a',
+        color: '#f5f5f5',
         padding: '80px',
         position: 'relative',
-        fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+        fontFamily: '"Barlow Condensed", system-ui, sans-serif',
       }}
     >
       <div
         style={{
-          width: '200px',
-          height: '6px',
-          backgroundColor: '#3b82f6',
-          marginBottom: '40px',
-        }}
-      />
-
-      <div
-        style={{
           fontSize: titleSize,
           fontWeight: 700,
-          letterSpacing: '-0.02em',
-          lineHeight: 1.05,
-          color: '#f8fafc',
-          marginBottom: subtitle ? 24 : 0,
+          letterSpacing: '-0.01em',
+          lineHeight: 1.15,
+          color: '#f5f5f5',
+          marginBottom: subtitle ? 28 : 0,
           display: '-webkit-box',
           WebkitLineClamp: 3,
           WebkitBoxOrient: 'vertical',
@@ -61,57 +91,67 @@ export function OgLayout({ title, subtitle, footer }: OgLayoutProps) {
       {subtitle && (
         <div
           style={{
-            fontSize: 32,
+            fontSize: 36,
             fontWeight: 400,
-            color: '#94a3b8',
-            lineHeight: 1.3,
+            color: '#a3a3a3',
+            lineHeight: 1.25,
             display: '-webkit-box',
             WebkitLineClamp: 2,
             WebkitBoxOrient: 'vertical',
             overflow: 'hidden',
+            fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
           }}
         >
           {subtitle}
         </div>
       )}
 
-      <div
-        style={{
-          position: 'absolute',
-          bottom: 80,
-          left: 80,
-          right: 80,
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-end',
-          fontSize: 26,
-        }}
-      >
+      {(resolvedIcon || footer) && (
         <div
           style={{
-            color: '#cbd5e1',
-            fontWeight: 500,
+            position: 'absolute',
+            bottom: 80,
+            left: 80,
+            right: 80,
             display: 'flex',
-            maxWidth: '60%',
-            overflow: 'hidden',
-            whiteSpace: 'nowrap',
-            textOverflow: 'ellipsis',
+            alignItems: 'center',
+            gap: 16,
+            fontSize: 28,
+            color: '#d4d4d4',
+            fontWeight: 500,
+            fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
           }}
         >
-          {footer || ''}
+          {resolvedIcon && (
+            // eslint-disable-next-line @next/next/no-img-element -- Satori needs a plain <img>; next/image isn't supported in ImageResponse
+            <img
+              src={resolvedIcon}
+              width={64}
+              height={64}
+              alt=""
+              style={{
+                width: 64,
+                height: 64,
+                borderRadius: 12,
+                objectFit: 'cover',
+                background: '#262626',
+              }}
+            />
+          )}
+          {footer && (
+            <div
+              style={{
+                display: 'flex',
+                overflow: 'hidden',
+                whiteSpace: 'nowrap',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {footer}
+            </div>
+          )}
         </div>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'baseline',
-            gap: 12,
-            color: '#64748b',
-            fontWeight: 500,
-          }}
-        >
-          <span>eduskript.org</span>
-        </div>
-      </div>
+      )}
     </div>
   )
 }
