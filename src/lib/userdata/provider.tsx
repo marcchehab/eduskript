@@ -194,6 +194,12 @@ export interface SyncedUserDataOptions {
   targetType?: 'class' | 'student' | 'page' | null
   /** For broadcasts: target ID (classId, studentId, or pageId for public) */
   targetId?: string | null
+  /**
+   * When true, the record stays on-device only — the sync engine never pushes it.
+   * Used for student-uploaded binaries (images, CSVs) that we deliberately keep
+   * off the server. Persisted on the record, so it survives reload.
+   */
+  localOnly?: boolean
 }
 
 /**
@@ -235,7 +241,7 @@ export function useSyncedUserData<T>(
   const initialDataRef = React.useRef(initialData)
 
   // Extract targeting from options
-  const { targetType, targetId } = options
+  const { targetType, targetId, localOnly } = options
 
   // Determine if we're in broadcast mode (targeting is set)
   const isBroadcastMode = Boolean(targetType && targetId)
@@ -382,10 +388,12 @@ export function useSyncedUserData<T>(
           immediate: shouldSyncImmediately,
           targetType: effectiveTargetType ?? null,
           targetId: effectiveTargetId ?? null,
+          localOnly,
         })
 
-        // Queue for cloud sync if authenticated
-        if (isAuthenticated) {
+        // Queue for cloud sync if authenticated, unless this record is local-only.
+        // Local-only records (student-uploaded binaries) must never be pushed.
+        if (isAuthenticated && !localOnly) {
           const record = await userDataService.get(pageId, componentId, {
             targetType: effectiveTargetType,
             targetId: effectiveTargetId
@@ -414,7 +422,7 @@ export function useSyncedUserData<T>(
       }
     },
     // Note: isBroadcastMode is derived from targetType && targetId, so not needed in deps
-    [pageId, componentId, isAuthenticated, targetType, targetId]
+    [pageId, componentId, isAuthenticated, targetType, targetId, localOnly]
   )
 
   return {

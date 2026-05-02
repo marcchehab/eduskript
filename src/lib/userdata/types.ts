@@ -30,6 +30,10 @@ export interface UserDataRecord<T = any> {
   // Uses '' instead of null because IndexedDB compound keys don't support null
   targetType: 'class' | 'student' | 'page' | ''
   targetId: string  // '' for personal data, classId/studentId/pageId for broadcasts
+  // When true, the sync engine never pushes this record to the server.
+  // Used for student-uploaded binaries (images, CSVs) that should stay on-device.
+  // Future use: flip to false on teacher-graded exam files for sync-back.
+  localOnly?: boolean
 }
 
 /**
@@ -136,6 +140,26 @@ export interface PythonFile {
  */
 export interface GlobalImportsData {
   files: PythonFile[]
+}
+
+/**
+ * Binary file (e.g. uploaded image, CSV, sqlite) attached to a Python editor.
+ * Stored via useSyncedUserData with localOnly=true so the sync engine never
+ * pushes the bytes to the server. Three scope componentIds:
+ *   - `code-editor-{editorId}-binaries` — only this editor
+ *   - `binaries:skript:{skriptId}`      — all Python editors in this skript
+ *   - `binaries:global`                 — all Python editors anywhere
+ */
+export interface BinaryFile {
+  name: string         // Filename as written into Pyodide's FS, e.g. "photo.jpg"
+  bytes: Blob          // Raw file content (Dexie stores Blobs natively)
+  sizeBytes: number    // Convenience copy of bytes.size for sorting / size checks
+  addedAt: number      // Unix timestamp
+  source: 'student'    // Future: 'teacher' for exam-graded files synced back for marking
+}
+
+export interface BinaryFileData {
+  files: BinaryFile[]
 }
 
 /**

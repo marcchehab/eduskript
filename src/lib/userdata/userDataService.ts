@@ -139,6 +139,10 @@ export class UserDataService {
       targetType?: 'class' | 'student' | 'page' | null
       targetId?: string | null
       sourceId?: string // ID of the editor instance that triggered this save
+      // When true, the record is flagged so the sync engine never pushes it.
+      // Persists on the record so the flag survives reload. Once set, it sticks
+      // unless an explicit save passes localOnly=false.
+      localOnly?: boolean
     } = {}
   ): Promise<void> {
     // Validate inputs to prevent IndexedDB DataError
@@ -147,7 +151,7 @@ export class UserDataService {
       return
     }
 
-    const { debounce = this.DEFAULT_DEBOUNCE, immediate = false, targetType, targetId, sourceId } = options
+    const { debounce = this.DEFAULT_DEBOUNCE, immediate = false, targetType, targetId, sourceId, localOnly } = options
     const cacheKey = this.getCacheKey(pageId, componentId, targetType, targetId)
 
     // Clear existing timer if any
@@ -159,13 +163,13 @@ export class UserDataService {
 
     // If immediate save requested, execute now
     if (immediate) {
-      await this.performSave(pageId, componentId, data, targetType, targetId, sourceId)
+      await this.performSave(pageId, componentId, data, targetType, targetId, sourceId, localOnly)
       return
     }
 
     // Otherwise, debounce the save
     const timer = setTimeout(async () => {
-      await this.performSave(pageId, componentId, data, targetType, targetId, sourceId)
+      await this.performSave(pageId, componentId, data, targetType, targetId, sourceId, localOnly)
       this.saveTimers.delete(cacheKey)
     }, debounce)
 
@@ -181,11 +185,16 @@ export class UserDataService {
     data: T,
     targetType?: 'class' | 'student' | 'page' | null,
     targetId?: string | null,
-    sourceId?: string
+    sourceId?: string,
+    localOnly?: boolean
   ): Promise<void> {
     try {
       const existing = await this.get(pageId, componentId, { targetType, targetId })
       const now = Date.now()
+
+      // Preserve existing localOnly flag unless caller explicitly overrides.
+      // This ensures the flag survives normal saves that don't pass it.
+      const effectiveLocalOnly = localOnly !== undefined ? localOnly : existing?.localOnly
 
       const record: UserDataRecord<T> = {
         pageId,
@@ -199,6 +208,7 @@ export class UserDataService {
         // Use empty strings for IndexedDB compound key compatibility (null not allowed)
         targetType: targetType ?? '',
         targetId: targetId ?? '',
+        ...(effectiveLocalOnly ? { localOnly: true } : {}),
       }
 
       await db.userData.put(record)

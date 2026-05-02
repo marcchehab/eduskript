@@ -36,6 +36,15 @@ export class UserDataDatabase extends Dexie {
       // Version blobs: hash-based deduplication
       versionBlobs: 'blobId, createdAt, refCount'
     })
+
+    // Version 2 - Add localOnly secondary index. Lets sync code identify
+    // records that must never be pushed to the server (e.g. student-uploaded
+    // binaries) without deserializing their (potentially large) blob payload.
+    this.version(2).stores({
+      userData: '[pageId+componentId+targetType+targetId], updatedAt, userId, savedToRemote, targetType, localOnly',
+      userData_history: '++id, [pageId+componentId], versionNumber, createdAt, blobId',
+      versionBlobs: 'blobId, createdAt, refCount'
+    })
   }
 }
 

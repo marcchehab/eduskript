@@ -345,9 +345,11 @@ export class SyncEngine {
         }
       }
 
-      // Also push any unsynced local data not on server
+      // Also push any unsynced local data not on server.
+      // Skip localOnly records — those are deliberately on-device only
+      // (e.g. student-uploaded binaries) and must never reach the server.
       const unsyncedRecords = await db.userData
-        .filter((record) => record.savedToRemote === false)
+        .filter((record) => record.savedToRemote === false && !record.localOnly)
         .toArray()
 
       for (const record of unsyncedRecords) {
