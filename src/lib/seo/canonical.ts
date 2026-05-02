@@ -47,3 +47,13 @@ export function canonicalUrl(args: CanonicalArgs): string {
 
   return `https://eduskript.org/${args.slug}${path}`
 }
+
+// Returns the URL object for the canonical's origin, suitable for
+// `metadataBase` in Next.js generateMetadata. Anchoring metadataBase to the
+// tenant's public host (custom domain when present, else eduskript.org) makes
+// the file-based opengraph-image URL resolve to a host crawlers can actually
+// reach — without this, Next.js falls back to the request host, which on
+// Koyeb is the internal `http://localhost:8000`.
+export function canonicalBase(args: Omit<CanonicalArgs, 'path'>): URL {
+  return new URL(new URL(canonicalUrl(args)).origin)
+}

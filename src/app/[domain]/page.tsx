@@ -7,7 +7,7 @@ import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.
 import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
 import { getTeacherByUsernameDeduped } from '@/lib/cached-queries'
 import { prisma } from '@/lib/prisma'
-import { canonicalUrl } from '@/lib/seo/canonical'
+import { canonicalUrl, canonicalBase } from '@/lib/seo/canonical'
 
 // Enable ISR - pages are cached until explicitly invalidated
 export const revalidate = false
@@ -50,8 +50,15 @@ export async function generateMetadata({ params }: DomainIndexProps): Promise<Me
     const description = teacher.pageDescription || teacher.bio || `Educational content by ${teacher.pageName || teacher.name}`
 
     // og:image is provided by src/app/[domain]/opengraph-image.tsx — passing
-    // images here would override the file-based OG, so we omit it.
+    // images here would override the file-based OG, so we omit it. metadataBase
+    // anchors the relative OG image URL to the tenant's public host so social
+    // crawlers fetch from the right domain (custom domain when present).
     return {
+      metadataBase: canonicalBase({
+        type: 'teacher',
+        slug: teacher.pageSlug ?? domain,
+        customDomains: teacher.customDomains,
+      }),
       title,
       description,
       authors: [{ name: teacher.name || 'Unknown' }],

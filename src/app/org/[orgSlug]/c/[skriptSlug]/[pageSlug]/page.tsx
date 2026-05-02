@@ -6,7 +6,7 @@ import type { Metadata } from 'next'
 import { prisma } from '@/lib/prisma'
 import { getOrgPublishedPage, getOrgFullSiteStructure } from '@/lib/cached-queries'
 import { buildSiteStructure } from '@/lib/site-structure'
-import { canonicalUrl } from '@/lib/seo/canonical'
+import { canonicalUrl, canonicalBase } from '@/lib/seo/canonical'
 import { generateExcerpt } from '@/lib/markdown'
 import { JsonLd, learningResourceSchema, breadcrumbSchema } from '@/lib/seo/json-ld'
 
@@ -71,8 +71,14 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     })
 
     // og:image is provided by the colocated opengraph-image.tsx — passing
-    // images here would override the file-based OG, so we omit it.
+    // images here would override the file-based OG, so we omit it. metadataBase
+    // anchors the relative OG image URL to the org's public host.
     return {
+      metadataBase: canonicalBase({
+        type: 'org',
+        slug: orgSlug,
+        customDomains: organization.customDomains,
+      }),
       title,
       description,
       alternates: { canonical },

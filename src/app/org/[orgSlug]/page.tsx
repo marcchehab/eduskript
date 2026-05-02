@@ -10,7 +10,7 @@ import { HtmlLangSetter } from '@/components/seo/html-lang-setter'
 import { getOrgMembership } from '@/lib/org-auth'
 import { getOrgWithLayout, getOrgHomepageContent, getOrgFullSiteStructure } from '@/lib/cached-queries'
 import { prisma } from '@/lib/prisma'
-import { canonicalUrl } from '@/lib/seo/canonical'
+import { canonicalUrl, canonicalBase } from '@/lib/seo/canonical'
 import { JsonLd, organizationSchema } from '@/lib/seo/json-ld'
 
 export const dynamic = 'force-dynamic'
@@ -73,7 +73,13 @@ export async function generateMetadata({ params }: OrgPageProps): Promise<Metada
 
     // og:image is provided by src/app/org/[orgSlug]/opengraph-image.tsx —
     // passing images here would override the file-based OG, so we omit it.
+    // metadataBase anchors the relative OG image URL to the org's public host.
     return {
+      metadataBase: canonicalBase({
+        type: 'org',
+        slug: orgSlug,
+        customDomains: organization.customDomains,
+      }),
       title,
       description,
       alternates: { canonical },

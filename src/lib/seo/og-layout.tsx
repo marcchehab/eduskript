@@ -22,10 +22,13 @@ export interface OgLayoutProps {
 
 // Cached so we only read the TTF once per process. Barlow Condensed Bold matches
 // the project's `--font-heading` (Barlow_Condensed weight 700 in src/app/layout.tsx).
+// Lives under public/fonts so Next.js standalone output bundles it (the
+// alternative — reading from src/ via process.cwd() — fails in production
+// because Next traces source files into a separate prefix).
 let fontPromise: Promise<ArrayBuffer> | null = null
 export function loadHeadingFont(): Promise<ArrayBuffer> {
   if (!fontPromise) {
-    const fontPath = path.join(process.cwd(), 'src/lib/seo/fonts/barlow-condensed-700.ttf')
+    const fontPath = path.join(process.cwd(), 'public/fonts/barlow-condensed-700.ttf')
     fontPromise = fs.readFile(fontPath).then(buf =>
       buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer,
     )

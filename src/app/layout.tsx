@@ -33,7 +33,23 @@ const headingFont = Barlow_Condensed({
   variable: '--font-heading',
 });
 
+// Global default for resolving relative metadata URLs (file-based opengraph-image
+// is the main case). Without this, Next.js falls back to the request host —
+// which on Koyeb is `http://localhost:8000` (internal port), producing OG image
+// URLs no external crawler can fetch.
+//
+// Public tenant routes override this in their own generateMetadata with the
+// canonical origin so custom domains (e.g. informatikgarten.ch) resolve to the
+// tenant's public host instead of eduskript.org. Local dev keeps localhost so
+// /og preview during dev still works.
+const APP_BASE = new URL(
+  process.env.NODE_ENV === 'development'
+    ? 'http://localhost:3000'
+    : 'https://eduskript.org',
+)
+
 export const metadata: Metadata = {
+  metadataBase: APP_BASE,
   title: "Eduskript - Education Platform",
   description: "Create and manage educational content with ease",
   openGraph: {

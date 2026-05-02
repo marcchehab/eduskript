@@ -6,7 +6,7 @@ import {
 } from '@/lib/cached-queries'
 import { PublicPageBody } from '@/components/public/public-page-body'
 import type { Metadata } from 'next'
-import { canonicalUrl } from '@/lib/seo/canonical'
+import { canonicalUrl, canonicalBase } from '@/lib/seo/canonical'
 import { generateExcerpt } from '@/lib/markdown'
 import { JsonLd, learningResourceSchema, breadcrumbSchema } from '@/lib/seo/json-ld'
 
@@ -74,8 +74,14 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     })
 
     // og:image is provided by the colocated opengraph-image.tsx — passing
-    // images here would override the file-based OG, so we omit it.
+    // images here would override the file-based OG, so we omit it. metadataBase
+    // anchors the relative OG image URL to the tenant's public host.
     return {
+      metadataBase: canonicalBase({
+        type: 'teacher',
+        slug: teacher.pageSlug ?? domain,
+        customDomains: teacher.customDomains,
+      }),
       title,
       description,
       authors: [{ name: teacher.name || 'Unknown' }],
