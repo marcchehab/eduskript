@@ -34,6 +34,19 @@ interface ParentNode extends Node {
  * # Hides file tabs for simple examples
  * print("Hello!")
  * ```
+ *
+ * Teacher-attached binary files (resolved against skript file storage):
+ * ```python editor assets="data.csv,sample.png"
+ * import pandas as pd
+ * pd.read_csv('data.csv').head()
+ * ```
+ *
+ * Allow students to upload local files (in-browser only, never sent to server):
+ * ```python editor allow-upload accept="image/*,.csv"
+ * # Students can upload images, CSVs, etc. and read them with PIL/pandas.
+ * ```
+ *
+ * Note: `assets`/`allow-upload` are intended for the Python editor only.
  */
 export function remarkCodeEditor() {
   return (tree: Node) => {
@@ -250,6 +263,11 @@ function parseMeta(node: CodeNode): Record<string, string> {
 
     if (part === 'exam') {
       attributes['exam'] = 'true'
+      return
+    }
+
+    if (part === 'allow-upload') {
+      attributes['allow-upload'] = 'true'
       return
     }
 

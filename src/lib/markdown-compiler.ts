@@ -106,7 +106,7 @@ export const sanitizeSchema = {
     // Allow className and style on all elements
     '*': [...(defaultSchema.attributes?.['*'] || []), 'className', 'style'],
     // Custom component attributes (camelCase for HAST, kebab-case for raw HTML)
-    'code-editor': ['dataLanguage', 'dataCode', 'dataFiles', 'dataId', 'dataDb', 'dataSchemaImage', 'dataSingle', 'dataShowCanvas', 'dataSolution', 'dataExam', 'dataCheckCode', 'dataCheckPoints', 'dataMaxChecks', 'data-language', 'data-code', 'data-files', 'data-id', 'data-db', 'data-schema-image', 'data-single', 'data-show-canvas', 'data-solution', 'data-exam', 'data-check-code', 'data-check-points', 'data-max-checks'],
+    'code-editor': ['dataLanguage', 'dataCode', 'dataFiles', 'dataId', 'dataDb', 'dataSchemaImage', 'dataSingle', 'dataShowCanvas', 'dataSolution', 'dataExam', 'dataCheckCode', 'dataCheckPoints', 'dataMaxChecks', 'dataAssets', 'dataAllowUpload', 'dataAccept', 'data-language', 'data-code', 'data-files', 'data-id', 'data-db', 'data-schema-image', 'data-single', 'data-show-canvas', 'data-solution', 'data-exam', 'data-check-code', 'data-check-points', 'data-max-checks', 'data-assets', 'data-allow-upload', 'data-accept'],
     'tabs-container': ['dataItems', 'data-items'],
     'youtube-embed': ['dataId', 'dataPlaylist', 'dataStartTime', 'dataCaption', 'data-id', 'data-playlist', 'data-start-time', 'data-caption'],
     'mermaid-diagram': ['dataDefinition', 'data-definition'],

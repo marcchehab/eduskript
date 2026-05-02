@@ -17,14 +17,14 @@ import { basicSetup } from 'codemirror'
 import { autocompletion } from '@codemirror/autocomplete'
 import { createPythonCompletions } from './python-completions'
 import { Button } from '@/components/ui/button'
-import { Play, Square, RotateCcw, Maximize2, Minimize2, Camera, X, Plus, FileText, ZoomIn, ZoomOut, Save, History, Highlighter, MessageSquare, WrapText, Circle, CheckCircle2, Package, Trash2 } from 'lucide-react'
+import { Play, Square, RotateCcw, Maximize2, Minimize2, Camera, X, Plus, FileText, ZoomIn, ZoomOut, Save, History, Highlighter, MessageSquare, WrapText, Circle, CheckCircle2, Package, Trash2, Paperclip, Upload, Pencil } from 'lucide-react'
 import { useUserData, useCreateVersion, useVersionHistory, useRestoreVersion, useDeleteVersion, useUpdateVersionLabel } from '@/lib/userdata/hooks'
 import { userDataService } from '@/lib/userdata'
 import { useSyncedUserData, type SyncedUserDataOptions } from '@/lib/userdata/provider'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
 import { useTeacherBroadcast } from '@/hooks/use-teacher-broadcast'
 import { useSession } from 'next-auth/react'
-import type { CodeEditorData, CodeHighlight, HighlightColor, HighlightComment, SqlVerificationData, GlobalImportsData, PythonCheckData } from '@/lib/userdata/types'
+import type { CodeEditorData, CodeHighlight, HighlightColor, HighlightComment, SqlVerificationData, GlobalImportsData, PythonCheckData, BinaryFile, BinaryFileData } from '@/lib/userdata/types'
 
 /** Data structure for broadcast highlights (separate from personal code data) */
 interface BroadcastHighlightsData {
@@ -100,6 +100,14 @@ interface CodeEditorProps {
   checkCode?: string // Hidden assert statements for Python checking
   checkPoints?: number // Total points for this exercise
   maxChecks?: number // Max submission attempts (undefined = unlimited)
+  // Teacher-attached binary files (Python only). Resolved from skript storage in
+  // markdown-components and fetched on demand. Read-only from the student's POV.
+  attachedFiles?: Array<{ name: string; url: string }>
+  // Show the "Upload file" button so students can bring their own local files
+  // (images, CSVs, etc.) into the Pyodide FS. Files stay on-device only.
+  allowUpload?: boolean
+  // Optional `accept` attribute hint for the file picker (e.g. "image/*,.csv").
+  acceptUploads?: string
 }
 
 // Custom annotation to mark programmatic changes (defined once outside component)
@@ -203,6 +211,13 @@ function preloadSqlJs(dbPath?: string): Promise<void> {
   })
 }
 
+/** Compact byte-size formatter for the Files panel ("245 B", "12 KB", "3.4 MB"). */
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`
+}
+
 /**
  * Compare two SQL result sets for equality.
  * Row-order sensitive, string-coerced values.
@@ -239,6 +254,9 @@ export const CodeEditor = memo(function CodeEditor({
   checkCode,
   checkPoints,
   maxChecks,
+  attachedFiles,
+  allowUpload = false,
+  acceptUploads,
 }: CodeEditorProps) {
   const { resolvedTheme } = useTheme()
   const { data: session } = useSession()
@@ -565,6 +583,173 @@ export const CodeEditor = memo(function CodeEditor({
     userDataService.save('__global__', 'python-imports', data, { immediate: true, sourceId: editorInstanceId })
   }, [editorInstanceId])
 
+  // ====================================================================
+  // Binary files (uploaded by students or attached by teacher in markdown).
+  // Three scopes mirror the python-imports tiers.
+  // All scope records persist in IndexedDB with localOnly: true so the sync
+  // engine never pushes them to the server. See provider.tsx + sync-engine.ts.
+  // ====================================================================
+  const editorBinariesPageId = pageId || 'no-page'
+  const editorBinariesComponentId = `code-editor-${id}-binaries`
+  const skriptBinariesComponentId = 'python-binaries'
+  const globalBinariesComponentId = 'python-binaries'
+
+  type BinaryScope = 'editor' | 'skript' | 'global'
+  const [editorBinaries, setEditorBinaries] = useState<BinaryFileData>({ files: [] })
+  const [skriptBinaries, setSkriptBinaries] = useState<BinaryFileData>({ files: [] })
+  const [globalBinaries, setGlobalBinaries] = useState<BinaryFileData>({ files: [] })
+  // Pending scope-change confirmation. Lives at this level (not inside the dropdown
+  // block lower down) because applyScopeChange — defined right after the binary save
+  // helpers — needs to read it.
+  const [pendingScopeChange, setPendingScopeChange] = useState<{
+    name: string
+    sizeBytes: number
+    fromScope: BinaryScope
+    toScope: BinaryScope
+  } | null>(null)
+  // Inline rename state for the binaries list.
+  const [renamingBinary, setRenamingBinary] = useState<{ scope: BinaryScope; oldName: string } | null>(null)
+  const [renameBinaryValue, setRenameBinaryValue] = useState('')
+
+  useEffect(() => {
+    if (!isPython) return
+
+    const loadBinaries = async () => {
+      const editorRec = await userDataService.get<BinaryFileData>(editorBinariesPageId, editorBinariesComponentId)
+      if (editorRec?.data) setEditorBinaries(editorRec.data)
+      if (skriptId) {
+        const skriptRec = await userDataService.get<BinaryFileData>(skriptId, skriptBinariesComponentId)
+        if (skriptRec?.data) setSkriptBinaries(skriptRec.data)
+      }
+      const globalRec = await userDataService.get<BinaryFileData>('__global__', globalBinariesComponentId)
+      if (globalRec?.data) setGlobalBinaries(globalRec.data)
+    }
+    loadBinaries()
+
+    // Cross-editor sync: when the user uploads/promotes/removes in editor A,
+    // editor B in the same scope picks up the change without a reload.
+    const unsubs: Array<() => void> = []
+
+    if (skriptId) {
+      unsubs.push(
+        userDataService.subscribe<BinaryFileData>(skriptId, skriptBinariesComponentId, (data, sourceId) => {
+          if (sourceId === editorInstanceId) return
+          setSkriptBinaries(data)
+        }, { id: editorInstanceId })
+      )
+    }
+
+    unsubs.push(
+      userDataService.subscribe<BinaryFileData>('__global__', globalBinariesComponentId, (data, sourceId) => {
+        if (sourceId === editorInstanceId) return
+        setGlobalBinaries(data)
+      }, { id: editorInstanceId })
+    )
+
+    return () => { unsubs.forEach(fn => fn()) }
+  }, [isPython, skriptId, editorInstanceId, editorBinariesPageId, editorBinariesComponentId])
+
+  const saveEditorBinaries = useCallback((data: BinaryFileData) => {
+    setEditorBinaries(data)
+    userDataService.save(editorBinariesPageId, editorBinariesComponentId, data, {
+      immediate: true,
+      sourceId: editorInstanceId,
+      localOnly: true,
+    })
+  }, [editorBinariesPageId, editorBinariesComponentId, editorInstanceId])
+
+  const saveSkriptBinaries = useCallback((data: BinaryFileData) => {
+    setSkriptBinaries(data)
+    if (skriptId) {
+      userDataService.save(skriptId, skriptBinariesComponentId, data, {
+        immediate: true,
+        sourceId: editorInstanceId,
+        localOnly: true,
+      })
+    }
+  }, [skriptId, skriptBinariesComponentId, editorInstanceId])
+
+  const saveGlobalBinaries = useCallback((data: BinaryFileData) => {
+    setGlobalBinaries(data)
+    userDataService.save('__global__', globalBinariesComponentId, data, {
+      immediate: true,
+      sourceId: editorInstanceId,
+      localOnly: true,
+    })
+  }, [globalBinariesComponentId, editorInstanceId])
+
+  // Binary helpers (upload, remove, change scope). All work in-memory + IndexedDB
+  // — none of these ever hit the network.
+  const writeBinariesForScope = useCallback((scope: 'editor' | 'skript' | 'global', data: BinaryFileData) => {
+    if (scope === 'editor') saveEditorBinaries(data)
+    else if (scope === 'skript') saveSkriptBinaries(data)
+    else saveGlobalBinaries(data)
+  }, [saveEditorBinaries, saveSkriptBinaries, saveGlobalBinaries])
+
+  const readBinariesForScope = useCallback((scope: 'editor' | 'skript' | 'global'): BinaryFileData => {
+    if (scope === 'editor') return editorBinaries
+    if (scope === 'skript') return skriptBinaries
+    return globalBinaries
+  }, [editorBinaries, skriptBinaries, globalBinaries])
+
+  // Default upload destination is the editor scope. Students can promote later.
+  const handleBinaryUpload = useCallback(async (filesList: FileList | null) => {
+    if (!filesList || filesList.length === 0) return
+    const incoming: BinaryFile[] = []
+    for (let i = 0; i < filesList.length; i++) {
+      const f = filesList[i]
+      incoming.push({
+        name: f.name,
+        bytes: f,                  // a File is a Blob — Dexie stores it natively
+        sizeBytes: f.size,
+        addedAt: Date.now(),
+        source: 'student',
+      })
+    }
+    // Replace any existing entries with the same name (latest upload wins).
+    const existing = editorBinariesRef.current.files.filter(f => !incoming.some(n => n.name === f.name))
+    saveEditorBinaries({ files: [...existing, ...incoming] })
+  }, [saveEditorBinaries])
+
+  const removeBinary = useCallback((scope: 'editor' | 'skript' | 'global', name: string) => {
+    const current = readBinariesForScope(scope)
+    writeBinariesForScope(scope, { files: current.files.filter(f => f.name !== name) })
+  }, [readBinariesForScope, writeBinariesForScope])
+
+  // Rename a binary in place. If the new name collides with an existing file in
+  // the same scope, the older entry is replaced (matches upload semantics).
+  const renameBinary = useCallback((scope: 'editor' | 'skript' | 'global', oldName: string, newName: string) => {
+    const trimmed = newName.trim()
+    if (!trimmed || trimmed === oldName) return
+    const current = readBinariesForScope(scope)
+    const target = current.files.find(f => f.name === oldName)
+    if (!target) return
+    const renamed: BinaryFile = { ...target, name: trimmed }
+    writeBinariesForScope(scope, {
+      files: [...current.files.filter(f => f.name !== oldName && f.name !== trimmed), renamed],
+    })
+  }, [readBinariesForScope, writeBinariesForScope])
+
+  // Apply a scope change after the user confirms the modal.
+  const applyScopeChange = useCallback(() => {
+    if (!pendingScopeChange) return
+    const { name, fromScope, toScope } = pendingScopeChange
+    const fromData = readBinariesForScope(fromScope)
+    const file = fromData.files.find(f => f.name === name)
+    if (!file) {
+      setPendingScopeChange(null)
+      return
+    }
+    // Remove from source scope.
+    writeBinariesForScope(fromScope, { files: fromData.files.filter(f => f.name !== name) })
+    // Add to target scope (replacing any same-name entry).
+    const toData = readBinariesForScope(toScope)
+    writeBinariesForScope(toScope, {
+      files: [...toData.files.filter(f => f.name !== name), file],
+    })
+    setPendingScopeChange(null)
+  }, [pendingScopeChange, readBinariesForScope, writeBinariesForScope])
+
   // Which import files are currently open as tabs
   const [openImports, setOpenImports] = useState<Array<{ name: string; scope: 'skript' | 'global' }>>([])
   // Active tab: either a local file or an import file
@@ -591,6 +776,30 @@ export const CodeEditor = memo(function CodeEditor({
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [showImportsDropdown])
+
+  // Binary files dropdown (the unified Files panel for teacher-attached + student uploads).
+  // The pending-scope state itself is declared earlier (see above) because applyScopeChange
+  // depends on it and is hoisted higher in the component.
+  const [showBinariesDropdown, setShowBinariesDropdown] = useState(false)
+  const [binariesDropdownPosition, setBinariesDropdownPosition] = useState<{ top: number; left: number } | null>(null)
+  const binariesDropdownRef = useRef<HTMLDivElement>(null)
+  const binariesDropdownPortalRef = useRef<HTMLDivElement>(null)
+  const binariesFileInputRef = useRef<HTMLInputElement>(null)
+
+  // Close binaries dropdown on outside click
+  useEffect(() => {
+    if (!showBinariesDropdown) return
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as Node
+      if (binariesDropdownRef.current?.contains(target)) return
+      if (binariesDropdownPortalRef.current?.contains(target)) return
+      // Don't close while the scope-change modal is open — the modal lives outside the portal.
+      if (pendingScopeChange) return
+      setShowBinariesDropdown(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [showBinariesDropdown, pendingScopeChange])
 
   // Tab context menu (right-click / long-press)
   const [tabContextMenu, setTabContextMenu] = useState<{ index: number; x: number; y: number } | null>(null)
@@ -676,9 +885,12 @@ export const CodeEditor = memo(function CodeEditor({
       : initialCode)
   const hasTurtleModule = language === 'python' && /import\s+turtle|from\s+turtle/.test(currentCode)
   const hasMatplotlib = language === 'python' && /import\s+matplotlib|from\s+matplotlib/.test(currentCode)
+  // PIL: any usage hints that the code may produce images (display(), Image.show(), etc.).
+  // Matches `import PIL`, `from PIL`, `from PIL.Image` — same lightweight heuristic as matplotlib.
+  const hasPil = language === 'python' && /import\s+PIL|from\s+PIL/.test(currentCode)
   // SQL schema: provided via schemaImage/schemaImageDark props (auto-detected in markdown renderer)
   const hasSqlSchema = language === 'sql' && !!(schemaImage || schemaImageDark)
-  const hasGraphics = hasTurtleModule || hasMatplotlib || hasSqlSchema
+  const hasGraphics = hasTurtleModule || hasMatplotlib || hasPil || hasSqlSchema
   const showEditor = containerRef.current ? (editorWidth / 100) * containerRef.current.offsetWidth >= MIN_VISIBLE_WIDTH : true
   const showGraphics = containerRef.current ? ((100 - editorWidth) / 100) * containerRef.current.offsetWidth >= MIN_VISIBLE_WIDTH : true
   const [canvasVisible, setCanvasVisible] = useState(false) // Start hidden, show only when graphics detected
@@ -863,6 +1075,12 @@ export const CodeEditor = memo(function CodeEditor({
   // This is intentional: personal code/settings shouldn't be overwritten when broadcasting.
   // COMPLEXITY NOTE: This means savedData?.highlights must be preserved during broadcast saves.
   // If this gets confusing, consider using a separate state variable for personal highlights.
+  // Track the highlights payload last sent to the broadcast endpoint so we can
+  // skip redundant network calls when this effect fires for unrelated reasons
+  // (e.g. canvasTransform pan, font size). Without this, dragging the canvas in
+  // broadcast mode floods /api/user-data/sync with an unchanged `{highlights:[]}`.
+  const lastSyncedBroadcastHighlightsRef = useRef<string | null>(null)
+
   useEffect(() => {
     // Only save if pageId is provided (not in fallback mode)
     if (!pageId) return
@@ -875,10 +1093,16 @@ export const CodeEditor = memo(function CodeEditor({
     // In broadcast mode: save highlights to broadcast record, personal data keeps other settings
     // In personal mode: save everything to personal record
     if (isBroadcastMode) {
-      // Save highlights to broadcast record
-      updateBroadcastHighlights({ highlights }, { immediate: true })
+      // Only push to broadcast if highlights actually changed since last push.
+      // Compared as JSON for a quick deep-equality check (highlights arrays are tiny).
+      const serialized = JSON.stringify(highlights)
+      if (serialized !== lastSyncedBroadcastHighlightsRef.current) {
+        lastSyncedBroadcastHighlightsRef.current = serialized
+        updateBroadcastHighlights({ highlights }, { immediate: true })
+      }
 
-      // Save personal data WITHOUT highlights (keep them separate)
+      // Save personal data WITHOUT highlights (keep them separate).
+      // useUserData under the hood — IndexedDB only, no network.
       const personalData: CodeEditorData = {
         files,
         activeFileIndex,
@@ -1814,6 +2038,18 @@ export const CodeEditor = memo(function CodeEditor({
   useLayoutEffect(() => { skriptImportsRef.current = skriptImports }, [skriptImports])
   const globalImportsRef = useRef(globalImports)
   useLayoutEffect(() => { globalImportsRef.current = globalImports }, [globalImports])
+  const editorBinariesRef = useRef(editorBinaries)
+  useLayoutEffect(() => { editorBinariesRef.current = editorBinaries }, [editorBinaries])
+  const skriptBinariesRef = useRef(skriptBinaries)
+  useLayoutEffect(() => { skriptBinariesRef.current = skriptBinaries }, [skriptBinaries])
+  const globalBinariesRef = useRef(globalBinaries)
+  useLayoutEffect(() => { globalBinariesRef.current = globalBinaries }, [globalBinaries])
+  const attachedFilesRef = useRef(attachedFiles)
+  useLayoutEffect(() => { attachedFilesRef.current = attachedFiles }, [attachedFiles])
+
+  // Cache for teacher-attached file bytes keyed by URL. Avoids re-fetching the
+  // same file on every Run click. Lives across runs of this editor instance.
+  const attachedFileBytesRef = useRef<Map<string, Uint8Array>>(new Map())
 
   // When imports change externally, close any open tabs for files that no longer exist
   useEffect(() => {
@@ -2823,6 +3059,8 @@ export const CodeEditor = memo(function CodeEditor({
         'sympy': 'sympy',
         'scikit-learn': 'scikit-learn',
         'sklearn': 'scikit-learn',
+        'PIL': 'Pillow',
+        'pillow': 'Pillow',
       }
 
       // Parse imports from code
@@ -2838,10 +3076,32 @@ export const CodeEditor = memo(function CodeEditor({
       // Remove duplicates
       const uniquePackages = [...new Set(packagesToLoad)]
 
-      // Load packages if needed (silently)
+      // Bind stdout/stderr to THIS editor *before* anything that might emit output.
+      // The Pyodide instance is shared across editors via window.__pyodidePromise, so
+      // setStdout writes to a global slot — without this, stdout from a slow load on
+      // editor A can land in editor B's output panel after the user clicks Run on B.
+      let stdoutBuffer: string[] = []
+      pyodide.setStdout({
+        batched: (text: string) => {
+          stdoutBuffer.push(text)
+          addOutput(text, OutputLevel.OUTPUT)
+        }
+      })
+      pyodide.setStderr({
+        batched: (text: string) => {
+          addOutput(text, OutputLevel.ERROR)
+        }
+      })
+
+      // Load packages if needed. Pass our own messageCallback/errorCallback so
+      // Pyodide's "Loading numpy, pandas, …" progress lines route to *this* editor's
+      // output, not whatever editor most recently set the global console handler.
       if (uniquePackages.length > 0) {
         try {
-          await pyodide.loadPackage(uniquePackages)
+          await pyodide.loadPackage(uniquePackages, {
+            messageCallback: (msg: string) => addOutput(msg, OutputLevel.OUTPUT),
+            errorCallback: (msg: string) => addOutput(msg, OutputLevel.ERROR),
+          })
         } catch (err) {
           addOutput(`Warning: Failed to load some packages: ${err}\n`, OutputLevel.WARNING)
         }
@@ -2863,22 +3123,6 @@ plt.show = lambda: None
 `)
       }
 
-      // Capture stdout
-      let stdoutBuffer: string[] = []
-      pyodide.setStdout({
-        batched: (text: string) => {
-          stdoutBuffer.push(text)
-          addOutput(text, OutputLevel.OUTPUT)
-        }
-      })
-
-      // Capture stderr
-      pyodide.setStderr({
-        batched: (text: string) => {
-          addOutput(text, OutputLevel.ERROR)
-        }
-      })
-
       // Collect all auxiliary files (local + imports) from refs for latest content
       const localFiles = filesRef.current
       const importFiles = [...(skriptImportsRef.current?.files || []), ...(globalImportsRef.current?.files || [])]
@@ -2893,6 +3137,119 @@ plt.show = lambda: None
           `import sys\nif '${moduleName}' in sys.modules: del sys.modules['${moduleName}']`
         )
       }
+
+      // Write binary attachments to Pyodide's FS so user code can `open()` them.
+      // Order: teacher-attached first (lowest precedence), then global, skript,
+      // editor-scoped uploads (highest precedence). If two scopes provide the same
+      // filename, the higher-precedence one wins, matching the student's mental
+      // model of "the file I just uploaded should be the one Python sees".
+      const writtenBinaryNames = new Set<string>()
+      const writeBinary = (name: string, bytes: Uint8Array) => {
+        if (writtenBinaryNames.has(name)) return
+        pyodide.FS.writeFile(name, bytes)
+        writtenBinaryNames.add(name)
+      }
+
+      // Student-uploaded binaries (highest precedence first).
+      const studentBinaryScopes: BinaryFileData[] = [
+        editorBinariesRef.current,
+        skriptBinariesRef.current,
+        globalBinariesRef.current,
+      ]
+      for (const scope of studentBinaryScopes) {
+        for (const file of scope.files) {
+          if (writtenBinaryNames.has(file.name)) continue
+          const buf = new Uint8Array(await file.bytes.arrayBuffer())
+          writeBinary(file.name, buf)
+        }
+      }
+
+      // Teacher-attached binaries (fetched once, cached for subsequent runs).
+      const attached = attachedFilesRef.current || []
+      for (const att of attached) {
+        if (writtenBinaryNames.has(att.name)) continue
+        let bytes = attachedFileBytesRef.current.get(att.url)
+        if (!bytes) {
+          try {
+            const resp = await fetch(att.url)
+            if (!resp.ok) {
+              addOutput(`Failed to load attached file '${att.name}': ${resp.status}`, OutputLevel.ERROR)
+              continue
+            }
+            bytes = new Uint8Array(await resp.arrayBuffer())
+            attachedFileBytesRef.current.set(att.url, bytes)
+          } catch (err) {
+            addOutput(`Failed to load attached file '${att.name}': ${err instanceof Error ? err.message : String(err)}`, OutputLevel.ERROR)
+            continue
+          }
+        }
+        writeBinary(att.name, bytes)
+      }
+
+      // Inject a small helper *before* user code runs.
+      //
+      // The helper captures every "shown" image into a single ordered buffer so
+      // matplotlib plots and PIL displays render in the order they were called,
+      // not segregated by type. Three sources push into the same buffer:
+      //   - `display(pil_image)`            (Jupyter-style helper)
+      //   - `pil_image.show()`              (patched: would otherwise try to open
+      //                                      an OS viewer and silently no-op)
+      //   - `plt.show()`                    (patched: encodes all open figures and
+      //                                      closes them so the post-run sweep
+      //                                      doesn't double-render)
+      //
+      // Items are stored as already-encoded PNG bytes so the post-run capture is
+      // a trivial base64-encode. The buffer is reset every run.
+      // All patches are idempotent and skip silently when the relevant package
+      // isn't loaded.
+      await pyodide.runPythonAsync(`
+import builtins as _b
+import io as _io
+_b._eduskript_shown = []  # list of PNG byte blobs, in call order
+
+def _eduskript_png_from_pil(img):
+    save_img = img if img.mode in ('RGB', 'RGBA', 'L', 'LA', 'P') else img.convert('RGBA')
+    buf = _io.BytesIO()
+    save_img.save(buf, format='PNG')
+    return buf.getvalue()
+
+def _eduskript_png_from_fig(fig):
+    buf = _io.BytesIO()
+    fig.savefig(buf, format='png', bbox_inches='tight', dpi=100)
+    return buf.getvalue()
+
+def display(obj):
+    """Show a PIL image in the editor canvas (in call order with matplotlib)."""
+    try:
+        from PIL.Image import Image as _PILImage
+        if isinstance(obj, _PILImage):
+            _b._eduskript_shown.append(_eduskript_png_from_pil(obj))
+            return
+    except ImportError:
+        pass
+    print(repr(obj))
+
+_b.display = display
+
+try:
+    from PIL.Image import Image as _PILImage
+    def _eduskript_pil_show(self, title=None, command=None):
+        _b._eduskript_shown.append(_eduskript_png_from_pil(self))
+    _PILImage.show = _eduskript_pil_show
+except ImportError:
+    pass
+
+try:
+    import matplotlib.pyplot as _plt
+    def _eduskript_plt_show(*args, **kwargs):
+        for _num in _plt.get_fignums():
+            _fig = _plt.figure(_num)
+            _b._eduskript_shown.append(_eduskript_png_from_fig(_fig))
+            _plt.close(_fig)
+    _plt.show = _eduskript_plt_show
+except ImportError:
+    pass
+`)
 
       // Run the code
       const result = await pyodide.runPythonAsync(code)
@@ -2915,32 +3272,42 @@ plt.show = lambda: None
       setTimeout(cleanupMatplotlibUI, 100)
       setTimeout(cleanupMatplotlibUI, 500)
 
-      // Check if matplotlib plots were created and capture them
+      // Capture every image the run produced, in call order. The patched
+      // display() / .show() / plt.show() in the pre-run helper appended PNG
+      // bytes to a single ordered buffer, so we just base64-encode in sequence.
+      // Then sweep any matplotlib figures the user created but forgot to
+      // plt.show() — those land at the end so they're never lost.
       try {
         const plotScript = `
 import sys
 import io
 import base64
+import builtins as _b
 
 plots = []
+
+# 1) Anything the user explicitly displayed, in call order
+shown = getattr(_b, '_eduskript_shown', [])
+for png_bytes in shown:
+    plots.append('data:image/png;base64,' + base64.b64encode(png_bytes).decode('UTF-8'))
+
+# 2) Trailing matplotlib figures the user forgot to plt.show()
 try:
-    import matplotlib
     import matplotlib.pyplot as plt
-
-    # Get all figures
-    figures = [plt.figure(num) for num in plt.get_fignums()]
-
-    for fig in figures:
-        buf = io.BytesIO()
-        fig.savefig(buf, format='png', bbox_inches='tight', dpi=100)
-        buf.seek(0)
-        img_str = 'data:image/png;base64,' + base64.b64encode(buf.read()).decode('UTF-8')
-        plots.append(img_str)
-        plt.close(fig)
+    for _num in plt.get_fignums():
+        _fig = plt.figure(_num)
+        _buf = io.BytesIO()
+        _fig.savefig(_buf, format='png', bbox_inches='tight', dpi=100)
+        _buf.seek(0)
+        plots.append('data:image/png;base64,' + base64.b64encode(_buf.read()).decode('UTF-8'))
+        plt.close(_fig)
 except ImportError:
-    pass  # matplotlib not loaded
+    pass
 except Exception as e:
-    print(f"Error capturing plots: {e}", file=sys.stderr)
+    print(f"Error capturing trailing figures: {e}", file=sys.stderr)
+
+# Reset for next run
+_b._eduskript_shown = []
 
 plots
 `
@@ -2948,6 +3315,9 @@ plots
 
         // Display plots in the graphics pane
         if (plotsData && plotsData.length > 0 && canvasRef.current) {
+          // Force the canvas open even if our static heuristic missed the import
+          // (e.g. the code uses display() with a PIL import we couldn't detect statically).
+          setCanvasVisible(true)
           // Clear previous matplotlib plots (but keep turtle graphics)
           const canvas = canvasRef.current
           // Remove existing matplotlib images
@@ -3334,10 +3704,41 @@ plots
                 <WrapText className="w-3 h-3" />
               </button>
 
-              {/* Global Files button - Python only */}
-              {isPython && (
+              {/* Files panel button - Python only, gated on having attached files OR allowing uploads.
+                  Clicking opens a unified list of teacher-attached binaries + student uploads
+                  (split by scope). All student uploads stay on-device (localOnly=true). */}
+              {isPython && (allowUpload || (attachedFiles && attachedFiles.length > 0)) && (
                 <>
                   <div className="w-px h-4 bg-border mx-1" />
+                  <div className="relative" ref={binariesDropdownRef}>
+                    <button
+                      onClick={() => {
+                        if (!showBinariesDropdown && binariesDropdownRef.current) {
+                          const rect = binariesDropdownRef.current.getBoundingClientRect()
+                          setBinariesDropdownPosition({
+                            top: rect.bottom + 4,
+                            left: rect.right - 240,
+                          })
+                        }
+                        setShowBinariesDropdown(prev => !prev)
+                      }}
+                      className="w-6 h-6 rounded flex items-center justify-center transition-colors hover:bg-muted text-amber-600 dark:text-amber-400"
+                      title="Files (attached & uploaded)"
+                    >
+                      <Paperclip className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {/* Global Files button - Python only.
+                  Skip the leading separator when the binaries paperclip is also shown,
+                  since the two buttons should sit visually together. */}
+              {isPython && (
+                <>
+                  {!(allowUpload || (attachedFiles && attachedFiles.length > 0)) && (
+                    <div className="w-px h-4 bg-border mx-1" />
+                  )}
                   <div className="relative" ref={importsDropdownRef}>
                     <button
                       onClick={() => {
@@ -3488,6 +3889,179 @@ plots
                     document.body
                   )}
                 </>
+              )}
+
+              {/* Files dropdown (binaries) - portal-rendered */}
+              {isPython && showBinariesDropdown && binariesDropdownPosition && typeof document !== 'undefined' && createPortal(
+                <div
+                  ref={binariesDropdownPortalRef}
+                  className="fixed bg-popover border rounded-lg shadow-lg p-2 min-w-[260px] max-w-[320px] z-[9999]"
+                  style={{
+                    top: `${binariesDropdownPosition.top}px`,
+                    left: `${binariesDropdownPosition.left}px`,
+                  }}
+                >
+                  {/* Teacher-attached files (read-only). Shown only if any. */}
+                  {attachedFiles && attachedFiles.length > 0 && (
+                    <>
+                      <div className="text-xs font-medium text-muted-foreground px-2 py-1 flex items-center gap-1">
+                        From skript
+                        <span className="text-[10px] text-muted-foreground/60">(read-only)</span>
+                      </div>
+                      {attachedFiles.map(f => (
+                        <div key={`attached-${f.name}`} className="flex items-center justify-between px-2 py-1 text-sm rounded hover:bg-muted/50">
+                          <span className="flex items-center gap-1.5 truncate">
+                            <FileText className="w-3 h-3 text-amber-500 shrink-0" />
+                            <span className="truncate">{f.name}</span>
+                          </span>
+                        </div>
+                      ))}
+                      <div className="border-t my-1" />
+                    </>
+                  )}
+
+                  {/* Student uploads, grouped by scope. Editor scope is shown even when empty
+                      so the student knows where their next upload will land. Skript/global
+                      sections are only shown when they contain files OR can receive promotions. */}
+                  {([
+                    { scope: 'editor' as const, label: 'This editor', data: editorBinaries },
+                    ...(skriptId ? [{ scope: 'skript' as const, label: 'This skript', data: skriptBinaries }] : []),
+                    { scope: 'global' as const, label: 'Everywhere', data: globalBinaries },
+                  ]).map(({ scope, label, data }) => (
+                    <div key={`scope-${scope}`}>
+                      <div className="text-xs font-medium text-muted-foreground px-2 py-1">
+                        {label}
+                      </div>
+                      {data.files.length === 0 && (
+                        <div className="text-xs text-muted-foreground/50 px-2 py-1 italic">No files</div>
+                      )}
+                      {data.files.map(f => {
+                        const isRenaming = renamingBinary?.scope === scope && renamingBinary?.oldName === f.name
+                        const commitRename = () => {
+                          renameBinary(scope, f.name, renameBinaryValue)
+                          setRenamingBinary(null)
+                        }
+                        return (
+                        <div key={`${scope}-${f.name}`} className="flex items-center justify-between px-2 py-1 text-sm rounded hover:bg-muted/50 gap-2">
+                          <span className="flex items-center gap-1.5 truncate min-w-0">
+                            <FileText className="w-3 h-3 text-amber-500 shrink-0" />
+                            {isRenaming ? (
+                              <input
+                                type="text"
+                                value={renameBinaryValue}
+                                autoFocus
+                                onChange={(e) => setRenameBinaryValue(e.target.value)}
+                                onBlur={commitRename}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') commitRename()
+                                  else if (e.key === 'Escape') setRenamingBinary(null)
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                                className="h-5 px-1 text-xs border rounded bg-background min-w-0 flex-1"
+                              />
+                            ) : (
+                              <span
+                                className="truncate cursor-text"
+                                onDoubleClick={() => {
+                                  setRenamingBinary({ scope, oldName: f.name })
+                                  setRenameBinaryValue(f.name)
+                                }}
+                                title="Double-click to rename"
+                              >
+                                {f.name}
+                              </span>
+                            )}
+                            {!isRenaming && (
+                              <span className="text-[10px] text-muted-foreground/60 shrink-0">
+                                {formatBytes(f.sizeBytes)}
+                              </span>
+                            )}
+                          </span>
+                          <span className="flex items-center gap-0.5 shrink-0">
+                            {/* Scope buttons - clicking a different scope opens the confirm modal.
+                                Skript scope is hidden when the editor isn't inside a skript. */}
+                            {(['editor', 'skript', 'global'] as const)
+                              .filter(s => s !== 'skript' || skriptId)
+                              .map(s => (
+                                <button
+                                  key={s}
+                                  onClick={() => {
+                                    if (s === scope) return
+                                    setPendingScopeChange({
+                                      name: f.name,
+                                      sizeBytes: f.sizeBytes,
+                                      fromScope: scope,
+                                      toScope: s,
+                                    })
+                                  }}
+                                  className={`px-1 h-5 rounded text-[10px] uppercase tracking-wide transition-colors ${
+                                    s === scope
+                                      ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 cursor-default'
+                                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                                  }`}
+                                  title={s === scope ? `Currently scoped to ${s}` : `Move to ${s} scope`}
+                                  disabled={s === scope}
+                                >
+                                  {s === 'editor' ? 'E' : s === 'skript' ? 'S' : 'G'}
+                                </button>
+                              ))}
+                            <button
+                              onClick={() => {
+                                setRenamingBinary({ scope, oldName: f.name })
+                                setRenameBinaryValue(f.name)
+                              }}
+                              className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                              title="Rename"
+                            >
+                              <Pencil className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (!window.confirm(`Remove "${f.name}"?`)) return
+                                removeBinary(scope, f.name)
+                              }}
+                              className="h-5 w-5 flex items-center justify-center rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive"
+                              title="Remove"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </span>
+                        </div>
+                        )
+                      })}
+                    </div>
+                  ))}
+
+                  {/* Upload button - only shown when the editor opted in via allow-upload */}
+                  {allowUpload && (
+                    <>
+                      <div className="border-t my-1" />
+                      <input
+                        ref={binariesFileInputRef}
+                        type="file"
+                        multiple
+                        accept={acceptUploads || undefined}
+                        className="hidden"
+                        onChange={(e) => {
+                          handleBinaryUpload(e.target.files)
+                          // Allow re-uploading the same file by clearing the input.
+                          e.target.value = ''
+                        }}
+                      />
+                      <button
+                        onClick={() => binariesFileInputRef.current?.click()}
+                        className="w-full text-left px-2 py-1 text-sm rounded hover:bg-muted text-amber-600 dark:text-amber-400 flex items-center gap-1.5"
+                      >
+                        <Upload className="w-3 h-3" />
+                        Upload file
+                      </button>
+                      <div className="text-[10px] text-muted-foreground/60 px-2 pt-1">
+                        Files stay on this device only.
+                      </div>
+                    </>
+                  )}
+                </div>,
+                document.body
               )}
 
               {/* Python Kernel Indicator */}
@@ -4517,6 +5091,49 @@ plots
         pageId={pageId}
         componentId={pythonCheckComponentId}
       />
+    )}
+
+    {/* Scope-promotion confirm modal. Always shown on scope change for consistency.
+        Files >1MB get an extra red warning since promoting them widens the load
+        cost across more editors. */}
+    {pendingScopeChange && typeof document !== 'undefined' && createPortal(
+      <div
+        className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/40"
+        onClick={(e) => { if (e.target === e.currentTarget) setPendingScopeChange(null) }}
+      >
+        <div className="bg-popover border rounded-lg shadow-xl p-4 max-w-sm w-[90%]">
+          <h3 className="text-sm font-semibold mb-2">Move file scope?</h3>
+          <p className="text-sm text-muted-foreground mb-3">
+            <span className="font-mono">{pendingScopeChange.name}</span>
+            {' '}({formatBytes(pendingScopeChange.sizeBytes)}) will be available in{' '}
+            <strong className="text-foreground">
+              {pendingScopeChange.toScope === 'editor' && 'this editor only'}
+              {pendingScopeChange.toScope === 'skript' && 'every Python editor in this skript'}
+              {pendingScopeChange.toScope === 'global' && 'every Python editor everywhere'}
+            </strong>.
+          </p>
+          {pendingScopeChange.sizeBytes > 1024 * 1024 && (
+            <p className="text-xs text-red-600 dark:text-red-400 mb-3 border border-red-200 dark:border-red-900/40 bg-red-50 dark:bg-red-950/20 rounded p-2">
+              Large files load every time these editors run. Promoting may slow them down.
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => setPendingScopeChange(null)}
+              className="px-3 py-1 text-sm rounded hover:bg-muted"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={applyScopeChange}
+              className="px-3 py-1 text-sm rounded bg-amber-600 hover:bg-amber-700 text-white"
+            >
+              Move
+            </button>
+          </div>
+        </div>
+      </div>,
+      document.body
     )}
     </>
   )

@@ -254,6 +254,9 @@ export function createMarkdownComponents(
     const checkPoints = (props['dataCheckPoints'] as string) || (props['data-check-points'] as string)
     const maxChecks = (props['dataMaxChecks'] as string) || (props['data-max-checks'] as string)
     const heightAttr = (props['dataHeight'] as string) || (props['data-height'] as string)
+    const assetsAttr = (props['dataAssets'] as string) || (props['data-assets'] as string)
+    const allowUploadAttr = (props['dataAllowUpload'] as string) || (props['data-allow-upload'] as string)
+    const acceptAttr = (props['dataAccept'] as string) || (props['data-accept'] as string)
 
     // Debug: log all props to find attribute naming
     if (typeof window !== 'undefined') {
@@ -316,6 +319,20 @@ export function createMarkdownComponents(
       }
     }
 
+    // Resolve teacher-attached binary assets (Python only) against skript file storage.
+    // Names that don't match any uploaded file are silently skipped — the editor will
+    // simply not show them. Same lookup pattern as `db=` above.
+    let attachedFiles: Array<{ name: string; url: string }> | undefined
+    if (assetsAttr && language === 'python') {
+      const names = assetsAttr.split(',').map(s => s.trim()).filter(Boolean)
+      const resolved: Array<{ name: string; url: string }> = []
+      for (const name of names) {
+        const file = resolveFile(files, name)
+        if (file?.url) resolved.push({ name: file.name, url: file.url })
+      }
+      if (resolved.length > 0) attachedFiles = resolved
+    }
+
     // HTML editor renders a sandboxed-iframe live preview instead of the
     // Run-button + output panel that Python/JS/SQL share, so we route it to
     // its own component rather than threading another branch through CodeEditor.
@@ -355,6 +372,9 @@ export function createMarkdownComponents(
           checkCode={checkCode ? decodeHtmlEntities(checkCode) : undefined}
           checkPoints={checkPoints ? parseInt(checkPoints, 10) : undefined}
           maxChecks={maxChecks ? parseInt(maxChecks, 10) : undefined}
+          attachedFiles={attachedFiles}
+          allowUpload={allowUploadAttr === 'true'}
+          acceptUploads={acceptAttr}
         />
       </div>
     )
