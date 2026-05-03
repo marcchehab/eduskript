@@ -9,7 +9,7 @@
  *
  * Turtle auto-grading: when student code uses turtle, a small shim is exec'd
  * BEFORE the student code so every move records its end position into a
- * `__turtle_path` list. Assertions can then check the list directly or via the
+ * `turtle_path` list. Assertions can then check the list directly or via the
  * `turtle_matches(expected, …)` helper which tolerates rotation + translation.
  * This is what makes "many code paths produce the same figure" gradeable.
  */
@@ -24,7 +24,7 @@ const TURTLE_USE_RE = /import\s+turtle|from\s+turtle/
  * BEFORE student code runs, so `import turtle` works inside Pyodide's check
  * harness (Pyodide's stdlib doesn't ship the real turtle module — it
  * depends on tkinter). Every move records its end position into
- * `__turtle_path` (list of (x, y, pen_down) tuples). Also exposes
+ * `turtle_path` (list of (x, y, pen_down) tuples). Also exposes
  * `turtle_matches(expected, tolerance, tolerate_rotation)` for
  * rotation/translation-tolerant comparison.
  *
@@ -33,11 +33,11 @@ const TURTLE_USE_RE = /import\s+turtle|from\s+turtle/
  */
 const TURTLE_PRELUDE = `
 # Auto-injected by python-check-runner when student code imports turtle.
-__turtle_path = []
+turtle_path = []
 
-import sys as __sys
-import math as __math
-import types as __types
+import sys as _sys
+import math as _math
+import types as _types
 
 class _EduskriptTurtle:
     def __init__(self, *a, **kw):
@@ -45,15 +45,15 @@ class _EduskriptTurtle:
         self._y = 0.0
         self._h = 0.0  # heading in degrees, 0 = east
         self._down = True
-        __turtle_path.append((0.0, 0.0, True))
+        turtle_path.append((0.0, 0.0, True))
 
     def _rec(self):
-        __turtle_path.append((round(self._x, 6), round(self._y, 6), self._down))
+        turtle_path.append((round(self._x, 6), round(self._y, 6), self._down))
 
     def forward(self, d):
-        rad = __math.radians(self._h)
-        self._x += d * __math.cos(rad)
-        self._y += d * __math.sin(rad)
+        rad = _math.radians(self._h)
+        self._x += d * _math.cos(rad)
+        self._y += d * _math.sin(rad)
         self._rec()
     fd = forward
 
@@ -96,13 +96,13 @@ class _EduskriptTurtle:
     seth = setheading
     def towards(self, x, y=None):
         if y is None: x, y = x[0], x[1]
-        return __math.degrees(__math.atan2(y - self._y, x - self._x)) % 360
+        return _math.degrees(_math.atan2(y - self._y, x - self._x)) % 360
 
     def circle(self, radius, extent=None, steps=None):
         if extent is None: extent = 360
         if steps is None: steps = max(int(abs(extent) / 3), 12)
         step_a = extent / steps
-        step_d = 2 * radius * __math.sin(__math.radians(abs(step_a)) / 2)
+        step_d = 2 * radius * _math.sin(_math.radians(abs(step_a)) / 2)
         self.left(step_a / 2)
         for _ in range(steps):
             self.forward(step_d if step_a > 0 else -step_d)
@@ -156,7 +156,7 @@ class _EduskriptScreen:
     def reset(self): pass
 
 # Build a fake turtle module and install it before student code runs.
-__fake = __types.ModuleType('turtle')
+__fake = _types.ModuleType('turtle')
 __fake.Turtle = _EduskriptTurtle
 __fake.RawTurtle = _EduskriptTurtle
 __fake.Pen = _EduskriptTurtle
@@ -189,19 +189,83 @@ __fake.done = lambda: None
 __fake.exitonclick = lambda: None
 __fake.bye = lambda: None
 
-__sys.modules['turtle'] = __fake
+_sys.modules['turtle'] = __fake
 
 
-def turtle_matches(expected, tolerance=1.0, tolerate_rotation=True):
+def _drawn_segments(path):
+    """Extract the set of drawn line segments (where the pen was down during
+    the move). Each segment is canonicalised so direction doesn't matter:
+    the lexicographically smaller endpoint always comes first.
     """
-    Compare __turtle_path against an expected list of (x, y) (or (x, y, pen_down))
-    tuples. Both paths are translated so their first vertex is at the origin.
-    With tolerate_rotation=True, the four cardinal rotations are tried.
-    Returns True iff the actual path matches expected within tolerance.
+    segs = []
+    for i in range(1, len(path)):
+        x0, y0, _ = path[i - 1]
+        x1, y1, down = path[i]
+        if not down or (x0 == x1 and y0 == y1):
+            continue
+        p1 = (round(x0, 3), round(y0, 3))
+        p2 = (round(x1, 3), round(y1, 3))
+        segs.append(tuple(sorted([p1, p2])))
+    return segs
+
+
+def _normalize_segs(segs):
+    """Translate segments so the bounding-box min corner is at (0, 0)."""
+    if not segs:
+        return frozenset()
+    all_pts = [p for s in segs for p in s]
+    dx = min(p[0] for p in all_pts)
+    dy = min(p[1] for p in all_pts)
+    return frozenset(
+        frozenset((round(p[0] - dx, 3), round(p[1] - dy, 3)) for p in seg)
+        for seg in segs
+    )
+
+
+def turtle_matches(expected, tolerate_rotation=True):
     """
-    if not __turtle_path or not expected:
+    Compare the SET of drawn line segments to expected.
+    expected: list of ((x1, y1), (x2, y2)) segments forming the target figure.
+    Both sets are normalised so the bounding-box origin is at (0, 0).
+    Direction of each segment doesn't matter; order of strokes doesn't matter;
+    retracing over an existing segment doesn't count again. With
+    tolerate_rotation=True, the four cardinal rotations of expected are tried.
+    Returns True iff the figure matches.
+    """
+    actual = _drawn_segments(turtle_path)
+    if not actual:
         return False
-    actual = [(p[0], p[1]) for p in __turtle_path]
+    target = []
+    for seg in expected:
+        p1 = (round(seg[0][0], 3), round(seg[0][1], 3))
+        p2 = (round(seg[1][0], 3), round(seg[1][1], 3))
+        target.append(tuple(sorted([p1, p2])))
+    a = _normalize_segs(actual)
+    if a == _normalize_segs(target):
+        return True
+    if tolerate_rotation:
+        for theta in (90, 180, 270):
+            rad = _math.radians(theta)
+            c, s = _math.cos(rad), _math.sin(rad)
+            rotated = []
+            for seg in target:
+                rp1 = (seg[0][0] * c - seg[0][1] * s, seg[0][0] * s + seg[0][1] * c)
+                rp2 = (seg[1][0] * c - seg[1][1] * s, seg[1][0] * s + seg[1][1] * c)
+                rotated.append(tuple(sorted([rp1, rp2])))
+            if a == _normalize_segs(rotated):
+                return True
+    return False
+
+
+def turtle_path_matches(expected, tolerance=1.0, tolerate_rotation=True):
+    """
+    Strict path comparison — vertex order matters. Use this when the order
+    of moves is part of the exercise (e.g. "draw side A first, then side B").
+    For "did the student draw the right figure" use turtle_matches instead.
+    """
+    if not turtle_path or not expected:
+        return False
+    actual = [(p[0], p[1]) for p in turtle_path]
     target = [(p[0], p[1]) for p in expected]
     if len(actual) != len(target):
         return False
@@ -216,8 +280,8 @@ def turtle_matches(expected, tolerance=1.0, tolerate_rotation=True):
         return True
     if tolerate_rotation:
         for theta in (90, 180, 270):
-            rad = __math.radians(theta)
-            c, s = __math.cos(rad), __math.sin(rad)
+            rad = _math.radians(theta)
+            c, s = _math.cos(rad), _math.sin(rad)
             rotated = [(x * c - y * s, x * s + y * c) for x, y in t]
             if _close(a, rotated):
                 return True
@@ -262,7 +326,12 @@ function cleanLabel(s: string): string {
  * Exported for testing.
  */
 export function parseAssertions(checkCode: string): { setupLines: string[]; assertions: ParsedAssertion[] } {
-  const lines = checkCode.split('\n')
+  // Collapse explicit line continuations (a backslash at end of line) so a
+  // multi-line `assert <cond>, \\\n    "long message"` becomes one logical
+  // line before we split. Without this, each fragment lands in its own file
+  // and Python errors with "unexpected EOF while parsing".
+  const collapsed = checkCode.replace(/\\\n[ \t]*/g, ' ')
+  const lines = collapsed.split('\n')
   const assertions: ParsedAssertion[] = []
   const setupLines: string[] = []
 
@@ -390,7 +459,7 @@ with open('__eduskript_student.py') as f:
     __student_code = f.read()
 
 # Turtle prelude (empty unless student code uses turtle). Runs in __ns so
-# turtle_matches and __turtle_path are visible to setup + assertions.
+# turtle_matches and turtle_path are visible to setup + assertions.
 with open('__eduskript_prelude.py') as f:
     __prelude_code = f.read()
 if __prelude_code.strip():
