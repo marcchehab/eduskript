@@ -221,7 +221,8 @@ export default async function OrgPublicPage({ params }: PageProps) {
       title: page.title,
       description,
       url: canonical,
-      inLanguage: organization.pageLanguage || 'en',
+      // Omit when null instead of defaulting to 'en' — see teacher route.
+      inLanguage: organization.pageLanguage || null,
       author: organization.name,
       dateCreated: page.createdAt,
       dateModified: page.updatedAt,

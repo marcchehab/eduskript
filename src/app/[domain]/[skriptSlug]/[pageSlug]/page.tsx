@@ -188,7 +188,9 @@ export default async function PublicPage({ params }: PageProps) {
       title: page.title,
       description,
       url: canonical,
-      inLanguage: teacher.pageLanguage || 'en',
+      // Omit when null instead of falling back to 'en' — a wrong language
+      // tag mis-classifies the page in Google's index.
+      inLanguage: teacher.pageLanguage || null,
       author: teacher.name || teacher.pageName || 'Eduskript',
       dateCreated: page.createdAt,
       dateModified: page.updatedAt,

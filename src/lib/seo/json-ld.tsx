@@ -45,26 +45,31 @@ interface LearningResourceArgs {
   title: string
   description: string
   url: string
-  inLanguage: string
+  // BCP-47 language tag (e.g. "de-CH", "en"). Pass `null` when the teacher
+  // hasn't configured one — we'd rather omit the field than ship a wrong
+  // value, since `inLanguage` is a strong indexing signal that an `en`
+  // default would mis-classify a German page.
+  inLanguage: string | null
   author: string
   dateCreated: Date
   dateModified: Date
 }
 
 export function learningResourceSchema(args: LearningResourceArgs): object {
-  return {
+  const out: Record<string, unknown> = {
     '@context': 'https://schema.org',
     '@type': 'LearningResource',
     name: args.title,
     description: args.description,
     url: args.url,
-    inLanguage: args.inLanguage,
     author: { '@type': 'Person', name: args.author },
     dateCreated: args.dateCreated.toISOString(),
     dateModified: args.dateModified.toISOString(),
     isAccessibleForFree: true,
     learningResourceType: 'Lesson',
   }
+  if (args.inLanguage) out.inLanguage = args.inLanguage
+  return out
 }
 
 interface PersonArgs {

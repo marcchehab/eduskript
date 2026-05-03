@@ -9,6 +9,7 @@ import { getTeacherByUsernameDeduped } from '@/lib/cached-queries'
 import { prisma } from '@/lib/prisma'
 import { canonicalUrl, canonicalBase } from '@/lib/seo/canonical'
 import { JsonLd, personSchema } from '@/lib/seo/json-ld'
+import { generateExcerpt } from '@/lib/markdown'
 
 // Enable ISR - pages are cached until explicitly invalidated
 export const revalidate = false
@@ -169,10 +170,18 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
     <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border">
       <JsonLd
         schema={personSchema({
-          name: teacher.pageName || teacher.name || teacher.pageSlug || domain,
+          // Person.name = the actual person, not the page brand. pageName
+          // (which often holds the site identity like "informatikgarten.ch")
+          // becomes a sane last-resort fallback for teachers who haven't
+          // filled in their real name.
+          name: teacher.name || teacher.pageName || teacher.pageSlug || domain,
           url: teacherCanonical,
           jobTitle: teacher.title,
-          description: teacher.pageDescription || teacher.bio,
+          // Strip markdown — pageDescription is rendered as markdown in the
+          // sidebar (so it can carry links), but JSON-LD wants plain text.
+          description: teacher.pageDescription
+            ? generateExcerpt(teacher.pageDescription, 250)
+            : teacher.bio,
           image: personImage,
           sameAs,
         })}
