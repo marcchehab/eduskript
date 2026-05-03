@@ -56,6 +56,7 @@ export async function readPage(args: { pageId: string }) {
             id: page.id,
             title: page.title,
             slug: page.slug,
+            description: page.description,
             isPublished: page.isPublished,
             content: page.content,
             updatedAt: page.updatedAt,

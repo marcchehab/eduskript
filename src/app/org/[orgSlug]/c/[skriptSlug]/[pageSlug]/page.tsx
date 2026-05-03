@@ -60,7 +60,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
     const browserTitle = `${content.page.title} | ${organization.name}`
     const ogTitle = content.page.title
+    // og:description fallback chain — teacher-authored wins, then auto-excerpt,
+    // then collection-level, then template. See teacher route for rationale.
     const description =
+      content.page.description ||
       generateExcerpt(content.page.content, 160) ||
       content.collection?.description ||
       `${content.page.title} by ${organization.name}`

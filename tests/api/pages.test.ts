@@ -223,6 +223,9 @@ describe('Pages API', () => {
           data: {
             title: 'New Page',
             slug: 'new-page',
+            // POST omits description; service normalises undefined to null
+            // (see createPageForUser in src/lib/services/pages.ts).
+            description: null,
             content: '# Content',
             order: 1,
             skriptId: 'skript-123',

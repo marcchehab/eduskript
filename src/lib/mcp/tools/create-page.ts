@@ -20,6 +20,12 @@ export const createPageConfig = {
       .string()
       .min(1)
       .describe('URL slug (lowercase, hyphenated). Will be normalized.'),
+    description: z
+      .string()
+      .optional()
+      .describe(
+        'Plain-text page description used as og:description on the public page. Overrides the auto-derived excerpt. Leave empty to fall back to the excerpt.',
+      ),
     content: z
       .string()
       .optional()
@@ -31,6 +37,7 @@ export async function createPage(args: {
   skriptId: string
   title: string
   slug: string
+  description?: string
   content?: string
 }) {
   requireScope('content:write')

@@ -64,10 +64,13 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     // redundant.
     const browserTitle = `${content.page.title} | ${teacher.name || 'Eduskript'}`
     const ogTitle = content.page.title
-    // Prefer an excerpt from the actual page content over the collection's
-    // shared description — every page in a collection would otherwise share
-    // one og:description.
+    // og:description fallback chain. Teacher-authored description wins —
+    // it's the only source that captures intent. Auto-derived excerpt is
+    // next so every page still ships something. Collection description is
+    // the per-skript fallback (every page in a collection would otherwise
+    // share it). The template line is the last-resort safety net.
     const description =
+      content.page.description ||
       generateExcerpt(content.page.content, 160) ||
       content.collection?.description ||
       `${content.page.title} by ${teacher.name}`

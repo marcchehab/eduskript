@@ -282,6 +282,7 @@ export async function auditSkriptSeoForUser(userId: string, skriptId: string) {
       id: true,
       title: true,
       slug: true,
+      description: true,
       content: true,
       order: true,
       isPublished: true,
@@ -295,12 +296,16 @@ export async function auditSkriptSeoForUser(userId: string, skriptId: string) {
     const issues: string[] = []
     if (!p.title || p.title.trim().length < 3) issues.push('title-too-short')
     if (p.content.trim().length < 200) issues.push('content-too-short')
-    if (excerpt.length < 50) issues.push('excerpt-too-short')
+    // Only flag a thin excerpt as an issue when the teacher hasn't supplied
+    // their own page.description — that field overrides the auto-derived
+    // excerpt for og:description, so a short excerpt no longer hurts SEO.
+    if (excerpt.length < 50 && !p.description) issues.push('excerpt-too-short')
     if (!p.isPublished) issues.push('unpublished')
     return {
       id: p.id,
       title: p.title,
       slug: p.slug,
+      description: p.description,
       order: p.order,
       isPublished: p.isPublished,
       isUnlisted: p.isUnlisted,

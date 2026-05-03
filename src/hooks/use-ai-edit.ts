@@ -477,6 +477,9 @@ export function useAIEdit({ target, currentContent }: UseAIEditOptions): UseAIEd
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               content: edit.proposedContent,
+              ...(edit.proposedDescription !== undefined
+                ? { description: edit.proposedDescription }
+                : {}),
               editSource: 'ai-edit',
             }),
           })
@@ -499,6 +502,9 @@ export function useAIEdit({ target, currentContent }: UseAIEditOptions): UseAIEd
               skriptId: target.skriptId,
               title: edit.pageTitle,
               slug: edit.pageSlug,
+              ...(edit.proposedDescription
+                ? { description: edit.proposedDescription }
+                : {}),
               content: edit.proposedContent,
               editSource: 'ai-edit',
             }),

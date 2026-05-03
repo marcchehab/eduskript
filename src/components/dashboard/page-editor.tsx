@@ -80,6 +80,7 @@ interface PageEditorProps {
     id: string
     title: string
     slug: string
+    description?: string | null
     content: string
     isPublished: boolean
     isUnlisted?: boolean
@@ -97,7 +98,7 @@ interface PageEditorProps {
 export function PageEditor({ skript, page, canEdit, userPermissions, currentUserId }: PageEditorProps) {
   const [title, setTitle] = useState(page.title || '')
   const [slug, setSlug] = useState(page.slug || '')
-  const [description, setDescription] = useState('')
+  const [description, setDescription] = useState(page.description || '')
   const [content, setContent] = useState(page.content || '')
 
   const [isSaving, setIsSaving] = useState(false)

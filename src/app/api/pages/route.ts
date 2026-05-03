@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json()
-  const { title, slug, content, skriptId } = body
+  const { title, slug, content, skriptId, description } = body
 
   // See PATCH handler in [id]/route.ts — only accept "ai-edit"; "mcp" must
   // come through the actual MCP transport, not from a REST body.
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
   try {
     const page = await createPageForUser(
       session.user.id,
-      { title, slug, content, skriptId },
+      { title, slug, content, skriptId, description },
       { isAdmin: session.user.isAdmin, editSource }
     )
     return NextResponse.json(page)

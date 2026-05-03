@@ -52,6 +52,11 @@ export interface PageEdit {
   pageSlug: string
   originalContent: string // empty string for new pages
   proposedContent: string
+  // Optional teacher-facing summary used as og:description on the public page.
+  // Generation routes don't produce this today, but the apply flow forwards it
+  // when set so future prompt iterations (or manual tweaks) can land it
+  // alongside the content edit.
+  proposedDescription?: string | null
   summary: string // Brief description of what changed
   isNew?: boolean // true if this is a new page to create
 }

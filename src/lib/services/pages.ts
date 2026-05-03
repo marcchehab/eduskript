@@ -56,6 +56,9 @@ export class ConflictError extends Error {
 export interface UpdatePagePatch {
   title?: string
   slug?: string
+  // Optional teacher-authored summary used as the og:description on the
+  // public page. Pass `null` (or empty string, normalised below) to clear.
+  description?: string | null
   content?: string
   isPublished?: boolean
   isUnlisted?: boolean
@@ -67,6 +70,7 @@ export interface CreatePageInput {
   skriptId: string
   title: string
   slug: string
+  description?: string | null
   content?: string
 }
 
@@ -159,11 +163,17 @@ export async function createPageForUser(
   input: CreatePageInput,
   ctx: ActorContext = {}
 ) {
-  const { skriptId, title, slug, content = '' } = input
+  const { skriptId, title, slug, description, content = '' } = input
 
   if (!title || !slug || !skriptId) {
     throw new ValidationError('Title, slug, and skript ID are required')
   }
+
+  // Empty string normalises to null so DB stays clean and og:description
+  // falls through to the auto-derived excerpt instead of rendering "".
+  const normalizedDescription = description !== undefined && description !== null
+    ? description.trim() || null
+    : null
 
   const skript = await prisma.skript.findFirst({
     where: { id: skriptId, authors: { some: { userId } } },
@@ -188,6 +198,7 @@ export async function createPageForUser(
     data: {
       title,
       slug: normalizedSlug,
+      description: normalizedDescription,
       content,
       order: nextOrder,
       skriptId,
@@ -222,7 +233,7 @@ export async function updatePageForUser(
   ctx: ActorContext = {}
 ) {
   const isAdmin = !!ctx.isAdmin
-  const { title, slug, content, isPublished, isUnlisted, pageType, examSettings } = patch
+  const { title, slug, description, content, isPublished, isUnlisted, pageType, examSettings } = patch
 
   const isContentOnlyUpdate =
     content !== undefined &&
@@ -268,6 +279,12 @@ export async function updatePageForUser(
   const updateData: Record<string, unknown> = { updatedAt: new Date() }
   if (title !== undefined) updateData.title = title.trim()
   if (slug !== undefined) updateData.slug = slug.trim()
+  if (description !== undefined) {
+    // Empty string normalises to null so DB stays clean and og:description
+    // falls through to the auto-derived excerpt instead of rendering "".
+    const trimmed = (description ?? '').trim()
+    updateData.description = trimmed.length > 0 ? trimmed : null
+  }
   if (content !== undefined) updateData.content = content
   if (isPublished !== undefined) updateData.isPublished = isPublished
   if (isUnlisted !== undefined) updateData.isUnlisted = isUnlisted

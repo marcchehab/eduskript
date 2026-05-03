@@ -15,13 +15,16 @@ describe('Markdown Processing', () => {
       expect(excerpt).toBe('This is a simple test content.')
     })
 
-    it('should remove markdown headers', () => {
+    // The line-filter strategy intentionally drops headers entirely — they're
+    // structural metadata, not the prose a social-share preview should show.
+    // See generateExcerpt jsdoc.
+    it('should drop heading lines (not just the # marker)', () => {
       const content = '# Main Title\n\nSome content here.'
 
       const excerpt = generateExcerpt(content)
 
       expect(excerpt).not.toContain('#')
-      expect(excerpt).toContain('Main Title')
+      expect(excerpt).not.toContain('Main Title')
       expect(excerpt).toContain('Some content')
     })
 
@@ -121,25 +124,42 @@ describe('Markdown Processing', () => {
     })
 
     // The Eduskript-specific syntax that broke og:descriptions in production.
-    it('should strip Eduskript callout syntax', () => {
-      const content = '> [!success] Lernziele\n> \n> - Sie können im Binärsystem zählen.\n> - Sie können Dezimalzahlen umwandeln.'
+    // The line-filter approach drops the entire callout block — Lernziele
+    // bullets aren't useful in a social-share preview anyway. The first prose
+    // paragraph after the callout is what we want to surface.
+    it('should drop a Lernziele callout and surface the first prose paragraph', () => {
+      const content = '> [!success] Lernziele\n> \n> - Sie können im Binärsystem zählen.\n> - Sie können Dezimalzahlen umwandeln.\n\nDieses Kapitel führt das Binärsystem ein und zeigt, wie Computer Zahlen darstellen.'
 
       const excerpt = generateExcerpt(content)
 
       expect(excerpt).not.toContain('>')
       expect(excerpt).not.toContain('[!success]')
-      expect(excerpt).not.toContain('Lernziele') // callout title is meta, not content
-      expect(excerpt).toContain('Sie können im Binärsystem zählen.')
+      expect(excerpt).not.toContain('Lernziele')
+      // The bullets inside the callout are also dropped (list items get filtered
+      // along with their callout context).
+      expect(excerpt).not.toContain('Sie können im Binärsystem zählen.')
+      expect(excerpt).toContain('Dieses Kapitel führt das Binärsystem ein')
     })
 
-    it('should strip collapsible callout markers', () => {
-      const content = '> [!note]- Folded content\n> Body text here'
+    it('should drop collapsible callouts entirely', () => {
+      const content = '> [!note]- Folded content\n> Body text here\n\nReal prose follows.'
 
       const excerpt = generateExcerpt(content)
 
       expect(excerpt).not.toContain('[!note]')
       expect(excerpt).not.toContain('Folded content')
-      expect(excerpt).toContain('Body text here')
+      expect(excerpt).not.toContain('Body text here')
+      expect(excerpt).toContain('Real prose follows.')
+    })
+
+    it('should drop list items, not just their markers', () => {
+      const content = 'Intro paragraph here.\n\n- bullet one\n- bullet two\n\nClosing thought.'
+
+      const excerpt = generateExcerpt(content)
+
+      expect(excerpt).not.toContain('bullet one')
+      expect(excerpt).toContain('Intro paragraph here.')
+      expect(excerpt).toContain('Closing thought.')
     })
 
     it('should strip fenced code blocks', () => {
@@ -174,7 +194,7 @@ describe('Markdown Processing', () => {
       expect(excerpt).toContain('"quoted"')
     })
 
-    it('should handle multiple markdown elements', () => {
+    it('should handle multiple inline markdown elements on a prose line', () => {
       const content = '# Title\n\nThis is **bold** and *italic* with `code` and [link](url) and ![img](pic.jpg)'
 
       const excerpt = generateExcerpt(content)
@@ -183,7 +203,7 @@ describe('Markdown Processing', () => {
       expect(excerpt).not.toContain('**')
       expect(excerpt).not.toContain('`')
       expect(excerpt).not.toContain('[')
-      expect(excerpt).toContain('Title')
+      expect(excerpt).not.toContain('Title') // heading line dropped (structural)
       expect(excerpt).toContain('bold')
       expect(excerpt).toContain('italic')
       expect(excerpt).toContain('code')

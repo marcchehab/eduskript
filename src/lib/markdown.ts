@@ -26,54 +26,54 @@
  */
 
 /**
- * Generate an excerpt from markdown content.
- * Strips markdown + Eduskript syntax (callouts, blockquotes, list markers,
- * fenced code, raw HTML, etc.) and truncates at word boundary. Used as the
- * og:description for content pages — must look like clean prose to a crawler.
+ * Generate an excerpt from markdown content for use as og:description.
+ *
+ * Strategy: instead of trying to peel markdown syntax off every line, just
+ * skip lines that *start* with one. Eduskript pages reliably open with a
+ * heading and a `> [!success] Lernziele` callout — those are exactly the
+ * "wrong" lines for a search/social preview, and they all start with `#`
+ * or `>`. Filtering on the first character of each line lets us reach the
+ * first real paragraph automatically. Inline cleanup (links, bold, …) is
+ * still applied to the prose lines we keep.
  */
 export function generateExcerpt(content: string, maxLength: number = 160): string {
-  // Strip block-level constructs that don't carry sentence content first,
-  // then line-level prefixes, then inline syntax. Order matters:
-  // fenced code & HTML must go before inline-code stripping (which is greedy
-  // on `).
-  const plainText = content
-    // Fenced code blocks: ```lang ... ```  (incl. our `python editor` etc.)
-    .replace(/```[\s\S]*?```/g, '')
-    // YAML frontmatter (--- ... ---) at the top of a file
-    .replace(/^---\n[\s\S]*?\n---\n?/m, '')
-    // Raw HTML tags including custom Eduskript components like
-    // <plugin .../>, <question>, <tabs-container>, <youtube>, <muxvideo>...
-    .replace(/<[^>]+>/g, '')
-    // Callout headers: `> [!success] Lernziele` / `> [!note]-` / `> [!type]+`.
-    // Match the whole line so the title text (which is meta, not content)
-    // doesn't survive into the excerpt.
-    .replace(/^[ \t]*>[ \t]*\[![a-zA-Z]+\][-+]?.*$/gm, '')
-    // Continuation lines of blockquotes / callouts: drop leading `>` markers
-    // (one or many) and the optional space. Run twice in case of nesting.
-    .replace(/^[ \t]*(?:>[ \t]?)+/gm, '')
-    .replace(/^[ \t]*(?:>[ \t]?)+/gm, '')
-    // Headers: `# `, `## `, …
-    .replace(/^[ \t]*#{1,6}[ \t]+/gm, '')
-    // List markers (- / * / +) and ordered (1.) at line start
-    .replace(/^[ \t]*(?:[-*+]|\d+\.)[ \t]+/gm, '')
-    // Horizontal rules
-    .replace(/^[ \t]*(?:---+|\*\*\*+)[ \t]*$/gm, '')
-    // Images first (before links — image syntax is `![...](...)`, link is `[...](...)`).
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
-    // Links: keep the visible text only
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-    // Bold / italic / inline code
-    .replace(/\*\*([^*]+)\*\*/g, '$1')
-    .replace(/\*([^*]+)\*/g, '$1')
-    .replace(/`([^`]+)`/g, '$1')
-    // Common HTML entities that survived raw-HTML stripping
+  // Block-level constructs that span multiple lines need to go first so the
+  // line filter below sees a clean stream.
+  const cleaned = content
+    .replace(/```[\s\S]*?```/g, '')        // fenced code blocks (incl. `python editor`)
+    .replace(/^---\n[\s\S]*?\n---\n?/m, '') // YAML frontmatter
+    .replace(/<[^>]+>/g, '')                // raw HTML + custom components
+
+  // A line is "prose" if its first non-whitespace character isn't a
+  // structural-markdown marker. This drops headings, callouts/blockquotes,
+  // list items, horizontal rules, and bare table separators. Comparing with
+  // a Set is cheaper than running a regex per line on long pages.
+  const STRUCTURAL_FIRST_CHARS = new Set(['#', '>', '-', '*', '+', '|', '='])
+  const proseLines = cleaned
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => {
+      if (!line) return false
+      if (STRUCTURAL_FIRST_CHARS.has(line[0])) return false
+      // Ordered list: `1. text`, `12. text`. A leading digit alone is fine
+      // (years, counts) — only filter when followed by a dot+space.
+      if (/^\d+\.[ \t]/.test(line)) return false
+      return true
+    })
+
+  const plainText = proseLines
+    .join(' ')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')   // images first (before links)
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1') // links → keep text
+    .replace(/\*\*([^*]+)\*\*/g, '$1')      // bold
+    .replace(/\*([^*]+)\*/g, '$1')          // italic
+    .replace(/`([^`]+)`/g, '$1')            // inline code
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
-    // Collapse whitespace last
     .replace(/\s+/g, ' ')
     .trim()
 

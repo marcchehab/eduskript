@@ -299,6 +299,11 @@ model Page {
   title        String
   slug         String
   content      String
+  // Optional teacher-authored summary. When set, used as the og:description
+  // ahead of the auto-derived generateExcerpt(content) fallback so social
+  // previews surface the teacher's intent rather than the first prose
+  // paragraph.
+  description  String?
   order        Int
   isPublished  Boolean  @default(false)
   isUnlisted   Boolean  @default(false)
