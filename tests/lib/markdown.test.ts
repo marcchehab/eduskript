@@ -88,8 +88,8 @@ describe('Markdown Processing', () => {
 
       const excerpt = generateExcerpt(content, 100)
 
-      expect(excerpt.length).toBeLessThanOrEqual(104) // 100 + '...'
-      expect(excerpt).toContain('...')
+      expect(excerpt.length).toBeLessThanOrEqual(101) // 100 + '…'
+      expect(excerpt).toContain('…')
     })
 
     it('should truncate at last space before maxLength', () => {
@@ -97,10 +97,10 @@ describe('Markdown Processing', () => {
 
       const excerpt = generateExcerpt(content, 20)
 
-      expect(excerpt).toContain('...')
+      expect(excerpt).toContain('…')
       expect(excerpt).not.toContain('word8')
       // Should end at a space, not mid-word
-      expect(excerpt.substring(0, excerpt.length - 3).trim()).not.toMatch(/\w{10,}/)
+      expect(excerpt.substring(0, excerpt.length - 1).trim()).not.toMatch(/\w{10,}/)
     })
 
     it('should return full text if shorter than maxLength', () => {
@@ -117,7 +117,61 @@ describe('Markdown Processing', () => {
 
       const excerpt = generateExcerpt(content)
 
-      expect(excerpt.length).toBeLessThanOrEqual(164) // 160 + '...'
+      expect(excerpt.length).toBeLessThanOrEqual(161) // 160 + '…'
+    })
+
+    // The Eduskript-specific syntax that broke og:descriptions in production.
+    it('should strip Eduskript callout syntax', () => {
+      const content = '> [!success] Lernziele\n> \n> - Sie können im Binärsystem zählen.\n> - Sie können Dezimalzahlen umwandeln.'
+
+      const excerpt = generateExcerpt(content)
+
+      expect(excerpt).not.toContain('>')
+      expect(excerpt).not.toContain('[!success]')
+      expect(excerpt).not.toContain('Lernziele') // callout title is meta, not content
+      expect(excerpt).toContain('Sie können im Binärsystem zählen.')
+    })
+
+    it('should strip collapsible callout markers', () => {
+      const content = '> [!note]- Folded content\n> Body text here'
+
+      const excerpt = generateExcerpt(content)
+
+      expect(excerpt).not.toContain('[!note]')
+      expect(excerpt).not.toContain('Folded content')
+      expect(excerpt).toContain('Body text here')
+    })
+
+    it('should strip fenced code blocks', () => {
+      const content = 'Before code.\n\n```python editor\nprint("hello")\n```\n\nAfter code.'
+
+      const excerpt = generateExcerpt(content)
+
+      expect(excerpt).not.toContain('print')
+      expect(excerpt).not.toContain('```')
+      expect(excerpt).toContain('Before code.')
+      expect(excerpt).toContain('After code.')
+    })
+
+    it('should strip raw HTML and custom Eduskript components', () => {
+      const content = 'Real content. <plugin src="x"/><tabs-container data-items=\'["A"]\'><tab-item>Hidden</tab-item></tabs-container> More content.'
+
+      const excerpt = generateExcerpt(content)
+
+      expect(excerpt).not.toContain('<')
+      expect(excerpt).not.toContain('plugin')
+      expect(excerpt).toContain('Real content.')
+      expect(excerpt).toContain('More content.')
+    })
+
+    it('should decode common HTML entities', () => {
+      const content = 'Text with &amp; and &gt; and &quot;quoted&quot; words.'
+
+      const excerpt = generateExcerpt(content)
+
+      expect(excerpt).toContain('&')
+      expect(excerpt).toContain('>')
+      expect(excerpt).toContain('"quoted"')
     })
 
     it('should handle multiple markdown elements', () => {

@@ -27,18 +27,54 @@
 
 /**
  * Generate an excerpt from markdown content.
- * Strips markdown syntax and truncates at word boundary.
+ * Strips markdown + Eduskript syntax (callouts, blockquotes, list markers,
+ * fenced code, raw HTML, etc.) and truncates at word boundary. Used as the
+ * og:description for content pages — must look like clean prose to a crawler.
  */
 export function generateExcerpt(content: string, maxLength: number = 160): string {
-  // Remove markdown syntax for excerpt
+  // Strip block-level constructs that don't carry sentence content first,
+  // then line-level prefixes, then inline syntax. Order matters:
+  // fenced code & HTML must go before inline-code stripping (which is greedy
+  // on `).
   const plainText = content
-    .replace(/#{1,6}\s+/g, '') // Remove headers
-    .replace(/\*\*(.*?)\*\*/g, '$1') // Remove bold
-    .replace(/\*(.*?)\*/g, '$1') // Remove italics
-    .replace(/`(.*?)`/g, '$1') // Remove inline code
-    .replace(/\[(.*?)\]\(.*?\)/g, '$1') // Remove links
-    .replace(/!\[.*?\]\(.*?\)/g, '') // Remove images
-    .replace(/\n/g, ' ') // Replace newlines with spaces
+    // Fenced code blocks: ```lang ... ```  (incl. our `python editor` etc.)
+    .replace(/```[\s\S]*?```/g, '')
+    // YAML frontmatter (--- ... ---) at the top of a file
+    .replace(/^---\n[\s\S]*?\n---\n?/m, '')
+    // Raw HTML tags including custom Eduskript components like
+    // <plugin .../>, <question>, <tabs-container>, <youtube>, <muxvideo>...
+    .replace(/<[^>]+>/g, '')
+    // Callout headers: `> [!success] Lernziele` / `> [!note]-` / `> [!type]+`.
+    // Match the whole line so the title text (which is meta, not content)
+    // doesn't survive into the excerpt.
+    .replace(/^[ \t]*>[ \t]*\[![a-zA-Z]+\][-+]?.*$/gm, '')
+    // Continuation lines of blockquotes / callouts: drop leading `>` markers
+    // (one or many) and the optional space. Run twice in case of nesting.
+    .replace(/^[ \t]*(?:>[ \t]?)+/gm, '')
+    .replace(/^[ \t]*(?:>[ \t]?)+/gm, '')
+    // Headers: `# `, `## `, …
+    .replace(/^[ \t]*#{1,6}[ \t]+/gm, '')
+    // List markers (- / * / +) and ordered (1.) at line start
+    .replace(/^[ \t]*(?:[-*+]|\d+\.)[ \t]+/gm, '')
+    // Horizontal rules
+    .replace(/^[ \t]*(?:---+|\*\*\*+)[ \t]*$/gm, '')
+    // Images first (before links — image syntax is `![...](...)`, link is `[...](...)`).
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    // Links: keep the visible text only
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    // Bold / italic / inline code
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    // Common HTML entities that survived raw-HTML stripping
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    // Collapse whitespace last
+    .replace(/\s+/g, ' ')
     .trim()
 
   if (plainText.length <= maxLength) {
@@ -48,7 +84,7 @@ export function generateExcerpt(content: string, maxLength: number = 160): strin
   const truncated = plainText.substring(0, maxLength)
   const lastSpace = truncated.lastIndexOf(' ')
 
-  return truncated.substring(0, lastSpace) + '...'
+  return truncated.substring(0, lastSpace) + '…'
 }
 
 /**

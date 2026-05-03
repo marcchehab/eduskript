@@ -58,7 +58,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       return { title: 'Page Not Found', robots: 'noindex' }
     }
 
-    const title = `${content.page.title} | ${organization.name}`
+    const browserTitle = `${content.page.title} | ${organization.name}`
+    const ogTitle = content.page.title
     const description =
       generateExcerpt(content.page.content, 160) ||
       content.collection?.description ||
@@ -70,28 +71,29 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       path: `/c/${skriptSlug}/${pageSlug}`,
     })
 
-    // og:image is provided by the colocated opengraph-image.tsx — passing
-    // images here would override the file-based OG, so we omit it. metadataBase
-    // anchors the relative OG image URL to the org's public host.
+    // og:image: explicit URL from canonical. See teacher content route for the
+    // rationale (custom-domain proxy strips the /org/<slug>/ internal prefix).
+    const ogImage = `${canonical}/opengraph-image`
     return {
       metadataBase: canonicalBase({
         type: 'org',
         slug: orgSlug,
         customDomains: organization.customDomains,
       }),
-      title,
+      title: browserTitle,
       description,
       alternates: { canonical },
       openGraph: {
-        title,
+        title: ogTitle,
         description,
         type: 'article',
         siteName: organization.name,
         url: canonical,
+        images: [ogImage],
         publishedTime: content.page.createdAt.toISOString(),
         modifiedTime: content.page.updatedAt.toISOString(),
       },
-      twitter: { card: 'summary_large_image', title, description }
+      twitter: { card: 'summary_large_image', title: ogTitle, description, images: [ogImage] }
     }
   } catch (error) {
     console.error('Error generating metadata:', error)

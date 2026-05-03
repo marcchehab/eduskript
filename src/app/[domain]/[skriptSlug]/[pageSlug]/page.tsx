@@ -58,7 +58,12 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       }
     }
 
-    const title = `${content.page.title} | ${teacher.name || 'Eduskript'}`
+    // Browser-tab title keeps the teacher suffix for branding; og:title is the
+    // page title alone — social cards show siteName above the title already, so
+    // duplicating it ("Binärsystem | Marc Chéhab" + "INFORMATIKGARTEN.CH") is
+    // redundant.
+    const browserTitle = `${content.page.title} | ${teacher.name || 'Eduskript'}`
+    const ogTitle = content.page.title
     // Prefer an excerpt from the actual page content over the collection's
     // shared description — every page in a collection would otherwise share
     // one og:description.
@@ -73,33 +78,38 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       path: `/${skriptSlug}/${pageSlug}`,
     })
 
-    // og:image is provided by the colocated opengraph-image.tsx — passing
-    // images here would override the file-based OG, so we omit it. metadataBase
-    // anchors the relative OG image URL to the tenant's public host.
+    // og:image: build the URL from the canonical path so multi-tenant custom
+    // domains don't ship the proxy-prepended `/<pageSlug>/` prefix that
+    // Next.js's auto-detected file-OG URL would include (and which 404s for
+    // external crawlers). The colocated opengraph-image.tsx still generates
+    // the PNG — we just point at it via the public-facing URL.
+    const ogImage = `${canonical}/opengraph-image`
     return {
       metadataBase: canonicalBase({
         type: 'teacher',
         slug: teacher.pageSlug ?? domain,
         customDomains: teacher.customDomains,
       }),
-      title,
+      title: browserTitle,
       description,
       authors: [{ name: teacher.name || 'Unknown' }],
       alternates: { canonical },
       ...(teacher.pageIcon ? { icons: { icon: teacher.pageIcon } } : {}),
       openGraph: {
-        title,
+        title: ogTitle,
         description,
         type: 'article',
         siteName: teacher.name || 'Eduskript',
         url: canonical,
+        images: [ogImage],
         publishedTime: content.page.createdAt.toISOString(),
         modifiedTime: content.page.updatedAt.toISOString(),
       },
       twitter: {
         card: 'summary_large_image',
-        title,
+        title: ogTitle,
         description,
+        images: [ogImage],
       }
     }
   } catch (error) {

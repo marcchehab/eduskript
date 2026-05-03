@@ -50,10 +50,12 @@ export async function generateMetadata({ params }: DomainIndexProps): Promise<Me
       : baseTitle
     const description = teacher.pageDescription || teacher.bio || `Educational content by ${teacher.pageName || teacher.name}`
 
-    // og:image is provided by src/app/[domain]/opengraph-image.tsx — passing
-    // images here would override the file-based OG, so we omit it. metadataBase
-    // anchors the relative OG image URL to the tenant's public host so social
-    // crawlers fetch from the right domain (custom domain when present).
+    // og:image: explicit URL built from the canonical so multi-tenant custom
+    // domains don't ship the proxy-prepended `/<pageSlug>/` prefix that
+    // Next.js's auto-detected file-OG URL would include (and which 404s for
+    // external crawlers). The colocated opengraph-image.tsx still generates
+    // the PNG — we just point at it via the public-facing URL.
+    const ogImage = `${canonical}/opengraph-image`
     return {
       metadataBase: canonicalBase({
         type: 'teacher',
@@ -71,11 +73,13 @@ export async function generateMetadata({ params }: DomainIndexProps): Promise<Me
         type: 'website',
         siteName: teacher.pageName || teacher.name || 'Eduskript',
         url: canonical,
+        images: [ogImage],
       },
       twitter: {
         card: 'summary_large_image',
         title,
         description,
+        images: [ogImage],
       }
     }
   } catch (error) {
