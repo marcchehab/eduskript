@@ -182,7 +182,13 @@ describe('Tool isolation — account A vs account B', () => {
     expect(call[0]).toBe('user-A')
     expect(call[1]).toBe('page-1')
     expect(call[2]).toEqual({ title: 'New' })
-    expect(call[3]).toEqual({ editSource: 'mcp', editClient: 'Claude' })
+    expect(call[3]).toEqual({
+      editSource: 'mcp',
+      editClient: 'Claude',
+      // Destructive-write guard escape hatch — false unless the caller
+      // explicitly passes confirm_destructive=true on the tool call.
+      allowEmptyContent: false,
+    })
   })
 
   it('update_page rejects without content:write scope', async () => {

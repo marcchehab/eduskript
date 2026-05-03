@@ -29,6 +29,22 @@ import { listMySkripts, listMySkriptsConfig } from '@/lib/mcp/tools/list-my-skri
 import { readPage, readPageConfig } from '@/lib/mcp/tools/read-page'
 import { searchMyContent, searchMyContentConfig } from '@/lib/mcp/tools/search-my-content'
 import { updatePage, updatePageConfig } from '@/lib/mcp/tools/update-page'
+import {
+  updatePageMetadata,
+  updatePageMetadataConfig,
+} from '@/lib/mcp/tools/update-page-metadata'
+import {
+  updatePageContent,
+  updatePageContentConfig,
+} from '@/lib/mcp/tools/update-page-content'
+import {
+  listPageVersions,
+  listPageVersionsConfig,
+} from '@/lib/mcp/tools/list-page-versions'
+import {
+  restorePageVersion,
+  restorePageVersionConfig,
+} from '@/lib/mcp/tools/restore-page-version'
 import { readSkript, readSkriptConfig } from '@/lib/mcp/tools/read-skript'
 import { updateSkript, updateSkriptConfig } from '@/lib/mcp/tools/update-skript'
 import {
@@ -109,7 +125,7 @@ function buildServerInstructions(userPrompt?: string | null): string {
     getCondensedSyntaxReference(),
     '',
     '## MCP-specific guidance',
-    'You are connected to a teacher\'s Eduskript account via MCP. Use the available tools to discover, read, and edit their content. Page-level: list_my_skripts, search_my_content, read_page, create_page, update_page. Skript-level: read_skript, update_skript, read_skript_frontpage, update_skript_frontpage. Collection-level: read_collection, update_collection. Bulk SEO scan: audit_skript_seo (returns excerpts + issue flags for every page in a skript — call this before sweeping descriptions). The teacher only sees the natural-language reply — show edits in human-readable form rather than raw markdown dumps.',
+    'You are connected to a teacher\'s Eduskript account via MCP. Use the available tools to discover, read, and edit their content. Page-level: list_my_skripts, search_my_content, read_page, create_page, update_page_metadata (title/slug/description/publish), update_page_content (markdown body — destructive, creates a new version each time), list_page_versions + restore_page_version (audit & undo). The legacy update_page is deprecated; prefer the metadata/content split. Skript-level: read_skript, update_skript, read_skript_frontpage, update_skript_frontpage. Collection-level: read_collection, update_collection. Bulk SEO scan: audit_skript_seo (returns excerpts + issue flags for every page in a skript — call this before sweeping descriptions). The teacher only sees the natural-language reply — show edits in human-readable form rather than raw markdown dumps.',
     '- Prefer interactive code editors (`editor` keyword) when an example is meant to be run by students.',
   ]
   if (userPrompt && userPrompt.trim()) {
@@ -141,6 +157,26 @@ export function buildMcpServer(opts: { userPrompt?: string | null } = {}): McpSe
   )
   server.registerTool('update_page', updatePageConfig, async (args) =>
     safe('update_page', () => updatePage(args)) as never
+  )
+  server.registerTool(
+    'update_page_metadata',
+    updatePageMetadataConfig,
+    async (args) => safe('update_page_metadata', () => updatePageMetadata(args)) as never
+  )
+  server.registerTool(
+    'update_page_content',
+    updatePageContentConfig,
+    async (args) => safe('update_page_content', () => updatePageContent(args)) as never
+  )
+  server.registerTool(
+    'list_page_versions',
+    listPageVersionsConfig,
+    async (args) => safe('list_page_versions', () => listPageVersions(args)) as never
+  )
+  server.registerTool(
+    'restore_page_version',
+    restorePageVersionConfig,
+    async (args) => safe('restore_page_version', () => restorePageVersion(args)) as never
   )
   server.registerTool('search_my_content', searchMyContentConfig, async (args) =>
     safe('search_my_content', () => searchMyContent(args)) as never

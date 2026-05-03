@@ -44,13 +44,19 @@ export async function PATCH(
   // the literal "ai-edit" — never accept "mcp" from REST (would let a malicious
   // dashboard request fake an MCP attribution).
   const editSource = body?.editSource === 'ai-edit' ? 'ai-edit' : undefined
-  // Strip from the patch so it doesn't reach prisma.page.update as a column.
-  const { editSource: _ignored, ...patch } = body ?? {}
+  // confirmDestructive opts out of the empty-content guard. Dashboard editor
+  // currently never wipes content, so this stays defensive — passed through
+  // for parity with the MCP update_page_content tool.
+  const allowEmptyContent = body?.confirmDestructive === true
+  // Strip control fields from the patch so they don't reach prisma.page.update
+  // as columns.
+  const { editSource: _e, confirmDestructive: _c, ...patch } = body ?? {}
 
   try {
     const updated = await updatePageForUser(session.user.id, id, patch, {
       isAdmin: session.user.isAdmin,
       editSource,
+      allowEmptyContent,
     })
     return NextResponse.json(updated)
   } catch (error) {

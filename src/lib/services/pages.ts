@@ -84,6 +84,15 @@ interface ActorContext {
   editSource?: 'mcp' | 'ai-edit'
   /** Snapshot of OAuthClient.name; only meaningful when editSource === 'mcp'. */
   editClient?: string
+  /**
+   * Opt-in escape hatch for the destructive-write guard in updatePageForUser.
+   * When true, an empty/whitespace-only `content` string is accepted even if
+   * the page currently has content. Default false — the guard exists because
+   * partial-update tools that treat `content: ""` as "set content to empty"
+   * silently wipe pages, and the recovery path (restorePageVersionForUser)
+   * shouldn't be the default workflow.
+   */
+  allowEmptyContent?: boolean
 }
 
 /**
@@ -276,6 +285,26 @@ export async function updatePageForUser(
   const contentChanged =
     content !== undefined && currentVersion?.content !== content
 
+  // Destructive-write guard: a partial-update tool that treats `content: ""`
+  // as "set content to empty" silently wipes pages. We require an explicit
+  // `allowEmptyContent` opt-in when an empty/whitespace-only content would
+  // overwrite a non-trivial existing page.
+  if (
+    content !== undefined &&
+    content.trim().length === 0 &&
+    (currentVersion?.content?.trim().length ?? 0) > 0 &&
+    !ctx.allowEmptyContent
+  ) {
+    throw new ValidationError(
+      'Refusing to overwrite non-empty page content with an empty string. ' +
+        'If you wanted to update only metadata (title, slug, description, ' +
+        'isPublished, isUnlisted), omit the `content` field entirely. ' +
+        'If wiping the page is intentional, set confirm_destructive=true. ' +
+        'To recover an accidentally wiped page, use list_page_versions + ' +
+        'restore_page_version.',
+    )
+  }
+
   const updateData: Record<string, unknown> = { updatedAt: new Date() }
   if (title !== undefined) updateData.title = title.trim()
   if (slug !== undefined) updateData.slug = slug.trim()
@@ -405,4 +434,144 @@ export async function searchPagesForUser(
     orderBy: { updatedAt: 'desc' },
     take: limit,
   })
+}
+
+/**
+ * List PageVersion rows for a page the actor authors. Newest first.
+ * Returned shape mirrors the GET /api/pages/[id]/versions REST route, plus a
+ * `contentLength` field so MCP callers can spot a wipe without fetching every
+ * version's content.
+ */
+export async function listPageVersionsForUser(
+  userId: string,
+  pageId: string,
+  ctx: ActorContext = {},
+) {
+  const isAdmin = !!ctx.isAdmin
+  const page = await prisma.page.findFirst({
+    where: {
+      id: pageId,
+      ...(isAdmin ? {} : { authors: { some: { userId } } }),
+    },
+    select: { id: true },
+  })
+  if (!page) throw new NotFoundError('Page not found')
+
+  const versions = await prisma.pageVersion.findMany({
+    where: { pageId },
+    include: {
+      author: { select: { name: true, email: true } },
+    },
+    orderBy: { version: 'desc' },
+  })
+
+  return versions.map(v => ({
+    id: v.id,
+    version: v.version,
+    changeLog: v.changeLog,
+    createdAt: v.createdAt,
+    editSource: v.editSource,
+    editClient: v.editClient,
+    contentLength: v.content.length,
+    author: v.author,
+  }))
+}
+
+/**
+ * Restore a page to a prior PageVersion. Mirrors the side effects of
+ * src/app/api/pages/[id]/versions/[versionId]/restore/route.ts (which now
+ * delegates to this function): updates Page.content, appends a new
+ * PageVersion row with `Restored from version N` changeLog, and fires the
+ * same cache invalidations as a content-update.
+ */
+export async function restorePageVersionForUser(
+  userId: string,
+  pageId: string,
+  versionId: string,
+  ctx: ActorContext = {},
+) {
+  const isAdmin = !!ctx.isAdmin
+
+  // Permission gate via loadPageForActor (same shape as updatePageForUser).
+  const existingPage = await loadPageForActor(pageId, userId, isAdmin)
+  if (!existingPage) throw new NotFoundError('Page not found')
+
+  const versionToRestore = await prisma.pageVersion.findFirst({
+    where: { id: versionId, pageId },
+  })
+  if (!versionToRestore) throw new NotFoundError('Version not found')
+
+  const latestVersion = await prisma.pageVersion.findFirst({
+    where: { pageId },
+    orderBy: { version: 'desc' },
+    select: { version: true },
+  })
+  const newVersionNumber = (latestVersion?.version || 0) + 1
+
+  const updatedPage = await prisma.page.update({
+    where: { id: pageId },
+    data: {
+      content: versionToRestore.content,
+      updatedAt: new Date(),
+    },
+  })
+
+  await prisma.pageVersion.create({
+    data: {
+      pageId,
+      content: versionToRestore.content,
+      version: newVersionNumber,
+      changeLog: `Restored from version ${versionToRestore.version}`,
+      authorId: userId,
+      editSource: ctx.editSource ?? null,
+      editClient: ctx.editSource === 'mcp' ? ctx.editClient ?? null : null,
+    },
+  })
+
+  // Same cache fan-out as updatePageForUser. The original REST route only
+  // hit revalidatePath; we add the tag-based invalidation so ISR routes
+  // pick up the rollback immediately.
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { pageSlug: true },
+  })
+
+  if (user?.pageSlug) {
+    revalidateTag(
+      CACHE_TAGS.pageBySlug(user.pageSlug, existingPage.skript.slug, updatedPage.slug),
+      { expire: 0 },
+    )
+    revalidateTag(
+      CACHE_TAGS.skriptBySlug(user.pageSlug, existingPage.skript.slug),
+      { expire: 0 },
+    )
+    const collectionSlug = existingPage.skript.collectionSkripts[0]?.collection?.slug
+    if (collectionSlug) {
+      revalidateTag(CACHE_TAGS.collectionBySlug(user.pageSlug, collectionSlug), {
+        expire: 0,
+      })
+    }
+    revalidatePath(
+      `/${user.pageSlug}/${existingPage.skript.slug}/${updatedPage.slug}`,
+    )
+    revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), { expire: 0 })
+    revalidatePath('/dashboard')
+
+    const orgMemberships = await prisma.organizationMember.findMany({
+      where: { userId },
+      select: { organization: { select: { slug: true } } },
+    })
+    for (const membership of orgMemberships) {
+      if (membership.organization?.slug) {
+        revalidateTag(CACHE_TAGS.orgContent(membership.organization.slug), {
+          expire: 0,
+        })
+      }
+    }
+  }
+
+  return {
+    page: updatedPage,
+    restoredFromVersion: versionToRestore.version,
+  }
 }
