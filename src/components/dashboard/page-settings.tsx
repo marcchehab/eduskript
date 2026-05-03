@@ -561,7 +561,7 @@ export function PageSettings() {
               <option value="en-GB" />
             </datalist>
             <p className="text-sm text-muted-foreground">
-              BCP-47 language tag. Sets <code>html lang</code> on your public pages and the <code>inLanguage</code> field of the JSON-LD structured data Google uses to classify content. Leave blank if you publish in multiple languages.
+              Language tag for your site (important for search engines).
             </p>
           </div>
 
