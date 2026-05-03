@@ -29,7 +29,7 @@ export const updatePageConfig = {
       .nullable()
       .optional()
       .describe(
-        'Plain-text page description. Overrides the auto-derived og:description excerpt. Pass null or empty string to clear and fall back to the auto-derived excerpt.',
+        'Plain-text page description used as og:description on the public page. To set, pass a non-empty string. To leave unchanged, omit the field or pass an empty string. To clear (and fall back to the auto-derived excerpt), pass JSON null.',
       ),
     content: z
       .string()

@@ -242,25 +242,41 @@ export async function updatePageForUser(
   ctx: ActorContext = {}
 ) {
   const isAdmin = !!ctx.isAdmin
-  const { title, slug, description, content, isPublished, isUnlisted, pageType, examSettings } = patch
+  const rawPatch = patch
+  const { content, isPublished, isUnlisted, pageType, examSettings } = rawPatch
 
-  const isContentOnlyUpdate =
-    content !== undefined &&
-    title === undefined &&
-    slug === undefined &&
-    isPublished === undefined
-  const isPublishOnlyUpdate =
-    isPublished !== undefined &&
-    title === undefined &&
-    slug === undefined &&
-    content === undefined
+  // Empty-string-as-no-change normalisation. Partial-update tools (REST
+  // PATCH, MCP update_page_metadata, MCP update_page) often receive
+  // `title: ""` / `slug: ""` / `description: ""` from clients that
+  // "pass everything to be safe" — the LLM-friendly interpretation is
+  // that an empty value means "leave alone", not "set to empty". Title
+  // and slug can never legitimately be empty (DB-non-null), so this
+  // collapses cleanly. Description is a tristate: undefined / "" → no
+  // change, `null` → clear, non-empty string → set. `content` keeps
+  // its own destructive-write guard semantics (see further down) and
+  // is intentionally NOT normalised here.
+  const title =
+    typeof rawPatch.title === 'string' && rawPatch.title.trim().length === 0
+      ? undefined
+      : rawPatch.title
+  const slug =
+    typeof rawPatch.slug === 'string' && rawPatch.slug.trim().length === 0
+      ? undefined
+      : rawPatch.slug
+  const description =
+    typeof rawPatch.description === 'string' &&
+    rawPatch.description.trim().length === 0
+      ? undefined
+      : rawPatch.description
 
-  if (
-    !isContentOnlyUpdate &&
-    !isPublishOnlyUpdate &&
-    (!title?.trim() || !slug?.trim())
-  ) {
-    throw new ValidationError('Title and slug are required')
+  // Post-normalisation: any title / slug we kept must be a real value.
+  // (The empty-string case is already gone; this only fires if a caller
+  // somehow lands a non-string here, which Zod should have prevented.)
+  if (title !== undefined && !title.trim()) {
+    throw new ValidationError('Title cannot be whitespace only')
+  }
+  if (slug !== undefined && !slug.trim()) {
+    throw new ValidationError('Slug cannot be whitespace only')
   }
 
   const existingPage = await loadPageForActor(pageId, userId, isAdmin)
@@ -268,7 +284,7 @@ export async function updatePageForUser(
     throw new NotFoundError('Page not found')
   }
 
-  if (!isContentOnlyUpdate && !isPublishOnlyUpdate && slug) {
+  if (slug) {
     const slugExists = await prisma.page.findFirst({
       where: {
         slug: slug.trim(),
@@ -309,10 +325,11 @@ export async function updatePageForUser(
   if (title !== undefined) updateData.title = title.trim()
   if (slug !== undefined) updateData.slug = slug.trim()
   if (description !== undefined) {
-    // Empty string normalises to null so DB stays clean and og:description
-    // falls through to the auto-derived excerpt instead of rendering "".
-    const trimmed = (description ?? '').trim()
-    updateData.description = trimmed.length > 0 ? trimmed : null
+    // After empty-string normalisation above, `description` is one of:
+    //   - null         → clear the column (caller's explicit intent)
+    //   - non-empty    → store trimmed value
+    // Empty string was collapsed to undefined and is already filtered out.
+    updateData.description = description === null ? null : description.trim()
   }
   if (content !== undefined) updateData.content = content
   if (isPublished !== undefined) updateData.isPublished = isPublished

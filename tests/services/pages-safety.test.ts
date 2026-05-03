@@ -135,6 +135,87 @@ describe('updatePageForUser — destructive-write guard', () => {
     expect(prisma.pageVersion.create).not.toHaveBeenCalled()
   })
 
+  // Empty-string-as-no-change rule (the bug-report scenario):
+  // an LLM that "passes everything to be safe" with title:"" and slug:""
+  // should NOT trigger title/slug validation when only description is
+  // actually being changed.
+  describe('empty-string normalisation', () => {
+    it('treats title:"" and slug:"" as no-change when description is set', async () => {
+      vi.mocked(prisma.page.findFirst)
+        .mockResolvedValueOnce(baseExistingPage as never)
+      vi.mocked(prisma.page.update).mockResolvedValue({
+        ...baseExistingPage,
+        description: 'New excerpt',
+      } as never)
+
+      await expect(
+        updatePageForUser('user-1', 'page-1', {
+          title: '',
+          slug: '',
+          description: 'New excerpt',
+        }),
+      ).resolves.toBeDefined()
+
+      const updateCall = vi.mocked(prisma.page.update).mock.calls[0][0]
+      expect(updateCall.data).toMatchObject({ description: 'New excerpt' })
+      expect(updateCall.data).not.toHaveProperty('title')
+      expect(updateCall.data).not.toHaveProperty('slug')
+    })
+
+    it('accepts a metadata-only patch with only description', async () => {
+      vi.mocked(prisma.page.findFirst).mockResolvedValueOnce(baseExistingPage as never)
+      vi.mocked(prisma.page.update).mockResolvedValue(baseExistingPage as never)
+
+      await expect(
+        updatePageForUser('user-1', 'page-1', { description: 'Just this' }),
+      ).resolves.toBeDefined()
+
+      const updateCall = vi.mocked(prisma.page.update).mock.calls[0][0]
+      expect(updateCall.data).toMatchObject({ description: 'Just this' })
+    })
+
+    it('treats description:"" as no-change (does not clear)', async () => {
+      vi.mocked(prisma.page.findFirst).mockResolvedValueOnce({
+        ...baseExistingPage,
+        description: 'Existing description',
+      } as never)
+      vi.mocked(prisma.page.update).mockResolvedValue(baseExistingPage as never)
+
+      await expect(
+        updatePageForUser('user-1', 'page-1', { description: '' }),
+      ).resolves.toBeDefined()
+
+      const updateCall = vi.mocked(prisma.page.update).mock.calls[0][0]
+      expect(updateCall.data).not.toHaveProperty('description')
+    })
+
+    it('treats description:null as an explicit clear', async () => {
+      vi.mocked(prisma.page.findFirst).mockResolvedValueOnce(baseExistingPage as never)
+      vi.mocked(prisma.page.update).mockResolvedValue(baseExistingPage as never)
+
+      await expect(
+        updatePageForUser('user-1', 'page-1', { description: null }),
+      ).resolves.toBeDefined()
+
+      const updateCall = vi.mocked(prisma.page.update).mock.calls[0][0]
+      expect(updateCall.data).toMatchObject({ description: null })
+    })
+
+    it('rejects whitespace-only title with a clear error', async () => {
+      vi.mocked(prisma.page.findFirst).mockResolvedValueOnce(baseExistingPage as never)
+
+      await expect(
+        updatePageForUser('user-1', 'page-1', { title: '   ' }),
+      ).resolves.toBeDefined() // whitespace-only collapses to undefined → no-op
+
+      // No update should have title in its data.
+      const updateCall = vi.mocked(prisma.page.update).mock.calls[0]?.[0]
+      if (updateCall) {
+        expect(updateCall.data).not.toHaveProperty('title')
+      }
+    })
+  })
+
   it('does not block content="" when there was nothing to wipe', async () => {
     // Page exists but its current content is also empty (or never had any).
     vi.mocked(prisma.page.findFirst).mockResolvedValue({

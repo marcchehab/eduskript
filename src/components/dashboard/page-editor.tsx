@@ -393,7 +393,9 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
         body: JSON.stringify({
           title: title.trim(),
           slug: slug.trim(),
-          description: description.trim(),
+          // Empty string now means "no change" service-side; send null
+          // so clearing the input in the UI clears the DB column.
+          description: description.trim() || null,
           content: contentRef.current,
           pageType,
           examSettings: pageType === 'exam' ? examSettings : null
