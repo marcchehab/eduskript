@@ -105,8 +105,11 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
         siteName: teacher.name || 'Eduskript',
         url: canonical,
         images: [ogImage],
-        publishedTime: content.page.createdAt.toISOString(),
-        modifiedTime: content.page.updatedAt.toISOString(),
+        // unstable_cache serialises Date → ISO string on its way out, so
+        // the cached query may hand us either. Both shapes are valid for
+        // Next.js's openGraph metadata, so just pass through.
+        publishedTime: typeof content.page.createdAt === 'string' ? content.page.createdAt : content.page.createdAt.toISOString(),
+        modifiedTime: typeof content.page.updatedAt === 'string' ? content.page.updatedAt : content.page.updatedAt.toISOString(),
       },
       twitter: {
         card: 'summary_large_image',

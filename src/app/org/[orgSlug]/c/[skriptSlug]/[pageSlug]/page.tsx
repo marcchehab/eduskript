@@ -93,8 +93,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
         siteName: organization.name,
         url: canonical,
         images: [ogImage],
-        publishedTime: content.page.createdAt.toISOString(),
-        modifiedTime: content.page.updatedAt.toISOString(),
+        // unstable_cache may have serialised these to ISO strings already.
+        publishedTime: typeof content.page.createdAt === 'string' ? content.page.createdAt : content.page.createdAt.toISOString(),
+        modifiedTime: typeof content.page.updatedAt === 'string' ? content.page.updatedAt : content.page.updatedAt.toISOString(),
       },
       twitter: { card: 'summary_large_image', title: ogTitle, description, images: [ogImage] }
     }

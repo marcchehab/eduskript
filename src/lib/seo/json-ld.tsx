@@ -51,8 +51,15 @@ interface LearningResourceArgs {
   // default would mis-classify a German page.
   inLanguage: string | null
   author: string
-  dateCreated: Date
-  dateModified: Date
+  // Accept both — Next.js's `unstable_cache` JSON-serialises return values,
+  // so cached query helpers hand us ISO strings even when Prisma returned
+  // Date objects originally. Normalise on the way in.
+  dateCreated: Date | string
+  dateModified: Date | string
+}
+
+function toIsoString(d: Date | string): string {
+  return typeof d === 'string' ? d : d.toISOString()
 }
 
 export function learningResourceSchema(args: LearningResourceArgs): object {
@@ -63,8 +70,8 @@ export function learningResourceSchema(args: LearningResourceArgs): object {
     description: args.description,
     url: args.url,
     author: { '@type': 'Person', name: args.author },
-    dateCreated: args.dateCreated.toISOString(),
-    dateModified: args.dateModified.toISOString(),
+    dateCreated: toIsoString(args.dateCreated),
+    dateModified: toIsoString(args.dateModified),
     isAccessibleForFree: true,
     learningResourceType: 'Lesson',
   }
