@@ -20,83 +20,208 @@ import type { PythonCheckResult, PythonFile } from './types'
 const TURTLE_USE_RE = /import\s+turtle|from\s+turtle/
 
 /**
- * Python shim that monkey-patches turtle.Turtle to record vertices into
- * `__turtle_path` (a list of (x, y, pen_down) tuples). Also exposes
- * `turtle_matches(expected, tolerance=1.0, tolerate_rotation=True)` for
+ * Python shim that installs a minimal in-memory turtle stub into sys.modules
+ * BEFORE student code runs, so `import turtle` works inside Pyodide's check
+ * harness (Pyodide's stdlib doesn't ship the real turtle module — it
+ * depends on tkinter). Every move records its end position into
+ * `__turtle_path` (list of (x, y, pen_down) tuples). Also exposes
+ * `turtle_matches(expected, tolerance, tolerate_rotation)` for
  * rotation/translation-tolerant comparison.
  *
- * Runs only inside the Pyodide check harness — Skulpt (which renders the
- * canvas the student sees) is untouched.
+ * Runs only inside the Pyodide check harness. Skulpt (the runtime that
+ * actually renders the canvas the student sees on Run) is untouched.
  */
 const TURTLE_PRELUDE = `
 # Auto-injected by python-check-runner when student code imports turtle.
-# Records every move into __turtle_path so assertions can compare paths
-# without caring about which corner the student started from.
 __turtle_path = []
 
-try:
-    import turtle as __t
-    import math as __math
+import sys as __sys
+import math as __math
+import types as __types
 
-    def __record(self):
-        pos = self.pos()
-        __turtle_path.append((round(pos[0], 6), round(pos[1], 6), bool(self.isdown())))
+class _EduskriptTurtle:
+    def __init__(self, *a, **kw):
+        self._x = 0.0
+        self._y = 0.0
+        self._h = 0.0  # heading in degrees, 0 = east
+        self._down = True
+        __turtle_path.append((0.0, 0.0, True))
 
-    _orig_init = __t.Turtle.__init__
-    def __wrap_init(self, *a, **kw):
-        _orig_init(self, *a, **kw)
-        __record(self)
-    __t.Turtle.__init__ = __wrap_init
+    def _rec(self):
+        __turtle_path.append((round(self._x, 6), round(self._y, 6), self._down))
 
-    def __wrap_move(orig):
-        def wrapped(self, *a, **kw):
-            if not __turtle_path:
-                __record(self)
-            r = orig(self, *a, **kw)
-            __record(self)
-            return r
-        return wrapped
+    def forward(self, d):
+        rad = __math.radians(self._h)
+        self._x += d * __math.cos(rad)
+        self._y += d * __math.sin(rad)
+        self._rec()
+    fd = forward
 
-    for __name in ('forward', 'backward', 'goto', 'setpos', 'setposition',
-                   'setx', 'sety', 'home', 'circle', 'fd', 'back', 'bk'):
-        __orig = getattr(__t.Turtle, __name, None)
-        if callable(__orig):
-            setattr(__t.Turtle, __name, __wrap_move(__orig))
+    def backward(self, d): self.forward(-d)
+    back = backward
+    bk = backward
 
-    def turtle_matches(expected, tolerance=1.0, tolerate_rotation=True):
-        """
-        Compare __turtle_path against an expected list of (x, y) (or (x, y, pen_down))
-        tuples. Both paths are translated so their first vertex is at the origin.
-        With tolerate_rotation=True, the four cardinal rotations are tried.
-        Returns True iff the actual path matches expected within tolerance.
-        """
-        if not __turtle_path or not expected:
-            return False
-        actual = [(p[0], p[1]) for p in __turtle_path]
-        target = [(p[0], p[1]) for p in expected]
-        if len(actual) != len(target):
-            return False
-        ax0, ay0 = actual[0]
-        tx0, ty0 = target[0]
-        a = [(x - ax0, y - ay0) for x, y in actual]
-        t = [(x - tx0, y - ty0) for x, y in target]
-        def close(p, q):
-            return all(abs(px - qx) <= tolerance and abs(py - qy) <= tolerance
-                       for (px, py), (qx, qy) in zip(p, q))
-        if close(a, t):
-            return True
-        if tolerate_rotation:
-            for theta in (90, 180, 270):
-                rad = __math.radians(theta)
-                c, s = __math.cos(rad), __math.sin(rad)
-                rotated = [(x * c - y * s, x * s + y * c) for x, y in t]
-                if close(a, rotated):
-                    return True
+    def right(self, a): self._h = (self._h - a) % 360
+    rt = right
+
+    def left(self, a): self._h = (self._h + a) % 360
+    lt = left
+
+    def goto(self, x, y=None):
+        if y is None:
+            x, y = x[0], x[1]
+        self._x = float(x); self._y = float(y); self._rec()
+    setpos = goto
+    setposition = goto
+
+    def setx(self, x): self._x = float(x); self._rec()
+    def sety(self, y): self._y = float(y); self._rec()
+    def home(self): self._x = self._y = self._h = 0.0; self._rec()
+
+    def penup(self): self._down = False
+    pu = penup
+    up = penup
+
+    def pendown(self): self._down = True
+    pd = pendown
+    down = pendown
+
+    def isdown(self): return self._down
+    def pos(self): return (self._x, self._y)
+    position = pos
+    def xcor(self): return self._x
+    def ycor(self): return self._y
+    def heading(self): return self._h
+    def setheading(self, a): self._h = a % 360
+    seth = setheading
+    def towards(self, x, y=None):
+        if y is None: x, y = x[0], x[1]
+        return __math.degrees(__math.atan2(y - self._y, x - self._x)) % 360
+
+    def circle(self, radius, extent=None, steps=None):
+        if extent is None: extent = 360
+        if steps is None: steps = max(int(abs(extent) / 3), 12)
+        step_a = extent / steps
+        step_d = 2 * radius * __math.sin(__math.radians(abs(step_a)) / 2)
+        self.left(step_a / 2)
+        for _ in range(steps):
+            self.forward(step_d if step_a > 0 else -step_d)
+            self.left(step_a)
+        self.right(step_a / 2)
+
+    # Style/visual methods are no-ops — they don't affect the path.
+    def color(self, *a, **kw): pass
+    def pencolor(self, *a, **kw): pass
+    def fillcolor(self, *a, **kw): pass
+    def begin_fill(self): pass
+    def end_fill(self): pass
+    def fill(self, *a): pass
+    def width(self, *a): pass
+    def pensize(self, *a): pass
+    def dot(self, *a, **kw): pass
+    def stamp(self): return None
+    def clearstamp(self, *a): pass
+    def write(self, *a, **kw): pass
+    def hideturtle(self): pass
+    ht = hideturtle
+    def showturtle(self): pass
+    st = showturtle
+    def isvisible(self): return True
+    def speed(self, *a): pass
+    def shape(self, *a): pass
+    def shapesize(self, *a, **kw): pass
+    def tracer(self, *a, **kw): pass
+    def update(self): pass
+    def reset(self): self._x = self._y = self._h = 0.0; self._down = True
+    def clear(self): pass
+
+class _EduskriptScreen:
+    def setup(self, *a, **kw): pass
+    def title(self, *a, **kw): pass
+    def bgcolor(self, *a, **kw): pass
+    def bgpic(self, *a, **kw): pass
+    def screensize(self, *a, **kw): pass
+    def colormode(self, *a, **kw): pass
+    def listen(self): pass
+    def onkey(self, *a, **kw): pass
+    def onkeypress(self, *a, **kw): pass
+    def onkeyrelease(self, *a, **kw): pass
+    def onclick(self, *a, **kw): pass
+    def ontimer(self, *a, **kw): pass
+    def update(self): pass
+    def tracer(self, *a, **kw): pass
+    def mainloop(self): pass
+    def done(self): pass
+    def exitonclick(self): pass
+    def reset(self): pass
+
+# Build a fake turtle module and install it before student code runs.
+__fake = __types.ModuleType('turtle')
+__fake.Turtle = _EduskriptTurtle
+__fake.RawTurtle = _EduskriptTurtle
+__fake.Pen = _EduskriptTurtle
+__fake.Screen = lambda: _EduskriptScreen()
+__fake.TurtleScreen = _EduskriptScreen
+
+# Module-level shortcuts that operate on a single shared default turtle.
+__fake._default = None
+def __get_default():
+    if __fake._default is None:
+        __fake._default = _EduskriptTurtle()
+    return __fake._default
+
+for __m in ('forward', 'fd', 'backward', 'back', 'bk', 'right', 'rt', 'left', 'lt',
+            'goto', 'setpos', 'setposition', 'setx', 'sety', 'home', 'circle',
+            'penup', 'pu', 'up', 'pendown', 'pd', 'down', 'isdown',
+            'pos', 'position', 'xcor', 'ycor', 'heading', 'setheading', 'seth',
+            'color', 'pencolor', 'fillcolor', 'begin_fill', 'end_fill',
+            'width', 'pensize', 'dot', 'stamp', 'write',
+            'hideturtle', 'ht', 'showturtle', 'st', 'speed', 'shape', 'tracer',
+            'update', 'reset', 'clear'):
+    def __mk(_name):
+        def __fn(*a, **kw):
+            return getattr(__get_default(), _name)(*a, **kw)
+        return __fn
+    setattr(__fake, __m, __mk(__m))
+
+__fake.mainloop = lambda: None
+__fake.done = lambda: None
+__fake.exitonclick = lambda: None
+__fake.bye = lambda: None
+
+__sys.modules['turtle'] = __fake
+
+
+def turtle_matches(expected, tolerance=1.0, tolerate_rotation=True):
+    """
+    Compare __turtle_path against an expected list of (x, y) (or (x, y, pen_down))
+    tuples. Both paths are translated so their first vertex is at the origin.
+    With tolerate_rotation=True, the four cardinal rotations are tried.
+    Returns True iff the actual path matches expected within tolerance.
+    """
+    if not __turtle_path or not expected:
         return False
-except Exception as __turtle_shim_err:
-    # If the turtle module isn't usable in this Pyodide build, expose stubs
-    # so assertions referencing them don't crash with NameError.
-    def turtle_matches(*a, **kw): return False
+    actual = [(p[0], p[1]) for p in __turtle_path]
+    target = [(p[0], p[1]) for p in expected]
+    if len(actual) != len(target):
+        return False
+    ax0, ay0 = actual[0]
+    tx0, ty0 = target[0]
+    a = [(x - ax0, y - ay0) for x, y in actual]
+    t = [(x - tx0, y - ty0) for x, y in target]
+    def _close(p, q):
+        return all(abs(px - qx) <= tolerance and abs(py - qy) <= tolerance
+                   for (px, py), (qx, qy) in zip(p, q))
+    if _close(a, t):
+        return True
+    if tolerate_rotation:
+        for theta in (90, 180, 270):
+            rad = __math.radians(theta)
+            c, s = __math.cos(rad), __math.sin(rad)
+            rotated = [(x * c - y * s, x * s + y * c) for x, y in t]
+            if _close(a, rotated):
+                return True
+    return False
 `
 
 export interface ParsedAssertion {
