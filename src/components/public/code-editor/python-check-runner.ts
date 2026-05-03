@@ -6,9 +6,98 @@
  *
  * Approach: Write student code and check code to Pyodide's virtual filesystem,
  * then run a harness script that exec()'s them. This avoids fragile string escaping.
+ *
+ * Turtle auto-grading: when student code uses turtle, a small shim is exec'd
+ * BEFORE the student code so every move records its end position into a
+ * `__turtle_path` list. Assertions can then check the list directly or via the
+ * `turtle_matches(expected, …)` helper which tolerates rotation + translation.
+ * This is what makes "many code paths produce the same figure" gradeable.
  */
 
 import type { PythonCheckResult, PythonFile } from './types'
+
+/** Same regex used at src/components/public/code-editor/index.tsx:886. */
+const TURTLE_USE_RE = /import\s+turtle|from\s+turtle/
+
+/**
+ * Python shim that monkey-patches turtle.Turtle to record vertices into
+ * `__turtle_path` (a list of (x, y, pen_down) tuples). Also exposes
+ * `turtle_matches(expected, tolerance=1.0, tolerate_rotation=True)` for
+ * rotation/translation-tolerant comparison.
+ *
+ * Runs only inside the Pyodide check harness — Skulpt (which renders the
+ * canvas the student sees) is untouched.
+ */
+const TURTLE_PRELUDE = `
+# Auto-injected by python-check-runner when student code imports turtle.
+# Records every move into __turtle_path so assertions can compare paths
+# without caring about which corner the student started from.
+__turtle_path = []
+
+try:
+    import turtle as __t
+    import math as __math
+
+    def __record(self):
+        pos = self.pos()
+        __turtle_path.append((round(pos[0], 6), round(pos[1], 6), bool(self.isdown())))
+
+    _orig_init = __t.Turtle.__init__
+    def __wrap_init(self, *a, **kw):
+        _orig_init(self, *a, **kw)
+        __record(self)
+    __t.Turtle.__init__ = __wrap_init
+
+    def __wrap_move(orig):
+        def wrapped(self, *a, **kw):
+            if not __turtle_path:
+                __record(self)
+            r = orig(self, *a, **kw)
+            __record(self)
+            return r
+        return wrapped
+
+    for __name in ('forward', 'backward', 'goto', 'setpos', 'setposition',
+                   'setx', 'sety', 'home', 'circle', 'fd', 'back', 'bk'):
+        __orig = getattr(__t.Turtle, __name, None)
+        if callable(__orig):
+            setattr(__t.Turtle, __name, __wrap_move(__orig))
+
+    def turtle_matches(expected, tolerance=1.0, tolerate_rotation=True):
+        """
+        Compare __turtle_path against an expected list of (x, y) (or (x, y, pen_down))
+        tuples. Both paths are translated so their first vertex is at the origin.
+        With tolerate_rotation=True, the four cardinal rotations are tried.
+        Returns True iff the actual path matches expected within tolerance.
+        """
+        if not __turtle_path or not expected:
+            return False
+        actual = [(p[0], p[1]) for p in __turtle_path]
+        target = [(p[0], p[1]) for p in expected]
+        if len(actual) != len(target):
+            return False
+        ax0, ay0 = actual[0]
+        tx0, ty0 = target[0]
+        a = [(x - ax0, y - ay0) for x, y in actual]
+        t = [(x - tx0, y - ty0) for x, y in target]
+        def close(p, q):
+            return all(abs(px - qx) <= tolerance and abs(py - qy) <= tolerance
+                       for (px, py), (qx, qy) in zip(p, q))
+        if close(a, t):
+            return True
+        if tolerate_rotation:
+            for theta in (90, 180, 270):
+                rad = __math.radians(theta)
+                c, s = __math.cos(rad), __math.sin(rad)
+                rotated = [(x * c - y * s, x * s + y * c) for x, y in t]
+                if close(a, rotated):
+                    return True
+        return False
+except Exception as __turtle_shim_err:
+    # If the turtle module isn't usable in this Pyodide build, expose stubs
+    # so assertions referencing them don't crash with NameError.
+    def turtle_matches(*a, **kw): return False
+`
 
 export interface ParsedAssertion {
   line: string
@@ -122,6 +211,12 @@ export async function runPythonChecks(
   pyodide.FS.writeFile('__eduskript_student.py', studentCode)
   pyodide.FS.writeFile('__eduskript_setup.py', setupLines.join('\n'))
 
+  // Inject turtle path-recording shim only when the student is using turtle —
+  // skip the import + monkey-patching cost otherwise. The prelude runs in
+  // __ns BEFORE the student code, so all moves are captured.
+  const usesTurtle = TURTLE_USE_RE.test(studentCode)
+  pyodide.FS.writeFile('__eduskript_prelude.py', usesTurtle ? TURTLE_PRELUDE : '')
+
   // Write each assertion as a separate file
   for (let i = 0; i < assertions.length; i++) {
     pyodide.FS.writeFile(`__eduskript_assert_${i}.py`, assertions[i].line)
@@ -168,6 +263,16 @@ __stdout_buf = __io.StringIO()
 
 with open('__eduskript_student.py') as f:
     __student_code = f.read()
+
+# Turtle prelude (empty unless student code uses turtle). Runs in __ns so
+# turtle_matches and __turtle_path are visible to setup + assertions.
+with open('__eduskript_prelude.py') as f:
+    __prelude_code = f.read()
+if __prelude_code.strip():
+    try:
+        exec(compile(__prelude_code, '<turtle-prelude>', 'exec'), __ns)
+    except Exception:
+        pass
 
 try:
     with __cl.redirect_stdout(__stdout_buf):
@@ -244,6 +349,7 @@ json.dumps(__results)
     const filesToRemove = [
       '__eduskript_student.py',
       '__eduskript_setup.py',
+      '__eduskript_prelude.py',
       '__eduskript_labels.json',
       ...assertions.map((_, i) => `__eduskript_assert_${i}.py`)
     ]
