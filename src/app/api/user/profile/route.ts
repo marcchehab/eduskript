@@ -22,6 +22,15 @@ const updateProfileSchema = z.object({
   pageName: z.string().optional(),
   pageDescription: z.string().optional(),
   pageIcon: z.string().url().optional().or(z.literal('')),
+  // BCP-47 tag (e.g. "de-CH", "fr", "en"). Empty string clears the column.
+  // Loose validation — any non-empty 2–35 char string passes; we'd rather
+  // accept the teacher's input than block on a strict tag check.
+  pageLanguage: z
+    .string()
+    .max(35)
+    .regex(/^[a-zA-Z][a-zA-Z0-9-]*$/, 'Use a BCP-47 tag like "de-CH" or "en"')
+    .optional()
+    .or(z.literal('')),
   title: z.string().optional(),
   bio: z.string().optional()
 })
@@ -41,9 +50,53 @@ const adminUpdateProfileSchema = z.object({
   pageName: z.string().optional(),
   pageDescription: z.string().optional(),
   pageIcon: z.string().url().optional().or(z.literal('')),
+  // BCP-47 tag (e.g. "de-CH", "fr", "en"). Empty string clears the column.
+  // Loose validation — any non-empty 2–35 char string passes; we'd rather
+  // accept the teacher's input than block on a strict tag check.
+  pageLanguage: z
+    .string()
+    .max(35)
+    .regex(/^[a-zA-Z][a-zA-Z0-9-]*$/, 'Use a BCP-47 tag like "de-CH" or "en"')
+    .optional()
+    .or(z.literal('')),
   title: z.string().optional(),
   bio: z.string().optional()
 })
+
+// Read the caller's current profile + page fields fresh from the DB.
+// Reason this exists: the dashboard's settings UI was reading values out of
+// the NextAuth session/JWT, which goes stale whenever the underlying row is
+// edited from another path (MCP, AI Edit, direct API, another dashboard tab).
+// Symptom: user updates pageDescription, opens settings, sees the OLD text.
+// This GET is the authoritative source the UI hydrates from on mount.
+export async function GET() {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      pageSlug: true,
+      pageName: true,
+      pageDescription: true,
+      pageIcon: true,
+      pageLanguage: true,
+      title: true,
+      bio: true,
+    },
+  })
+
+  if (!user) {
+    return NextResponse.json({ error: 'User not found' }, { status: 404 })
+  }
+
+  return NextResponse.json(user)
+}
 
 export async function PATCH(request: NextRequest) {
   try {
@@ -102,6 +155,7 @@ export async function PATCH(request: NextRequest) {
       if ('pageName' in body) updateData.pageName = validatedData.pageName || null
       if ('pageDescription' in body) updateData.pageDescription = validatedData.pageDescription || null
       if ('pageIcon' in body) updateData.pageIcon = validatedData.pageIcon || null
+      if ('pageLanguage' in body) updateData.pageLanguage = validatedData.pageLanguage || null
       if ('title' in body) updateData.title = validatedData.title || null
       if ('bio' in body) updateData.bio = validatedData.bio || null
 
@@ -117,6 +171,7 @@ export async function PATCH(request: NextRequest) {
           pageName: true,
           pageDescription: true,
           pageIcon: true,
+          pageLanguage: true,
           title: true,
           bio: true
         }

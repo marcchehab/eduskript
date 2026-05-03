@@ -25,6 +25,17 @@ export function PageSettings() {
   const [pageName, setPageName] = useState(session?.user?.pageName || '')
   const [pageDescription, setPageDescription] = useState(session?.user?.pageDescription || '')
   const [pageIcon, setPageIcon] = useState(session?.user?.pageIcon || '')
+  const [pageLanguage, setPageLanguage] = useState('')
+  // Original DB values (loaded on mount via /api/user/profile GET, not from
+  // session). Used to compute `hasPageInfoChanges` so the Save button only
+  // lights up when something actually differs from the persisted state — and
+  // so the displayed values aren't out of sync with the public site when the
+  // session JWT lags behind the DB.
+  const [originalPageSlug, setOriginalPageSlug] = useState(session?.user?.pageSlug || '')
+  const [originalPageName, setOriginalPageName] = useState(session?.user?.pageName || '')
+  const [originalPageDescription, setOriginalPageDescription] = useState(session?.user?.pageDescription || '')
+  const [originalPageIcon, setOriginalPageIcon] = useState(session?.user?.pageIcon || '')
+  const [originalPageLanguage, setOriginalPageLanguage] = useState('')
   const [iconUploadLoading, setIconUploadLoading] = useState(false)
   const [hostnamePrefix, setHostnamePrefix] = useState('eduskript.org/')
   const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null)
@@ -48,11 +59,12 @@ export function PageSettings() {
   useEffect(() => {
     const loadPreferences = async () => {
       try {
-        const [sidebarResponse, typographyResponse, orgAdminResponse, aiPromptResponse] = await Promise.all([
+        const [sidebarResponse, typographyResponse, orgAdminResponse, aiPromptResponse, profileResponse] = await Promise.all([
           fetch('/api/user/sidebar-preference'),
           fetch('/api/user/typography-preference'),
           fetch('/api/user/is-org-admin'),
           fetch('/api/user/ai-prompt'),
+          fetch('/api/user/profile'),
         ])
 
         if (sidebarResponse.ok) {
@@ -74,6 +86,27 @@ export function PageSettings() {
           const data = await aiPromptResponse.json()
           setAiSystemPrompt(data.aiSystemPrompt || '')
         }
+
+        // Hydrate page fields from DB (not session) — see comment on the
+        // `original*` state above for the rationale.
+        if (profileResponse.ok) {
+          const data = await profileResponse.json()
+          const slug = data.pageSlug || ''
+          const name = data.pageName || ''
+          const desc = data.pageDescription || ''
+          const icon = data.pageIcon || ''
+          const lang = data.pageLanguage || ''
+          setPageSlug(slug)
+          setPageName(name)
+          setPageDescription(desc)
+          setPageIcon(icon)
+          setPageLanguage(lang)
+          setOriginalPageSlug(slug)
+          setOriginalPageName(name)
+          setOriginalPageDescription(desc)
+          setOriginalPageIcon(icon)
+          setOriginalPageLanguage(lang)
+        }
       } catch (error) {
         console.error('Error loading preferences:', error)
       }
@@ -81,10 +114,6 @@ export function PageSettings() {
 
     if (session?.user) {
       loadPreferences()
-      setPageSlug(session.user.pageSlug || '')
-      setPageName(session.user.pageName || '')
-      setPageDescription(session.user.pageDescription || '')
-      setPageIcon(session.user.pageIcon || '')
     }
   }, [session])
 
@@ -103,8 +132,8 @@ export function PageSettings() {
   }, [minSlugLength])
 
   useEffect(() => {
-    // Don't check if slug hasn't changed from the original
-    if (pageSlug === (session?.user?.pageSlug || '')) {
+    // Don't check if slug hasn't changed from the original (DB-backed value)
+    if (pageSlug === originalPageSlug) {
       setSlugAvailable(null)
       setCheckingSlug(false)
       return
@@ -130,7 +159,7 @@ export function PageSettings() {
       clearTimeout(timer)
       controller.abort()
     }
-  }, [pageSlug, session?.user?.pageSlug, checkSlugAvailability, minSlugLength])
+  }, [pageSlug, originalPageSlug, checkSlugAvailability, minSlugLength])
 
   const handleSidebarBehaviorChange = async (value: string) => {
     setSidebarBehavior(value)
@@ -196,12 +225,21 @@ export function PageSettings() {
           pageName,
           pageDescription,
           pageIcon,
+          pageLanguage,
           name: session?.user?.name || 'User' // Include name as it's required by the API
         }),
       })
 
       if (response.ok) {
-        await update() // Update session
+        const data = await response.json()
+        // Sync the original-* baseline so hasPageInfoChanges flips back to
+        // false right after a successful save.
+        setOriginalPageSlug(data.pageSlug || '')
+        setOriginalPageName(data.pageName || '')
+        setOriginalPageDescription(data.pageDescription || '')
+        setOriginalPageIcon(data.pageIcon || '')
+        setOriginalPageLanguage(data.pageLanguage || '')
+        await update() // Update session (best-effort — JWT may still lag)
         router.refresh() // Refresh page
       } else {
         const data = await response.json()
@@ -217,12 +255,13 @@ export function PageSettings() {
     }
   }
 
-  // Check if page info has changed
+  // Check if page info has changed (against DB baseline, not session)
   const hasPageInfoChanges =
-    pageSlug !== (session?.user?.pageSlug || '') ||
-    pageName !== (session?.user?.pageName || '') ||
-    pageDescription !== (session?.user?.pageDescription || '') ||
-    pageIcon !== (session?.user?.pageIcon || '')
+    pageSlug !== originalPageSlug ||
+    pageName !== originalPageName ||
+    pageDescription !== originalPageDescription ||
+    pageIcon !== originalPageIcon ||
+    pageLanguage !== originalPageLanguage
 
   // Check if slug is valid for saving
   const slugIsValid = pageSlug.length >= minSlugLength && slugAvailable !== false
@@ -494,6 +533,35 @@ export function PageSettings() {
             />
             <p className="text-sm text-muted-foreground">
               Shown below your page name in the sidebar. Describe what visitors will find on your page.
+            </p>
+          </div>
+
+          {/* Page Language */}
+          <div className="space-y-2">
+            <Label htmlFor="pageLanguage" className="text-sm font-medium">Page Language</Label>
+            <input
+              id="pageLanguage"
+              type="text"
+              list="page-language-suggestions"
+              value={pageLanguage}
+              onChange={(e) => setPageLanguage(e.target.value)}
+              placeholder="e.g. de-CH, en, fr-CH"
+              maxLength={35}
+              className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            />
+            <datalist id="page-language-suggestions">
+              <option value="de-CH" />
+              <option value="de" />
+              <option value="fr-CH" />
+              <option value="fr" />
+              <option value="it-CH" />
+              <option value="it" />
+              <option value="en" />
+              <option value="en-US" />
+              <option value="en-GB" />
+            </datalist>
+            <p className="text-sm text-muted-foreground">
+              BCP-47 language tag. Sets <code>html lang</code> on your public pages and the <code>inLanguage</code> field of the JSON-LD structured data Google uses to classify content. Leave blank if you publish in multiple languages.
             </p>
           </div>
 
