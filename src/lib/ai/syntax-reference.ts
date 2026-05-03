@@ -182,7 +182,48 @@ assert fibonacci(5) == 5, "fibonacci(5) should return 5."
 - ✅ **For open challenges with multiple valid solutions**, test *behavior* with multiple inputs/edge cases, not implementation form. Example: \`assert "umbrella" in advise(10, True).lower(), "Cold rainy weather should suggest an umbrella."\`
 - ❌ **Don't repeat the same test path with different inputs**. Three asserts that all hit the same code branch waste score signal.
 
-If you omit \`for\` or the editor \`id\`, the check block is silently dropped.`)
+If you omit \`for\` or the editor \`id\`, the check block is silently dropped.
+
+### Turtle auto-grading
+
+Turtle exercises are gradeable through the same \`python-check\` mechanism. Pyodide's stdlib doesn't ship turtle, so the runner installs a recording stub that captures every move into a global \`turtle_path\` list (tuples of \`(x, y, pen_down)\`). Three helper functions are then available inside any \`python-check\`:
+
+- **\`turtle_solution_matches(solution_code)\`** — preferred. Pass a string of teacher-written turtle code; the runner exec's it through the same recording stub and compares the figures. No need to enumerate vertices by hand.
+- **\`turtle_matches(expected_segments)\`** — comparison against a hand-written list of segments \`[((x1,y1),(x2,y2)), …]\`. Use when the figure is short enough to type out.
+- **\`turtle_path_matches(expected_path, tolerance=1.0)\`** — strict vertex-order comparison. Use only when the order of moves is part of the exercise; for "did the student draw the right figure?" use \`turtle_solution_matches\` or \`turtle_matches\`.
+
+All three are translation-invariant (bounding-box origin) and try the four cardinal rotations. \`turtle_matches\` and \`turtle_solution_matches\` compare the **set of drawn segments** — direction of strokes, order of strokes, and retracing don't matter; only the figure matters. So a student drawing a square CW vs CCW vs starting from a different corner all match.
+
+Example using a reference solution:
+
+\`\`\`markdown
+\`\`\`python editor id="stairs"
+import turtle
+t = turtle.Turtle()
+# student writes their solution here
+\`\`\`
+
+\`\`\`python-check for="stairs"
+solution = """
+import turtle
+t = turtle.Turtle()
+def square(t, side):
+    for _ in range(4):
+        t.forward(side)
+        t.left(90)
+square(t, 30)
+t.penup()
+t.goto(30, 30)
+t.pendown()
+square(t, 30)
+"""
+assert turtle_solution_matches(solution), "Draw a 2-step stairs of two 30×30 squares."
+\`\`\`
+\`\`\`
+
+**Limitations:**
+- Pyodide's turtle is a recording stub, not a renderer. Style methods (\`color\`, \`fillcolor\`, \`pensize\`, \`hideturtle\`, \`speed\`, \`tracer\`, …) are accepted but no-ops — they don't affect the path. The Skulpt run the student sees on Run renders these correctly; only the auto-grader ignores them.
+- Multi-line \`assert\` with backslash continuations works (the parser handles it), but multi-line strings inside an assert (triple-quoted) confuse the splitter. Put long solution strings as a setup-line assignment first, then assert on the variable.`)
 
   // Math
   sections.push(`## Math (KaTeX)
@@ -418,6 +459,7 @@ export function getCondensedSyntaxReference(): string {
 **Python Checks:** pair \`\`\`python editor id="x"\`\`\` with \`\`\`python-check for="x"\`\`\` containing \`assert\` statements.
   - \`for="<id>"\` is REQUIRED and must match the editor's \`id\` — otherwise the check block is silently dropped.
   - Optional: \`points="10"\`, \`max-checks="5"\`. Check block is never rendered, only runs on "Check".
+  - **Turtle exercises:** \`turtle_solution_matches(solution_code)\` (preferred), \`turtle_matches(expected_segments)\`, \`turtle_path_matches(expected_path)\`. The first runs a teacher-supplied reference solution through the same recording stub; the runner compares the set of drawn segments. Translation- and rotation-tolerant. Put long solution strings as a setup variable, then \`assert turtle_solution_matches(solution), "..."\`.
 
 **Math:** \`$inline$\` and \`$$display$$\` (KaTeX)
 

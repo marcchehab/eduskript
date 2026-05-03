@@ -257,6 +257,56 @@ def turtle_matches(expected, tolerate_rotation=True):
     return False
 
 
+def turtle_solution_matches(solution_code, tolerate_rotation=True):
+    """
+    Run \`solution_code\` (a string of teacher-written turtle code) in a fresh
+    namespace and compare the figure it draws against the student's. Both
+    runs share the same instrumented stub, so the comparison is exact and
+    teachers don't have to hand-compute segment lists.
+
+    Returns True iff the student's drawn-segment set matches the solution's
+    (modulo translation and, optionally, cardinal rotation).
+    """
+    # Snapshot the student's path so this comparison is non-destructive.
+    _student_path = list(turtle_path)
+    # Reset for the solution run: clear the path log and the shared module-level
+    # default turtle, so the solution starts at (0, 0) facing east just like
+    # the student did.
+    turtle_path.clear()
+    _sys.modules['turtle']._default = None
+    try:
+        try:
+            exec(solution_code, {})
+        except Exception:
+            return False
+        _solution_path = list(turtle_path)
+    finally:
+        # Restore student state for any later assertions that read turtle_path.
+        turtle_path.clear()
+        turtle_path.extend(_student_path)
+        _sys.modules['turtle']._default = None
+
+    student_segs = _drawn_segments(_student_path)
+    solution_segs = _drawn_segments(_solution_path)
+    if not student_segs or not solution_segs:
+        return False
+    a = _normalize_segs(student_segs)
+    if a == _normalize_segs(solution_segs):
+        return True
+    if tolerate_rotation:
+        for theta in (90, 180, 270):
+            rad = _math.radians(theta)
+            c, s = _math.cos(rad), _math.sin(rad)
+            rotated = []
+            for seg in solution_segs:
+                rp1 = (seg[0][0] * c - seg[0][1] * s, seg[0][0] * s + seg[0][1] * c)
+                rp2 = (seg[1][0] * c - seg[1][1] * s, seg[1][0] * s + seg[1][1] * c)
+                rotated.append(tuple(sorted([rp1, rp2])))
+            if a == _normalize_segs(rotated):
+                return True
+    return False
+
+
 def turtle_path_matches(expected, tolerance=1.0, tolerate_rotation=True):
     """
     Strict path comparison — vertex order matters. Use this when the order
