@@ -4750,16 +4750,16 @@ plots
                     {verificationResult !== null && !exam && (
                       <>
                         {verificationResult.isCorrect ? (
-                          <span className="text-green-600 dark:text-green-400"> · &#10003; Korrekt!</span>
+                          <span className="text-green-600 dark:text-green-400"> · &#10003; Correct!</span>
                         ) : (
                           <>
-                            <span className="text-red-600 dark:text-red-400"> · &#10007; Nicht korrekt.</span>
+                            <span className="text-red-600 dark:text-red-400"> · &#10007; Not correct.</span>
                             {' '}
                             <button
                               className="text-red-600 dark:text-red-400 underline text-xs opacity-80 hover:opacity-100"
                               onClick={() => setVerificationResult(prev => prev ? { ...prev, showSolution: !prev.showSolution } : prev)}
                             >
-                              {verificationResult.showSolution ? 'Lösung verbergen' : 'Lösung anzeigen'}
+                              {verificationResult.showSolution ? 'Hide solution' : 'Show solution'}
                             </button>
                           </>
                         )}
