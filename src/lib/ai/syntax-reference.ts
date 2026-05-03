@@ -188,7 +188,7 @@ If you omit \`for\` or the editor \`id\`, the check block is silently dropped.
 
 Turtle exercises are gradeable through the same \`python-check\` mechanism. Pyodide's stdlib doesn't ship turtle, so the runner installs a recording stub that captures every move into a global \`turtle_path\` list (tuples of \`(x, y, pen_down)\`). Three helper functions are then available inside any \`python-check\`:
 
-- **\`turtle_solution_matches(solution_code)\`** — preferred. Pass a string of teacher-written turtle code; the runner exec's it through the same recording stub and compares the figures. No need to enumerate vertices by hand.
+- **\`turtle_solution_matches(solution_code, match_colors=False)\`** — preferred. Pass a string of teacher-written turtle code; the runner exec's it through the same recording stub and compares the figures. No need to enumerate vertices by hand. Set \`match_colors=True\` to also require each segment to have the same pen color in solution and student (call \`t.color("red")\` etc. consistently on both sides — strings are compared lowercased).
 - **\`turtle_matches(expected_segments)\`** — comparison against a hand-written list of segments \`[((x1,y1),(x2,y2)), …]\`. Use when the figure is short enough to type out.
 - **\`turtle_path_matches(expected_path, tolerance=1.0)\`** — strict vertex-order comparison. Use only when the order of moves is part of the exercise; for "did the student draw the right figure?" use \`turtle_solution_matches\` or \`turtle_matches\`.
 
@@ -222,7 +222,7 @@ assert turtle_solution_matches(solution), "Draw a 2-step stairs of two 30×30 sq
 \`\`\`
 
 **Limitations:**
-- Pyodide's turtle is a recording stub, not a renderer. Style methods (\`color\`, \`fillcolor\`, \`pensize\`, \`hideturtle\`, \`speed\`, \`tracer\`, …) are accepted but no-ops — they don't affect the path. The Skulpt run the student sees on Run renders these correctly; only the auto-grader ignores them.
+- Pyodide's turtle is a recording stub, not a renderer. Style methods (\`fillcolor\`, \`pensize\`, \`hideturtle\`, \`speed\`, \`tracer\`, …) are accepted but no-ops. \`color\`/\`pencolor\` are recorded per segment so \`turtle_solution_matches(..., match_colors=True)\` can grade colours; everything else is figure-only. The Skulpt run the student sees on Run renders all style methods correctly; only the auto-grader ignores the no-op ones.
 - Multi-line \`assert\` with backslash continuations works (the parser handles it), but multi-line strings inside an assert (triple-quoted) confuse the splitter. Put long solution strings as a setup-line assignment first, then assert on the variable.`)
 
   // Math
@@ -459,7 +459,7 @@ export function getCondensedSyntaxReference(): string {
 **Python Checks:** pair \`\`\`python editor id="x"\`\`\` with \`\`\`python-check for="x"\`\`\` containing \`assert\` statements.
   - \`for="<id>"\` is REQUIRED and must match the editor's \`id\` — otherwise the check block is silently dropped.
   - Optional: \`points="10"\`, \`max-checks="5"\`. Check block is never rendered, only runs on "Check".
-  - **Turtle exercises:** \`turtle_solution_matches(solution_code)\` (preferred), \`turtle_matches(expected_segments)\`, \`turtle_path_matches(expected_path)\`. The first runs a teacher-supplied reference solution through the same recording stub; the runner compares the set of drawn segments. Translation- and rotation-tolerant. Put long solution strings as a setup variable, then \`assert turtle_solution_matches(solution), "..."\`.
+  - **Turtle exercises:** \`turtle_solution_matches(solution_code, match_colors=False)\` (preferred), \`turtle_matches(expected_segments)\`, \`turtle_path_matches(expected_path)\`. The first runs a teacher-supplied reference solution through the same recording stub; the runner compares the set of drawn segments. Translation- and rotation-tolerant. Pass \`match_colors=True\` to also require matching pen colours per segment. Put long solution strings as a setup variable, then \`assert turtle_solution_matches(solution), "..."\`.
 
 **Math:** \`$inline$\` and \`$$display$$\` (KaTeX)
 

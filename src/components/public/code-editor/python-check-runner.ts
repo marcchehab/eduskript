@@ -33,11 +33,30 @@ const TURTLE_USE_RE = /import\s+turtle|from\s+turtle/
  */
 const TURTLE_PRELUDE = `
 # Auto-injected by python-check-runner when student code imports turtle.
+# Path entries are 4-tuples: (x, y, pen_down, color). Color is the active pen
+# color at the time of the move (None if never set). Old (x, y, pen_down)
+# tuples remain readable via index access (turtle_path[i][0..2]) so existing
+# checks keep working.
 turtle_path = []
 
 import sys as _sys
 import math as _math
 import types as _types
+
+def _normalize_color(c):
+    """Coerce a color to a comparable form: lowercased string, or rounded
+    float tuple. Returns None for unrecognised shapes so colour comparison
+    fails silently rather than throwing."""
+    if c is None:
+        return None
+    if isinstance(c, str):
+        return c.lower().strip()
+    if isinstance(c, (tuple, list)):
+        try:
+            return tuple(round(float(x), 3) for x in c)
+        except Exception:
+            return None
+    return None
 
 class _EduskriptTurtle:
     def __init__(self, *a, **kw):
@@ -45,10 +64,11 @@ class _EduskriptTurtle:
         self._y = 0.0
         self._h = 0.0  # heading in degrees, 0 = east
         self._down = True
-        turtle_path.append((0.0, 0.0, True))
+        self._color = None
+        turtle_path.append((0.0, 0.0, True, None))
 
     def _rec(self):
-        turtle_path.append((round(self._x, 6), round(self._y, 6), self._down))
+        turtle_path.append((round(self._x, 6), round(self._y, 6), self._down, self._color))
 
     def forward(self, d):
         rad = _math.radians(self._h)
@@ -109,9 +129,25 @@ class _EduskriptTurtle:
             self.left(step_a)
         self.right(step_a / 2)
 
-    # Style/visual methods are no-ops — they don't affect the path.
-    def color(self, *a, **kw): pass
-    def pencolor(self, *a, **kw): pass
+    # color/pencolor record the pen color so it can be matched against a
+    # solution. Other style methods stay no-ops — they don't affect the path
+    # or stroke colour.
+    def color(self, *a, **kw):
+        if not a:
+            return
+        # Two positional args = (pen, fill); only pen colour affects strokes.
+        # Three positional args = an RGB triple.
+        if len(a) == 3:
+            self._color = _normalize_color(a)
+        else:
+            self._color = _normalize_color(a[0])
+    def pencolor(self, *a, **kw):
+        if not a:
+            return
+        if len(a) == 3:
+            self._color = _normalize_color(a)
+        else:
+            self._color = _normalize_color(a[0])
     def fillcolor(self, *a, **kw): pass
     def begin_fill(self): pass
     def end_fill(self): pass
@@ -194,31 +230,43 @@ _sys.modules['turtle'] = __fake
 
 def _drawn_segments(path):
     """Extract the set of drawn line segments (where the pen was down during
-    the move). Each segment is canonicalised so direction doesn't matter:
-    the lexicographically smaller endpoint always comes first.
+    the move). Each entry is (canonical_seg, color) — canonical means the
+    lexicographically smaller endpoint comes first, so direction doesn't
+    matter. Color is whatever was active when the move ended; None if
+    student never called color()/pencolor().
     """
     segs = []
     for i in range(1, len(path)):
-        x0, y0, _ = path[i - 1]
-        x1, y1, down = path[i]
+        prev = path[i - 1]
+        curr = path[i]
+        x0, y0 = prev[0], prev[1]
+        x1, y1, down = curr[0], curr[1], curr[2]
+        color = curr[3] if len(curr) > 3 else None
         if not down or (x0 == x1 and y0 == y1):
             continue
         p1 = (round(x0, 3), round(y0, 3))
         p2 = (round(x1, 3), round(y1, 3))
-        segs.append(tuple(sorted([p1, p2])))
+        segs.append((tuple(sorted([p1, p2])), color))
     return segs
 
 
-def _normalize_segs(segs):
-    """Translate segments so the bounding-box min corner is at (0, 0)."""
+def _normalize_segs(segs, with_color=False):
+    """Translate segments so the bounding-box min corner is at (0, 0).
+    \`segs\` is a list of (canonical_seg, color) tuples. With with_color=True,
+    color is part of the equality key; otherwise color is dropped."""
     if not segs:
         return frozenset()
-    all_pts = [p for s in segs for p in s]
+    all_pts = [p for s, _c in segs for p in s]
     dx = min(p[0] for p in all_pts)
     dy = min(p[1] for p in all_pts)
+    if with_color:
+        return frozenset(
+            (frozenset((round(p[0] - dx, 3), round(p[1] - dy, 3)) for p in seg), color)
+            for seg, color in segs
+        )
     return frozenset(
         frozenset((round(p[0] - dx, 3), round(p[1] - dy, 3)) for p in seg)
-        for seg in segs
+        for seg, _c in segs
     )
 
 
@@ -230,6 +278,8 @@ def turtle_matches(expected, tolerate_rotation=True):
     Direction of each segment doesn't matter; order of strokes doesn't matter;
     retracing over an existing segment doesn't count again. With
     tolerate_rotation=True, the four cardinal rotations of expected are tried.
+    Color-blind by design — the expected list has no color info. Use
+    turtle_solution_matches(..., match_colors=True) for color-aware checks.
     Returns True iff the figure matches.
     """
     actual = _drawn_segments(turtle_path)
@@ -239,7 +289,7 @@ def turtle_matches(expected, tolerate_rotation=True):
     for seg in expected:
         p1 = (round(seg[0][0], 3), round(seg[0][1], 3))
         p2 = (round(seg[1][0], 3), round(seg[1][1], 3))
-        target.append(tuple(sorted([p1, p2])))
+        target.append((tuple(sorted([p1, p2])), None))
     a = _normalize_segs(actual)
     if a == _normalize_segs(target):
         return True
@@ -248,21 +298,27 @@ def turtle_matches(expected, tolerate_rotation=True):
             rad = _math.radians(theta)
             c, s = _math.cos(rad), _math.sin(rad)
             rotated = []
-            for seg in target:
+            for seg, _c in target:
                 rp1 = (seg[0][0] * c - seg[0][1] * s, seg[0][0] * s + seg[0][1] * c)
                 rp2 = (seg[1][0] * c - seg[1][1] * s, seg[1][0] * s + seg[1][1] * c)
-                rotated.append(tuple(sorted([rp1, rp2])))
+                rotated.append((tuple(sorted([rp1, rp2])), None))
             if a == _normalize_segs(rotated):
                 return True
     return False
 
 
-def turtle_solution_matches(solution_code, tolerate_rotation=True):
+def turtle_solution_matches(solution_code, tolerate_rotation=True, match_colors=False):
     """
     Run \`solution_code\` (a string of teacher-written turtle code) in a fresh
     namespace and compare the figure it draws against the student's. Both
     runs share the same instrumented stub, so the comparison is exact and
     teachers don't have to hand-compute segment lists.
+
+    With match_colors=True the comparison also checks that each segment was
+    drawn in the same pen color in solution and student code. Use plain
+    color names ('red', 'blue', …) consistently on both sides — they're
+    compared lowercased; (r, g, b) tuples are also fine but won't match
+    against the named version.
 
     Returns True iff the student's drawn-segment set matches the solution's
     (modulo translation and, optionally, cardinal rotation).
@@ -290,19 +346,19 @@ def turtle_solution_matches(solution_code, tolerate_rotation=True):
     solution_segs = _drawn_segments(_solution_path)
     if not student_segs or not solution_segs:
         return False
-    a = _normalize_segs(student_segs)
-    if a == _normalize_segs(solution_segs):
+    a = _normalize_segs(student_segs, with_color=match_colors)
+    if a == _normalize_segs(solution_segs, with_color=match_colors):
         return True
     if tolerate_rotation:
         for theta in (90, 180, 270):
             rad = _math.radians(theta)
             c, s = _math.cos(rad), _math.sin(rad)
             rotated = []
-            for seg in solution_segs:
+            for seg, color in solution_segs:
                 rp1 = (seg[0][0] * c - seg[0][1] * s, seg[0][0] * s + seg[0][1] * c)
                 rp2 = (seg[1][0] * c - seg[1][1] * s, seg[1][0] * s + seg[1][1] * c)
-                rotated.append(tuple(sorted([rp1, rp2])))
-            if a == _normalize_segs(rotated):
+                rotated.append((tuple(sorted([rp1, rp2])), color))
+            if a == _normalize_segs(rotated, with_color=match_colors):
                 return True
     return False
 
