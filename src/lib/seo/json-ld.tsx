@@ -67,6 +67,34 @@ export function learningResourceSchema(args: LearningResourceArgs): object {
   }
 }
 
+interface PersonArgs {
+  name: string
+  url: string
+  // Optional pieces — only emit fields the teacher actually filled in;
+  // schema.org parsers ignore missing properties without complaint.
+  jobTitle?: string | null
+  description?: string | null
+  image?: string | null
+  // Other URLs that represent the same person (custom domain ↔ eduskript.org).
+  // Helps Google merge identity signals across hosts and reinforces E-A-T
+  // for the LearningResource.author references on content pages.
+  sameAs?: string[]
+}
+
+export function personSchema(args: PersonArgs): object {
+  const out: Record<string, unknown> = {
+    '@context': 'https://schema.org',
+    '@type': 'Person',
+    name: args.name,
+    url: args.url,
+  }
+  if (args.jobTitle) out.jobTitle = args.jobTitle
+  if (args.description) out.description = args.description
+  if (args.image) out.image = args.image
+  if (args.sameAs && args.sameAs.length > 0) out.sameAs = args.sameAs
+  return out
+}
+
 export function breadcrumbSchema(items: { name: string; url: string }[]): object {
   return {
     '@context': 'https://schema.org',

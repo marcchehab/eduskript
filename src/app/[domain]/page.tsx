@@ -8,6 +8,7 @@ import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
 import { getTeacherByUsernameDeduped } from '@/lib/cached-queries'
 import { prisma } from '@/lib/prisma'
 import { canonicalUrl, canonicalBase } from '@/lib/seo/canonical'
+import { JsonLd, personSchema } from '@/lib/seo/json-ld'
 
 // Enable ISR - pages are cached until explicitly invalidated
 export const revalidate = false
@@ -142,8 +143,36 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
   // Owner can create public annotations on their own front page
   const isPageAuthor = isOwner
 
+  // Person JSON-LD reinforces E-A-T (Expertise/Authority/Trust) — reuses the
+  // same Person identity that LearningResource schemas on content pages name
+  // as `author`, so Google can merge the signals across the tenant's pages
+  // and across hosts (custom domain + eduskript.org via `sameAs`).
+  const teacherCanonical = canonicalUrl({
+    type: 'teacher',
+    slug: teacher.pageSlug ?? domain,
+    customDomains: teacher.customDomains,
+  })
+  const fallbackUrl = `https://eduskript.org/${teacher.pageSlug ?? domain}`
+  const sameAs = teacherCanonical !== fallbackUrl ? [fallbackUrl] : []
+  const personImage =
+    teacher.pageIcon && teacher.pageIcon !== 'default'
+      ? /^https?:\/\//i.test(teacher.pageIcon)
+        ? teacher.pageIcon
+        : new URL(teacher.pageIcon, teacherCanonical).toString()
+      : null
+
   return (
     <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border">
+      <JsonLd
+        schema={personSchema({
+          name: teacher.pageName || teacher.name || teacher.pageSlug || domain,
+          url: teacherCanonical,
+          jobTitle: teacher.title,
+          description: teacher.pageDescription || teacher.bio,
+          image: personImage,
+          sameAs,
+        })}
+      />
       {frontPage?.content ? (
         <article className="prose-theme">
           <AnnotationWrapper pageId={frontPage.id} content={frontPage.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} isPageAuthor={isPageAuthor}>
