@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { userDataService } from './userDataService'
+import { useUserDataContext } from './provider'
 import type { UseUserDataResult, SaveOptions, VersionSummary, CreateVersionOptions, UserDataVersion } from './types'
 
 /**
@@ -30,6 +31,7 @@ export function useUserData<T>(
   componentId: string,
   initialData: T | null = null
 ): UseUserDataResult<T> {
+  const { isDbReady } = useUserDataContext()
   const [data, setData] = useState<T | null>(initialData)
   const [isLoading, setIsLoading] = useState(true)
   const [isSynced, setIsSynced] = useState(true)
@@ -38,9 +40,12 @@ export function useUserData<T>(
   // Use ref to track if component is mounted
   const isMountedRef = useRef(true)
 
-  // Load data on mount
+  // Load data on mount. Wait for isDbReady so we don't read mid-migration
+  // (the v2→v3 copy and the anonymous re-key both run inside the provider
+  // before isDbReady flips true).
   useEffect(() => {
     isMountedRef.current = true
+    if (!isDbReady) return
 
     const loadData = async () => {
       try {
@@ -75,7 +80,7 @@ export function useUserData<T>(
     return () => {
       isMountedRef.current = false
     }
-  }, [pageId, componentId, initialData])
+  }, [pageId, componentId, initialData, isDbReady])
 
   /**
    * Update user data with optional debouncing
@@ -141,12 +146,14 @@ export function useUserDataExists(
   pageId: string,
   componentId: string
 ): { exists: boolean; lastUpdated: number | null; isLoading: boolean } {
+  const { isDbReady } = useUserDataContext()
   const [exists, setExists] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<number | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     let isMounted = true
+    if (!isDbReady) return
 
     const checkExists = async () => {
       try {
@@ -175,7 +182,7 @@ export function useUserDataExists(
     return () => {
       isMounted = false
     }
-  }, [pageId, componentId])
+  }, [pageId, componentId, isDbReady])
 
   return { exists, lastUpdated, isLoading }
 }
@@ -204,6 +211,7 @@ export function useVersionHistory(
   isLoading: boolean
   refresh: () => Promise<void>
 } {
+  const { isDbReady } = useUserDataContext()
   const [versions, setVersions] = useState<VersionSummary[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
@@ -221,8 +229,9 @@ export function useVersionHistory(
   }, [pageId, componentId])
 
   useEffect(() => {
+    if (!isDbReady) return
     loadVersions()
-  }, [loadVersions])
+  }, [loadVersions, isDbReady])
 
   return {
     versions,
@@ -343,16 +352,23 @@ export function useDeleteVersion(
   pageId: string,
   componentId: string
 ): {
-  deleteVersion: (versionNumber: number) => Promise<void>
+  deleteVersion: (target: { id?: number; versionNumber: number }) => Promise<void>
   isDeleting: boolean
 } {
   const [isDeleting, setIsDeleting] = useState(false)
 
+  // Prefer the row's unique IndexedDB id when available — versionNumber alone
+  // can match multiple rows if any duplicates exist from before the
+  // createVersion race fix. id-based deletes are always unambiguous.
   const deleteVersion = useCallback(
-    async (versionNumber: number): Promise<void> => {
+    async (target: { id?: number; versionNumber: number }): Promise<void> => {
       try {
         setIsDeleting(true)
-        await userDataService.deleteVersion(pageId, componentId, versionNumber)
+        if (typeof target.id === 'number') {
+          await userDataService.deleteVersion(pageId, componentId, target.id, { byId: true })
+        } else {
+          await userDataService.deleteVersion(pageId, componentId, target.versionNumber)
+        }
       } catch (error) {
         console.error('Failed to delete version:', error)
         throw error

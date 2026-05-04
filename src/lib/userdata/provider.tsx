@@ -6,8 +6,12 @@
  * React context that connects the user data service with authentication
  * and provides sync status to the UI.
  *
- * IMPORTANT: IndexedDB keys don't include userId, so we must clear the database
- * when the user changes to prevent cross-user data contamination.
+ * USERID SCOPING: As of v3 the IndexedDB primary keys include userId, so
+ * different users on the same browser are isolated without wiping. The old
+ * wipe-on-user-change logic (which destroyed local autosave history) is
+ * gone. Existing v2 data is migrated forward by `runOneTimeMigrationV2ToV3`,
+ * and anonymous-mode work is re-keyed under the logged-in user via
+ * `migrateAnonymousIfNeeded` on first login.
  */
 
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
@@ -15,16 +19,12 @@ import { useSession } from 'next-auth/react'
 import { useExamSession } from '@/contexts/exam-session-context'
 import { syncEngine, type SyncStatus } from './sync-engine'
 import { userDataService } from './userDataService'
-import { db } from './schema'
+import { runOneTimeMigrationV2ToV3, migrateAnonymousIfNeeded } from './migrations'
 import { createLogger } from '@/lib/logger'
 
 const log = createLogger('userdata:provider')
 
 const LAST_USER_KEY = 'eduskript-last-user-id'
-// Increment this to force a one-time IndexedDB clear for all users
-// Use when fixing data corruption bugs or schema issues
-const CACHE_VERSION = 3
-const CACHE_VERSION_KEY = 'eduskript-cache-version'
 
 interface UserDataContextValue {
   /** Current sync status */
@@ -68,55 +68,56 @@ export function UserDataProvider({ children }: UserDataProviderProps) {
   const [onClearAnnotations, setOnClearAnnotationsState] = useState<(() => void) | null>(null)
   const [isDbReady, setIsDbReady] = useState(false)
   const userChangeHandledRef = useRef(false)
+  // Tracks the userId active on the previous effect run. Initialised from
+  // localStorage on the client so a fresh mount can correctly detect
+  // "anonymous → real userId" transitions (which trigger the anonymous re-key
+  // migration). SSR has no real localStorage — Node polyfills the global as a
+  // stub without methods, so guard on `typeof window` and try/catch.
+  const previousUserIdRef = useRef<string | null>(null)
+  const initRef = useRef(false)
+  if (!initRef.current && typeof window !== 'undefined') {
+    initRef.current = true
+    try {
+      previousUserIdRef.current = window.localStorage.getItem(LAST_USER_KEY)
+    } catch {
+      // Some browsers throw on localStorage access (private mode, blocked).
+      previousUserIdRef.current = null
+    }
+  }
 
   // Use NextAuth session first, fall back to exam session
   const userId = session?.user?.id ?? examSession.user?.id ?? null
   const isAuthenticated = (status === 'authenticated' && session?.user?.id !== null) || examSession.isInExamSession
 
-  // CRITICAL: Clear IndexedDB when user changes OR when cache version is outdated
-  // IndexedDB keys don't include userId, so different users on the same browser would
-  // share cached data without this cleanup.
+  // On userId change: run any pending DB migrations, then update the service's
+  // active userId, then update the sync engine. No wiping — different users on
+  // one browser are isolated by userId in the primary key.
   useEffect(() => {
     if (status === 'loading') return // Wait for session to load
 
     const handleUserChange = async () => {
-      // Prevent double handling
       if (userChangeHandledRef.current) return
       userChangeHandledRef.current = true
 
       try {
-        const lastUserId = localStorage.getItem(LAST_USER_KEY)
-        const storedVersion = parseInt(localStorage.getItem(CACHE_VERSION_KEY) || '0', 10)
         const currentUserId = userId ?? 'anonymous'
+        const previousUserId = previousUserIdRef.current
 
-        // Clear if user changed OR if cache version is outdated
-        const userChanged = lastUserId && lastUserId !== currentUserId
-        const versionOutdated = storedVersion < CACHE_VERSION
+        // 1. v2 → v3 schema migration (idempotent; gated by localStorage flag).
+        await runOneTimeMigrationV2ToV3()
 
-        if (userChanged || versionOutdated) {
-          log('Clearing IndexedDB cache', {
-            reason: versionOutdated ? 'version upgrade' : 'user change',
-            from: lastUserId ? lastUserId.substring(0, 8) + '...' : 'none',
-            to: currentUserId === 'anonymous' ? 'anonymous' : currentUserId.substring(0, 8) + '...',
-            storedVersion,
-            currentVersion: CACHE_VERSION
-          })
-
-          // Clear all tables in IndexedDB
-          await db.userData.clear()
-          await db.userData_history.clear()
-          await db.versionBlobs.clear()
-
-          log('IndexedDB cleared successfully')
+        // 2. anonymous → real userId re-key, if applicable.
+        if (previousUserId === 'anonymous' && currentUserId !== 'anonymous') {
+          await migrateAnonymousIfNeeded(previousUserId, currentUserId)
         }
 
-        // Update last user and version
-        if (userId) {
-          localStorage.setItem(LAST_USER_KEY, userId)
-        } else {
-          localStorage.setItem(LAST_USER_KEY, 'anonymous')
-        }
-        localStorage.setItem(CACHE_VERSION_KEY, String(CACHE_VERSION))
+        // 3. Service swap. setCurrentUser awaits flush() so debounced saves
+        // started under the previous userId land under that userId.
+        await userDataService.setCurrentUser(currentUserId)
+
+        // 4. Update local pointer for next transition.
+        previousUserIdRef.current = currentUserId
+        localStorage.setItem(LAST_USER_KEY, currentUserId)
       } catch (error) {
         log.error('Failed to handle user change:', error)
       } finally {

@@ -17,9 +17,10 @@ import { basicSetup } from 'codemirror'
 import { autocompletion } from '@codemirror/autocomplete'
 import { createPythonCompletions } from './python-completions'
 import { Button } from '@/components/ui/button'
-import { Play, Square, RotateCcw, Maximize2, Minimize2, Camera, X, Plus, FileText, ZoomIn, ZoomOut, Save, History, Highlighter, MessageSquare, WrapText, Circle, CheckCircle2, Package, Trash2, Paperclip, Upload, Pencil } from 'lucide-react'
+import { Play, Square, RotateCcw, Maximize2, Minimize2, Camera, X, Plus, FileText, ZoomIn, ZoomOut, Save, History, Highlighter, MessageSquare, WrapText, Circle, CheckCircle2, Package, Trash2, Paperclip, Upload, Pencil, Cloud, HardDrive } from 'lucide-react'
 import { useUserData, useCreateVersion, useVersionHistory, useRestoreVersion, useDeleteVersion, useUpdateVersionLabel } from '@/lib/userdata/hooks'
 import { userDataService } from '@/lib/userdata'
+import { postCheckpoint } from '@/lib/userdata/checkpoints'
 import { useSyncedUserData, type SyncedUserDataOptions } from '@/lib/userdata/provider'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
 import { useTeacherBroadcast } from '@/hooks/use-teacher-broadcast'
@@ -286,6 +287,11 @@ export const CodeEditor = memo(function CodeEditor({
   const componentId = `code-editor-${id}`
   const highlightsComponentId = `code-highlights-${id}` // Separate adapter for broadcast highlights
   const verificationComponentId = `sql-verification-${id}`
+  // Code editor's main data is intentionally LOCAL-ONLY. The keystroke-level
+  // save path stays in IndexedDB; the server only sees explicit user actions
+  // via checkpoints (manual save, "Check" press, exam hand-in). This keeps
+  // server volume bounded and matches the agreed model (manual + check +
+  // handin), avoiding a keystroke-level firehose.
   const { data: savedData, updateData: savePersistentData, isLoading } = useUserData<CodeEditorData>(
     pageId || 'no-page', // Fallback if no pageId
     componentId,
@@ -418,6 +424,24 @@ export const CodeEditor = memo(function CodeEditor({
   const { deleteVersion, isDeleting } = useDeleteVersion(pageId || 'no-page', componentId)
   const updateLabel = useUpdateVersionLabel(pageId || 'no-page', componentId)
 
+  // Per-kind sequential default labels: auto1/auto2/…, manual1/manual2/…,
+  // check1/check2/… Computed in chronological (oldest-first) order so the
+  // user-visible numbering matches the order events actually happened.
+  // Keyed by the row's IndexedDB id when present (stable across renders),
+  // falling back to versionNumber for legacy/unmigrated rows.
+  const defaultVersionLabels = useMemo(() => {
+    const sortedAsc = [...versions].sort((a, b) => a.createdAt - b.createdAt)
+    const counters: Record<string, number> = { auto: 0, manual: 0, check: 0 }
+    const labelMap = new Map<number | string, string>()
+    for (const v of sortedAsc) {
+      const k = v.kind ?? (v.isManualSave ? 'manual' : 'auto')
+      counters[k] = (counters[k] ?? 0) + 1
+      const key = v.id ?? `v-${v.versionNumber}`
+      labelMap.set(key, `${k}${counters[k]}`)
+    }
+    return labelMap
+  }, [versions])
+
   // Pending input() state for Skulpt interactive programs
   const [pendingInput, setPendingInput] = useState<{
     prompt: string
@@ -437,8 +461,16 @@ export const CodeEditor = memo(function CodeEditor({
   const [confirmDeletion, setConfirmDeletion] = useState(false)
   const [showAutosaves, setShowAutosaves] = useState(false)
 
-  // Keystroke counter for version creation
+  // Keystroke counter for version creation. Resets synchronously when an
+  // autosave fires (before the async createVersion settles) so a burst of
+  // keystrokes during the await doesn't re-fire the trigger over and over.
   const keystrokeCountRef = useRef(0)
+  // Idle-based autosave: fires after the student stops typing for a moment,
+  // even if they haven't hit the 100-keystroke threshold. Without this,
+  // short edits (a one-line tweak, a few-word change) never create a
+  // version snapshot until the next 100-keystroke milestone.
+  const autosaveIdleTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const AUTOSAVE_IDLE_MS = 3000
 
   // Helper to get file extension based on language
   const getFileExtension = (lang: 'python' | 'javascript' | 'sql'): string => {
@@ -1049,7 +1081,9 @@ export const CodeEditor = memo(function CodeEditor({
     )
 
     // Persist directly to IndexedDB via the service singleton, bypassing the
-    // useUserData hook's updateData which calls setData and triggers a re-render.
+    // hook's updateData which calls setData and triggers a re-render. NOT
+    // synced to the server — the agreed model is checkpoint-only, so the
+    // server only sees explicit user actions (manual save / Check / hand-in).
     userDataService.save(pageId, componentId, {
       files: filesRef.current,
       activeFileIndex,
@@ -1161,19 +1195,116 @@ export const CodeEditor = memo(function CodeEditor({
     }
 
     // Note: Duplicate detection is handled by the service layer via SHA-256 hashing
-    // If the data is identical to a previous version, it will reuse the same blob
-    const version = await createVersion(dataToVersion, { isManualSave })
+    // If the data is identical to a previous version, it will reuse the same blob.
+    // Pass an explicit `kind` so the history UI can render auto/manual labels.
+    const version = await createVersion(dataToVersion, {
+      isManualSave,
+      kind: isManualSave ? 'manual' : 'auto',
+    })
     await refreshVersions()
     keystrokeCountRef.current = 0 // Reset counter after creating version
 
-    // Only open history tab for manual saves
+    // Only open history tab for manual saves; also push a server checkpoint so
+    // the teacher's timeline gets the snapshot. Fire-and-forget for the UX
+    // path, but if the POST succeeds we stamp the local row with the server
+    // id so the history overview can render a "synced" badge that survives
+    // reloads. Checkpoint failures (incl. 402 free-tier gate) leave the row
+    // unsynced — local save still succeeded.
     if (isManualSave) {
       setActivePanel('history')
       setHighlightedVersion(version.versionNumber)
       // Clear highlight after 2 seconds
       setTimeout(() => setHighlightedVersion(null), 2000)
+      void (async () => {
+        const result = await postCheckpoint({
+          pageId,
+          componentId,
+          kind: 'manual',
+          payload: dataToVersion,
+          label: version.label,
+        })
+        if (result.id && version.id) {
+          await userDataService.markVersionSynced(version.id, result.id)
+          await refreshVersions()
+        }
+      })()
     }
-  }, [pageId, activeFileIndex, fontSize, lineWrapping, editorWidth, canvasTransform, highlights, createVersion, refreshVersions, initialCode])
+  }, [pageId, componentId, activeFileIndex, fontSize, lineWrapping, editorWidth, canvasTransform, highlights, createVersion, refreshVersions, initialCode])
+
+  // Create a "check" version row alongside the server checkpoint POST.
+  // Local row gives the student a history entry like `check1`, `check2`, …;
+  // synced badge appears when the POST succeeds.
+  const createCheckVersion = useCallback(async (label?: string) => {
+    if (!pageId) return
+    const liveFiles = editorViewRef.current
+      ? filesRef.current.map((file, idx) =>
+          idx === activeFileIndex
+            ? { ...file, content: editorViewRef.current!.state.doc.toString() }
+            : file
+        )
+      : filesRef.current
+    const payload: CodeEditorData = {
+      files: liveFiles,
+      activeFileIndex,
+      fontSize,
+      lineWrapping,
+      editorWidth,
+      canvasTransform,
+      highlights,
+    }
+    try {
+      const version = await createVersion(payload, { kind: 'check', label })
+      const result = await postCheckpoint({
+        pageId,
+        componentId,
+        kind: 'check',
+        payload,
+        label,
+      })
+      if (result.id && version.id) {
+        await userDataService.markVersionSynced(version.id, result.id)
+      }
+      await refreshVersions()
+    } catch (e) {
+      console.error('createCheckVersion failed:', e)
+    }
+  }, [pageId, componentId, activeFileIndex, fontSize, lineWrapping, editorWidth, canvasTransform, highlights, createVersion, refreshVersions])
+
+  // Promote a local autosave to a synced manual save. The original payload
+  // is read from the version's blob, the row's `kind` flips to 'manual', and
+  // a checkpoint POST stamps the row with serverCheckpointId so the icon
+  // turns into the synced cloud. The user-facing display name is preserved
+  // (frozen as an explicit `label`) so what was "auto3" stays "auto3"
+  // visually instead of jumping to "manualN".
+  const promoteVersion = useCallback(async (
+    version: { id?: number; versionNumber: number; label?: string }
+  ) => {
+    if (!pageId || !version.id) return
+    try {
+      const payload = await userDataService.getVersionPayload<CodeEditorData>(version.id)
+      if (!payload) return
+      const preservedLabel = version.label || defaultVersionLabels.get(version.id) || `v${version.versionNumber}`
+      await userDataService.updateVersion(version.id, {
+        kind: 'manual',
+        isManualSave: true,
+        label: preservedLabel,
+      })
+      await refreshVersions()
+      const result = await postCheckpoint({
+        pageId,
+        componentId,
+        kind: 'manual',
+        payload,
+        label: preservedLabel,
+      })
+      if (result.id) {
+        await userDataService.markVersionSynced(version.id, result.id)
+        await refreshVersions()
+      }
+    } catch (e) {
+      console.error('promoteVersion failed:', e)
+    }
+  }, [pageId, componentId, defaultVersionLabels, refreshVersions])
 
   // Keep refs in sync with callbacks (avoids dependencies in CodeMirror effect)
   useEffect(() => {
@@ -2197,8 +2328,31 @@ export const CodeEditor = memo(function CodeEditor({
             // Increment keystroke counter
             keystrokeCountRef.current++
 
-            // Create autosave version every 100 keystrokes
+            // Reset the idle timer on every keystroke. If no further keystroke
+            // arrives within AUTOSAVE_IDLE_MS, fire an autosave covering the
+            // edits accumulated so far.
+            if (autosaveIdleTimerRef.current) {
+              clearTimeout(autosaveIdleTimerRef.current)
+            }
+            autosaveIdleTimerRef.current = setTimeout(() => {
+              autosaveIdleTimerRef.current = null
+              if (keystrokeCountRef.current > 0) {
+                keystrokeCountRef.current = 0
+                createVersionSnapshotRef.current()
+              }
+            }, AUTOSAVE_IDLE_MS)
+
+            // Burst path: hit the 100-keystroke threshold during fast typing.
+            // Reset the counter SYNCHRONOUSLY before firing so additional
+            // keystrokes during the (async) snapshot don't each re-trigger
+            // the threshold. Without this, a fast typist gets several
+            // duplicate autosaves fired off in quick succession.
             if (keystrokeCountRef.current >= 100) {
+              keystrokeCountRef.current = 0
+              if (autosaveIdleTimerRef.current) {
+                clearTimeout(autosaveIdleTimerRef.current)
+                autosaveIdleTimerRef.current = null
+              }
               createVersionSnapshotRef.current()
             }
 
@@ -2267,6 +2421,16 @@ export const CodeEditor = memo(function CodeEditor({
       if (contentSaveTimeoutRef.current) {
         clearTimeout(contentSaveTimeoutRef.current)
         contentSaveTimeoutRef.current = null
+      }
+      // Cancel any pending idle-autosave; if there's accumulated work, fire
+      // it now so the unmount doesn't lose the last few keystrokes.
+      if (autosaveIdleTimerRef.current) {
+        clearTimeout(autosaveIdleTimerRef.current)
+        autosaveIdleTimerRef.current = null
+      }
+      if (keystrokeCountRef.current > 0) {
+        keystrokeCountRef.current = 0
+        createVersionSnapshotRef.current()
       }
       debouncedSaveContentRef.current()
 
@@ -2873,6 +3037,8 @@ export const CodeEditor = memo(function CodeEditor({
           // Persist so teacher can see class progress
           if (pageId) {
             saveVerification({ isCorrect, hasAttempted: true }, { immediate: true })
+            // Local check version + synced server checkpoint in one go.
+            void createCheckVersion(isCorrect ? 'check: correct' : 'check: incorrect')
           }
         }
       } else {
@@ -3379,6 +3545,7 @@ plots
               lastResults: results,
               lastCheckedAt: Date.now(),
             }, { immediate: true })
+            void createCheckVersion(`exam check: ${passedTests}/${totalTests} (${earned}/${totalPoints} pts)`)
           }
         } catch { /* silent in exam mode */ }
       }
@@ -3466,6 +3633,7 @@ plots
           lastResults: results,
           lastCheckedAt: Date.now(),
         }, { immediate: true })
+        void createCheckVersion(`check: ${passedTests}/${totalTests} (${earned}/${totalPoints} pts)`)
       }
     } catch (error: any) {
       addOutput(`Check error: ${error.message || String(error)}`, OutputLevel.ERROR)
@@ -4868,7 +5036,7 @@ plots
                 </button>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
-                <span className="text-foreground">Show autosaves</span>
+                <span className="text-foreground">Show local-only</span>
                 <button
                   type="button"
                   role="switch"
@@ -4887,7 +5055,11 @@ plots
               </label>
             </div>
 
-            {versionsLoading ? (
+            {versionsLoading && versions.length === 0 ? (
+              // Only show the loading spinner on the FIRST fetch. Subsequent
+              // refreshes (after delete/save/restore) keep the stale list
+              // visible and swap in fresh data once it arrives, avoiding a
+              // disorienting flash.
               <div className="flex items-center justify-center py-8 text-muted-foreground">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-current" />
                 <span className="ml-2">Loading versions...</span>
@@ -4899,7 +5071,11 @@ plots
                 {/* Version timeline */}
                 <div className="flex gap-2 px-2 py-2 overflow-x-auto">
                 {versions
-                  .filter(v => showAutosaves || v.isManualSave)
+                  // Synced rows (cloud icon) are always shown — they reflect
+                  // explicit student actions that reached the server. Local
+                  // rows (autosaves, failed manual POSTs on free tier, etc.)
+                  // are gated behind the toggle.
+                  .filter(v => showAutosaves || v.synced)
                   .map((version) => {
                   const date = new Date(version.createdAt)
                   const now = Date.now()
@@ -4921,22 +5097,63 @@ plots
 
                   return (
                     <div
-                      key={version.versionNumber}
+                      // Prefer the stable IndexedDB auto-increment id over
+                      // versionNumber, which can collide if two parallel
+                      // createVersion calls race (rare but seen in practice
+                      // during fast-typing autosave bursts).
+                      key={version.id ?? `v-${version.versionNumber}`}
                       className={`group relative flex-shrink-0 w-24 min-h-28 max-h-40 border rounded-lg p-3 transition-all flex flex-col items-center justify-center gap-1 ${
                         isHighlighted ? 'bg-primary/20 border-primary ring-2 ring-primary/50' : 'hover:bg-accent/50'
                       }`}
                     >
-                      {/* Delete button - appears on hover */}
+                      {/* Sync indicator (top-left): cloud = pushed to server
+                          as a checkpoint, local-disk = local IndexedDB only.
+                          Today only manual saves can sync; autosaves stay
+                          local by design. The flag is persisted on the
+                          version row so the badge survives reloads. */}
+                      {/* Sync indicator (top-left). Synced rows show a blue
+                          cloud (label only). Local rows show an orange disk
+                          that's clickable — tapping it promotes the autosave
+                          to a synced manual save while preserving the
+                          displayed name. */}
+                      {version.synced ? (
+                        <div
+                          className="absolute top-1 left-1 z-10 pointer-events-none text-primary"
+                          title="Synced to server"
+                        >
+                          <Cloud className="w-5 h-5" />
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={async (e) => {
+                            e.stopPropagation()
+                            await promoteVersion(version)
+                          }}
+                          className="absolute top-1 left-1 z-20 text-orange-500 hover:text-orange-400 transition-colors"
+                          title="Click to convert this autosave into a synced manual save"
+                        >
+                          <HardDrive className="w-5 h-5" />
+                        </button>
+                      )}
+
+                      {/* Delete button - appears on hover. Positioned INSIDE
+                          the card boundary because the version-list wrapper uses
+                          `overflow-x-auto`, which per the CSS spec implicitly
+                          clips the y-axis too — anchoring the button at
+                          `-top-2 -right-2` previously hid it behind the clip. */}
                       <button
                         onClick={async (e) => {
                           e.stopPropagation()
-                          if (!confirmDeletion || confirm(`Delete version ${version.versionNumber}?`)) {
-                            await deleteVersion(version.versionNumber)
+                          const defaultName = defaultVersionLabels.get(version.id ?? `v-${version.versionNumber}`) ?? `v${version.versionNumber}`
+                          const displayName = version.label || defaultName
+                          if (!confirmDeletion || confirm(`Delete ${displayName}?`)) {
+                            await deleteVersion({ id: version.id, versionNumber: version.versionNumber })
                             await refreshVersions()
                           }
                         }}
                         disabled={isDeleting}
-                        className="absolute -top-2 -right-2 w-5 h-5 bg-destructive text-destructive-foreground rounded-full items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hidden group-hover:flex hover:bg-destructive/90"
+                        className="absolute top-1 right-1 z-20 w-5 h-5 bg-destructive text-destructive-foreground rounded-full items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hidden group-hover:flex hover:bg-destructive/90"
                         title="Delete version"
                       >
                         <X className="w-3 h-3" />
@@ -4998,7 +5215,7 @@ plots
                               }
                             }}
                             autoFocus
-                            placeholder={`v${version.versionNumber}`}
+                            placeholder={defaultVersionLabels.get(version.id ?? `v-${version.versionNumber}`) ?? `v${version.versionNumber}`}
                             className="w-full text-xs text-center bg-background border rounded px-1 py-0.5 font-bold"
                             onClick={(e) => e.stopPropagation()}
                           />
@@ -5012,10 +5229,10 @@ plots
                               setEditingVersion(version.versionNumber)
                               setEditingLabel(version.label || '')
                             }}
-                            className="relative z-10 font-bold text-sm text-foreground w-full text-center px-1 hover:text-primary transition-colors line-clamp-2"
+                            className="relative z-10 font-bold text-sm text-foreground w-full text-center px-1 hover:text-primary transition-colors line-clamp-2 cursor-text"
                             title="Click to rename version"
                           >
-                            {version.label || `v${version.versionNumber}`}
+                            {version.label || defaultVersionLabels.get(version.id ?? `v-${version.versionNumber}`) || `v${version.versionNumber}`}
                           </button>
                           <div className="text-xs text-muted-foreground pointer-events-none">{timeAgo}</div>
                         </div>

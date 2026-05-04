@@ -18,6 +18,11 @@ import { prisma } from '@/lib/prisma'
 import { validateExamSession, ExamSessionData } from '@/lib/exam-tokens'
 import { eventBus } from '@/lib/events'
 
+interface HandInSnapshot {
+  componentId: string
+  payload: unknown
+}
+
 /**
  * POST /api/exams/[pageId]/hand-in
  * Record exam submission for the current student
@@ -58,6 +63,24 @@ export async function POST(
     // This ensures consistency even if hand-in is triggered from a different page in the skript
     const examPageId = sessionData.pageId
 
+    // Optional snapshots: client gathers each on-page code editor's IndexedDB
+    // state and posts them alongside the hand-in. Stored as `kind='handin'`
+    // checkpoints atomic with the ExamSubmission so the teacher's timeline
+    // captures exactly what was handed in.
+    let snapshots: HandInSnapshot[] = []
+    try {
+      const body = await request.json().catch(() => ({}))
+      if (Array.isArray(body?.snapshots)) {
+        snapshots = body.snapshots.filter((s: unknown): s is HandInSnapshot =>
+          !!s && typeof s === 'object' &&
+          typeof (s as HandInSnapshot).componentId === 'string' &&
+          (s as HandInSnapshot).payload !== undefined
+        )
+      }
+    } catch {
+      // Body is optional; ignore parse failures.
+    }
+
     // Check if already submitted
     const existingSubmission = await prisma.examSubmission.findUnique({
       where: {
@@ -75,12 +98,29 @@ export async function POST(
       })
     }
 
-    // Create the submission record
-    const submission = await prisma.examSubmission.create({
-      data: {
-        pageId: examPageId,
-        studentId: sessionData.userId
+    // Atomic: ExamSubmission + checkpoints succeed or fail together. If
+    // checkpoint inserts blow up, the submission isn't recorded either, and
+    // the student stays on the page to retry.
+    const submission = await prisma.$transaction(async (tx) => {
+      const sub = await tx.examSubmission.create({
+        data: {
+          pageId: examPageId,
+          studentId: sessionData.userId,
+        },
+      })
+      if (snapshots.length > 0) {
+        await tx.userDataCheckpoint.createMany({
+          data: snapshots.map((s) => ({
+            userId: sessionData.userId,
+            pageId: examPageId,
+            componentId: s.componentId,
+            kind: 'handin',
+            payload: s.payload as object,
+            label: 'exam hand-in',
+          })),
+        })
       }
+      return sub
     })
 
     // Find the student's class for this exam to emit event

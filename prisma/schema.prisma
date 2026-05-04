@@ -141,6 +141,10 @@ model User {
   // User data (code, annotations, settings, etc.)
   userData UserData[] @relation("UserDataEntries")
 
+  // Server-side checkpoints — explicit snapshots written on manual save,
+  // "Check" press, and exam hand-in (see UserDataCheckpoint).
+  userDataCheckpoints UserDataCheckpoint[] @relation("UserCheckpoints")
+
   // Front page
   frontPage         FrontPage?
   frontPageVersions FrontPageVersion[]
@@ -344,6 +348,9 @@ model Page {
   // Exam state and submissions
   examStates      ExamState[]      @relation("ExamStates")
   examSubmissions ExamSubmission[] @relation("ExamSubmissions")
+
+  // Server-side checkpoints captured at manual save / Check / hand-in
+  userDataCheckpoints UserDataCheckpoint[] @relation("PageCheckpoints")
 
   @@unique([skriptId, slug])
   @@map("pages")
@@ -676,6 +683,30 @@ model UserData {
   @@index([updatedAt])
   @@index([targetType, targetId, adapter, itemId]) // For querying broadcasts/feedback
   @@map("user_data")
+}
+
+// Server-side snapshots of student work captured on explicit events.
+// Three event kinds: 'manual' (Save button), 'check' (Run verification /
+// Python check), 'handin' (exam hand-in). Bounded volume because all three
+// are user-initiated; this is NOT a keystroke-level autosave log. Used for
+// the teacher checkpoint timeline and exam grading.
+model UserDataCheckpoint {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  pageId      String   @map("page_id")
+  componentId String   @map("component_id") // e.g. "code-editor-abc123"
+  kind        String // 'manual' | 'check' | 'handin'
+  payload     Json // Snapshot data (e.g. CodeEditorData)
+  label       String? // Optional label for manual saves
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User @relation("UserCheckpoints", fields: [userId], references: [id], onDelete: Cascade)
+  page Page @relation("PageCheckpoints", fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([pageId])
+  @@index([userId, pageId, componentId, createdAt])
+  @@map("user_data_checkpoints")
 }
 
 // FrontPage model - custom landing pages for users, skripts, and organizations

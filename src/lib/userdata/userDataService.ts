@@ -2,19 +2,32 @@
  * User Data Service
  *
  * Singleton service for managing local user data persistence via IndexedDB.
- * Handles debounced saves, versioning, and future remote sync preparation.
+ * Handles debounced saves, versioning, and remote-sync handoff.
+ *
+ * USERID SCOPING: All records are keyed on `currentUserId` (default 'anonymous'),
+ * set via setCurrentUser() from the provider when auth resolves. Different users
+ * on one browser are naturally isolated — no wipe needed.
  */
 
 import { db } from './schema'
 import type { UserDataRecord, SaveOptions, UserDataVersion, VersionBlob, CreateVersionOptions, VersionSummary } from './types'
 import { generateSHA256, gzipCompress, gzipDecompress, calculateSize } from './compression'
 
+interface PendingSave<T = any> {
+  timer: NodeJS.Timeout
+  // Replay function captures the data + targeting at the time of debounce.
+  // Awaiting this from flush() actually persists the pending save (the previous
+  // implementation only cleared timers and dropped data).
+  replay: () => Promise<void>
+}
+
 /**
  * Singleton service for user data management
  */
 export class UserDataService {
   private static instance: UserDataService
-  private saveTimers: Map<string, NodeJS.Timeout> = new Map()
+  private currentUserId: string = 'anonymous'
+  private saveTimers: Map<string, PendingSave> = new Map()
   private readonly DEFAULT_DEBOUNCE = 1000 // 1 second
 
   // Pub/sub listeners keyed by cacheKey, used for cross-editor sync of shared data (e.g. Python imports)
@@ -35,7 +48,22 @@ export class UserDataService {
   }
 
   /**
-   * Generate cache key for debounce timers (includes targeting)
+   * Set the active userId for all subsequent reads/writes. 'anonymous' is the
+   * default scope for not-logged-in browsers. Awaits flush() so any save
+   * debounced under the previous userId actually lands under that userId
+   * before the swap.
+   */
+  public async setCurrentUser(userId: string | null): Promise<void> {
+    await this.flush()
+    this.currentUserId = userId ?? 'anonymous'
+  }
+
+  public getCurrentUser(): string {
+    return this.currentUserId
+  }
+
+  /**
+   * Generate cache key for debounce timers and pub/sub (includes userId + targeting)
    */
   private getCacheKey(
     pageId: string,
@@ -44,11 +72,11 @@ export class UserDataService {
     targetId?: string | null
   ): string {
     const targetKey = targetType && targetId ? `:${targetType}:${targetId}` : ''
-    return `${pageId}:${componentId}${targetKey}`
+    return `${this.currentUserId}:${pageId}:${componentId}${targetKey}`
   }
 
   /**
-   * Generate IndexedDB compound key (includes targeting)
+   * Generate IndexedDB compound key (5-tuple including userId)
    * Note: Uses empty strings instead of null because IndexedDB doesn't support null in compound keys
    */
   private getDbKey(
@@ -56,8 +84,8 @@ export class UserDataService {
     componentId: string,
     targetType?: 'class' | 'student' | 'page' | null,
     targetId?: string | null
-  ): [string, string, string, string] {
-    return [pageId, componentId, targetType ?? '', targetId ?? '']
+  ): [string, string, string, string, string] {
+    return [this.currentUserId, pageId, componentId, targetType ?? '', targetId ?? '']
   }
 
   /**
@@ -154,32 +182,40 @@ export class UserDataService {
     const { debounce = this.DEFAULT_DEBOUNCE, immediate = false, targetType, targetId, sourceId, localOnly } = options
     const cacheKey = this.getCacheKey(pageId, componentId, targetType, targetId)
 
+    // Capture the userId active right now; if the user changes mid-debounce,
+    // setCurrentUser() awaits flush() and the replay below will run under
+    // this captured userId rather than the new one.
+    const capturedUserId = this.currentUserId
+
     // Clear existing timer if any
-    const existingTimer = this.saveTimers.get(cacheKey)
-    if (existingTimer) {
-      clearTimeout(existingTimer)
+    const existing = this.saveTimers.get(cacheKey)
+    if (existing) {
+      clearTimeout(existing.timer)
       this.saveTimers.delete(cacheKey)
     }
 
     // If immediate save requested, execute now
     if (immediate) {
-      await this.performSave(pageId, componentId, data, targetType, targetId, sourceId, localOnly)
+      await this.performSave(capturedUserId, pageId, componentId, data, targetType, targetId, sourceId, localOnly)
       return
     }
 
-    // Otherwise, debounce the save
-    const timer = setTimeout(async () => {
-      await this.performSave(pageId, componentId, data, targetType, targetId, sourceId, localOnly)
+    // Otherwise, debounce. The replay closure captures the payload so flush()
+    // can persist it instead of dropping it.
+    const replay = async () => {
       this.saveTimers.delete(cacheKey)
-    }, debounce)
+      await this.performSave(capturedUserId, pageId, componentId, data, targetType, targetId, sourceId, localOnly)
+    }
+    const timer = setTimeout(() => { void replay() }, debounce)
 
-    this.saveTimers.set(cacheKey, timer)
+    this.saveTimers.set(cacheKey, { timer, replay })
   }
 
   /**
    * Internal method to perform the actual save operation
    */
   private async performSave<T = any>(
+    userId: string,
     pageId: string,
     componentId: string,
     data: T,
@@ -189,7 +225,9 @@ export class UserDataService {
     localOnly?: boolean
   ): Promise<void> {
     try {
-      const existing = await this.get(pageId, componentId, { targetType, targetId })
+      // Look up the existing record under the userId active at save time —
+      // not this.currentUserId, which may have changed since debounce started.
+      const existing = await db.userData.get([userId, pageId, componentId, targetType ?? '', targetId ?? ''])
       const now = Date.now()
 
       // Preserve existing localOnly flag unless caller explicitly overrides.
@@ -197,6 +235,7 @@ export class UserDataService {
       const effectiveLocalOnly = localOnly !== undefined ? localOnly : existing?.localOnly
 
       const record: UserDataRecord<T> = {
+        userId,
         pageId,
         componentId,
         data,
@@ -204,7 +243,6 @@ export class UserDataService {
         savedToRemote: false,
         version: existing ? existing.version + 1 : 1,
         createdAt: existing?.createdAt || new Date().toISOString(),
-        userId: existing?.userId, // Preserve userId if it exists
         // Use empty strings for IndexedDB compound key compatibility (null not allowed)
         targetType: targetType ?? '',
         targetId: targetId ?? '',
@@ -213,8 +251,11 @@ export class UserDataService {
 
       await db.userData.put(record)
 
-      // Notify subscribers (for cross-editor sync)
-      const cacheKey = this.getCacheKey(pageId, componentId, targetType, targetId)
+      // Notify subscribers under the cache key matching this userId. We
+      // recompute the key here using `userId` (not currentUserId) so that
+      // late replays after a user swap notify under the captured user.
+      const targetKey = targetType && targetId ? `:${targetType}:${targetId}` : ''
+      const cacheKey = `${userId}:${pageId}:${componentId}${targetKey}`
       this.notifyListeners(cacheKey, data, sourceId)
     } catch (error) {
       console.error('Failed to save user data:', error)
@@ -244,9 +285,9 @@ export class UserDataService {
       const cacheKey = this.getCacheKey(pageId, componentId, targetType, targetId)
 
       // Clear pending save timer if any
-      const existingTimer = this.saveTimers.get(cacheKey)
-      if (existingTimer) {
-        clearTimeout(existingTimer)
+      const existing = this.saveTimers.get(cacheKey)
+      if (existing) {
+        clearTimeout(existing.timer)
         this.saveTimers.delete(cacheKey)
       }
 
@@ -259,11 +300,14 @@ export class UserDataService {
   }
 
   /**
-   * Delete all data for a specific page
+   * Delete all data for a specific page (scoped to current user)
    */
   public async deleteAllForPage(pageId: string): Promise<void> {
     try {
-      await db.userData.where('pageId').equals(pageId).delete()
+      await db.userData
+        .where('[userId+pageId]')
+        .equals([this.currentUserId, pageId])
+        .delete()
     } catch (error) {
       console.error('Failed to delete page data:', error)
       throw error
@@ -271,11 +315,14 @@ export class UserDataService {
   }
 
   /**
-   * Get all component IDs with data for a specific page
+   * Get all component IDs with data for a specific page (scoped to current user)
    */
   public async getComponentsForPage(pageId: string): Promise<string[]> {
     try {
-      const records = await db.userData.where('pageId').equals(pageId).toArray()
+      const records = await db.userData
+        .where('[userId+pageId]')
+        .equals([this.currentUserId, pageId])
+        .toArray()
       return records.map((r) => r.componentId)
     } catch (error) {
       console.error('Failed to retrieve page components:', error)
@@ -284,13 +331,17 @@ export class UserDataService {
   }
 
   /**
-   * Clear old data (for cleanup purposes)
+   * Clear old data for the current user (for cleanup purposes)
    * @param olderThanDays Delete records older than this many days
    */
   public async cleanupOldData(olderThanDays: number = 90): Promise<number> {
     try {
       const cutoff = Date.now() - olderThanDays * 24 * 60 * 60 * 1000
-      const deleted = await db.userData.where('updatedAt').below(cutoff).delete()
+      const userId = this.currentUserId
+      const deleted = await db.userData
+        .where('updatedAt').below(cutoff)
+        .and((r) => r.userId === userId)
+        .delete()
       return deleted
     } catch (error) {
       console.error('Failed to cleanup old data:', error)
@@ -299,21 +350,19 @@ export class UserDataService {
   }
 
   /**
-   * Flush all pending saves immediately
+   * Flush all pending debounced saves immediately. Returns once every queued
+   * payload has been persisted. Call this before swapping userId or unmounting.
    */
   public async flush(): Promise<void> {
-    const promises: Promise<void>[] = []
-
-    this.saveTimers.forEach((timer, cacheKey) => {
+    const replays: Array<() => Promise<void>> = []
+    this.saveTimers.forEach(({ timer, replay }) => {
       clearTimeout(timer)
-      const [_pageId, _componentId] = cacheKey.split(':')
-      // Note: We don't have the data here, so this is best-effort
-      // In practice, components should call save with immediate: true before unmounting
-      void _pageId, void _componentId // Suppress unused variable warnings
+      replays.push(replay)
     })
-
     this.saveTimers.clear()
-    await Promise.all(promises)
+
+    // performSave handles its own errors; surface any here for visibility.
+    await Promise.all(replays.map((r) => r().catch((e) => console.error('Flush replay failed:', e))))
   }
 
   /* ========================================================================
@@ -321,12 +370,16 @@ export class UserDataService {
    * ======================================================================== */
 
   /**
-   * Create a new version snapshot of the current data
-   * @param pageId - Page identifier
-   * @param componentId - Component identifier
-   * @param data - Data to snapshot
-   * @param options - Optional label and save options
-   * @returns The created version record
+   * Create a new version snapshot of the current data.
+   *
+   * Concurrency: the version-number lookup and the row insert run inside a
+   * single Dexie transaction so two parallel callers can't both compute the
+   * same `versionNumber` from a stale snapshot. Without this, a fast typist
+   * triggering autosaves in close succession would write rows with duplicate
+   * versionNumber — visible in the UI as duplicate React keys.
+   *
+   * The (potentially expensive) gzip happens *outside* the transaction
+   * because Dexie transactions can't await non-Dexie promises.
    */
   public async createVersion<T = any>(
     pageId: string,
@@ -336,6 +389,10 @@ export class UserDataService {
   ): Promise<UserDataVersion> {
     try {
       const { label, isManualSave = false } = options
+      // Resolve the row's kind: explicit `kind` wins, then legacy
+      // `isManualSave` flag, default to 'auto'.
+      const kind: 'auto' | 'manual' | 'check' = options.kind ?? (isManualSave ? 'manual' : 'auto')
+      const userId = this.currentUserId
 
       // Serialize data to JSON
       const dataJson = JSON.stringify(data)
@@ -343,56 +400,68 @@ export class UserDataService {
 
       // Generate hash for deduplication
       const dataHash = await generateSHA256(dataJson)
+      const blobId = dataHash
 
-      // Check if we already have this exact data in a blob
-      let blobId = dataHash
-      let existingBlob = await db.versionBlobs.get(blobId)
+      // Pre-compress outside the transaction (gzip is async non-Dexie work
+      // and would abort a Dexie transaction). We may end up not needing it
+      // if a concurrent caller wrote the same blob first; that's fine —
+      // the put inside the transaction is idempotent on the blobId key.
+      const existingBlobBefore = await db.versionBlobs.get(blobId)
+      const compressedBlob = existingBlobBefore ? null : await gzipCompress(dataJson)
 
-      if (existingBlob) {
-        // Increment reference count on existing blob
-        await db.versionBlobs.update(blobId, { refCount: existingBlob.refCount + 1 })
-      } else {
-        // Compress and create new blob
-        const compressedBlob = await gzipCompress(dataJson)
-        const versionBlob: VersionBlob = {
-          blobId,
-          data: compressedBlob,
-          refCount: 1,
-          createdAt: Date.now()
+      const created = await db.transaction('rw', db.userData_history, db.versionBlobs, async () => {
+        // Re-check blob existence inside the transaction so refCount is
+        // accurate even under concurrent createVersion calls.
+        const existingBlob = await db.versionBlobs.get(blobId)
+        if (existingBlob) {
+          await db.versionBlobs.update(blobId, { refCount: existingBlob.refCount + 1 })
+        } else if (compressedBlob) {
+          await db.versionBlobs.put({
+            blobId,
+            data: compressedBlob,
+            refCount: 1,
+            createdAt: Date.now(),
+          })
+        } else {
+          // Race: blob existed before, was deleted by cleanup mid-flight.
+          // Re-compress synchronously is not possible here (would break the
+          // transaction); throw so the outer catch logs and skips this snapshot.
+          throw new Error('Blob disappeared mid-transaction; retry')
         }
-        await db.versionBlobs.put(versionBlob)
-      }
 
-      // Get next version number
-      const existingVersions = await db.userData_history
-        .where('[pageId+componentId]')
-        .equals([pageId, componentId])
-        .toArray()
+        // Compute next version number atomically inside the transaction.
+        const existingVersions = await db.userData_history
+          .where('[userId+pageId+componentId]')
+          .equals([userId, pageId, componentId])
+          .toArray()
+        const versionNumber = existingVersions.length > 0
+          ? Math.max(...existingVersions.map(v => v.versionNumber)) + 1
+          : 1
 
-      const versionNumber = existingVersions.length > 0
-        ? Math.max(...existingVersions.map(v => v.versionNumber)) + 1
-        : 1
+        const version: UserDataVersion = {
+          userId,
+          pageId,
+          componentId,
+          versionNumber,
+          dataHash,
+          blobId,
+          createdAt: Date.now(),
+          label,
+          sizeBytes,
+          // Keep both for back-compat with code that still reads isManualSave.
+          isManualSave: kind === 'manual',
+          kind,
+        }
 
-      // Create version record
-      const version: UserDataVersion = {
-        pageId,
-        componentId,
-        versionNumber,
-        dataHash,
-        blobId,
-        createdAt: Date.now(),
-        label,
-        sizeBytes,
-        isManualSave
-      }
+        const id = await db.userData_history.add(version)
+        version.id = id
+        return version
+      })
 
-      const id = await db.userData_history.add(version)
-      version.id = id
-
-      // Cleanup old versions (enforce 64 version limit)
+      // Cleanup runs outside the transaction — opportunistic, non-critical.
       await this.cleanupOldVersions(pageId, componentId, 64)
 
-      return version
+      return created
     } catch (error) {
       console.error('Failed to create version:', error)
       throw error
@@ -400,10 +469,7 @@ export class UserDataService {
   }
 
   /**
-   * Get version history for a component
-   * @param pageId - Page identifier
-   * @param componentId - Component identifier
-   * @returns Array of version summaries, newest first
+   * Get version history for a component (current user only)
    */
   public async getVersionHistory(
     pageId: string,
@@ -411,18 +477,22 @@ export class UserDataService {
   ): Promise<VersionSummary[]> {
     try {
       const versions = await db.userData_history
-        .where('[pageId+componentId]')
-        .equals([pageId, componentId])
+        .where('[userId+pageId+componentId]')
+        .equals([this.currentUserId, pageId, componentId])
         .reverse()
         .sortBy('versionNumber')
 
       return versions.map(v => ({
+        id: v.id,
         versionNumber: v.versionNumber,
         createdAt: v.createdAt,
         label: v.label,
         sizeBytes: v.sizeBytes,
         canRestore: true,
-        isManualSave: v.isManualSave
+        isManualSave: v.isManualSave,
+        // Derive kind for legacy rows that don't have it stamped yet.
+        kind: v.kind ?? (v.isManualSave ? 'manual' : 'auto'),
+        synced: !!v.serverCheckpointId,
       }))
     } catch (error) {
       console.error('Failed to get version history:', error)
@@ -431,11 +501,7 @@ export class UserDataService {
   }
 
   /**
-   * Restore data from a specific version
-   * @param pageId - Page identifier
-   * @param componentId - Component identifier
-   * @param versionNumber - Version to restore
-   * @returns The restored data
+   * Restore data from a specific version (current user only)
    */
   public async restoreVersion<T = any>(
     pageId: string,
@@ -445,8 +511,8 @@ export class UserDataService {
     try {
       // Find the version record
       const versions = await db.userData_history
-        .where('[pageId+componentId]')
-        .equals([pageId, componentId])
+        .where('[userId+pageId+componentId]')
+        .equals([this.currentUserId, pageId, componentId])
         .filter(v => v.versionNumber === versionNumber)
         .toArray()
 
@@ -479,26 +545,40 @@ export class UserDataService {
   }
 
   /**
-   * Delete a specific version
-   * @param pageId - Page identifier
-   * @param componentId - Component identifier
-   * @param versionNumber - Version number to delete
+   * Delete a specific version. Identifies by the row's unique IndexedDB id
+   * when provided, falling back to versionNumber lookup for legacy callers.
+   * Version-number lookup can hit ambiguity if old data has duplicate
+   * versionNumbers (from a pre-fix race); id is unique by definition.
    */
   public async deleteVersion(
     pageId: string,
     componentId: string,
-    versionNumber: number
+    versionNumberOrId: number,
+    options: { byId?: boolean } = {}
   ): Promise<void> {
     try {
-      // Find the version
-      const version = await db.userData_history
-        .where('[pageId+componentId]')
-        .equals([pageId, componentId])
-        .filter(v => v.versionNumber === versionNumber)
-        .first()
+      let version: UserDataVersion | undefined
+      if (options.byId) {
+        version = await db.userData_history.get(versionNumberOrId)
+        // Also confirm it belongs to the current user / page / component.
+        if (
+          version &&
+          (version.userId !== this.currentUserId ||
+            version.pageId !== pageId ||
+            version.componentId !== componentId)
+        ) {
+          version = undefined
+        }
+      } else {
+        version = await db.userData_history
+          .where('[userId+pageId+componentId]')
+          .equals([this.currentUserId, pageId, componentId])
+          .filter(v => v.versionNumber === versionNumberOrId)
+          .first()
+      }
 
       if (!version) {
-        throw new Error(`Version ${versionNumber} not found`)
+        throw new Error(`Version ${versionNumberOrId} not found`)
       }
 
       // Decrement blob refCount
@@ -524,11 +604,55 @@ export class UserDataService {
   }
 
   /**
-   * Update a version's label
-   * @param pageId - Page identifier
-   * @param componentId - Component identifier
-   * @param versionNumber - Version number to update
-   * @param label - New label
+   * Stamp a local version row with the id of its corresponding server-side
+   * checkpoint. Called after a successful POST to /api/user-data/checkpoints
+   * so the UI can render a "synced" badge that survives reloads.
+   */
+  public async markVersionSynced(versionId: number, serverCheckpointId: string): Promise<void> {
+    try {
+      await db.userData_history.update(versionId, { serverCheckpointId })
+    } catch (error) {
+      console.error('Failed to mark version synced:', error)
+    }
+  }
+
+  /**
+   * Decompress and return the full payload for a given version row. Used
+   * when promoting an autosave to a synced manual save — the caller needs
+   * the original CodeEditorData snapshot to POST as the checkpoint payload.
+   */
+  public async getVersionPayload<T = any>(versionId: number): Promise<T | null> {
+    try {
+      const version = await db.userData_history.get(versionId)
+      if (!version) return null
+      const blob = await db.versionBlobs.get(version.blobId)
+      if (!blob) return null
+      const dataJson = await gzipDecompress(blob.data)
+      return JSON.parse(dataJson) as T
+    } catch (error) {
+      console.error('Failed to get version payload:', error)
+      return null
+    }
+  }
+
+  /**
+   * Generic in-place update for a version row. Used by the autosave→manual
+   * promotion flow to flip `kind`, set `isManualSave`, and optionally stamp
+   * a preserved label so the display name doesn't shift after promotion.
+   */
+  public async updateVersion(
+    versionId: number,
+    updates: Partial<UserDataVersion>
+  ): Promise<void> {
+    try {
+      await db.userData_history.update(versionId, updates)
+    } catch (error) {
+      console.error('Failed to update version:', error)
+    }
+  }
+
+  /**
+   * Update a version's label (current user only)
    */
   public async updateVersionLabel(
     pageId: string,
@@ -539,8 +663,8 @@ export class UserDataService {
     try {
       // Find the version
       const version = await db.userData_history
-        .where('[pageId+componentId]')
-        .equals([pageId, componentId])
+        .where('[userId+pageId+componentId]')
+        .equals([this.currentUserId, pageId, componentId])
         .filter(v => v.versionNumber === versionNumber)
         .first()
 
@@ -557,10 +681,7 @@ export class UserDataService {
   }
 
   /**
-   * Cleanup old versions to maintain retention limit
-   * @param pageId - Page identifier
-   * @param componentId - Component identifier
-   * @param maxVersions - Maximum versions to keep (default: 64)
+   * Cleanup old versions to maintain retention limit (per-user)
    */
   private async cleanupOldVersions(
     pageId: string,
@@ -569,8 +690,8 @@ export class UserDataService {
   ): Promise<void> {
     try {
       const versions = await db.userData_history
-        .where('[pageId+componentId]')
-        .equals([pageId, componentId])
+        .where('[userId+pageId+componentId]')
+        .equals([this.currentUserId, pageId, componentId])
         .sortBy('versionNumber')
 
       if (versions.length <= maxVersions) {
@@ -604,9 +725,7 @@ export class UserDataService {
   }
 
   /**
-   * Delete all versions for a component
-   * @param pageId - Page identifier
-   * @param componentId - Component identifier
+   * Delete all versions for a component (current user only)
    */
   public async deleteAllVersions(
     pageId: string,
@@ -614,8 +733,8 @@ export class UserDataService {
   ): Promise<void> {
     try {
       const versions = await db.userData_history
-        .where('[pageId+componentId]')
-        .equals([pageId, componentId])
+        .where('[userId+pageId+componentId]')
+        .equals([this.currentUserId, pageId, componentId])
         .toArray()
 
       for (const version of versions) {
@@ -642,9 +761,6 @@ export class UserDataService {
 
   /**
    * Get the most recent version (quick undo)
-   * @param pageId - Page identifier
-   * @param componentId - Component identifier
-   * @returns The most recent version or null
    */
   public async getPreviousVersion(
     pageId: string,

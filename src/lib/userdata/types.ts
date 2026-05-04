@@ -18,9 +18,9 @@ export interface UserDataKey {
  * Note: targetType/targetId use empty strings (not null) for IndexedDB compound key compatibility
  */
 export interface UserDataRecord<T = any> {
+  userId: string          // Owning user — 'anonymous' for not-logged-in writes. Part of the IndexedDB compound primary key so multiple users on one browser are isolated without wiping.
   pageId: string          // Database ID of the page
   componentId: string     // Component identifier
-  userId?: string         // Optional: user ID for future remote sync
   data: T                 // Component-specific data
   createdAt: string       // ISO timestamp of creation
   updatedAt: number       // Unix timestamp of last update
@@ -243,8 +243,16 @@ export interface UseUserDataResult<T> {
 /**
  * Version history record
  */
+/**
+ * Type of trigger that produced a version row. Used for per-kind labeling
+ * in the history UI ("auto1", "manual2", "check3"). Legacy rows without
+ * `kind` are derived from `isManualSave` at read time.
+ */
+export type VersionKind = 'auto' | 'manual' | 'check'
+
 export interface UserDataVersion {
   id?: number                    // Auto-increment primary key
+  userId: string                 // Owning user — part of the [userId+pageId+componentId] secondary index so histories are isolated per user
   pageId: string                 // Foreign key to main record
   componentId: string            // Foreign key to main record
   versionNumber: number          // Sequential version number
@@ -253,7 +261,13 @@ export interface UserDataVersion {
   createdAt: number              // Unix timestamp
   label?: string                 // Optional user label ("checkpoint", "before clear")
   sizeBytes: number              // Uncompressed size for metrics
-  isManualSave?: boolean         // True if manually saved by user, false for autosaves
+  isManualSave?: boolean         // Legacy: true if manually saved. New code should use `kind` instead.
+  kind?: VersionKind             // 'auto' | 'manual' | 'check' — drives default labeling in the UI
+  // Set after a successful checkpoint POST to /api/user-data/checkpoints.
+  // Presence of this id is the "synced" badge in the version-history UI.
+  // Stays undefined for purely local rows (autosaves, manual saves that
+  // failed to POST, manual saves while on the 402-gated free tier).
+  serverCheckpointId?: string
 }
 
 /**
@@ -271,17 +285,23 @@ export interface VersionBlob {
  */
 export interface CreateVersionOptions extends SaveOptions {
   label?: string                 // Optional label for this version
-  isManualSave?: boolean         // True if manually saved by user
+  isManualSave?: boolean         // Legacy. Equivalent to kind: 'manual'.
+  kind?: VersionKind             // Preferred over isManualSave for new code.
 }
 
 /**
  * Version history summary for UI
  */
 export interface VersionSummary {
+  id?: number                    // IndexedDB auto-increment id — stable unique key for React lists
   versionNumber: number
   createdAt: number
   label?: string
   sizeBytes: number
   canRestore: boolean
   isManualSave?: boolean
+  kind: VersionKind              // Always set in summaries (derived from `kind` or `isManualSave` for legacy rows)
+  // True when this version has a corresponding row in the server-side
+  // user_data_checkpoints table. Currently only manual saves can be synced.
+  synced?: boolean
 }

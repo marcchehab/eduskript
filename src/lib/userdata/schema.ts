@@ -1,56 +1,40 @@
 /**
  * User Data Service Database Schema
  *
- * Dexie-based IndexedDB schema for local user data storage
+ * Dexie-based IndexedDB schema for local user data storage.
+ *
+ * v3 (current): primary keys include userId so multiple users on one browser
+ * are naturally isolated. The previous "wipe-on-user-change" cleanup in
+ * provider.tsx is gone — see migrations.ts for the v2→v3 data migration that
+ * preserves existing records by inferring their owner from localStorage.
  */
 
 import Dexie, { Table } from 'dexie'
 import type { UserDataRecord, UserDataVersion, VersionBlob } from './types'
 
-// Database name includes version suffix to handle primary key changes
-// (Dexie doesn't support migrating primary key structure)
-// Increment this when primary key changes require a fresh database
-const DB_NAME = 'EduskriptUserData_v2'
+// Database name includes a version suffix because Dexie can't migrate primary
+// key shape changes in place. Bump this only when the primary key changes.
+const DB_NAME = 'EduskriptUserData_v3'
 
 export class UserDataDatabase extends Dexie {
-  // Primary key is [pageId, componentId, targetType, targetId]
-  // targetType/targetId use '' for personal data (IndexedDB doesn't support null in compound keys)
-  userData!: Table<UserDataRecord, [string, string, string, string]>
+  // Primary key is [userId, pageId, componentId, targetType, targetId]
+  // userId is 'anonymous' for not-logged-in writes; targetType/targetId use
+  // '' for personal data (IndexedDB compound keys don't accept null).
+  userData!: Table<UserDataRecord, [string, string, string, string, string]>
   userData_history!: Table<UserDataVersion, number>
   versionBlobs!: Table<VersionBlob, string>
 
   constructor() {
     super(DB_NAME)
 
-    // Version 1 - Fresh schema with targeting support
-    // Primary key: [pageId, componentId, targetType, targetId]
-    // This allows storing both personal data (targetType=null) and
-    // targeted data (targetType='class'|'student') for the same page/component
+    // v1 — fresh schema for v3 DB. Existing v2 data is migrated by the
+    // one-time copy in migrations.ts before this DB is read from.
     this.version(1).stores({
-      // Extended compound primary key for targeting support
-      // targetType: null (personal), 'class', or 'student'
-      // targetId: null (personal), classId, or studentId
-      userData: '[pageId+componentId+targetType+targetId], updatedAt, userId, savedToRemote, targetType',
-      // Version history: auto-increment id, compound index for queries
-      userData_history: '++id, [pageId+componentId], versionNumber, createdAt, blobId',
-      // Version blobs: hash-based deduplication
-      versionBlobs: 'blobId, createdAt, refCount'
-    })
-
-    // Version 2 - Add localOnly secondary index. Lets sync code identify
-    // records that must never be pushed to the server (e.g. student-uploaded
-    // binaries) without deserializing their (potentially large) blob payload.
-    this.version(2).stores({
-      userData: '[pageId+componentId+targetType+targetId], updatedAt, userId, savedToRemote, targetType, localOnly',
-      userData_history: '++id, [pageId+componentId], versionNumber, createdAt, blobId',
+      userData: '[userId+pageId+componentId+targetType+targetId], updatedAt, savedToRemote, targetType, localOnly, [userId+pageId], userId',
+      userData_history: '++id, [userId+pageId+componentId], versionNumber, createdAt, blobId',
       versionBlobs: 'blobId, createdAt, refCount'
     })
   }
-}
-
-// Delete old database if it exists (one-time cleanup)
-if (typeof indexedDB !== 'undefined') {
-  indexedDB.deleteDatabase('EduskriptUserData')
 }
 
 // Singleton instance

@@ -24,6 +24,31 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { userDataService } from '@/lib/userdata'
+
+/**
+ * Gather snapshots of every on-page code editor's IndexedDB state. The
+ * hand-in route stores these atomically with the ExamSubmission as
+ * `kind='handin'` checkpoints — that's the only durable copy of the
+ * student's actual code, since the editor's main data is otherwise just
+ * the live-synced userData record (which gets overwritten by future edits).
+ */
+async function gatherEditorSnapshots(pageId: string): Promise<Array<{ componentId: string; payload: unknown }>> {
+  try {
+    await userDataService.flush()
+    const componentIds = await userDataService.getComponentsForPage(pageId)
+    const editorIds = componentIds.filter((c) => c.startsWith('code-editor-'))
+    const snapshots: Array<{ componentId: string; payload: unknown }> = []
+    for (const componentId of editorIds) {
+      const record = await userDataService.get(pageId, componentId)
+      if (record) snapshots.push({ componentId, payload: record.data })
+    }
+    return snapshots
+  } catch (error) {
+    console.error('[HandInButton] failed to gather snapshots:', error)
+    return []
+  }
+}
 
 interface HandInButtonProps {
   pageId: string
@@ -39,10 +64,15 @@ export function HandInButton({ pageId }: HandInButtonProps) {
     setError(null)
 
     try {
-      // Record the submission
+      // Gather every code editor's current state from IndexedDB and POST
+      // alongside the submission. The server stores these as 'handin'
+      // checkpoints atomically with the ExamSubmission record.
+      const snapshots = await gatherEditorSnapshots(pageId)
+
       const response = await fetch(`/api/exams/${pageId}/hand-in`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ snapshots }),
       })
 
       if (!response.ok) {

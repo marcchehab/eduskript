@@ -353,9 +353,10 @@ export class SyncEngine {
           continue
         }
 
-        // Use 4-element key: [pageId, componentId, targetType, targetId]
+        // 5-element key: [userId, pageId, componentId, targetType, targetId]
         // For initial sync, we're looking for personal data (empty targeting)
-        const localRecord = await db.userData.get([serverItem.itemId, serverItem.adapter, '', ''])
+        if (!this.userId) continue
+        const localRecord = await db.userData.get([this.userId, serverItem.itemId, serverItem.adapter, '', ''])
 
         if (!localRecord || serverItem.updatedAt > localRecord.updatedAt) {
           // Server has newer data - fetch and merge
@@ -374,8 +375,11 @@ export class SyncEngine {
       // Also push any unsynced local data not on server.
       // Skip localOnly records — those are deliberately on-device only
       // (e.g. student-uploaded binaries) and must never reach the server.
+      // Filter to current user so we never push another user's pending data
+      // up under this session.
+      const sessionUserId = this.userId
       const unsyncedRecords = await db.userData
-        .filter((record) => record.savedToRemote === false && !record.localOnly)
+        .filter((record) => record.userId === sessionUserId && record.savedToRemote === false && !record.localOnly)
         .toArray()
 
       for (const record of unsyncedRecords) {
@@ -416,7 +420,13 @@ export class SyncEngine {
       }
 
       const serverData = await response.json()
-      const localRecord = await db.userData.get([serverItem.itemId, serverItem.adapter])
+      if (!this.userId) {
+        this.updateOperation(opId, 'failed', 'No userId in session')
+        return
+      }
+      // 5-element key — fixes the prior 2-element-key bug that always returned
+      // undefined and caused fetchAndMerge to silently overwrite local data.
+      const localRecord = await db.userData.get([this.userId, serverItem.itemId, serverItem.adapter, '', ''])
 
       let mergedData = serverData.data
       let didMerge = false
@@ -439,6 +449,7 @@ export class SyncEngine {
 
       // Update local DB (use '' for targeting since this is personal data)
       await db.userData.put({
+        userId: this.userId,
         pageId: serverItem.itemId,
         componentId: serverItem.adapter,
         data: mergedData,
@@ -477,8 +488,12 @@ export class SyncEngine {
       const targetType = conflict.targetType ?? ''
       const targetId = conflict.targetId ?? ''
 
-      // Use 4-element key for conflict resolution WITH targeting
-      const localRecord = await db.userData.get([conflict.itemId, conflict.adapter, targetType, targetId])
+      // 5-element key for conflict resolution WITH targeting
+      if (!this.userId) {
+        this.updateOperation(opId, 'failed', 'No userId in session')
+        continue
+      }
+      const localRecord = await db.userData.get([this.userId, conflict.itemId, conflict.adapter, targetType, targetId])
       if (!localRecord) {
         this.updateOperation(opId, 'failed', 'Local record not found')
         continue
@@ -539,9 +554,10 @@ export class SyncEngine {
    * Mark items as synced in local DB
    */
   private async markSynced(items: SyncItem[]): Promise<void> {
+    if (!this.userId) return
     for (const item of items) {
-      // Use 4-element key including targeting (if present)
-      const record = await db.userData.get([item.itemId, item.adapter, item.targetType ?? '', item.targetId ?? ''])
+      // 5-element key including userId + targeting (if present)
+      const record = await db.userData.get([this.userId, item.itemId, item.adapter, item.targetType ?? '', item.targetId ?? ''])
       if (record) {
         await db.userData.put({
           ...record,
