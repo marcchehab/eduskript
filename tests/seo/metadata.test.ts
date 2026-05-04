@@ -295,6 +295,13 @@ function hasFileOgImage(label: string): boolean {
   )
 }
 
+// First cold dynamic import of a Next.js app-router page module under Vite
+// can blow past the 5000ms default while the transitive React tree
+// (PublicSiteLayout, ServerMarkdownRenderer, …) gets transformed. The
+// assertion itself is cheap — only the import is heavy. Give every test in
+// this file a generous budget so the gate never flakes on cold starts.
+const ROUTE_TEST_TIMEOUT_MS = 20000
+
 describe('SEO hygiene gate', () => {
   for (const route of PUBLIC_ROUTES) {
     it(`${route.label} declares required metadata fields`, async () => {
@@ -312,7 +319,7 @@ describe('SEO hygiene gate', () => {
         `${route.label} is missing SEO fields: ${missing.join(', ')}\n` +
           `Add them to the route's generateMetadata (or src/app/layout.tsx for global defaults).`
       ).toEqual([])
-    })
+    }, ROUTE_TEST_TIMEOUT_MS)
   }
 
   // Content pages must derive og:description from page content (excerpt),
@@ -332,6 +339,6 @@ describe('SEO hygiene gate', () => {
           `If you reverted to the collection-description fallback, restore the ` +
           `generateExcerpt(page.content) call in generateMetadata.`
       ).toContain(PAGE_CONTENT_PREFIX)
-    })
+    }, ROUTE_TEST_TIMEOUT_MS)
   }
 })

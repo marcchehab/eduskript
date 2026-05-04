@@ -36,6 +36,8 @@ describe('Authentication Utilities', () => {
       expect(isValid).toBe(false)
     })
 
+    // Four bcrypt(cost=12) ops in one test: ~3s baseline, easily 5s+ on a busy
+    // machine. Vitest's 5000ms default was too tight and made this flake.
     it('should generate unique hashes for same password (salt)', async () => {
       const password = 'SamePassword123!'
       const hash1 = await bcrypt.hash(password, 12)
@@ -47,7 +49,7 @@ describe('Authentication Utilities', () => {
       // But both should verify against the original password
       expect(await bcrypt.compare(password, hash1)).toBe(true)
       expect(await bcrypt.compare(password, hash2)).toBe(true)
-    })
+    }, 15000)
 
     it('should handle empty passwords correctly', async () => {
       const emptyHash = await bcrypt.hash('', 12)

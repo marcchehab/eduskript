@@ -238,6 +238,11 @@ interface PageModule {
   default: (props: PageComponentProps) => Promise<ReactElement>
 }
 
+// First cold dynamic import of a Next.js app-router page module under Vite
+// can blow past the 5000ms default while the transitive React tree gets
+// transformed. Match the budget used by metadata.test.ts.
+const ROUTE_TEST_TIMEOUT_MS = 20000
+
 describe('JSON-LD wiring on public pages', () => {
   it('eduskript org frontpage embeds Organization JSON-LD', async () => {
     const mod = (await import('@/app/org/[orgSlug]/page')) as unknown as PageModule
@@ -247,7 +252,7 @@ describe('JSON-LD wiring on public pages', () => {
       'Org frontpage should render <JsonLd schema={organizationSchema()} />. ' +
         'If it stopped, restore the JsonLd JSX in src/app/org/[orgSlug]/page.tsx.'
     ).toBe(true)
-  })
+  }, ROUTE_TEST_TIMEOUT_MS)
 
   it('teacher content page embeds LearningResource + Breadcrumb JSON-LD', async () => {
     const mod = (await import('@/app/[domain]/[skriptSlug]/[pageSlug]/page')) as unknown as PageModule
@@ -259,7 +264,7 @@ describe('JSON-LD wiring on public pages', () => {
       'Teacher content page should render <JsonLd schema={[learningResourceSchema(...), breadcrumbSchema(...)]} />. ' +
         'If it stopped, restore the JsonLd JSX in src/app/[domain]/[skriptSlug]/[pageSlug]/page.tsx.'
     ).toBe(true)
-  })
+  }, ROUTE_TEST_TIMEOUT_MS)
 
   it('org content page embeds LearningResource + Breadcrumb JSON-LD', async () => {
     const mod = (await import('@/app/org/[orgSlug]/c/[skriptSlug]/[pageSlug]/page')) as unknown as PageModule
@@ -270,5 +275,5 @@ describe('JSON-LD wiring on public pages', () => {
       containsJsonLd(tree),
       'Org content page should render <JsonLd schema={[learningResourceSchema(...), breadcrumbSchema(...)]} />.'
     ).toBe(true)
-  })
+  }, ROUTE_TEST_TIMEOUT_MS)
 })
