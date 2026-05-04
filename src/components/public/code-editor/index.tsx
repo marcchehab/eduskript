@@ -3061,6 +3061,9 @@ export const CodeEditor = memo(function CodeEditor({
         'sklearn': 'scikit-learn',
         'PIL': 'Pillow',
         'pillow': 'Pillow',
+        'cv2': 'opencv-python',
+        'imageio': 'imageio',
+        'micropip': 'micropip',
       }
 
       // Parse imports from code
