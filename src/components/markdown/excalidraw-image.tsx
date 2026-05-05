@@ -117,6 +117,13 @@ export function ExcalidrawImage({ src, alt, style, onWidthChange, onEdit, align 
 
       {/* Render both images, CSS controls visibility based on theme */}
       {/* Plain <img> intentional: SVGs don't benefit from Next.js Image optimization */}
+      {/* No loading="lazy" — excalidraw SVGs are typically 10-100 KB and form
+          part of the visible content on a page. Lazy loading deferred them
+          past the IntersectionObserver tick, which on slow connections made
+          drawings appear visibly later than the surrounding text and the
+          public-annotation layer. The dark/light variant that's hidden via
+          `dark:hidden` / `hidden dark:block` isn't fetched anyway because
+          browsers skip downloads for display:none images. */}
       {lightSrc && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -124,7 +131,6 @@ export function ExcalidrawImage({ src, alt, style, onWidthChange, onEdit, align 
           alt={caption}
           width={imgWidth}
           height={imgHeight}
-          loading="lazy"
           decoding="async"
           className="excalidraw-light w-full h-auto rounded-md dark:hidden"
         />
@@ -136,7 +142,6 @@ export function ExcalidrawImage({ src, alt, style, onWidthChange, onEdit, align 
           alt={caption}
           width={imgWidth}
           height={imgHeight}
-          loading="lazy"
           decoding="async"
           className="excalidraw-dark w-full h-auto rounded-md hidden dark:block"
         />
