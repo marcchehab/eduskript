@@ -17,7 +17,7 @@ import { basicSetup } from 'codemirror'
 import { autocompletion } from '@codemirror/autocomplete'
 import { createPythonCompletions } from './python-completions'
 import { Button } from '@/components/ui/button'
-import { Play, Square, RotateCcw, Maximize2, Minimize2, Camera, X, Plus, FileText, ZoomIn, ZoomOut, Save, History, Highlighter, MessageSquare, WrapText, Circle, CheckCircle2, Package, Trash2, Paperclip, Upload, Pencil, Cloud, HardDrive } from 'lucide-react'
+import { Play, Square, RotateCcw, Maximize2, Minimize2, X, Plus, FileText, ZoomIn, ZoomOut, Save, History, Highlighter, MessageSquare, WrapText, Circle, CheckCircle2, Package, Trash2, Paperclip, Upload, Pencil, Cloud, HardDrive } from 'lucide-react'
 import { useUserData, useCreateVersion, useVersionHistory, useRestoreVersion, useDeleteVersion, useUpdateVersionLabel } from '@/lib/userdata/hooks'
 import { userDataService } from '@/lib/userdata'
 import { postCheckpoint } from '@/lib/userdata/checkpoints'
@@ -3901,11 +3901,6 @@ plots
     setCanvasTransform({ x: 0, y: 0, scale: 1 })
   }
 
-  // Screenshot turtle canvas
-  const screenshotCanvas = () => {
-    // TODO: Implement canvas screenshot functionality
-  }
-
   // Toggle fullscreen
   const toggleFullscreen = () => {
     if (!document.fullscreenElement && wrapperRef.current) {
@@ -4839,9 +4834,6 @@ plots
             >
               {/* Floating Control Buttons */}
               <div className="absolute top-2 right-2 flex items-center gap-1 z-10">
-                <Button onClick={screenshotCanvas} size="sm" variant="outline" className="h-7 w-7 p-0 shadow-lg" title="Screenshot">
-                  <Camera className="w-3 h-3" />
-                </Button>
                 <Button onClick={toggleFullscreen} size="sm" variant="outline" className="h-7 w-7 p-0 shadow-lg" title="Fullscreen">
                   {fullscreen ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
                 </Button>
