@@ -6,6 +6,7 @@
  * 2. Tag-specific attributes (inside an open tag)
  * 3. Known attribute values (inside quotes)
  * 4. Callout types (after `> [!`)
+ * 5. Pandoc fenced-div directives (after `:::`)
  */
 
 import type { CompletionContext, CompletionResult, Completion } from '@codemirror/autocomplete'
@@ -186,6 +187,14 @@ const ATTR_VALUES: Record<string, string[]> = {
   'class': ['invert-dark'],
 }
 
+// ── Block directive completions ──────────────────────────────────────
+
+const DIRECTIVE_COMPLETIONS: Array<{ name: 'center' | 'left' | 'right'; info: string }> = [
+  { name: 'center', info: 'Center-align block content (Pandoc fenced div)' },
+  { name: 'left', info: 'Left-align block content (Pandoc fenced div)' },
+  { name: 'right', info: 'Right-align block content (Pandoc fenced div)' },
+]
+
 // ── Callout completions ──────────────────────────────────────────────
 
 // Build callout list from the canonical source
@@ -233,6 +242,31 @@ export function createMarkdownCompletions(getFileList: () => FileListItem[]) {
     return {
       from: context.pos - calloutMatch[1].length,
       options: CALLOUT_COMPLETIONS,
+      validFor: /^\w*$/,
+    }
+  }
+
+  // 5. Block directives: :::nam… at start of line. Auto-expands the chosen
+  // name into `:::name\n\n:::` and parks the cursor on the empty middle
+  // line so the author can type content immediately. Mirrors how the
+  // toolbar's alignment button wraps content.
+  const directiveMatch = textBefore.match(/^:::(\w*)$/)
+  if (directiveMatch) {
+    const typed = directiveMatch[1]
+    return {
+      from: context.pos - typed.length,
+      options: DIRECTIVE_COMPLETIONS.map(({ name, info }) => ({
+        label: name,
+        type: 'keyword',
+        info,
+        apply: (view: import('@codemirror/view').EditorView, _completion: Completion, fromPos: number, toPos: number) => {
+          const insert = `${name}\n\n:::`
+          view.dispatch({
+            changes: { from: fromPos, to: toPos, insert },
+            selection: { anchor: fromPos + name.length + 1 },
+          })
+        },
+      })),
       validFor: /^\w*$/,
     }
   }
