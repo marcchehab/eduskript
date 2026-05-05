@@ -1994,6 +1994,11 @@ mark.text-highlight-purple {
 .es-bg-red    { background-color: var(--es-bg-red);    border-radius: 2px; padding: 0 1px; }
 .es-bg-purple { background-color: var(--es-bg-purple); border-radius: 2px; padding: 0 1px; }
 
+/* Pandoc-style fenced div alignment. Authored as `:::center` … `:::`. */
+.es-align-left   { text-align: left; }
+.es-align-center { text-align: center; }
+.es-align-right  { text-align: right; }
+
 /* Button-styled links (`<a class="es-btn es-btn-…">`).
  * Inserted from the editor toolbar. The base class wins over .prose-theme a
  * (underline + primary color) via more specific selectors. */

@@ -268,6 +268,21 @@ $$
 
 Excalidraw diagrams: Reference \`.excalidraw\` files directly. The system auto-detects light/dark SVG variants.`)
 
+  // Text alignment
+  sections.push(`## Text alignment
+
+Wrap content in a Pandoc-style fenced div directive to align it. Names: \`left\`, \`center\`, \`right\`.
+
+\`\`\`markdown
+:::center
+## Centered heading
+
+A centered paragraph below.
+:::
+\`\`\`
+
+The closing \`:::\` is required. Inner content is normal markdown — multi-block blocks need blank lines between them as usual.`)
+
   // Custom CSS
   sections.push(`## Custom CSS
 

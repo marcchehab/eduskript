@@ -1452,22 +1452,97 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   const insertNumberedList = () => insertAtCursor('\n1. ')
   const insertLink = () => wrapSelection('[', '](url)')
 
-  // Wrap the current line(s) — or the selection's full lines — in a
-  // <div style="text-align: …"> block. Blank lines around the inner content
-  // let the markdown parser keep processing headings, lists, etc. inside.
+  // Wrap the current line(s) in a Pandoc-style fenced div directive:
+  //
+  //   :::center
+  //   ## Centered heading
+  //   :::
+  //
+  // Compiled to <div class="es-align-center">…</div> by remarkAlign.
+  // Context-aware: if the cursor is already inside a left/center/right
+  // directive, clicking the same alignment unwraps it; clicking a different
+  // alignment rewrites the opening fence in place. So clicking center twice
+  // never produces nested wrappers.
   const insertAlign = (alignment: 'left' | 'center' | 'right') => {
     if (!editorViewRef.current || useSimpleEditor) return
     const view = editorViewRef.current
+    const doc = view.state.doc
     const { from, to } = view.state.selection.main
-    const startLine = view.state.doc.lineAt(from)
-    const endLine = view.state.doc.lineAt(to)
-    const blockFrom = startLine.from
-    const blockTo = endLine.to
-    const inner = view.state.doc.sliceString(blockFrom, blockTo) || 'Aligned text'
-    const wrapped = `<div style="text-align: ${alignment}">\n\n${inner}\n\n</div>`
+
+    const cursorLineNum = doc.lineAt(from).number
+
+    // Walk up from the cursor to find an opening fence. If we hit a closing
+    // fence first, the cursor isn't inside a wrapper.
+    let openLineNum = -1
+    let openName: string | null = null
+    for (let i = cursorLineNum; i >= 1; i--) {
+      const text = doc.line(i).text
+      const openMatch = text.match(/^:::(left|center|right)\s*$/)
+      if (openMatch) {
+        openLineNum = i
+        openName = openMatch[1]
+        break
+      }
+      if (i !== cursorLineNum && /^:::\s*$/.test(text)) break
+    }
+
+    // If we found an opener, walk down for its matching closer.
+    let closeLineNum = -1
+    if (openLineNum > 0) {
+      for (let i = cursorLineNum; i <= doc.lines; i++) {
+        if (i === openLineNum) continue
+        const text = doc.line(i).text
+        if (/^:::(left|center|right)\s*$/.test(text)) break // nested opener — bail
+        if (/^:::\s*$/.test(text)) {
+          closeLineNum = i
+          break
+        }
+      }
+    }
+
+    if (openLineNum > 0 && closeLineNum > 0 && openName) {
+      const openLine = doc.line(openLineNum)
+      if (openName === alignment) {
+        // Same alignment → unwrap. Delete both fence lines (with their
+        // newlines). The close fence might be the doc's last line, which has
+        // no trailing newline — eat the leading one in that case.
+        const closeLine = doc.line(closeLineNum)
+        const closeIsLast = closeLine.to === doc.length
+        view.dispatch({
+          changes: [
+            { from: openLine.from, to: Math.min(openLine.to + 1, doc.length), insert: '' },
+            closeIsLast
+              ? { from: Math.max(0, closeLine.from - 1), to: closeLine.to, insert: '' }
+              : { from: closeLine.from, to: closeLine.to + 1, insert: '' },
+          ],
+        })
+      } else {
+        // Different alignment → rewrite the opening fence in place.
+        view.dispatch({
+          changes: { from: openLine.from, to: openLine.to, insert: `:::${alignment}` },
+        })
+      }
+      view.focus()
+      return
+    }
+
+    // No existing wrapper → wrap the selection's full lines. Leading and
+    // trailing newlines guarantee separation from surrounding paragraphs so
+    // the directive is always recognized as a block.
+    const startLine = doc.lineAt(from)
+    const endLine = doc.lineAt(to)
+    const inner = doc.sliceString(startLine.from, endLine.to)
+    const innerEmpty = !inner.trim()
+    const fence = `:::${alignment}`
+    const wrapped = innerEmpty
+      ? `\n${fence}\n\n:::\n`
+      : `\n${fence}\n${inner}\n:::\n`
+    const anchor = innerEmpty
+      ? startLine.from + 1 + fence.length + 1 // after leading-\n + fence + \n
+      : startLine.from + wrapped.length
     view.dispatch({
-      changes: { from: blockFrom, to: blockTo, insert: wrapped },
-      selection: { anchor: blockFrom + wrapped.length },
+      changes: { from: startLine.from, to: endLine.to, insert: wrapped },
+      selection: { anchor },
     })
     view.focus()
   }
