@@ -352,6 +352,9 @@ export function createMarkdownComponents(
       )
     }
 
+    const parsedHeight = heightAttr ? parseInt(heightAttr, 10) : NaN
+    const editorHeight = Number.isFinite(parsedHeight) && parsedHeight > 0 ? parsedHeight : undefined
+
     return (
       <div {...props}>
         <CodeEditor
@@ -375,6 +378,7 @@ export function createMarkdownComponents(
           attachedFiles={attachedFiles}
           allowUpload={allowUploadAttr === 'true'}
           acceptUploads={acceptAttr}
+          height={editorHeight}
         />
       </div>
     )

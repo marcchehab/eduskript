@@ -110,6 +110,10 @@ interface CodeEditorProps {
   allowUpload?: boolean
   // Optional `accept` attribute hint for the file picker (e.g. "image/*,.csv").
   acceptUploads?: string
+  // Explicit editor-area height in pixels (from markdown ` height="500"`).
+  // Overrides the line-count auto-height. The user's manual splitter drag still
+  // wins over this. Output panel adds to the total below the splitter.
+  height?: number
 }
 
 // Custom annotation to mark programmatic changes (defined once outside component)
@@ -259,6 +263,7 @@ export const CodeEditor = memo(function CodeEditor({
   attachedFiles,
   allowUpload = false,
   acceptUploads,
+  height: explicitHeight,
 }: CodeEditorProps) {
   const { resolvedTheme } = useTheme()
   const { data: session } = useSession()
@@ -937,7 +942,8 @@ export const CodeEditor = memo(function CodeEditor({
   )
   // User-adjusted editor height (set when dragging horizontal splitter, keeps total constant)
   const [userEditorHeight, setUserEditorHeight] = useState<number | null>(null)
-  const editorHeight = userEditorHeight ?? calculatedEditorHeight
+  // Resolution order: manual splitter drag > explicit markdown `height="..."` > auto from line count.
+  const editorHeight = userEditorHeight ?? explicitHeight ?? calculatedEditorHeight
   // Output panel adds to total height when visible
   const totalHeight = editorHeight + (panelVisible ? outputPanelHeight + SPLITTER_HEIGHT : 0)
 
