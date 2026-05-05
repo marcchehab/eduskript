@@ -788,10 +788,14 @@ export function PublicSiteLayout({
               <SyncStatusButton />
               {!isSidebarCollapsed && (
                 <div className="pt-2 text-center text-[11px] text-muted-foreground/40 space-y-1">
+                  {/* prefetch={false}: footer links are rarely clicked, but
+                      Next 16 emits 2-3 RSC prefetches per visible Link during
+                      idle time, which kept the public-page tab in "loading"
+                      state for 4-5 s on Slow 4G even after LCP. */}
                   <div>
-                    <Link href="/impressum" className="hover:text-muted-foreground">Legal</Link>
+                    <Link href="/impressum" className="hover:text-muted-foreground" prefetch={false}>Legal</Link>
                     <span className="mx-1.5">·</span>
-                    <Link href="/terms" className="hover:text-muted-foreground">Terms (Mar 2026)</Link>
+                    <Link href="/terms" className="hover:text-muted-foreground" prefetch={false}>Terms (Mar 2026)</Link>
                   </div>
                   <div>
                     Built with{' '}

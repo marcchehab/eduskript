@@ -31,11 +31,15 @@ export function Navigation() {
                 </Button>
               </div>
             ) : (
+              // prefetch={false}: most visitors don't click these from the
+              // homepage, but Next 16's Link emits multiple RSC prefetches
+              // per visible link in idle time and held the tab in "loading"
+              // past LCP on slower connections.
               <div className="flex items-center gap-2">
-                <Link href="/auth/signin">
+                <Link href="/auth/signin" prefetch={false}>
                   <Button variant="ghost">Sign In</Button>
                 </Link>
-                <Link href="/auth/signup">
+                <Link href="/auth/signup" prefetch={false}>
                   <Button>Create account</Button>
                 </Link>
               </div>

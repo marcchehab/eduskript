@@ -63,6 +63,16 @@ export function MuxVideo({ src, alt = '', poster: posterOverride, className, fil
   // Author-supplied poster wins; fall back to Mux's auto-generated one.
   const poster = resolvePoster(posterOverride, files) ?? defaultPoster
 
+  // preload="none": don't fetch video manifest, audio/video chunks, or
+  // subtitle tracks until the user actually plays. Default Mux behaviour
+  // pulls 4-6 segment requests on mount, which kept the page tab in
+  // "loading" state for several seconds on slower connections even though
+  // most visitors never play the video. Trade-off: ~200-400 ms buffering
+  // pause when Play is first clicked. The poster image still preloads, so
+  // the player still looks ready. Pages that explicitly mark a video as
+  // autoplay opt back into preloading by setting preload="auto".
+  const preloadStrategy = alt.includes('autoplay') ? 'auto' : 'none'
+
   return (
     <MuxPlayer
       playbackId={playbackId}
@@ -73,6 +83,7 @@ export function MuxVideo({ src, alt = '', poster: posterOverride, className, fil
       style={{ aspectRatio: aspectRatio ?? 16 / 9 }}
       autoPlay={alt.includes('autoplay')}
       loop={alt.includes('loop')}
+      preload={preloadStrategy}
       disableTracking // Disable Mux analytics to avoid CORS issues
     />
   )
