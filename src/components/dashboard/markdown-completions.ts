@@ -129,6 +129,49 @@ const TAG_ATTRS: Record<string, AttrDef[]> = {
   'style': [],
 }
 
+// ── Per-plugin attribute definitions (keyed by `<plugin src="…">`) ───
+// These attrs are merged in addition to the generic `plugin` attrs above
+// when the current `<plugin>` tag's src matches. Add a new entry for each
+// built-in plugin you want intellisense for; user plugins keep generic.
+const PLUGIN_SRC_ATTRS: Record<string, AttrDef[]> = {
+  'eduadmin/dijkstra-visualizer': [
+    { label: 'initialnodecount', info: 'Initial node count (3..200, default 7)' },
+    { label: 'initialdirected', info: 'Start in directed mode (true | false)' },
+    { label: 'initialspeed', info: 'Animation speed 100..2000, higher = faster (default 1300)' },
+    { label: 'lang', info: 'UI language (en | de)' },
+  ],
+  'eduadmin/mod-calc': [
+    { label: 'formula', info: 'Initial formula' },
+    { label: 'base', info: 'Initial base' },
+    { label: 'exp', info: 'Initial exponent' },
+    { label: 'mod', info: 'Initial modulus' },
+    { label: 'lang', info: 'UI language (en | de)' },
+  ],
+  'eduadmin/cipher-lab': [
+    { label: 'cipher', info: 'Initial cipher (e.g. caesar, vigenere)' },
+    { label: 'cipherkey', info: 'Initial cipher key' },
+    { label: 'text', info: 'Initial plaintext' },
+    { label: 'lang', info: 'UI language (en | de)' },
+  ],
+  'eduadmin/mod-clock': [
+    { label: 'mod', info: 'Initial modulus' },
+    { label: 'modmax', info: 'Modulus slider max' },
+    { label: 'max', info: 'Counter max' },
+    { label: 'font', info: 'Custom font' },
+    { label: 'lang', info: 'UI language (en | de)' },
+  ],
+  'eduadmin/diffie-hellman': [
+    { label: 'p', info: 'Prime modulus' },
+    { label: 'g', info: 'Generator' },
+    { label: 'a', info: 'Alice secret' },
+    { label: 'b', info: 'Bob secret' },
+    { label: 'lang', info: 'UI language (en | de)' },
+  ],
+  'eduadmin/data-cube-visualizer': [
+    { label: 'lang', info: 'UI language (en | de)' },
+  ],
+}
+
 // ── Attribute value definitions ──────────────────────────────────────
 
 const ATTR_VALUES: Record<string, string[]> = {
@@ -256,7 +299,11 @@ export function createMarkdownCompletions(getFileList: () => FileListItem[]) {
     const attrMatch = textBefore.match(/\s(\w*)$/)
     if (attrMatch) {
       const tagAttrs = TAG_ATTRS[tagContext] || []
-      const allAttrs = [...tagAttrs, ...GLOBAL_ATTRS]
+      // Merge plugin-source-specific attrs when inside a <plugin src="…">
+      const pluginAttrs = tagContext === 'plugin'
+        ? (PLUGIN_SRC_ATTRS[findPluginSrc(fullTextBefore) || ''] || [])
+        : []
+      const allAttrs = [...tagAttrs, ...pluginAttrs, ...GLOBAL_ATTRS]
 
       return {
         from: context.pos - attrMatch[1].length,
@@ -318,6 +365,33 @@ export function createMarkdownCompletions(getFileList: () => FileListItem[]) {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Inside the innermost unclosed `<plugin …>` tag, scan back for `src="…"`
+ * and return the value, or null if not found / not in a plugin tag.
+ */
+function findPluginSrc(text: string): string | null {
+  // Find the start of the unclosed `<plugin`
+  let depth = 0
+  let openIdx = -1
+  for (let i = text.length - 1; i >= 0; i--) {
+    if (text[i] === '>') {
+      depth++
+    } else if (text[i] === '<') {
+      if (depth > 0) {
+        depth--
+      } else {
+        openIdx = i
+        break
+      }
+    }
+  }
+  if (openIdx < 0) return null
+  const tag = text.slice(openIdx + 1)
+  if (!tag.startsWith('plugin')) return null
+  const m = tag.match(/\bsrc="([^"]*)"/)
+  return m ? m[1] : null
+}
 
 /** Scan backwards to find the tag name of the innermost unclosed opening tag. */
 function findOpenTag(text: string): string | null {

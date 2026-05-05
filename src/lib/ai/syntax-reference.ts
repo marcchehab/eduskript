@@ -482,5 +482,5 @@ export function getCondensedSyntaxReference(): string {
 **Built-in plugins:** \`<plugin src="${BUILTIN_PLUGIN_OWNER}/<slug>" [attrs] [height="500"]></plugin>\` — user-scoped; built-ins on this deployment under \`${BUILTIN_PLUGIN_OWNER}\`:
   - \`mod-calc\` (\`formula\`, \`base\`, \`exp\`, \`mod\`, \`lang\`), \`color-sliders\`, \`cipher-lab\` (\`cipher\`, \`cipherkey\`, \`text\`, \`lang\`)
   - \`mod-clock\` (\`mod\`, \`modmax\`, \`max\`, \`font\`, \`lang\`), \`diffie-hellman\` (\`p\`, \`g\`, \`a\`, \`b\`, \`lang\`)
-  - \`dijkstra-visualizer\` (\`initialnodecount\`, \`initialdirected\`, \`lang\`), \`data-cube-visualizer\` (\`lang\`)`
+  - \`dijkstra-visualizer\` (\`initialnodecount\`, \`initialdirected\`, \`initialspeed\` 100..2000 higher=faster, \`lang\`), \`data-cube-visualizer\` (\`lang\`)`
 }

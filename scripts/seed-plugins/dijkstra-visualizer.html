@@ -1563,6 +1563,15 @@
       btnDirected.classList.add('active');
     }
 
+    // initialspeed: matches the slider semantic (100..2000, higher = faster).
+    // Internal `speed` variable is the delay in ms between play steps and is
+    // computed as 2100 - sliderValue, so higher slider = lower delay = faster.
+    var initSpeed = parseInt(config.initialspeed);
+    if (!isNaN(initSpeed) && initSpeed >= 100 && initSpeed <= 2000) {
+      speedSlider.value = initSpeed;
+      speed = 2100 - initSpeed;
+    }
+
     lang = (config.lang) || 'en';
     applyLanguage();
 
