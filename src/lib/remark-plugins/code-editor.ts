@@ -50,9 +50,23 @@ interface ParentNode extends Node {
  */
 export function remarkCodeEditor() {
   return (tree: Node) => {
-    const parent = tree as ParentNode
-    if (!parent.children) return
+    // Visit every container so code editors inside blockquotes (callouts),
+    // list items, etc. get transformed too — not just root-level blocks.
+    visitParents(tree, processParent)
+  }
+}
 
+function visitParents(node: Node, fn: (parent: ParentNode) => void): void {
+  if (!isParent(node)) return
+  fn(node)
+  for (const child of node.children) visitParents(child, fn)
+}
+
+function isParent(node: Node): node is ParentNode {
+  return Array.isArray((node as ParentNode).children)
+}
+
+function processParent(parent: ParentNode): void {
     // Phase 1: Collect groups of consecutive code blocks sharing the same explicit id.
     // Blocks without an explicit id are standalone (backward compatible).
     interface GroupEntry {
@@ -215,7 +229,6 @@ export function remarkCodeEditor() {
     for (let i = indicesToRemove.length - 1; i >= 0; i--) {
       parent.children.splice(indicesToRemove[i], 1)
     }
-  }
 }
 
 /**
