@@ -1455,6 +1455,17 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
       // Use offsetWidth to get the untransformed width (ignores CSS transform scale on mobile)
       setPaperWidth(paper.offsetWidth)
 
+      // Seed pageHeight from the paper's measured height at hydration time so the
+      // public reference layer (gated on `pageHeight > 0`) can paint in the same
+      // commit as the public sticky-notes/snaps. Without this seed, pageHeight
+      // remains 0 until the 300ms-debounced ResizeObserver fires recalculate-
+      // HeadingPositions, which delays the drawn public layer by ~250-400ms
+      // after the first paper paint. The accurate height (after code editors
+      // mount, KaTeX, etc.) still arrives via the ResizeObserver path; strokes
+      // are positioned via per-section transforms so initial vs final height
+      // doesn't shift them.
+      setPageHeight(paper.offsetHeight)
+
       // Ensure paper has position:relative for absolute canvas positioning
       paper.style.position = 'relative'
 
