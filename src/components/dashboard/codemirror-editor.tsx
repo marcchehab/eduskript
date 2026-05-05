@@ -6,7 +6,7 @@ import { useSession } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
-import { Eye, EyeOff, Pencil, Code, Bold, Italic, Heading, Heading1, Heading2, Heading3, List, ListOrdered, Link, Palette, Highlighter, Circle, Wand2, ChevronDown, FilePen, Minus, Plus, CircleHelp, TextQuote, Puzzle, Sigma, MousePointerClick } from 'lucide-react'
+import { Eye, EyeOff, Pencil, Code, Bold, Italic, Heading, Heading1, Heading2, Heading3, List, ListOrdered, Link, Palette, Highlighter, Circle, Wand2, ChevronDown, FilePen, Minus, Plus, CircleHelp, TextQuote, Puzzle, Sigma, AlignLeft, AlignCenter, AlignRight, MessageSquare } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1452,19 +1452,42 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   const insertNumberedList = () => insertAtCursor('\n1. ')
   const insertLink = () => wrapSelection('[', '](url)')
 
-  // Insert a styled button (rendered as <a> link with an es-btn class).
-  // Selects the label so the author can immediately overwrite "Click me".
-  const insertButton = (variant: 'primary' | 'secondary' | 'outline' = 'primary') => {
+  // Wrap the current line(s) — or the selection's full lines — in a
+  // <div style="text-align: …"> block. Blank lines around the inner content
+  // let the markdown parser keep processing headings, lists, etc. inside.
+  const insertAlign = (alignment: 'left' | 'center' | 'right') => {
+    if (!editorViewRef.current || useSimpleEditor) return
+    const view = editorViewRef.current
+    const { from, to } = view.state.selection.main
+    const startLine = view.state.doc.lineAt(from)
+    const endLine = view.state.doc.lineAt(to)
+    const blockFrom = startLine.from
+    const blockTo = endLine.to
+    const inner = view.state.doc.sliceString(blockFrom, blockTo) || 'Aligned text'
+    const wrapped = `<div style="text-align: ${alignment}">\n\n${inner}\n\n</div>`
+    view.dispatch({
+      changes: { from: blockFrom, to: blockTo, insert: wrapped },
+      selection: { anchor: blockFrom + wrapped.length },
+    })
+    view.focus()
+  }
+
+  // Insert an Obsidian-style callout. The title MUST sit on the same line as
+  // [!type] (see CLAUDE.md). We select the placeholder title so the author
+  // can type over it immediately.
+  const insertCallout = (type: string) => {
     if (!editorViewRef.current || useSimpleEditor) return
     const view = editorViewRef.current
     const pos = view.state.selection.main.head
-    const label = 'Click me'
-    const opening = `<a class="es-btn es-btn-${variant}" href="https://example.com">`
-    const closing = `</a>`
-    const insertText = `${opening}${label}${closing}`
+    const line = view.state.doc.lineAt(pos)
+    const insertPos = line.to
+    const before = `\n\n> [!${type}] `
+    const title = 'Title'
+    const after = `\n> Content\n`
+    const insertText = before + title + after
     view.dispatch({
-      changes: { from: pos, insert: insertText },
-      selection: { anchor: pos + opening.length, head: pos + opening.length + label.length },
+      changes: { from: insertPos, insert: insertText },
+      selection: { anchor: insertPos + before.length, head: insertPos + before.length + title.length },
     })
     view.focus()
   }
@@ -1701,6 +1724,45 @@ const CodeMirrorEditor = function CodeMirrorEditor({
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
+                {/* Alignment (default click = center; dropdown for left/right) */}
+                <DropdownMenu>
+                  <div className="flex items-center border rounded-md h-8">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => insertAlign('center')}
+                      title="Align center"
+                      className="w-8 h-8 p-0 rounded-r-none border-0"
+                    >
+                      <AlignCenter className="w-4 h-4" />
+                    </Button>
+                    <div className="h-4 w-px bg-border" />
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-5 h-8 p-0 rounded-l-none border-0"
+                        title="Alignment options"
+                      >
+                        <ChevronDown className="w-3 h-3" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                  </div>
+                  <DropdownMenuContent align="start" className="min-w-[140px]">
+                    <DropdownMenuItem onClick={() => insertAlign('left')} className="gap-2">
+                      <AlignLeft className="w-4 h-4" />
+                      <span>Align left</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => insertAlign('center')} className="gap-2">
+                      <AlignCenter className="w-4 h-4" />
+                      <span>Align center</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => insertAlign('right')} className="gap-2">
+                      <AlignRight className="w-4 h-4" />
+                      <span>Align right</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
               {/* Structure group */}
               <div className="flex items-center gap-1">
@@ -1740,6 +1802,47 @@ const CodeMirrorEditor = function CodeMirrorEditor({
                 >
                   <TextQuote className="w-4 h-4" />
                 </Button>
+                {/* Callouts (default click = note; dropdown for the rest) */}
+                <DropdownMenu>
+                  <div className="flex items-center border rounded-md h-8">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => insertCallout('note')}
+                      title="Insert Callout"
+                      className="w-8 h-8 p-0 rounded-r-none border-0"
+                    >
+                      <MessageSquare className="w-4 h-4" />
+                    </Button>
+                    <div className="h-4 w-px bg-border" />
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-5 h-8 p-0 rounded-l-none border-0"
+                        title="Callout types"
+                      >
+                        <ChevronDown className="w-3 h-3" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                  </div>
+                  <DropdownMenuContent align="start" className="min-w-[160px] max-h-[60vh] overflow-y-auto">
+                    <DropdownMenuItem onClick={() => insertCallout('note')}>Note</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => insertCallout('tip')}>Tip</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => insertCallout('info')}>Info</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => insertCallout('success')}>Success / Lernziele</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => insertCallout('warning')}>Warning</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => insertCallout('danger')}>Danger</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => insertCallout('question')}>Question</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => insertCallout('exercise')}>Exercise</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => insertCallout('example')}>Example</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => insertCallout('quote')}>Quote</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => insertCallout('idea')}>Idea</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => insertCallout('todo')}>Todo</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => insertCallout('solution')}>Solution</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => insertCallout('discuss')}>Discuss</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
               <div className="h-4 w-px bg-border mx-1" />
               {/* Colors group */}
@@ -1946,45 +2049,6 @@ const CodeMirrorEditor = function CodeMirrorEditor({
                 <DropdownMenuItem onClick={insertMathInline} className="gap-2">
                   <span className="font-serif italic">x</span>
                   <span>Inline ($…$)</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            {/* Button (link styled as a button; dropdown picks the variant) */}
-            <DropdownMenu>
-              <div className="flex items-center border rounded-md h-8">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => insertButton('primary')}
-                  title="Insert Button"
-                  className="w-8 h-8 p-0 rounded-r-none border-0"
-                >
-                  <MousePointerClick className="w-4 h-4" />
-                </Button>
-                <div className="h-4 w-px bg-border" />
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="w-5 h-8 p-0 rounded-l-none border-0"
-                    title="Button style"
-                  >
-                    <ChevronDown className="w-3 h-3" />
-                  </Button>
-                </DropdownMenuTrigger>
-              </div>
-              <DropdownMenuContent align="start" className="min-w-[160px]">
-                <DropdownMenuItem onClick={() => insertButton('primary')} className="gap-2">
-                  <span className="es-btn es-btn-primary text-[10px] px-2 py-0.5 leading-none">Aa</span>
-                  <span>Primary</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => insertButton('secondary')} className="gap-2">
-                  <span className="es-btn es-btn-secondary text-[10px] px-2 py-0.5 leading-none">Aa</span>
-                  <span>Secondary</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => insertButton('outline')} className="gap-2">
-                  <span className="es-btn es-btn-outline text-[10px] px-2 py-0.5 leading-none">Aa</span>
-                  <span>Outline</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
