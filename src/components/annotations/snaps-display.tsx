@@ -1169,11 +1169,16 @@ export function SnapsDisplay({ snaps, onRemoveSnap, onRenameSnap, onUpdateSnap, 
 
   return (
     <>
-      {/* All snaps wrapped in unified fade-in container */}
-      {/* Waits for initialLoadComplete to prevent multiple redraws during initial page load */}
-      {/* Uses CSS animation that plays on mount for smooth fade-in */}
-      {initialLoadComplete && (
-        <div className="annotation-content-wrapper" style={{ zIndex: 45 }}>
+      {/* All snaps wrapped in a single container.
+          Previously gated on `initialLoadComplete` for a unified fade-in,
+          but that held back the SSR-supplied public/teacher snaps until
+          the personal-layer useSyncedUserData hooks resolved — visible as
+          a 1-2 s lag where sticky-notes painted first and snaps trailed.
+          Public snaps come from props and are stable from first render;
+          own snaps may briefly render empty then re-render once IndexedDB
+          returns, which is React's normal data-flow behaviour and not
+          visual flicker. */}
+      <div className="annotation-content-wrapper" style={{ zIndex: 45 }}>
           {/* Student's own snaps */}
           {DEBUG_STATE && console.log(`[SnapsDisplay] Render - zIndexOrder: [${zIndexOrder.join(', ')}]`)}
           {snaps.map((snap) => {
@@ -1238,8 +1243,7 @@ export function SnapsDisplay({ snaps, onRemoveSnap, onRenameSnap, onUpdateSnap, 
             />
           )
         })}
-        </div>
-      )}
+      </div>
 
       {/* Expanded snap modal */}
       {expandedSnapIndex !== null && (

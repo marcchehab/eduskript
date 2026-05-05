@@ -3299,9 +3299,17 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
 
           {/* Public page annotations - visible to everyone */}
           {/* Don't show when user is actively editing page-broadcast (they see their own edits in the main layer) */}
-          {/* Wait for initialLoadComplete to prevent double render (SSR fallback → synced data) */}
-          {/* Wrapped in a single fade-in container to prevent flicker when switching data sources */}
-          {viewMode !== 'page-broadcast' && isLayerVisible('public') && initialLoadComplete && createPortal(
+          {/* Render immediately — `publicAnnotations` arrives as a prop from
+              the server (see public-page-data.ts), so there's nothing to wait
+              for. The previous `initialLoadComplete` gate held the public
+              layer back until the personal-layer useSyncedUserData hooks
+              resolved, which is why sticky-notes (no such gate) painted
+              first and the rest of the public content appeared 1-2s later.
+              The pageBroadcastData hook can still swap in fresher data
+              after it loads via the SSR-fallback branch below; switching
+              from SSR data to synced data is a same-shape swap, not a
+              double render. */}
+          {viewMode !== 'page-broadcast' && isLayerVisible('public') && createPortal(
             <div className="annotation-content-wrapper" style={{ zIndex: 36 }}>
               {(() => {
                 // Use synced pageBroadcastData (updates dynamically) or fall back to server-passed publicAnnotations
