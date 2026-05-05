@@ -3023,11 +3023,16 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
         paperElement
       )}
 
-      {/* Reference annotation layers - read-only overlays */}
-      {/* Note: Don't condition on teacherAnnotationsLoading - use SWR pattern to keep showing */}
-      {/* stale data while loading. Each layer checks its own data existence. */}
-      {/* Wait for initialLoadComplete to prevent multiple redraws during initial page load */}
-      {paperElement && pageHeight > 0 && initialLoadComplete && (
+      {/* Reference annotation layers - read-only overlays.
+          Each inner block gates on its own data (hasPersonalContent,
+          teacherClassAnnotations.length, etc.), so an unpopulated layer
+          stays unrendered. The previous global `initialLoadComplete` gate
+          on top of those checks was the load-time bottleneck: it held back
+          the SSR-supplied public layer until the personal-layer
+          useSyncedUserData hooks resolved (~1 s on cold IndexedDB), even
+          though the public block at the bottom of this list draws from
+          props that are stable from first paint. */}
+      {paperElement && pageHeight > 0 && (
         <>
           {/* Teacher's personal annotations as reference (when broadcasting to class/student) */}
           {hasPersonalContent && isLayerVisible('personal') && (() => {

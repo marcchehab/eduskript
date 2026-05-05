@@ -733,9 +733,13 @@ article.prose-theme > div > :first-child {
   filter: invert(1) hue-rotate(180deg);
 }
 
-/* Shared fade-in duration - change this one value to adjust all fade-in speeds */
+/* Shared fade-in duration. The wrapper carries SSR-supplied public layers
+   (annotations, snaps), which are stable from first paint and don't need a
+   long fade. Cut from 500 ms → 150 ms so SSR content reaches full opacity
+   in roughly a single perceptual frame instead of looking like it "fades
+   in late" relative to text content that was already visible. */
 :root {
-  --annotation-fade-duration: 500ms;
+  --annotation-fade-duration: 150ms;
 }
 
 /* Fade-in animation for loaded annotations */
