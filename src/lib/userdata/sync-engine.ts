@@ -15,11 +15,17 @@ import { getAdapter } from './adapters'
 export interface SyncOperation {
   id: string
   type: 'sync' | 'fetch' | 'merge' | 'conflict' | 'error'
+  /** Primary label shown in the row. For grouped ops this is a summary
+   *  (e.g. "12 items"); for single-item ops this is the adapter name. */
   adapter: string
+  /** Primary item identifier for single-item ops. Empty string for grouped ops. */
   itemId: string
   timestamp: Date
   status: 'pending' | 'success' | 'failed'
   message?: string
+  /** When set, this operation represents one network request covering N items.
+   *  The UI renders a single row that expands to show the item list. */
+  items?: Array<{ adapter: string; itemId: string }>
 }
 
 export interface SyncStatus {
@@ -213,9 +219,17 @@ export class SyncEngine {
     const batch = Array.from(this.syncQueue.values())
     this.syncQueue.clear()
 
-    // Log pending operations
-    const operationIds = batch.map((item) =>
-      this.logOperation('sync', item.adapter, item.itemId, 'pending', `Syncing ${item.adapter}`)
+    // One grouped log entry for the whole request — the modal renders it as
+    // an expandable row listing every item covered by this single POST.
+    const opItems = batch.map((it) => ({ adapter: it.adapter, itemId: it.itemId }))
+    const opLabel = batch.length === 1 ? batch[0].adapter : `${batch.length} items`
+    const operationId = this.logOperation(
+      'sync',
+      opLabel,
+      batch.length === 1 ? batch[0].itemId : '',
+      'pending',
+      batch.length === 1 ? `Syncing ${batch[0].adapter}` : `Syncing ${batch.length} items`,
+      opItems,
     )
 
     try {
@@ -230,7 +244,7 @@ export class SyncEngine {
       if (response.status === 402) {
         this.gatedByPlan = true
         await this.markSynced(batch)
-        operationIds.forEach((id) => this.updateOperation(id, 'success'))
+        this.updateOperation(operationId, 'success', 'Cloud sync disabled (free plan)')
         this.syncQueue.clear()
         this.updateStatus({ pending: 0, syncing: false, error: null })
         console.info('[SyncEngine] Cloud sync disabled (free plan). Data stays local.')
@@ -246,8 +260,8 @@ export class SyncEngine {
       // Mark items as synced in local DB
       await this.markSynced(batch)
 
-      // Mark operations as successful
-      operationIds.forEach((id) => this.updateOperation(id, 'success'))
+      // Mark operation as successful
+      this.updateOperation(operationId, 'success')
 
       // Handle any conflicts returned by server
       if (result.conflicts && result.conflicts.length > 0) {
@@ -256,10 +270,14 @@ export class SyncEngine {
 
       // Handle S3 upload errors (snaps that failed to upload to storage)
       if (result.s3Errors && result.s3Errors.length > 0) {
-        // Log each S3 error as a failed operation
-        result.s3Errors.forEach((errorMsg: string) => {
-          this.logOperation('error', 'snaps', 'storage', 'failed', errorMsg)
-        })
+        // Log a single grouped error op covering all failing snaps
+        this.logOperation(
+          'error',
+          result.s3Errors.length === 1 ? 'snaps' : `${result.s3Errors.length} snaps`,
+          'storage',
+          'failed',
+          result.s3Errors.join('; '),
+        )
         // Set error state so the indicator shows there's a problem
         this.updateStatus({
           pending: this.syncQueue.size,
@@ -281,8 +299,8 @@ export class SyncEngine {
       console.error('[SyncEngine] Sync failed:', error)
       const errorMsg = error instanceof Error ? error.message : 'Sync failed'
 
-      // Mark operations as failed
-      operationIds.forEach((id) => this.updateOperation(id, 'failed', errorMsg))
+      // Mark operation as failed
+      this.updateOperation(operationId, 'failed', errorMsg)
 
       // Re-queue failed items
       batch.forEach((item) => {
@@ -346,30 +364,35 @@ export class SyncEngine {
         await this.cleanupMalformedEntries()
       }
 
-      // Compare with local data and sync as needed
+      // First pass: classify each manifest entry without any HTTP. Anything
+      // server-newer goes into a single bulk-fetch; anything local-newer is
+      // queued for the regular sync POST.
+      const serverNewer: ManifestItem[] = []
       for (const serverItem of manifest) {
-        // Skip malformed entries (already cleaned up above)
-        if (!serverItem.itemId || !serverItem.adapter) {
-          continue
-        }
-
-        // 5-element key: [userId, pageId, componentId, targetType, targetId]
-        // For initial sync, we're looking for personal data (empty targeting)
+        if (!serverItem.itemId || !serverItem.adapter) continue
         if (!this.userId) continue
-        const localRecord = await db.userData.get([this.userId, serverItem.itemId, serverItem.adapter, '', ''])
+        const localRecord = await db.userData.get([
+          this.userId,
+          serverItem.itemId,
+          serverItem.adapter,
+          '',
+          '',
+        ])
 
         if (!localRecord || serverItem.updatedAt > localRecord.updatedAt) {
-          // Server has newer data - fetch and merge
-          await this.fetchAndMerge(serverItem)
-        } else if (localRecord && localRecord.updatedAt > serverItem.updatedAt) {
-          // Local has newer data - queue for sync
+          serverNewer.push(serverItem)
+        } else if (localRecord.updatedAt > serverItem.updatedAt) {
           this.queueSync(
             serverItem.adapter,
             serverItem.itemId,
             JSON.stringify(localRecord.data),
-            localRecord.version
+            localRecord.version,
           )
         }
+      }
+
+      if (serverNewer.length > 0) {
+        await this.bulkFetchAndMerge(serverNewer)
       }
 
       // Also push any unsynced local data not on server.
@@ -399,77 +422,123 @@ export class SyncEngine {
   }
 
   /**
-   * Fetch item from server and merge with local
+   * Bulk-fetch every server-newer item in one POST and merge each into local.
+   *
+   * Replaces the old per-item fetchAndMerge loop, which produced N HTTP
+   * requests when initialSync had N items to reconcile. The /bulk-fetch
+   * endpoint groups by adapter and serves the whole batch from one userData
+   * query; merge logic is unchanged and runs locally per item.
    */
-  private async fetchAndMerge(serverItem: ManifestItem): Promise<void> {
-    const opId = this.logOperation('fetch', serverItem.adapter, serverItem.itemId, 'pending', 'Fetching from server')
+  private async bulkFetchAndMerge(serverItems: ManifestItem[]): Promise<void> {
+    if (serverItems.length === 0) return
+    if (!this.userId) return
+
+    const opItems = serverItems.map((s) => ({ adapter: s.adapter, itemId: s.itemId }))
+    const opLabel = serverItems.length === 1 ? serverItems[0].adapter : `${serverItems.length} items`
+    const opId = this.logOperation(
+      'fetch',
+      opLabel,
+      serverItems.length === 1 ? serverItems[0].itemId : '',
+      'pending',
+      `Fetching ${serverItems.length} item${serverItems.length === 1 ? '' : 's'} from server`,
+      opItems,
+    )
 
     try {
-      const response = await fetch(
-        `/api/user-data/${encodeURIComponent(serverItem.adapter)}/${encodeURIComponent(serverItem.itemId)}`
-      )
-
-      // 404 means the item doesn't exist on the server yet - that's fine, just skip
-      if (response.status === 404) {
-        this.updateOperation(opId, 'success', 'No server data (404)')
-        return
-      }
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch item: ${response.status}`)
-      }
-
-      const serverData = await response.json()
-      if (!this.userId) {
-        this.updateOperation(opId, 'failed', 'No userId in session')
-        return
-      }
-      // 5-element key — fixes the prior 2-element-key bug that always returned
-      // undefined and caused fetchAndMerge to silently overwrite local data.
-      const localRecord = await db.userData.get([this.userId, serverItem.itemId, serverItem.adapter, '', ''])
-
-      let mergedData = serverData.data
-      let didMerge = false
-
-      // If we have local data, try to merge
-      if (localRecord && localRecord.data) {
-        const adapter = getAdapter(serverItem.adapter)
-        if (adapter?.merge) {
-          try {
-            const localData = adapter.deserialize(JSON.stringify(localRecord.data))
-            const remoteData = adapter.deserialize(JSON.stringify(serverData.data))
-            mergedData = adapter.merge(localData, remoteData)
-            didMerge = true
-          } catch {
-            // Merge failed, use server data
-            mergedData = serverData.data
-          }
-        }
-      }
-
-      // Update local DB (use '' for targeting since this is personal data)
-      await db.userData.put({
-        userId: this.userId,
-        pageId: serverItem.itemId,
-        componentId: serverItem.adapter,
-        data: mergedData,
-        updatedAt: serverItem.updatedAt,
-        savedToRemote: true,
-        version: serverData.version,
-        createdAt: localRecord?.createdAt || new Date().toISOString(),
-        targetType: localRecord?.targetType ?? '',
-        targetId: localRecord?.targetId ?? '',
+      const response = await fetch('/api/user-data/bulk-fetch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: serverItems.map((s) => ({ adapter: s.adapter, itemId: s.itemId })),
+        }),
       })
 
-      this.updateOperation(opId, 'success', didMerge ? 'Merged with local' : 'Fetched from server')
+      if (!response.ok) {
+        throw new Error(`Bulk fetch failed: ${response.status}`)
+      }
+
+      const result = (await response.json()) as {
+        items: Array<{ adapter: string; itemId: string; data: unknown; version: number; updatedAt: number }>
+      }
+
+      // Index server items so we can iterate the manifest order and pair up.
+      const byKey = new Map<string, (typeof result.items)[number]>()
+      for (const it of result.items) {
+        byKey.set(`${it.adapter}:${it.itemId}`, it)
+      }
+
+      let mergeCount = 0
+      let fetchCount = 0
+      let missingCount = 0
+
+      for (const serverItem of serverItems) {
+        const serverData = byKey.get(`${serverItem.adapter}:${serverItem.itemId}`)
+        // Manifest told us the row exists — if bulk-fetch didn't return it,
+        // the row was deleted between manifest and fetch. Just skip.
+        if (!serverData) {
+          missingCount++
+          continue
+        }
+
+        const localRecord = await db.userData.get([
+          this.userId,
+          serverItem.itemId,
+          serverItem.adapter,
+          '',
+          '',
+        ])
+
+        let mergedData: unknown = serverData.data
+        let didMerge = false
+
+        if (localRecord && localRecord.data) {
+          const adapter = getAdapter(serverItem.adapter)
+          if (adapter?.merge) {
+            try {
+              const localData = adapter.deserialize(JSON.stringify(localRecord.data))
+              const remoteData = adapter.deserialize(JSON.stringify(serverData.data))
+              mergedData = adapter.merge(localData, remoteData)
+              didMerge = true
+            } catch {
+              mergedData = serverData.data
+            }
+          }
+        }
+
+        await db.userData.put({
+          userId: this.userId,
+          pageId: serverItem.itemId,
+          componentId: serverItem.adapter,
+          data: mergedData,
+          updatedAt: serverData.updatedAt,
+          savedToRemote: true,
+          version: serverData.version,
+          createdAt: localRecord?.createdAt || new Date().toISOString(),
+          targetType: localRecord?.targetType ?? '',
+          targetId: localRecord?.targetId ?? '',
+        })
+
+        if (didMerge) mergeCount++
+        else fetchCount++
+      }
+
+      const parts: string[] = []
+      if (fetchCount) parts.push(`${fetchCount} fetched`)
+      if (mergeCount) parts.push(`${mergeCount} merged`)
+      if (missingCount) parts.push(`${missingCount} missing`)
+      this.updateOperation(opId, 'success', parts.join(', ') || 'No changes')
     } catch (error) {
-      console.error('[SyncEngine] Fetch and merge failed:', error)
+      console.error('[SyncEngine] Bulk fetch failed:', error)
       this.updateOperation(opId, 'failed', error instanceof Error ? error.message : 'Fetch failed')
     }
   }
 
   /**
-   * Handle conflicts returned by server
+   * Handle conflicts returned by server.
+   *
+   * All conflicts from one sync POST are folded into a single grouped log
+   * entry — counts of merged / server-wins / missing make the row useful
+   * at a glance, and the expanded view lists each adapter:itemId.
    */
   private async handleConflicts(
     conflicts: Array<{
@@ -481,21 +550,35 @@ export class SyncEngine {
       targetId?: string | null
     }>
   ): Promise<void> {
-    for (const conflict of conflicts) {
-      const opId = this.logOperation('conflict', conflict.adapter, conflict.itemId, 'pending', 'Resolving conflict')
+    if (conflicts.length === 0) return
 
-      // Use targeting if provided, otherwise empty strings for personal data
+    const opItems = conflicts.map((c) => ({ adapter: c.adapter, itemId: c.itemId }))
+    const opLabel = conflicts.length === 1 ? conflicts[0].adapter : `${conflicts.length} items`
+    const opId = this.logOperation(
+      'conflict',
+      opLabel,
+      conflicts.length === 1 ? conflicts[0].itemId : '',
+      'pending',
+      `Resolving ${conflicts.length} conflict${conflicts.length === 1 ? '' : 's'}`,
+      opItems,
+    )
+
+    let mergedCount = 0
+    let serverWinsCount = 0
+    let missingCount = 0
+    let failedCount = 0
+
+    for (const conflict of conflicts) {
       const targetType = conflict.targetType ?? ''
       const targetId = conflict.targetId ?? ''
 
-      // 5-element key for conflict resolution WITH targeting
       if (!this.userId) {
-        this.updateOperation(opId, 'failed', 'No userId in session')
+        failedCount++
         continue
       }
       const localRecord = await db.userData.get([this.userId, conflict.itemId, conflict.adapter, targetType, targetId])
       if (!localRecord) {
-        this.updateOperation(opId, 'failed', 'Local record not found')
+        missingCount++
         continue
       }
 
@@ -508,7 +591,7 @@ export class SyncEngine {
           version: conflict.serverVersion,
           savedToRemote: true,
         })
-        this.updateOperation(opId, 'success', 'Server version accepted')
+        serverWinsCount++
         continue
       }
 
@@ -536,7 +619,7 @@ export class SyncEngine {
           }
         )
 
-        this.updateOperation(opId, 'success', 'Merged local and server')
+        mergedCount++
       } catch {
         // Merge failed - server wins
         await db.userData.put({
@@ -545,9 +628,19 @@ export class SyncEngine {
           version: conflict.serverVersion,
           savedToRemote: true,
         })
-        this.updateOperation(opId, 'success', 'Merge failed, server version accepted')
+        serverWinsCount++
       }
     }
+
+    const parts: string[] = []
+    if (mergedCount) parts.push(`${mergedCount} merged`)
+    if (serverWinsCount) parts.push(`${serverWinsCount} server-wins`)
+    if (missingCount) parts.push(`${missingCount} missing`)
+    if (failedCount) parts.push(`${failedCount} failed`)
+    const status: SyncOperation['status'] = failedCount > 0 && mergedCount + serverWinsCount === 0
+      ? 'failed'
+      : 'success'
+    this.updateOperation(opId, status, parts.join(', ') || 'No conflicts resolved')
   }
 
   /**
@@ -613,14 +706,18 @@ export class SyncEngine {
   }
 
   /**
-   * Log an operation to the operations list
+   * Log an operation to the operations list.
+   *
+   * Pass `items` for grouped operations (one log row per network request,
+   * expandable in the UI). Single-item operations omit it.
    */
   private logOperation(
     type: SyncOperation['type'],
     adapter: string,
     itemId: string,
     status: SyncOperation['status'],
-    message?: string
+    message?: string,
+    items?: Array<{ adapter: string; itemId: string }>,
   ): string {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
     const operation: SyncOperation = {
@@ -631,6 +728,7 @@ export class SyncEngine {
       timestamp: new Date(),
       status,
       message,
+      ...(items && items.length > 0 ? { items } : {}),
     }
 
     // Add to front and trim to max

@@ -8,7 +8,7 @@
  */
 
 import { useState } from 'react'
-import { Cloud, CloudOff, Loader2, AlertCircle, Check, X, RefreshCw } from 'lucide-react'
+import { Cloud, CloudOff, Loader2, AlertCircle, Check, X, RefreshCw, ChevronRight } from 'lucide-react'
 import { useSyncStatus, useUserDataContext } from '@/lib/userdata/provider'
 import { syncEngine, type SyncOperation } from '@/lib/userdata/sync-engine'
 import { cn } from '@/lib/utils'
@@ -293,6 +293,8 @@ function StatusBadge({ status }: { status: ReturnType<typeof useSyncStatus> }) {
 }
 
 function OperationRow({ operation }: { operation: SyncOperation }) {
+  const [expanded, setExpanded] = useState(false)
+
   const getTypeLabel = (type: SyncOperation['type']) => {
     switch (type) {
       case 'sync': return 'Sync'
@@ -315,20 +317,55 @@ function OperationRow({ operation }: { operation: SyncOperation }) {
   }
 
   const timeAgo = getTimeAgo(operation.timestamp)
+  const isGrouped = !!(operation.items && operation.items.length > 0)
+
+  const headerInner = (
+    <>
+      {isGrouped ? (
+        <ChevronRight
+          className={cn(
+            'w-3 h-3 text-muted-foreground transition-transform flex-shrink-0',
+            expanded && 'rotate-90'
+          )}
+        />
+      ) : (
+        <span className="w-3 h-3 flex-shrink-0" />
+      )}
+      {getStatusIcon(operation.status)}
+      <span className="font-medium">{getTypeLabel(operation.type)}</span>
+      <span className="text-muted-foreground">·</span>
+      <span className="text-muted-foreground truncate flex-1 text-left">{operation.adapter}</span>
+      <span className="text-xs text-muted-foreground" title={new Date(operation.timestamp).toLocaleString()}>{timeAgo}</span>
+    </>
+  )
 
   return (
     <div className="px-4 py-2 text-sm">
-      <div className="flex items-center gap-2">
-        {getStatusIcon(operation.status)}
-        <span className="font-medium">{getTypeLabel(operation.type)}</span>
-        <span className="text-muted-foreground">·</span>
-        <span className="text-muted-foreground truncate flex-1">{operation.adapter}</span>
-        <span className="text-xs text-muted-foreground" title={new Date(operation.timestamp).toLocaleString()}>{timeAgo}</span>
-      </div>
+      {isGrouped ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="flex items-center gap-2 w-full hover:text-foreground"
+        >
+          {headerInner}
+        </button>
+      ) : (
+        <div className="flex items-center gap-2">{headerInner}</div>
+      )}
       {operation.message && (
-        <div className="mt-0.5 text-xs text-muted-foreground pl-5 truncate">
+        <div className="mt-0.5 text-xs text-muted-foreground pl-8 truncate">
           {operation.message}
         </div>
+      )}
+      {isGrouped && expanded && (
+        <ul className="mt-1.5 pl-8 space-y-0.5 text-xs text-muted-foreground">
+          {operation.items!.map((item, i) => (
+            <li key={`${item.adapter}:${item.itemId}:${i}`} className="truncate font-mono">
+              {item.adapter}
+              {item.itemId ? ` · ${item.itemId}` : ''}
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   )
