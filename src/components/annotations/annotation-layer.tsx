@@ -842,10 +842,15 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
     return { targetType: 'page', targetId: pageId }
   }, [pageId])
 
-  // Load page-broadcast data for reference layer when not actively editing
-  // This allows seeing saved page annotations even after switching modes
+  // Load page-broadcast data for reference layer when not actively editing.
+  // This is the live-syncable copy; non-authors render the SSR-passed
+  // `publicAnnotations` prop instead (see line ~3331), so they don't need
+  // this hook to fire — gating with the empty-pageId sentinel saves a
+  // /api/user-data/annotations/{pageId}?targetType=page round-trip on every
+  // anonymous public-page visit. Authors get it once `isPageAuthor` flips
+  // true after the client-side author check resolves.
   const { data: pageBroadcastData, updateData: updatePageBroadcastData } = useSyncedUserData<AnnotationData>(
-    pageId,
+    isPageAuthor ? pageId : '',
     'annotations',
     null,
     pageBroadcastSyncOptions

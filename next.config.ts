@@ -44,6 +44,26 @@ const nextConfig: NextConfig = {
           { key: 'Cache-Control', value: 'no-store, must-revalidate' },
         ],
       },
+      // Order matters — Next.js merges matching rules and later entries
+      // override earlier ones for the same header key. The `/:domain/:path*`
+      // rule above also matches `/_next/static/...` (the `:domain` segment
+      // captures `_next`), which silently downgraded hashed asset caching to
+      // `no-cache, no-store` and forced every visitor to re-download CSS/JS
+      // on every page load. These two more-specific rules sit AFTER the
+      // broad rule so their `immutable` directive wins for content-addressed
+      // assets. The hash in the filename is a sufficient cache-busting key.
+      {
+        source: '/_next/static/:path*',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+        ],
+      },
+      {
+        source: '/js/:path*',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+        ],
+      },
     ]
   },
   images: {

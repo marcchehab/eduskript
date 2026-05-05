@@ -105,9 +105,24 @@ export function ReadingProgress() {
   useEffect(() => {
     let rafId: number | null = null
     let lastProgress = 0
+    let chapterRefreshTimeout: ReturnType<typeof setTimeout> | null = null
 
     const refreshChapters = () => {
       setChapters(getChaptersFromDOM())
+    }
+
+    // Coalesce many subtree mutations (editors hydrating, snaps loading,
+    // KaTeX fonts settling, lazy images decoding) into one chapter recompute
+    // per ~200 ms window. Without this, the bar's chapter widths and heading
+    // positions visibly shift several times during the first ~5 s after
+    // load — especially obvious near the top of the bar where the user is
+    // looking.
+    const scheduleChapterRefresh = () => {
+      if (chapterRefreshTimeout !== null) return
+      chapterRefreshTimeout = setTimeout(() => {
+        chapterRefreshTimeout = null
+        refreshChapters()
+      }, 200)
     }
 
     const refreshProgress = () => {
@@ -143,8 +158,10 @@ export function ReadingProgress() {
       scrollContainer.addEventListener('scroll', scheduleUpdate, { passive: true })
     }
 
-    // Recompute chapters when article content changes
-    const observer = new MutationObserver(refreshChapters)
+    // Recompute chapters when article content changes — debounced so a burst
+    // of mutations during initial hydration doesn't cause heading-position
+    // thrash in the bar.
+    const observer = new MutationObserver(scheduleChapterRefresh)
     const article = document.querySelector('article.prose-theme')
     if (article) {
       observer.observe(article, { childList: true, subtree: true })
@@ -165,6 +182,7 @@ export function ReadingProgress() {
         scrollContainer.removeEventListener('scroll', scheduleUpdate)
       }
       if (rafId !== null) cancelAnimationFrame(rafId)
+      if (chapterRefreshTimeout !== null) clearTimeout(chapterRefreshTimeout)
       cancelAnimationFrame(initRaf)
       observer.disconnect()
     }
