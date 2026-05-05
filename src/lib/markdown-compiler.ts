@@ -79,6 +79,7 @@ export const sanitizeSchema = {
     'yt',
     'mark',  // <mark> for text highlighting showcase
     'u',     // <u> for underlined text (not in defaultSchema)
+    'nobr',  // <nobr> non-standard but widely supported; prevents line breaks
     'image', // Alias for <img> — passes through sanitizer, mapped to img handler
     'excali', // <excali> shorthand for excalidraw drawings
     'flex', // <flex> layout container
