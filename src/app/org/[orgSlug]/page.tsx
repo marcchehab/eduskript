@@ -12,6 +12,7 @@ import { getOrgWithLayout, getOrgHomepageContent, getOrgFullSiteStructure } from
 import { prisma } from '@/lib/prisma'
 import { canonicalUrl, canonicalBase } from '@/lib/seo/canonical'
 import { JsonLd, organizationSchema } from '@/lib/seo/json-ld'
+import { getPublicLayers, EMPTY_PUBLIC_LAYERS } from '@/lib/public-page-data'
 
 export const dynamic = 'force-dynamic'
 export const dynamicParams = true
@@ -133,33 +134,10 @@ export default async function OrgPage({ params }: OrgPageProps) {
   const showFrontPage = frontPage && (frontPage.isPublished || isAdmin)
   const isPreviewMode = isAdmin && frontPage && !frontPage.isPublished
 
-  // Fetch public annotations and snaps for this front page
-  const [publicAnnotations, publicSnaps] = frontPage ? await Promise.all([
-    prisma.userData.findMany({
-      where: {
-        adapter: 'annotations',
-        itemId: frontPage.id,
-        targetType: 'page',
-      },
-      select: {
-        data: true,
-        userId: true,
-        user: { select: { name: true } }
-      }
-    }),
-    prisma.userData.findMany({
-      where: {
-        adapter: 'snaps',
-        itemId: frontPage.id,
-        targetType: 'page',
-      },
-      select: {
-        data: true,
-        userId: true,
-        user: { select: { name: true } }
-      }
-    })
-  ]) : [[], []]
+  // Fetch public annotations, snaps, and sticky notes for this front page
+  const { publicAnnotations, publicSnaps, publicStickyNotes } = frontPage
+    ? await getPublicLayers(frontPage.id)
+    : EMPTY_PUBLIC_LAYERS
 
   // Org admins/owners can create public annotations on the org front page
   const isPageAuthor = isAdmin
@@ -223,7 +201,7 @@ export default async function OrgPage({ params }: OrgPageProps) {
         {/* Frontpage content or empty state for admins */}
         {showFrontPage && frontPage.content ? (
           <article className="prose-theme">
-            <AnnotationWrapper pageId={frontPage.id} content={frontPage.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} isPageAuthor={isPageAuthor}>
+            <AnnotationWrapper pageId={frontPage.id} content={frontPage.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes} isPageAuthor={isPageAuthor}>
               <ServerMarkdownRenderer
                 content={frontPage.content}
                 pageId={frontPage.id}

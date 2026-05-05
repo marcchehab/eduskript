@@ -529,10 +529,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Invalidate ISR cache for page-targeted annotations
-    // This ensures public annotations are visible to other visitors
+    // Invalidate ISR cache for page-targeted public layers (drawn annotations,
+    // snaps, sticky notes). Each is SSR-prefetched in src/lib/public-page-data.ts
+    // and rendered at first paint, so the cached HTML must be regenerated when
+    // any of them changes — otherwise visitors see stale public content until
+    // the next deploy.
+    const PUBLIC_REVALIDATING_ADAPTERS = new Set(['annotations', 'snaps', 'sticky-notes'])
     const pageAnnotationItems = items.filter(
-      item => item.targetType === 'page' && item.adapter === 'annotations' && synced.includes(`${item.adapter}:${item.itemId}`)
+      item => item.targetType === 'page'
+        && PUBLIC_REVALIDATING_ADAPTERS.has(item.adapter)
+        && synced.includes(`${item.adapter}:${item.itemId}`)
     )
 
     if (pageAnnotationItems.length > 0) {

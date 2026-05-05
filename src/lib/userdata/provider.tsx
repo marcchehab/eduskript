@@ -259,6 +259,16 @@ export function useSyncedUserData<T>(
     // This ensures we don't show stale data from a previous target
     setData(initialDataRef.current)
 
+    // Callers (notably sticky-notes-layer / annotation-layer) pass pageId=''
+    // as a sentinel for "this layer is dormant — don't load anything". Without
+    // this guard, broadcast-mode would still issue a GET to
+    // /api/user-data/{adapter}/?targetType=…&targetId=… which 308→404s and
+    // wastes round-trips on every public page load.
+    if (!pageId) {
+      setIsLoading(false)
+      return () => { mounted = false }
+    }
+
     const loadData = async () => {
       try {
         setIsLoading(true)

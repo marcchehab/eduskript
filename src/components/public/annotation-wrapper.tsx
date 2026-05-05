@@ -3,7 +3,7 @@
 import { ReactNode } from 'react'
 import { AnnotationLayer } from '@/components/annotations/annotation-layer'
 import { HighlightLayer } from '@/components/text-highlights/highlight-layer'
-import { StickyNotesLayer } from '@/components/annotations/sticky-notes-layer'
+import { StickyNotesLayer, type StickyNote } from '@/components/annotations/sticky-notes-layer'
 import { TeacherBroadcastProvider } from '@/contexts/teacher-broadcast-context'
 import { StickyNotesProvider } from '@/contexts/sticky-notes-context'
 import type { Prisma } from '@prisma/client'
@@ -30,6 +30,11 @@ interface AnnotationWrapperProps {
   publicAnnotations?: PublicAnnotation[]
   /** Pre-fetched public snaps (from server) */
   publicSnaps?: PublicSnap[]
+  /**
+   * Pre-fetched public sticky notes (from server). When supplied, the layer
+   * skips its post-hydration fetch and renders notes at first paint.
+   */
+  publicStickyNotes?: StickyNote[]
   /** Whether current user can create public annotations */
   isPageAuthor?: boolean
   /** Whether user is a student in an exam session (for SEB mode where NextAuth session isn't available) */
@@ -45,12 +50,12 @@ interface AnnotationWrapperProps {
  * Without it, each code editor and annotation layer would make separate API calls.
  * With the provider, all consumers share a single data source.
  */
-export function AnnotationWrapper({ pageId, content, children, publicAnnotations, publicSnaps, isPageAuthor, isExamStudent }: AnnotationWrapperProps) {
+export function AnnotationWrapper({ pageId, content, children, publicAnnotations, publicSnaps, publicStickyNotes, isPageAuthor, isExamStudent }: AnnotationWrapperProps) {
   return (
     <StickyNotesProvider>
       <TeacherBroadcastProvider pageId={pageId}>
         <AnnotationLayer pageId={pageId} content={content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} isPageAuthor={isPageAuthor} isExamStudent={isExamStudent}>
-          <StickyNotesLayer pageId={pageId} isExamStudent={isExamStudent}>
+          <StickyNotesLayer pageId={pageId} isExamStudent={isExamStudent} publicStickyNotes={publicStickyNotes}>
             <HighlightLayer pageId={pageId}>
               {children}
             </HighlightLayer>

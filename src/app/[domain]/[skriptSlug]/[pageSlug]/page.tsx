@@ -9,6 +9,7 @@ import type { Metadata } from 'next'
 import { canonicalUrl, canonicalBase } from '@/lib/seo/canonical'
 import { generateExcerpt } from '@/lib/markdown'
 import { JsonLd, learningResourceSchema, breadcrumbSchema } from '@/lib/seo/json-ld'
+import { getPublicLayers, EMPTY_PUBLIC_LAYERS } from '@/lib/public-page-data'
 
 interface PageProps {
   params: Promise<{
@@ -158,18 +159,9 @@ export default async function PublicPage({ params }: PageProps) {
   // tables are empty by definition — skip the queries to keep anonymous visits
   // free of per-page DB roundtrips.
   const isFreeTeacher = teacher.billingPlan === 'free'
-  const [publicAnnotations, publicSnaps] = isFreeTeacher
-    ? [[], []]
-    : await Promise.all([
-        prisma.userData.findMany({
-          where: { adapter: 'annotations', itemId: page.id, targetType: 'page' },
-          select: { data: true, userId: true, user: { select: { name: true } } }
-        }),
-        prisma.userData.findMany({
-          where: { adapter: 'snaps', itemId: page.id, targetType: 'page' },
-          select: { data: true, userId: true, user: { select: { name: true } } }
-        })
-      ])
+  const { publicAnnotations, publicSnaps, publicStickyNotes } = isFreeTeacher
+    ? EMPTY_PUBLIC_LAYERS
+    : await getPublicLayers(page.id)
 
   const canonical = canonicalUrl({
     type: 'teacher',
@@ -215,6 +207,7 @@ export default async function PublicPage({ params }: PageProps) {
         skriptId={skript.id}
         publicAnnotations={publicAnnotations}
         publicSnaps={publicSnaps}
+        publicStickyNotes={publicStickyNotes}
       />
     </>
   )

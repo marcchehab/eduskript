@@ -77,5 +77,13 @@ declare module "next-auth/jwt" {
     typographyPreference?: string | null
     signedUpFromPageSlug?: string | null // For students: the teacher page they signed up from
     oauthEmail?: string | null // For students: their real OAuth email (not stored in DB, only in token)
+    /**
+     * Unix-ms timestamp of the last time the JWT callback ran the
+     * subscription-expiry check + the billingPlan/isAdmin refresh. Used to
+     * throttle those queries so the session-check hot path doesn't chain
+     * 2-3 serial DB roundtrips on every page navigation. See
+     * src/lib/auth.ts:jwt for the cadence.
+     */
+    dbRefreshedAt?: number
   }
 }

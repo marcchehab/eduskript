@@ -10,6 +10,7 @@ import { prisma } from '@/lib/prisma'
 import { canonicalUrl, canonicalBase } from '@/lib/seo/canonical'
 import { JsonLd, personSchema } from '@/lib/seo/json-ld'
 import { generateExcerpt } from '@/lib/markdown'
+import { getPublicLayers, EMPTY_PUBLIC_LAYERS } from '@/lib/public-page-data'
 
 // Enable ISR - pages are cached until explicitly invalidated
 export const revalidate = false
@@ -118,32 +119,9 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
   // Free teachers can't write to UserData (sync endpoint returns 402), so the
   // public-annotation/snap tables are empty by definition — skip the queries.
   const isFreeTeacher = teacher.billingPlan === 'free'
-  const [publicAnnotations, publicSnaps] = frontPage && !isFreeTeacher ? await Promise.all([
-    prisma.userData.findMany({
-      where: {
-        adapter: 'annotations',
-        itemId: frontPage.id,
-        targetType: 'page',
-      },
-      select: {
-        data: true,
-        userId: true,
-        user: { select: { name: true } }
-      }
-    }),
-    prisma.userData.findMany({
-      where: {
-        adapter: 'snaps',
-        itemId: frontPage.id,
-        targetType: 'page',
-      },
-      select: {
-        data: true,
-        userId: true,
-        user: { select: { name: true } }
-      }
-    })
-  ]) : [[], []]
+  const { publicAnnotations, publicSnaps, publicStickyNotes } = frontPage && !isFreeTeacher
+    ? await getPublicLayers(frontPage.id)
+    : EMPTY_PUBLIC_LAYERS
 
   // Owner can create public annotations on their own front page
   const isPageAuthor = isOwner
@@ -188,7 +166,7 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
       />
       {frontPage?.content ? (
         <article className="prose-theme">
-          <AnnotationWrapper pageId={frontPage.id} content={frontPage.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} isPageAuthor={isPageAuthor}>
+          <AnnotationWrapper pageId={frontPage.id} content={frontPage.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes} isPageAuthor={isPageAuthor}>
             <ServerMarkdownRenderer
               content={frontPage.content}
               pageId={frontPage.id}

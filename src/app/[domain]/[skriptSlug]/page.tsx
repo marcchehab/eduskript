@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { SkriptRedirect } from '@/components/SkriptRedirect'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
 import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
+import { getPublicLayers, EMPTY_PUBLIC_LAYERS } from '@/lib/public-page-data'
 import { headers } from 'next/headers'
 
 // Force dynamic rendering - this page uses headers() for hostname detection
@@ -150,32 +151,9 @@ export default async function SkriptPreviewPage({ params }: SkriptPreviewProps) 
 
     // Free teachers can't write to UserData (sync endpoint returns 402), so
     // these tables are empty by definition — skip the queries.
-    const [publicAnnotations, publicSnaps] = frontPage && !isFreeTeacher ? await Promise.all([
-      prisma.userData.findMany({
-        where: {
-          adapter: 'annotations',
-          itemId: frontPage.id,
-          targetType: 'page',
-        },
-        select: {
-          data: true,
-          userId: true,
-          user: { select: { name: true } }
-        }
-      }),
-      prisma.userData.findMany({
-        where: {
-          adapter: 'snaps',
-          itemId: frontPage.id,
-          targetType: 'page',
-        },
-        select: {
-          data: true,
-          userId: true,
-          user: { select: { name: true } }
-        }
-      })
-    ]) : [[], []]
+    const { publicAnnotations, publicSnaps, publicStickyNotes } = frontPage && !isFreeTeacher
+      ? await getPublicLayers(frontPage.id)
+      : EMPTY_PUBLIC_LAYERS
 
     const isPageAuthor = isAuthor
     const showFrontpage = frontPage?.content || isAuthor
@@ -185,7 +163,7 @@ export default async function SkriptPreviewPage({ params }: SkriptPreviewProps) 
         <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border">
           {frontPage?.content ? (
             <article className="prose-theme">
-              <AnnotationWrapper pageId={frontPage.id} content={frontPage.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} isPageAuthor={isPageAuthor}>
+              <AnnotationWrapper pageId={frontPage.id} content={frontPage.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes} isPageAuthor={isPageAuthor}>
                 <ServerMarkdownRenderer
                   content={frontPage.content}
                   skriptId={skript.id}

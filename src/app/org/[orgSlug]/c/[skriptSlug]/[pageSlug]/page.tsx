@@ -9,6 +9,7 @@ import { buildSiteStructure } from '@/lib/site-structure'
 import { canonicalUrl, canonicalBase } from '@/lib/seo/canonical'
 import { generateExcerpt } from '@/lib/markdown'
 import { JsonLd, learningResourceSchema, breadcrumbSchema } from '@/lib/seo/json-ld'
+import { getPublicLayers } from '@/lib/public-page-data'
 
 interface PageProps {
   params: Promise<{
@@ -143,17 +144,8 @@ export default async function OrgPublicPage({ params }: PageProps) {
 
   const { collection, skript, page, allPages } = content
 
-  // Fetch public annotations and snaps
-  const [publicAnnotations, publicSnaps] = await Promise.all([
-    prisma.userData.findMany({
-      where: { adapter: 'annotations', itemId: page.id, targetType: 'page' },
-      select: { data: true, userId: true, user: { select: { name: true } } }
-    }),
-    prisma.userData.findMany({
-      where: { adapter: 'snaps', itemId: page.id, targetType: 'page' },
-      select: { data: true, userId: true, user: { select: { name: true } } }
-    })
-  ])
+  // Fetch public annotations, snaps, and sticky notes
+  const { publicAnnotations, publicSnaps, publicStickyNotes } = await getPublicLayers(page.id)
 
   // Build site structure for navigation
   const siteStructure = collection
@@ -251,7 +243,7 @@ export default async function OrgPublicPage({ params }: PageProps) {
     >
       <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border">
         <article className="prose-theme">
-          <AnnotationWrapper pageId={page.id} content={page.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps}>
+          <AnnotationWrapper pageId={page.id} content={page.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes}>
             <ServerMarkdownRenderer
               content={page.content}
               skriptId={skript.id}

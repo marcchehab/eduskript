@@ -54,6 +54,7 @@ import { PythonProgressBar } from './python-progress-bar'
 import { PythonTestResults } from './python-test-results'
 import { runPythonChecks } from './python-check-runner'
 import type { PythonCheckResult } from './types'
+import { deferUntilIdle } from '@/lib/defer-until-idle'
 
 /**
  * Strip Pyodide/internal traceback frames from Python errors, keeping only
@@ -1945,26 +1946,34 @@ export const CodeEditor = memo(function CodeEditor({
   // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only effect, debugTag is stable
   }, [])
 
-  // Preload runtime in background on mount (before user clicks Run)
-  // This runs asynchronously and doesn't block the UI
+  // Preload runtime in background — deferred until after `window.load` and
+  // an idle frame, so the multi-MB Pyodide / Skulpt downloads don't compete
+  // with above-the-fold network traffic (sticky-notes, public annotations,
+  // fonts, etc.) during the critical-path window. By the time the user
+  // scrolls down to a code editor and clicks Run, the preload has typically
+  // already finished; cold-start cost is only paid in the rare case the
+  // user runs code within the first ~1s after navigation.
   useEffect(() => {
-    if (language === 'python') {
-      // Check if code uses turtle module - same logic as runCode()
-      const hasTurtle = /import\s+turtle|from\s+turtle/.test(initialCode)
+    if (language !== 'python') return
+    const hasTurtle = /import\s+turtle|from\s+turtle/.test(initialCode)
+    return deferUntilIdle(() => {
       if (hasTurtle) {
         preloadSkulpt().catch(() => {})
       } else {
         preloadPyodide().catch(() => {})
       }
-    }
-    // SQL preloading is handled below with the database
+    })
   }, [language, initialCode])
 
-  // Load SQL database when in SQL mode
+  // Load SQL database when in SQL mode — deferred via `load + idle` (same
+  // reasoning as the Python preload above). `setDbStatus('loading')` still
+  // fires immediately so the UI can show the right indicator; the actual
+  // network fetch waits until the page is past its critical-path window.
   useEffect(() => {
-    if (language === 'sql' && db && mounted) {
+    if (language !== 'sql' || !db || !mounted) return
+    setDbStatus('loading')
+    return deferUntilIdle(() => {
       console.debug(debugTag, 'loading database', db)
-      setDbStatus('loading')
       // Dynamic import to avoid SSR issues
       import('@/lib/sql-executor.client').then(({ loadDatabase }) => {
         loadDatabase(db).then(() => {
@@ -1976,7 +1985,7 @@ export const CodeEditor = memo(function CodeEditor({
           addOutput(`Failed to load database: ${error.message}`, OutputLevel.ERROR)
         })
       })
-    }
+    })
   // eslint-disable-next-line react-hooks/exhaustive-deps -- debugTag is stable (derived from id prop)
   }, [language, db, mounted])
 

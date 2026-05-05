@@ -426,15 +426,30 @@ export const authOptions: NextAuthOptions = {
         }
       }
 
-      // Expire trial if past due — runs before billingPlan refresh so the
-      // token picks up the downgrade immediately
-      if (token.id && trigger !== 'update') {
-        await expireSubscriptionIfNeeded(token.id as string)
-      }
+      // The JWT callback fires on every session check, including the implicit
+      // /api/auth/session GET that NextAuth runs on each page load. Without
+      // throttling, it chains 2-3 serial DB queries (expire check + user
+      // refresh) on every navigation; on cold connections that's enough to
+      // exhaust pool acquire timeouts and produce the "30s pre-auth hang"
+      // visitors observed (logged-out UI flips to logged-in only after the
+      // queries return). We refresh at most once per SESSION_REFRESH_INTERVAL
+      // and stash the timestamp on the token. The `update` trigger (client
+      // explicitly calls `update()`) bypasses the cache so admin changes to
+      // billingPlan/isAdmin propagate on demand. On fresh signin (`user`
+      // truthy) we skip too because the bigger fetch above already populated
+      // billingPlan/isAdmin.
+      const SESSION_REFRESH_INTERVAL_MS = 5 * 60 * 1000
+      const nowMs = Date.now()
+      const lastRefreshAt = token.dbRefreshedAt ?? 0
+      const cacheStale = nowMs - lastRefreshAt > SESSION_REFRESH_INTERVAL_MS
 
-      // Always refresh billingPlan and isAdmin from DB — these gate UI access
-      // and can be changed by admins without the user re-authenticating
-      if (token.id && trigger !== 'update') {
+      if (token.id && trigger !== 'update' && !user && cacheStale) {
+        // Expire trial if past due — runs before billingPlan refresh so the
+        // token picks up the downgrade immediately
+        await expireSubscriptionIfNeeded(token.id as string)
+
+        // Refresh billingPlan + isAdmin so admin-side changes propagate
+        // without forcing the user to re-authenticate.
         const freshUser = await prisma.user.findUnique({
           where: { id: token.id as string },
           select: { billingPlan: true, isAdmin: true }
@@ -443,6 +458,11 @@ export const authOptions: NextAuthOptions = {
           token.billingPlan = freshUser.billingPlan
           token.isAdmin = freshUser.isAdmin
         }
+        token.dbRefreshedAt = nowMs
+      } else if (user) {
+        // Fresh signin path already fetched everything — record the
+        // timestamp so the next session check doesn't redo the work.
+        token.dbRefreshedAt = nowMs
       }
 
       // Only refetch full user data on update trigger (not on every session check)

@@ -17,6 +17,7 @@ import { ExamSubmittedPage } from '@/components/exam/exam-submitted-page'
 import { TeacherExamToolbar } from '@/components/exam/teacher-exam-toolbar'
 import { isSEBRequest, type ExamSettings } from '@/lib/seb'
 import { validateExamToken, validateExamSession } from '@/lib/exam-tokens'
+import { getPublicLayers } from '@/lib/public-page-data'
 import type { Metadata } from 'next'
 
 interface PageProps {
@@ -209,17 +210,8 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
     )
   }
 
-  // Fetch public annotations and snaps (same as non-exam path)
-  const [publicAnnotations, publicSnaps] = await Promise.all([
-    prisma.userData.findMany({
-      where: { adapter: 'annotations', itemId: page.id, targetType: 'page' },
-      select: { data: true, userId: true, user: { select: { name: true } } }
-    }),
-    prisma.userData.findMany({
-      where: { adapter: 'snaps', itemId: page.id, targetType: 'page' },
-      select: { data: true, userId: true, user: { select: { name: true } } }
-    })
-  ])
+  // Fetch public annotations, snaps, and sticky notes (same as non-exam path)
+  const { publicAnnotations, publicSnaps, publicStickyNotes } = await getPublicLayers(page.id)
 
   // Layout: the /exam/... segment doesn't inherit the [domain] sidebar layout,
   // so render PublicSiteLayout inline. During exams students benefit from the
@@ -258,6 +250,7 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
         skriptId={skript.id}
         publicAnnotations={publicAnnotations}
         publicSnaps={publicSnaps}
+        publicStickyNotes={publicStickyNotes}
         isExamStudent={isExamStudent}
       />
     </PublicSiteLayout>

@@ -142,9 +142,18 @@ interface StickyNotesLayerProps {
   children: ReactNode
   /** Whether user is a student in an exam session */
   isExamStudent?: boolean
+  /**
+   * Pre-fetched public (page-broadcast) sticky notes from the server.
+   *
+   * When provided (even as an empty array), the client-side `fetch` for the
+   * public layer is skipped — public notes render at first paint without a
+   * post-hydration waterfall. Pass `undefined` only on routes that don't
+   * SSR-prefetch this data.
+   */
+  publicStickyNotes?: StickyNote[]
 }
 
-export function StickyNotesLayer({ pageId, children, isExamStudent }: StickyNotesLayerProps) {
+export function StickyNotesLayer({ pageId, children, isExamStudent, publicStickyNotes }: StickyNotesLayerProps) {
   const { data: session } = useSession()
   const { viewMode, isTeacher, selectedClass, selectedStudent } = useTeacherClass()
   const isStudent = session?.user?.accountType === 'student' || isExamStudent
@@ -191,11 +200,17 @@ export function StickyNotesLayer({ pageId, children, isExamStudent }: StickyNote
     individualStickyNotes: teacherIndividualStickyNotes,
   } = useTeacherBroadcast(isStudent ? pageId : '')
 
-  // For students and unauthenticated visitors: fetch public (page-broadcast) sticky notes.
+  // For students and unauthenticated visitors: render public (page-broadcast) sticky notes.
   // Teachers use the pageBroadcastStickyNotes hook instead (supports live sync).
-  const [publicNotes, setPublicNotes] = useState<StickyNote[]>([])
+  //
+  // Initial value comes from the server-rendered `publicStickyNotes` prop when
+  // the route SSR-prefetches it (the four public page routes). When the prop is
+  // omitted (legacy callers), we fall back to a client fetch on mount.
+  const [publicNotes, setPublicNotes] = useState<StickyNote[]>(publicStickyNotes ?? [])
   const isLoggedIn = !!session?.user
   useEffect(() => {
+    // Prop-supplied data is authoritative for the initial render — skip the fetch.
+    if (publicStickyNotes !== undefined) return
     if (isTeacher || !pageId) return
     fetch(`/api/user-data/sticky-notes/${encodeURIComponent(pageId)}?targetType=page`)
       .then(res => res.ok ? res.json() : null)
@@ -204,7 +219,7 @@ export function StickyNotesLayer({ pageId, children, isExamStudent }: StickyNote
         if (d?.notes?.length) setPublicNotes(d.notes)
       })
       .catch(() => {}) // Silently ignore — not critical
-  }, [isTeacher, pageId])
+  }, [isTeacher, pageId, publicStickyNotes])
 
   // For teachers: load page-broadcast sticky notes as a read-only reference layer
   // when NOT actively editing page-broadcast (mirrors pageBroadcastData in annotation-layer).

@@ -11,6 +11,7 @@ import { authOptions } from '@/lib/auth'
 import { getOrgMembership } from '@/lib/org-auth'
 import { getOrgFullSiteStructure } from '@/lib/cached-queries'
 import { buildSiteStructure } from '@/lib/site-structure'
+import { getPublicLayers, EMPTY_PUBLIC_LAYERS } from '@/lib/public-page-data'
 
 export const dynamic = 'force-dynamic'
 export const dynamicParams = true
@@ -152,17 +153,10 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
     }
   })
 
-  // Fetch public annotations and snaps for this skript front page
-  const [publicAnnotations, publicSnaps] = frontPage ? await Promise.all([
-    prisma.userData.findMany({
-      where: { adapter: 'annotations', itemId: frontPage.id, targetType: 'page' },
-      select: { data: true, userId: true, user: { select: { name: true } } }
-    }),
-    prisma.userData.findMany({
-      where: { adapter: 'snaps', itemId: frontPage.id, targetType: 'page' },
-      select: { data: true, userId: true, user: { select: { name: true } } }
-    })
-  ]) : [[], []]
+  // Fetch public annotations, snaps, and sticky notes for this skript front page
+  const { publicAnnotations, publicSnaps, publicStickyNotes } = frontPage
+    ? await getPublicLayers(frontPage.id)
+    : EMPTY_PUBLIC_LAYERS
 
   const isPageAuthor = isAdmin
   const showFrontpage = frontPage?.content || isAdmin
@@ -239,7 +233,7 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
 
           {frontPage?.content ? (
             <article className="prose-theme">
-              <AnnotationWrapper pageId={frontPage.id} content={frontPage.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} isPageAuthor={isPageAuthor}>
+              <AnnotationWrapper pageId={frontPage.id} content={frontPage.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes} isPageAuthor={isPageAuthor}>
                 <ServerMarkdownRenderer
                   content={frontPage.content}
                   skriptId={skript.id}

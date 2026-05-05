@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import { PublicSiteLayout } from '@/components/public/layout'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
 import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
+import { getPublicLayers } from '@/lib/public-page-data'
 import { ExamSessionIndicator } from '@/components/exam/exam-session-indicator'
 import { ExamLockedPage } from '@/components/exam/exam-locked-page'
 import { SEBRequiredPage } from '@/components/exam/seb-required-page'
@@ -357,16 +358,7 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
 
   }
 
-  const [publicAnnotations, publicSnaps] = await Promise.all([
-    prisma.userData.findMany({
-      where: { adapter: 'annotations', itemId: page.id, targetType: 'page' },
-      select: { data: true, userId: true, user: { select: { name: true } } }
-    }),
-    prisma.userData.findMany({
-      where: { adapter: 'snaps', itemId: page.id, targetType: 'page' },
-      select: { data: true, userId: true, user: { select: { name: true } } }
-    })
-  ])
+  const { publicAnnotations, publicSnaps, publicStickyNotes } = await getPublicLayers(page.id)
 
   let isPageAuthor = false
   const session = await getServerSession(authOptions)
@@ -429,7 +421,7 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
   const examContent = (
     <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border">
       <article className="prose-theme">
-        <AnnotationWrapper pageId={page.id} content={page.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} isPageAuthor={isPageAuthor} isExamStudent={isExamStudent}>
+        <AnnotationWrapper pageId={page.id} content={page.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes} isPageAuthor={isPageAuthor} isExamStudent={isExamStudent}>
           <ServerMarkdownRenderer
             content={page.content}
             skriptId={skript.id}
