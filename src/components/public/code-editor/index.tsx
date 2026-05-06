@@ -5368,20 +5368,12 @@ plots
                     orphanId={orphanId}
                     onPreviewVersion={previewOrphanVersion}
                     onRestore={async () => {
-                      if (!confirm(
-                        `Restore all saves from "${orphanId}" onto this editor? ` +
-                        `They will appear in this editor's History tab and the orphan will disappear.`
-                      )) return
                       await reassignHistory(orphanId)
                       await refreshVersions()
                       await refreshOrphans()
                       setActivePanel('history')
                     }}
                     onDelete={async () => {
-                      if (!confirm(
-                        `Permanently delete every save under "${orphanId}"? ` +
-                        `This cannot be undone.`
-                      )) return
                       // Order: history rows first (refCount-aware blob cleanup),
                       // then the main userData row. Orphan disappears from the
                       // list because detection runs against userData_history.

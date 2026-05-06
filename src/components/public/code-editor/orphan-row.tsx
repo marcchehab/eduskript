@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { ChevronRight, ChevronDown, Trash2, Import } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ConfirmationDialog } from '@/components/ui/confirmation-dialog'
 import { userDataService } from '@/lib/userdata'
 import type { VersionSummary } from '@/lib/userdata/types'
 import { VersionCardDisplay } from './version-card-display'
@@ -28,8 +29,6 @@ export function OrphanRow({ pageId, orphanId, onRestore, onDelete, onPreviewVers
   const [expanded, setExpanded] = useState(false)
   const [versions, setVersions] = useState<VersionSummary[] | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [isRestoring, setIsRestoring] = useState(false)
-  const [isDeleting, setIsDeleting] = useState(false)
 
   async function toggle() {
     const next = !expanded
@@ -42,24 +41,6 @@ export function OrphanRow({ pageId, orphanId, onRestore, onDelete, onPreviewVers
       } finally {
         setIsLoading(false)
       }
-    }
-  }
-
-  async function handleRestore() {
-    setIsRestoring(true)
-    try {
-      await onRestore()
-    } finally {
-      setIsRestoring(false)
-    }
-  }
-
-  async function handleDelete() {
-    setIsDeleting(true)
-    try {
-      await onDelete()
-    } finally {
-      setIsDeleting(false)
     }
   }
 
@@ -95,26 +76,40 @@ export function OrphanRow({ pageId, orphanId, onRestore, onDelete, onPreviewVers
           )}
           <code className="text-xs font-mono truncate">{orphanId}</code>
         </button>
-        <Button
-          onClick={handleRestore}
-          disabled={isRestoring || isDeleting}
-          size="sm"
-          variant="ghost"
-          className="h-7 w-7 p-0 flex-shrink-0"
-          title="Restore to this editor — move all saves from this orphaned editor onto the current one"
-        >
-          <Import className="w-3.5 h-3.5" />
-        </Button>
-        <Button
-          onClick={handleDelete}
-          disabled={isRestoring || isDeleting}
-          size="sm"
-          variant="ghost"
-          className="h-7 w-7 p-0 flex-shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
-          title="Delete — permanently remove every save under this orphaned editor id"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </Button>
+        <ConfirmationDialog
+          title="Restore to this editor"
+          description={`Move every save from "${orphanId}" onto the current editor. They will appear in this editor's History tab and the orphan will disappear.`}
+          confirmText="Restore"
+          variant="default"
+          onConfirm={onRestore}
+          trigger={
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 w-7 p-0 flex-shrink-0"
+              title="Restore to this editor — move all saves from this orphaned editor onto the current one"
+            >
+              <Import className="w-3.5 h-3.5" />
+            </Button>
+          }
+        />
+        <ConfirmationDialog
+          title="Delete orphaned saves"
+          description={`Permanently delete every save under "${orphanId}". This cannot be undone.`}
+          confirmText="Delete"
+          variant="destructive"
+          onConfirm={onDelete}
+          trigger={
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 w-7 p-0 flex-shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              title="Delete — permanently remove every save under this orphaned editor id"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+          }
+        />
       </div>
       {expanded && (
         <div className="px-2 pb-2 border-t">
