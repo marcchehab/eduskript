@@ -295,7 +295,19 @@ export function HighlightLayer({ pageId, children }: HighlightLayerProps) {
   )
 }
 
-// --- Side panel (vertical color picker, in the left gutter of #paper) ---
+// --- Side panel (vertical color picker, in #paper's right gutter when visible) ---
+//
+// Horizontal: aim for the visual center of #paper's right padding (96px from
+// paper's right edge in unscaled coords, multiplied by the current paper
+// scale). When the gutter center falls outside the viewport — i.e. the user
+// has zoomed in far enough that the right padding is offscreen — the same
+// clamp pins the panel to the viewport's right edge.
+// Vertical: track the selection's center, clamped to keep the panel in view.
+// `position: fixed` + portal to document.body keeps it in real viewport
+// coords regardless of the `transform: scale()` on #paper.
+
+const PAPER_PADDING_X = 192 // matches `.paper-responsive { @apply px-48 }` in globals.css
+const VIEWPORT_MARGIN = 8
 
 interface SidePanelProps {
   /** Function that returns the current bounding rect of the source element (selection or mark) */
@@ -307,18 +319,50 @@ interface SidePanelProps {
 
 const SidePanel = forwardRef<HTMLDivElement, SidePanelProps>(
   function SidePanel({ getSourceRect, currentColor, onSelectColor, onDelete }, ref) {
-    const [pos, setPos] = useState({ left: 8, top: 0 })
+    const innerRef = useRef<HTMLDivElement>(null)
+    const [pos, setPos] = useState({ left: 0, top: 0 })
+
+    const setRefs = useCallback(
+      (node: HTMLDivElement | null) => {
+        innerRef.current = node
+        if (typeof ref === 'function') ref(node)
+        else if (ref) ref.current = node
+      },
+      [ref],
+    )
 
     useEffect(() => {
       const update = () => {
-        const paper = document.getElementById('paper')
         const sourceRect = getSourceRect()
-        const paperLeft = paper ? paper.getBoundingClientRect().left : 0
+        if (!sourceRect) return
 
-        setPos({
-          left: Math.max(8, paperLeft + 8),
-          top: sourceRect ? sourceRect.top + sourceRect.height / 2 : pos.top,
-        })
+        const panel = innerRef.current
+        const panelW = panel?.offsetWidth ?? 0
+        const panelH = panel?.offsetHeight ?? 0
+        const vw = window.innerWidth
+        const vh = window.innerHeight
+
+        // Horizontal: gutter center, falling back to viewport edge when the
+        // gutter is offscreen (zoomed in past it).
+        const paper = document.getElementById('paper')
+        const viewportRightLimit = vw - VIEWPORT_MARGIN - panelW / 2
+        let desiredX = viewportRightLimit
+        if (paper && paper.offsetWidth > 0) {
+          const paperRect = paper.getBoundingClientRect()
+          const scale = paperRect.width / paper.offsetWidth
+          const gutterCenter = paperRect.right - (PAPER_PADDING_X / 2) * scale
+          desiredX = Math.min(gutterCenter, viewportRightLimit)
+        }
+        const left = Math.max(VIEWPORT_MARGIN + panelW / 2, desiredX)
+
+        // Vertical: selection center, clamped into viewport.
+        const desiredY = sourceRect.top + sourceRect.height / 2
+        const top = Math.max(
+          VIEWPORT_MARGIN + panelH / 2,
+          Math.min(vh - VIEWPORT_MARGIN - panelH / 2, desiredY),
+        )
+
+        setPos({ left, top })
       }
       update()
 
@@ -329,17 +373,16 @@ const SidePanel = forwardRef<HTMLDivElement, SidePanelProps>(
         scrollContainer?.removeEventListener('scroll', update)
         window.removeEventListener('resize', update)
       }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- pos.top fallback only used on initial render
     }, [getSourceRect])
 
     return (
       <div
-        ref={ref}
+        ref={setRefs}
         className="fixed flex flex-col items-center gap-1.5 rounded-lg border border-border bg-popover p-1.5 shadow-lg select-none"
         style={{
           left: pos.left,
           top: pos.top,
-          transform: 'translateY(-50%)',
+          transform: 'translate(-50%, -50%)',
           zIndex: 45,
         }}
       >
