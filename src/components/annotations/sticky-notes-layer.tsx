@@ -28,7 +28,7 @@ import { createPortal } from 'react-dom'
 import { nanoid } from 'nanoid'
 import {
   StickyNote as StickyNoteIcon,
-  X,
+  Trash2,
   Minus,
   Plus,
   Palette,
@@ -633,7 +633,7 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly }: StickyN
               className="w-5 h-5 rounded flex items-center justify-center opacity-40 hover:opacity-100 hover:text-red-500 transition-all"
               title="Delete note"
             >
-              <X className="w-3 h-3" aria-hidden />
+              <Trash2 className="w-3 h-3" aria-hidden />
             </button>
           </div>
         )}

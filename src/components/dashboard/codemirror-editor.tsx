@@ -1053,7 +1053,10 @@ const CodeMirrorEditor = function CodeMirrorEditor({
 
   // Insert code editor block
   const insertCodeEditor = () => {
-    const codeEditorTemplate = '```python editor\n# Write your Python code here\nprint("Hello, World!")\n```\n'
+    // Pre-fill an explicit id so saves persist across markdown edits. Without
+    // an explicit id the editor falls back to a content-hash-derived one,
+    // which flips whenever the starter code changes and orphans the saves.
+    const codeEditorTemplate = `\`\`\`python editor id="${generateId()}"\n# Write your Python code here\nprint("Hello, World!")\n\`\`\`\n`
 
     if (editorViewRef.current && !useSimpleEditor) {
       const view = editorViewRef.current
