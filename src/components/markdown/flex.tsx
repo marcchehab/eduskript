@@ -27,7 +27,7 @@ export function FlexItem({ children, className, width, grow = true }: FlexItemPr
   return (
     <div
       className={cn(
-        'min-w-0',
+        'min-w-0 [&>*:first-child]:!mt-0',
         grow ? 'flex-grow' : 'flex-grow-0',
         className
       )}
