@@ -36,6 +36,7 @@ import { rehypeHeadingSectionIds } from './rehype-plugins/heading-section-ids'
 import { rehypeMarkdownChildren } from './rehype-plugins/markdown-children'
 import { rehypeAllowPluginAttrs } from './rehype-plugins/plugin-attrs'
 import { rehypeColorClasses } from './rehype-plugins/color-classes'
+import { rehypeExternalLinks } from './rehype-plugins/external-links'
 
 // Re-export remarkPlugins for backward compatibility
 export { remarkPlugins }
@@ -163,7 +164,7 @@ export const sanitizeSchema = {
     // Span for KaTeX
     'span': ['className', 'style'],
     // Links
-    'a': ['href', 'title', 'className', 'dataOriginalHref', 'data-original-href', 'download'],
+    'a': ['href', 'title', 'className', 'dataOriginalHref', 'data-original-href', 'download', 'target', 'rel'],
     // SVG container attributes
     'svg': ['viewBox', 'width', 'height', 'xmlns', 'preserveAspectRatio', 'fill', 'stroke', 'stroke-width', 'stroke-dasharray', 'stroke-dashoffset', 'opacity', 'transform'],
     // SVG shape attributes (shared)
@@ -278,6 +279,7 @@ export async function compileMarkdown(
     .use(rehypeRaw)
     .use(rehypeMarkdownChildren) // Re-parse markdown inside custom elements like <stickme>
     .use(rehypeAllowPluginAttrs, schema) // Add this document's <plugin> attrs to the sanitize allowlist
+    .use(rehypeExternalLinks) // Auto target=_blank for external links + title="_blank" opt-in
     .use(rehypeSanitize, schema)
     .use(rehypePlugins)
     .use(rehypeReact, {
