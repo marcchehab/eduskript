@@ -133,6 +133,7 @@ export function ContentImage({ src, alt = '', title, style, onWidthChange, origi
       wrap={wrap}
       onLayoutChange={onWidthChange ? handleLayoutChange : undefined}
       dataAttributes={dataAttributes}
+      style={{ maxWidth: `${imgWidth}px` }}
     >
       {/* Image */}
       <span className="block relative group/img">
@@ -188,8 +189,12 @@ export function ContentImage({ src, alt = '', title, style, onWidthChange, origi
           <img
             src={imageSrc}
             alt={alt || ''}
-            className="max-w-full max-h-[90vh] object-contain rounded-md"
-            style={invertFilter ? { filter: invertFilter } : undefined}
+            className="max-w-[95vw] max-h-[90vh] w-auto h-auto object-contain rounded-md"
+            style={{
+              width: '95vw',
+              height: '90vh',
+              ...(invertFilter ? { filter: invertFilter } : {}),
+            }}
           />
         </ImageLightbox>
       )}

@@ -160,7 +160,8 @@ export function ExcalidrawImage({ src, alt, style, onWidthChange, onEdit, align 
           <img
             src={lightSrc}
             alt={caption}
-            className="max-w-full max-h-[90vh] object-contain rounded-md dark:hidden"
+            style={{ width: '95vw', height: '90vh' }}
+            className="max-w-[95vw] max-h-[90vh] w-auto h-auto object-contain rounded-md dark:hidden"
           />
         )}
         {darkSrc && (
@@ -168,7 +169,8 @@ export function ExcalidrawImage({ src, alt, style, onWidthChange, onEdit, align 
           <img
             src={darkSrc}
             alt={caption}
-            className="max-w-full max-h-[90vh] object-contain rounded-md hidden dark:block"
+            style={{ width: '95vw', height: '90vh' }}
+            className="max-w-[95vw] max-h-[90vh] w-auto h-auto object-contain rounded-md hidden dark:block"
           />
         )}
       </ImageLightbox>

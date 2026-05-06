@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 
 interface ImageLightboxProps {
@@ -9,10 +10,10 @@ interface ImageLightboxProps {
   children: React.ReactNode
 }
 
-/**
- * Lightbox overlay that darkens/blurs the page and shows content maximized.
- * Closes on Escape, backdrop click, or the X button.
- */
+// Portals to document.body so the overlay escapes the public reader's
+// `transform: scale()` zoom on `#paper` — without this, `position: fixed`
+// is contained by the transformed ancestor and the overlay covers the
+// scaled paper instead of the real viewport.
 export function ImageLightbox({ open, onClose, children }: ImageLightboxProps) {
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === 'Escape') onClose()
@@ -28,9 +29,9 @@ export function ImageLightbox({ open, onClose, children }: ImageLightboxProps) {
     }
   }, [open, handleKeyDown])
 
-  if (!open) return null
+  if (!open || typeof window === 'undefined') return null
 
-  return (
+  const overlay = (
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-8 cursor-zoom-out"
       onClick={onClose}
@@ -42,12 +43,11 @@ export function ImageLightbox({ open, onClose, children }: ImageLightboxProps) {
       >
         <X className="w-5 h-5" />
       </button>
-      <div
-        className="max-w-[95vw] max-h-[90vh] cursor-default"
-        onClick={e => e.stopPropagation()}
-      >
+      <div className="w-full h-full flex items-center justify-center pointer-events-none">
         {children}
       </div>
     </div>
   )
+
+  return createPortal(overlay, document.body)
 }
