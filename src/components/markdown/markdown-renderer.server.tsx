@@ -2,6 +2,8 @@ import { compileMarkdown } from '@/lib/markdown-compiler'
 import { createMarkdownComponents } from '@/lib/markdown-components'
 import { createEmptySkriptFiles } from '@/lib/skript-files'
 import { getSkriptFiles } from '@/lib/skript-files.server'
+import { extractStableLinkIds } from '@/lib/page-stable-link'
+import { resolveStableLinks } from '@/lib/page-stable-link.server'
 import { EagerImageLoader } from './eager-image-loader'
 
 interface ServerMarkdownRendererProps {
@@ -28,12 +30,21 @@ export async function ServerMarkdownRenderer({ content, skriptId, pageId, organi
   // 2. Create components with files prop bound
   const components = createMarkdownComponents(files, { pageId, skriptId, organizationSlug, optimizeImages: true })
 
-  // 3. Compile markdown (safe pipeline, no JS execution)
+  // 3. Pre-resolve `/p/{id}` stable links to canonical URLs in one batched
+  //    DB query so public HTML ships with real hrefs. Done here (server) so
+  //    `markdown-compiler` stays free of `server-only` imports and can be
+  //    safely bundled into client code paths (live editor preview, demo).
+  const stableIds = extractStableLinkIds(content)
+  const resolvedStableLinks = stableIds.length > 0
+    ? await resolveStableLinks(stableIds)
+    : undefined
+
+  // 4. Compile markdown (safe pipeline, no JS execution)
   let rendered: React.ReactNode
   let error: unknown
 
   try {
-    rendered = await compileMarkdown(content, { components })
+    rendered = await compileMarkdown(content, { components, resolvedStableLinks })
   } catch (e) {
     error = e
     console.error('Server markdown rendering error:', e)

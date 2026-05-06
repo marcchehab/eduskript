@@ -38,7 +38,6 @@ import { rehypeAllowPluginAttrs } from './rehype-plugins/plugin-attrs'
 import { rehypeColorClasses } from './rehype-plugins/color-classes'
 import { rehypeExternalLinks } from './rehype-plugins/external-links'
 import { rehypeStablePageLinks } from './rehype-plugins/stable-page-links'
-import { extractStableLinkIds } from './page-stable-link'
 import type { ResolvedPage } from './page-stable-link'
 
 // Re-export remarkPlugins for backward compatibility
@@ -226,6 +225,12 @@ export const sanitizeSchema = {
 export interface CompileMarkdownOptions {
   /** React components to use for HTML elements */
   components?: Record<string, ComponentType<any>>
+  /** Pre-resolved canonical URLs for `/p/{id}` stable links. Server callers
+   *  resolve via `resolveStableLinks` before invoking; client renders pass
+   *  nothing and the `/p/[id]` redirect route handles links at click time.
+   *  Kept as a parameter so this module stays free of `server-only` imports
+   *  and can be safely bundled into client components. */
+  resolvedStableLinks?: Map<string, ResolvedPage>
 }
 
 /**
@@ -266,7 +271,7 @@ export async function compileMarkdown(
   content: string,
   options?: CompileMarkdownOptions
 ): Promise<ReactNode> {
-  const { components = {} } = options ?? {}
+  const { components = {}, resolvedStableLinks = new Map<string, ResolvedPage>() } = options ?? {}
 
   const processed = expandSelfClosingTags(content)
 
@@ -274,19 +279,6 @@ export async function compileMarkdown(
   // allowlist based on the attrs found in *this* document, so concurrent
   // renders can't pollute each other.
   const schema = structuredClone(sanitizeSchema)
-
-  // Server-only: pre-resolve stable `/p/{id}` page links to their canonical
-  // URLs in one batched DB query, so public pages ship with real hrefs.
-  // Client renders (live editor preview) skip this — the `/p/[id]` redirect
-  // route handles any unrewritten links at click time. Dynamic import keeps
-  // prisma out of the client bundle.
-  const isServer = typeof window === 'undefined'
-  const stableIds = isServer ? extractStableLinkIds(processed) : []
-  let resolvedStableLinks = new Map<string, ResolvedPage>()
-  if (isServer && stableIds.length > 0) {
-    const { resolveStableLinks } = await import('./page-stable-link.server')
-    resolvedStableLinks = await resolveStableLinks(stableIds)
-  }
 
   const processor = unified()
     .use(remarkParse)

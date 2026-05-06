@@ -28,6 +28,9 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      // Next.js virtual module — provide an empty stub so vitest can resolve
+      // imports of `server-only` from server-tagged source files.
+      'server-only': path.resolve(__dirname, './tests/stubs/server-only.ts'),
     },
   },
 })
