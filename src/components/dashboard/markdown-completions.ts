@@ -398,6 +398,66 @@ export function createMarkdownCompletions(getFileList: () => FileListItem[]) {
   }
 }
 
+// ── Page-link completions ────────────────────────────────────────────
+
+/**
+ * Async completion source: when the cursor sits inside the URL parens of a
+ * markdown link `[title](|)`, suggest the user's pages and insert the
+ * selected one as a stable link `/p/{id}`. Stable links are slug-independent
+ * and survive renames (see lib/page-stable-link.server.ts + the /p/[id]
+ * redirect route).
+ *
+ * Registered as a separate source alongside markdownCompletions because it
+ * needs to be async (fetches from /api/pages/search) while the existing
+ * source is sync.
+ */
+interface PageSearchHit {
+  id: string
+  title: string
+  skriptTitle: string
+}
+
+export async function pageLinkCompletions(
+  context: CompletionContext
+): Promise<CompletionResult | null> {
+  const line = context.state.doc.lineAt(context.pos)
+  const textBefore = line.text.slice(0, context.pos - line.from)
+
+  // Match the URL portion of `[label](|)` — cursor is after `](` with no
+  // closing `)` or whitespace yet between `(` and the cursor.
+  const linkMatch = textBefore.match(/\]\(([^)\s]*)$/)
+  if (!linkMatch) return null
+
+  const query = linkMatch[1]
+
+  // Skip when the user is clearly typing an external/protocol URL — page
+  // suggestions there would be noise. Anything else (empty, plain text,
+  // partial /p/, relative path) gets the dropdown.
+  if (/^(https?:|\/\/|mailto:|tel:)/i.test(query)) return null
+
+  let hits: PageSearchHit[] = []
+  try {
+    const res = await fetch(`/api/pages/search?q=${encodeURIComponent(query)}`)
+    if (!res.ok) return null
+    const data = await res.json()
+    hits = Array.isArray(data.pages) ? data.pages : []
+  } catch {
+    return null
+  }
+  if (hits.length === 0) return null
+
+  return {
+    from: context.pos - query.length,
+    options: hits.map<Completion>(p => ({
+      label: p.title,
+      type: 'reference',
+      detail: p.skriptTitle,
+      apply: `/p/${p.id}`,
+    })),
+    validFor: /^[^)\s]*$/,
+  }
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────
 
 /**

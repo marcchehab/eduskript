@@ -124,6 +124,10 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
   const [teacherClasses, setTeacherClasses] = useState<Array<{ id: string; name: string }>>([])
   const [unlockedClassIds, setUnlockedClassIds] = useState<string[]>([])
   const [sebLinkCopied, setSebLinkCopied] = useState(false)
+  // Tracks which page just had its stable link copied — keyed by page.id so
+  // both the metadata-header button and the per-row sidebar buttons can share
+  // the same feedback state.
+  const [stableLinkCopiedFor, setStableLinkCopiedFor] = useState<string | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
 
   // Move page dialog state
@@ -378,6 +382,17 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
     setTimeout(() => setSebLinkCopied(false), 2000)
   }
 
+  // Copy a slug-independent "/p/{id}" stable link for a page. Survives renames
+  // (resolved at compile time / via the /p/[id] redirect route).
+  const handleCopyStableLink = useCallback(async (pageId: string) => {
+    const url = `${window.location.origin}/p/${pageId}`
+    await navigator.clipboard.writeText(url)
+    setStableLinkCopiedFor(pageId)
+    setTimeout(() => {
+      setStableLinkCopiedFor(prev => (prev === pageId ? null : prev))
+    }, 1500)
+  }, [])
+
   const handleSave = useCallback(async () => {
     if (!title.trim() || !slug.trim()) {
       alert.showError('Title and slug are required')
@@ -555,6 +570,17 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                   title="Move to another skript"
                 >
                   <ArrowRightLeft className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleCopyStableLink(p.id) }}
+                  className="p-1 rounded text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground hover:bg-muted transition-all flex-shrink-0"
+                  title="Copy stable link (survives slug renames)"
+                >
+                  {stableLinkCopiedFor === p.id ? (
+                    <Check className="w-3.5 h-3.5 text-green-600" />
+                  ) : (
+                    <ClipboardCopy className="w-3.5 h-3.5" />
+                  )}
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleDeletePage(p.id, p.title) }}
@@ -765,6 +791,18 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                       </Button>
                     )
                   )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleCopyStableLink(page.id)}
+                    title="Copy stable link (survives slug renames)"
+                  >
+                    {stableLinkCopiedFor === page.id ? (
+                      <Check className="w-4 h-4 text-green-600" />
+                    ) : (
+                      <ClipboardCopy className="w-4 h-4" />
+                    )}
+                  </Button>
                   {canEdit && !isFullscreen && (
                     <Button
                       variant="ghost"

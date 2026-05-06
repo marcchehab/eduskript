@@ -20,7 +20,7 @@ import { ExcalidrawEditor } from './excalidraw-editor'
 import { PluginPicker } from './plugin-picker'
 import { InteractivePreview } from './interactive-preview'
 import { autocompletion } from '@codemirror/autocomplete'
-import { createMarkdownCompletions } from './markdown-completions'
+import { createMarkdownCompletions, pageLinkCompletions } from './markdown-completions'
 import type { EditorView } from '@codemirror/view'
 import type { ViewUpdate } from '@codemirror/view'
 import { fromMarkdown } from 'mdast-util-from-markdown'
@@ -649,7 +649,10 @@ const CodeMirrorEditor = function CodeMirrorEditor({
             keymap.of([indentWithTab, { key: 'Mod-Shift-.', run: toggleBlockquoteCmd }]), // Tab + blockquote toggle
             markdownExtension,
             autocompletion({
-              override: [createMarkdownCompletions(() => fileListRef.current || [])],
+              override: [
+                createMarkdownCompletions(() => fileListRef.current || []),
+                pageLinkCompletions,
+              ],
               activateOnTyping: true,
               maxRenderedOptions: 15,
             }),
