@@ -469,18 +469,23 @@ export class UserDataService {
   }
 
   /**
-   * Get version history for a component (current user only)
+   * Get version history for a component (current user only).
+   *
+   * Sorted descending by createdAt rather than versionNumber so that rows
+   * moved in by `reassignVersionHistory` (orphan-restore) interleave
+   * correctly with native rows. versionNumber is still written on creation
+   * but is no longer used as an identifier or sort key.
    */
   public async getVersionHistory(
     pageId: string,
     componentId: string
   ): Promise<VersionSummary[]> {
     try {
-      const versions = await db.userData_history
+      const rows = await db.userData_history
         .where('[userId+pageId+componentId]')
         .equals([this.currentUserId, pageId, componentId])
-        .reverse()
-        .sortBy('versionNumber')
+        .toArray()
+      const versions = rows.sort((a, b) => b.createdAt - a.createdAt)
 
       return versions.map(v => ({
         id: v.id,
@@ -501,41 +506,100 @@ export class UserDataService {
   }
 
   /**
-   * Restore data from a specific version (current user only)
+   * Distinct code-editor componentIds that have version-history rows on
+   * this page for the current user. Used by the orphaned-versions feature
+   * to detect editor IDs whose saves still live in IndexedDB even though
+   * no editor is currently mounted with that ID.
    */
-  public async restoreVersion<T = any>(
-    pageId: string,
-    componentId: string,
-    versionNumber: number
-  ): Promise<T | null> {
+  public async getCodeEditorComponentIdsWithHistory(pageId: string): Promise<string[]> {
     try {
-      // Find the version record
       const versions = await db.userData_history
         .where('[userId+pageId+componentId]')
-        .equals([this.currentUserId, pageId, componentId])
-        .filter(v => v.versionNumber === versionNumber)
+        .between(
+          [this.currentUserId, pageId, ''],
+          [this.currentUserId, pageId, '\uffff']
+        )
         .toArray()
+      const ids = new Set<string>()
+      for (const v of versions) {
+        if (v.componentId.startsWith('code-editor-')) ids.add(v.componentId)
+      }
+      return [...ids]
+    } catch (error) {
+      console.error('Failed to list code-editor component ids:', error)
+      return []
+    }
+  }
 
-      if (versions.length === 0) {
-        console.error('Version not found:', versionNumber)
+  /**
+   * Move every version-history row from `fromComponentId` to `toComponentId`
+   * for the current user/page. Used by the orphan-restore action.
+   *
+   * Rows are mutated in place (`update` only flips componentId), so:
+   *  - Auto-increment `id`s are preserved.
+   *  - `versionBlobs` and their refCounts are not touched (rows are moved,
+   *    not duplicated).
+   *  - `versionNumber` is left as-is. It's no longer used as an identifier;
+   *    duplicates after a move are tolerated because lookups are id-based.
+   *  - The compound secondary index `[userId+pageId+componentId]` is
+   *    re-keyed by Dexie automatically on update.
+   *
+   * The whole batch runs in a single transaction so a partial failure rolls
+   * back — there is no half-moved orphan.
+   */
+  public async reassignVersionHistory(
+    pageId: string,
+    fromComponentId: string,
+    toComponentId: string
+  ): Promise<number> {
+    try {
+      const userId = this.currentUserId
+      return await db.transaction('rw', db.userData_history, async () => {
+        const rows = await db.userData_history
+          .where('[userId+pageId+componentId]')
+          .equals([userId, pageId, fromComponentId])
+          .toArray()
+        for (const row of rows) {
+          if (row.id == null) continue
+          await db.userData_history.update(row.id, { componentId: toComponentId })
+        }
+        return rows.length
+      })
+    } catch (error) {
+      console.error('Failed to reassign version history:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Restore data from a specific version (current user only) by its
+   * IndexedDB auto-increment id. The version's stored componentId/pageId
+   * decide where the snapshot is written, so this also works for orphans.
+   */
+  public async restoreVersion<T = any>(versionId: number): Promise<T | null> {
+    try {
+      const version = await db.userData_history.get(versionId)
+      if (!version) {
+        console.error('Version not found:', versionId)
+        return null
+      }
+      if (version.userId !== this.currentUserId) {
+        console.error('Version does not belong to current user:', versionId)
         return null
       }
 
-      const version = versions[0]
-
-      // Get the blob
       const blob = await db.versionBlobs.get(version.blobId)
       if (!blob) {
         console.error('Version blob not found:', version.blobId)
         return null
       }
 
-      // Decompress and parse
       const dataJson = await gzipDecompress(blob.data)
       const data = JSON.parse(dataJson) as T
 
-      // Save the restored data as current (this will also create a new version via normal save flow)
-      await this.save(pageId, componentId, data, { immediate: true })
+      // Save as current (debounce-skipped). This also creates a new auto
+      // version via the normal save flow.
+      await this.save(version.pageId, version.componentId, data, { immediate: true })
 
       return data
     } catch (error) {
@@ -652,28 +716,21 @@ export class UserDataService {
   }
 
   /**
-   * Update a version's label (current user only)
+   * Update a version's label by its IndexedDB auto-increment id (current
+   * user only). id-based lookup avoids the duplicate-versionNumber
+   * ambiguity that the old (pageId, componentId, versionNumber) signature
+   * had — and that the orphan-restore path can produce on purpose.
    */
   public async updateVersionLabel(
-    pageId: string,
-    componentId: string,
-    versionNumber: number,
+    versionId: number,
     label: string
   ): Promise<void> {
     try {
-      // Find the version
-      const version = await db.userData_history
-        .where('[userId+pageId+componentId]')
-        .equals([this.currentUserId, pageId, componentId])
-        .filter(v => v.versionNumber === versionNumber)
-        .first()
-
-      if (!version || !version.id) {
-        throw new Error(`Version ${versionNumber} not found`)
+      const version = await db.userData_history.get(versionId)
+      if (!version || version.userId !== this.currentUserId) {
+        throw new Error(`Version ${versionId} not found`)
       }
-
-      // Update the label
-      await db.userData_history.update(version.id, { label })
+      await db.userData_history.update(versionId, { label })
     } catch (error) {
       console.error('Failed to update version label:', error)
       throw error

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useLayoutEffect, useRef, useState, useCallback, memo, useMemo } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, useCallback, memo, useMemo, useSyncExternalStore } from 'react'
 import { nanoid } from 'nanoid'
 import { createPortal } from 'react-dom'
 import { useTheme } from 'next-themes'
@@ -18,8 +18,10 @@ import { autocompletion } from '@codemirror/autocomplete'
 import { createPythonCompletions } from './python-completions'
 import { Button } from '@/components/ui/button'
 import { Play, Square, RotateCcw, Maximize2, Minimize2, X, Plus, FileText, ZoomIn, ZoomOut, Save, History, Highlighter, MessageSquare, WrapText, Circle, CheckCircle2, Package, Trash2, Paperclip, Upload, Pencil, Cloud, HardDrive } from 'lucide-react'
-import { useUserData, useCreateVersion, useVersionHistory, useRestoreVersion, useDeleteVersion, useUpdateVersionLabel } from '@/lib/userdata/hooks'
+import { useUserData, useCreateVersion, useVersionHistory, useRestoreVersion, useDeleteVersion, useUpdateVersionLabel, useOrphanedComponentIds, useReassignVersionHistory } from '@/lib/userdata/hooks'
 import { userDataService } from '@/lib/userdata'
+import { registerEditor, getMountedIds, subscribeToMounted } from './mounted-registry'
+import { OrphanRow } from './orphan-row'
 import { postCheckpoint } from '@/lib/userdata/checkpoints'
 import { useSyncedUserData, type SyncedUserDataOptions } from '@/lib/userdata/provider'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
@@ -428,7 +430,32 @@ export const CodeEditor = memo(function CodeEditor({
   const { versions, isLoading: versionsLoading, refresh: refreshVersions } = useVersionHistory(pageId || 'no-page', componentId)
   const { restore, isRestoring } = useRestoreVersion<CodeEditorData>(pageId || 'no-page', componentId)
   const { deleteVersion, isDeleting } = useDeleteVersion(pageId || 'no-page', componentId)
-  const updateLabel = useUpdateVersionLabel(pageId || 'no-page', componentId)
+  const updateLabel = useUpdateVersionLabel()
+
+  // Orphaned-versions feature: track currently-mounted code editors on this
+  // page and surface IndexedDB componentIds whose history rows exist but no
+  // editor on the page claims them. Happens when teachers edit markdown:
+  // the deterministic id-hash flips, the editor remounts under a new
+  // componentId, and the previous saves are stranded.
+  useEffect(() => {
+    if (!pageId) return
+    return registerEditor(pageId, componentId)
+  }, [pageId, componentId])
+  // useSyncExternalStore is the right primitive here: it handles the
+  // subscribe-vs-first-notify race that a useEffect+setState pair has
+  // (the registerEditor effect fires the registry listener before a
+  // separate subscribe effect can attach, and that first notification
+  // gets dropped, leaving mountedIds permanently stale).
+  const getMountedSnapshot = useCallback(() => getMountedIds(pageId || ''), [pageId])
+  const mountedIds = useSyncExternalStore(subscribeToMounted, getMountedSnapshot, getMountedSnapshot)
+  const { orphans, refresh: refreshOrphans } = useOrphanedComponentIds(pageId || '', mountedIds)
+  const reassignHistory = useReassignVersionHistory(pageId || '', componentId)
+  // Tracks whether we've already taken a "safety" autosave during this
+  // editor instance's lifetime. The orphan-preview flow autosaves the
+  // current state before clobbering the editor with the orphan's content,
+  // but only ONCE — subsequent previews would just snapshot already-
+  // previewed content, which adds nothing.
+  const safetyAutosaveDoneRef = useRef(false)
 
   // Per-kind sequential default labels: auto1/auto2/…, manual1/manual2/…,
   // check1/check2/… Computed in chronological (oldest-first) order so the
@@ -459,7 +486,7 @@ export const CodeEditor = memo(function CodeEditor({
   const jsAbortControllerRef = useRef<AbortController | null>(null)
 
   // Output/History panel state
-  const [activePanel, setActivePanel] = useState<'output' | 'history'>('output')
+  const [activePanel, setActivePanel] = useState<'output' | 'history' | 'orphans'>('output')
   const [panelVisible, setPanelVisible] = useState(false)
   const [highlightedVersion, setHighlightedVersion] = useState<number | null>(null)
   const [editingVersion, setEditingVersion] = useState<number | null>(null)
@@ -2178,6 +2205,60 @@ export const CodeEditor = memo(function CodeEditor({
   useLayoutEffect(() => { filesRef.current = files }, [files])
   const activeFileIndexRef = useRef(activeFileIndex)
   useLayoutEffect(() => { activeFileIndexRef.current = activeFileIndex }, [activeFileIndex])
+
+  // Apply a CodeEditorData snapshot to the editor's UI state. Mirrors the
+  // restore-on-click handler in the History tab; also used by the orphan-
+  // preview flow to load a single orphan version's content into the live
+  // editor without writing it back to the orphan's componentId.
+  const applyDataToEditor = useCallback((data: CodeEditorData) => {
+    if (data.files) {
+      setFiles(data.files)
+      filesRef.current = data.files
+      const view = editorViewRef.current
+      const fileIdx = data.activeFileIndex ?? activeFileIndex
+      if (view && data.files[fileIdx]) {
+        view.dispatch(view.state.update({
+          changes: { from: 0, to: view.state.doc.length, insert: data.files[fileIdx].content },
+          annotations: programmaticChange.of(true),
+        }))
+      }
+    }
+    if (data.activeFileIndex !== undefined) setActiveFileIndex(data.activeFileIndex)
+    if (data.fontSize !== undefined) setFontSize(data.fontSize)
+    if (data.lineWrapping !== undefined) setLineWrapping(data.lineWrapping)
+    if (data.editorWidth !== undefined) setEditorWidth(data.editorWidth)
+    if (data.canvasTransform) setCanvasTransform(data.canvasTransform)
+  }, [activeFileIndex])
+
+  // Preview an orphan version: snapshot current editor state ONCE (per
+  // editor instance) as a safety autosave, then load the orphan's content
+  // into the editor. Does not move the orphan version's componentId — the
+  // bulk move is the row-level "Restore to this editor" button.
+  const previewOrphanVersion = useCallback(async (versionId: number) => {
+    if (!safetyAutosaveDoneRef.current) {
+      const currentData: CodeEditorData = {
+        files: filesRef.current,
+        activeFileIndex,
+        fontSize,
+        lineWrapping,
+        editorWidth,
+        canvasTransform,
+      }
+      try {
+        await createVersion(currentData, {
+          kind: 'auto',
+          label: 'before previewing orphan',
+        })
+        safetyAutosaveDoneRef.current = true
+      } catch (e) {
+        console.error('Autosave before orphan preview failed:', e)
+      }
+    }
+    const data = await userDataService.getVersionPayload<CodeEditorData>(versionId)
+    if (!data) return
+    applyDataToEditor(data)
+    await refreshVersions()
+  }, [activeFileIndex, fontSize, lineWrapping, editorWidth, canvasTransform, createVersion, applyDataToEditor, refreshVersions])
   const activeTabRef = useRef(activeTab)
   useLayoutEffect(() => { activeTabRef.current = activeTab }, [activeTab])
   const skriptImportsRef = useRef(skriptImports)
@@ -4891,6 +4972,17 @@ plots
               History
             </Button>
           )}
+          {pageId && orphans.length > 0 && (
+            <Button
+              onClick={() => setActivePanel('orphans')}
+              size="sm"
+              variant={activePanel === 'orphans' ? 'secondary' : 'ghost'}
+              className="h-7"
+              title="Saves from previous versions of this editor whose IDs no longer match"
+            >
+              Orphaned ({orphans.length})
+            </Button>
+          )}
           {/* Spacer */}
           <div className="flex-1" />
           {/* Close button */}
@@ -5010,7 +5102,7 @@ plots
                 </div>
               )}
           </div>
-        ) : (
+        ) : activePanel === 'history' ? (
           <div className="flex-1 overflow-x-auto overflow-y-hidden p-2">
             {/* Controls row: Save button + toggles */}
             <div className="flex items-center gap-4 px-2 pb-2 text-xs border-b mb-2">
@@ -5099,8 +5191,8 @@ plots
                     days < 7 ? `${days}d` :
                     date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 
-                  const isHighlighted = highlightedVersion === version.versionNumber
-                  const isEditing = editingVersion === version.versionNumber
+                  const isHighlighted = version.id != null && highlightedVersion === version.id
+                  const isEditing = version.id != null && editingVersion === version.id
 
                   return (
                     <div
@@ -5170,7 +5262,8 @@ plots
                       <button
                         disabled={isRestoring || isEditing}
                         onClick={async () => {
-                          const data = await restore(version.versionNumber)
+                          if (version.id == null) return
+                          const data = await restore(version.id)
                           if (data) {
                             // Restore the data to component state
                             if (data.files) {
@@ -5195,8 +5288,10 @@ plots
                             await refreshVersions()
 
                             // Highlight the restored version
-                            setHighlightedVersion(version.versionNumber)
-                            setTimeout(() => setHighlightedVersion(null), 2000)
+                            if (version.id != null) {
+                              setHighlightedVersion(version.id)
+                              setTimeout(() => setHighlightedVersion(null), 2000)
+                            }
                           }
                         }}
                         className="absolute inset-0 rounded-lg disabled:cursor-default"
@@ -5210,8 +5305,10 @@ plots
                             value={editingLabel}
                             onChange={(e) => setEditingLabel(e.target.value)}
                             onBlur={async () => {
-                              await updateLabel(version.versionNumber, editingLabel)
-                              await refreshVersions()
+                              if (version.id != null) {
+                                await updateLabel(version.id, editingLabel)
+                                await refreshVersions()
+                              }
                               setEditingVersion(null)
                             }}
                             onKeyDown={(e) => {
@@ -5233,7 +5330,7 @@ plots
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
-                              setEditingVersion(version.versionNumber)
+                              if (version.id != null) setEditingVersion(version.id)
                               setEditingLabel(version.label || '')
                             }}
                             className="relative z-10 font-bold text-sm text-foreground w-full text-center px-1 hover:text-primary transition-colors line-clamp-2 cursor-text"
@@ -5248,6 +5345,52 @@ plots
                   )
                 })}
                 </div>
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="flex-1 overflow-auto p-2">
+            {orphans.length === 0 ? (
+              <div className="text-muted-foreground italic px-2 py-2 text-sm">
+                No orphaned saves found for this page.
+              </div>
+            ) : (
+              <>
+                <div className="text-xs text-muted-foreground px-2 pb-2 border-b mb-2">
+                  These editor IDs have saved versions in this browser but no
+                  matching editor on the page. Click an ID to inspect the most
+                  recent versions, then restore them onto this editor if you want.
+                </div>
+                {orphans.map((orphanId) => (
+                  <OrphanRow
+                    key={orphanId}
+                    pageId={pageId!}
+                    orphanId={orphanId}
+                    onPreviewVersion={previewOrphanVersion}
+                    onRestore={async () => {
+                      if (!confirm(
+                        `Restore all saves from "${orphanId}" onto this editor? ` +
+                        `They will appear in this editor's History tab and the orphan will disappear.`
+                      )) return
+                      await reassignHistory(orphanId)
+                      await refreshVersions()
+                      await refreshOrphans()
+                      setActivePanel('history')
+                    }}
+                    onDelete={async () => {
+                      if (!confirm(
+                        `Permanently delete every save under "${orphanId}"? ` +
+                        `This cannot be undone.`
+                      )) return
+                      // Order: history rows first (refCount-aware blob cleanup),
+                      // then the main userData row. Orphan disappears from the
+                      // list because detection runs against userData_history.
+                      await userDataService.deleteAllVersions(pageId!, orphanId)
+                      await userDataService.delete(pageId!, orphanId)
+                      await refreshOrphans()
+                    }}
+                  />
+                ))}
               </>
             )}
           </div>

@@ -272,33 +272,27 @@ export function useCreateVersion<T = any>(
 }
 
 /**
- * Hook for restoring versions
- *
- * @param pageId - Database ID of the page
- * @param componentId - Component identifier
- * @returns Functions for restoring versions
- *
- * @example
- * ```tsx
- * const { restore, isRestoring } = useRestoreVersion(pageId, 'code-editor-0')
- * await restore(5) // Restore version 5
- * ```
+ * Hook for restoring versions. `restore` takes the row's IndexedDB
+ * auto-increment id; the version's stored componentId/pageId determine
+ * where the snapshot lands, so this works for both native and orphaned
+ * rows. `restorePrevious` still resolves the most-recent row for this
+ * pageId+componentId, then restores it by id.
  */
 export function useRestoreVersion<T = any>(
   pageId: string,
   componentId: string
 ): {
-  restore: (versionNumber: number) => Promise<T | null>
+  restore: (versionId: number) => Promise<T | null>
   restorePrevious: () => Promise<T | null>
   isRestoring: boolean
 } {
   const [isRestoring, setIsRestoring] = useState(false)
 
   const restore = useCallback(
-    async (versionNumber: number): Promise<T | null> => {
+    async (versionId: number): Promise<T | null> => {
       try {
         setIsRestoring(true)
-        const data = await userDataService.restoreVersion<T>(pageId, componentId, versionNumber)
+        const data = await userDataService.restoreVersion<T>(versionId)
         return data
       } catch (error) {
         console.error('Failed to restore version:', error)
@@ -307,18 +301,18 @@ export function useRestoreVersion<T = any>(
         setIsRestoring(false)
       }
     },
-    [pageId, componentId]
+    []
   )
 
   const restorePrevious = useCallback(async (): Promise<T | null> => {
     try {
       setIsRestoring(true)
       const previousVersion = await userDataService.getPreviousVersion(pageId, componentId)
-      if (!previousVersion) {
+      if (!previousVersion || previousVersion.id == null) {
         console.warn('No previous version available')
         return null
       }
-      const data = await userDataService.restoreVersion<T>(pageId, componentId, previousVersion.versionNumber)
+      const data = await userDataService.restoreVersion<T>(previousVersion.id)
       return data
     } catch (error) {
       console.error('Failed to restore previous version:', error)
@@ -386,31 +380,76 @@ export function useDeleteVersion(
 }
 
 /**
- * Hook for updating version labels
- *
- * @param pageId - Database ID of the page
- * @param componentId - Component identifier
- * @returns Function to update a version label
- *
- * @example
- * ```tsx
- * const updateLabel = useUpdateVersionLabel(pageId, 'code-editor-0')
- * await updateLabel(5, 'Before refactor') // Update version 5's label
- * ```
+ * Hook for updating version labels. id-based: caller passes the row's
+ * IndexedDB auto-increment id. Avoids the duplicate-versionNumber
+ * ambiguity the prior signature had.
  */
-export function useUpdateVersionLabel(
-  pageId: string,
-  componentId: string
-): (versionNumber: number, label: string) => Promise<void> {
+export function useUpdateVersionLabel(): (versionId: number, label: string) => Promise<void> {
   return useCallback(
-    async (versionNumber: number, label: string): Promise<void> => {
+    async (versionId: number, label: string): Promise<void> => {
       try {
-        await userDataService.updateVersionLabel(pageId, componentId, versionNumber, label)
+        await userDataService.updateVersionLabel(versionId, label)
       } catch (error) {
         console.error('Failed to update version label:', error)
         throw error
       }
     },
-    [pageId, componentId]
+    []
+  )
+}
+
+/**
+ * Hook for orphaned-version discovery on a page. Returns code-editor
+ * componentIds whose IndexedDB version-history rows exist but no
+ * currently-mounted CodeEditor claims them. Re-runs the diff whenever the
+ * mounted set changes.
+ */
+export function useOrphanedComponentIds(
+  pageId: string,
+  mountedIds: Set<string>
+): { orphans: string[]; isLoading: boolean; refresh: () => Promise<void> } {
+  const { isDbReady } = useUserDataContext()
+  const [orphans, setOrphans] = useState<string[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+
+  const refresh = useCallback(async () => {
+    if (!pageId) {
+      setOrphans([])
+      setIsLoading(false)
+      return
+    }
+    try {
+      setIsLoading(true)
+      const all = await userDataService.getCodeEditorComponentIdsWithHistory(pageId)
+      setOrphans(all.filter((id) => !mountedIds.has(id)))
+    } catch (error) {
+      console.error('Failed to load orphaned componentIds:', error)
+      setOrphans([])
+    } finally {
+      setIsLoading(false)
+    }
+  }, [pageId, mountedIds])
+
+  useEffect(() => {
+    if (!isDbReady) return
+    refresh()
+  }, [refresh, isDbReady])
+
+  return { orphans, isLoading, refresh }
+}
+
+/**
+ * Hook returning a function that moves all version-history rows from a
+ * given orphan componentId onto the editor identified by `toComponentId`.
+ * See `userDataService.reassignVersionHistory` for safety details.
+ */
+export function useReassignVersionHistory(
+  pageId: string,
+  toComponentId: string
+): (fromComponentId: string) => Promise<number> {
+  return useCallback(
+    (fromComponentId: string) =>
+      userDataService.reassignVersionHistory(pageId, fromComponentId, toComponentId),
+    [pageId, toComponentId]
   )
 }
