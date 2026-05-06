@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { usePathname } from 'next/navigation'
 
 interface Chapter {
   id: string
@@ -101,6 +102,12 @@ export function ReadingProgress() {
   const [chapters, setChapters] = useState<Chapter[]>([])
   const [progress, setProgress] = useState(0)
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
+  // ReadingProgress lives in the public layout, so it persists across
+  // client-side navs between pages. Re-run the effect on pathname change so
+  // we re-attach the MutationObserver and recompute chapters for the new
+  // <article> — otherwise we'd be observing a detached node from the
+  // previous page and the bar collapses to the empty-chapters fallback.
+  const pathname = usePathname()
 
   useEffect(() => {
     let rafId: number | null = null
@@ -160,17 +167,25 @@ export function ReadingProgress() {
 
     // Recompute chapters when article content changes — debounced so a burst
     // of mutations during initial hydration doesn't cause heading-position
-    // thrash in the bar.
+    // thrash in the bar. Observe a stable container instead of the article
+    // itself: the article is per-page and may be missing or already replaced
+    // at the moment this effect runs (e.g. mid-soft-nav). scroll-container
+    // lives in the layout and is the same node for the component's lifetime.
     const observer = new MutationObserver(scheduleChapterRefresh)
-    const article = document.querySelector('article.prose-theme')
-    if (article) {
-      observer.observe(article, { childList: true, subtree: true })
-    }
+    const observerTarget =
+      document.getElementById('scroll-container') ?? document.body
+    observer.observe(observerTarget, { childList: true, subtree: true })
 
-    // Initial computation deferred to rAF
+    // Initial computation deferred to rAF. setProgress unconditionally here
+    // (skipping the lastProgress dedupe used by refreshProgress for scroll
+    // spam) so a route change resyncs state with the new page's scroll
+    // position — otherwise the bar carries the previous page's progress
+    // forward until the user scrolls.
     const initRaf = requestAnimationFrame(() => {
       refreshChapters()
-      refreshProgress()
+      const p = getScrollProgress()
+      lastProgress = p
+      setProgress(p)
     })
 
     return () => {
@@ -186,7 +201,7 @@ export function ReadingProgress() {
       cancelAnimationFrame(initRaf)
       observer.disconnect()
     }
-  }, [])
+  }, [pathname])
 
   // Derive active chapter from progress
   const activeIndex = getActiveIndex(chapters, progress)
