@@ -84,13 +84,13 @@ export function HighlightLayer({ pageId, children }: HighlightLayerProps) {
     return () => clearTimeout(timer)
   }, [renderHighlights])
 
-  // Check if a node is inside a code block or editor
+  // Reject selections that touch a code block or editor. Inline <code> is
+  // allowed — block code lives under <pre>, and CodeMirror under .cm-editor.
   const isInsideCodeBlock = useCallback((node: Node): boolean => {
     let el: Element | null =
       node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement
     while (el) {
-      const tag = el.tagName
-      if (tag === 'PRE' || tag === 'CODE' || el.classList.contains('cm-editor')) return true
+      if (el.tagName === 'PRE' || el.classList.contains('cm-editor')) return true
       el = el.parentElement
     }
     return false

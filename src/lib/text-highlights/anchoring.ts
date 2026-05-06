@@ -3,8 +3,10 @@ import { createLogger } from '@/lib/logger'
 
 const log = createLogger('text-highlights:anchor')
 
-/** Tags whose text content should be skipped when building the virtual text map */
-const SKIP_TAGS = new Set(['PRE', 'CODE', 'CODE-EDITOR'])
+/** Tags whose text content should be skipped when building the virtual text map.
+ * Inline <code> is included so highlights can span it; block code is excluded
+ * via its <pre> ancestor. */
+const SKIP_TAGS = new Set(['PRE', 'CODE-EDITOR'])
 
 interface TextMapping {
   node: Text
