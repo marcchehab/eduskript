@@ -53,7 +53,7 @@ Three places to toggle the state:
 
 For skripts, use the skript editor or the dashboard.
 
-In the page list, the state is shown as `(draft)` or `(unlisted)` after the title. Published pages show no marker — they're the default expectation.
+In the page list, each page shows a small icon after its title that mirrors the Publish toggle's color coding: a green check for **published**, an amber dash for **draft**, and a violet crossed-out eye for **unlisted**.
 
 ---
 

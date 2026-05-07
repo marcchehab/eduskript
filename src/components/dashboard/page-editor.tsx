@@ -14,7 +14,7 @@ import { EditModal } from '@/components/dashboard/edit-modal'
 import { CreatePageModal } from '@/components/dashboard/create-page-modal'
 import { SkriptAccessManager } from '@/components/permissions/SkriptAccessManager'
 import { EditorWithMedia, type ExtraManageTab } from '@/components/dashboard/editor-with-media'
-import { ArrowLeft, ArrowRightLeft, Save, History, Eye, ClipboardCopy, Check, Shield, Lock, Unlock, Globe, Maximize2, Minimize2, BookA, BookOpen, FileText, FilePenLine, GripVertical, Trash2, Users, Loader2 } from 'lucide-react'
+import { ArrowLeft, ArrowRightLeft, Save, History, Eye, EyeOff, ClipboardCopy, Check, Shield, Lock, Unlock, Globe, Maximize2, Minimize2, BookA, BookOpen, FileText, FilePenLine, GripVertical, Trash2, Users, Loader2, CircleCheckBig, CircleMinus } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -556,11 +556,20 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
             >
               <FileText className="w-4 h-4 flex-shrink-0" />
               <span className="truncate">{p.title}</span>
-              {!p.isPublished ? (
-                <span className="ml-auto text-xs text-muted-foreground">(draft)</span>
-              ) : p.isUnlisted ? (
-                <span className="ml-auto text-xs text-muted-foreground">(unlisted)</span>
-              ) : null}
+              {/* Visibility marker — mirrors PublishToggle's icon/color
+                  language so the read-only indicator and the interactive
+                  toggle speak the same visual vocabulary. */}
+              {(() => {
+                const state = !p.isPublished ? 'draft' : p.isUnlisted ? 'unlisted' : 'published'
+                const Icon = state === 'draft' ? CircleMinus : state === 'unlisted' ? EyeOff : CircleCheckBig
+                const color = state === 'draft' ? 'text-warning' : state === 'unlisted' ? 'text-violet-500' : 'text-success'
+                const label = state === 'draft' ? 'Draft' : state === 'unlisted' ? 'Unlisted' : 'Published'
+                return (
+                  <span className={`ml-auto flex-shrink-0 ${color}`} title={label} aria-label={label}>
+                    <Icon className="w-3.5 h-3.5" />
+                  </span>
+                )
+              })()}
             </Link>
             {canEdit && (
               <>
