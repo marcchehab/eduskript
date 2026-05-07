@@ -88,15 +88,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Prompt is required' }, { status: 400 })
   }
 
-  // Track the request
+  // Track the request as a rate-limit marker. We reuse the import_jobs
+  // table only because it gives us per-user time-bucketed counting; this
+  // row is NOT a real import. Write it as terminal ('completed') so the
+  // dashboard's active-import polling never picks it up — past attempts
+  // wrote 'processing' and left these rows hanging forever, surfacing the
+  // prompt text in the import-progress UI.
   await prisma.importJob.create({
     data: {
       userId: session.user.id,
       type: 'plugin-generate',
-      status: 'processing',
-      progress: 0,
+      status: 'completed',
+      progress: 100,
       message: prompt.slice(0, 200),
       result: {},
+      completedAt: new Date(),
     },
   })
 

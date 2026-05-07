@@ -123,10 +123,14 @@ export async function GET() {
 
     const userId = session.user.id
 
-    // Find active import job
+    // Find active import job. Filter by type='import' because the same
+    // table is also used by /api/plugins/generate for rate-limit markers
+    // — without this filter, a prompt-text message from a plugin-generate
+    // row would surface as if it were an in-progress content import.
     const activeJob = await prisma.importJob.findFirst({
       where: {
         userId,
+        type: 'import',
         status: {
           in: ['pending', 'uploading', 'processing']
         }
@@ -138,6 +142,7 @@ export async function GET() {
     const recentJobs = await prisma.importJob.findMany({
       where: {
         userId,
+        type: 'import',
         status: {
           in: ['completed', 'failed', 'cancelled']
         }
