@@ -5,6 +5,7 @@ import { getSkriptFiles } from '@/lib/skript-files.server'
 import { extractStableLinkIds } from '@/lib/page-stable-link'
 import { resolveStableLinks } from '@/lib/page-stable-link.server'
 import { EagerImageLoader } from './eager-image-loader'
+import { MarkdownErrorBoundary } from './markdown-error-boundary'
 
 interface ServerMarkdownRendererProps {
   content: string
@@ -63,7 +64,7 @@ export async function ServerMarkdownRenderer({ content, skriptId, pageId, organi
   return (
     <EagerImageLoader>
       <div className="markdown-content prose dark:prose-invert max-w-none">
-        {rendered}
+        <MarkdownErrorBoundary>{rendered}</MarkdownErrorBoundary>
       </div>
     </EagerImageLoader>
   )

@@ -6,6 +6,7 @@ import { createMarkdownComponents } from '@/lib/markdown-components'
 import { createSkriptFiles, createEmptySkriptFiles, type SkriptFilesData } from '@/lib/skript-files'
 import type { VideoInfo } from '@/lib/skript-files'
 import { EagerImageLoader } from './eager-image-loader'
+import { MarkdownErrorBoundary } from './markdown-error-boundary'
 
 interface MarkdownRendererProps {
   content: string
@@ -220,7 +221,7 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
   return (
     <EagerImageLoader>
       <div className="markdown-content prose dark:prose-invert max-w-none">
-        {renderedContent}
+        <MarkdownErrorBoundary>{renderedContent}</MarkdownErrorBoundary>
       </div>
     </EagerImageLoader>
   )
