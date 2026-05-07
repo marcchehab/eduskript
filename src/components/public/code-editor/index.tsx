@@ -3126,6 +3126,13 @@ export const CodeEditor = memo(function CodeEditor({
     setOutput([]) // Clear previous output
     setVerificationResult(null) // Reset verification on each run
 
+    // Yield one frame so React commits the RUNNING state (button → Stop)
+    // before SQL.js's synchronous .exec() blocks the event loop. Without
+    // this, fast queries against a cached DB finish inside a single
+    // microtask and the button never visibly changes — unlike the Python
+    // and JS paths, which naturally await a runtime that hasn't loaded yet.
+    await new Promise(resolve => requestAnimationFrame(() => resolve(null)))
+
     try {
       // Ensure database is configured
       if (!db) {
