@@ -383,3 +383,41 @@ export function repositionSnaps(
 
   return { snaps: repositioned }
 }
+
+/**
+ * Sticky-note shape for repositioning. Mirrors `SnapForReposition` but uses
+ * `x`/`y` (sticky-note storage) instead of `left`/`top` (snap storage).
+ */
+export interface StickyNoteForReposition {
+  id: string
+  x: number
+  y: number
+  sectionId?: string
+  sectionOffsetY?: number
+}
+
+/**
+ * Vertically reposition a single sticky note based on its anchor section's
+ * current Y position. Returns the note unchanged if it has no anchor or the
+ * anchor section is gone (treat as orphan — user can drag if needed).
+ *
+ * Unlike `repositionSnaps`, this is per-note and stateless: callers decide
+ * whether to persist (own notes) or display-only-transform (broadcast notes).
+ */
+export function repositionStickyNote<T extends StickyNoteForReposition>(
+  note: T,
+  currentHeadingPositions: HeadingPosition[],
+): T {
+  if (!note.sectionId || note.sectionOffsetY === undefined) return note
+  const current = currentHeadingPositions.find(h => h.sectionId === note.sectionId)
+  if (!current) return note
+  const deltaY = current.offsetY - note.sectionOffsetY
+  // Sub-pixel threshold: layout measurement is float-precise, and each reflow
+  // would otherwise persist a microscopic update on every recompute.
+  if (Math.abs(deltaY) < 0.5) return note
+  return {
+    ...note,
+    y: note.y + deltaY,
+    sectionOffsetY: current.offsetY,
+  }
+}

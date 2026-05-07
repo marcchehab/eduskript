@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback, memo, useMemo } from 'react'
 import { GripVertical, Trash2, Globe, Users, User, Image, Palette, Minus, Plus } from 'lucide-react'
 import type { Snap, SnapColor } from '@/types/snap'
 import { SnapViewerOverlay } from './snap-viewer-overlay'
+import { useZoom } from '@/contexts/zoom-context'
 
 const SNAP_COLORS: SnapColor[] = ['blue', 'yellow', 'green', 'pink', 'purple']
 
@@ -89,7 +90,6 @@ interface SnapsDisplayProps {
   snapOverrides?: SnapOverridesData | null
   onTeacherSnapOverride?: (snapId: string, layerType: 'class' | 'individual' | 'public', position: { top: number; left: number; width: number; height: number }) => void
   onStudentWorkSnapOverride?: (snapId: string, position: { top: number; left: number; width: number; height: number }) => void
-  zoom: number
   paperWidth: number // Paper width in pixels for drag delta conversion
   initialLoadComplete?: boolean // Whether all annotation/snap data has loaded (for unified fade-in)
 }
@@ -102,14 +102,12 @@ const DEBUG_STATE = false
 // Student work snap component - moveable by teacher viewing student's work
 const StudentWorkSnapItem = memo(function StudentWorkSnapItem({
   snap,
-  zoom,
   onExpand,
   overridePosition,
   onPositionChange,
   paperWidth,
 }: {
   snap: StudentWorkSnap
-  zoom: number
   onExpand: (id: string) => void
   overridePosition?: { top: number; left: number; width: number; height: number }
   onPositionChange?: (position: { top: number; left: number; width: number; height: number }) => void
@@ -119,6 +117,7 @@ const StudentWorkSnapItem = memo(function StudentWorkSnapItem({
 
   const elementRef = useRef<HTMLDivElement>(null)
   const imageRef = useRef<HTMLImageElement>(null)
+  const getZoom = useZoom()
 
   // Use override position if available, otherwise use original snap position
   const position = useMemo(() =>
@@ -165,6 +164,7 @@ const StudentWorkSnapItem = memo(function StudentWorkSnapItem({
       const element = elementRef.current
       if (!element) return
 
+      const zoom = getZoom()
       const deltaX = (e.clientX - state.startX) / zoom
       const deltaY = (e.clientY - state.startY) / zoom
 
@@ -188,7 +188,7 @@ const StudentWorkSnapItem = memo(function StudentWorkSnapItem({
         }
       }
     }
-  }, [zoom])
+  }, [getZoom])
 
   // Store onPositionChange in a ref to avoid stale closures
   const onPositionChangeRef = useRef(onPositionChange)
@@ -365,14 +365,12 @@ const StudentWorkSnapItem = memo(function StudentWorkSnapItem({
 // Teacher snap component - read-only, moveable but no delete
 const TeacherSnapItem = memo(function TeacherSnapItem({
   snap,
-  zoom,
   onExpand,
   overridePosition,
   onPositionChange,
   paperWidth,
 }: {
   snap: TeacherSnap
-  zoom: number
   onExpand: (id: string) => void
   overridePosition?: { top: number; left: number; width: number; height: number }
   onPositionChange?: (position: { top: number; left: number; width: number; height: number }) => void
@@ -382,6 +380,7 @@ const TeacherSnapItem = memo(function TeacherSnapItem({
 
   const elementRef = useRef<HTMLDivElement>(null)
   const imageRef = useRef<HTMLImageElement>(null)
+  const getZoom = useZoom()
 
   // Use override position if available, otherwise use original snap position
   const position = useMemo(() =>
@@ -428,6 +427,7 @@ const TeacherSnapItem = memo(function TeacherSnapItem({
       const element = elementRef.current
       if (!element) return
 
+      const zoom = getZoom()
       const deltaX = (e.clientX - state.startX) / zoom
       const deltaY = (e.clientY - state.startY) / zoom
 
@@ -451,7 +451,7 @@ const TeacherSnapItem = memo(function TeacherSnapItem({
         }
       }
     }
-  }, [zoom])
+  }, [getZoom])
 
   // Store onPositionChange in a ref to avoid stale closures
   const onPositionChangeRef = useRef(onPositionChange)
@@ -635,7 +635,6 @@ const SnapItem = memo(function SnapItem({
   onReorder,
   onExpand,
   onBringToFront,
-  zoom,
   allSnaps,
   paperWidth,
   zIndex,
@@ -648,7 +647,6 @@ const SnapItem = memo(function SnapItem({
   onReorder: (snaps: Snap[]) => void
   onExpand: (id: string) => void
   onBringToFront: (id: string) => void
-  zoom: number
   allSnaps: Snap[]
   paperWidth: number
   zIndex: number
@@ -663,6 +661,7 @@ const SnapItem = memo(function SnapItem({
   const cfg = SNAP_COLOR_CONFIG[color]
   const elementRef = useRef<HTMLDivElement>(null)
   const imageRef = useRef<HTMLImageElement>(null)
+  const getZoom = useZoom()
 
   // Store current transform during drag (not position - we use transform for smooth movement)
   const dragStateRef = useRef<{
@@ -710,6 +709,7 @@ const SnapItem = memo(function SnapItem({
       const element = elementRef.current
       if (!element) return
 
+      const zoom = getZoom()
       const deltaX = (e.clientX - state.startX) / zoom
       const deltaY = (e.clientY - state.startY) / zoom
 
@@ -751,7 +751,7 @@ const SnapItem = memo(function SnapItem({
         }
       }
     }
-  }, [zoom])
+  }, [getZoom])
 
   // Store callbacks and data in refs to avoid stale closures during drag operations
   const onExpandRef = useRef(onExpand)
@@ -1067,7 +1067,7 @@ const SnapItem = memo(function SnapItem({
   )
 })
 
-export function SnapsDisplay({ snaps, onRemoveSnap, onRenameSnap, onUpdateSnap, onReorderSnaps, teacherSnaps = [], studentWorkSnaps = [], snapOverrides, onTeacherSnapOverride, onStudentWorkSnapOverride, zoom, paperWidth, initialLoadComplete = true }: SnapsDisplayProps) {
+export function SnapsDisplay({ snaps, onRemoveSnap, onRenameSnap, onUpdateSnap, onReorderSnaps, teacherSnaps = [], studentWorkSnaps = [], snapOverrides, onTeacherSnapOverride, onStudentWorkSnapOverride, paperWidth, initialLoadComplete = true }: SnapsDisplayProps) {
   if (DEBUG_STATE) console.log(`[SnapsDisplay] Render - ${snaps.length} snaps, ${teacherSnaps.length} teacher snaps, ${studentWorkSnaps.length} student work snaps`)
 
   const [expandedSnapIndex, setExpandedSnapIndex] = useState<number | null>(null)
@@ -1198,7 +1198,6 @@ export function SnapsDisplay({ snaps, onRemoveSnap, onRenameSnap, onUpdateSnap, 
                 onReorder={onReorderSnaps}
                 onExpand={handleExpand}
                 onBringToFront={handleBringToFront}
-                zoom={zoom}
                 allSnaps={snaps}
                 paperWidth={paperWidth}
                 zIndex={snapZIndex}
@@ -1218,7 +1217,6 @@ export function SnapsDisplay({ snaps, onRemoveSnap, onRenameSnap, onUpdateSnap, 
             <TeacherSnapItem
               key={snap.id}
               snap={snap}
-              zoom={zoom}
               onExpand={handleTeacherSnapExpand}
               overridePosition={overridePosition}
               onPositionChange={onTeacherSnapOverride ? (pos) => onTeacherSnapOverride(snap.id, layerType, pos) : undefined}
@@ -1235,7 +1233,6 @@ export function SnapsDisplay({ snaps, onRemoveSnap, onRenameSnap, onUpdateSnap, 
             <StudentWorkSnapItem
               key={snap.id}
               snap={snap}
-              zoom={zoom}
               onExpand={handleStudentWorkSnapExpand}
               overridePosition={overridePosition}
               onPositionChange={onStudentWorkSnapOverride ? (pos) => onStudentWorkSnapOverride(snap.id, pos) : undefined}

@@ -4,7 +4,8 @@
  * SpacersDisplay - Manages spacer interaction controls
  *
  * When `active` (spacer tool selected): spacers get accented border, resize handles,
- * and a floating side panel (left gutter, like highlighter UI) with pattern picker + delete.
+ * and a floating side panel (right gutter, mirrors the highlighter side panel)
+ * with pattern picker + delete.
  *
  * Resize handles respond to both touch and stylus (pointer events).
  * When not active, resize handles are still available via touch only.
@@ -15,12 +16,12 @@ import { createPortal } from 'react-dom'
 import { SeparatorHorizontal, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Spacer, SpacerPattern } from '@/types/spacer'
+import { useZoom } from '@/contexts/zoom-context'
 
 interface SpacersDisplayProps {
   spacers: Spacer[]
   onUpdateSpacer: (id: string, updates: Partial<Spacer>) => void
   onRemoveSpacer: (id: string) => void
-  zoom: number
   active: boolean  // True when spacer tool is selected
   readOnly?: boolean
   lastCreatedSpacerId?: string | null  // Auto-open panel for newly created spacer
@@ -42,7 +43,6 @@ export function SpacersDisplay({
   spacers,
   onUpdateSpacer,
   onRemoveSpacer,
-  zoom,
   active,
   readOnly = false,
   lastCreatedSpacerId,
@@ -60,10 +60,8 @@ export function SpacersDisplay({
   const [panelSpacerId, setPanelSpacerId] = useState<string | null>(null)
   const panelRef = useRef<HTMLDivElement>(null)
 
-  // Keep latest values in refs for window event listeners
-  const zoomRef = useRef(zoom)
+  const getZoom = useZoom()
   const onUpdateRef = useRef(onUpdateSpacer)
-  useEffect(() => { zoomRef.current = zoom }, [zoom])
   useEffect(() => { onUpdateRef.current = onUpdateSpacer }, [onUpdateSpacer])
   const onResizingChangeRef = useRef(onResizingChange)
   useEffect(() => { onResizingChangeRef.current = onResizingChange }, [onResizingChange])
@@ -95,7 +93,7 @@ export function SpacersDisplay({
     const handleMove = (e: PointerEvent) => {
       if (!resizeRef.current) return
       e.preventDefault()
-      const deltaY = (e.clientY - resizeRef.current.startY) / zoomRef.current
+      const deltaY = (e.clientY - resizeRef.current.startY) / getZoom()
       const newHeight = Math.max(
         MIN_SPACER_HEIGHT,
         Math.min(MAX_SPACER_HEIGHT, resizeRef.current.startHeight + deltaY)
@@ -107,7 +105,7 @@ export function SpacersDisplay({
     const handleUp = (e: PointerEvent) => {
       if (!resizeRef.current) return
       e.preventDefault()
-      const deltaY = (e.clientY - resizeRef.current.startY) / zoomRef.current
+      const deltaY = (e.clientY - resizeRef.current.startY) / getZoom()
       const newHeight = Math.max(
         MIN_SPACER_HEIGHT,
         Math.min(MAX_SPACER_HEIGHT, resizeRef.current.startHeight + deltaY)
@@ -123,7 +121,7 @@ export function SpacersDisplay({
       window.removeEventListener('pointermove', handleMove)
       window.removeEventListener('pointerup', handleUp)
     }
-  }, [])
+  }, [getZoom])
 
   // Attach controls to spacer DOM elements
   const attachControls = useCallback(() => {
@@ -247,6 +245,16 @@ export function SpacersDisplay({
 }
 
 // --- Floating side panel for spacer controls (pattern picker + delete) ---
+//
+// Mirrors the highlighter side panel: positioned in #paper's right gutter
+// (centered in the 192px right padding), falling back to the viewport's right
+// edge when zoom pushes the gutter offscreen. Vertical: spacer's center,
+// clamped into viewport. `position: fixed` + portal to document.body keeps
+// the panel in real viewport coords regardless of `transform: scale()` on
+// #paper. Keep this in sync with `SidePanel` in highlight-layer.tsx.
+
+const PAPER_PADDING_X = 192 // matches `.paper-responsive { @apply px-48 }` in globals.css
+const VIEWPORT_MARGIN = 8
 
 interface SpacerSidePanelProps {
   spacer: Spacer
@@ -257,18 +265,50 @@ interface SpacerSidePanelProps {
 
 const SpacerSidePanel = forwardRef<HTMLDivElement, SpacerSidePanelProps>(
   function SpacerSidePanel({ spacer, getSourceRect, onPatternChange, onDelete }, ref) {
-    const [pos, setPos] = useState({ left: 8, top: 0 })
+    const innerRef = useRef<HTMLDivElement>(null)
+    const [pos, setPos] = useState({ left: 0, top: 0 })
+
+    const setRefs = useCallback(
+      (node: HTMLDivElement | null) => {
+        innerRef.current = node
+        if (typeof ref === 'function') ref(node)
+        else if (ref) ref.current = node
+      },
+      [ref],
+    )
 
     useEffect(() => {
       const update = () => {
-        const paper = document.getElementById('paper')
         const sourceRect = getSourceRect()
-        const paperLeft = paper ? paper.getBoundingClientRect().left : 0
+        if (!sourceRect) return
 
-        setPos({
-          left: Math.max(8, paperLeft + 8),
-          top: sourceRect ? sourceRect.top + sourceRect.height / 2 : pos.top,
-        })
+        const panel = innerRef.current
+        const panelW = panel?.offsetWidth ?? 0
+        const panelH = panel?.offsetHeight ?? 0
+        const vw = window.innerWidth
+        const vh = window.innerHeight
+
+        // Horizontal: gutter center, falling back to viewport edge when the
+        // gutter is offscreen (zoomed in past it).
+        const paper = document.getElementById('paper')
+        const viewportRightLimit = vw - VIEWPORT_MARGIN - panelW / 2
+        let desiredX = viewportRightLimit
+        if (paper && paper.offsetWidth > 0) {
+          const paperRect = paper.getBoundingClientRect()
+          const scale = paperRect.width / paper.offsetWidth
+          const gutterCenter = paperRect.right - (PAPER_PADDING_X / 2) * scale
+          desiredX = Math.min(gutterCenter, viewportRightLimit)
+        }
+        const left = Math.max(VIEWPORT_MARGIN + panelW / 2, desiredX)
+
+        // Vertical: spacer center, clamped into viewport.
+        const desiredY = sourceRect.top + sourceRect.height / 2
+        const top = Math.max(
+          VIEWPORT_MARGIN + panelH / 2,
+          Math.min(vh - VIEWPORT_MARGIN - panelH / 2, desiredY),
+        )
+
+        setPos({ left, top })
       }
       update()
 
@@ -279,17 +319,16 @@ const SpacerSidePanel = forwardRef<HTMLDivElement, SpacerSidePanelProps>(
         scrollContainer?.removeEventListener('scroll', update)
         window.removeEventListener('resize', update)
       }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- pos.top fallback only used on initial render
     }, [getSourceRect])
 
     return (
       <div
-        ref={ref}
+        ref={setRefs}
         className="fixed flex flex-col items-center gap-1.5 rounded-lg border border-border bg-popover p-1.5 shadow-lg select-none"
         style={{
           left: pos.left,
           top: pos.top,
-          transform: 'translateY(-50%)',
+          transform: 'translate(-50%, -50%)',
           zIndex: 45,
         }}
       >

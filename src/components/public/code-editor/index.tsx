@@ -18,6 +18,7 @@ import { autocompletion } from '@codemirror/autocomplete'
 import { createPythonCompletions } from './python-completions'
 import { Button } from '@/components/ui/button'
 import { Play, Square, RotateCcw, Maximize2, Minimize2, X, Plus, FileText, ZoomIn, ZoomOut, Save, History, Highlighter, MessageSquare, WrapText, Circle, CheckCircle2, Package, Trash2, Paperclip, Upload, Pencil, Cloud, HardDrive } from 'lucide-react'
+import { useZoom } from '@/contexts/zoom-context'
 import { useUserData, useCreateVersion, useVersionHistory, useRestoreVersion, useDeleteVersion, useUpdateVersionLabel, useOrphanedComponentIds, useReassignVersionHistory } from '@/lib/userdata/hooks'
 import { userDataService } from '@/lib/userdata'
 import { registerEditor, getMountedIds, subscribeToMounted } from './mounted-registry'
@@ -542,6 +543,9 @@ export const CodeEditor = memo(function CodeEditor({
   // so cursor-pixel deltas can be converted to logical-pixel heights.
   const splitterDragStartRef = useRef<{ startY: number; startEditor: number; startOutput: number; zoom: number } | null>(null)
   const resizeDragStartRef = useRef<{ startY: number; startHeight: number; zoom: number } | null>(null)
+
+  // Live ancestor zoom (annotation-layer page zoom). Read at mousedown only.
+  const getZoom = useZoom()
 
   // Run button success flash state
   const [showSuccessFlash, setShowSuccessFlash] = useState(false)
@@ -1885,18 +1889,6 @@ export const CodeEditor = memo(function CodeEditor({
     }
   }, [isDraggingSplitter])
 
-  // Detect ancestor zoom by comparing visual vs logical height of the wrapper.
-  // Annotation-layer applies `transform: scale(z)` to <main>; without correcting
-  // for it, cursor-pixel deltas over-shoot wrapper height by factor `z`.
-  const detectAncestorZoom = (): number => {
-    const w = wrapperRef.current
-    if (!w) return 1
-    const logical = w.clientHeight
-    if (logical <= 0) return 1
-    const visual = w.getBoundingClientRect().height
-    return visual / logical
-  }
-
   // Handle horizontal splitter dragging (between main content and output panel)
   // Delta-based: capture start state on mousedown, compute cursor-delta on move.
   // Avoids the feedback loop where re-measuring wrapperRect each frame compounds
@@ -1907,7 +1899,7 @@ export const CodeEditor = memo(function CodeEditor({
       startY: e.clientY,
       startEditor: editorHeight,
       startOutput: outputPanelHeight,
-      zoom: detectAncestorZoom(),
+      zoom: getZoom(),
     }
     setIsDraggingHorizontalSplitter(true)
   }
@@ -1919,7 +1911,7 @@ export const CodeEditor = memo(function CodeEditor({
       startY: e.touches[0].clientY,
       startEditor: editorHeight,
       startOutput: outputPanelHeight,
-      zoom: detectAncestorZoom(),
+      zoom: getZoom(),
     }
     setIsDraggingHorizontalSplitter(true)
   }
@@ -1986,7 +1978,7 @@ export const CodeEditor = memo(function CodeEditor({
     resizeDragStartRef.current = {
       startY: e.clientY,
       startHeight: logicalHeight,
-      zoom: detectAncestorZoom(),
+      zoom: getZoom(),
     }
     setIsDraggingResize(true)
   }

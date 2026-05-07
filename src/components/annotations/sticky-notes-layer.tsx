@@ -36,6 +36,13 @@ import {
   ChevronsDownUp,
   Radio,
 } from 'lucide-react'
+import {
+  determineSectionFromY,
+  repositionStickyNote,
+  type HeadingPosition,
+} from '@/lib/annotations/reposition-strokes'
+import { useHeadingPositions } from '@/contexts/heading-positions-context'
+import { useZoom } from '@/contexts/zoom-context'
 import { useSyncedUserData, type SyncedUserDataOptions } from '@/lib/userdata'
 import { useStickyNotesContext } from '@/contexts/sticky-notes-context'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
@@ -66,6 +73,16 @@ export interface StickyNote {
   height: number
   createdAt: number
   updatedAt: number
+  /**
+   * Anchor section for vertical repositioning (matches snap/stroke model).
+   * When the markdown above this section grows or shrinks, the note follows
+   * its section instead of staying at a stale absolute Y. Optional for
+   * back-compat with notes created before anchoring landed; those notes
+   * stay at their stored y until the user moves them.
+   */
+  sectionId?: string
+  /** Section's Y offset when the note was placed/last moved. */
+  sectionOffsetY?: number
 }
 
 export interface StickyNotesData {
@@ -305,16 +322,37 @@ export function StickyNotesLayer({ pageId, children, isExamStudent, publicSticky
     return () => window.removeEventListener('keydown', handleKey)
   }, [placementMode])
 
+  // Heading positions from AnnotationLayer (parent context). Used to anchor
+  // sticky notes to their nearest section so they follow content reflow.
+  const headingPositions = useHeadingPositions()
+  const headingPositionsRef = useRef<HeadingPosition[]>(headingPositions)
+  useEffect(() => { headingPositionsRef.current = headingPositions }, [headingPositions])
+
+  /**
+   * Compute the {sectionId, sectionOffsetY} anchor for a Y coordinate. Returns
+   * `{}` if no section contains it (e.g. note placed above the first heading)
+   * — caller spreads either way, so an empty object is a safe no-op.
+   */
+  const anchorForY = useCallback((y: number): { sectionId?: string; sectionOffsetY?: number } => {
+    const positions = headingPositionsRef.current
+    if (positions.length === 0) return {}
+    const sectionId = determineSectionFromY(y, positions)
+    if (!sectionId) return {}
+    const sectionOffsetY = positions.find(h => h.sectionId === sectionId)?.offsetY
+    return { sectionId, sectionOffsetY }
+  }, [])
+
   // Note placement: handled via a portal overlay div (see JSX), not a global listener.
   // offsetX/offsetY on the div give direct paper-relative coords without any scroll math.
   const handlePlacementClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const x = e.nativeEvent.offsetX
     const y = e.nativeEvent.offsetY
+    const noteY = y - 20
 
     const newNote: StickyNote = {
       id: nanoid(),
       x: x - DEFAULT_WIDTH / 2,
-      y: y - 20,
+      y: noteY,
       content: '',
       color: 'yellow',
       minimized: false,
@@ -322,28 +360,54 @@ export function StickyNotesLayer({ pageId, children, isExamStudent, publicSticky
       height: DEFAULT_HEIGHT,
       createdAt: Date.now(),
       updatedAt: Date.now(),
+      ...anchorForY(noteY),
     }
 
     const current = dataRef.current ?? INITIAL_DATA
     updateData({ notes: [...current.notes, newNote] })
     setPlacementMode(false)
-  }, [updateData, setPlacementMode])
+  }, [updateData, setPlacementMode, anchorForY])
 
   const updateNote = useCallback((id: string, updates: Partial<StickyNote>) => {
     const current = dataRef.current ?? INITIAL_DATA
+    // If the note was moved vertically, re-anchor to whichever section now
+    // contains it. Without this, dragging a note out of its old section would
+    // leave it tied to a wrong anchor and snap back on the next reflow.
+    const reAnchor = updates.y !== undefined ? anchorForY(updates.y) : null
     updateData({
       notes: current.notes.map(n =>
-        n.id === id ? { ...n, ...updates, updatedAt: Date.now() } : n
+        n.id === id
+          ? { ...n, ...updates, ...(reAnchor ?? {}), updatedAt: Date.now() }
+          : n
       ),
     })
-  }, [updateData])
+  }, [updateData, anchorForY])
 
   const deleteNote = useCallback((id: string) => {
     const current = dataRef.current ?? INITIAL_DATA
     updateData({ notes: current.notes.filter(n => n.id !== id) })
   }, [updateData])
 
-  const notes = data?.notes ?? []
+  // Stabilise the notes reference so dependent effects don't re-run on every
+  // render of this component (the `?? []` fallback would otherwise allocate
+  // a fresh array each time).
+  const notes = useMemo(() => data?.notes ?? [], [data?.notes])
+
+  // Reposition own notes when their anchor section moves. Persists the new
+  // y/sectionOffsetY back to userData so other devices see the same alignment
+  // (mirrors `repositionSnaps` in annotation-layer's snap-reposition effect).
+  // Notes without a sectionId (created before anchoring or above the first
+  // heading) pass through unchanged.
+  useEffect(() => {
+    if (notes.length === 0 || headingPositions.length === 0) return
+    let changed = false
+    const next = notes.map(n => {
+      const repositioned = repositionStickyNote(n, headingPositions)
+      if (repositioned !== n) changed = true
+      return repositioned
+    })
+    if (changed) updateData({ notes: next })
+  }, [notes, headingPositions, updateData])
 
   // Auto-clean: if a note ID exists in both the personal store and a broadcast layer,
   // remove it from the personal store (broadcast is the canonical source).
@@ -415,13 +479,15 @@ export function StickyNotesLayer({ pageId, children, isExamStudent, publicSticky
         )
       )}
 
-      {/* Broadcast notes from teacher (read-only), filtered by layer visibility */}
+      {/* Broadcast notes from teacher (read-only), filtered by layer visibility.
+          Reposition display-only via the current heading positions — never
+          persist back, since the broadcast author is the canonical source. */}
       {paperEl && broadcastNotesByLayer.map(layer =>
         isLayerVisible(layer.layerKey) && layer.notes.map(note =>
           createPortal(
             <StickyNoteCard
               key={`broadcast-${note.id}`}
-              note={note}
+              note={repositionStickyNote(note, headingPositions)}
               paperEl={paperEl}
               readOnly
             />,
@@ -448,6 +514,7 @@ interface StickyNoteCardProps {
 
 function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly }: StickyNoteCardProps) {
   const cardRef = useRef<HTMLDivElement>(null)
+  const getZoom = useZoom()
   const [showColorPicker, setShowColorPicker] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [isResizing, setIsResizing] = useState(false)
@@ -476,12 +543,15 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly }: StickyN
     const startMouseY = e.clientY
     const startNoteX = note.x
     const startNoteY = note.y
+    // Capture ancestor zoom once: cursor delta is in viewport pixels but
+    // note.x/y live in #paper's logical pre-scale pixels.
+    const zoom = getZoom()
 
     setIsDragging(true)
 
     const onMove = (ev: MouseEvent) => {
-      const newX = startNoteX + ev.clientX - startMouseX
-      const newY = startNoteY + ev.clientY - startMouseY
+      const newX = startNoteX + (ev.clientX - startMouseX) / zoom
+      const newY = startNoteY + (ev.clientY - startMouseY) / zoom
       if (cardRef.current) {
         cardRef.current.style.left = `${newX}px`
         cardRef.current.style.top = `${newY}px`
@@ -490,8 +560,8 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly }: StickyN
 
     const onUp = (ev: MouseEvent) => {
       onUpdate?.({
-        x: startNoteX + ev.clientX - startMouseX,
-        y: startNoteY + ev.clientY - startMouseY,
+        x: startNoteX + (ev.clientX - startMouseX) / zoom,
+        y: startNoteY + (ev.clientY - startMouseY) / zoom,
       })
       setIsDragging(false)
       document.removeEventListener('mousemove', onMove)
@@ -500,7 +570,7 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly }: StickyN
 
     document.addEventListener('mousemove', onMove)
     document.addEventListener('mouseup', onUp)
-  }, [readOnly, note.x, note.y, onUpdate])
+  }, [readOnly, note.x, note.y, onUpdate, getZoom])
 
   // ---- Resize --------------------------------------------------------------
 
@@ -513,12 +583,13 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly }: StickyN
     const startMouseY = e.clientY
     const startW = note.width
     const startH = note.height
+    const zoom = getZoom()
 
     setIsResizing(true)
 
     const onMove = (ev: MouseEvent) => {
-      const newW = Math.max(MIN_WIDTH, startW + ev.clientX - startMouseX)
-      const newH = Math.max(MIN_HEIGHT, startH + ev.clientY - startMouseY)
+      const newW = Math.max(MIN_WIDTH, startW + (ev.clientX - startMouseX) / zoom)
+      const newH = Math.max(MIN_HEIGHT, startH + (ev.clientY - startMouseY) / zoom)
       if (cardRef.current) {
         cardRef.current.style.width = `${newW}px`
         const textarea = cardRef.current.querySelector('textarea')
@@ -528,8 +599,8 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly }: StickyN
 
     const onUp = (ev: MouseEvent) => {
       onUpdate?.({
-        width: Math.max(MIN_WIDTH, startW + ev.clientX - startMouseX),
-        height: Math.max(MIN_HEIGHT, startH + ev.clientY - startMouseY),
+        width: Math.max(MIN_WIDTH, startW + (ev.clientX - startMouseX) / zoom),
+        height: Math.max(MIN_HEIGHT, startH + (ev.clientY - startMouseY) / zoom),
       })
       setIsResizing(false)
       document.removeEventListener('mousemove', onMove)
@@ -538,7 +609,7 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly }: StickyN
 
     document.addEventListener('mousemove', onMove)
     document.addEventListener('mouseup', onUp)
-  }, [readOnly, note.width, note.height, onUpdate])
+  }, [readOnly, note.width, note.height, onUpdate, getZoom])
 
   // ---- Content -------------------------------------------------------------
 

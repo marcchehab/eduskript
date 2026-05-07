@@ -100,6 +100,8 @@ import { useLayout } from '@/contexts/layout-context'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
 import { useStickyNotesContext } from '@/contexts/sticky-notes-context'
 import { LayerVisibilityProvider } from '@/contexts/layer-visibility-context'
+import { HeadingPositionsProvider } from '@/contexts/heading-positions-context'
+import { ZoomProvider } from '@/contexts/zoom-context'
 import { useTeacherBroadcast } from '@/hooks/use-teacher-broadcast'
 import { useStudentWork } from '@/hooks/use-student-work'
 import { parseStrokes, type AnimatedStroke } from '@/hooks/use-stroke-animation'
@@ -2939,7 +2941,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
   }, [handleTouchStart, handleTouchMove, handleTouchEnd])
 
   return (
-    <>
+    <ZoomProvider zoomRef={zoomRef}>
       {/* Orphaned strokes warning banner */}
       {orphanedStrokesCount > 0 && (
         <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-yellow-100 dark:bg-yellow-900/20 border border-yellow-400 dark:border-yellow-600 rounded-lg shadow-lg px-4 py-2 max-w-md">
@@ -2961,7 +2963,9 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
       {/* Content wrapper */}
       <div ref={contentRef} style={{ position: 'relative' }}>
         <LayerVisibilityProvider value={layerVisibilityContextValue}>
-          {children}
+          <HeadingPositionsProvider positions={headingPositions}>
+            {children}
+          </HeadingPositionsProvider>
         </LayerVisibilityProvider>
       </div>
 
@@ -3498,7 +3502,6 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
           spacers={spacers}
           onUpdateSpacer={handleUpdateSpacer}
           onRemoveSpacer={handleRemoveSpacer}
-          zoom={zoom}
           active={mode === 'spacer'}
           lastCreatedSpacerId={lastCreatedSpacerId}
           onLastCreatedConsumed={() => setLastCreatedSpacerId(null)}
@@ -3534,12 +3537,11 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
           snapOverrides={snapOverrides}
           onTeacherSnapOverride={handleTeacherSnapOverride}
           onStudentWorkSnapOverride={isTeacher ? handleStudentWorkSnapOverride : undefined}
-          zoom={zoom}
           paperWidth={paperWidth}
           initialLoadComplete={initialLoadComplete}
         />,
         paperElement
       )}
-    </>
+    </ZoomProvider>
   )
 }
