@@ -10,7 +10,7 @@
  */
 
 import { db } from './schema'
-import type { UserDataRecord, SaveOptions, UserDataVersion, VersionBlob, CreateVersionOptions, VersionSummary } from './types'
+import type { UserDataRecord, SaveOptions, UserDataVersion, VersionBlob, CreateVersionOptions, VersionSummary, VersionKind } from './types'
 import { generateSHA256, gzipCompress, gzipDecompress, calculateSize } from './compression'
 
 interface PendingSave<T = any> {
@@ -391,7 +391,7 @@ export class UserDataService {
       const { label, isManualSave = false } = options
       // Resolve the row's kind: explicit `kind` wins, then legacy
       // `isManualSave` flag, default to 'auto'.
-      const kind: 'auto' | 'manual' | 'check' = options.kind ?? (isManualSave ? 'manual' : 'auto')
+      const kind: VersionKind = options.kind ?? (isManualSave ? 'manual' : 'auto')
       const userId = this.currentUserId
 
       // Serialize data to JSON
@@ -410,6 +410,38 @@ export class UserDataService {
       const compressedBlob = existingBlobBefore ? null : await gzipCompress(dataJson)
 
       const created = await db.transaction('rw', db.userData_history, db.versionBlobs, async () => {
+        // Read existing rows once: needed for both the dedup guard below and
+        // the version-number assignment further down.
+        const existingVersions = await db.userData_history
+          .where('[userId+pageId+componentId]')
+          .equals([userId, pageId, componentId])
+          .toArray()
+
+        // Dedup guard: skip rows whose content hash matches the most recent
+        // row when the new row would carry no information beyond the
+        // content. Two cases:
+        //   - 'auto', no label: a passive autosave; redundant against any
+        //     latest row regardless of kind.
+        //   - 'run', no label: pressing Run again with no edits; only
+        //     redundant against another 'run' (Run after a check/autosave
+        //     should still record the deliberate Run event).
+        // The blob hasn't been touched yet, so no refCount cleanup is
+        // needed. Manual/check saves and *labeled* rows always insert
+        // because their row carries meaning beyond the content. Comparing
+        // against the latest row by createdAt — not versionNumber —
+        // because reassignVersionHistory can move rows in from other
+        // componentIds and createdAt is the canonical UI sort key.
+        if (existingVersions.length > 0) {
+          const latest = existingVersions.reduce((a, b) => (a.createdAt > b.createdAt ? a : b))
+          const sameContent = latest.dataHash === dataHash
+          const dedupAuto = kind === 'auto' && !label && sameContent
+          const dedupRun =
+            kind === 'run' && !label && sameContent && latest.kind === 'run' && !latest.label
+          if (dedupAuto || dedupRun) {
+            return { ...latest, isDuplicate: true }
+          }
+        }
+
         // Re-check blob existence inside the transaction so refCount is
         // accurate even under concurrent createVersion calls.
         const existingBlob = await db.versionBlobs.get(blobId)
@@ -429,11 +461,6 @@ export class UserDataService {
           throw new Error('Blob disappeared mid-transaction; retry')
         }
 
-        // Compute next version number atomically inside the transaction.
-        const existingVersions = await db.userData_history
-          .where('[userId+pageId+componentId]')
-          .equals([userId, pageId, componentId])
-          .toArray()
         const versionNumber = existingVersions.length > 0
           ? Math.max(...existingVersions.map(v => v.versionNumber)) + 1
           : 1
@@ -597,8 +624,9 @@ export class UserDataService {
       const dataJson = await gzipDecompress(blob.data)
       const data = JSON.parse(dataJson) as T
 
-      // Save as current (debounce-skipped). This also creates a new auto
-      // version via the normal save flow.
+      // Save as current (debounce-skipped). Writes only to db.userData;
+      // does NOT create a history row. Any subsequent autosave that
+      // produces the same hash will be deduped by createVersion's guard.
       await this.save(version.pageId, version.componentId, data, { immediate: true })
 
       return data

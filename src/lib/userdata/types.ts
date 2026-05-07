@@ -245,10 +245,10 @@ export interface UseUserDataResult<T> {
  */
 /**
  * Type of trigger that produced a version row. Used for per-kind labeling
- * in the history UI ("auto1", "manual2", "check3"). Legacy rows without
- * `kind` are derived from `isManualSave` at read time.
+ * in the history UI ("auto1", "manual2", "check3", "run4"). Legacy rows
+ * without `kind` are derived from `isManualSave` at read time.
  */
-export type VersionKind = 'auto' | 'manual' | 'check'
+export type VersionKind = 'auto' | 'manual' | 'check' | 'run'
 
 export interface UserDataVersion {
   id?: number                    // Auto-increment primary key
@@ -262,12 +262,17 @@ export interface UserDataVersion {
   label?: string                 // Optional user label ("checkpoint", "before clear")
   sizeBytes: number              // Uncompressed size for metrics
   isManualSave?: boolean         // Legacy: true if manually saved. New code should use `kind` instead.
-  kind?: VersionKind             // 'auto' | 'manual' | 'check' — drives default labeling in the UI
+  kind?: VersionKind             // 'auto' | 'manual' | 'check' | 'run' — drives default labeling in the UI
   // Set after a successful checkpoint POST to /api/user-data/checkpoints.
   // Presence of this id is the "synced" badge in the version-history UI.
   // Stays undefined for purely local rows (autosaves, manual saves that
   // failed to POST, manual saves while on the 402-gated free tier).
   serverCheckpointId?: string
+  // Transient: set on the value returned from createVersion when the call
+  // was deduped against an existing row. Never persisted to IndexedDB
+  // because Dexie ignores fields not declared in the schema. Callers use
+  // it to decide whether to fire side effects (e.g. server checkpoint POST).
+  isDuplicate?: boolean
 }
 
 /**

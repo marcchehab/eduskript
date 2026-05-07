@@ -4,9 +4,11 @@
  * Server-side snapshots of student work captured on explicit events:
  *   - kind='manual'  — student clicked Save in the code editor
  *   - kind='check'   — Python check / SQL verification was run
+ *   - kind='run'     — student clicked Run (deduped client-side: identical
+ *                      consecutive runs collapse to a single checkpoint)
  *   - kind='handin'  — exam hand-in (also written via the hand-in route's batch path)
  *
- * Bounded volume because all three events are user-initiated. This is NOT a
+ * Bounded volume because all four events are user-initiated. This is NOT a
  * keystroke autosave log — that stays local in IndexedDB userData_history.
  *
  * Auth model:
@@ -28,12 +30,12 @@ import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 interface CheckpointInput {
   pageId: string
   componentId: string
-  kind: 'manual' | 'check' | 'handin'
+  kind: 'manual' | 'check' | 'handin' | 'run'
   payload: unknown
   label?: string
 }
 
-const VALID_KINDS = new Set(['manual', 'check', 'handin'])
+const VALID_KINDS = new Set(['manual', 'check', 'handin', 'run'])
 
 async function resolveAuthUserId(): Promise<{ userId: string; isTeacher: boolean } | null> {
   const session = await getServerSession(authOptions)

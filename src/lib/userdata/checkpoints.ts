@@ -1,9 +1,9 @@
 /**
  * Client helper for writing server-side checkpoints.
  *
- * Three call sites currently use it: code editor's manual save, Python check
- * runs, and SQL verification runs. Hand-in goes through its own batched
- * route (see /api/exams/[pageId]/hand-in).
+ * Four call sites currently use it: code editor's manual save, Python check
+ * runs, SQL verification runs, and Run-button presses. Hand-in goes through
+ * its own batched route (see /api/exams/[pageId]/hand-in).
  *
  * Errors are swallowed by design: a checkpoint failure (incl. 402 free-tier
  * gate) must never break the local save UX — IndexedDB has the data either
@@ -14,7 +14,7 @@ import { createLogger } from '@/lib/logger'
 
 const log = createLogger('userdata:checkpoints')
 
-export type CheckpointKind = 'manual' | 'check' | 'handin'
+export type CheckpointKind = 'manual' | 'check' | 'handin' | 'run'
 
 export interface CheckpointPayload {
   pageId: string

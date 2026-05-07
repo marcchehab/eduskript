@@ -458,13 +458,13 @@ export const CodeEditor = memo(function CodeEditor({
   const safetyAutosaveDoneRef = useRef(false)
 
   // Per-kind sequential default labels: auto1/auto2/…, manual1/manual2/…,
-  // check1/check2/… Computed in chronological (oldest-first) order so the
-  // user-visible numbering matches the order events actually happened.
-  // Keyed by the row's IndexedDB id when present (stable across renders),
-  // falling back to versionNumber for legacy/unmigrated rows.
+  // check1/check2/…, run1/run2/… Computed in chronological (oldest-first)
+  // order so the user-visible numbering matches the order events actually
+  // happened. Keyed by the row's IndexedDB id when present (stable across
+  // renders), falling back to versionNumber for legacy/unmigrated rows.
   const defaultVersionLabels = useMemo(() => {
     const sortedAsc = [...versions].sort((a, b) => a.createdAt - b.createdAt)
-    const counters: Record<string, number> = { auto: 0, manual: 0, check: 0 }
+    const counters: Record<string, number> = { auto: 0, manual: 0, check: 0, run: 0 }
     const labelMap = new Map<number | string, string>()
     for (const v of sortedAsc) {
       const k = v.kind ?? (v.isManualSave ? 'manual' : 'auto')
@@ -1228,8 +1228,10 @@ export const CodeEditor = memo(function CodeEditor({
       return
     }
 
-    // Note: Duplicate detection is handled by the service layer via SHA-256 hashing
-    // If the data is identical to a previous version, it will reuse the same blob.
+    // The service layer dedupes unlabeled autosaves whose content hash
+    // matches the most recent row (no new history entry, no refCount bump).
+    // Blob storage is also shared via SHA-256 across all rows. Manual/check
+    // saves and labeled autosaves always insert.
     // Pass an explicit `kind` so the history UI can render auto/manual labels.
     const version = await createVersion(dataToVersion, {
       isManualSave,
@@ -1301,6 +1303,50 @@ export const CodeEditor = memo(function CodeEditor({
       await refreshVersions()
     } catch (e) {
       console.error('createCheckVersion failed:', e)
+    }
+  }, [pageId, componentId, activeFileIndex, fontSize, lineWrapping, editorWidth, canvasTransform, highlights, createVersion, refreshVersions])
+
+  // Create a "run" version row alongside the server checkpoint POST when
+  // the student presses Run. Identical consecutive runs (no edits between
+  // presses) are deduped at the service layer: createVersion returns the
+  // existing row flagged with `isDuplicate`, and we skip the server POST
+  // so the teacher's timeline doesn't fill with redundant Run events.
+  const createRunVersion = useCallback(async () => {
+    if (!pageId) return
+    const liveFiles = editorViewRef.current
+      ? filesRef.current.map((file, idx) =>
+          idx === activeFileIndex
+            ? { ...file, content: editorViewRef.current!.state.doc.toString() }
+            : file
+        )
+      : filesRef.current
+    const payload: CodeEditorData = {
+      files: liveFiles,
+      activeFileIndex,
+      fontSize,
+      lineWrapping,
+      editorWidth,
+      canvasTransform,
+      highlights,
+    }
+    try {
+      const version = await createVersion(payload, { kind: 'run' })
+      if (version.isDuplicate) {
+        // Same content as the previous run — no new local row, no POST.
+        return
+      }
+      const result = await postCheckpoint({
+        pageId,
+        componentId,
+        kind: 'run',
+        payload,
+      })
+      if (result.id && version.id) {
+        await userDataService.markVersionSynced(version.id, result.id)
+      }
+      await refreshVersions()
+    } catch (e) {
+      console.error('createRunVersion failed:', e)
     }
   }, [pageId, componentId, activeFileIndex, fontSize, lineWrapping, editorWidth, canvasTransform, highlights, createVersion, refreshVersions])
 
@@ -3005,6 +3051,10 @@ export const CodeEditor = memo(function CodeEditor({
 
     // Save current file before running
     saveCurrentFile()
+
+    // Snapshot + checkpoint the Run press. Fire-and-forget; service-layer
+    // dedup collapses identical consecutive runs into a single row/POST.
+    void createRunVersion()
 
     const code = editorViewRef.current.state.doc.toString()
 

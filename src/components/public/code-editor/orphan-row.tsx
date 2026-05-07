@@ -45,12 +45,12 @@ export function OrphanRow({ pageId, orphanId, onRestore, onDelete, onPreviewVers
   }
 
   // Default labels by kind — mirrors index.tsx's per-kind sequential
-  // counters (auto1/manual2/check3) but computed locally for this orphan.
+  // counters (auto1/manual2/check3/run4) but computed locally for this orphan.
   const defaultLabels = (() => {
     const map = new Map<string, string>()
     if (!versions) return map
     const sortedAsc = [...versions].sort((a, b) => a.createdAt - b.createdAt)
-    const counters: Record<string, number> = { auto: 0, manual: 0, check: 0 }
+    const counters: Record<string, number> = { auto: 0, manual: 0, check: 0, run: 0 }
     for (const v of sortedAsc) {
       const k = v.kind ?? (v.isManualSave ? 'manual' : 'auto')
       counters[k] = (counters[k] ?? 0) + 1

@@ -686,16 +686,17 @@ model UserData {
 }
 
 // Server-side snapshots of student work captured on explicit events.
-// Three event kinds: 'manual' (Save button), 'check' (Run verification /
-// Python check), 'handin' (exam hand-in). Bounded volume because all three
-// are user-initiated; this is NOT a keystroke-level autosave log. Used for
-// the teacher checkpoint timeline and exam grading.
+// Four event kinds: 'manual' (Save button), 'check' (Python check / SQL
+// verification), 'run' (Run button — deduped client-side so identical
+// consecutive runs collapse), 'handin' (exam hand-in). Bounded volume
+// because all four are user-initiated; this is NOT a keystroke-level
+// autosave log. Used for the teacher checkpoint timeline and exam grading.
 model UserDataCheckpoint {
   id          String   @id @default(cuid())
   userId      String   @map("user_id")
   pageId      String   @map("page_id")
   componentId String   @map("component_id") // e.g. "code-editor-abc123"
-  kind        String // 'manual' | 'check' | 'handin'
+  kind        String // 'manual' | 'check' | 'run' | 'handin'
   payload     Json // Snapshot data (e.g. CodeEditorData)
   label       String? // Optional label for manual saves
   createdAt   DateTime @default(now()) @map("created_at")
