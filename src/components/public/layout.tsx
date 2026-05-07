@@ -589,12 +589,12 @@ export function PublicSiteLayout({
             )}
           </div>
 
-          {/* Navigation. mr-2 insets the scroll container from the sidebar's
-              right edge so the scrollbar (anchored to the container's right
-              edge) doesn't sit flush against the panel boundary. */}
+          {/* Navigation. p-4 (16px right padding) gives the scrollbar
+              breathing room from the content without insetting the
+              container itself. */}
           <div
             ref={sidebarNavRef}
-            className="flex-1 p-4 pr-2 mr-2 flex flex-col overflow-y-scroll [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&:hover::-webkit-scrollbar-thumb]:bg-muted-foreground/30"
+            className="flex-1 p-4 flex flex-col overflow-y-scroll [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&:hover::-webkit-scrollbar-thumb]:bg-muted-foreground/30"
           >
             {isSidebarCollapsed ? (
               /* Collapsed navigation - empty, use header icon to go home */
