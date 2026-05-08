@@ -826,10 +826,13 @@ export function PublicSiteLayout({
         />
       )}
 
-        {/* Main content with scroll container */}
+        {/* Main content with scroll container.
+            relative: hosts the absolutely-positioned zoom-spacer that AnnotationLayer
+            injects when the page is zoomed via transform: scale(). Declarative so
+            AnnotationLayer doesn't have to mutate this element imperatively. */}
         <div
           id="scroll-container"
-          className={`transition-all duration-300 h-screen overflow-auto ${
+          className={`relative transition-all duration-300 h-screen overflow-auto ${
             hideSidebar ? '' : isSidebarCollapsed ? 'min-[1344px]:ml-16' : 'min-[1344px]:ml-80'
           }`}
         >

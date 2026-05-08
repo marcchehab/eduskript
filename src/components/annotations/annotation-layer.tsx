@@ -2223,6 +2223,21 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
       }
     }
 
+    // Build the targeting override fields for updateAnnotationData. When the caller
+    // passes overrideOptions (typically the layer-switch effect saving to the OLD
+    // target), we must force-route the save to that target — even if it's personal
+    // (targetType undefined). The hook distinguishes "no override" from "override to
+    // personal" by checking `targetTypeOverride !== undefined`, so we coerce undefined
+    // to null here. Without this, an override of personal-mode falls through and the
+    // hook uses its current (post-switch) targetType, persisting strokes into the new
+    // layer — i.e. the personal→class layer-transfer bug.
+    const targetingOverride = overrideOptions
+      ? {
+          targetTypeOverride: overrideOptions.targetType ?? null,
+          targetIdOverride: overrideOptions.targetId ?? null,
+        }
+      : {}
+
     try {
       // Parse canvas data to check if we have strokes
       const strokes = JSON.parse(currentCanvasData) as StrokeData[]
@@ -2230,10 +2245,15 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
       if (strokes.length === 0) {
         // User erased every stroke — persist the empty state. Without this
         // the beforeunload-triggered performSave would silently drop and the
-        // original strokes return on reload. Route through deleteAnnotationData
-        // so the server receives the proper "no annotations" payload (empty
-        // canvasData + zeroed pageVersion) instead of a stroke-less array.
-        await deleteAnnotationData()
+        // original strokes return on reload. We send the same "no annotations"
+        // payload deleteAnnotationData() does, but route it through
+        // updateAnnotationData so we can pass the targeting override (otherwise
+        // the empty save would land on the hook's current target instead of the
+        // one the caller intended).
+        await updateAnnotationData(
+          { canvasData: '', headingOffsets: {}, pageVersion: '' },
+          { immediate: true, ...targetingOverride }
+        )
         return
       }
 
@@ -2256,11 +2276,9 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
       setSaveState('saving')
 
       // Use immediate: true since we're already debouncing at component level
-      // Pass targeting overrides if provided (used when saving before switching targets)
       await updateAnnotationData(data, {
         immediate: true,
-        targetTypeOverride: overrideOptions?.targetType,
-        targetIdOverride: overrideOptions?.targetId,
+        ...targetingOverride,
       })
 
       setSaveState('saved')
@@ -2273,7 +2291,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
       // Reset to idle after showing error briefly
       setTimeout(() => setSaveState('idle'), 3000)
     }
-  }, [updateAnnotationData, deleteAnnotationData, viewMode, syncOptions, targetingKey])
+  }, [updateAnnotationData, viewMode, syncOptions, targetingKey])
 
   // Keep ref in sync for use in effects that can't depend on the function directly
   // eslint-disable-next-line react-hooks/immutability -- Intentional: sync ref with callback for effects
@@ -2684,9 +2702,17 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
   }, [stylusModeActive, mode])
 
   // CSS transform: scale() doesn't affect layout, so the scroll container has no idea
-  // the content grew. This helper injects an invisible spacer sibling of <main> that
-  // forces the scroll container to have the correct scrollable dimensions, and overrides
-  // the overflow-x:clip on <main> that would otherwise hide the scaled content.
+  // the content grew. This helper injects an invisible spacer sibling of <main> sized
+  // to the scaled-paper dimensions; the scroll container picks it up and offers a
+  // correctly-sized scrollable area natively.
+  //
+  // We also override main's max-width: at narrow viewports `main:has(.paper-responsive)`
+  // gets `max-width: 100vw` (globals.css) to prevent horizontal overflow under normal
+  // layout — but when zoomed we *want* horizontal overflow for scrolling, so we lift
+  // the cap until zoom returns to 1.
+  //
+  // #scroll-container is `position: relative` declaratively (see public/layout.tsx),
+  // which is what makes this absolute spacer place correctly.
   const updateZoomSpacer = useCallback((zoomLevel: number) => {
     const container = scrollContainerRef.current
     const main = mainRef.current
@@ -2705,7 +2731,6 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
       spacer.id = 'zoom-spacer'
       spacer.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none'
       spacer.ariaHidden = 'true'
-      container.style.position = 'relative'
       container.appendChild(spacer)
     }
 
@@ -2942,6 +2967,18 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
 
   return (
     <ZoomProvider zoomRef={zoomRef}>
+      {/* Dev-only zoom readout. Portaled to body so the transform on <main> doesn't
+          composite it (otherwise the indicator would scale with the page). */}
+      {process.env.NODE_ENV === 'development' && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed bottom-4 right-4 bg-black/80 text-white text-xs font-mono px-2 py-1 rounded pointer-events-none"
+          style={{ zIndex: 99999 }}
+        >
+          zoom {(zoom * 100).toFixed(1)}%
+        </div>,
+        document.body
+      )}
+
       {/* Orphaned strokes warning banner */}
       {orphanedStrokesCount > 0 && (
         <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-yellow-100 dark:bg-yellow-900/20 border border-yellow-400 dark:border-yellow-600 rounded-lg shadow-lg px-4 py-2 max-w-md">
