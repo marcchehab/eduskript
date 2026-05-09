@@ -5,7 +5,7 @@ import type { Root, Element } from 'hast'
  * Rehype plugin to add data-section-id attributes to elements for annotation alignment.
  *
  * Tracks:
- * - h1, h2 headings (using their slug as ID)
+ * - h1, h2, h3 headings (using their slug as ID)
  * - pre (code blocks)
  * - code-editor (interactive editors) - dynamic height due to console output
  * - plugin (iframe plugins) - dynamic height due to iframe auto-resize
@@ -14,7 +14,13 @@ import type { Root, Element } from 'hast'
  * - table (tables)
  *
  * Dynamic-height elements also get data-dynamic-height="true" so the client
- * can track both top and bottom positions.
+ * can track both top and bottom positions, AND get a 0-height sibling
+ * `<div data-section-id="${id}-end">` inserted right after them. The sibling
+ * is what the per-section annotation portal anchors to: strokes drawn near
+ * the bottom of a dynamic-height element get sectionId `${id}-end` (assigned
+ * by simple-canvas.tsx using the headingPositions list), and the sibling
+ * gives those strokes a real DOM anchor that follows the element's bottom
+ * edge as it grows/shrinks.
  */
 export function rehypeHeadingSectionIds() {
   // Counters for generating sequential IDs
@@ -28,11 +34,15 @@ export function rehypeHeadingSectionIds() {
   }
 
   return (tree: Root) => {
-    visit(tree, 'element', (node: Element) => {
+    // Collect end-sentinel insertions during visit; apply after the walk so we
+    // don't perturb traversal indices. Each entry: { parent, index, sectionId }.
+    const inserts: Array<{ parent: Element | Root; index: number; sectionId: string }> = []
+
+    visit(tree, 'element', (node: Element, index, parent) => {
       node.properties = node.properties || {}
 
-      // H1-H2 headings (use slug-based ID)
-      if (['h1', 'h2'].includes(node.tagName)) {
+      // H1-H3 headings (use slug-based ID)
+      if (['h1', 'h2', 'h3'].includes(node.tagName)) {
         const headingId = node.properties?.id as string | undefined
         if (!headingId) return
 
@@ -56,6 +66,9 @@ export function rehypeHeadingSectionIds() {
         const sectionId = `editor-${counters['code-editor']++}`
         node.properties['data-section-id'] = sectionId
         node.properties['data-dynamic-height'] = 'true' // Console output can change height
+        if (parent && typeof index === 'number') {
+          inserts.push({ parent: parent as Element | Root, index, sectionId })
+        }
         return
       }
 
@@ -68,6 +81,9 @@ export function rehypeHeadingSectionIds() {
           : `plugin-${counters.plugin++}`
         node.properties['data-section-id'] = sectionId
         node.properties['data-dynamic-height'] = 'true'
+        if (parent && typeof index === 'number') {
+          inserts.push({ parent: parent as Element | Root, index, sectionId })
+        }
         return
       }
 
@@ -79,6 +95,9 @@ export function rehypeHeadingSectionIds() {
           const sectionId = `callout-${counters.callout++}`
           node.properties['data-section-id'] = sectionId
           node.properties['data-dynamic-height'] = 'true' // Collapsible
+          if (parent && typeof index === 'number') {
+            inserts.push({ parent: parent as Element | Root, index, sectionId })
+          }
           return
         }
       }
@@ -97,6 +116,23 @@ export function rehypeHeadingSectionIds() {
         return
       }
     })
+
+    // Apply end-sentinel insertions in reverse order so earlier indices stay valid.
+    inserts.sort((a, b) => b.index - a.index)
+    for (const { parent, index, sectionId } of inserts) {
+      const sentinel: Element = {
+        type: 'element',
+        tagName: 'div',
+        properties: {
+          'data-section-id': `${sectionId}-end`,
+          'data-section-end': 'true',
+          'aria-hidden': 'true',
+          style: 'height:0;pointer-events:none',
+        },
+        children: [],
+      }
+      parent.children.splice(index + 1, 0, sentinel)
+    }
   }
 }
 

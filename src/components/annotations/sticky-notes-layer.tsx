@@ -38,7 +38,6 @@ import {
 } from 'lucide-react'
 import {
   determineSectionFromY,
-  repositionStickyNote,
   type HeadingPosition,
 } from '@/lib/annotations/reposition-strokes'
 import { useHeadingPositions } from '@/contexts/heading-positions-context'
@@ -300,12 +299,20 @@ export function StickyNotesLayer({ pageId, children, isExamStudent, publicSticky
     return () => setClearHandler(null)
   }, [setClearHandler, updateData])
   const [paperEl, setPaperEl] = useState<HTMLElement | null>(null)
+  const [paperPaddingLeft, setPaperPaddingLeft] = useState<number>(0)
 
   // Find #paper once mounted (annotation-layer already sets position:relative on it)
   useEffect(() => {
     const find = () => {
       const paper = document.getElementById('paper')
-      if (paper) setPaperEl(paper)
+      if (paper) {
+        setPaperEl(paper)
+        // Read paper's left padding once. Sections (children of .markdown-content)
+        // start at this offset within the paper, so notes portaled into a section
+        // need their stored paper-X subtracted by this amount to align visually.
+        const padding = parseFloat(getComputedStyle(paper).paddingLeft) || 0
+        setPaperPaddingLeft(padding)
+      }
     }
     find()
     const t = setTimeout(find, 600)
@@ -393,21 +400,125 @@ export function StickyNotesLayer({ pageId, children, isExamStudent, publicSticky
   // a fresh array each time).
   const notes = useMemo(() => data?.notes ?? [], [data?.notes])
 
-  // Reposition own notes when their anchor section moves. Persists the new
-  // y/sectionOffsetY back to userData so other devices see the same alignment
-  // (mirrors `repositionSnaps` in annotation-layer's snap-reposition effect).
-  // Notes without a sectionId (created before anchoring or above the first
-  // heading) pass through unchanged.
+  // Resolve each note's anchor section to a live DOM element. We re-run when
+  // notes change OR when headingPositions change (which is the proxy for
+  // "DOM section layout changed" — markdown re-renders, spacers added, etc).
+  // Notes whose sectionId can't be resolved fall back to the paper portal
+  // (no vertical anchoring, sit at note.y in paper coords).
+  //
+  // Replaces the old repositionStickyNote effect: instead of writing new
+  // y / sectionOffsetY back to userData on every layout shift, we anchor
+  // the note's DOM into its section element so the browser carries it.
+  // No persistence churn, no JS reposition math.
+  const allNotes = useMemo(() => {
+    const broadcast: StickyNote[] = []
+    for (const layer of broadcastNotesByLayer) for (const n of layer.notes) broadcast.push(n)
+    return [...notes, ...broadcast]
+  }, [notes, broadcastNotesByLayer])
+
+  const [sectionTargets, setSectionTargets] = useState<Map<string, HTMLElement>>(() => new Map())
+
   useEffect(() => {
-    if (notes.length === 0 || headingPositions.length === 0) return
-    let changed = false
-    const next = notes.map(n => {
-      const repositioned = repositionStickyNote(n, headingPositions)
-      if (repositioned !== n) changed = true
-      return repositioned
+    const next = new Map<string, HTMLElement>()
+    for (const note of allNotes) {
+      if (!note.sectionId) continue
+      if (next.has(note.sectionId)) continue
+      const el = document.querySelector(`[data-section-id="${CSS.escape(note.sectionId)}"]`)
+      if (el instanceof HTMLElement) next.set(note.sectionId, el)
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional: querying live DOM for portal targets after render. Same-value short-circuit prevents cascade.
+    setSectionTargets((prev) => {
+      if (prev.size !== next.size) return next
+      for (const [k, v] of next) if (prev.get(k) !== v) return next
+      return prev
     })
-    if (changed) updateData({ notes: next })
-  }, [notes, headingPositions, updateData])
+  }, [allNotes, headingPositions])
+
+  /** Returns { target, originX, originY } — where to portal this note. */
+  const resolveTarget = useCallback((note: StickyNote): { target: HTMLElement; originX: number; originY: number } | null => {
+    if (!paperEl) return null
+    if (note.sectionId && note.sectionOffsetY !== undefined) {
+      const sectionEl = sectionTargets.get(note.sectionId)
+      if (sectionEl) {
+        return { target: sectionEl, originX: paperPaddingLeft, originY: note.sectionOffsetY }
+      }
+    }
+    return { target: paperEl, originX: 0, originY: 0 }
+  }, [paperEl, paperPaddingLeft, sectionTargets])
+
+  // Listen for spacer-add re-anchor events from annotation-layer. When a new
+  // spacer is added inside an existing section, notes that fall below it should
+  // re-anchor to the spacer's end-sentinel + shift down by the spacer's height
+  // so they follow subsequent height changes. Mirrors the stroke/snap reanchor
+  // in annotation-layer.tsx; same destructive-on-remove trade-off applies.
+  useEffect(() => {
+    const handleReanchor = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { spacerId: string; spacerTop: number; spacerEndY: number; height: number }
+      const NT = detail.spacerTop
+      const NE = detail.spacerEndY
+      const H = detail.height
+
+      const visualY = (n: StickyNote): number | null => {
+        if (!n.sectionId || n.sectionOffsetY === undefined) return null
+        const entry = headingPositionsRef.current.find(h => h.sectionId === n.sectionId)
+        if (!entry) return null
+        return entry.offsetY + (n.y - n.sectionOffsetY)
+      }
+      const shouldReassign = (n: StickyNote): boolean => {
+        if (!n.sectionId || n.sectionOffsetY === undefined) return false
+        const entry = headingPositionsRef.current.find(h => h.sectionId === n.sectionId)
+        if (!entry) return false
+        if (entry.offsetY >= NT) return false
+        const v = visualY(n)
+        return v !== null && v > NT
+      }
+
+      const current = dataRef.current ?? INITIAL_DATA
+      let changed = false
+      const next = current.notes.map(n => {
+        if (!shouldReassign(n)) return n
+        changed = true
+        return {
+          ...n,
+          sectionId: `spacer-${detail.spacerId}-end`,
+          sectionOffsetY: NE,
+          y: n.y + H,
+          updatedAt: Date.now(),
+        }
+      })
+      if (changed) updateData({ notes: next })
+    }
+    window.addEventListener('eduskript:reanchor-below-spacer', handleReanchor)
+
+    // Reverse of handleReanchor: when a spacer is removed, notes anchored to
+    // its end-sentinel re-anchor to the divider above and shift up by -H.
+    // Restores the pre-add visual position.
+    const handleUnanchor = (e: Event) => {
+      const detail = (e as CustomEvent).detail as {
+        spacerId: string; prevSectionId: string; prevSectionOffsetY: number; height: number
+      }
+      const current = dataRef.current ?? INITIAL_DATA
+      let changed = false
+      const next = current.notes.map(n => {
+        if (n.sectionId !== `spacer-${detail.spacerId}-end`) return n
+        changed = true
+        return {
+          ...n,
+          sectionId: detail.prevSectionId,
+          sectionOffsetY: detail.prevSectionOffsetY,
+          y: n.y - detail.height,
+          updatedAt: Date.now(),
+        }
+      })
+      if (changed) updateData({ notes: next })
+    }
+    window.addEventListener('eduskript:unanchor-spacer-removed', handleUnanchor)
+
+    return () => {
+      window.removeEventListener('eduskript:reanchor-below-spacer', handleReanchor)
+      window.removeEventListener('eduskript:unanchor-spacer-removed', handleUnanchor)
+    }
+  }, [updateData])
 
   // Auto-clean: if a note ID exists in both the personal store and a broadcast layer,
   // remove it from the personal store (broadcast is the canonical source).
@@ -465,35 +576,47 @@ export function StickyNotesLayer({ pageId, children, isExamStudent, publicSticky
         paperEl,
       )}
 
-      {/* Own note cards portalled into paper so they scroll with content */}
-      {paperEl && isLayerVisible(ownLayerKey) && notes.map(note =>
-        createPortal(
+      {/* Own note cards: each portaled into its anchor section element when
+          resolvable, falling back to #paper otherwise. Section-portaled notes
+          follow their section automatically as the page reflows. */}
+      {paperEl && isLayerVisible(ownLayerKey) && notes.map(note => {
+        const r = resolveTarget(note)
+        if (!r) return null
+        return createPortal(
           <StickyNoteCard
             key={note.id}
             note={note}
             paperEl={paperEl}
             onUpdate={updates => updateNote(note.id, updates)}
             onDelete={() => deleteNote(note.id)}
+            originX={r.originX}
+            originY={r.originY}
           />,
-          paperEl,
+          r.target,
+          `note-portal:${note.id}`,
         )
-      )}
+      })}
 
-      {/* Broadcast notes from teacher (read-only), filtered by layer visibility.
-          Reposition display-only via the current heading positions — never
-          persist back, since the broadcast author is the canonical source. */}
+      {/* Broadcast notes from teacher (read-only). Anchored the same way as
+          owned notes — no display-only repositionStickyNote call needed; the
+          section portal carries them through layout changes. */}
       {paperEl && broadcastNotesByLayer.map(layer =>
-        isLayerVisible(layer.layerKey) && layer.notes.map(note =>
-          createPortal(
+        isLayerVisible(layer.layerKey) && layer.notes.map(note => {
+          const r = resolveTarget(note)
+          if (!r) return null
+          return createPortal(
             <StickyNoteCard
               key={`broadcast-${note.id}`}
-              note={repositionStickyNote(note, headingPositions)}
+              note={note}
               paperEl={paperEl}
               readOnly
+              originX={r.originX}
+              originY={r.originY}
             />,
-            paperEl,
+            r.target,
+            `note-portal:broadcast:${note.id}`,
           )
-        )
+        })
       )}
     </>
   )
@@ -510,9 +633,16 @@ interface StickyNoteCardProps {
   onDelete?: () => void
   /** When true, note is non-interactive (broadcast notes for students) */
   readOnly?: boolean
+  /** When the card is portaled into a section (rather than the paper), the
+   *  section's top-left isn't aligned with the paper's top-left. We subtract
+   *  these offsets from note.x/note.y at render time so the note still appears
+   *  at its stored paper-absolute coordinates. note.x/y itself stays in
+   *  paper-space (drag math, persistence). 0 when paper-portaled. */
+  originX?: number
+  originY?: number
 }
 
-function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly }: StickyNoteCardProps) {
+function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly, originX = 0, originY = 0 }: StickyNoteCardProps) {
   const cardRef = useRef<HTMLDivElement>(null)
   const getZoom = useZoom()
   const [showColorPicker, setShowColorPicker] = useState(false)
@@ -553,8 +683,8 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly }: StickyN
       const newX = startNoteX + (ev.clientX - startMouseX) / zoom
       const newY = startNoteY + (ev.clientY - startMouseY) / zoom
       if (cardRef.current) {
-        cardRef.current.style.left = `${newX}px`
-        cardRef.current.style.top = `${newY}px`
+        cardRef.current.style.left = `${newX - originX}px`
+        cardRef.current.style.top = `${newY - originY}px`
       }
     }
 
@@ -643,8 +773,8 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly }: StickyN
         (isDragging || isResizing) ? 'shadow-2xl select-none ' + cfg.ring : 'hover:shadow-xl',
       )}
       style={{
-        left: note.x,
-        top: note.y,
+        left: note.x - originX,
+        top: note.y - originY,
         width: note.minimized ? 'auto' : note.width,
         minWidth: note.minimized ? undefined : MIN_WIDTH,
       }}

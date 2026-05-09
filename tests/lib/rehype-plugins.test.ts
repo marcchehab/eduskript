@@ -65,7 +65,7 @@ describe('Rehype Plugins', () => {
       expect(h1?.properties?.['data-heading-text']).toBe('Test Heading')
     })
 
-    it('should not modify h3 headings', async () => {
+    it('should add data-section-id to h3 headings', async () => {
       const markdown = '### Level 3 Heading'
 
       const processor = unified()
@@ -79,8 +79,8 @@ describe('Rehype Plugins', () => {
 
       const h3 = findNode(hast, (node: any) => node.tagName === 'h3')
 
-      expect(h3?.properties?.['data-section-id']).toBeUndefined()
-      expect(h3?.properties?.['data-heading-text']).toBeUndefined()
+      expect(h3?.properties?.['data-section-id']).toBe('h3-level-3-heading')
+      expect(h3?.properties?.['data-heading-text']).toBe('Level 3 Heading')
     })
 
     it('should skip headings without id', async () => {

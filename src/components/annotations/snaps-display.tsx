@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback, memo, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { GripVertical, Trash2, Globe, Users, User, Image, Palette, Minus, Plus } from 'lucide-react'
 import type { Snap, SnapColor } from '@/types/snap'
 import { SnapViewerOverlay } from './snap-viewer-overlay'
@@ -92,6 +93,11 @@ interface SnapsDisplayProps {
   onStudentWorkSnapOverride?: (snapId: string, position: { top: number; left: number; width: number; height: number }) => void
   paperWidth: number // Paper width in pixels for drag delta conversion
   initialLoadComplete?: boolean // Whether all annotation/snap data has loaded (for unified fade-in)
+  /** Re-resolution trigger for section-portaled snaps. When the section DOM
+   *  is rebuilt (spacer add/resize/remove), the parent's headingPositions ref
+   *  changes; that signals us to re-query target elements and avoid pointing
+   *  portals at detached nodes. */
+  headingPositions?: Array<{ sectionId: string; offsetY: number }>
 }
 
 // Minimum distance to move before considering it a drag (in pixels)
@@ -638,6 +644,8 @@ const SnapItem = memo(function SnapItem({
   allSnaps,
   paperWidth,
   zIndex,
+  originX = 0,
+  originY = 0,
 }: {
   snap: Snap
   isNew: boolean
@@ -650,6 +658,13 @@ const SnapItem = memo(function SnapItem({
   allSnaps: Snap[]
   paperWidth: number
   zIndex: number
+  /** When the snap is portaled into a section (rather than the paper), the
+   *  section's top-left isn't aligned with the paper's top-left. We subtract
+   *  these offsets from snap.top/snap.left at render time so the snap still
+   *  appears at its stored paper-absolute coordinates. snap.top/left itself
+   *  stays in paper-space (drag math, persistence). 0 when paper-portaled. */
+  originX?: number
+  originY?: number
 }) {
   if (DEBUG_STATE) console.log(`[SnapItem ${snap.id.slice(-4)}] Render - top:${snap.top.toFixed(0)} left:${snap.left.toFixed(0)}`)
 
@@ -932,8 +947,8 @@ const SnapItem = memo(function SnapItem({
       ref={elementRef}
       className={`absolute ${cfg.bg} border ${cfg.border} shadow-md rounded-xl overflow-hidden group transition-shadow duration-150 hover:shadow-xl`}
       style={{
-        top: snap.top,
-        left: snap.left,
+        top: snap.top - originY,
+        left: snap.left - originX,
         width: snap.minimized ? 'auto' : snap.width,
         willChange: 'transform',
         animation: isNew ? 'snap-fade-in 0.05s ease-out forwards' : undefined,
@@ -1067,8 +1082,52 @@ const SnapItem = memo(function SnapItem({
   )
 })
 
-export function SnapsDisplay({ snaps, onRemoveSnap, onRenameSnap, onUpdateSnap, onReorderSnaps, teacherSnaps = [], studentWorkSnaps = [], snapOverrides, onTeacherSnapOverride, onStudentWorkSnapOverride, paperWidth, initialLoadComplete = true }: SnapsDisplayProps) {
+export function SnapsDisplay({ snaps, onRemoveSnap, onRenameSnap, onUpdateSnap, onReorderSnaps, teacherSnaps = [], studentWorkSnaps = [], snapOverrides, onTeacherSnapOverride, onStudentWorkSnapOverride, paperWidth, initialLoadComplete = true, headingPositions }: SnapsDisplayProps) {
   if (DEBUG_STATE) console.log(`[SnapsDisplay] Render - ${snaps.length} snaps, ${teacherSnaps.length} teacher snaps, ${studentWorkSnaps.length} student work snaps`)
+
+  // Read paper's left padding once. Sections (children of .markdown-content)
+  // start at this offset within the paper, so snaps portaled into a section
+  // need their stored paper-X subtracted by this amount to align visually.
+  const [paperPaddingLeft, setPaperPaddingLeft] = useState<number>(0)
+  useEffect(() => {
+    const find = () => {
+      const paper = document.getElementById('paper')
+      if (!paper) return
+      const padding = parseFloat(getComputedStyle(paper).paddingLeft) || 0
+      setPaperPaddingLeft(padding)
+    }
+    find()
+    const t = setTimeout(find, 600)
+    return () => clearTimeout(t)
+  }, [])
+
+  // Resolve each owned snap's anchor section to a live DOM element. Re-runs
+  // when snaps change (add/remove or anchor change). Snaps whose sectionId
+  // doesn't resolve fall back to the wrapper portal — same as before.
+  const ownSnapAnchors = useMemo(() => {
+    const ids = new Set<string>()
+    for (const s of snaps) if (s.sectionId) ids.add(s.sectionId)
+    return Array.from(ids)
+  }, [snaps])
+
+  const [sectionTargets, setSectionTargets] = useState<Map<string, HTMLElement>>(() => new Map())
+
+  useEffect(() => {
+    const next = new Map<string, HTMLElement>()
+    for (const sid of ownSnapAnchors) {
+      const el = document.querySelector(`[data-section-id="${CSS.escape(sid)}"]`)
+      if (el instanceof HTMLElement) next.set(sid, el)
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional: querying live DOM for portal targets after render. Same-value short-circuit prevents cascade.
+    setSectionTargets((prev) => {
+      if (prev.size !== next.size) return next
+      for (const [k, v] of next) if (prev.get(k) !== v) return next
+      return prev
+    })
+    // headingPositions is in deps purely as a re-run trigger; we don't read its
+    // values here. Same reason as in SectionAnchoredStrokes — it bumps whenever
+    // section DOM is rebuilt, which is when our cached refs go stale.
+  }, [ownSnapAnchors, headingPositions])
 
   const [expandedSnapIndex, setExpandedSnapIndex] = useState<number | null>(null)
   const [expandedIsTeacher, setExpandedIsTeacher] = useState(false)
@@ -1187,7 +1246,16 @@ export function SnapsDisplay({ snaps, onRemoveSnap, onRenameSnap, onUpdateSnap, 
             const snapZIndex = 45 + (orderIndex >= 0 ? orderIndex : 0)
             if (DEBUG_STATE) console.log(`[SnapsDisplay] ${snap.id.slice(-8)} orderIndex=${orderIndex} zIndex=${snapZIndex}`)
 
-            return (
+            // If the snap is anchored to a section that resolves to a live DOM
+            // element, portal the snap into that section so the browser's
+            // layout engine carries it through reflows (spacers, callouts,
+            // etc) without any JS reposition pass. Fallback path keeps the
+            // snap inside the wrapper, positioned in paper-absolute coords.
+            const sectionTarget = snap.sectionId && snap.sectionOffsetY !== undefined
+              ? sectionTargets.get(snap.sectionId)
+              : undefined
+
+            const item = (
               <SnapItem
                 key={snap.id}
                 snap={snap}
@@ -1201,8 +1269,14 @@ export function SnapsDisplay({ snaps, onRemoveSnap, onRenameSnap, onUpdateSnap, 
                 allSnaps={snaps}
                 paperWidth={paperWidth}
                 zIndex={snapZIndex}
+                originX={sectionTarget ? paperPaddingLeft : 0}
+                originY={sectionTarget ? snap.sectionOffsetY! : 0}
               />
             )
+
+            return sectionTarget
+              ? createPortal(item, sectionTarget, `snap-portal:${snap.id}`)
+              : item
           })}
           {/* Teacher snaps (read-only, moveable) */}
         {teacherSnaps.map((snap) => {

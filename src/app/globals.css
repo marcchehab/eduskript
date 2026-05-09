@@ -704,6 +704,17 @@ article.prose-theme > div > :first-child {
   position: relative;
 }
 
+/* Every section element (heading, code block, callout, code editor, plugin, figure, table)
+   gets a relative positioning context so the per-section annotation overlays
+   (strokes, sticky notes, snaps) anchor to the section's natural layout position.
+   When the section moves — spacer added, callout opened, code editor resized —
+   the browser layout engine reflows its descendants automatically, so no JS
+   repositioning math is needed. The rule is layout-invisible: it only affects
+   absolutely-positioned children, of which sections normally have none. */
+[data-section-id] {
+  position: relative;
+}
+
 /* Animate note appear */
 @keyframes stickyNoteAppear {
   from { opacity: 0; transform: scale(0.90) translateY(6px); }
@@ -729,7 +740,8 @@ article.prose-theme > div > :first-child {
 
 /* Invert annotation canvas/SVG and color picker in dark mode */
 .dark .annotation-canvas,
-.dark .annotation-svg {
+.dark .annotation-svg,
+.dark .annotation-section-svg {
   filter: invert(1) hue-rotate(180deg);
 }
 

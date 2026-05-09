@@ -750,7 +750,14 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         const inputPoints = vp
           ? sourcePoints.map(p => [p.x - vp.x, p.y - vp.y, p.pressure])
           : sourcePoints.map(p => [p.x, p.y, p.pressure])
-        const outline = getStroke(inputPoints, getStrokeOptions(strokeWidth, false, isUniform))
+        // last: true matches the committed-stroke render in section-anchored-strokes.
+        // Without this, the canvas paints with a full-width round end while the SVG
+        // paints with the end taper enabled — the user sees the stroke "shrink"
+        // toward the end at the handoff (looks like a few-pixel drift, especially
+        // when the stroke ends going downward). Coordinate-wise the canvas and SVG
+        // already agree to subpixel precision; this just makes the visual handoff
+        // seamless.
+        const outline = getStroke(inputPoints, getStrokeOptions(strokeWidth, true, isUniform))
         const pathObj = getPathFromStroke(outline)
         ctx.fillStyle = strokeColor
         ctx.fill(pathObj)
@@ -845,7 +852,34 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         // Determine which section this stroke belongs to based on first point
         const firstPoint = currentPathRef.current[0]
         const sectionId = determineSectionFromY(firstPoint.y, headingPositions) || 'unknown'
-        const sectionOffsetY = headingPositions.find(h => h.sectionId === sectionId)?.offsetY || 0
+        // Live-measure the section's current paper-top against the canvas's
+        // own coord origin (the wrapper element that contains the canvas, which
+        // sits at paper's padding edge — `position: absolute; inset: 0`).
+        //
+        // Three things had to be right for this to align with the canvas:
+        //   1. Width-based scale (paperRect.width / offsetWidth). offsetHeight
+        //      is integer-rounded by the browser, so paperRect.height /
+        //      offsetHeight can drift to e.g. 1.000057 even at no transform.
+        //   2. Wrapper rect as origin (NOT paperRect.top + border-top * scale).
+        //      The browser rounds border rendering at the device-pixel grid,
+        //      so the multiplied value drifts from the actual padding-edge
+        //      screen position at heavy zoom.
+        //   3. Live-measure rather than trust the debounced headingPositions
+        //      cache, which can be stale at draw-commit time.
+        let sectionOffsetY = headingPositions.find(h => h.sectionId === sectionId)?.offsetY ?? 0
+        if (sectionId !== 'unknown' && typeof document !== 'undefined') {
+          const sectionEl = document.querySelector(`[data-section-id="${CSS.escape(sectionId)}"]`)
+          const paperEl = document.getElementById('paper')
+          if (sectionEl instanceof HTMLElement && paperEl) {
+            const paperRect = paperEl.getBoundingClientRect()
+            const sectionRect = sectionEl.getBoundingClientRect()
+            const liveScale = paperRect.width / paperEl.offsetWidth || 1
+            const canvas = canvasRef.current
+            const wrapperEl = (canvas?.offsetParent ?? paperEl) as HTMLElement
+            const wrapperRect = wrapperEl.getBoundingClientRect()
+            sectionOffsetY = (sectionRect.top - wrapperRect.top) / liveScale
+          }
+        }
 
         // Telemetry: sample every Nth stroke
         telemetryStrokeCountRef.current++

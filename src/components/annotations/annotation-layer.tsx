@@ -86,6 +86,7 @@ import { AlertTriangle, User, Users, MessageSquare, Globe } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SimpleCanvas, type SimpleCanvasHandle, type DrawMode } from './simple-canvas'
 import { AnnotationSvgLayer } from './annotation-svg-layer'
+import { SectionAnchoredStrokes } from './section-anchored-strokes'
 import { computeSectionTransforms, type SectionTransform } from '@/lib/annotations/svg-path'
 import { AnnotationToolbar, formatStudentLabel, type AnnotationMode } from './annotation-toolbar'
 import { getReverseMappingsForClass } from '@/lib/email-mapping-db'
@@ -95,7 +96,7 @@ import type { SnapsData, SpacersData } from '@/lib/userdata/adapters'
 import type { Spacer, SpacerPattern } from '@/types/spacer'
 import { generateContentHash, type HeadingPosition, type StrokeData } from '@/lib/indexeddb/annotations'
 import { getStrokeAvg } from '@/lib/annotations/stroke-grouping'
-import { repositionSnaps } from '@/lib/annotations/reposition-strokes'
+import { repositionSnaps, determineSectionFromY } from '@/lib/annotations/reposition-strokes'
 import { useLayout } from '@/contexts/layout-context'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
 import { useStickyNotesContext } from '@/contexts/sticky-notes-context'
@@ -1243,10 +1244,11 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
   const performSaveRef = useRef<(() => Promise<void>) | null>(null)
   const [pageHeight, setPageHeight] = useState(0)
   const [orphanedStrokesCount, setOrphanedStrokesCount] = useState(0)
+  // Strokes whose sectionId currently doesn't resolve to a live DOM element.
+  // These get rendered in a paper-anchored fallback overlay (no section to follow).
+  // Updated by SectionAnchoredStrokes' onOrphansChange.
+  const [domOrphanedStrokes, setDomOrphanedStrokes] = useState<AnimatedStroke[]>([])
   const [storedHeadingOffsets, setStoredHeadingOffsets] = useState<Record<string, number>>({})
-  // Original offsets from annotation data — never overwritten by snap repositioning.
-  // Used by computeSectionTransforms for accurate stroke repositioning.
-  const originalHeadingOffsetsRef = useRef<Record<string, number>>({})
   const [storedPaddingLeft, setStoredPaddingLeft] = useState<number | undefined>(undefined)
   const [currentPaddingLeft, setCurrentPaddingLeft] = useState<number>(0)
 
@@ -1709,7 +1711,6 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
           log('loaded storedHeadingOffsets:', JSON.stringify(annotationData.headingOffsets))
           hasLoadedAnnotationOffsets.current = true
           const offsets = annotationData.headingOffsets || {}
-          originalHeadingOffsetsRef.current = offsets
           setStoredHeadingOffsets(offsets)
           setStoredPaddingLeft(annotationData.paddingLeft)
         }
@@ -1737,7 +1738,6 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
     const currentOffsets = Object.fromEntries(
       headingPositions.map(h => [h.sectionId, h.offsetY])
     )
-    originalHeadingOffsetsRef.current = currentOffsets
     setStoredHeadingOffsets(currentOffsets)
   }, [headingPositions, hasAnnotations])
 
@@ -1804,10 +1804,26 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
     const positions: HeadingPosition[] = []
 
     // Get the CSS transform scale factor applied to paper (for mobile responsive scaling)
-    // getBoundingClientRect() returns scaled coordinates, but we need unscaled for canvas
+    // getBoundingClientRect() returns scaled coordinates, but we need unscaled for canvas.
+    // Compute scale from WIDTH not height: paper width is hard-locked at 1280 px so
+    // offsetWidth is exact, and paperRect.width / 1280 gives a clean transform scale.
+    // offsetHeight, by contrast, is integer-rounded by the browser while
+    // paperRect.height carries subpixels — yielding a spurious "scale" of e.g.
+    // 1.000057 even when no transform is applied. That subpixel error propagates
+    // into every sectionOffsetY (each shrunk by ~0.06%), and the canvas — which
+    // uses width-based scale — disagrees, producing a sectionOffsetY → point.y
+    // mismatch that grows linearly with y (visible as a few-pixel drift between
+    // canvas-drawn and SVG-rendered strokes near the bottom of the page).
     const paperRect = paperElement!.getBoundingClientRect()
-    // Calculate scale from height ratio (same as width for uniform CSS transform scale)
-    const scale = (paperRect.height / paperElement!.offsetHeight) || 1
+    const scale = (paperRect.width / paperElement!.offsetWidth) || 1
+    // sectionOffsetY must use the CANVAS's actual coord origin as anchor.
+    // The canvas lives inside .annotation-content-wrapper (`position: absolute;
+    // inset: 0` inside paper, so it sits at paper's padding edge). Measure that
+    // wrapper's rect directly — at heavy zoom, computing it from paperRect.top +
+    // paperBorderTop * scale drifts because the browser rounds border rendering
+    // at the device-pixel grid, which doesn't equal the multiplied value.
+    const wrapperEl = paperElement!.querySelector('.annotation-content-wrapper') as HTMLElement | null
+    const originRect = wrapperEl ? wrapperEl.getBoundingClientRect() : paperRect
 
     sectionElements.forEach((element) => {
       const sectionId = element.getAttribute('data-section-id')
@@ -1818,7 +1834,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
         // Get the element's position relative to paper element
         // Divide by scale to convert from scaled (getBoundingClientRect) to unscaled (canvas) coordinates
         const rect = element.getBoundingClientRect()
-        const unscaledOffsetY = (rect.top - paperRect.top) / scale
+        const unscaledOffsetY = (rect.top - originRect.top) / scale
 
         // Add top reference point
         positions.push({
@@ -1833,7 +1849,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
         if (isDynamicHeight) {
           positions.push({
             sectionId: `${sectionId}-end`,
-            offsetY: (rect.bottom - paperRect.top) / scale,
+            offsetY: (rect.bottom - originRect.top) / scale,
             headingText: ''
           })
         }
@@ -1959,7 +1975,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
     const container = getMarkdownContainer()
     if (!container) return []
     return Array.from(container.children).filter(
-      el => !el.hasAttribute('data-spacer-id')
+      el => !el.hasAttribute('data-spacer-id') && !el.hasAttribute('data-spacer-end')
     )
   }, [getMarkdownContainer])
 
@@ -1968,45 +1984,120 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
     const container = getMarkdownContainer()
     if (!container) return
 
-    // Remove previously injected spacer elements
-    container.querySelectorAll('[data-spacer-id]').forEach(el => el.remove())
+    // In-place sync: keep existing spacer/sentinel DOM elements stable across
+    // height/pattern changes. A naive teardown+rebuild here causes a 1-frame
+    // flicker on every height commit because portal targets (cached by
+    // SectionAnchoredStrokes / SnapsDisplay / sticky-notes-layer) briefly
+    // point at detached nodes between teardown and re-injection.
+    const existingSpacers = new Map<string, HTMLElement>()
+    container.querySelectorAll('[data-spacer-id]').forEach(el => {
+      const id = (el as HTMLElement).getAttribute('data-spacer-id')
+      if (id) existingSpacers.set(id, el as HTMLElement)
+    })
+    const existingSentinels = new Map<string, HTMLElement>()
+    container.querySelectorAll('[data-spacer-end]').forEach(el => {
+      const id = (el as HTMLElement).getAttribute('data-spacer-end')
+      if (id) existingSentinels.set(id, el as HTMLElement)
+    })
 
-    // No spacers to inject: any pre-existing spacers were just removed above;
-    // ResizeObserver on the content container picks up the resulting size change
-    // and triggers the recalc — no need to call it directly here.
+    const targetIds = new Set(allSpacersToInject.map(s => s.id))
+
+    // Remove spacers no longer in the target set
+    let removedAny = false
+    for (const [id, el] of existingSpacers) {
+      if (!targetIds.has(id)) {
+        el.remove()
+        existingSentinels.get(id)?.remove()
+        removedAny = true
+      }
+    }
+    // Sweep any orphaned sentinels (e.g. from older state)
+    for (const [id, el] of existingSentinels) {
+      if (!targetIds.has(id)) el.remove()
+    }
+
     if (allSpacersToInject.length === 0) {
       return
     }
 
-    // Sort spacers by afterBlockIndex descending so insertions don't shift indices
+    // Sort spacers by afterBlockIndex descending so new insertions don't shift
+    // indices of later inserts. (Existing spacers stay where they are.)
     const sorted = [...allSpacersToInject].sort((a, b) => b.afterBlockIndex - a.afterBlockIndex)
 
+    let createdAnyNew = false
     for (const spacer of sorted) {
-      // Re-query children excluding spacers since we just removed them all
+      const existingDiv = existingSpacers.get(spacer.id)
+
+      if (existingDiv) {
+        // In-place update for height/pattern changes — no teardown, no flicker.
+        // Class is rewritten in full to swap pattern variants.
+        existingDiv.className = `spacer-element spacer-${spacer.pattern}`
+        if (existingDiv.style.height !== `${spacer.height}px`) {
+          existingDiv.style.height = `${spacer.height}px`
+        }
+        // Sentinel needs no update — it's always 0-height and sits right after.
+        continue
+      }
+
+      // New spacer — create + insert. Re-query block children excluding any
+      // spacer/sentinel elements so afterBlockIndex maps onto content blocks.
       const currentChildren = Array.from(container.children).filter(
-        el => !el.hasAttribute('data-spacer-id')
+        el => !el.hasAttribute('data-spacer-id') && !el.hasAttribute('data-spacer-end')
       )
       const clampedIndex = Math.min(spacer.afterBlockIndex, currentChildren.length - 1)
       if (clampedIndex < 0) continue
-
       const targetChild = currentChildren[clampedIndex]
       if (!targetChild) continue
 
       const spacerDiv = document.createElement('div')
       spacerDiv.setAttribute('data-spacer-id', spacer.id)
+      // Spacer is also a section divider: its top anchors strokes immediately above
+      // (assigned to spacer-{id}) and its bottom anchors strokes below (assigned to
+      // spacer-{id}-end via the sentinel sibling). Both follow as the spacer's height
+      // changes, with no JS recalc — same pattern as callouts/code-editors/plugins.
+      spacerDiv.setAttribute('data-section-id', `spacer-${spacer.id}`)
+      spacerDiv.setAttribute('data-dynamic-height', 'true')
       spacerDiv.className = `spacer-element spacer-${spacer.pattern}`
       spacerDiv.style.height = `${spacer.height}px`
+      // CSS already sets [data-section-id] { position: relative } so absolute children anchor here.
+
+      const endSentinel = document.createElement('div')
+      endSentinel.setAttribute('data-section-id', `spacer-${spacer.id}-end`)
+      endSentinel.setAttribute('data-section-end', 'true')
+      endSentinel.setAttribute('data-spacer-end', spacer.id) // for cleanup query
+      endSentinel.setAttribute('aria-hidden', 'true')
+      endSentinel.style.cssText = 'height:0;pointer-events:none'
 
       targetChild.after(spacerDiv)
+      spacerDiv.after(endSentinel)
+      createdAnyNew = true
     }
 
-    // Recalculate heading positions since content shifted
-    recalculateHeadingPositions()
+    // Recalculate heading positions only when DOM topology actually changed
+    // (added or removed spacers). Pure height tweaks already reflow via the
+    // browser layout engine; a JS recalc would just re-trigger the section-
+    // target re-resolution effects unnecessarily. New strokes drawn during a
+    // drag still get the correct sectionId because determineSectionFromY runs
+    // against current headingPositions only at draw time, by which point the
+    // commit-time recalc has already fired.
+    if (createdAnyNew || removedAny) {
+      recalculateHeadingPositions()
+    }
   }, [allSpacersToInject, children, recalculateHeadingPositions, getMarkdownContainer])
 
   // Track ID of the most recently created spacer so the floating panel auto-opens
   const [lastCreatedSpacerId, setLastCreatedSpacerId] = useState<string | null>(null)
   const [spacerResizing, setSpacerResizing] = useState(false)
+
+  // When a new spacer is added inside an existing section, items (strokes,
+  // notes, snaps) that visually fall *below* the new spacer need to re-anchor
+  // to the spacer's end-sentinel so they follow subsequent height changes.
+  // Without re-anchor, they stay tied to the parent section's top — which
+  // doesn't move when the spacer grows, so they don't move either. This ref
+  // tracks the spacer that needs reassignment; the effect below runs once
+  // per add, after the spacer's DOM is in place and headingPositions has its
+  // entries.
+  const pendingSpacerReassignmentRef = useRef<{ id: string; height: number } | null>(null)
 
   // Spacer CRUD operations
   const handleAddSpacer = useCallback((afterBlockIndex: number) => {
@@ -2018,6 +2109,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
       pattern: spacerPattern,
     }
     setLastCreatedSpacerId(id)
+    pendingSpacerReassignmentRef.current = { id, height: 80 }
     const current = spacersData?.spacers || []
     updateSpacersData({ spacers: [...current, newSpacer] })
   }, [spacerPattern, spacersData, updateSpacersData])
@@ -2035,6 +2127,72 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
   }, [updateSpacersData])
 
   const handleRemoveSpacer = useCallback((id: string) => {
+    // Reverse of the add-time reassignment: items currently anchored to this
+    // spacer's end-sentinel (`spacer-{id}-end`) should re-anchor to the section
+    // divider immediately above the spacer's top (heading, previous spacer-end,
+    // callout, etc), and shift their stored y by -H so their visual paper-Y
+    // matches the post-removal layout. The "previous divider" is whatever
+    // headingPositions entry sits just above the spacer's top.
+    const spacerToRemove = spacers.find(s => s.id === id)
+    const H = spacerToRemove?.height ?? 0
+    const spacerTopEntry = headingPositions.find(h => h.sectionId === `spacer-${id}`)
+    const prevDivider = spacerTopEntry
+      ? headingPositions
+          .filter(h =>
+            h.sectionId !== `spacer-${id}` &&
+            h.sectionId !== `spacer-${id}-end` &&
+            h.offsetY < spacerTopEntry.offsetY
+          )
+          .sort((a, b) => b.offsetY - a.offsetY)[0]
+      : undefined
+
+    if (prevDivider && H > 0) {
+      // Strokes
+      if (canvasData && !spacerDeleteAnnotations) {
+        try {
+          const strokes = JSON.parse(canvasData) as StrokeData[]
+          let changed = false
+          const next = strokes.map(stroke => {
+            if (stroke.sectionId !== `spacer-${id}-end`) return stroke
+            changed = true
+            return {
+              ...stroke,
+              sectionId: prevDivider.sectionId,
+              sectionOffsetY: prevDivider.offsetY,
+              points: stroke.points.map(p => ({ ...p, y: p.y - H })),
+              avgY: stroke.avgY !== undefined ? stroke.avgY - H : stroke.avgY,
+            }
+          })
+          if (changed) setCanvasData(JSON.stringify(next))
+        } catch { /* ignore */ }
+      }
+      // Snaps
+      const currentSnaps = snapsData?.snaps || []
+      let snapsChanged = false
+      const nextSnaps = currentSnaps.map(snap => {
+        if (snap.sectionId !== `spacer-${id}-end`) return snap
+        snapsChanged = true
+        return {
+          ...snap,
+          sectionId: prevDivider.sectionId,
+          sectionOffsetY: prevDivider.offsetY,
+          top: snap.top - H,
+        }
+      })
+      if (snapsChanged) updateSnapsData({ snaps: nextSnaps })
+      // Sticky notes (own data lives in sticky-notes-layer)
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('eduskript:unanchor-spacer-removed', {
+          detail: {
+            spacerId: id,
+            prevSectionId: prevDivider.sectionId,
+            prevSectionOffsetY: prevDivider.offsetY,
+            height: H,
+          },
+        }))
+      }
+    }
+
     // Optionally delete annotations whose avgY falls within the spacer's vertical range
     if (spacerDeleteAnnotations && canvasData) {
       const spacerEl = document.querySelector(`[data-spacer-id="${id}"]`) as HTMLElement | null
@@ -2042,7 +2200,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
         const paperEl = document.getElementById('paper')
         if (paperEl) {
           const paperRect = paperEl.getBoundingClientRect()
-          const scale = (paperRect.height / paperEl.offsetHeight) || 1
+          const scale = (paperRect.width / paperEl.offsetWidth) || 1
           const elRect = spacerEl.getBoundingClientRect()
           const spacerTop = (elRect.top - paperRect.top) / scale
           const spacerBottom = (elRect.bottom - paperRect.top) / scale
@@ -2079,7 +2237,85 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
 
     const current = spacersData?.spacers || []
     updateSpacersData({ spacers: current.filter(s => s.id !== id) })
-  }, [spacersData, updateSpacersData, spacerDeleteAnnotations, canvasData, headingPositions, currentPaddingLeft, updateAnnotationData])
+  }, [spacersData, updateSpacersData, spacerDeleteAnnotations, canvasData, headingPositions, currentPaddingLeft, updateAnnotationData, spacers, snapsData])
+
+  // Re-anchor items below a newly added spacer to the spacer's end-sentinel.
+  // Without this, items stay tied to the parent section's heading (which
+  // doesn't move when the spacer grows), so they don't follow subsequent
+  // height changes. We update item.y/top by +H so the items also visually
+  // shift down by the spacer's height at the moment of insertion (matching
+  // the content reflow). The reverse on spacer-remove (re-anchor to the
+  // previous divider above, shift -H) lives in handleRemoveSpacer.
+  useEffect(() => {
+    const pending = pendingSpacerReassignmentRef.current
+    if (!pending) return
+    const NT = headingPositions.find(h => h.sectionId === `spacer-${pending.id}`)?.offsetY
+    const NE = headingPositions.find(h => h.sectionId === `spacer-${pending.id}-end`)?.offsetY
+    if (NT === undefined || NE === undefined) return  // wait for inject + recalc
+
+    const H = pending.height
+    pendingSpacerReassignmentRef.current = null
+
+    // Decide reassignment per item: anchor must be above the new spacer's top,
+    // and the item's current visual paper-Y must be below it.
+    const visualY = (itemY: number, itemSectionOffsetY: number, itemSectionId: string): number | null => {
+      const entry = headingPositions.find(h => h.sectionId === itemSectionId)
+      if (!entry) return null
+      return entry.offsetY + (itemY - itemSectionOffsetY)
+    }
+    const shouldReassign = (itemY: number, itemSectionOffsetY: number, itemSectionId: string): boolean => {
+      const entry = headingPositions.find(h => h.sectionId === itemSectionId)
+      if (!entry) return false
+      if (entry.offsetY >= NT) return false
+      const visual = visualY(itemY, itemSectionOffsetY, itemSectionId)
+      return visual !== null && visual > NT
+    }
+
+    // Strokes (canvasData)
+    if (canvasData) {
+      try {
+        const strokes = JSON.parse(canvasData) as StrokeData[]
+        let changed = false
+        const next = strokes.map(stroke => {
+          const refY = stroke.points[0]?.y ?? stroke.avgY ?? 0
+          if (!shouldReassign(refY, stroke.sectionOffsetY, stroke.sectionId)) return stroke
+          changed = true
+          return {
+            ...stroke,
+            sectionId: `spacer-${pending.id}-end`,
+            sectionOffsetY: NE,
+            points: stroke.points.map(p => ({ ...p, y: p.y + H })),
+            avgY: stroke.avgY !== undefined ? stroke.avgY + H : stroke.avgY,
+          }
+        })
+        if (changed) setCanvasData(JSON.stringify(next))
+      } catch { /* ignore */ }
+    }
+
+    // Snaps
+    const currentSnaps = snapsData?.snaps || []
+    let snapsChanged = false
+    const nextSnaps = currentSnaps.map(snap => {
+      if (snap.sectionId === undefined || snap.sectionOffsetY === undefined) return snap
+      if (!shouldReassign(snap.top, snap.sectionOffsetY, snap.sectionId)) return snap
+      snapsChanged = true
+      return {
+        ...snap,
+        sectionId: `spacer-${pending.id}-end`,
+        sectionOffsetY: NE,
+        top: snap.top + H,
+      }
+    })
+    if (snapsChanged) updateSnapsData({ snaps: nextSnaps })
+
+    // Sticky notes are managed by sticky-notes-layer (its own data hook).
+    // Fire a window event so it can run the same reassignment on its own state.
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('eduskript:reanchor-below-spacer', {
+        detail: { spacerId: pending.id, spacerTop: NT, spacerEndY: NE, height: H },
+      }))
+    }
+  }, [headingPositions, canvasData, snapsData, updateSnapsData])
 
   // Compute all gap Y positions between block children (for preview lines)
   // Returns array of { index, y } for each gap
@@ -2100,7 +2336,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
     const paperEl = document.getElementById('paper')
     if (!paperEl) return
     const paperRect = paperEl.getBoundingClientRect()
-    const scale = (paperRect.height / paperEl.offsetHeight) || 1
+    const scale = (paperRect.width / paperEl.offsetWidth) || 1
 
     const gaps: Array<{ index: number; y: number }> = []
     for (let i = 0; i < blockChildren.length; i++) {
@@ -2116,7 +2352,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
     const paperEl = document.getElementById('paper')
     if (!paperEl || spacerGapPositions.length === 0) return null
     const paperRect = paperEl.getBoundingClientRect()
-    const scale = (paperRect.height / paperEl.offsetHeight) || 1
+    const scale = (paperRect.width / paperEl.offsetWidth) || 1
     const y = (clientY - paperRect.top) / scale
 
     let bestIndex = 0
@@ -2187,7 +2423,9 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
         const positions: HeadingPosition[] = []
         const paperRect = paperElement.getBoundingClientRect()
         // Divide by CSS transform scale to get unscaled coordinates (same as recalculateHeadingPositions)
-        const scale = (paperRect.height / paperElement.offsetHeight) || 1
+        const scale = (paperRect.width / paperElement.offsetWidth) || 1
+        const wrapperEl = paperElement.querySelector('.annotation-content-wrapper') as HTMLElement | null
+        const originRect = wrapperEl ? wrapperEl.getBoundingClientRect() : paperRect
 
         sectionElements.forEach((element) => {
           const sectionId = element.getAttribute('data-section-id')
@@ -2196,7 +2434,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
 
           if (sectionId) {
             const rect = element.getBoundingClientRect()
-            const unscaledOffsetY = (rect.top - paperRect.top) / scale
+            const unscaledOffsetY = (rect.top - originRect.top) / scale
 
             // Add top reference point
             positions.push({
@@ -2209,7 +2447,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
             if (isDynamicHeight) {
               positions.push({
                 sectionId: `${sectionId}-end`,
-                offsetY: (rect.bottom - paperRect.top) / scale,
+                offsetY: (rect.bottom - originRect.top) / scale,
                 headingText: ''
               })
             }
@@ -2257,14 +2495,13 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
         return
       }
 
-      // Build heading offsets map
+      // Build heading offsets map. Saved alongside the strokes so reference layers
+      // (other users' annotations) can reposition relative to their author's
+      // layout. The active layer doesn't use this — its strokes are rendered via
+      // section-anchored portals, which the browser layout carries directly.
       const headingOffsets = Object.fromEntries(
         currentHeadingPositions.map(h => [h.sectionId, h.offsetY])
       )
-
-      // Update the original offsets baseline — after saving, the stored data
-      // will have these offsets, so they become the new baseline for transforms.
-      originalHeadingOffsetsRef.current = headingOffsets
 
       const data: AnnotationData = {
         canvasData: currentCanvasData,
@@ -2350,32 +2587,11 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
       const strokes = JSON.parse(data) as StrokeData[]
       hasData = strokes && strokes.length > 0
 
-      // Transitioning from empty → has strokes: the user just committed their
-      // first stroke. Re-measure layout synchronously and rebase the baseline
-      // so the stroke's initial render has dy=0. Without this, a layout shift
-      // that happened during the stroke (CodeMirror completing its measure
-      // mid-draw, a callout toggling, an image loading) leaves the baseline
-      // at a stale pre-shift value — the stroke visibly jumps by the shift
-      // delta until performSave rebases the baseline 2 s later.
-      if (hasData && !hasAnnotations && !hasLoadedAnnotationOffsets.current && contentRef.current) {
-        const paperElement = document.getElementById('paper')
-        if (paperElement) {
-          const paperRect = paperElement.getBoundingClientRect()
-          const scale = (paperRect.height / paperElement.offsetHeight) || 1
-          const sectionElements = contentRef.current.querySelectorAll<HTMLElement>('[data-section-id]')
-          const freshOffsets: Record<string, number> = {}
-          sectionElements.forEach(el => {
-            const sectionId = el.getAttribute('data-section-id')
-            if (!sectionId) return
-            const rect = el.getBoundingClientRect()
-            freshOffsets[sectionId] = (rect.top - paperRect.top) / scale
-            if (el.getAttribute('data-dynamic-height') === 'true') {
-              freshOffsets[`${sectionId}-end`] = (rect.bottom - paperRect.top) / scale
-            }
-          })
-          originalHeadingOffsetsRef.current = freshOffsets
-        }
-      }
+      // First-stroke baseline-rebasing logic removed: with section-anchored portal
+      // rendering, each stroke carries its own sectionOffsetY captured at draw
+      // time, and renders inside its section element's natural layout position.
+      // No global baseline ref to keep current, so layout shifts during a draw
+      // gesture don't cause the post-commit visual jump that needed fixing.
 
       setHasAnnotations(hasData)
 
@@ -2575,8 +2791,16 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
   const handleSnapCapture = useCallback((snap: Snap) => {
     setMode('view') // Return to view mode immediately
 
-    // Save snap directly - imageUrl is already base64 from canvas capture
-    const newSnap = {
+    // Anchor the snap to the section that currently contains its top edge so
+    // it follows that section through layout reflow (spacers, callouts, etc).
+    // Without this, the SnapData fields stay undefined and repositionSnaps
+    // is a silent no-op — which is the snap-doesn't-follow-spacer bug.
+    const sectionId = (headingPositions.length > 0 ? determineSectionFromY(snap.top, headingPositions) : null) ?? undefined
+    const sectionOffsetY = sectionId
+      ? headingPositions.find(h => h.sectionId === sectionId)?.offsetY
+      : undefined
+
+    const newSnap: Snap = {
       id: snap.id,
       name: snap.name,
       imageUrl: snap.imageUrl, // base64 data URL
@@ -2584,10 +2808,12 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
       left: snap.left,
       width: snap.width,
       height: snap.height,
+      sectionId,
+      sectionOffsetY,
     }
     const currentSnaps = snapsData?.snaps || []
     updateSnapsData({ snaps: [...currentSnaps, newSnap] })
-  }, [snapsData, updateSnapsData])
+  }, [snapsData, updateSnapsData, headingPositions])
 
   // Handle snap removal - just remove from synced data
   const handleRemoveSnap = useCallback((id: string) => {
@@ -2610,12 +2836,26 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
   // Handle snap update (color, minimized, etc.)
   const handleUpdateSnap = useCallback((id: string, updates: Partial<Snap>) => {
     const currentSnaps = snapsData?.snaps || []
+    // If the snap was moved vertically (drag), re-anchor it to whichever section
+    // now contains its new top edge. Without this re-anchor a snap dragged out
+    // of its old section stays tied to the wrong sectionOffsetY and snaps back
+    // on the next reflow. Mirrors sticky-notes-layer.tsx's anchorForY on drag.
+    const reAnchor = (() => {
+      if (updates.top === undefined) return null
+      if (headingPositions.length === 0) return null
+      const sectionId = determineSectionFromY(updates.top, headingPositions) ?? undefined
+      const sectionOffsetY = sectionId
+        ? headingPositions.find(h => h.sectionId === sectionId)?.offsetY
+        : undefined
+      return { sectionId, sectionOffsetY }
+    })()
+
     updateSnapsData({
       snaps: currentSnaps.map(snap =>
-        snap.id === id ? { ...snap, ...updates } : snap
+        snap.id === id ? { ...snap, ...updates, ...(reAnchor ?? {}) } : snap
       )
     })
-  }, [snapsData, updateSnapsData])
+  }, [snapsData, updateSnapsData, headingPositions])
 
   // Handle snap reorder
   const handleReorderSnaps = useCallback((reorderedSnaps: Snap[]) => {
@@ -3020,23 +3260,18 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
             zIndex: 40, // Above code editor buttons (z-30), below snap overlay (z-10000)
           }}
         >
-          {/* SVG layer: committed strokes rendered as resolution-independent paths.
-              Uses sectionTransforms (storedHeadingOffsets → current) for repositioning.
-              This is compatible with existing data where repositionStrokes() already
-              mutated points to match storedHeadingOffsets — the transform bridges
-              from that baseline to the current layout. */}
-          <AnnotationSvgLayer
-            strokes={parsedStrokes}
-            width={paperWidth}
-            height={pageHeight}
-            markedForDeletion={eraserMarkedIds}
-            sectionTransforms={computeSectionTransforms(
-              originalHeadingOffsetsRef.current,
-              headingPositions,
-              storedPaddingLeft,
-              currentPaddingLeft
-            )}
-          />
+          {/* Fallback layer: strokes whose sectionId doesn't resolve to a live DOM
+              element (deleted section, or section unmounted mid-render). Rendered at
+              their stored absolute paper coordinates, no transform — they sit where
+              they were drawn until the user removes them via the orphans banner. */}
+          {domOrphanedStrokes.length > 0 && (
+            <AnnotationSvgLayer
+              strokes={domOrphanedStrokes}
+              width={paperWidth}
+              height={pageHeight}
+              markedForDeletion={eraserMarkedIds}
+            />
+          )}
           {/* Canvas: handles pointer events and renders in-progress stroke only.
               Committed strokes are displayed by the SVG layer above. */}
           <SimpleCanvas
@@ -3073,6 +3308,25 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
           )}
         </div>,
         paperElement
+      )}
+
+      {/* Active layer's committed strokes — one small SVG per section, portaled
+          into the section's `[data-section-id]` element. Browser layout carries
+          each SVG with its host section, so spacers / callout toggles / code
+          editor resizes / image loads reposition strokes for free, without any
+          JS recalc. Strokes whose sectionId doesn't currently resolve to a live
+          element are surfaced via onOrphansChange and rendered in the
+          paper-anchored fallback above. */}
+      {paperElement && pageHeight > 0 && initialLoadComplete && activeLayerVisible && (
+        <SectionAnchoredStrokes
+          strokes={parsedStrokes}
+          paperWidth={paperWidth}
+          paperHeight={pageHeight}
+          paperPaddingLeft={currentPaddingLeft}
+          markedForDeletion={eraserMarkedIds}
+          onOrphansChange={setDomOrphanedStrokes}
+          headingPositions={headingPositions}
+        />
       )}
 
       {/* Reference annotation layers - read-only overlays.
@@ -3576,6 +3830,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
           onStudentWorkSnapOverride={isTeacher ? handleStudentWorkSnapOverride : undefined}
           paperWidth={paperWidth}
           initialLoadComplete={initialLoadComplete}
+          headingPositions={headingPositions}
         />,
         paperElement
       )}
