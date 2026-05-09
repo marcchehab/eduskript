@@ -434,13 +434,35 @@ export function StickyNotesLayer({ pageId, children, isExamStudent, publicSticky
     })
   }, [allNotes, headingPositions])
 
-  /** Returns { target, originX, originY } — where to portal this note. */
+  /** Returns { target, originX, originY } — where to portal this note.
+   * Returns null when the note's section was a markdown-dynamic-height
+   * element (callout, code-editor, plugin) that's no longer in the DOM —
+   * caller renders nothing in that case. Mental model: variable-height
+   * element disappears → its annotations disappear too. Data persists.
+   * Other anchors (h1/h2/h3, spacers) fall through to the paper-absolute
+   * fallback so the note stays visible at its drawn position. */
   const resolveTarget = useCallback((note: StickyNote): { target: HTMLElement; originX: number; originY: number } | null => {
     if (!paperEl) return null
     if (note.sectionId && note.sectionOffsetY !== undefined) {
       const sectionEl = sectionTargets.get(note.sectionId)
       if (sectionEl) {
-        return { target: sectionEl, originX: paperPaddingLeft, originY: note.sectionOffsetY }
+        // Compensate for the section's own border: `position: absolute; top:0;
+        // left:0` of an absolute child of a positioned parent lands at the
+        // parent's padding-edge (inside the border), but sectionOffsetY is
+        // measured to the border-edge. Without adding the section's border
+        // widths to originX/originY, notes inside elements like callouts
+        // (which have a 6 px left border) get visibly offset to the right.
+        const cs = window.getComputedStyle(sectionEl)
+        const borderTop = parseFloat(cs.borderTopWidth) || 0
+        const borderLeft = parseFloat(cs.borderLeftWidth) || 0
+        return {
+          target: sectionEl,
+          originX: paperPaddingLeft + borderLeft,
+          originY: note.sectionOffsetY + borderTop,
+        }
+      }
+      if (/^(callout|editor|plugin)-/.test(note.sectionId)) {
+        return null
       }
     }
     return { target: paperEl, originX: 0, originY: 0 }
@@ -490,27 +512,86 @@ export function StickyNotesLayer({ pageId, children, isExamStudent, publicSticky
     }
     window.addEventListener('eduskript:reanchor-below-spacer', handleReanchor)
 
-    // Reverse of handleReanchor: when a spacer is removed, notes anchored to
-    // its end-sentinel re-anchor to the divider above and shift up by -H.
-    // Restores the pre-add visual position.
+    // When a spacer is removed: notes anchored to `spacer-{id}` /
+    // `spacer-{id}-end` get split by their CURRENT visual paper-y (not stored
+    // y, which can have stale shifts baked in from earlier resizes):
+    //
+    //   in-spacer (visual_y inside [NT, NE]): deleted if the user has
+    //     spacer-delete-annotations on (default), else re-anchored to the
+    //     divider above with no y shift.
+    //
+    //   below-spacer: re-anchored to the divider above with
+    //       y -= (stored.sectionOffsetY − NT)
+    //     which un-applies the +H shift baked in at add-time, regardless of
+    //     any resize that happened in between. See the matching comment in
+    //     handleRemoveSpacer (annotation-layer.tsx) for the full rationale.
     const handleUnanchor = (e: Event) => {
       const detail = (e as CustomEvent).detail as {
-        spacerId: string; prevSectionId: string; prevSectionOffsetY: number; height: number
+        spacerId: string
+        prevSectionId?: string
+        prevSectionOffsetY?: number
+        spacerTop?: number
+        spacerEnd?: number
+        deleteInSpacer?: boolean
+        headingPositions?: Array<{ sectionId: string; offsetY: number }>
       }
+      const NT = detail.spacerTop
+      const NE = detail.spacerEnd
+      const positions = detail.headingPositions ?? []
+      const visualPaperY = (y: number, sectionOffsetY: number, sectionId: string): number | undefined => {
+        const entry = positions.find(p => p.sectionId === sectionId)
+        if (!entry) return undefined
+        return entry.offsetY + (y - sectionOffsetY)
+      }
+      const inSpacerSection = (sid: string | undefined) =>
+        sid === `spacer-${detail.spacerId}` || sid === `spacer-${detail.spacerId}-end`
+      const isInSpacer = (visY: number | undefined) =>
+        visY !== undefined && NT !== undefined && NE !== undefined && visY >= NT && visY <= NE
+      const reanchorShift = (sectionOffsetY: number): number =>
+        NT !== undefined ? -(sectionOffsetY - NT) : 0
       const current = dataRef.current ?? INITIAL_DATA
       let changed = false
-      const next = current.notes.map(n => {
-        if (n.sectionId !== `spacer-${detail.spacerId}-end`) return n
-        changed = true
-        return {
-          ...n,
-          sectionId: detail.prevSectionId,
-          sectionOffsetY: detail.prevSectionOffsetY,
-          y: n.y - detail.height,
-          updatedAt: Date.now(),
+      const nextNotes: typeof current.notes = []
+      for (const n of current.notes) {
+        if (!inSpacerSection(n.sectionId)) {
+          nextNotes.push(n)
+          continue
         }
-      })
-      if (changed) updateData({ notes: next })
+        if (n.sectionOffsetY === undefined || !n.sectionId) {
+          nextNotes.push(n)
+          continue
+        }
+        const visY = visualPaperY(n.y, n.sectionOffsetY, n.sectionId)
+        if (isInSpacer(visY)) {
+          if (detail.deleteInSpacer) {
+            changed = true
+            continue // delete
+          }
+          if (detail.prevSectionId !== undefined && detail.prevSectionOffsetY !== undefined) {
+            changed = true
+            nextNotes.push({
+              ...n,
+              sectionId: detail.prevSectionId,
+              sectionOffsetY: detail.prevSectionOffsetY,
+              updatedAt: Date.now(),
+            })
+            continue
+          }
+        } else if (detail.prevSectionId !== undefined && detail.prevSectionOffsetY !== undefined) {
+          const shift = reanchorShift(n.sectionOffsetY)
+          changed = true
+          nextNotes.push({
+            ...n,
+            sectionId: detail.prevSectionId,
+            sectionOffsetY: detail.prevSectionOffsetY,
+            y: n.y + shift,
+            updatedAt: Date.now(),
+          })
+          continue
+        }
+        nextNotes.push(n)
+      }
+      if (changed) updateData({ notes: nextNotes })
     }
     window.addEventListener('eduskript:unanchor-spacer-removed', handleUnanchor)
 

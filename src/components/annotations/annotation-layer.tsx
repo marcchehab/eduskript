@@ -866,6 +866,18 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
   const updatePageBroadcastDataRef = useRef<(() => void) | null>(null)
 
   const [mode, setMode] = useState<AnnotationMode>('view')
+
+  // Esc returns to view mode from any active tool (draw/erase/spacer).
+  // Sticky-note placement has its own Esc handler in sticky-notes-layer.tsx;
+  // both can fire harmlessly because each only acts when its mode is active.
+  useEffect(() => {
+    if (mode === 'view') return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMode('view')
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [mode])
   const [pageVersion, setPageVersion] = useState<string>('')
   const [hasAnnotations, setHasAnnotations] = useState(false)
   const [canvasData, setCanvasData] = useState<string>('')
@@ -2127,117 +2139,188 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
   }, [updateSpacersData])
 
   const handleRemoveSpacer = useCallback((id: string) => {
-    // Reverse of the add-time reassignment: items currently anchored to this
-    // spacer's end-sentinel (`spacer-{id}-end`) should re-anchor to the section
-    // divider immediately above the spacer's top (heading, previous spacer-end,
-    // callout, etc), and shift their stored y by -H so their visual paper-Y
-    // matches the post-removal layout. The "previous divider" is whatever
-    // headingPositions entry sits just above the spacer's top.
-    const spacerToRemove = spacers.find(s => s.id === id)
-    const H = spacerToRemove?.height ?? 0
-    const spacerTopEntry = headingPositions.find(h => h.sectionId === `spacer-${id}`)
-    const prevDivider = spacerTopEntry
+    // When a spacer is removed, every annotation anchored to `spacer-{id}` or
+    // `spacer-{id}-end` needs handling. Two coupled subtleties make this
+    // trickier than a simple "shift y by spacer height":
+    //
+    //   1. The spacer may have been resized between add and remove. The +H
+    //      shift applied on add used the height-at-add (e.g. 80), but the
+    //      spacer's current height (e.g. 200) is what `spacers[i].height`
+    //      reports. Subtracting current height would over-correct, leaving
+    //      strokes drifted up by (h_current − h_at_add). Instead we recover
+    //      h_at_anchor from `stored.sectionOffsetY − NT` — that's the
+    //      spacer's height at whichever moment the item became anchored to
+    //      spacer-end (either add-time re-anchor of items below the
+    //      insertion point, or direct draw inside the resized spacer).
+    //
+    //   2. The in-spacer/below-spacer split must be done on the item's
+    //      CURRENT visual paper-y, not its stored y. After resize, an item
+    //      whose stored y is "inside the spacer's stored coords" may visually
+    //      sit below the resized spacer (because the section-anchor
+    //      magic placed it there using the live spacer-end position).
+    //      Compute visual_y = section.live.offsetY + (stored.y − stored.sectionOffsetY)
+    //      and check that against the spacer's live range.
+    //
+    // In-spacer items get deleted (default) or re-anchored without y change.
+    // Below-spacer items get re-anchored to the divider above with
+    //   stored.y -= (stored.sectionOffsetY − NT)
+    // which un-applies the original +H shift exactly, regardless of any
+    // resize that happened in between.
+    const NT = headingPositions.find(h => h.sectionId === `spacer-${id}`)?.offsetY
+    const NE = headingPositions.find(h => h.sectionId === `spacer-${id}-end`)?.offsetY
+    const prevDivider = NT !== undefined
       ? headingPositions
           .filter(h =>
             h.sectionId !== `spacer-${id}` &&
             h.sectionId !== `spacer-${id}-end` &&
-            h.offsetY < spacerTopEntry.offsetY
+            h.offsetY < NT
           )
           .sort((a, b) => b.offsetY - a.offsetY)[0]
       : undefined
 
-    if (prevDivider && H > 0) {
-      // Strokes
-      if (canvasData && !spacerDeleteAnnotations) {
-        try {
-          const strokes = JSON.parse(canvasData) as StrokeData[]
-          let changed = false
-          const next = strokes.map(stroke => {
-            if (stroke.sectionId !== `spacer-${id}-end`) return stroke
+    const isSpacerSection = (sid: string | undefined): boolean =>
+      sid === `spacer-${id}` || sid === `spacer-${id}-end`
+    // Visual paper-y of an item: its current rendered position in paper-local
+    // coords. Returns undefined if the section can't be resolved (item
+    // anchored to a stale section we no longer know about).
+    const visualPaperY = (storedY: number, storedSectionOffsetY: number, storedSectionId: string): number | undefined => {
+      const entry = headingPositions.find(h => h.sectionId === storedSectionId)
+      if (!entry) return undefined
+      return entry.offsetY + (storedY - storedSectionOffsetY)
+    }
+    const isInSpacer = (visualY: number | undefined): boolean =>
+      visualY !== undefined && NT !== undefined && NE !== undefined && visualY >= NT && visualY <= NE
+    // Y shift that un-applies the spacer height that was baked into stored y
+    // at anchor-to-spacer-end time. Equals 0 for items anchored to spacer-{id}
+    // (top sentinel, sectionOffsetY = NT) — those don't have any baked-in
+    // shift. Equals h_at_anchor for items at spacer-{id}-end.
+    const reanchorShift = (storedSectionOffsetY: number): number =>
+      NT !== undefined ? -(storedSectionOffsetY - NT) : 0
+
+    // ── Strokes ──────────────────────────────────────────────────────────
+    if (canvasData) {
+      try {
+        const strokes = JSON.parse(canvasData) as StrokeData[]
+        let changed = false
+        const next: StrokeData[] = []
+        for (const stroke of strokes) {
+          if (!isSpacerSection(stroke.sectionId)) {
+            next.push(stroke)
+            continue
+          }
+          const refY = stroke.points[0]?.y ?? stroke.avgY ?? 0
+          const visY = visualPaperY(refY, stroke.sectionOffsetY, stroke.sectionId)
+          if (isInSpacer(visY)) {
+            if (spacerDeleteAnnotations) {
+              changed = true
+              continue // delete
+            }
+            if (prevDivider) {
+              changed = true
+              next.push({
+                ...stroke,
+                sectionId: prevDivider.sectionId,
+                sectionOffsetY: prevDivider.offsetY,
+              })
+              continue
+            }
+          } else if (prevDivider) {
+            const shift = reanchorShift(stroke.sectionOffsetY)
             changed = true
-            return {
+            next.push({
               ...stroke,
               sectionId: prevDivider.sectionId,
               sectionOffsetY: prevDivider.offsetY,
-              points: stroke.points.map(p => ({ ...p, y: p.y - H })),
-              avgY: stroke.avgY !== undefined ? stroke.avgY - H : stroke.avgY,
-            }
-          })
-          if (changed) setCanvasData(JSON.stringify(next))
-        } catch { /* ignore */ }
-      }
-      // Snaps
-      const currentSnaps = snapsData?.snaps || []
-      let snapsChanged = false
-      const nextSnaps = currentSnaps.map(snap => {
-        if (snap.sectionId !== `spacer-${id}-end`) return snap
-        snapsChanged = true
-        return {
-          ...snap,
-          sectionId: prevDivider.sectionId,
-          sectionOffsetY: prevDivider.offsetY,
-          top: snap.top - H,
+              points: stroke.points.map(p => ({ ...p, y: p.y + shift })),
+              avgY: stroke.avgY !== undefined ? stroke.avgY + shift : stroke.avgY,
+            })
+            continue
+          }
+          next.push(stroke)
         }
-      })
-      if (snapsChanged) updateSnapsData({ snaps: nextSnaps })
-      // Sticky notes (own data lives in sticky-notes-layer)
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('eduskript:unanchor-spacer-removed', {
-          detail: {
-            spacerId: id,
-            prevSectionId: prevDivider.sectionId,
-            prevSectionOffsetY: prevDivider.offsetY,
-            height: H,
-          },
-        }))
-      }
+        if (changed) {
+          const newData = JSON.stringify(next)
+          setCanvasData(newData)
+          setHasAnnotations(next.length > 0)
+          const currentOffsets = Object.fromEntries(
+            headingPositions.map(h => [h.sectionId, h.offsetY])
+          )
+          updateAnnotationData({
+            canvasData: newData,
+            headingOffsets: currentOffsets,
+            pageVersion: pageVersionRef.current,
+            paddingLeft: currentPaddingLeft,
+          })
+        }
+      } catch { /* ignore parse errors */ }
     }
 
-    // Optionally delete annotations whose avgY falls within the spacer's vertical range
-    if (spacerDeleteAnnotations && canvasData) {
-      const spacerEl = document.querySelector(`[data-spacer-id="${id}"]`) as HTMLElement | null
-      if (spacerEl) {
-        const paperEl = document.getElementById('paper')
-        if (paperEl) {
-          const paperRect = paperEl.getBoundingClientRect()
-          const scale = (paperRect.width / paperEl.offsetWidth) || 1
-          const elRect = spacerEl.getBoundingClientRect()
-          const spacerTop = (elRect.top - paperRect.top) / scale
-          const spacerBottom = (elRect.bottom - paperRect.top) / scale
-
-          try {
-            const strokes = JSON.parse(canvasData) as StrokeData[]
-            const filtered = strokes.filter(stroke => {
-              const avg = getStrokeAvg(stroke)
-              return avg.y < spacerTop || avg.y > spacerBottom
-            })
-            if (filtered.length !== strokes.length) {
-              const newData = JSON.stringify(filtered)
-              // Update canvas state — SimpleCanvas re-renders when initialData changes
-              setCanvasData(newData)
-              // Save filtered annotations
-              const hasData = filtered.length > 0
-              setHasAnnotations(hasData)
-              const currentOffsets = Object.fromEntries(
-                headingPositions.map(h => [h.sectionId, h.offsetY])
-              )
-              updateAnnotationData({
-                canvasData: newData,
-                headingOffsets: currentOffsets,
-                pageVersion: pageVersionRef.current,
-                paddingLeft: currentPaddingLeft,
-              })
-            }
-          } catch {
-            // Ignore parse errors
-          }
+    // ── Snaps ────────────────────────────────────────────────────────────
+    {
+      const currentSnaps = snapsData?.snaps || []
+      let changed = false
+      const nextSnaps: typeof currentSnaps = []
+      for (const snap of currentSnaps) {
+        if (!isSpacerSection(snap.sectionId)) {
+          nextSnaps.push(snap)
+          continue
         }
+        const sectionOffsetY = snap.sectionOffsetY
+        if (sectionOffsetY === undefined) {
+          nextSnaps.push(snap)
+          continue
+        }
+        const visY = visualPaperY(snap.top, sectionOffsetY, snap.sectionId!)
+        if (isInSpacer(visY)) {
+          if (spacerDeleteAnnotations) {
+            changed = true
+            continue
+          }
+          if (prevDivider) {
+            changed = true
+            nextSnaps.push({
+              ...snap,
+              sectionId: prevDivider.sectionId,
+              sectionOffsetY: prevDivider.offsetY,
+            })
+            continue
+          }
+        } else if (prevDivider) {
+          const shift = reanchorShift(sectionOffsetY)
+          changed = true
+          nextSnaps.push({
+            ...snap,
+            sectionId: prevDivider.sectionId,
+            sectionOffsetY: prevDivider.offsetY,
+            top: snap.top + shift,
+          })
+          continue
+        }
+        nextSnaps.push(snap)
       }
+      if (changed) updateSnapsData({ snaps: nextSnaps })
+    }
+
+    // ── Sticky notes (handled by sticky-notes-layer.tsx) ─────────────────
+    // Send the heading-positions snapshot so the receiver can replicate
+    // visualPaperY without needing its own layout query.
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('eduskript:unanchor-spacer-removed', {
+        detail: {
+          spacerId: id,
+          prevSectionId: prevDivider?.sectionId,
+          prevSectionOffsetY: prevDivider?.offsetY,
+          spacerTop: NT,
+          spacerEnd: NE,
+          deleteInSpacer: spacerDeleteAnnotations,
+          headingPositions,
+        },
+      }))
     }
 
     const current = spacersData?.spacers || []
     updateSpacersData({ spacers: current.filter(s => s.id !== id) })
-  }, [spacersData, updateSpacersData, spacerDeleteAnnotations, canvasData, headingPositions, currentPaddingLeft, updateAnnotationData, spacers, snapsData])
+  }, [spacersData, updateSpacersData, spacerDeleteAnnotations, canvasData, headingPositions, currentPaddingLeft, updateAnnotationData, snapsData])
 
   // Re-anchor items below a newly added spacer to the spacer's end-sentinel.
   // Without this, items stay tied to the parent section's heading (which
@@ -2253,7 +2336,14 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
     const NE = headingPositions.find(h => h.sectionId === `spacer-${pending.id}-end`)?.offsetY
     if (NT === undefined || NE === undefined) return  // wait for inject + recalc
 
-    const H = pending.height
+    // Use the LIVE measured height (NE − NT) rather than the literal pending.height.
+    // The spacer DOM's box-sizing, margin-collapse with neighbors, and sub-pixel
+    // rounding all mean the actual layout shift can deviate from the requested
+    // 80 px by a fraction. Stored y must shift by exactly the layout delta for
+    // the SVG re-render to land on the same screen pixel as before; otherwise
+    // pre-existing strokes show a tiny add-time misalignment that compounds
+    // through resize → delete.
+    const H = NE - NT
     pendingSpacerReassignmentRef.current = null
 
     // Decide reassignment per item: anchor must be above the new spacer's top,

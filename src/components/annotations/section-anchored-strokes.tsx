@@ -103,6 +103,13 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
   // IDs we care about changes; the effect also catches mount/unmount of section
   // elements due to markdown re-render.
   const [targets, setTargets] = useState<Map<string, HTMLElement>>(() => new Map())
+  // Per-section border widths (paper-local CSS px). Needed to offset the
+  // section-anchored SVG by the section's own border-top / border-left so that
+  // SVG.top:0 lines up with the section's border-edge (matching the canvas's
+  // coord origin) instead of its padding-edge (which is inside the border).
+  // Without this, sections like callouts (which have a 6 px left border) shift
+  // every stroke drawn inside them 6 px to the right.
+  const [sectionBorders, setSectionBorders] = useState<Map<string, { top: number; left: number }>>(() => new Map())
 
   // useLayoutEffect (not useEffect) so the resolve+setTargets+re-render cycle
   // completes synchronously before the browser paints. Otherwise, when a new
@@ -110,9 +117,17 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
   // is still missing → committed stroke flashes invisibly until the next frame.
   useLayoutEffect(() => {
     const next = new Map<string, HTMLElement>()
+    const nextBorders = new Map<string, { top: number; left: number }>()
     for (const sid of grouped.keys()) {
       const el = document.querySelector(`[data-section-id="${CSS.escape(sid)}"]`)
-      if (el instanceof HTMLElement) next.set(sid, el)
+      if (el instanceof HTMLElement) {
+        next.set(sid, el)
+        const cs = window.getComputedStyle(el)
+        nextBorders.set(sid, {
+          top: parseFloat(cs.borderTopWidth) || 0,
+          left: parseFloat(cs.borderLeftWidth) || 0,
+        })
+      }
     }
 
 
@@ -125,9 +140,32 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
       }
       return prev
     })
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- See above.
+    setSectionBorders((prev) => {
+      if (prev.size !== nextBorders.size) return nextBorders
+      for (const [k, v] of nextBorders) {
+        const old = prev.get(k)
+        if (!old || old.top !== v.top || old.left !== v.left) return nextBorders
+      }
+      return prev
+    })
 
     if (onOrphansChange) {
-      const orphans = strokes.filter(s => isRenderable(s) && (!s.sectionId || !next.has(s.sectionId)))
+      // Hide orphans whose lost section was a markdown-dynamic-height element
+      // (callout, code-editor, plugin). The user's mental model: each variable-
+      // height element is its own section, and "the element disappears" should
+      // imply "its annotations disappear too". When the markdown is edited to
+      // remove a callout, its section element unmounts; surfacing those strokes
+      // in the orphan-fallback layer would render them at their absolute paper-y
+      // — but the layout shifted when the element was removed, so the position
+      // is meaningless. Drop them silently. Heading-/spacer- orphans still
+      // surface (transient unmount during Fast Refresh, or genuinely lost
+      // references the user can clean up via the orphans banner).
+      const orphans = strokes.filter(s =>
+        isRenderable(s) &&
+        (!s.sectionId || !next.has(s.sectionId)) &&
+        !(s.sectionId && /^(callout|editor|plugin)-/.test(s.sectionId))
+      )
       onOrphansChange(orphans)
     }
     // headingPositions is in deps purely as a re-run trigger; we don't read its
@@ -141,12 +179,15 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
       {Array.from(grouped.entries()).map(([sid, paths]) => {
         const target = targets.get(sid)
         if (!target) return null
+        const border = sectionBorders.get(sid) ?? { top: 0, left: 0 }
         return createPortal(
           <SectionStrokeSvg
             paths={paths}
             paperWidth={paperWidth}
             paperHeight={paperHeight}
             paperPaddingLeft={paperPaddingLeft}
+            sectionBorderTop={border.top}
+            sectionBorderLeft={border.left}
             markedForDeletion={markedForDeletion}
           />,
           target,
@@ -163,12 +204,16 @@ function SectionStrokeSvg({
   paperWidth,
   paperHeight,
   paperPaddingLeft,
+  sectionBorderTop,
+  sectionBorderLeft,
   markedForDeletion,
 }: {
   paths: PathDatum[]
   paperWidth: number
   paperHeight: number
   paperPaddingLeft: number
+  sectionBorderTop: number
+  sectionBorderLeft: number
   markedForDeletion?: Set<string>
 }) {
   // Strokes drawn at different sectionOffsetY values (e.g. user drew, then layout
@@ -190,9 +235,14 @@ function SectionStrokeSvg({
       viewBox={`0 0 ${paperWidth} ${paperHeight}`}
       preserveAspectRatio="none"
       style={{
+        // Section's own border-top and border-left shift the SVG's `top:0` /
+        // `left:0` reference frame from the section's border-edge to its
+        // padding-edge. Compensate so SVG-(0,0) lines up with the section's
+        // border-edge top-left, matching the canvas's coord origin (paper-
+        // border-left, paper-padding-edge-top in paper-local).
         position: 'absolute',
-        top: 0,
-        left: -paperPaddingLeft,
+        top: -sectionBorderTop,
+        left: -paperPaddingLeft - sectionBorderLeft,
         width: paperWidth,
         height: paperHeight,
         pointerEvents: 'none',

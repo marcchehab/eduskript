@@ -1255,6 +1255,34 @@ export function SnapsDisplay({ snaps, onRemoveSnap, onRenameSnap, onUpdateSnap, 
               ? sectionTargets.get(snap.sectionId)
               : undefined
 
+            // If the snap was anchored to a markdown-dynamic-height element
+            // (callout, code-editor, plugin) that has since been removed from
+            // the markdown, hide it. Same mental model as section-anchored-
+            // strokes: variable-height element disappears → its annotations
+            // disappear with it. Data persists; only render is suppressed,
+            // so re-adding the element makes the snap reappear.
+            if (
+              !sectionTarget &&
+              snap.sectionId &&
+              /^(callout|editor|plugin)-/.test(snap.sectionId)
+            ) {
+              return null
+            }
+
+            // Section's own border-top/border-left shifts the absolute child's
+            // (top:0, left:0) reference frame inside the border (to the
+            // padding-edge), but sectionOffsetY is measured to the border-edge.
+            // Add the section's borders into originX/originY so callout-
+            // anchored snaps (callouts have a 6 px left border) don't render
+            // 6 px to the right of where they were dropped.
+            let sectionBorderTop = 0
+            let sectionBorderLeft = 0
+            if (sectionTarget) {
+              const cs = window.getComputedStyle(sectionTarget)
+              sectionBorderTop = parseFloat(cs.borderTopWidth) || 0
+              sectionBorderLeft = parseFloat(cs.borderLeftWidth) || 0
+            }
+
             const item = (
               <SnapItem
                 key={snap.id}
@@ -1269,8 +1297,8 @@ export function SnapsDisplay({ snaps, onRemoveSnap, onRenameSnap, onUpdateSnap, 
                 allSnaps={snaps}
                 paperWidth={paperWidth}
                 zIndex={snapZIndex}
-                originX={sectionTarget ? paperPaddingLeft : 0}
-                originY={sectionTarget ? snap.sectionOffsetY! : 0}
+                originX={sectionTarget ? paperPaddingLeft + sectionBorderLeft : 0}
+                originY={sectionTarget ? snap.sectionOffsetY! + sectionBorderTop : 0}
               />
             )
 
