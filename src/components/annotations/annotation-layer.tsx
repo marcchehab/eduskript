@@ -2320,6 +2320,10 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
 
     const current = spacersData?.spacers || []
     updateSpacersData({ spacers: current.filter(s => s.id !== id) })
+    // Exit spacer mode after a delete — same UX as pressing Esc. Without
+    // this the user has to manually toggle off; the click that deleted is
+    // also a clear "I'm done with this spacer" signal.
+    setMode('view')
   }, [spacersData, updateSpacersData, spacerDeleteAnnotations, canvasData, headingPositions, currentPaddingLeft, updateAnnotationData, snapsData])
 
   // Re-anchor items below a newly added spacer to the spacer's end-sentinel.
@@ -3050,7 +3054,28 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
 
     let spacer = document.getElementById('zoom-spacer')
 
-    if (zoomLevel <= 1) {
+    if (zoomLevel < 1) {
+      // Zoomed OUT: main's CSS transform shrinks the visual but leaves the
+      // layout box at its full natural height, so the scroll container offers
+      // empty scroll all the way down to where the unzoomed paper would have
+      // ended. Compensate with a negative margin-bottom equal to the
+      // "missing" visual space (= layout height × (1 − zoom)). The scroll
+      // container's scrollable area then matches the visible paper bottom.
+      // Symmetrically for width via marginRight.
+      spacer?.remove()
+      main.style.maxWidth = ''
+      const dy = main.scrollHeight * (1 - zoomLevel)
+      const dx = main.scrollWidth * (1 - zoomLevel)
+      main.style.marginBottom = `-${dy}px`
+      main.style.marginRight = `-${dx}px`
+      return
+    }
+
+    // Reset the zoom-out compensation now that we're at >= 1×.
+    main.style.marginBottom = ''
+    main.style.marginRight = ''
+
+    if (zoomLevel === 1) {
       spacer?.remove()
       main.style.maxWidth = ''
       return
@@ -3276,6 +3301,27 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
     mainRef.current.style.transformOrigin = 'top left'
     mainRef.current.style.transition = 'none'
     mainRef.current.style.transform = `scale(${zoomRef.current})`
+    // Sync the zoom-spacer / margin-compensation to the new zoom level. This
+    // matters on page navigation: <main> and #scroll-container live in the
+    // layout above this component and persist across nav, so a #zoom-spacer
+    // appended for the previous page's zoom > 1 stays in the DOM. When the
+    // new page mounts at zoom 1, calling updateZoomSpacer here removes that
+    // stale spacer (and clears any zoom-out marginBottom). Otherwise the
+    // user lands on the new page with an extra page-height of empty scroll.
+    updateZoomSpacer(zoomRef.current)
+    return () => {
+      // Clean up on unmount too, in case the next page renders without
+      // AnnotationLayer (or under a different code path that doesn't sync).
+      const spacer = document.getElementById('zoom-spacer')
+      spacer?.remove()
+      if (mainRef.current) {
+        mainRef.current.style.marginBottom = ''
+        mainRef.current.style.marginRight = ''
+        mainRef.current.style.maxWidth = ''
+      }
+    }
+    // updateZoomSpacer is referentially stable (useCallback with [] deps).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
 
