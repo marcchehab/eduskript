@@ -80,6 +80,18 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning data-scroll-behavior="smooth">
       <head>
+        {/*
+          Inline theme bootstrap. Runs synchronously before <body> paints so the
+          .dark class is on <html> before the first frame, eliminating the flash
+          of light mode on refresh. next-themes also writes the class on mount,
+          but its provider lives in <body>, which is too late. Storage key must
+          stay in sync with ThemeProvider's storageKey in providers.tsx.
+        */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var s=localStorage.getItem('eduskript-theme');var d=s==='dark'||((!s||s==='system')&&window.matchMedia('(prefers-color-scheme: dark)').matches);var c=document.documentElement.classList;if(d){c.add('dark')}else{c.remove('dark')}document.documentElement.style.colorScheme=d?'dark':'light';}catch(e){}})();`,
+          }}
+        />
         <link
           rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css"
