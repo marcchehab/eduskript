@@ -129,9 +129,13 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
   useLayoutEffect(() => {
     const next = new Map<string, HTMLElement>()
     const nextGeom = new Map<string, { borderTop: number; borderLeft: number; leftFromPaper: number }>()
-    // Resolve the paper element once. Sections live inside #paper; the paper's
-    // border-left is the canvas's coord origin (paperPaddingLeft fallback used
-    // only if the element somehow can't be found).
+    // Resolve the paper element once. Sections live inside #paper. The
+    // canvas's coord origin (where stored stroke x=0 lives) is the paper's
+    // PADDING-edge — that's what the old `-paperPaddingLeft` math implicitly
+    // targeted. getBoundingClientRect().left returns the BORDER-edge, so we
+    // subtract paper's own border-left-width to land on the padding-edge.
+    // Without this, every section is shifted by paper.borderLeft (a few px
+    // on bordered themes — visible as a small leftward drift on every stroke).
     //
     // Both rects come from getBoundingClientRect, which is post-transform —
     // i.e. in zoomed viewport pixels. Strokes are stored in paper-local
@@ -141,7 +145,10 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
     // is also paper-local; otherwise zoom != 1 produces a left/right shift
     // proportional to (1 - zoom) * sectionLeftFromPaper.
     const paperEl = document.getElementById('paper')
-    const paperLeft = paperEl?.getBoundingClientRect().left ?? null
+    const paperRect = paperEl?.getBoundingClientRect()
+    const paperBorderLeft = paperEl
+      ? parseFloat(window.getComputedStyle(paperEl).borderLeftWidth) || 0
+      : 0
     const zoom = getZoom() || 1
     for (const sid of grouped.keys()) {
       const el = document.querySelector(`[data-section-id="${CSS.escape(sid)}"]`)
@@ -152,7 +159,9 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
         nextGeom.set(sid, {
           borderTop: parseFloat(cs.borderTopWidth) || 0,
           borderLeft: parseFloat(cs.borderLeftWidth) || 0,
-          leftFromPaper: paperLeft != null ? (sectionLeft - paperLeft) / zoom : paperPaddingLeft,
+          leftFromPaper: paperRect
+            ? (sectionLeft - paperRect.left) / zoom - paperBorderLeft
+            : paperPaddingLeft,
         })
       }
     }
