@@ -846,6 +846,18 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly, originX =
       ref={cardRef}
       className={cn(
         'absolute z-30 rounded-xl border shadow-md flex flex-col overflow-hidden',
+        // font-sans: defeat font inheritance from the host section. Notes
+        // are portaled into their anchor element, so a note placed inside
+        // an <h2> would otherwise inherit the heading font (Barlow Condensed),
+        // and a note inside a callout inherits the callout's font tweaks.
+        // isolate: own stacking context so the note never falls behind
+        // sibling section overlays in ancestor stacks.
+        // pointer-events-auto: .annotation-content-wrapper sets
+        // pointer-events:none and re-enables it via `> *`. With per-section
+        // portaling, the note is no longer a direct child of the wrapper —
+        // it's nested inside a section that is — so the override doesn't
+        // match and clicks fall through. Force it back to auto on the note.
+        'font-sans isolate pointer-events-auto',
         'transition-shadow duration-150',
         'sticky-note-enter',
         cfg.bg,

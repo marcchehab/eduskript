@@ -54,9 +54,13 @@ export function Callout({ children, className, type, isFoldable, initiallyFolded
   const handleToggle = (e: React.MouseEvent) => {
     if (!isFoldable) return
 
-    // Don't toggle if clicking inside content
+    // Only toggle when the click landed on the callout's title bar.
+    // The blockquote is also the section's annotation portal target, so
+    // sticky notes / stroke SVGs / snaps end up as direct children. Without
+    // this guard, clicking a sticky note inside a callout bubbles up here
+    // and folds the callout instead of selecting the note.
     const target = e.target as HTMLElement
-    if (target.closest('.callout-content')) return
+    if (!target.closest('.callout-title')) return
 
     setIsOpen(!isOpen)
   }
