@@ -35,6 +35,7 @@ import { createPortal } from 'react-dom'
 import { getStroke } from 'perfect-freehand'
 import { getSvgPathFromStroke, getStrokeOptions, hasUniformPressure, smoothPoints } from '@/lib/annotations/svg-path'
 import type { AnimatedStroke } from '@/hooks/use-stroke-animation'
+import { useZoom } from '@/contexts/zoom-context'
 
 interface SectionAnchoredStrokesProps {
   strokes: AnimatedStroke[]
@@ -103,13 +104,23 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
   // IDs we care about changes; the effect also catches mount/unmount of section
   // elements due to markdown re-render.
   const [targets, setTargets] = useState<Map<string, HTMLElement>>(() => new Map())
-  // Per-section border widths (paper-local CSS px). Needed to offset the
-  // section-anchored SVG by the section's own border-top / border-left so that
-  // SVG.top:0 lines up with the section's border-edge (matching the canvas's
-  // coord origin) instead of its padding-edge (which is inside the border).
-  // Without this, sections like callouts (which have a 6 px left border) shift
-  // every stroke drawn inside them 6 px to the right.
-  const [sectionBorders, setSectionBorders] = useState<Map<string, { top: number; left: number }>>(() => new Map())
+  // Per-section geometry (paper-local CSS px):
+  //  - borderTop / borderLeft: section's own border widths. Used to offset the
+  //    SVG by the section's border so that SVG.top:0 / left:0 lines up with the
+  //    section's border-edge instead of its padding-edge. Without this, sections
+  //    like callouts (which have a 6 px left border) shift every stroke drawn
+  //    inside them 6 px to the right.
+  //  - leftFromPaper: horizontal distance from the paper element's border-left
+  //    to the section's border-left. Most sections sit at paperPaddingLeft (the
+  //    paper's px-48), but anything inside <fullwidth> is pulled out by -192px
+  //    so its sections start at 0 from the paper's border. Without measuring
+  //    this per-section, the SVG would be shifted by paperPaddingLeft for any
+  //    section that doesn't honour the assumption — strokes drawn over a
+  //    fullwidth row would appear ~192 px to the left of where they were drawn.
+  const [sectionGeom, setSectionGeom] = useState<
+    Map<string, { borderTop: number; borderLeft: number; leftFromPaper: number }>
+  >(() => new Map())
+  const getZoom = useZoom()
 
   // useLayoutEffect (not useEffect) so the resolve+setTargets+re-render cycle
   // completes synchronously before the browser paints. Otherwise, when a new
@@ -117,20 +128,34 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
   // is still missing → committed stroke flashes invisibly until the next frame.
   useLayoutEffect(() => {
     const next = new Map<string, HTMLElement>()
-    const nextBorders = new Map<string, { top: number; left: number }>()
+    const nextGeom = new Map<string, { borderTop: number; borderLeft: number; leftFromPaper: number }>()
+    // Resolve the paper element once. Sections live inside #paper; the paper's
+    // border-left is the canvas's coord origin (paperPaddingLeft fallback used
+    // only if the element somehow can't be found).
+    //
+    // Both rects come from getBoundingClientRect, which is post-transform —
+    // i.e. in zoomed viewport pixels. Strokes are stored in paper-local
+    // (unzoomed) pixels, and the SVG itself is sized in paper-local pixels
+    // (width=paperWidth, viewBox=0 0 paperWidth paperHeight). Divide the
+    // measured delta by the live zoom factor so the offset we hand the SVG
+    // is also paper-local; otherwise zoom != 1 produces a left/right shift
+    // proportional to (1 - zoom) * sectionLeftFromPaper.
+    const paperEl = document.getElementById('paper')
+    const paperLeft = paperEl?.getBoundingClientRect().left ?? null
+    const zoom = getZoom() || 1
     for (const sid of grouped.keys()) {
       const el = document.querySelector(`[data-section-id="${CSS.escape(sid)}"]`)
       if (el instanceof HTMLElement) {
         next.set(sid, el)
         const cs = window.getComputedStyle(el)
-        nextBorders.set(sid, {
-          top: parseFloat(cs.borderTopWidth) || 0,
-          left: parseFloat(cs.borderLeftWidth) || 0,
+        const sectionLeft = el.getBoundingClientRect().left
+        nextGeom.set(sid, {
+          borderTop: parseFloat(cs.borderTopWidth) || 0,
+          borderLeft: parseFloat(cs.borderLeftWidth) || 0,
+          leftFromPaper: paperLeft != null ? (sectionLeft - paperLeft) / zoom : paperPaddingLeft,
         })
       }
     }
-
-
 
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional: querying live DOM for portal targets after render. Same-value short-circuit prevents cascade.
     setTargets((prev) => {
@@ -141,11 +166,13 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
       return prev
     })
     // eslint-disable-next-line react-hooks/set-state-in-effect -- See above.
-    setSectionBorders((prev) => {
-      if (prev.size !== nextBorders.size) return nextBorders
-      for (const [k, v] of nextBorders) {
+    setSectionGeom((prev) => {
+      if (prev.size !== nextGeom.size) return nextGeom
+      for (const [k, v] of nextGeom) {
         const old = prev.get(k)
-        if (!old || old.top !== v.top || old.left !== v.left) return nextBorders
+        if (!old || old.borderTop !== v.borderTop || old.borderLeft !== v.borderLeft || old.leftFromPaper !== v.leftFromPaper) {
+          return nextGeom
+        }
       }
       return prev
     })
@@ -179,15 +206,15 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
       {Array.from(grouped.entries()).map(([sid, paths]) => {
         const target = targets.get(sid)
         if (!target) return null
-        const border = sectionBorders.get(sid) ?? { top: 0, left: 0 }
+        const geom = sectionGeom.get(sid) ?? { borderTop: 0, borderLeft: 0, leftFromPaper: paperPaddingLeft }
         return createPortal(
           <SectionStrokeSvg
             paths={paths}
             paperWidth={paperWidth}
             paperHeight={paperHeight}
-            paperPaddingLeft={paperPaddingLeft}
-            sectionBorderTop={border.top}
-            sectionBorderLeft={border.left}
+            sectionLeftFromPaper={geom.leftFromPaper}
+            sectionBorderTop={geom.borderTop}
+            sectionBorderLeft={geom.borderLeft}
             markedForDeletion={markedForDeletion}
           />,
           target,
@@ -203,7 +230,7 @@ function SectionStrokeSvg({
   paths,
   paperWidth,
   paperHeight,
-  paperPaddingLeft,
+  sectionLeftFromPaper,
   sectionBorderTop,
   sectionBorderLeft,
   markedForDeletion,
@@ -211,7 +238,7 @@ function SectionStrokeSvg({
   paths: PathDatum[]
   paperWidth: number
   paperHeight: number
-  paperPaddingLeft: number
+  sectionLeftFromPaper: number
   sectionBorderTop: number
   sectionBorderLeft: number
   markedForDeletion?: Set<string>
@@ -235,14 +262,20 @@ function SectionStrokeSvg({
       viewBox={`0 0 ${paperWidth} ${paperHeight}`}
       preserveAspectRatio="none"
       style={{
-        // Section's own border-top and border-left shift the SVG's `top:0` /
-        // `left:0` reference frame from the section's border-edge to its
-        // padding-edge. Compensate so SVG-(0,0) lines up with the section's
-        // border-edge top-left, matching the canvas's coord origin (paper-
-        // border-left, paper-padding-edge-top in paper-local).
+        // Place SVG-x=0 at the paper's border-left (canvas's coord origin),
+        // not at this section's border-left, so paths drawn in paper-absolute
+        // coords land at the right viewport-x. The shift is the section's
+        // measured offset from the paper plus the section's own border-left
+        // (CSS `left:0` on an abs child is the padding-edge, not the border-
+        // edge, so we back out the border too).
+        // Without per-section measurement, sections inside <fullwidth>
+        // (which pulls children -192px out of paper's px-48 padding) would
+        // be shifted by paperPaddingLeft and strokes would jump left by 192px.
+        // Top is just the section's own border-top — section vertical offset
+        // is handled by the per-offsetY <g translate> below.
         position: 'absolute',
         top: -sectionBorderTop,
-        left: -paperPaddingLeft - sectionBorderLeft,
+        left: -sectionLeftFromPaper - sectionBorderLeft,
         width: paperWidth,
         height: paperHeight,
         pointerEvents: 'none',

@@ -89,6 +89,42 @@ the rest of the subtree.
   </flex-item>
 </flex>
 
+## Inside <fullwidth> (the leftshift repro)
+
+`<fullwidth>` pulls children -192px out of the paper's px-48 padding.
+Without per-section measurement, the section SVG would be shifted by
+paperPaddingLeft and strokes drawn over this row would land ~192 px to
+the left.
+
+<fullwidth class="px-4 py-20">
+  <flex>
+    <flex-item width="32%">
+
+### Easy sketching
+
+Draw across this column. Stroke should commit exactly where drawn.
+
+    </flex-item>
+    <flex-item width="32%">
+
+### Beautiful math
+
+$$
+x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}
+$$
+
+    </flex-item>
+    <flex-item width="32%">
+
+### Visual callouts
+
+> [!discuss] Discuss!
+> Stroke continuity check across the full row.
+
+    </flex-item>
+  </flex>
+</fullwidth>
+
 ## Trailing baseline
 
 A heading after all the flex blocks, to confirm sequential counters
