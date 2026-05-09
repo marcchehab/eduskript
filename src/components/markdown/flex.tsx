@@ -3,6 +3,10 @@
 import { cn } from '@/lib/utils'
 import { ReactNode } from 'react'
 
+// `data-*` props let the rehypeHeadingSectionIds plugin's section attributes
+// (data-section-id, data-dynamic-height) survive the component substitution —
+// without these, the Flex component would strip the attributes and the per-
+// section annotation portal couldn't anchor strokes to the flex container.
 interface FlexProps {
   children: ReactNode
   gap?: 'none' | 'small' | 'medium' | 'large'
@@ -11,6 +15,8 @@ interface FlexProps {
   direction?: 'row' | 'column'
   justify?: 'start' | 'center' | 'end' | 'between' | 'around' | 'evenly'
   align?: 'start' | 'center' | 'end' | 'stretch' | 'baseline'
+  'data-section-id'?: string
+  'data-dynamic-height'?: string
 }
 
 interface FlexItemProps {
@@ -49,7 +55,8 @@ export function Flex({
   wrap = true,
   direction = 'row',
   justify = 'start',
-  align = 'start'
+  align = 'start',
+  ...dataAttrs
 }: FlexProps) {
   const gapMap = {
     none: 'gap-0',
@@ -88,6 +95,7 @@ export function Flex({
         'flex-col md:flex-row',
         className
       )}
+      {...dataAttrs}
     >
       {children}
     </div>

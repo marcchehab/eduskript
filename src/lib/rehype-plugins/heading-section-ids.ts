@@ -1,4 +1,4 @@
-import { visit } from 'unist-util-visit'
+import { visit, SKIP } from 'unist-util-visit'
 import type { Root, Element } from 'hast'
 
 /**
@@ -12,6 +12,13 @@ import type { Root, Element } from 'hast'
  * - blockquote.callout (callouts) - dynamic height when collapsed/expanded
  * - figure (images)
  * - table (tables)
+ * - flex (side-by-side layout container) - subsumes its descendants
+ *
+ * `<flex>` is treated as a single section: it gets its own section ID and the
+ * walker skips its subtree, so headings/callouts/etc. that sit side-by-side
+ * inside a flex don't each spawn their own section. Without this, two siblings
+ * laid out horizontally would produce two vertically-stacked sections in the
+ * annotation model and strokes would anchor to the wrong column.
  *
  * Dynamic-height elements also get data-dynamic-height="true" so the client
  * can track both top and bottom positions, AND get a 0-height sibling
@@ -31,6 +38,7 @@ export function rehypeHeadingSectionIds() {
     callout: 0,
     figure: 0,
     table: 0,
+    flex: 0,
   }
 
   return (tree: Root) => {
@@ -40,6 +48,19 @@ export function rehypeHeadingSectionIds() {
 
     visit(tree, 'element', (node: Element, index, parent) => {
       node.properties = node.properties || {}
+
+      // Flex container: claims one section ID for the whole subtree and
+      // SKIPs descendants so siblings inside don't each become a section.
+      // Marked dynamic-height because callouts inside can fold/unfurl.
+      if (node.tagName === 'flex') {
+        const sectionId = `flex-${counters.flex++}`
+        node.properties['data-section-id'] = sectionId
+        node.properties['data-dynamic-height'] = 'true'
+        if (parent && typeof index === 'number') {
+          inserts.push({ parent: parent as Element | Root, index, sectionId })
+        }
+        return SKIP
+      }
 
       // H1-H3 headings (use slug-based ID)
       if (['h1', 'h2', 'h3'].includes(node.tagName)) {

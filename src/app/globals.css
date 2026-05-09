@@ -745,6 +745,18 @@ article.prose-theme > div > :first-child {
   filter: invert(1) hue-rotate(180deg);
 }
 
+/* Lift section-portaled stroke SVGs above sibling positioned content in
+ * .markdown-content (callouts, h1, code-editors). Without this, an SVG
+ * portaled into section A paints in tree order — earlier than a later sibling
+ * callout B at z-index:auto — so any stroke whose visual extent overlaps B
+ * disappears under B when committed. z-index:1 puts the SVG in painting
+ * level 7 of the markdown stacking context, above all auto-z siblings. Stays
+ * well below .annotation-content-wrapper (z-index 36/40), so sticky notes,
+ * the live drawing canvas, and toolbars still float above committed strokes. */
+.annotation-section-svg {
+  z-index: 1;
+}
+
 /* Foldable callouts clip the inline annotation SVG to their visible-
  * content height. The callout already animates its grid-template-rows
  * from `min-content 0fr` → `min-content 1fr` over 0.3s ease-in-out
