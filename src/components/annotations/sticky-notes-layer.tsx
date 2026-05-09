@@ -26,6 +26,13 @@
 import { useState, useRef, useEffect, useCallback, useMemo, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { nanoid } from 'nanoid'
+import { Inter } from 'next/font/google'
+
+// Pinned at module load — Next.js generates a hashed family name at build
+// time, so this is a static value the runtime can't re-resolve. Using
+// system-ui or var() left the body font subject to OS/host inheritance,
+// which is exactly what changed across sections.
+const stickyNoteBodyFont = Inter({ subsets: ['latin'], display: 'swap' })
 import {
   StickyNote as StickyNoteIcon,
   Trash2,
@@ -846,10 +853,6 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly, originX =
       ref={cardRef}
       className={cn(
         'absolute z-30 rounded-xl border shadow-md flex flex-col overflow-hidden',
-        // font-sans: defeat font inheritance from the host section. Notes
-        // are portaled into their anchor element, so a note placed inside
-        // an <h2> would otherwise inherit the heading font (Barlow Condensed),
-        // and a note inside a callout inherits the callout's font tweaks.
         // isolate: own stacking context so the note never falls behind
         // sibling section overlays in ancestor stacks.
         // pointer-events-auto: .annotation-content-wrapper sets
@@ -857,9 +860,15 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly, originX =
         // portaling, the note is no longer a direct child of the wrapper —
         // it's nested inside a section that is — so the override doesn't
         // match and clicks fall through. Force it back to auto on the note.
-        'font-sans isolate pointer-events-auto',
+        // Font is pinned per-element below (title vs textarea) so the note
+        // looks identical regardless of host section.
+        'isolate pointer-events-auto',
         'transition-shadow duration-150',
-        'sticky-note-enter',
+        // Only animate-in for genuinely fresh notes. Without the age guard,
+        // moving a note between sections (which re-portals — i.e. unmount +
+        // remount) replays the wiggle every time. createdAt is set once at
+        // creation, so 3-second window catches just the initial render.
+        !readOnly && Date.now() - note.createdAt < 3000 ? 'sticky-note-enter' : '',
         cfg.bg,
         cfg.border,
         readOnly ? 'opacity-90' : '',
@@ -890,10 +899,16 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly, originX =
         <StickyNoteIcon className="w-3 h-3 opacity-50 shrink-0" aria-hidden />
 
         {/* Preview of content when minimized / label when empty */}
-        <span className={cn(
-          'text-xs opacity-60 truncate flex-1 min-w-0 select-none',
-          note.minimized ? 'max-w-[160px]' : '',
-        )}>
+        <span
+          className={cn(
+            'text-xs opacity-60 truncate flex-1 min-w-0 select-none',
+            note.minimized ? 'max-w-[160px]' : '',
+          )}
+          style={{
+            fontFamily: 'var(--font-heading), system-ui, sans-serif',
+            fontWeight: 600,
+          }}
+        >
           {localContent.trim() || 'Note'}
         </span>
 
@@ -965,7 +980,17 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly, originX =
               'placeholder:text-foreground/30',
               'text-foreground',
             )}
-            style={{ height: note.height }}
+            style={{
+              height: note.height,
+              // Pin the body font + weight so the note reads the same
+              // regardless of which section it's portaled into.
+              // stickyNoteBodyFont is resolved at build time, so this is a
+              // fixed family name — no OS/host-section variability. Weight
+              // had to be pinned too: an <h2>/<h3> host hands down 600+
+              // and the textarea inherits it.
+              fontFamily: stickyNoteBodyFont.style.fontFamily,
+              fontWeight: 400,
+            }}
             placeholder={readOnly ? '' : 'Write your note…'}
             value={localContent}
             onChange={e => handleContentChange(e.target.value)}

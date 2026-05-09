@@ -26,10 +26,30 @@ vi.mock('next/navigation', () => ({
 // Mock Next.js image
 vi.mock('next/image', () => ({
   default: (props: any) => {
-     
+
     return { ...props, $$typeof: Symbol.for('react.element') }
   },
 }))
+
+// Mock Next.js Google fonts. The real loader runs at build time and isn't
+// available under vitest, so any module that calls `Inter(...)` etc. hangs
+// trying to fetch font assets. Return a minimal shape matching
+// `next/font/google` outputs (className, variable, style.fontFamily) for
+// every font name we use. Inlined inside the factory because vi.mock is
+// hoisted but auxiliary `const`s are not.
+vi.mock('next/font/google', () => {
+  const mockFont = () => ({
+    className: 'mock-font',
+    variable: '--mock-font',
+    style: { fontFamily: 'mock-font' },
+  })
+  return {
+    Inter: mockFont,
+    Roboto_Slab: mockFont,
+    EB_Garamond: mockFont,
+    Barlow_Condensed: mockFont,
+  }
+})
 
 // Mock NextAuth
 vi.mock('next-auth/react', () => ({
