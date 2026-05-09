@@ -736,6 +736,15 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly, originX =
   const [showColorPicker, setShowColorPicker] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [isResizing, setIsResizing] = useState(false)
+  // Snapshot at mount: was this a freshly-created note? Lazy initializer
+  // runs once per mount, so when the note re-portals into a new section
+  // (unmount + remount) the snapshot resets — but for an old note the
+  // age check returns false, so the wiggle animation doesn't replay.
+  // 500ms covers initial mount latency; the wiggle keyframes only run
+  // 180ms, so a wider window would just delay the cutoff for nothing.
+  const [isFreshOnMount] = useState(
+    () => !readOnly && Date.now() - note.createdAt < 500,
+  )
 
   // Local content state so typing is instant; synced with debounce
   const [localContent, setLocalContent] = useState(note.content)
@@ -866,9 +875,9 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly, originX =
         'transition-shadow duration-150',
         // Only animate-in for genuinely fresh notes. Without the age guard,
         // moving a note between sections (which re-portals — i.e. unmount +
-        // remount) replays the wiggle every time. createdAt is set once at
-        // creation, so 3-second window catches just the initial render.
-        !readOnly && Date.now() - note.createdAt < 3000 ? 'sticky-note-enter' : '',
+        // remount) replays the wiggle every time. isFreshOnMount captures
+        // the age check once per mount.
+        isFreshOnMount ? 'sticky-note-enter' : '',
         cfg.bg,
         cfg.border,
         readOnly ? 'opacity-90' : '',

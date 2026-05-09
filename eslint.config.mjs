@@ -15,6 +15,9 @@ const eslintConfig = [
       '**/*.config.mjs',
       '.obsidian/**',
       'public/js/**',
+      // Locked worktrees from agent runs would otherwise surface stale
+      // warnings from pre-existing code, blocking the zero-warnings push gate.
+      '.claude/worktrees/**',
     ],
   },
   ...nextPlugin,
