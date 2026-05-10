@@ -1,7 +1,7 @@
 'use client'
 
 import { useTheme } from 'next-themes'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { Moon, Sun } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -10,49 +10,23 @@ interface ThemeToggleProps {
   isCollapsed?: boolean
 }
 
+// Theme is a per-device preference. localStorage (via next-themes) is the
+// source of truth on the client; PATCH /api/user/theme records it on the user
+// row purely so it round-trips through /api/user/data-export. We deliberately
+// do NOT fetch the server preference back on mount: that fetch was the cause
+// of a post-paint setTheme flash whenever localStorage and the DB disagreed.
 export function ThemeToggle({ isCollapsed = false }: ThemeToggleProps) {
-  const { theme, setTheme, resolvedTheme } = useTheme()
+  const { setTheme, resolvedTheme } = useTheme()
   const { data: session } = useSession()
   const [mounted, setMounted] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [hasLoadedPreference, setHasLoadedPreference] = useState(false)
 
-  // Only render after mounting to avoid hydration mismatch
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true)
   }, [])
 
-  const loadThemePreference = useCallback(async () => {
-    if (!session?.user?.email || hasLoadedPreference || isLoading) return
-    
-    setIsLoading(true)
-    try {
-      const response = await fetch('/api/user/theme')
-      if (response.ok) {
-        const data = await response.json()
-        // Only set theme if it's different and not already in sync
-        if (data.themePreference && data.themePreference !== theme && data.themePreference !== resolvedTheme) {
-          setTheme(data.themePreference)
-        }
-        setHasLoadedPreference(true)
-      }
-    } catch (error) {
-      console.error('Failed to load theme preference:', error)
-    } finally {
-      setIsLoading(false)
-    }
-  }, [session, theme, resolvedTheme, setTheme, hasLoadedPreference, isLoading])
-
-  // Load user's theme preference when session is available
-  useEffect(() => {
-    if (session?.user?.email && mounted && !hasLoadedPreference) {
-      loadThemePreference()
-    }
-  }, [session, mounted, loadThemePreference, hasLoadedPreference])
-
   const saveThemePreference = async (newTheme: string) => {
     if (!session?.user?.email) return
-    
     try {
       await fetch('/api/user/theme', {
         method: 'PATCH',
@@ -78,25 +52,17 @@ export function ThemeToggle({ isCollapsed = false }: ThemeToggleProps) {
     )
   }
 
-  const cycleTheme = async () => {
-    if (isLoading) return
-    
-    // Use resolvedTheme for more accurate current state
+  const cycleTheme = () => {
     const currentTheme = resolvedTheme || 'light'
     const newTheme = currentTheme === 'dark' ? 'light' : 'dark'
-    
+
     // Temporarily disable transitions to prevent flicker
     document.documentElement.classList.add('theme-transitioning')
-    
-    // Set theme immediately for instant feedback
     setTheme(newTheme)
-    
-    // Re-enable transitions after a brief delay
     setTimeout(() => {
       document.documentElement.classList.remove('theme-transitioning')
     }, 100)
-    
-    // Save to database asynchronously
+
     if (session?.user?.email) {
       saveThemePreference(newTheme)
     }
@@ -115,7 +81,6 @@ export function ThemeToggle({ isCollapsed = false }: ThemeToggleProps) {
       variant="ghost"
       size="sm"
       onClick={cycleTheme}
-      disabled={isLoading}
       className={`${isCollapsed ? 'w-10 h-10 p-0' : 'w-full justify-start'} transition-none`}
       title={isCollapsed ? `Theme: ${getThemeLabel()} (click to cycle)` : undefined}
     >
