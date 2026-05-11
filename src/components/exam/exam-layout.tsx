@@ -23,6 +23,11 @@ interface ExamLayoutProps {
   studentName?: string | null
   studentEmail?: string | null
   typographyPreference?: 'modern' | 'classic'
+  /** Teacher's active RSA-OAEP public key for the offline backup feature. */
+  backupPublicKeyJwk?: JsonWebKey
+  backupKeyId?: string
+  studentId?: string
+  skriptId?: string
 }
 
 export function ExamLayout({
@@ -31,7 +36,11 @@ export function ExamLayout({
   pageTitle,
   studentName,
   studentEmail,
-  typographyPreference = 'modern'
+  typographyPreference = 'modern',
+  backupPublicKeyJwk,
+  backupKeyId,
+  studentId,
+  skriptId,
 }: ExamLayoutProps) {
   return (
     <div
@@ -46,6 +55,10 @@ export function ExamLayout({
         pageTitle={pageTitle}
         studentName={studentName}
         studentEmail={studentEmail}
+        backupPublicKeyJwk={backupPublicKeyJwk}
+        backupKeyId={backupKeyId}
+        studentId={studentId}
+        skriptId={skriptId}
       />
 
       {/* Main content - full width, no sidebar */}

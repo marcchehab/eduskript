@@ -19,13 +19,25 @@ interface ExamHeaderProps {
   pageTitle: string
   studentName?: string | null
   studentEmail?: string | null
+  /** Teacher's active RSA-OAEP public key for offline backup encryption. */
+  backupPublicKeyJwk?: JsonWebKey
+  /** Short identifier embedded in .examfile backups so the server can look the key up. */
+  backupKeyId?: string
+  /** Current student's user id — needed for backup meta. */
+  studentId?: string
+  /** Containing skript's id — needed for backup meta. */
+  skriptId?: string
 }
 
 export function ExamHeader({
   pageId,
   pageTitle,
   studentName,
-  studentEmail
+  studentEmail,
+  backupPublicKeyJwk,
+  backupKeyId,
+  studentId,
+  skriptId,
 }: ExamHeaderProps) {
   // Determine what to display for the student
   const displayName = studentName || studentEmail || 'Student'
@@ -36,7 +48,13 @@ export function ExamHeader({
       <div className="h-full px-4 flex items-center justify-between">
         {/* Left: Hand in button */}
         <div className="flex-shrink-0">
-          <HandInButton pageId={pageId} />
+          <HandInButton
+            pageId={pageId}
+            publicKeyJwk={backupPublicKeyJwk}
+            keyId={backupKeyId}
+            studentId={studentId}
+            skriptId={skriptId}
+          />
         </div>
 
         {/* Center: Exam title */}

@@ -178,6 +178,10 @@ model User {
   examSubmissions       ExamSubmission[] @relation("StudentExamSubmissions")
   gradedExamSubmissions ExamSubmission[] @relation("GradedExamSubmissions")
 
+  // Encryption keys used by students to encrypt offline exam backups.
+  // Rotatable; old keys are kept so historical .examfile backups stay decryptable.
+  examKeys TeacherExamKey[] @relation("TeacherExamKeys")
+
   // Cross-domain auth tokens
   crossDomainTokens CrossDomainToken[]
 
@@ -372,7 +376,7 @@ model PageAuthor {
 }
 
 model PageVersion {
-  id        String   @id @default(cuid())
+  id         String   @id @default(cuid())
   content    String
   version    Int
   changeLog  String?
@@ -1050,6 +1054,28 @@ model ExamSubmission {
   @@index([pageId])
   @@index([studentId])
   @@map("exam_submissions")
+}
+
+// Per-teacher encryption keypair used to encrypt offline exam backups (.examfile).
+// Students encrypt with the teacher's RSA-OAEP public key; teacher decrypts with
+// the private key on the recovery endpoint. Rotatable: rotating flips isActive
+// on the current row and inserts a new active one. Old rows are kept forever so
+// historical backups remain decryptable. v1 stores the private key as a plain
+// JWK; future versions should wrap it with a server master key at rest.
+model TeacherExamKey {
+  id            String    @id @default(cuid())
+  teacherId     String    @map("teacher_id")
+  keyId         String    @unique @map("key_id") // short embedded id (10 chars) referenced in .examfile
+  publicKeyJwk  Json      @map("public_key_jwk")
+  privateKeyJwk Json      @map("private_key_jwk") // v1: plain JWK. TODO: encrypt at rest.
+  isActive      Boolean   @default(true) @map("is_active") // only one active row per teacher
+  createdAt     DateTime  @default(now()) @map("created_at")
+  rotatedAt     DateTime? @map("rotated_at") // null while active
+
+  teacher User @relation("TeacherExamKeys", fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@index([teacherId, isActive])
+  @@map("teacher_exam_keys")
 }
 
 // Cross-domain authentication tokens

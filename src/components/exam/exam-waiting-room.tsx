@@ -21,12 +21,21 @@ interface ExamWaitingRoomProps {
   pageId: string
   classId: string
   examTitle: string
+  /** Teacher's active RSA-OAEP public key for the offline backup feature. */
+  backupPublicKeyJwk?: JsonWebKey
+  backupKeyId?: string
+  studentId?: string
+  skriptId?: string
 }
 
 export function ExamWaitingRoom({
   pageId,
   classId,
-  examTitle
+  examTitle,
+  backupPublicKeyJwk,
+  backupKeyId,
+  studentId,
+  skriptId,
 }: ExamWaitingRoomProps) {
   const [isConnected, setIsConnected] = useState(false)
   const eventSourceRef = useRef<EventSource | null>(null)
@@ -126,7 +135,13 @@ export function ExamWaitingRoom({
           <p className="text-sm text-muted-foreground mb-3">
             Need to leave before the exam starts?
           </p>
-          <HandInButton pageId={pageId} />
+          <HandInButton
+            pageId={pageId}
+            publicKeyJwk={backupPublicKeyJwk}
+            keyId={backupKeyId}
+            studentId={studentId}
+            skriptId={skriptId}
+          />
         </div>
       </div>
     </div>

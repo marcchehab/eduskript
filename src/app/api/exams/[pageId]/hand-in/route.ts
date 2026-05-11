@@ -17,11 +17,7 @@ import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
 import { validateExamSession, ExamSessionData } from '@/lib/exam-tokens'
 import { eventBus } from '@/lib/events'
-
-interface HandInSnapshot {
-  componentId: string
-  payload: unknown
-}
+import { applyHandinSnapshots, type HandinSnapshot } from '@/lib/exam-recovery'
 
 /**
  * POST /api/exams/[pageId]/hand-in
@@ -67,61 +63,38 @@ export async function POST(
     // state and posts them alongside the hand-in. Stored as `kind='handin'`
     // checkpoints atomic with the ExamSubmission so the teacher's timeline
     // captures exactly what was handed in.
-    let snapshots: HandInSnapshot[] = []
+    let snapshots: HandinSnapshot[] = []
     try {
       const body = await request.json().catch(() => ({}))
       if (Array.isArray(body?.snapshots)) {
-        snapshots = body.snapshots.filter((s: unknown): s is HandInSnapshot =>
+        snapshots = body.snapshots.filter((s: unknown): s is HandinSnapshot =>
           !!s && typeof s === 'object' &&
-          typeof (s as HandInSnapshot).componentId === 'string' &&
-          (s as HandInSnapshot).payload !== undefined
+          typeof (s as HandinSnapshot).componentId === 'string' &&
+          (s as HandinSnapshot).payload !== undefined
         )
       }
     } catch {
       // Body is optional; ignore parse failures.
     }
 
-    // Check if already submitted
-    const existingSubmission = await prisma.examSubmission.findUnique({
-      where: {
-        pageId_studentId: {
-          pageId: examPageId,
-          studentId: sessionData.userId
-        }
-      }
-    })
-
-    if (existingSubmission) {
-      return NextResponse.json({
-        message: 'Already submitted',
-        submittedAt: existingSubmission.submittedAt
-      })
-    }
-
     // Atomic: ExamSubmission + checkpoints succeed or fail together. If
     // checkpoint inserts blow up, the submission isn't recorded either, and
-    // the student stays on the page to retry.
-    const submission = await prisma.$transaction(async (tx) => {
-      const sub = await tx.examSubmission.create({
-        data: {
-          pageId: examPageId,
-          studentId: sessionData.userId,
-        },
+    // the student stays on the page to retry. Idempotent on re-submit:
+    // returns the existing submission's submittedAt without duplicating.
+    const handinResult = await prisma.$transaction(async (tx) => {
+      return applyHandinSnapshots(tx, {
+        pageId: examPageId,
+        studentId: sessionData.userId,
+        snapshots,
       })
-      if (snapshots.length > 0) {
-        await tx.userDataCheckpoint.createMany({
-          data: snapshots.map((s) => ({
-            userId: sessionData.userId,
-            pageId: examPageId,
-            componentId: s.componentId,
-            kind: 'handin',
-            payload: s.payload as object,
-            label: 'exam hand-in',
-          })),
-        })
-      }
-      return sub
     })
+
+    if (handinResult.alreadyExisted) {
+      return NextResponse.json({
+        message: 'Already submitted',
+        submittedAt: handinResult.submittedAt,
+      })
+    }
 
     // Find the student's class for this exam to emit event
     // The student should be a member of a class that has this page unlocked
@@ -151,8 +124,8 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      submissionId: submission.id,
-      submittedAt: submission.submittedAt
+      submissionId: handinResult.submissionId,
+      submittedAt: handinResult.submittedAt
     })
   } catch (error) {
     console.error('Error recording exam submission:', error)

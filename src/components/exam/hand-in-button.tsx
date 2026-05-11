@@ -1,20 +1,26 @@
 /**
- * Hand In Button Component
+ * Hand In Button + Save Backup Button
  *
- * Button that allows students to submit their exam and exit SEB.
- * Includes a confirmation dialog to prevent accidental submissions.
+ * Renders two adjacent buttons during an exam:
+ *   1. "Hand in & Quit" (destructive) — POSTs to /api/exams/[pageId]/hand-in,
+ *      then navigates to /api/exams/end-session which clears the cookie and
+ *      hands SEB its quit URL.
+ *   2. "Save backup" (outline) — gathers the same snapshots, encrypts them
+ *      with the teacher's RSA-OAEP public key, and triggers a browser
+ *      download. Used as a defensive measure (pre-emptive save) and as the
+ *      fallback path when hand-in fails (network down, server error). The
+ *      .examfile is unreadable by the student — only the teacher's recovery
+ *      endpoint can decrypt it with the matching private key.
  *
- * Flow:
- * 1. Student clicks "Hand in & Quit"
- * 2. Confirmation dialog appears
- * 3. On confirm: POST to /api/exams/[pageId]/hand-in
- * 4. Navigate to /api/exams/end-session (clears cookie, redirects to /exam-complete)
+ * If publicKeyJwk / keyId are not provided, the "Save backup" affordances
+ * are hidden — older render paths that don't yet plumb the key still get
+ * a functioning Hand-in button.
  */
 
 'use client'
 
 import { useState } from 'react'
-import { LogOut, Loader2 } from 'lucide-react'
+import { LogOut, Loader2, Download, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -25,6 +31,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { userDataService } from '@/lib/userdata'
+import {
+  encryptSnapshotsForBackup,
+  triggerBackupDownload,
+  suggestBackupFilename,
+  type BackupMeta,
+  type BackupSnapshot,
+} from '@/lib/exam-backup'
 
 /**
  * Gather snapshots of every on-page code editor's IndexedDB state. The
@@ -33,12 +46,12 @@ import { userDataService } from '@/lib/userdata'
  * student's actual code, since the editor's main data is otherwise just
  * the live-synced userData record (which gets overwritten by future edits).
  */
-async function gatherEditorSnapshots(pageId: string): Promise<Array<{ componentId: string; payload: unknown }>> {
+async function gatherEditorSnapshots(pageId: string): Promise<BackupSnapshot[]> {
   try {
     await userDataService.flush()
     const componentIds = await userDataService.getComponentsForPage(pageId)
     const editorIds = componentIds.filter((c) => c.startsWith('code-editor-'))
-    const snapshots: Array<{ componentId: string; payload: unknown }> = []
+    const snapshots: BackupSnapshot[] = []
     for (const componentId of editorIds) {
       const record = await userDataService.get(pageId, componentId)
       if (record) snapshots.push({ componentId, payload: record.data })
@@ -50,14 +63,84 @@ async function gatherEditorSnapshots(pageId: string): Promise<Array<{ componentI
   }
 }
 
-interface HandInButtonProps {
+async function saveEncryptedBackup(args: {
   pageId: string
+  studentId: string
+  skriptId: string
+  publicKeyJwk: JsonWebKey
+  keyId: string
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const snapshots = await gatherEditorSnapshots(args.pageId)
+    const meta: BackupMeta = {
+      pageId: args.pageId,
+      studentId: args.studentId,
+      skriptId: args.skriptId,
+      createdAt: new Date().toISOString(),
+    }
+    const file = await encryptSnapshotsForBackup(
+      snapshots,
+      args.publicKeyJwk,
+      args.keyId,
+      meta,
+    )
+    triggerBackupDownload(file, suggestBackupFilename(meta))
+    return { ok: true }
+  } catch (err) {
+    console.error('[HandInButton] backup encryption failed:', err)
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'Backup save failed',
+    }
+  }
 }
 
-export function HandInButton({ pageId }: HandInButtonProps) {
+interface HandInButtonProps {
+  pageId: string
+  /** Optional. When provided, "Save backup" affordance is enabled. */
+  publicKeyJwk?: JsonWebKey
+  /** Optional. Required alongside publicKeyJwk. Embedded in the .examfile. */
+  keyId?: string
+  /** Optional. The current student's user id — needed for backup meta. */
+  studentId?: string
+  /** Optional. The skript id — needed for backup meta. */
+  skriptId?: string
+}
+
+export function HandInButton({
+  pageId,
+  publicKeyJwk,
+  keyId,
+  studentId,
+  skriptId,
+}: HandInButtonProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isSavingBackup, setIsSavingBackup] = useState(false)
+  const [backupHint, setBackupHint] = useState<string | null>(null)
+
+  const backupReady =
+    !!publicKeyJwk && !!keyId && !!studentId && !!skriptId
+
+  const handleSaveBackup = async () => {
+    if (!backupReady) return
+    setIsSavingBackup(true)
+    setBackupHint(null)
+    const result = await saveEncryptedBackup({
+      pageId,
+      studentId: studentId!,
+      skriptId: skriptId!,
+      publicKeyJwk: publicKeyJwk!,
+      keyId: keyId!,
+    })
+    setIsSavingBackup(false)
+    setBackupHint(
+      result.ok
+        ? 'Backup file downloaded. Keep it safe and give it to your teacher only if needed.'
+        : `Backup save failed: ${result.error}`,
+    )
+  }
 
   const handleHandIn = async () => {
     setIsSubmitting(true)
@@ -76,8 +159,8 @@ export function HandInButton({ pageId }: HandInButtonProps) {
       })
 
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to submit exam')
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data?.error || 'Failed to submit exam')
       }
 
       // Navigate to end-session which clears cookie and redirects
@@ -92,40 +175,93 @@ export function HandInButton({ pageId }: HandInButtonProps) {
 
   return (
     <>
-      <Button
-        variant="destructive"
-        size="sm"
-        className="gap-2"
-        disabled={isSubmitting}
-        onClick={() => setIsOpen(true)}
-      >
-        {isSubmitting ? (
-          <Loader2 className="w-4 h-4 animate-spin" />
-        ) : (
-          <LogOut className="w-4 h-4" />
+      <div className="flex items-center gap-2">
+        <Button
+          variant="destructive"
+          size="sm"
+          className="gap-2"
+          disabled={isSubmitting}
+          onClick={() => setIsOpen(true)}
+        >
+          {isSubmitting ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <LogOut className="w-4 h-4" />
+          )}
+          <span className="hidden sm:inline">Hand in & Quit</span>
+          <span className="sm:hidden">Quit</span>
+        </Button>
+
+        {backupReady && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            disabled={isSavingBackup || isSubmitting}
+            onClick={handleSaveBackup}
+            title="Save an encrypted local backup of your answers. Only your teacher can read it."
+          >
+            {isSavingBackup ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <ShieldCheck className="w-4 h-4" />
+            )}
+            <span className="hidden sm:inline">Save backup</span>
+          </Button>
         )}
-        <span className="hidden sm:inline">Hand in & Quit</span>
-        <span className="sm:hidden">Quit</span>
-      </Button>
+      </div>
+
+      {backupHint && (
+        <p className="hidden sm:block text-xs text-muted-foreground mt-1 max-w-xs">
+          {backupHint}
+        </p>
+      )}
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Hand in your exam?</DialogTitle>
             <DialogDescription className="space-y-2">
-              <p>
+              <span className="block">
                 Are you sure you want to hand in your exam and quit?
-              </p>
-              <p className="font-medium text-destructive">
+              </span>
+              <span className="block font-medium text-destructive">
                 You will not be able to return after submitting.
-              </p>
+              </span>
               {error && (
-                <p className="text-destructive text-sm mt-2">
+                <span className="block text-destructive text-sm mt-2">
                   Error: {error}
-                </p>
+                </span>
               )}
             </DialogDescription>
           </DialogHeader>
+
+          {error && backupReady && (
+            <div className="rounded-md border border-border bg-muted/40 p-3 text-sm">
+              <p className="mb-2">
+                Hand-in failed. Save an encrypted backup file, then give it to
+                your teacher — they can recover your answers from it.
+              </p>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="gap-2"
+                onClick={handleSaveBackup}
+                disabled={isSavingBackup}
+              >
+                {isSavingBackup ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4" />
+                )}
+                Download answers
+              </Button>
+              {backupHint && (
+                <p className="text-xs text-muted-foreground mt-2">{backupHint}</p>
+              )}
+            </div>
+          )}
+
           <DialogFooter>
             <Button
               variant="outline"

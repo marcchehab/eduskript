@@ -13,6 +13,7 @@ import { TeacherExamToolbar } from '@/components/exam/teacher-exam-toolbar'
 import { ExamDataSync } from '@/components/exam/exam-data-sync'
 import { isSEBRequest, type ExamSettings } from '@/lib/seb'
 import { validateExamToken, validateExamSession } from '@/lib/exam-tokens'
+import { getOrCreateActiveExamKey } from '@/lib/exam-keys'
 import { cookies } from 'next/headers'
 import type { Metadata } from 'next'
 import { prisma } from '@/lib/prisma'
@@ -434,6 +435,13 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
   )
 
   if (isInExamSession && !isTeacherViewingExam && examAuthenticatedUserId) {
+    // Lazy-load (or fetch) the page-owning teacher's active exam encryption
+    // key. Embedded in the page render so the student's browser can encrypt
+    // an offline backup at any time, including after a hand-in failure. The
+    // private half stays server-side; the recovery endpoint uses it to
+    // decrypt uploaded .examfile blobs.
+    const backupKey = await getOrCreateActiveExamKey(teacher.id)
+
     if (examState === 'lobby' && examClassId) {
       return (
         <ExamDataSync
@@ -448,11 +456,19 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
             studentName={examSessionUserName}
             studentEmail={examSessionUserEmail}
             typographyPreference={teacher.typographyPreference as 'modern' | 'classic' || 'modern'}
+            backupPublicKeyJwk={backupKey.publicKeyJwk}
+            backupKeyId={backupKey.keyId}
+            studentId={examAuthenticatedUserId}
+            skriptId={skript.id}
           >
             <ExamWaitingRoom
               pageId={page.id}
               classId={examClassId}
               examTitle={page.title}
+              backupPublicKeyJwk={backupKey.publicKeyJwk}
+              backupKeyId={backupKey.keyId}
+              studentId={examAuthenticatedUserId}
+              skriptId={skript.id}
             />
           </ExamLayout>
         </ExamDataSync>
@@ -472,6 +488,10 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
           studentName={examSessionUserName}
           studentEmail={examSessionUserEmail}
           typographyPreference={teacher.typographyPreference as 'modern' | 'classic' || 'modern'}
+          backupPublicKeyJwk={backupKey.publicKeyJwk}
+          backupKeyId={backupKey.keyId}
+          studentId={examAuthenticatedUserId}
+          skriptId={skript.id}
         >
           {examContent}
         </ExamLayout>
