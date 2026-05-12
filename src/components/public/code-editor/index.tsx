@@ -506,12 +506,17 @@ export const CodeEditor = memo(function CodeEditor({
   const autosaveIdleTimerRef = useRef<NodeJS.Timeout | null>(null)
   const AUTOSAVE_IDLE_MS = 3000
 
-  // Helper to get file extension based on language
+  // Helper to get file extension based on language.
+  // Default case guards the template-literal call sites (`main${getFileExtension(language)}`)
+  // from emitting "mainundefined" if `language` ever arrives as anything outside
+  // the declared union — which a past bug did, leaving "mainundefined" files in
+  // some students' IndexedDB. The load-time repair below renames those.
   const getFileExtension = (lang: 'python' | 'javascript' | 'sql'): string => {
     switch (lang) {
       case 'python': return '.py'
       case 'javascript': return '.js'
       case 'sql': return '.sql'
+      default: return '.py'
     }
   }
 
@@ -1014,12 +1019,35 @@ export const CodeEditor = memo(function CodeEditor({
       hasLoadedData.current = true
 
       if (savedData.files) {
+        // LEGACY REPAIR: a past bug emitted file names like "mainundefined"
+        // when getFileExtension fell off the switch. Rename them to the
+        // correct extension so the student's content surfaces in the right
+        // tab and merges with the markdown default. If the corrected name
+        // collides with another already-saved file, suffix _recovered so we
+        // never silently drop content (students have lost versions before).
+        const correctExt = getFileExtension(language)
+        const taken = new Set(
+          savedData.files.filter(f => !f.name.endsWith('undefined')).map(f => f.name)
+        )
+        const repairedSavedFiles = savedData.files.map((f: PythonFile) => {
+          if (!f.name.endsWith('undefined')) return f
+          const base = f.name.slice(0, -'undefined'.length)
+          let candidate = `${base}${correctExt}`
+          let n = 1
+          while (taken.has(candidate)) {
+            candidate = `${base}_recovered${n}${correctExt}`
+            n++
+          }
+          taken.add(candidate)
+          return { ...f, name: candidate }
+        })
+
         // Merge saved files with default files by name: saved content wins per-file,
         // but new files from markdown (e.g. a newly added caesar.py stub) are preserved.
-        const savedByName = new Map(savedData.files.map((f: PythonFile) => [f.name, f]))
+        const savedByName = new Map(repairedSavedFiles.map((f: PythonFile) => [f.name, f]))
         const merged = defaultData.files.map(f => savedByName.get(f.name) || f)
         // Also append any saved files not in the default set (student-created files)
-        for (const f of savedData.files) {
+        for (const f of repairedSavedFiles) {
           if (!merged.some(m => m.name === f.name)) merged.push(f)
         }
         setFiles(merged)
