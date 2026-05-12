@@ -26,6 +26,7 @@ import { OrphanRow } from './orphan-row'
 import { postCheckpoint } from '@/lib/userdata/checkpoints'
 import { useSyncedUserData, type SyncedUserDataOptions } from '@/lib/userdata/provider'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
+import { useStudentSnapshot } from '@/contexts/student-snapshot-context'
 import { useTeacherBroadcast } from '@/hooks/use-teacher-broadcast'
 import { useSession } from 'next-auth/react'
 import type { CodeEditorData, CodeHighlight, HighlightColor, HighlightComment, SqlVerificationData, GlobalImportsData, PythonCheckData, BinaryFile, BinaryFileData } from '@/lib/userdata/types'
@@ -296,6 +297,18 @@ export const CodeEditor = memo(function CodeEditor({
   const componentId = `code-editor-${id}`
   const highlightsComponentId = `code-highlights-${id}` // Separate adapter for broadcast highlights
   const verificationComponentId = `sql-verification-${id}`
+
+  // Teacher's "view this student's submission" mode. When a snapshot exists
+  // for this componentId, the editor swaps to a read-only view of that
+  // checkpoint payload instead of the teacher's own IndexedDB record. The
+  // StudentSnapshotProvider above this tree batches the fetch; we just look
+  // up our slice here. `isViewingSnapshot` short-circuits the save paths
+  // below so teacher state isn't clobbered while viewing.
+  const {
+    isViewing: isViewingSnapshot,
+    isLoading: snapshotLoading,
+    snapshot: studentSnapshot,
+  } = useStudentSnapshot(componentId)
   // Code editor's main data is intentionally LOCAL-ONLY. The keystroke-level
   // save path stays in IndexedDB; the server only sees explicit user actions
   // via checkpoints (manual save, "Check" press, exam hand-in). This keeps
@@ -1015,6 +1028,13 @@ export const CodeEditor = memo(function CodeEditor({
     if (!isLoading && !hasLoadedData.current) {
       console.debug(debugTag, 'userData loaded', !!savedData)
     }
+    // In snapshot-view mode the teacher is looking at a student's checkpoint,
+    // not their own. Skip the IndexedDB merge so we don't paint teacher state
+    // over the snapshot. The snapshot-hydration effect further below applies
+    // the student's payload via applyDataToEditor.
+    if (isViewingSnapshot) {
+      return
+    }
     if (!isLoading && savedData && !hasLoadedData.current) {
       hasLoadedData.current = true
 
@@ -1061,7 +1081,7 @@ export const CodeEditor = memo(function CodeEditor({
         setHighlights(savedData.highlights)
       }
     }
-  }, [isLoading, savedData, isBroadcastMode, debugTag])
+  }, [isLoading, savedData, isBroadcastMode, debugTag, isViewingSnapshot])
 
   // Track previous broadcast mode to detect mode switches
   // MODE SWITCHING BEHAVIOR:
@@ -1102,6 +1122,7 @@ export const CodeEditor = memo(function CodeEditor({
   const themeCompartment = useRef(new Compartment())
   const fontSizeCompartment = useRef(new Compartment())
   const lineWrappingCompartment = useRef(new Compartment())
+  const readOnlyCompartment = useRef(new Compartment())
 
   const canvasRef = useRef<HTMLDivElement>(null)
   const canvasContainerRef = useRef<HTMLDivElement>(null)
@@ -1118,6 +1139,11 @@ export const CodeEditor = memo(function CodeEditor({
 
   const debouncedSaveContent = useCallback(() => {
     if (!editorViewRef.current || !pageId) return
+    // In snapshot-view mode every write would clobber the teacher's own
+    // record with the student's code. Read-only CodeMirror should prevent
+    // user-driven calls in the first place, but keep this guard for any
+    // programmatic path that might still reach in.
+    if (isViewingSnapshot) return
 
     const content = editorViewRef.current.state.doc.toString()
     const currentTab = activeTabRef.current
@@ -1159,7 +1185,7 @@ export const CodeEditor = memo(function CodeEditor({
       canvasTransform,
       highlights,
     })
-  }, [activeFileIndex, pageId, componentId, fontSize, lineWrapping, editorWidth, canvasTransform, highlights, skriptId, editorInstanceId])
+  }, [activeFileIndex, pageId, componentId, fontSize, lineWrapping, editorWidth, canvasTransform, highlights, skriptId, editorInstanceId, isViewingSnapshot])
 
   // Ref to avoid debouncedSaveContent as a dependency in the editor effect
   const debouncedSaveContentRef = useRef(debouncedSaveContent)
@@ -1189,6 +1215,11 @@ export const CodeEditor = memo(function CodeEditor({
     if (isLoading) {
       return
     }
+
+    // Snapshot-view mode: the on-screen `files` are the student's checkpoint
+    // payload, not the teacher's own work. Persisting would overwrite the
+    // teacher's IndexedDB record with the student's code.
+    if (isViewingSnapshot) return
 
     // In broadcast mode: save highlights to broadcast record, personal data keeps other settings
     // In personal mode: save everything to personal record
@@ -1226,7 +1257,7 @@ export const CodeEditor = memo(function CodeEditor({
       }
       savePersistentData(dataToSave, { immediate: true })
     }
-  }, [activeFileIndex, fontSize, lineWrapping, editorWidth, canvasTransform, pageId, savePersistentData, files, componentId, isLoading, highlights, isBroadcastMode, updateBroadcastHighlights, savedData?.highlights])
+  }, [activeFileIndex, fontSize, lineWrapping, editorWidth, canvasTransform, pageId, savePersistentData, files, componentId, isLoading, highlights, isBroadcastMode, updateBroadcastHighlights, savedData?.highlights, isViewingSnapshot])
 
   // Helper function to create a version snapshot
   const createVersionSnapshot = useCallback(async (isManualSave = false) => {
@@ -2296,6 +2327,45 @@ export const CodeEditor = memo(function CodeEditor({
     if (data.canvasTransform) setCanvasTransform(data.canvasTransform)
   }, [activeFileIndex])
 
+  // Hydrate the editor from the student's checkpoint payload whenever the
+  // viewed student or their latest snapshot changes. Track what we last
+  // applied so reusing the snapshot reference (e.g. on re-render) doesn't
+  // re-dispatch a no-op transaction. Skip if there's no snapshot yet for
+  // this componentId — that just means this student hasn't touched this
+  // editor; we leave the previous content visible until they do.
+  const lastAppliedSnapshotRef = useRef<{ componentId: string; createdAt: string } | null>(null)
+  useEffect(() => {
+    if (!isViewingSnapshot) {
+      lastAppliedSnapshotRef.current = null
+      return
+    }
+    if (!studentSnapshot) return
+    const fingerprint = { componentId: studentSnapshot.componentId, createdAt: studentSnapshot.createdAt }
+    const prev = lastAppliedSnapshotRef.current
+    if (prev && prev.componentId === fingerprint.componentId && prev.createdAt === fingerprint.createdAt) {
+      return
+    }
+    lastAppliedSnapshotRef.current = fingerprint
+    const payload = studentSnapshot.payload as CodeEditorData | null
+    if (payload && typeof payload === 'object') {
+      applyDataToEditor(payload)
+    }
+  }, [isViewingSnapshot, studentSnapshot, applyDataToEditor])
+
+  // When the teacher exits view mode (clears selectedStudent), restore their
+  // own IndexedDB-loaded state so the editor doesn't keep showing the last
+  // student's code. Falls back to a no-op when savedData is empty (teacher
+  // never had data on this page).
+  const wasViewingRef = useRef(isViewingSnapshot)
+  useEffect(() => {
+    const wasViewing = wasViewingRef.current
+    wasViewingRef.current = isViewingSnapshot
+    if (!wasViewing || isViewingSnapshot) return
+    if (savedData) {
+      applyDataToEditor(savedData)
+    }
+  }, [isViewingSnapshot, savedData, applyDataToEditor])
+
   // Preview an orphan version: snapshot current editor state ONCE (per
   // editor instance) as a safety autosave, then load the orphan's content
   // into the editor. Does not move the orphan version's componentId — the
@@ -2410,6 +2480,14 @@ export const CodeEditor = memo(function CodeEditor({
       })),
       themeCompartment.current.of(isDark ? vsCodeDark : vsCodeLight),
       lineWrappingCompartment.current.of(lineWrapping ? EditorView.lineWrapping : []),
+      // Snapshot-view mode is read-only. `EditorState.readOnly` blocks all
+      // edit transactions; `EditorView.editable.of(false)` removes the
+      // contenteditable attribute so the cursor doesn't appear.
+      readOnlyCompartment.current.of(
+        isViewingSnapshot
+          ? [EditorState.readOnly.of(true), EditorView.editable.of(false)]
+          : []
+      ),
     ]
 
     // Add Python autocomplete for Python files
@@ -2638,6 +2716,19 @@ export const CodeEditor = memo(function CodeEditor({
       )
     })
   }, [lineWrapping])
+
+  // Toggle CodeMirror read-only when entering/leaving snapshot-view mode.
+  useEffect(() => {
+    const view = editorViewRef.current
+    if (!view) return
+    view.dispatch({
+      effects: readOnlyCompartment.current.reconfigure(
+        isViewingSnapshot
+          ? [EditorState.readOnly.of(true), EditorView.editable.of(false)]
+          : []
+      )
+    })
+  }, [isViewingSnapshot])
 
   // Attach non-passive wheel event listener to prevent page scroll
   useEffect(() => {
@@ -4858,7 +4949,22 @@ plots
                   <span className="text-xs text-muted-foreground animate-pulse">Loading editor...</span>
                 </div>
               )}
+              {/* Snapshot-view banner: when a teacher is viewing a student's
+                  submission, the floating action buttons are hidden so Run /
+                  Check / Reset / Save can't fire against frozen student code. */}
+              {isViewingSnapshot && (
+                <div className="absolute bottom-2 left-2 right-2 z-10 flex items-center justify-between gap-2 px-2 py-1 rounded bg-amber-100/90 dark:bg-amber-900/40 text-xs text-amber-900 dark:text-amber-100 shadow-sm">
+                  <span className="truncate">
+                    {snapshotLoading
+                      ? 'Loading student snapshot…'
+                      : studentSnapshot
+                        ? `Viewing snapshot · ${studentSnapshot.kind}${studentSnapshot.label ? ` · ${studentSnapshot.label}` : ''} · ${new Date(studentSnapshot.createdAt).toLocaleTimeString()}`
+                        : 'No submission yet for this editor'}
+                  </span>
+                </div>
+              )}
               {/* Floating Control Buttons - Bottom Left */}
+              {!isViewingSnapshot && (
               <div className="absolute bottom-2 left-2 flex items-center gap-1 z-10">
                 {runState === RunState.STOPPED ? (
                   <Button
@@ -4914,8 +5020,9 @@ plots
                   </Button>
                 )}
               </div>
+              )}
               {/* Floating Control Buttons - Bottom Right */}
-              {pageId && (
+              {pageId && !isViewingSnapshot && (
                 <div className="absolute bottom-2 right-2 flex items-center gap-1 z-10">
                   <button
                     onClick={() => { navigator.clipboard.writeText(componentId) }}

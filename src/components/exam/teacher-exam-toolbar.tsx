@@ -14,7 +14,7 @@
 
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Users,
   CheckCircle2,
@@ -27,7 +27,9 @@ import {
   RotateCcw,
   DoorOpen,
   Lock,
-  Unlock
+  Unlock,
+  Eye,
+  X
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -37,6 +39,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
+import { useExamRoster, type ExamRosterStudent } from '@/hooks/use-exam-roster'
 import { getReverseMappingsForClass } from '@/lib/email-mapping-db'
 import { cn } from '@/lib/utils'
 
@@ -45,45 +48,37 @@ interface ExamClass {
   name: string
 }
 
-interface StudentStatus {
-  id: string
-  name: string | null
-  email: string | null
-  studentPseudonym: string | null
-  status: 'not_started' | 'taking' | 'submitted'
-  startedAt?: string
-  submittedAt?: string
-}
-
-interface StudentCounts {
-  total: number
-  notStarted: number
-  taking: number
-  submitted: number
-}
-
 interface TeacherExamToolbarProps {
   pageId: string
   unlockedClasses: ExamClass[]
 }
 
-type ExamState = 'closed' | 'lobby' | 'open' | null
-
-const POLL_INTERVAL_MS = 10000 // Poll student counts every 10 seconds
-
 export function TeacherExamToolbar({
   pageId,
   unlockedClasses
 }: TeacherExamToolbarProps) {
-  const { selectedClass, setSelectedClass } = useTeacherClass()
-  const [examState, setExamState] = useState<ExamState>(null)
-  const [studentCounts, setStudentCounts] = useState<StudentCounts | null>(null)
-  const [students, setStudents] = useState<StudentStatus[]>([])
+  const {
+    selectedClass,
+    setSelectedClass,
+    selectedStudent,
+    setSelectedStudent,
+    submittedOnly,
+    setSubmittedOnly,
+  } = useTeacherClass()
   const [resolvedEmails, setResolvedEmails] = useState<Record<string, string>>({})
-  const [isLoading, setIsLoading] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
   const [isExpanded, setIsExpanded] = useState(false)
   const [reopeningStudent, setReopeningStudent] = useState<string | null>(null)
+
+  const {
+    students,
+    counts: studentCounts,
+    examState,
+    refresh: refreshRoster,
+  } = useExamRoster({
+    pageId,
+    classId: selectedClass?.id ?? null,
+  })
 
   // Load resolved email mappings when class changes
   useEffect(() => {
@@ -103,45 +98,15 @@ export function TeacherExamToolbar({
     }
   }, [selectedClass, unlockedClasses, setSelectedClass])
 
-  // Fetch exam state and student counts
-  const fetchExamData = useCallback(async () => {
-    if (!selectedClass) return
-
-    setIsLoading(true)
-    try {
-      // Fetch exam state
-      const stateResponse = await fetch(
-        `/api/exams/${pageId}/state?classId=${selectedClass.id}`
-      )
-      if (stateResponse.ok) {
-        const stateData = await stateResponse.json()
-        setExamState(stateData.state || 'closed')
-      }
-
-      // Fetch student data (includes counts and individual status)
-      const studentsResponse = await fetch(
-        `/api/exams/${pageId}/students?classId=${selectedClass.id}`
-      )
-      if (studentsResponse.ok) {
-        const studentsData = await studentsResponse.json()
-        setStudentCounts(studentsData.counts)
-        setStudents(studentsData.students || [])
-      }
-    } catch (error) {
-      console.error('Error fetching exam data:', error)
-    } finally {
-      setIsLoading(false)
-    }
-  }, [pageId, selectedClass])
-
-  // Initial fetch and polling
-  useEffect(() => {
-    fetchExamData()
-
-    // Poll for updates
-    const interval = setInterval(fetchExamData, POLL_INTERVAL_MS)
-    return () => clearInterval(interval)
-  }, [fetchExamData])
+  // Get display name for student (prefer resolved email, then name, then pseudonym).
+  // Hoisted so the click handler below can capture it.
+  const getStudentDisplayName = (student: ExamRosterStudent) => {
+    const resolved = student.studentPseudonym ? resolvedEmails[student.studentPseudonym] : null
+    if (resolved) return resolved
+    if (student.name) return student.name
+    if (student.studentPseudonym) return `Student ${student.studentPseudonym.slice(0, 8)}`
+    return 'Unknown student'
+  }
 
   // Set exam state directly
   const setExamStateTo = async (newState: 'closed' | 'lobby' | 'open') => {
@@ -159,10 +124,8 @@ export function TeacherExamToolbar({
       })
 
       if (response.ok) {
-        const data = await response.json()
-        setExamState(data.state)
-        // Refresh student counts after state change
-        fetchExamData()
+        // Refresh roster after state change (covers state cell + any state-derived counts)
+        refreshRoster()
       }
     } catch (error) {
       console.error('Error updating exam state:', error)
@@ -188,8 +151,7 @@ export function TeacherExamToolbar({
       })
 
       if (response.ok) {
-        // Refresh student list
-        fetchExamData()
+        refreshRoster()
       } else {
         const data = await response.json()
         console.error('Error reopening exam:', data.error)
@@ -199,6 +161,21 @@ export function TeacherExamToolbar({
     } finally {
       setReopeningStudent(null)
     }
+  }
+
+  // Toggle "view this student's snapshot" mode by clicking a roster row.
+  // Clicking the already-selected student exits view mode (back to teacher's own view).
+  const viewStudent = (student: ExamRosterStudent) => {
+    if (selectedStudent?.id === student.id) {
+      setSelectedStudent(null)
+      return
+    }
+    setSelectedStudent({
+      id: student.id,
+      displayName: getStudentDisplayName(student),
+      pseudonym: student.studentPseudonym ?? undefined,
+      revealedEmail: student.email ?? null,
+    })
   }
 
   // No classes unlocked for this exam
@@ -225,7 +202,7 @@ export function TeacherExamToolbar({
 
   const stateConfig = getStateConfig()
 
-  const getStatusIcon = (status: StudentStatus['status']) => {
+  const getStatusIcon = (status: ExamRosterStudent['status']) => {
     switch (status) {
       case 'taking':
         return <Clock className="w-4 h-4 text-yellow-500" />
@@ -236,7 +213,7 @@ export function TeacherExamToolbar({
     }
   }
 
-  const getStatusLabel = (status: StudentStatus['status']) => {
+  const getStatusLabel = (status: ExamRosterStudent['status']) => {
     switch (status) {
       case 'taking':
         return 'Taking exam'
@@ -251,15 +228,6 @@ export function TeacherExamToolbar({
     if (!dateString) return null
     const date = new Date(dateString)
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  }
-
-  // Get display name for student (prefer resolved email, then name, then pseudonym)
-  const getStudentDisplayName = (student: StudentStatus) => {
-    const resolved = student.studentPseudonym ? resolvedEmails[student.studentPseudonym] : null
-    if (resolved) return resolved
-    if (student.name) return student.name
-    if (student.studentPseudonym) return `Student ${student.studentPseudonym.slice(0, 8)}`
-    return 'Unknown student'
   }
 
   return (
@@ -361,6 +329,34 @@ export function TeacherExamToolbar({
           {/* Spacer */}
           <div className="flex-1" />
 
+          {/* Viewing-state chip + back-out button. Visible only when the
+              teacher has clicked a student row to enter snapshot-view mode. */}
+          {selectedStudent && (
+            <div className="flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-amber-100/80 dark:bg-amber-900/40 text-amber-900 dark:text-amber-100">
+              <Eye className="w-3.5 h-3.5" />
+              <span className="truncate max-w-[180px]">Viewing {selectedStudent.displayName}</span>
+              <button
+                onClick={() => setSelectedStudent(null)}
+                className="ml-1 p-0.5 rounded hover:bg-amber-200/60 dark:hover:bg-amber-800/60"
+                title="Back to my own view"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+
+          {/* Submitted-only toggle. Lives in shared context so the gutter
+              navigator filters the same way. */}
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none" title="Cycle only through students who have handed in">
+            <input
+              type="checkbox"
+              checked={submittedOnly}
+              onChange={(e) => setSubmittedOnly(e.target.checked)}
+              className="h-3.5 w-3.5 accent-primary"
+            />
+            <span>Submitted only</span>
+          </label>
+
           {/* Student Counts (clickable to expand) */}
           {studentCounts && selectedClass && (
             <button
@@ -409,14 +405,25 @@ export function TeacherExamToolbar({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {students.map((student) => (
-                    <tr key={student.id} className="hover:bg-muted/30">
+                  {students.map((student) => {
+                    const isViewingThis = selectedStudent?.id === student.id
+                    return (
+                    <tr
+                      key={student.id}
+                      onClick={() => viewStudent(student)}
+                      className={cn(
+                        'cursor-pointer hover:bg-muted/30',
+                        isViewingThis && 'bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-950/50'
+                      )}
+                      title={isViewingThis ? 'Click to stop viewing' : "Click to view this student's work"}
+                    >
                       <td className="px-4 py-2">
                         <div className="flex items-center gap-2">
                           <User className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                           <span className="truncate max-w-[200px]">
                             {getStudentDisplayName(student)}
                           </span>
+                          {isViewingThis && <Eye className="w-3 h-3 text-amber-600 flex-shrink-0" />}
                         </div>
                       </td>
                       <td className="px-4 py-2 text-muted-foreground">
@@ -450,7 +457,11 @@ export function TeacherExamToolbar({
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => reopenForStudent(student.id)}
+                            onClick={(e) => {
+                              // Don't bubble into the row's "view student" click.
+                              e.stopPropagation()
+                              reopenForStudent(student.id)
+                            }}
                             disabled={reopeningStudent === student.id}
                             className="h-7 px-2 text-xs gap-1"
                             title="Allow student to retake exam"
@@ -465,7 +476,8 @@ export function TeacherExamToolbar({
                         )}
                       </td>
                     </tr>
-                  ))}
+                    )
+                  })}
                 </tbody>
               </table>
             )}

@@ -16,6 +16,9 @@ import { SEBRequiredPage } from '@/components/exam/seb-required-page'
 import { ExamSubmittedPage } from '@/components/exam/exam-submitted-page'
 import { TeacherExamToolbar } from '@/components/exam/teacher-exam-toolbar'
 import { ExamDataSync } from '@/components/exam/exam-data-sync'
+import { StudentNavigator } from '@/components/exam/student-navigator'
+import { StudentSnapshotProvider } from '@/contexts/student-snapshot-context'
+import { ExamPageContextProvider } from '@/contexts/exam-page-context'
 import { isSEBRequest, type ExamSettings } from '@/lib/seb'
 import { validateExamToken, validateExamSession } from '@/lib/exam-tokens'
 import { getPublicLayers } from '@/lib/public-page-data'
@@ -266,6 +269,7 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
         publicStickyNotes={publicStickyNotes}
         isExamStudent={isExamStudent}
       />
+      {isTeacherAuthor && <StudentNavigator pageId={page.id} />}
     </>
   )
 
@@ -276,6 +280,7 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
       sidebarBehavior={(layoutTeacher.sidebarBehavior as 'contextual' | 'full') || 'full'}
       typographyPreference={(layoutTeacher.typographyPreference as 'modern' | 'classic') || 'modern'}
     >
+      <ExamPageContextProvider>
       {isExamStudent ? (
         <ExamDataSync
           userId={studentId}
@@ -286,8 +291,14 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
           {body}
         </ExamDataSync>
       ) : (
-        body
+        // Snapshot provider gates on isTeacher + selectedStudent internally,
+        // so it's inert for non-teacher non-author viewers and for the
+        // teacher when no student is picked. Cheap to mount unconditionally.
+        <StudentSnapshotProvider pageId={page.id} enabled={isTeacherAuthor}>
+          {body}
+        </StudentSnapshotProvider>
       )}
+      </ExamPageContextProvider>
     </PublicSiteLayout>
   )
 }

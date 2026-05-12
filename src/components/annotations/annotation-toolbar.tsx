@@ -7,6 +7,7 @@ import type { SpacerPattern } from '@/types/spacer'
 import { Circle } from '@uiw/react-color'
 import { cn } from '@/lib/utils'
 import { useLayout } from '@/contexts/layout-context'
+import { useIsExamPage } from '@/contexts/exam-page-context'
 import { createLogger } from '@/lib/logger'
 
 const log = createLogger('annotations:toolbar')
@@ -242,6 +243,10 @@ export function AnnotationToolbar({
 }: AnnotationToolbarProps) {
   // Get layout context for centering toolbar on page content (not viewport)
   const { sidebarWidth } = useLayout()
+
+  // On exam pages, the TeacherExamToolbar owns class+student selection; hide
+  // the duplicate audience selector here. Default false on non-exam pages.
+  const isExamPage = useIsExamPage()
 
   // Broadcast dropdown state
   const [showClassDropdown, setShowClassDropdown] = useState(false)
@@ -598,8 +603,12 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
       {/* Single horizontal toolbar */}
       <div className="bg-background/95 backdrop-blur border border-border rounded-lg shadow-lg p-2 flex items-center gap-1">
 
-        {/* ============ SECTION 1: Broadcast Controls (Teachers and Page Authors) ============ */}
-        {(isTeacher || isPageAuthor) && (
+        {/* ============ SECTION 1: Broadcast Controls (Teachers and Page Authors) ============
+            Hidden on exam pages: the TeacherExamToolbar at the top of the
+            page is the canonical class+student controller there, and having
+            two selectors writing to the same useTeacherClass() context
+            confuses teachers. */}
+        {(isTeacher || isPageAuthor) && !isExamPage && (
           <>
             <ToolbarSection>
               {/* Class/Page selector dropdown - picks class or "Public" for page authors */}

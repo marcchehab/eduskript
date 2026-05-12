@@ -9,6 +9,7 @@ const log = createLogger('teacher:context')
 const STORAGE_KEY = 'eduskript-teacher-class'
 const STUDENT_STORAGE_KEY = 'eduskript-teacher-selected-student'
 const PAGE_BROADCAST_KEY = 'eduskript-page-broadcast'
+const SUBMITTED_ONLY_KEY = 'eduskript-teacher-submitted-only'
 
 interface SelectedClass {
   id: string
@@ -40,6 +41,14 @@ interface TeacherClassContextValue {
   /** When true, broadcasts to all page visitors (requires author permission) */
   broadcastToPage: boolean
   setBroadcastToPage: (broadcast: boolean) => void
+  /**
+   * Filter for the student-cycling UI on exam pages: when true, prev/next
+   * skips students who haven't handed in. Lives here (rather than in the
+   * exam toolbar) because the navigator needs to read it too, and we want
+   * it to survive reloads like the rest of the teacher selection state.
+   */
+  submittedOnly: boolean
+  setSubmittedOnly: (value: boolean) => void
   viewMode: ViewMode
   isTeacher: boolean
   isLoading: boolean
@@ -52,6 +61,7 @@ export function TeacherClassProvider({ children }: { children: ReactNode }) {
   const [selectedClass, setSelectedClassState] = useState<SelectedClass | null>(null)
   const [selectedStudent, setSelectedStudentState] = useState<SelectedStudent | null>(null)
   const [broadcastToPage, setBroadcastToPageState] = useState(false)
+  const [submittedOnly, setSubmittedOnlyState] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
 
   const isTeacher = session?.user?.accountType === 'teacher'
@@ -81,6 +91,11 @@ export function TeacherClassProvider({ children }: { children: ReactNode }) {
       const storedPageBroadcast = localStorage.getItem(PAGE_BROADCAST_KEY)
       if (storedPageBroadcast === 'true') {
         setBroadcastToPageState(true)
+      }
+
+      const storedSubmittedOnly = localStorage.getItem(SUBMITTED_ONLY_KEY)
+      if (storedSubmittedOnly === 'true') {
+        setSubmittedOnlyState(true)
       }
     } catch (e) {
       // Invalid stored data, ignore
@@ -122,6 +137,16 @@ export function TeacherClassProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem(STUDENT_STORAGE_KEY)
     }
     localStorage.removeItem(PAGE_BROADCAST_KEY)
+  }, [])
+
+  const setSubmittedOnly = useCallback((value: boolean) => {
+    setSubmittedOnlyState(value)
+    if (typeof window === 'undefined') return
+    if (value) {
+      localStorage.setItem(SUBMITTED_ONLY_KEY, 'true')
+    } else {
+      localStorage.removeItem(SUBMITTED_ONLY_KEY)
+    }
   }, [])
 
   const setBroadcastToPage = useCallback((broadcast: boolean) => {
@@ -172,6 +197,8 @@ export function TeacherClassProvider({ children }: { children: ReactNode }) {
         setSelectedStudent,
         broadcastToPage,
         setBroadcastToPage,
+        submittedOnly,
+        setSubmittedOnly,
         viewMode,
         isTeacher,
         isLoading: isLoading || status === 'loading',
@@ -193,6 +220,8 @@ export function useTeacherClass() {
       setSelectedStudent: () => {},
       broadcastToPage: false,
       setBroadcastToPage: () => {},
+      submittedOnly: false,
+      setSubmittedOnly: () => {},
       viewMode: 'my-view' as ViewMode,
       isTeacher: false,
       isLoading: false,

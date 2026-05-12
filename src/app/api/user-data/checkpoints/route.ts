@@ -26,6 +26,7 @@ import { cookies } from 'next/headers'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
+import { eventBus } from '@/lib/events'
 
 interface CheckpointInput {
   pageId: string
@@ -123,6 +124,37 @@ export async function POST(request: NextRequest) {
         })
       )
     )
+
+    // Student-initiated checkpoints (Run / Check / manual save) feed the
+    // teacher's "view this student" snapshot UI. Emit per page touched so an
+    // open teacher viewer refetches in real time. Bounded by the user-action
+    // cadence — auto-saves never reach this endpoint.
+    if (!auth.isTeacher) {
+      try {
+        const memberships = await prisma.classMembership.findMany({
+          where: { studentId: auth.userId },
+          select: { classId: true },
+        })
+        if (memberships.length > 0) {
+          const pageIds = [...new Set(items.map((item) => item.pageId))]
+          await Promise.all(
+            pageIds.flatMap((pageId) =>
+              memberships.map((m) =>
+                eventBus.publish(`class:${m.classId}:teacher`, {
+                  type: 'student-work-update',
+                  studentId: auth.userId,
+                  classId: m.classId,
+                  pageId,
+                  timestamp: Date.now(),
+                })
+              )
+            )
+          )
+        }
+      } catch (err) {
+        console.error('[checkpoints] failed to publish student-work-update:', err)
+      }
+    }
 
     return NextResponse.json({ created })
   } catch (error) {
