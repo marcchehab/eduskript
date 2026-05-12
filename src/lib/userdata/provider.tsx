@@ -68,22 +68,6 @@ export function UserDataProvider({ children }: UserDataProviderProps) {
   const [onClearAnnotations, setOnClearAnnotationsState] = useState<(() => void) | null>(null)
   const [isDbReady, setIsDbReady] = useState(false)
   const userChangeHandledRef = useRef(false)
-  // Tracks the userId active on the previous effect run. Initialised from
-  // localStorage on the client so a fresh mount can correctly detect
-  // "anonymous → real userId" transitions (which trigger the anonymous re-key
-  // migration). SSR has no real localStorage — Node polyfills the global as a
-  // stub without methods, so guard on `typeof window` and try/catch.
-  const previousUserIdRef = useRef<string | null>(null)
-  const initRef = useRef(false)
-  if (!initRef.current && typeof window !== 'undefined') {
-    initRef.current = true
-    try {
-      previousUserIdRef.current = window.localStorage.getItem(LAST_USER_KEY)
-    } catch {
-      // Some browsers throw on localStorage access (private mode, blocked).
-      previousUserIdRef.current = null
-    }
-  }
 
   // Use NextAuth session first, fall back to exam session
   const userId = session?.user?.id ?? examSession.user?.id ?? null
@@ -101,22 +85,25 @@ export function UserDataProvider({ children }: UserDataProviderProps) {
 
       try {
         const currentUserId = userId ?? 'anonymous'
-        const previousUserId = previousUserIdRef.current
 
         // 1. v2 → v3 schema migration (idempotent; gated by localStorage flag).
         await runOneTimeMigrationV2ToV3()
 
-        // 2. anonymous → real userId re-key, if applicable.
-        if (previousUserId === 'anonymous' && currentUserId !== 'anonymous') {
-          await migrateAnonymousIfNeeded(previousUserId, currentUserId)
+        // 2. anonymous → real userId re-key. Gated on IndexedDB state, not
+        // localStorage — first-render with a cached NextAuth session would
+        // skip past 'anonymous' before the provider ever wrote it back, and
+        // private-mode browsing drops the localStorage hint entirely. The
+        // migration itself is idempotent on an empty anonymous tier.
+        if (currentUserId !== 'anonymous') {
+          await migrateAnonymousIfNeeded(currentUserId)
         }
 
         // 3. Service swap. setCurrentUser awaits flush() so debounced saves
         // started under the previous userId land under that userId.
         await userDataService.setCurrentUser(currentUserId)
 
-        // 4. Update local pointer for next transition.
-        previousUserIdRef.current = currentUserId
+        // 4. Persist current userId so the v2→v3 migration on a future
+        // browser version can still infer the owner of pre-v3 records.
         localStorage.setItem(LAST_USER_KEY, currentUserId)
       } catch (error) {
         log.error('Failed to handle user change:', error)

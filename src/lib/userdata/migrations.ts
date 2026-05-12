@@ -134,14 +134,17 @@ export async function runOneTimeMigrationV2ToV3(): Promise<void> {
  * rows are always re-keyed and then renumbered to avoid duplicate
  * `versionNumber` per (pageId, componentId).
  *
- * Caller is responsible for the precondition: previousUserId === 'anonymous'
- * AND currentUserId is a real userId (not null, not 'anonymous').
+ * Gated on the IndexedDB state, not on a localStorage hint about the previous
+ * userId. Earlier versions skipped migration unless `previousUserId` was the
+ * literal string 'anonymous', which lost data whenever localStorage didn't
+ * agree with IndexedDB (private mode, first-render race where NextAuth had
+ * already auto-logged the user in before the provider could write 'anonymous'
+ * back to localStorage, etc.). Idempotent: returns early when there's nothing
+ * to claim, so the provider can call this on every real-userId activation.
  */
 export async function migrateAnonymousIfNeeded(
-  previousUserId: string | null,
   currentUserId: string
 ): Promise<void> {
-  if (previousUserId !== 'anonymous') return
   if (!currentUserId || currentUserId === 'anonymous') return
 
   try {
