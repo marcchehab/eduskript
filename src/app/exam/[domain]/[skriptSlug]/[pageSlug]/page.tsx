@@ -15,6 +15,7 @@ import { ExamLockedPage } from '@/components/exam/exam-locked-page'
 import { SEBRequiredPage } from '@/components/exam/seb-required-page'
 import { ExamSubmittedPage } from '@/components/exam/exam-submitted-page'
 import { TeacherExamToolbar } from '@/components/exam/teacher-exam-toolbar'
+import { ExamDataSync } from '@/components/exam/exam-data-sync'
 import { isSEBRequest, type ExamSettings } from '@/lib/seb'
 import { validateExamToken, validateExamSession } from '@/lib/exam-tokens'
 import { getPublicLayers } from '@/lib/public-page-data'
@@ -232,13 +233,25 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
 
   const isExamStudent = !isTeacherAuthor && (authenticatedViaToken || authenticatedViaExamSession)
 
-  return (
-    <PublicSiteLayout
-      teacher={teacherForLayout}
-      siteStructure={fullSiteStructure}
-      sidebarBehavior={(layoutTeacher.sidebarBehavior as 'contextual' | 'full') || 'full'}
-      typographyPreference={(layoutTeacher.typographyPreference as 'modern' | 'classic') || 'modern'}
-    >
+  // SEB-authenticated students have no NextAuth session, so without an
+  // ExamSessionProvider in the tree useUserDataContext treats them as
+  // unauthenticated and skips the cloud-sync queue. That keeps Check/Run
+  // checkpoints local-only and the teacher's PythonProgressBar can't see
+  // any updates. Fetch name/email for the indicator chips and hand them to
+  // ExamDataSync so useSyncedUserData.updateData() will queueSync().
+  let examUserName: string | null = null
+  let examUserEmail: string | null = null
+  if (isExamStudent) {
+    const examUser = await prisma.user.findUnique({
+      where: { id: studentId },
+      select: { name: true, email: true },
+    })
+    examUserName = examUser?.name ?? null
+    examUserEmail = examUser?.email ?? null
+  }
+
+  const body = (
+    <>
       {isTeacherAuthor && (
         <TeacherExamToolbar
           pageId={page.id}
@@ -253,6 +266,28 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
         publicStickyNotes={publicStickyNotes}
         isExamStudent={isExamStudent}
       />
+    </>
+  )
+
+  return (
+    <PublicSiteLayout
+      teacher={teacherForLayout}
+      siteStructure={fullSiteStructure}
+      sidebarBehavior={(layoutTeacher.sidebarBehavior as 'contextual' | 'full') || 'full'}
+      typographyPreference={(layoutTeacher.typographyPreference as 'modern' | 'classic') || 'modern'}
+    >
+      {isExamStudent ? (
+        <ExamDataSync
+          userId={studentId}
+          userName={examUserName}
+          userEmail={examUserEmail}
+          pageId={page.id}
+        >
+          {body}
+        </ExamDataSync>
+      ) : (
+        body
+      )}
     </PublicSiteLayout>
   )
 }
