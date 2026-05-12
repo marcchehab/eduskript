@@ -20,6 +20,7 @@ import { remarkMuxVideo } from './remark-plugins/mux-video'
 import { remarkYoutube } from './remark-plugins/youtube'
 import { remarkYoutubeImage } from './remark-plugins/youtube-image'
 import { remarkQuiz } from './remark-plugins/quiz'
+import { remarkSurvey } from './remark-plugins/survey'
 import { remarkFileLinkResolver } from './remark-plugins/file-link-resolver'
 import { remarkMermaid } from './remark-plugins/mermaid'
 
@@ -28,6 +29,7 @@ import { remarkMermaid } from './remark-plugins/mermaid'
  */
 export const remarkPlugins: PluggableList = [
   remarkTabs,
+  remarkSurvey, // Must run before remarkQuiz — lowercases <Survey>; remarkQuiz then processes nested <Question>s
   remarkQuiz,
   remarkGfm,
   remarkMath,

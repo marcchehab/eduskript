@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { checkPagePermissions } from '@/lib/permissions'
 
 interface RouteParams {
   params: Promise<{
@@ -57,17 +58,63 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    // Verify class exists and user owns it
+    // Verify class exists; resolve auth two ways:
+    //  (a) classic class teacher (the existing behaviour)
+    //  (b) implicit survey class: any author of the bound page (via
+    //      checkPagePermissions inheriting up to skript/collection).
     const classRecord = await prisma.class.findUnique({
       where: { id: classId },
-      select: { teacherId: true }
+      select: {
+        teacherId: true,
+        isImplicit: true,
+        implicitPageId: true,
+      },
     })
 
     if (!classRecord) {
       return NextResponse.json({ error: 'Class not found' }, { status: 404 })
     }
 
-    if (classRecord.teacherId !== session.user.id) {
+    let authorized = classRecord.teacherId === session.user.id
+
+    if (!authorized && classRecord.isImplicit && classRecord.implicitPageId) {
+      // Implicit (survey) class: viewer must be an author of the bound page,
+      // or inherit edit rights via skript/collection authorship. Mirrors
+      // the auth model used for editing the page itself.
+      const pageWithAuthors = await prisma.page.findUnique({
+        where: { id: classRecord.implicitPageId },
+        include: {
+          authors: { include: { user: { select: { id: true } } } },
+          skript: {
+            include: {
+              authors: { include: { user: { select: { id: true } } } },
+              collectionSkripts: {
+                include: {
+                  collection: {
+                    include: {
+                      authors: { include: { user: { select: { id: true } } } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      })
+      if (pageWithAuthors) {
+        const collectionAuthors = pageWithAuthors.skript.collectionSkripts
+          .flatMap((cs) => cs.collection?.authors ?? [])
+        const perms = checkPagePermissions(
+          session.user.id,
+          pageWithAuthors.authors,
+          pageWithAuthors.skript.authors,
+          collectionAuthors
+        )
+        authorized = perms.canEdit
+      }
+    }
+
+    if (!authorized) {
       return NextResponse.json(
         { error: 'You do not have permission to view this class' },
         { status: 403 }

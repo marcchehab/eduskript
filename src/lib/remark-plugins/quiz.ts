@@ -65,7 +65,7 @@ export function remarkQuiz() {
       // Parse the Question block
       const result = parseQuestionBlock(fullContent)
       if (result) {
-        const { attrs, options } = result
+        const { attrs, options, prompt } = result
 
         // Create answer elements
         // Note: use "correct" instead of "is" because "is" is a reserved React attribute
@@ -83,10 +83,19 @@ export function remarkQuiz() {
         if (attrs.maxValue) attrStr += ` maxValue="${attrs.maxValue}"`
         if (attrs.step) attrStr += ` step="${attrs.step}"`
 
+        // For choice questions: inner content = <answer> children.
+        // For text/number/range questions: inner content = the prompt text
+        // (which the Question component reads as `children` and renders below
+        // the input). Required for surveys, which need free-text prompts.
+        const isChoice = !attrs.type || attrs.type === 'single' || attrs.type === 'multiple'
+        const innerContent = isChoice
+          ? optionElements.map(o => (o as any).value).join('\n')
+          : (prompt ?? '').trim()
+
         // Create the question wrapper
         const questionHtml: RootContent = {
           type: 'html',
-          value: `<question ${attrStr}>\n${optionElements.map(o => (o as any).value).join('\n')}\n</question>`
+          value: `<question ${attrStr}>\n${innerContent}\n</question>`
         }
 
         // Replace the nodes
@@ -139,7 +148,7 @@ interface QuestionAttributes {
   step?: string
 }
 
-function parseQuestionBlock(content: string): { attrs: QuestionAttributes; options: ParsedOption[] } | null {
+function parseQuestionBlock(content: string): { attrs: QuestionAttributes; options: ParsedOption[]; prompt?: string } | null {
   // Extract Question attributes
   const questionMatch = content.match(/<Question\s+([^>]*)>/)
   if (!questionMatch) return null
@@ -198,7 +207,20 @@ function parseQuestionBlock(content: string): { attrs: QuestionAttributes; optio
     })
   }
 
-  if (options.length === 0) return null
+  // For non-choice types (text/number/range), the inner content is the
+  // prompt itself rather than option blocks. Extract everything between
+  // <Question> and </Question>, stripped of any (unexpected) <Option> tags.
+  const isChoice = !attrs.type || attrs.type === 'single' || attrs.type === 'multiple'
+  let prompt: string | undefined
+  if (!isChoice) {
+    const innerMatch = content.match(/<Question\s+[^>]*>([\s\S]*?)<\/Question>/)
+    if (innerMatch) {
+      prompt = innerMatch[1].replace(/<Option[\s\S]*?<\/Option>/g, '').trim()
+    }
+  }
 
-  return { attrs, options }
+  // Choice questions require at least one option; non-choice types do not.
+  if (isChoice && options.length === 0) return null
+
+  return { attrs, options, prompt }
 }

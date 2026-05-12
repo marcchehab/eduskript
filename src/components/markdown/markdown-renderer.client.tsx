@@ -7,6 +7,7 @@ import { createSkriptFiles, createEmptySkriptFiles, type SkriptFilesData } from 
 import type { VideoInfo } from '@/lib/skript-files'
 import { EagerImageLoader } from './eager-image-loader'
 import { MarkdownErrorBoundary } from './markdown-error-boundary'
+import { SurveyProvider } from './survey-provider'
 
 interface MarkdownRendererProps {
   content: string
@@ -197,6 +198,16 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
     }
   }, [renderedContent])
 
+  // Mount the SurveyProvider only when the markdown actually contains a
+  // <Survey> region. Cheap source-level regex; matches both <survey> (post-
+  // remarkSurvey lowercase) and <Survey> (pre-render) so live editing during
+  // authoring still toggles the provider on. Declared here above the early
+  // returns to keep hook ordering stable.
+  const hasSurvey = useMemo(
+    () => /<survey[\s>]/i.test(deferredContent),
+    [deferredContent]
+  )
+
   if (isInitialLoad && !renderedContent) {
     return (
       <div className="markdown-content prose dark:prose-invert max-w-none">
@@ -218,10 +229,14 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
     )
   }
 
+  const inner = <MarkdownErrorBoundary>{renderedContent}</MarkdownErrorBoundary>
+
   return (
     <EagerImageLoader>
       <div className="markdown-content prose dark:prose-invert max-w-none">
-        <MarkdownErrorBoundary>{renderedContent}</MarkdownErrorBoundary>
+        {hasSurvey && pageId
+          ? <SurveyProvider pageId={pageId}>{inner}</SurveyProvider>
+          : inner}
       </div>
     </EagerImageLoader>
   )

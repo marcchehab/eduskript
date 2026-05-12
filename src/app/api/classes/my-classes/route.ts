@@ -45,10 +45,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ hasPendingInvitations: !!hasInvitations })
     }
 
-    // Get all classes the student is enrolled in
+    // Get all classes the student is enrolled in (exclude implicit survey
+    // pseudo-classes — they're not real student-facing classes)
     const memberships = await prisma.classMembership.findMany({
       where: {
-        studentId: session.user.id
+        studentId: session.user.id,
+        class: { isImplicit: false }
       },
       include: {
         class: {
@@ -76,7 +78,8 @@ export async function GET(request: NextRequest) {
     const joinRequests = user.studentPseudonym
       ? await prisma.preAuthorizedStudent.findMany({
           where: {
-            pseudonym: user.studentPseudonym
+            pseudonym: user.studentPseudonym,
+            class: { isImplicit: false }
           },
           include: {
             class: {
@@ -112,7 +115,9 @@ export async function GET(request: NextRequest) {
         id: m.class.id,
         name: m.class.name,
         description: m.class.description,
-        teacherName: m.class.teacher.name,
+        // Implicit-class filter above means teacher should always be present;
+        // fallback kept for type-safety since teacherId is nullable in schema.
+        teacherName: m.class.teacher?.name ?? '',
         memberCount: m.class._count.memberships,
         joinedAt: m.joinedAt,
       })),
@@ -121,7 +126,7 @@ export async function GET(request: NextRequest) {
         classId: req.classId,
         className: req.class.name,
         classDescription: req.class.description,
-        teacherName: req.class.teacher.name,
+        teacherName: req.class.teacher?.name ?? '',
         inviteCode: req.class.inviteCode,
         allowAnonymous: req.class.allowAnonymous,
         addedAt: req.addedAt

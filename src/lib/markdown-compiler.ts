@@ -75,6 +75,7 @@ export const sanitizeSchema = {
     'question',
     'quiz-option',
     'answer',
+    'survey', // <Survey> region marker — wraps <Question>s for anonymous-submission flow
     'mermaid-diagram',
     'stickme',
     'demoeditor',

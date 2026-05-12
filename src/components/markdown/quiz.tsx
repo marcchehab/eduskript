@@ -1,12 +1,13 @@
 "use client"
 
-import { useState, ReactNode, ReactElement, Children } from 'react'
+import { useState, useEffect, useRef, ReactNode, ReactElement, Children } from 'react'
 import { useSyncedUserData } from '@/lib/userdata'
 import type { QuizData } from '@/lib/userdata/types'
 import { cn } from '@/lib/utils'
 import { Check, X } from 'lucide-react'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
 import { QuizProgressBar } from './quiz-progress-bar'
+import { useSurvey, type SurveyContextValue, type SurveyAnswerType } from './survey-provider'
 
 interface QuestionProps {
   children: ReactNode
@@ -29,21 +30,34 @@ interface OptionProps {
 // Parse correct prop to boolean
 const isCorrect = (value: 'true' | 'false' | undefined): boolean => value === 'true'
 
-// Inner component that renders after data is loaded
+// Inner component that renders after data is loaded.
+//
+// surveyMode: when true, hides per-question submit button + saved indicator,
+// and auto-fires updateData on every state change instead of only on submit
+// click. The page-level SurveyProvider's "Senden" button is the only submit
+// path in survey mode. isSubmitted stays false throughout, which means
+// correct/wrong feedback never renders either.
 function QuestionInner({
   children,
   type = 'multiple',
-  showFeedback = true,
-  allowUpdate = false,
+  showFeedback: showFeedbackProp = true,
+  allowUpdate: allowUpdateProp = false,
   minValue = 0,
   maxValue = 100,
   step = 1,
   initialData,
-  updateData
+  updateData,
+  surveyMode = false,
 }: Omit<QuestionProps, 'id' | 'pageId'> & {
   initialData: QuizData | null
   updateData: (data: QuizData, options?: { immediate?: boolean }) => Promise<void>
+  surveyMode?: boolean
 }) {
+  // In survey mode, surveys have no correct/wrong answers and respondents
+  // should be free to revise per-question before the overall Senden. The
+  // author's explicit attributes are overridden — survey semantics win.
+  const showFeedback = surveyMode ? false : showFeedbackProp
+  const allowUpdate = surveyMode ? true : allowUpdateProp
   // Initialize state from saved data
   const [selected, setSelected] = useState<number[]>(initialData?.selected ?? [])
   const [textAnswer, setTextAnswer] = useState(initialData?.textAnswer ?? '')
@@ -52,6 +66,11 @@ function QuestionInner({
     initialData?.rangeAnswer ?? { min: minValue, max: maxValue }
   )
   const [isSubmitted, setIsSubmitted] = useState(initialData?.isSubmitted ?? false)
+  // Snapshot of the data at the last Save click. Drives the "Update" button's
+  // grey-when-unchanged state — once you click Save, editing anything makes
+  // Update active again. Compared by value (not reference).
+  const [lastSaved, setLastSaved] = useState<QuizData | null>(initialData?.isSubmitted ? initialData : null)
+
 
   // Handle selection for choice questions
   const handleSelect = (index: number) => {
@@ -118,14 +137,37 @@ function QuestionInner({
       ...(type === 'range' ? { rangeAnswer } : {})
     }
 
+    setLastSaved(quizData)
     await updateData(quizData, { immediate: true })
   }
 
-  const isButtonDisabled =
+  // True when the current widget state matches the last Save — Update is
+  // pointless. Disables the Update button until the user actually edits.
+  const isUnchangedSinceSave = (() => {
+    if (!isSubmitted || !lastSaved) return false
+    if (type === 'single' || type === 'multiple') {
+      const a = selected, b = lastSaved.selected ?? []
+      if (a.length !== b.length) return false
+      const sortedA = [...a].sort()
+      const sortedB = [...b].sort()
+      return sortedA.every((v, i) => v === sortedB[i])
+    }
+    if (type === 'text') return textAnswer === (lastSaved.textAnswer ?? '')
+    if (type === 'number') return numberAnswer === lastSaved.numberAnswer
+    if (type === 'range') {
+      const r = lastSaved.rangeAnswer
+      return !!r && r.min === rangeAnswer.min && r.max === rangeAnswer.max
+    }
+    return false
+  })()
+
+  const isEmptyAnswer =
     ((type === 'single' || type === 'multiple') && selected.length === 0) ||
     (type === 'text' && !textAnswer.trim()) ||
     (type === 'number' && numberAnswer === undefined) ||
     (type === 'range' && rangeAnswer === undefined)
+
+  const isButtonDisabled = isEmptyAnswer || isUnchangedSinceSave
 
   return (
     <div className="space-y-4 border rounded-lg p-4 shadow-sm bg-card">
@@ -206,6 +248,10 @@ function QuestionInner({
       {/* Text Question */}
       {type === 'text' && (
         <div className="space-y-2">
+          {/* Prompt above the textarea — reads as a question label */}
+          <div className="text-muted-foreground text-sm">
+            {children}
+          </div>
           <textarea
             value={textAnswer}
             onChange={handleTextChange}
@@ -216,9 +262,6 @@ function QuestionInner({
             )}
             placeholder="Enter your answer..."
           />
-          <div className="text-muted-foreground text-sm">
-            {children}
-          </div>
         </div>
       )}
 
@@ -334,7 +377,10 @@ function QuestionInner({
         </div>
       )}
 
-      {/* Submit Button */}
+      {/* Submit Button + Saved indicator — survey mode reuses the same UX
+          (explicit per-question save). Survey provider intercepts the
+          updateData call to capture the answer instead of syncing it to
+          per-user storage. */}
       <div className="flex items-center justify-between pt-2">
         {(!isSubmitted || allowUpdate) && (
           <button
@@ -348,11 +394,10 @@ function QuestionInner({
                 : 'hover:bg-primary/90'
             )}
           >
-            {isSubmitted && allowUpdate ? 'Update' : 'Submit'}
+            {isSubmitted && allowUpdate ? 'Update' : (surveyMode ? 'Save' : 'Submit')}
           </button>
         )}
 
-        {/* Status indicator */}
         {isSubmitted && (
           <div className="text-sm text-muted-foreground flex items-center gap-1.5">
             <Check className="w-4 h-4 text-green-500" />
@@ -391,8 +436,127 @@ function extractOptionsInfo(children: ReactNode, type: 'single' | 'multiple' | '
   return { correctIndices, optionLabels }
 }
 
-// Wrapper component that handles data loading
-function Question({
+// Router: branch on whether we're inside a <Survey> region. The two leaf
+// components have disjoint hook usage (SyncedQuestion calls useSyncedUserData,
+// SurveyQuestion doesn't), so this lifts the conditional out cleanly above
+// the hook boundary instead of trying to gate hooks per render.
+function Question(props: QuestionProps) {
+  const survey = useSurvey()
+  if (survey) {
+    return <SurveyQuestion {...props} survey={survey} />
+  }
+  return <SyncedQuestion {...props} />
+}
+
+// Survey-mode variant. Uses the same useSyncedUserData path as classroom
+// questions (with localOnly:true so it never syncs to server) — refresh
+// persists per-question Save state for both anonymous visitors (userId
+// 'anonymous') and logged-in authors (their userId). The page-level
+// SurveyProvider holds an in-memory mirror via registerAnswer so the Send
+// button knows which answers exist and can POST them as one batch.
+//
+// When the viewer is the page author, the existing QuizProgressBar is
+// rendered below using the implicit class id resolved by the provider —
+// author sees per-question response visibility without picking a class
+// from the toolbar (implicit classes are hidden from there).
+function SurveyQuestion({
+  children,
+  id,
+  pageId,
+  type = 'multiple',
+  survey,
+  ...rest
+}: QuestionProps & { survey: SurveyContextValue }) {
+  const componentId = `quiz-${id}`
+  const { correctIndices, optionLabels } = extractOptionsInfo(children, type)
+
+  // Same hook path as classroom Question, just with localOnly so the
+  // sync engine never pushes this record to the server. Per-question
+  // refresh persistence is therefore handled by the shared IndexedDB
+  // layer, not parallel localStorage.
+  const { data, updateData, isLoading } = useSyncedUserData<QuizData>(
+    pageId,
+    componentId,
+    null,
+    { localOnly: true }
+  )
+
+  // Adapter: extract the answer value from a QuizData record so the provider
+  // can compute the dirty/clean signature without caring about widget shape.
+  const valueFromQuizData = (qd: QuizData): unknown => {
+    if (type === 'single' || type === 'multiple') return qd.selected
+    if (type === 'text') return qd.textAnswer
+    if (type === 'number') return qd.numberAnswer
+    if (type === 'range') return qd.rangeAnswer
+    return null
+  }
+
+  // Wrap updateData so every per-question Save also notifies the provider's
+  // in-memory mirror (Send button's counter + POST payload depends on it).
+  const updateDataAndNotify = async (qd: QuizData, opts?: { immediate?: boolean }) => {
+    await updateData(qd, opts)
+    survey.registerAnswer(id, type as SurveyAnswerType, valueFromQuizData(qd))
+  }
+
+  // Hydration sync: when useSyncedUserData finishes loading, register the
+  // restored value with the provider exactly once. Without this, the Send
+  // button's counter and POST payload would be empty after refresh even
+  // though the questions visibly show their persisted state.
+  const hydratedRef = useRef(false)
+  useEffect(() => {
+    if (isLoading) return
+    if (hydratedRef.current) return
+    hydratedRef.current = true
+    if (data?.isSubmitted) {
+      survey.registerAnswer(id, type as SurveyAnswerType, valueFromQuizData(data))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading, data])
+
+  if (isLoading) {
+    return (
+      <div className="border rounded-lg p-4 animate-pulse">
+        <div className="h-4 bg-muted rounded w-3/4 mb-4" />
+        <div className="space-y-2">
+          <div className="h-12 bg-muted rounded" />
+          <div className="h-12 bg-muted rounded" />
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <QuestionInner
+        {...rest}
+        type={type}
+        initialData={data}
+        updateData={updateDataAndNotify}
+        surveyMode={true}
+      >
+        {children}
+      </QuestionInner>
+
+      {survey.isAuthor && survey.implicitClassId && survey.responseCount > 0 && (
+        <QuizProgressBar
+          classId={survey.implicitClassId}
+          className="Responses"
+          pageId={pageId}
+          componentId={componentId}
+          questionType={type}
+          correctIndices={correctIndices}
+          options={optionLabels}
+          minValue={rest.minValue}
+          maxValue={rest.maxValue}
+        />
+      )}
+    </>
+  )
+}
+
+// Classroom-mode (default) variant. Syncs answers per-user via the existing
+// userdata hook and renders the teacher's progress-bar view when applicable.
+function SyncedQuestion({
   children,
   id,
   pageId,

@@ -6,6 +6,7 @@ import { extractStableLinkIds } from '@/lib/page-stable-link'
 import { resolveStableLinks } from '@/lib/page-stable-link.server'
 import { EagerImageLoader } from './eager-image-loader'
 import { MarkdownErrorBoundary } from './markdown-error-boundary'
+import { SurveyProvider } from './survey-provider'
 
 interface ServerMarkdownRendererProps {
   content: string
@@ -61,10 +62,20 @@ export async function ServerMarkdownRenderer({ content, skriptId, pageId, organi
     )
   }
 
+  // Mount the SurveyProvider only when the page contains a <Survey> region.
+  // Case-insensitive regex so we catch the source-level <Survey> before
+  // remarkSurvey lowercases it. Provider is a 'use client' component so
+  // its useState/useSession/etc. run in the browser; server just declares
+  // it in the tree.
+  const hasSurvey = pageId && /<survey[\s>]/i.test(content)
+  const body = <MarkdownErrorBoundary>{rendered}</MarkdownErrorBoundary>
+
   return (
     <EagerImageLoader>
       <div className="markdown-content prose dark:prose-invert max-w-none">
-        <MarkdownErrorBoundary>{rendered}</MarkdownErrorBoundary>
+        {hasSurvey && pageId
+          ? <SurveyProvider pageId={pageId}>{body}</SurveyProvider>
+          : body}
       </div>
     </EagerImageLoader>
   )

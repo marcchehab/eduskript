@@ -356,6 +356,10 @@ model Page {
   // Server-side checkpoints captured at manual save / Check / hand-in
   userDataCheckpoints UserDataCheckpoint[] @relation("PageCheckpoints")
 
+  // Implicit survey class (if this page has a <Survey>, an anonymous-allowed
+  // class is auto-created on first response submission and bound here).
+  implicitSurveyClass Class? @relation("ImplicitSurveyClass")
+
   @@unique([skriptId, slug])
   @@map("pages")
 }
@@ -575,20 +579,27 @@ model StudentSubmission {
   @@map("student_submissions")
 }
 
-// Class model - teacher-owned groups of students
+// Class model - teacher-owned groups of students.
+// Implicit classes (isImplicit=true) are auto-created per survey-page to enumerate
+// anonymous respondents; they have no teacher (teacherId is null) and are bound to
+// a specific page via implicitPageId. Auth for viewing their data routes through
+// PageAuthor inheritance (checkPagePermissions), not class ownership.
 model Class {
   id             String   @id @default(cuid())
   name           String
   description    String?
-  teacherId      String   @map("teacher_id")
+  teacherId      String?  @map("teacher_id") // Nullable: implicit survey classes have no owner
   inviteCode     String   @unique @map("invite_code")
   isActive       Boolean  @default(true) @map("is_active")
   allowAnonymous Boolean  @default(false) @map("allow_anonymous")
+  isImplicit     Boolean  @default(false) @map("is_implicit") // True for auto-generated survey/pseudo classes
+  implicitPageId String?  @unique @map("implicit_page_id") // For isImplicit=true: the page this class is bound to
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
   // Relations
-  teacher               User                   @relation("TeacherClasses", fields: [teacherId], references: [id], onDelete: Cascade)
+  teacher               User?                  @relation("TeacherClasses", fields: [teacherId], references: [id], onDelete: Cascade)
+  implicitPage          Page?                  @relation("ImplicitSurveyClass", fields: [implicitPageId], references: [id], onDelete: Cascade)
   memberships           ClassMembership[]
   preAuthorizedStudents PreAuthorizedStudent[]
   pageUnlocks           PageUnlock[]           @relation("ClassUnlocks") // Pages unlocked for this class
@@ -596,6 +607,7 @@ model Class {
 
   @@index([teacherId])
   @@index([inviteCode])
+  @@index([isImplicit])
   @@map("classes")
 }
 

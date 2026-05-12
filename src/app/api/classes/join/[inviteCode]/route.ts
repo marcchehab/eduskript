@@ -85,6 +85,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       )
     }
 
+    // Implicit (e.g. survey pseudo-) classes have no real teacher and aren't
+    // joinable via invite code — they accept anonymous submissions through
+    // their own endpoint, not this one.
+    if (classRecord.isImplicit || !classRecord.teacher) {
+      return NextResponse.json(
+        { error: 'Invalid invite code' },
+        { status: 404 }
+      )
+    }
+
     // Check if already a member
     const existingMembership = await prisma.classMembership.findUnique({
       where: {
@@ -225,6 +235,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json(
         { error: 'This class is no longer active' },
         { status: 403 }
+      )
+    }
+
+    // Implicit classes (e.g. survey pseudo-classes) are not joinable.
+    if (classRecord.isImplicit || !classRecord.teacher) {
+      return NextResponse.json(
+        { error: 'Invalid invite code' },
+        { status: 404 }
       )
     }
 

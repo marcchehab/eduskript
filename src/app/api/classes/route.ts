@@ -31,11 +31,14 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const pageId = searchParams.get('pageId')
 
-    // Get all classes for this teacher with member counts
+    // Get all classes for this teacher with member counts. Implicit
+    // (survey pseudo-) classes are hidden — they belong on a teacher's
+    // survey results UI, not in the regular class list.
     const classes = await prisma.class.findMany({
       where: {
         teacherId: session.user.id,
-        isActive: true
+        isActive: true,
+        isImplicit: false
       },
       include: {
         _count: {

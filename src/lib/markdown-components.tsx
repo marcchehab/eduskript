@@ -17,6 +17,7 @@ import { MuxVideo } from '@/components/markdown/mux-video'
 import { ExcalidrawImage } from '@/components/markdown/excalidraw-image'
 import { ContentImage } from '@/components/markdown/content-image'
 import { Question, Option } from '@/components/markdown/quiz'
+import { Survey } from '@/components/markdown/survey'
 import { Callout } from '@/components/markdown/callout'
 import { CodeBlock } from '@/components/markdown/code-block'
 import { OurTeachers } from '@/components/markdown/our-teachers'
@@ -594,6 +595,7 @@ export function createMarkdownComponents(
     'question': QuizQuestionComponent,
     'quiz-option': QuizOptionComponent,
     'answer': QuizOptionComponent,
+    'survey': Survey,
     'stickme': StickMe,
     // <excali> component - shorthand for excalidraw drawings
     // Usage: <excali src="my-drawing" /> (no .excalidraw extension needed)
