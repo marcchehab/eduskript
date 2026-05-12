@@ -48,7 +48,11 @@ export default async function SkriptPage({ params }: SkriptPageProps) {
     redirect(`/dashboard/skripts/${skriptSlug}/pages/${skript.pages[0].slug}/edit`)
   }
 
-  // No pages exist — create a default page and redirect to it
+  // No pages exist — create a default page and redirect to it.
+  // The page-authors row is required: every other code path that loads a
+  // page for edit (loadPageForActor in src/lib/services/pages.ts) filters
+  // by `authors: { some: { userId } }`. Without it the creator can't even
+  // save the page they just landed on.
   const defaultPage = await prisma.page.create({
     data: {
       title: 'Introduction',
@@ -57,6 +61,9 @@ export default async function SkriptPage({ params }: SkriptPageProps) {
       isPublished: true,
       skriptId: skript.id,
       order: 0,
+      authors: {
+        create: { userId: session.user.id, permission: 'author' },
+      },
     }
   })
 
