@@ -11,6 +11,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
 import { useExamRoster, type ExamRosterStudent } from '@/hooks/use-exam-roster'
@@ -97,7 +98,13 @@ export function StudentNavigator({ pageId }: StudentNavigatorProps) {
     ? `${currentIndex + 1} / ${ordered.length}`
     : `— / ${ordered.length}`
 
-  return (
+  // Portal to document.body so `position: fixed` is anchored to the viewport
+  // and isn't trapped by an ancestor with `transform` (AnnotationLayer puts
+  // a transform on <main> while page-zoom is non-1, which would otherwise
+  // pin the arrows to the transformed content instead of the viewport).
+  if (typeof document === 'undefined') return null
+
+  return createPortal(
     <>
       <button
         type="button"
@@ -122,6 +129,7 @@ export function StudentNavigator({ pageId }: StudentNavigatorProps) {
       <div className="fixed right-2 top-[calc(50%+44px)] z-40 px-2 py-0.5 rounded-md bg-card/90 border border-border shadow-sm text-[11px] text-muted-foreground backdrop-blur-sm">
         {positionText}
       </div>
-    </>
+    </>,
+    document.body
   )
 }

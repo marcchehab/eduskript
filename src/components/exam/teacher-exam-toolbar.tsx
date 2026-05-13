@@ -231,7 +231,11 @@ export function TeacherExamToolbar({
   }
 
   return (
-    <div className="bg-card border border-border rounded-lg mb-4 shadow-sm overflow-hidden">
+    // Sticky to the top of #scroll-container so the class picker + state
+    // controls stay reachable while the teacher scrolls through the exam.
+    // `top-0` pins it flush; bumping z-index above the annotation overlay
+    // (z-10) and code-editor floats (z-10) but below modals (z-50+).
+    <div className="sticky top-0 z-30 bg-card border border-border rounded-lg mb-4 shadow-sm overflow-hidden">
       {/* Main toolbar bar */}
       <div className="p-3">
         <div className="flex flex-wrap items-center gap-3">
