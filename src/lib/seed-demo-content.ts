@@ -45,10 +45,6 @@ function slugSuffix(userId: string): string {
   return userId.slice(-8)
 }
 
-function collectionSlug(userId: string): string {
-  return `demo-getting-started-${slugSuffix(userId)}`
-}
-
 function skriptSlug(userId: string): string {
   return `demo-welcome-${slugSuffix(userId)}`
 }
@@ -123,9 +119,14 @@ async function deleteDemoContent(prisma: PrismaLike, userId: string): Promise<vo
     await prisma.skript.delete({ where: { id: skript.id } })
   }
 
-  // Find and delete demo collections (cascades to collectionAuthors, collectionSkripts)
+  // Find and delete demo collections (cascades to collectionAuthors, collectionSkripts).
+  // Match by title since slug is no longer a Collection field — `reset` is a
+  // best-effort cleanup keyed on the seeded title.
   const collections = await prisma.collection.findMany({
-    where: { slug: { startsWith: `demo-getting-started-${suffix}` } },
+    where: {
+      title: COLLECTION_TITLE,
+      authors: { some: { userId } }
+    },
     select: { id: true }
   })
   for (const collection of collections) {
@@ -146,13 +147,11 @@ export async function seedDemoContent(options: SeedDemoContentOptions): Promise<
 
   const skriptMeta = readSkriptMeta()
   const pages = readDemoPages()
-  const suffix = slugSuffix(userId)
 
   // Create collection
   const collection = await prisma.collection.create({
     data: {
       title: COLLECTION_TITLE,
-      slug: collectionSlug(userId),
       description: COLLECTION_DESCRIPTION,
       authors: {
         create: { userId, permission: 'author' },

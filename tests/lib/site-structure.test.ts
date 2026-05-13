@@ -31,13 +31,12 @@ describe('Site Structure Utilities', () => {
   const createCollection = (
     id: string,
     title: string,
-    slug: string,
+    _slug: string,
     collectionSkripts: ReturnType<typeof createCollectionSkript>[],
     options?: { accentColor?: string }
   ) => ({
     id,
     title,
-    slug,
     accentColor: options?.accentColor ?? null,
     collectionSkripts,
   })
@@ -60,7 +59,7 @@ describe('Site Structure Utilities', () => {
 
         expect(result).toHaveLength(1)
         expect(result[0].title).toBe('Algebra')
-        expect(result[0].slug).toBe('algebra')
+        expect(result[0].id).toBe('col-1')
         expect(result[0].skripts).toHaveLength(1)
         expect(result[0].skripts[0].title).toBe('Linear Equations')
         expect(result[0].skripts[0].pages).toHaveLength(2)

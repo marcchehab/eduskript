@@ -11,7 +11,7 @@ import { getCollectionForUser } from '@/lib/services/collections'
 export const readCollectionConfig = {
   title: 'Read collection',
   description:
-    'Read a single Eduskript collection by ID. Returns metadata (title, slug, description, accentColor) and the skripts contained in the collection.',
+    'Read a single Eduskript collection by ID. Returns metadata (title, description, accentColor) and the skripts contained in the collection.',
   inputSchema: {
     collectionId: z.string().min(1).describe('The Eduskript collection ID (cuid).'),
   },
@@ -32,7 +32,6 @@ export async function readCollection(args: { collectionId: string }) {
           {
             id: collection.id,
             title: collection.title,
-            slug: collection.slug,
             description: collection.description,
             accentColor: collection.accentColor,
             updatedAt: collection.updatedAt,

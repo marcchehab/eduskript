@@ -558,9 +558,9 @@ export async function POST(request: NextRequest) {
                   slug: true,
                   collectionSkripts: {
                     select: {
+                      collectionId: true,
                       collection: {
                         select: {
-                          slug: true,
                           authors: {
                             select: {
                               user: {
@@ -594,10 +594,9 @@ export async function POST(request: NextRequest) {
             }
 
             // Also check if page is accessible via any organization
-            // Get collection IDs from the skript
             const collectionIds = page.skript.collectionSkripts
-              .filter(cs => cs.collection)
-              .map(cs => cs.collection!.slug)
+              .map(cs => cs.collectionId)
+              .filter((id): id is string => Boolean(id))
 
             if (collectionIds.length > 0) {
               const orgLayouts = await prisma.orgPageLayout.findMany({
@@ -617,11 +616,8 @@ export async function POST(request: NextRequest) {
               })
 
               for (const orgLayout of orgLayouts) {
-                // Invalidate org page paths for all collections
-                for (const cs of page.skript.collectionSkripts) {
-                  if (!cs.collection) continue
-                  revalidatePath(`/org/${orgLayout.organization.slug}/c/${cs.collection.slug}/${skriptSlug}/${contentPageSlug}`)
-                }
+                // Org content routes are skript-only: /org/{orgSlug}/c/{skriptSlug}/{pageSlug}
+                revalidatePath(`/org/${orgLayout.organization.slug}/c/${skriptSlug}/${contentPageSlug}`)
               }
             }
             continue // Handled as regular page, skip front page check
@@ -643,7 +639,6 @@ export async function POST(request: NextRequest) {
                     select: {
                       collection: {
                         select: {
-                          slug: true,
                           authors: {
                             select: {
                               user: { select: { pageSlug: true } }
@@ -697,10 +692,7 @@ export async function POST(request: NextRequest) {
               })
 
               for (const orgLayout of orgLayouts) {
-                for (const cs of frontPage.skript.collectionSkripts) {
-                  if (!cs.collection) continue
-                  revalidatePath(`/org/${orgLayout.organization.slug}/c/${cs.collection.slug}/${skriptSlug}`)
-                }
+                revalidatePath(`/org/${orgLayout.organization.slug}/c/${skriptSlug}`)
               }
             }
           }

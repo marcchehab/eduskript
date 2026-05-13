@@ -2,12 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { generateSlug, isReservedSlug } from '@/lib/markdown'
 
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-    
+
     if (!session?.user?.id) {
       return NextResponse.json(
         { error: 'Unauthorized' },
@@ -15,45 +14,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { title, description, slug } = await request.json()
+    const { title, description } = await request.json()
 
-    // Validate input
-    if (!title || !slug) {
+    if (!title || !title.trim()) {
       return NextResponse.json(
-        { error: 'Title and slug are required' },
+        { error: 'Title is required' },
         { status: 400 }
-      )
-    }
-
-    // Normalize slug
-    const normalizedSlug = generateSlug(slug)
-
-    // Check for reserved slugs that conflict with system routes
-    if (isReservedSlug(normalizedSlug)) {
-      return NextResponse.json(
-        { error: `The slug "${normalizedSlug}" is reserved and cannot be used` },
-        { status: 400 }
-      )
-    }
-
-    // Check slug uniqueness scoped to this user's collections
-    const existingCollection = await prisma.collection.findFirst({
-      where: { slug: normalizedSlug, authors: { some: { userId: session.user.id } } }
-    })
-
-    if (existingCollection) {
-      return NextResponse.json(
-        { error: `You already have a collection with the slug "${normalizedSlug}"` },
-        { status: 409 }
       )
     }
 
     // Create collection with the current user as the first author
     const collection = await prisma.collection.create({
       data: {
-        title,
+        title: title.trim(),
         description: description || null,
-        slug: normalizedSlug,
         authors: {
           create: {
             userId: session.user.id,

@@ -25,7 +25,6 @@ interface SkriptWithAuthors extends Skript {
   authors: (SkriptAuthor & { user: Pick<User, 'id' | 'name' | 'email'> })[]
   collectionSkripts: Array<{
     collection: {
-      slug: string
       authors: (CollectionAuthor & { user: Pick<User, 'id' | 'name' | 'email'> })[]
     }
   }>
@@ -173,7 +172,6 @@ export function ContentLibrary({ onDataLoad, refreshTrigger, context = { type: '
                         currentUserId={session.user.id}
                         isViewOnly={false}
                         index={index}
-                        slug={collection.slug}
                       />
                     )
                   })}

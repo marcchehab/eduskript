@@ -8,7 +8,7 @@
  *
  * Side effects on update (mirrors the original PATCH at src/app/api/pages/[id]/route.ts):
  *   - PageVersion.create when content changes
- *   - 4 static revalidateTag (pageBySlug, skriptBySlug, collectionBySlug, teacherContent)
+ *   - 3 static revalidateTag (pageBySlug, skriptBySlug, teacherContent)
  *   - 1 revalidateTag(orgContent) per org membership
  *   - 2 revalidatePath (public page route, /dashboard)
  *   - All gated on the author having a pageSlug — null pageSlug = no revalidation
@@ -378,13 +378,6 @@ export async function updatePageForUser(
       { expire: 0 }
     )
 
-    const collectionSlug = existingPage.skript.collectionSkripts[0]?.collection?.slug
-    if (collectionSlug) {
-      revalidateTag(CACHE_TAGS.collectionBySlug(user.pageSlug, collectionSlug), {
-        expire: 0,
-      })
-    }
-
     revalidatePath(
       `/${user.pageSlug}/${existingPage.skript.slug}/${updatedPage.slug}`
     )
@@ -562,12 +555,6 @@ export async function restorePageVersionForUser(
       CACHE_TAGS.skriptBySlug(user.pageSlug, existingPage.skript.slug),
       { expire: 0 },
     )
-    const collectionSlug = existingPage.skript.collectionSkripts[0]?.collection?.slug
-    if (collectionSlug) {
-      revalidateTag(CACHE_TAGS.collectionBySlug(user.pageSlug, collectionSlug), {
-        expire: 0,
-      })
-    }
     revalidatePath(
       `/${user.pageSlug}/${existingPage.skript.slug}/${updatedPage.slug}`,
     )

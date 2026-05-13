@@ -44,7 +44,6 @@ describe('Collections API', () => {
   const mockCollection = {
     id: 'col-123',
     title: 'Test Collection',
-    slug: 'test-collection',
     description: 'A test collection',
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -78,7 +77,7 @@ describe('Collections API', () => {
       it('should return 401 when not authenticated', async () => {
         vi.mocked(getServerSession).mockResolvedValue(null)
 
-        const request = createRequest({ title: 'Test', slug: 'test' })
+        const request = createRequest({ title: 'Test' })
         const response = await POST(request)
 
         expect(response.status).toBe(401)
@@ -92,7 +91,7 @@ describe('Collections API', () => {
           user: { ...mockSession.user, id: undefined as any },
         })
 
-        const request = createRequest({ title: 'Test', slug: 'test' })
+        const request = createRequest({ title: 'Test' })
         const response = await POST(request)
 
         expect(response.status).toBe(401)
@@ -105,91 +104,27 @@ describe('Collections API', () => {
       })
 
       it('should return 400 when title is missing', async () => {
-        const request = createRequest({ slug: 'test' })
+        const request = createRequest({})
         const response = await POST(request)
 
         expect(response.status).toBe(400)
         const data = await response.json()
-        expect(data.error).toBe('Title and slug are required')
+        expect(data.error).toBe('Title is required')
       })
 
-      it('should return 400 when slug is missing', async () => {
-        const request = createRequest({ title: 'Test' })
+      it('should return 400 when title is an empty string', async () => {
+        const request = createRequest({ title: '   ' })
         const response = await POST(request)
 
         expect(response.status).toBe(400)
         const data = await response.json()
-        expect(data.error).toBe('Title and slug are required')
-      })
-
-      it('should return 400 for reserved slugs', async () => {
-        const request = createRequest({ title: 'Dashboard', slug: 'dashboard' })
-        const response = await POST(request)
-
-        expect(response.status).toBe(400)
-        const data = await response.json()
-        expect(data.error).toContain('reserved')
-      })
-
-      it('should return 400 for "api" reserved slug', async () => {
-        const request = createRequest({ title: 'API', slug: 'api' })
-        const response = await POST(request)
-
-        expect(response.status).toBe(400)
-        const data = await response.json()
-        expect(data.error).toContain('reserved')
-      })
-
-      it('should return 400 for "test" reserved slug', async () => {
-        const request = createRequest({ title: 'Test', slug: 'test' })
-        const response = await POST(request)
-
-        expect(response.status).toBe(400)
-        const data = await response.json()
-        expect(data.error).toContain('reserved')
-      })
-    })
-
-    describe('Slug Conflicts', () => {
-      beforeEach(() => {
-        vi.mocked(getServerSession).mockResolvedValue(mockSession)
-      })
-
-      it('should return 409 when slug already exists', async () => {
-        vi.mocked(prisma.collection.findFirst).mockResolvedValue(mockCollection)
-
-        const request = createRequest({
-          title: 'Another Collection',
-          slug: 'test-collection',
-        })
-        const response = await POST(request)
-
-        expect(response.status).toBe(409)
-        const data = await response.json()
-        expect(data.error).toContain('already have a collection')
-      })
-
-      it('should normalize slug before checking for conflicts', async () => {
-        vi.mocked(prisma.collection.findFirst).mockResolvedValue(null)
-        vi.mocked(prisma.collection.create).mockResolvedValue(mockCollection)
-
-        const request = createRequest({
-          title: 'Test',
-          slug: 'Test Collection!',
-        })
-        await POST(request)
-
-        // Should check with normalized slug scoped to user
-        expect(prisma.collection.findFirst).toHaveBeenCalledWith({
-          where: { slug: 'test-collection', authors: { some: { userId: 'user-123' } } },
-        })
+        expect(data.error).toBe('Title is required')
       })
     })
 
     describe('Successful Creation', () => {
       beforeEach(() => {
         vi.mocked(getServerSession).mockResolvedValue(mockSession)
-        vi.mocked(prisma.collection.findFirst).mockResolvedValue(null)
       })
 
       it('should create collection with user as author', async () => {
@@ -197,7 +132,6 @@ describe('Collections API', () => {
 
         const request = createRequest({
           title: 'New Collection',
-          slug: 'new-collection',
           description: 'A new collection',
         })
         const response = await POST(request)
@@ -207,7 +141,6 @@ describe('Collections API', () => {
           data: {
             title: 'New Collection',
             description: 'A new collection',
-            slug: 'new-collection',
             authors: {
               create: {
                 userId: 'user-123',
@@ -230,7 +163,6 @@ describe('Collections API', () => {
 
         const request = createRequest({
           title: 'New Collection',
-          slug: 'new-collection',
         })
         const response = await POST(request)
 
@@ -245,7 +177,6 @@ describe('Collections API', () => {
 
         const request = createRequest({
           title: 'New Collection',
-          slug: 'new-collection',
         })
         await POST(request)
 
@@ -262,13 +193,12 @@ describe('Collections API', () => {
     describe('Error Handling', () => {
       it('should return 500 on database error', async () => {
         vi.mocked(getServerSession).mockResolvedValue(mockSession)
-        vi.mocked(prisma.collection.findFirst).mockRejectedValue(
+        vi.mocked(prisma.collection.create).mockRejectedValue(
           new Error('Database error')
         )
 
         const request = createRequest({
           title: 'My Collection',
-          slug: 'my-collection',
         })
         const response = await POST(request)
 

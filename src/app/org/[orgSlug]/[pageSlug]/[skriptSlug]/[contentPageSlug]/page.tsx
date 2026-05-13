@@ -375,7 +375,6 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
     ? buildSiteStructure([{
         id: collection.id,
         title: collection.title,
-        slug: collection.slug,
         accentColor: collection.accentColor,
         collectionSkripts: [{
           order: collectionSkript?.order ?? 0,
@@ -391,7 +390,6 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
     : [{
         id: 'standalone',
         title: skript.title,
-        slug: skript.slug,
         skripts: [{
           id: skript.id,
           title: skript.title,

@@ -10,7 +10,6 @@ interface ExportManifest {
   version: number
   exportedAt: string
   collections: {
-    slug: string
     title: string
     description: string | null
     skripts: string[] // skript slugs
@@ -95,7 +94,7 @@ export async function GET(request: Request) {
 
     // Build manifest
     const manifest: ExportManifest = {
-      version: 1,
+      version: 2,
       exportedAt: new Date().toISOString(),
       collections: [],
       skripts: {}
@@ -162,7 +161,6 @@ export async function GET(request: Request) {
       }
 
       manifest.collections.push({
-        slug: collection.slug,
         title: collection.title,
         description: collection.description,
         skripts: collectionSkriptSlugs

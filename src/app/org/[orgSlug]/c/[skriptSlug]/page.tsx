@@ -173,7 +173,6 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
       ? buildSiteStructure([{
           id: collection.id,
           title: collection.title,
-          slug: collection.slug,
           accentColor: collection.accentColor,
           collectionSkripts: [{
             order: collectionSkript.order,
@@ -186,7 +185,6 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
       : [{
           id: 'standalone',
           title: skript.title,
-          slug: skript.slug,
           skripts: [{
             id: skript.id,
             title: skript.title,

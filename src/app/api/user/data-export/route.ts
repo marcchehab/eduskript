@@ -40,7 +40,6 @@ export async function GET(req: NextRequest) {
               select: {
                 id: true,
                 title: true,
-                slug: true,
                 createdAt: true,
               }
             }
@@ -156,7 +155,6 @@ export async function GET(req: NextRequest) {
       authoredCollections: userData.collectionAuthors.map(ca => ({
         collectionId: ca.collection.id,
         collectionTitle: ca.collection.title,
-        collectionSlug: ca.collection.slug,
         permission: ca.permission,
         since: ca.createdAt,
       })),

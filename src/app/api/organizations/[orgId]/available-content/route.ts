@@ -82,7 +82,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           include: {
             collection: {
               select: {
-                slug: true,
+                id: true,
                 authors: {
                   include: {
                     user: {

@@ -152,7 +152,6 @@ export default async function OrgPublicPage({ params }: PageProps) {
     ? buildSiteStructure([{
         id: collection.id,
         title: collection.title,
-        slug: collection.slug,
         accentColor: collection.accentColor,
         collectionSkripts: [{
           order: skript.order,
@@ -168,7 +167,6 @@ export default async function OrgPublicPage({ params }: PageProps) {
     : [{
         id: 'standalone',
         title: skript.title,
-        slug: skript.slug,
         skripts: [{
           id: skript.id,
           title: skript.title,

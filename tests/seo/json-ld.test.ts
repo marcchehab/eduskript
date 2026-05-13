@@ -99,7 +99,6 @@ vi.mock('@/lib/cached-queries', () => ({
   CACHE_TAGS: {
     user: () => 'user',
     collection: () => 'collection',
-    collectionBySlug: () => 'collectionBySlug',
     skript: () => 'skript',
     skriptBySlug: () => 'skriptBySlug',
     page: () => 'page',

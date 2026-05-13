@@ -67,7 +67,6 @@ export async function POST(request: Request) {
     const tutorialCollection = await prisma.collection.create({
       data: {
         title: 'Eduskript Tutorial',
-        slug: 'eduskript-tutorial',
         description: 'Learn how to use all of Eduskript\'s features',
         authors: {
           create: {

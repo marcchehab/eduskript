@@ -21,14 +21,12 @@ interface CollectionSettingsModalProps {
     id: string
     title: string
     description: string | null
-    slug: string
     accentColor?: string | null
   }
   onCollectionUpdated: (updatedCollection?: {
     id: string
     title: string
     description: string | null
-    slug: string
     accentColor?: string | null
   }) => void
 }
@@ -59,27 +57,8 @@ export function CollectionSettingsModal({ collection, onCollectionUpdated }: Col
   const [open, setOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [title, setTitle] = useState(collection.title)
-  const [slug, setSlug] = useState(collection.slug)
   const [description, setDescription] = useState(collection.description || '')
   const [accentColor, setAccentColor] = useState(collection.accentColor || '#6b7280')
-
-  const generateSlug = (title: string) => {
-    return title
-      .toLowerCase()
-      .replace(/[^\w\s-]/g, '')
-      .replace(/\s+/g, '-')
-      .replace(/-+/g, '-')
-      .trim()
-  }
-
-  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newTitle = e.target.value
-    setTitle(newTitle)
-    // Auto-generate slug from title if slug hasn't been manually edited
-    if (slug === generateSlug(collection.title) || slug === collection.slug) {
-      setSlug(generateSlug(newTitle))
-    }
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -93,7 +72,6 @@ export function CollectionSettingsModal({ collection, onCollectionUpdated }: Col
         },
         body: JSON.stringify({
           title: title.trim(),
-          slug: slug.trim(),
           description: description.trim() || null,
           accentColor: accentColor || null,
         }),
@@ -118,7 +96,6 @@ export function CollectionSettingsModal({ collection, onCollectionUpdated }: Col
     if (!newOpen) {
       // Reset form when closing
       setTitle(collection.title)
-      setSlug(collection.slug)
       setDescription(collection.description || '')
       setAccentColor(collection.accentColor || '#6b7280')
     }
@@ -147,25 +124,11 @@ export function CollectionSettingsModal({ collection, onCollectionUpdated }: Col
               <Input
                 id="title"
                 value={title}
-                onChange={handleTitleChange}
+                onChange={(e) => setTitle(e.target.value)}
                 placeholder="Enter collection title"
                 required
                 disabled={isLoading}
               />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="slug">URL Slug</Label>
-              <Input
-                id="slug"
-                value={slug}
-                onChange={(e) => setSlug(e.target.value)}
-                placeholder="url-friendly-name"
-                required
-                disabled={isLoading}
-              />
-              <p className="text-sm text-gray-500">
-                This will be used in the URL: /{slug || 'your-slug'}
-              </p>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="description">Description</Label>
@@ -220,7 +183,7 @@ export function CollectionSettingsModal({ collection, onCollectionUpdated }: Col
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isLoading || !title.trim() || !slug.trim()}>
+            <Button type="submit" disabled={isLoading || !title.trim()}>
               {isLoading ? 'Saving...' : 'Save Changes'}
             </Button>
           </DialogFooter>

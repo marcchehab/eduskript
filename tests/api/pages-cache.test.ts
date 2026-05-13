@@ -6,7 +6,7 @@
  * must remain green — it's the contract the service is expected to preserve.
  *
  * Side effects under test (PATCH content update):
- *   - 4 static revalidateTag: pageBySlug, skriptBySlug, collectionBySlug, teacherContent
+ *   - 3 static revalidateTag: pageBySlug, skriptBySlug, teacherContent
  *   - 1 per-org loop: revalidateTag(orgContent) for each OrganizationMember row
  *   - 2 revalidatePath: public page route + /dashboard
  *   - 1 PageVersion.create on content change (none on metadata-only)
@@ -119,7 +119,7 @@ describe('PATCH /api/pages/[id] — cache invalidation contract', () => {
     vi.mocked(prisma.organizationMember.findMany).mockResolvedValue([])
   })
 
-  it('fires the 4 static revalidateTag calls + 2 revalidatePath on content change', async () => {
+  it('fires the 3 static revalidateTag calls + 2 revalidatePath on content change', async () => {
     const response = await PATCH(buildPatchRequest({ content: '# New content' }), {
       params: Promise.resolve({ id: 'page-123' }),
     })
@@ -128,9 +128,8 @@ describe('PATCH /api/pages/[id] — cache invalidation contract', () => {
     const tagCalls = vi.mocked(revalidateTag).mock.calls.map((c) => c[0])
     expect(tagCalls).toContain('page:teacher:algebra-1:old-slug')
     expect(tagCalls).toContain('skript:teacher:algebra-1')
-    expect(tagCalls).toContain('collection:teacher:math')
     expect(tagCalls).toContain('teacher-content:teacher')
-    expect(tagCalls).toHaveLength(4)
+    expect(tagCalls).toHaveLength(3)
 
     const pathCalls = vi.mocked(revalidatePath).mock.calls.map((c) => c[0])
     expect(pathCalls).toEqual(['/teacher/algebra-1/old-slug', '/dashboard'])
@@ -149,7 +148,7 @@ describe('PATCH /api/pages/[id] — cache invalidation contract', () => {
     const tagCalls = vi.mocked(revalidateTag).mock.calls.map((c) => c[0])
     expect(tagCalls).toContain('org-content:school-a')
     expect(tagCalls).toContain('org-content:school-b')
-    expect(tagCalls).toHaveLength(6) // 4 static + 2 per-org
+    expect(tagCalls).toHaveLength(5) // 3 static + 2 per-org
   })
 
   it('creates a PageVersion when content changes', async () => {

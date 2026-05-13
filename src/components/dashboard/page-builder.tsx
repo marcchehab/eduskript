@@ -16,7 +16,6 @@ interface PageItem {
   description?: string
   order: number
   slug?: string
-  collectionSlug?: string // For skripts
   parentId?: string // For nested skripts under collections
   skripts?: PageItem[] // For collections containing skripts
   isInLayout?: boolean // For skripts: whether they're explicitly in the page layout
@@ -148,11 +147,10 @@ export function PageBuilder({
                 // Collections are created via API and added to page builder
                 const title = prompt('Collection name:')
                 if (!title?.trim()) return
-                const slug = title.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').trim()
                 fetch('/api/collections', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ title: title.trim(), slug, description: '' })
+                  body: JSON.stringify({ title: title.trim(), description: '' })
                 }).then(res => {
                   if (res.ok) onRefresh?.()
                   else res.json().then(d => window.alert(d.error || 'Failed to create collection'))
@@ -178,17 +176,13 @@ export function PageBuilder({
         </p>
       </CardHeader>
       <CardContent>
-        {/* Disable the outer droppable while reordering a skript that's already
-            inside a collection. @hello-pangea/dnd's getFurthestAway picks the
-            droppable whose center is furthest from drag-start when several
-            overlap; with nested droppables that's always the outer one, so
-            in-collection reorders would otherwise resolve to root and trigger
-            the "add to a collection" dialog. Library skripts (no parentId)
-            still hit this droppable, preserving that dialog. */}
-        <Droppable
-          droppableId="page-builder"
-          isDropDisabled={draggedItem?.type === 'skript' && !!draggedItem.parentId}
-        >
+        {/* Outer droppable accepts collections, library skripts, and skripts
+            being promoted out of a collection to root level. Note: @hello-pangea/dnd's
+            getFurthestAway picks the outer droppable when nested ones overlap,
+            so in-collection reorders may resolve here. The drop handler treats
+            a skript drop at root as a root-promotion — drag it back into the
+            collection if that wasn't the intent. */}
+        <Droppable droppableId="page-builder">
           {(provided) => (
             <div
               {...provided.droppableProps}
@@ -244,11 +238,10 @@ export function PageBuilder({
                       onClick={() => {
                         const title = prompt('Collection name:')
                         if (!title?.trim()) return
-                        const slug = title.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').trim()
                         fetch('/api/collections', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ title: title.trim(), slug, description: '' })
+                          body: JSON.stringify({ title: title.trim(), description: '' })
                         }).then(res => {
                           if (res.ok) onRefresh?.()
                           else res.json().then(d => window.alert(d.error || 'Failed to create collection'))
@@ -323,11 +316,15 @@ interface PageBuilderItemProps {
 
 function PageBuilderItem({ item, index, onRemove, expandedCollections, onToggleCollection, draggedItem }: PageBuilderItemProps) {
   const Icon = item.type === 'collection' ? BookOpen : FileText
-
+  // Root-level skripts use a distinct draggable prefix so the drag-end parser
+  // can tell them apart from collections (both render through this component).
+  const draggableId = item.type === 'collection'
+    ? `collection-${item.id}`
+    : `root-skript-${item.id}`
 
   return (
-    <Draggable 
-      draggableId={`collection-${item.id}`} 
+    <Draggable
+      draggableId={draggableId}
       index={index}
       isDragDisabled={item.permissions?.canView === false}
     >

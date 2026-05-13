@@ -23,7 +23,6 @@ interface DraggableCollectionProps extends BaseContentProps {
   skriptCount: number
   authors: (CollectionAuthor & { user: Pick<User, 'id' | 'name' | 'email'> })[]
   currentUserId: string
-  slug?: string
 }
 
 interface DraggableSkriptProps extends BaseContentProps {
@@ -34,17 +33,16 @@ interface DraggableSkriptProps extends BaseContentProps {
   slug?: string
 }
 
-export function DraggableCollection({ 
-  id, 
-  title, 
-  description, 
-  skriptCount, 
-  authors, 
-  currentUserId, 
+export function DraggableCollection({
+  id,
+  title,
+  description,
+  skriptCount,
+  authors,
+  currentUserId,
   isViewOnly = false,
   className,
   index = 0,
-  slug
 }: DraggableCollectionProps) {
   // Separate authors by permission
   const editableBy = authors.filter(author => 

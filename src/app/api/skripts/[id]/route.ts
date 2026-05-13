@@ -127,13 +127,6 @@ export async function PATCH(
             userId: session.user.id
           }
         }
-      },
-      include: {
-        collectionSkripts: {
-          include: {
-            collection: true
-          }
-        }
       }
     })
 
@@ -196,11 +189,6 @@ export async function PATCH(
     if (user?.pageSlug) {
       // Invalidate cached data using tags
       revalidateTag(CACHE_TAGS.skriptBySlug(user.pageSlug, updatedSkript.slug), { expire: 0 })
-      for (const cs of existingSkript.collectionSkripts) {
-        if (cs.collection) {
-          revalidateTag(CACHE_TAGS.collectionBySlug(user.pageSlug, cs.collection.slug), { expire: 0 })
-        }
-      }
       // Invalidate teacher content cache (homepage, sidebar)
       revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), { expire: 0 })
       revalidatePath(`/${user.pageSlug}/${updatedSkript.slug}`)
@@ -242,13 +230,6 @@ export async function DELETE(
             userId: session.user.id
           }
         }
-      },
-      include: {
-        collectionSkripts: {
-          include: {
-            collection: true
-          }
-        }
       }
     })
 
@@ -271,13 +252,6 @@ export async function DELETE(
     })
 
     if (user?.pageSlug) {
-      // Invalidate cached data using tags
-      for (const cs of existingSkript.collectionSkripts) {
-        if (cs.collection) {
-          // Invalidate collection-level cache (skript was removed)
-          revalidateTag(CACHE_TAGS.collectionBySlug(user.pageSlug, cs.collection.slug), { expire: 0 })
-        }
-      }
       // Invalidate teacher content cache (homepage, sidebar)
       revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), { expire: 0 })
       revalidatePath('/dashboard')

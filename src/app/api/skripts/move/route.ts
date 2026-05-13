@@ -274,22 +274,6 @@ export async function POST(request: NextRequest) {
       // Revalidate relevant paths
       revalidatePath(`/${user.pageSlug}`)
       revalidatePath('/dashboard')
-
-      // Revalidate old collection paths
-      for (const cs of skript.collectionSkripts) {
-        if (cs.collection) {
-          revalidatePath(`/${user.pageSlug}/${cs.collection.slug}`)
-        }
-      }
-
-      // Revalidate new collection paths
-      if (result) {
-        for (const cs of result.collectionSkripts) {
-          if (cs.collection) {
-            revalidatePath(`/${user.pageSlug}/${cs.collection.slug}`)
-          }
-        }
-      }
     }
 
     return NextResponse.json({ 

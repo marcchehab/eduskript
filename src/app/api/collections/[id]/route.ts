@@ -74,7 +74,7 @@ export async function PATCH(
     }
 
     const { id } = await params
-    const { title, slug, description, accentColor } = await request.json()
+    const { title, description, accentColor } = await request.json()
 
     const existingCollection = await prisma.collection.findUnique({
       where: { id },
@@ -90,29 +90,10 @@ export async function PATCH(
       return NextResponse.json({ error: 'You do not have permission to edit this collection' }, { status: 403 })
     }
 
-    // Check if slug is already used by another of this user's collections
-    if (slug && slug !== existingCollection.slug) {
-      const slugExists = await prisma.collection.findFirst({
-        where: {
-          slug,
-          NOT: { id },
-          authors: { some: { userId: session.user.id } }
-        }
-      })
-
-      if (slugExists) {
-        return NextResponse.json(
-          { error: 'You already have a collection with this slug' },
-          { status: 409 }
-        )
-      }
-    }
-
     const collection = await prisma.collection.update({
       where: { id },
       data: {
         ...(title && { title }),
-        ...(slug && { slug }),
         ...(description !== undefined && { description }),
         ...(accentColor !== undefined && { accentColor })
       },

@@ -5,17 +5,15 @@
  * typed errors that the MCP `safe()` wrapper translates to structured
  * tool errors.
  *
- * Cache invalidation on update: collectionBySlug for the editing user's
- * pageSlug surface, plus teacherContent + per-org membership.
+ * Cache invalidation on update: teacherContent for the editing user's
+ * pageSlug surface, plus per-org membership.
  */
 
 import { revalidatePath, revalidateTag } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { CACHE_TAGS } from '@/lib/cached-queries'
 import { checkCollectionPermissions } from '@/lib/permissions'
-import { generateSlug } from '@/lib/markdown'
 import {
-  ConflictError,
   NotFoundError,
   PermissionDeniedError,
   ValidationError,
@@ -70,7 +68,6 @@ export async function getCollectionForUser(
 export interface UpdateCollectionPatch {
   title?: string
   description?: string | null
-  slug?: string
   accentColor?: string | null
 }
 
@@ -83,18 +80,14 @@ export async function updateCollectionForUser(
   if (
     patch.title === undefined &&
     patch.description === undefined &&
-    patch.slug === undefined &&
     patch.accentColor === undefined
   ) {
     throw new ValidationError(
-      'At least one of {title, description, slug, accentColor} must be provided'
+      'At least one of {title, description, accentColor} must be provided'
     )
   }
   if (patch.title !== undefined && !patch.title.trim()) {
     throw new ValidationError('Title cannot be empty')
-  }
-  if (patch.slug !== undefined && !patch.slug.trim()) {
-    throw new ValidationError('Slug cannot be empty')
   }
 
   const existing = await prisma.collection.findUnique({
@@ -112,25 +105,10 @@ export async function updateCollectionForUser(
     throw new PermissionDeniedError('Cannot edit this collection')
   }
 
-  const normalizedSlug = patch.slug ? generateSlug(patch.slug) : undefined
-  if (normalizedSlug && normalizedSlug !== existing.slug) {
-    const conflict = await prisma.collection.findFirst({
-      where: {
-        slug: normalizedSlug,
-        authors: { some: { userId } },
-        id: { not: collectionId },
-      },
-    })
-    if (conflict) {
-      throw new ConflictError('Slug already exists in your collections')
-    }
-  }
-
   const updateData: Record<string, unknown> = { updatedAt: new Date() }
   if (patch.title !== undefined) updateData.title = patch.title.trim()
   if (patch.description !== undefined)
     updateData.description = patch.description?.toString() ?? null
-  if (normalizedSlug !== undefined) updateData.slug = normalizedSlug
   if (patch.accentColor !== undefined)
     updateData.accentColor = patch.accentColor?.toString() ?? null
 
@@ -147,15 +125,6 @@ export async function updateCollectionForUser(
     select: { pageSlug: true },
   })
   if (user?.pageSlug) {
-    revalidateTag(CACHE_TAGS.collectionBySlug(user.pageSlug, updated.slug), {
-      expire: 0,
-    })
-    if (normalizedSlug && normalizedSlug !== existing.slug) {
-      revalidateTag(
-        CACHE_TAGS.collectionBySlug(user.pageSlug, existing.slug),
-        { expire: 0 }
-      )
-    }
     revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), { expire: 0 })
     revalidatePath('/dashboard')
 

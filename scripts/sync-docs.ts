@@ -198,9 +198,9 @@ async function main() {
   console.log(`\n   Processing ${config.collections.length} collection(s)...`)
 
   for (const collectionDef of config.collections) {
-    // Find or create collection
+    // Find or create collection (match by title since slug is no longer a Collection field)
     let collection = await prisma.collection.findFirst({
-      where: { slug: collectionDef.slug }
+      where: { title: collectionDef.title }
     })
 
     if (collection) {
@@ -211,16 +211,15 @@ async function main() {
           description: collectionDef.description || null
         }
       })
-      console.log(`   ✓ Updated collection: ${collectionDef.slug}`)
+      console.log(`   ✓ Updated collection: ${collectionDef.title}`)
     } else {
       collection = await prisma.collection.create({
         data: {
           title: collectionDef.title,
-          slug: collectionDef.slug,
           description: collectionDef.description || null,
         }
       })
-      console.log(`   ✓ Created collection: ${collectionDef.slug}`)
+      console.log(`   ✓ Created collection: ${collectionDef.title}`)
     }
 
     // Grant admins author access on collection

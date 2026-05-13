@@ -9,14 +9,6 @@ import { useSession } from 'next-auth/react'
 import { checkSkriptPermissions } from '@/lib/permissions'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
-import { generateSlug } from '@/lib/markdown'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { BookOpen, Plus, Loader2 } from 'lucide-react'
 
 interface PageItem {
   id: string
@@ -25,7 +17,6 @@ interface PageItem {
   description?: string
   order: number
   slug?: string
-  collectionSlug?: string // For skripts
   parentId?: string // For nested skripts under collections
   skripts?: PageItem[] // For collections containing skripts
   isInLayout?: boolean // For skripts: whether they're explicitly in the page layout
@@ -76,11 +67,6 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
   const [refreshTrigger, setRefreshTrigger] = useState(0)
   const alert = useAlertDialog()
 
-  // State for "add skript to collection" dialog (shown when dropping a skript at root level)
-  const [pendingSkriptDrop, setPendingSkriptDrop] = useState<DragData | null>(null)
-  const [newCollectionName, setNewCollectionName] = useState('')
-  const [placementLoading, setPlacementLoading] = useState(false)
-
   // Load existing page layout on component mount
   useEffect(() => {
     const loadPageLayout = async () => {
@@ -127,7 +113,6 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
                             description: cs.skript.description,
                             order: cs.order, // Use order from junction table
                             slug: cs.skript.slug,
-                            collectionSlug: collection.slug,
                             parentId: item.contentId,
                             permissions: skriptPermissions, // Use individual skript permissions
                             isInLayout: true, // All skripts in CollectionSkript are part of the layout
@@ -136,14 +121,13 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
                           }
                         })
                     )
-                    
+
                     return {
                       id: item.contentId,
                       type: 'collection' as const,
                       title: collection.title || contentData.title || `collection ${item.contentId}`,
                       description: collection.description || contentData.description,
                       order: item.order,
-                      slug: collection.slug || contentData.slug,
                       permissions: contentData.permissions,
                       skripts: collectionSkripts.sort((a: { order: number }, b: { order: number }) => a.order - b.order)
                     }
@@ -272,97 +256,6 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
     }
   }
 
-  // Handle placing a skript into a new or existing collection (from root-level drop)
-  const handlePlaceSkript = async (collectionId: string | 'new') => {
-    if (!pendingSkriptDrop) return
-    setPlacementLoading(true)
-
-    try {
-      let targetCollectionId = collectionId
-      let targetCollection: PageItem | undefined
-
-      if (collectionId === 'new') {
-        if (!newCollectionName.trim()) return
-
-        // Create collection via API
-        const slug = generateSlug(newCollectionName.trim())
-        const res = await fetch('/api/collections', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title: newCollectionName.trim(), slug }),
-        })
-        if (!res.ok) {
-          const data = await res.json()
-          alert.showInfo(data.error || 'Failed to create collection', 'Error')
-          return
-        }
-        const { data: created } = await res.json()
-        targetCollectionId = created.id
-
-        // Add new collection to page items
-        targetCollection = {
-          id: created.id,
-          type: 'collection',
-          title: created.title,
-          slug: created.slug,
-          order: pageItems.length,
-          permissions: { canEdit: true, canView: true },
-          skripts: [],
-        }
-      } else {
-        targetCollection = pageItems.find(
-          (item) => item.id === collectionId && item.type === 'collection'
-        )
-      }
-
-      if (!targetCollection) return
-
-      // Build the skript item
-      const skriptData = pendingSkriptDrop.fromLibrary
-        ? libraryData.skripts.find((s: any) => s.id === pendingSkriptDrop.id)
-        : null
-      const skriptPermissions = session?.user?.id && skriptData?.authors
-        ? checkSkriptPermissions(session.user.id, skriptData.authors)
-        : pendingSkriptDrop.permissions || { canEdit: true, canView: true }
-
-      const newSkript: PageItem = {
-        id: pendingSkriptDrop.id,
-        type: 'skript',
-        title: pendingSkriptDrop.title,
-        description: pendingSkriptDrop.description,
-        order: targetCollection.skripts?.length ?? 0,
-        parentId: targetCollectionId as string,
-        slug: skriptData?.slug,
-        collectionSlug: targetCollection.slug,
-        permissions: skriptPermissions,
-      }
-
-      // Update items
-      let updatedItems: PageItem[]
-      if (collectionId === 'new') {
-        targetCollection.skripts = [newSkript]
-        updatedItems = [...pageItems, targetCollection]
-      } else {
-        updatedItems = pageItems.map((item) => {
-          if (item.id === collectionId && item.type === 'collection') {
-            return { ...item, skripts: [...(item.skripts || []), newSkript] }
-          }
-          return item
-        })
-      }
-
-      const changedCollectionIds = new Set([targetCollectionId as string])
-      setPageItems(updatedItems)
-      handleItemsChange(updatedItems, changedCollectionIds)
-      setExpandedCollections((prev) => [...new Set([...prev, targetCollectionId as string])])
-    } catch {
-      alert.showInfo('Failed to place skript', 'Error')
-    } finally {
-      setPlacementLoading(false)
-      setPendingSkriptDrop(null)
-    }
-  }
-
   const handleDragStart = (start: DragStart) => {
     // Parse the draggable ID to get drag data
     const draggableId = start.draggableId
@@ -459,6 +352,20 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
         description: skript?.description,
         fromLibrary: true 
       }
+    } else if (draggableId.startsWith('root-skript-')) {
+      // Root-level skript reorder (sibling of collections)
+      const skriptId = draggableId.replace('root-skript-', '')
+      const skript = pageItems.find(item => item.id === skriptId && item.type === 'skript')
+      if (skript) {
+        dragData = {
+          type: 'skript',
+          id: skriptId,
+          title: skript.title,
+          description: skript.description,
+          permissions: skript.permissions
+          // No parentId — already at root
+        }
+      }
     } else if (draggableId.startsWith('collection-')) {
       const collectionId = draggableId.replace('collection-', '')
       const collection = pageItems.find(item => item.id === collectionId)
@@ -470,29 +377,22 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
       const collection = pageItems.find(item => item.id === parentId)
       const skript = collection?.skripts?.find(s => s.id === skriptId)
       if (skript) {
-        dragData = { 
-          type: 'skript', 
-          id: skriptId, 
-          title: skript.title, 
+        dragData = {
+          type: 'skript',
+          id: skriptId,
+          title: skript.title,
           description: skript.description,
           parentId,
           permissions: skript.permissions
         }
       }
     }
-    
+
     if (!dragData) {
       return
     }
 
     const destinationId = destination.droppableId
-
-    // Skript dropped at root level — prompt user to pick/create a collection
-    if (destinationId === 'page-builder' && dragData?.type === 'skript') {
-      setPendingSkriptDrop(dragData)
-      setNewCollectionName('')
-      return
-    }
 
     // Simple insertion logic based on drop target
     let updatedItems = [...pageItems]
@@ -518,7 +418,6 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
             description: dragData.description,
             order: pageItems.length,
             permissions: collectionPermissions,
-            slug: collection?.slug,
             skripts: collection?.collectionSkripts?.map((cs: any, idx: number) => {
               const skriptPermissions = session?.user?.id
                 ? checkSkriptPermissions(session.user.id, cs.skript.authors || [])
@@ -532,14 +431,13 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
                 order: idx,
                 parentId: dragData.id,
                 slug: cs.skript.slug,
-                collectionSlug: collection.slug,
                 permissions: skriptPermissions
               }
             }) || []
           }
           updatedItems.push(newItem)
           hasChanges = true
-          
+
           // Auto-expand the newly added collection to show its skripts
           setExpandedCollections(prev => [...new Set([...prev, dragData.id])])
         } else if (!dragData.fromLibrary) {
@@ -556,6 +454,57 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
             })
             hasChanges = true
           }
+        }
+      } else if (dragData?.type === 'skript') {
+        // Skript dropped at root level — place as a standalone item, sibling of collections
+        const existingRootIndex = updatedItems.findIndex(item => item.id === dragData.id && item.type === 'skript')
+
+        if (existingRootIndex !== -1) {
+          // Already at root — reorder within root
+          if (existingRootIndex !== destination.index) {
+            const [moved] = updatedItems.splice(existingRootIndex, 1)
+            updatedItems.splice(destination.index, 0, moved)
+            updatedItems.forEach((item, index) => { item.order = index })
+            hasChanges = true
+          }
+        } else {
+          // New root skript — from library or moved out of a collection
+          // If it came from a collection in pageItems, remove it from that collection's skripts
+          if (isMovingExistingSkript && dragData.parentId) {
+            const sourceCollectionIndex = updatedItems.findIndex(item => item.id === dragData.parentId)
+            if (sourceCollectionIndex !== -1) {
+              const sourceCollection = updatedItems[sourceCollectionIndex]
+              if (sourceCollection.skripts) {
+                sourceCollection.skripts = sourceCollection.skripts
+                  .filter(s => s.id !== dragData.id)
+                  .map((s, idx) => ({ ...s, order: idx }))
+                changedCollectionIds.add(dragData.parentId)
+              }
+            }
+          }
+
+          // Resolve the skript's slug + permissions
+          const librarySkript = libraryData.skripts.find(s => s.id === dragData.id)
+          const skriptPermissions = session?.user?.id && librarySkript?.authors
+            ? checkSkriptPermissions(session.user.id, librarySkript.authors)
+            : (dragData.permissions || { canEdit: true, canView: true })
+
+          const newRootSkript: PageItem = {
+            id: dragData.id,
+            type: 'skript',
+            title: dragData.title,
+            description: dragData.description,
+            order: destination.index ?? updatedItems.length,
+            slug: librarySkript?.slug,
+            permissions: skriptPermissions,
+            isPublished: librarySkript?.isPublished,
+            isUnlisted: librarySkript?.isUnlisted,
+          }
+
+          // Insert at destination.index
+          updatedItems.splice(destination.index, 0, newRootSkript)
+          updatedItems.forEach((item, index) => { item.order = index })
+          hasChanges = true
         }
       }
     } else if (destinationId.startsWith('collection-')) {
@@ -839,67 +788,6 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
         title={alert.title}
         message={alert.message}
       />
-
-      {/* Skript Placement Dialog — shown when dropping a skript at root level */}
-      <Dialog open={!!pendingSkriptDrop} onOpenChange={(open) => { if (!open) setPendingSkriptDrop(null) }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Add &ldquo;{pendingSkriptDrop?.title}&rdquo; to a collection</DialogTitle>
-          </DialogHeader>
-
-          {placementLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {/* Create new collection */}
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  placeholder="New collection name..."
-                  value={newCollectionName}
-                  onChange={(e) => setNewCollectionName(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' && newCollectionName.trim()) handlePlaceSkript('new') }}
-                  className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  autoFocus
-                />
-                <button
-                  onClick={() => handlePlaceSkript('new')}
-                  disabled={!newCollectionName.trim()}
-                  className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                >
-                  <Plus className="h-4 w-4" />
-                  Create
-                </button>
-              </div>
-
-              {/* Existing collections */}
-              {pageItems.filter(item => item.type === 'collection' && item.permissions?.canEdit).length > 0 && (
-                <>
-                  <div className="text-xs text-muted-foreground uppercase tracking-wide">
-                    Or add to existing collection
-                  </div>
-                  <div className="space-y-1 max-h-48 overflow-y-auto">
-                    {pageItems
-                      .filter(item => item.type === 'collection' && item.permissions?.canEdit)
-                      .map(collection => (
-                        <button
-                          key={collection.id}
-                          onClick={() => handlePlaceSkript(collection.id)}
-                          className="flex items-center gap-2 w-full text-left px-3 py-2 rounded-md text-sm hover:bg-muted transition-colors"
-                        >
-                          <BookOpen className="h-4 w-4 shrink-0 text-muted-foreground" />
-                          {collection.title}
-                        </button>
-                      ))}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </DragDropContext>
   )
 }

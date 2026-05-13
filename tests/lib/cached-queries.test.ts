@@ -71,10 +71,6 @@ describe('cached-queries', () => {
       expect(CACHE_TAGS.collection('123')).toBe('collection:123')
     })
 
-    it('should generate correct collectionBySlug tag', () => {
-      expect(CACHE_TAGS.collectionBySlug('john', 'math')).toBe('collection:john:math')
-    })
-
     it('should generate correct skript tag', () => {
       expect(CACHE_TAGS.skript('456')).toBe('skript:456')
     })
@@ -198,7 +194,6 @@ describe('cached-queries', () => {
           collection: {
             id: 'col-1',
             title: 'Math',
-            slug: 'math',
             description: 'Math collection',
             isPublished: true,
             accentColor: null,
@@ -212,7 +207,7 @@ describe('cached-queries', () => {
 
       expect(result).not.toBeNull()
       expect(result?.page).toEqual(mockPage)
-      expect(result?.collection?.slug).toBe('math')
+      expect(result?.collection?.title).toBe('Math')
       expect(result?.skript.slug).toBe('algebra')
     })
 
@@ -327,20 +322,6 @@ describe('Cache invalidation integration', () => {
     ])
   })
 
-  it('should use correct tags for collection cache invalidation', () => {
-    const username = 'john'
-    const collectionSlug = 'math'
-
-    const expectedTags = [
-      CACHE_TAGS.collectionBySlug(username, collectionSlug),
-      CACHE_TAGS.teacherContent(username),
-    ]
-
-    expect(expectedTags).toEqual([
-      'collection:john:math',
-      'teacher-content:john',
-    ])
-  })
 })
 
 describe('revalidateTag integration', () => {

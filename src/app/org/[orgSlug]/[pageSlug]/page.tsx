@@ -155,7 +155,6 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
   const collections: Array<{
     id: string
     title: string
-    slug: string
     skripts: Array<{
       id: string
       title: string
@@ -168,7 +167,7 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
     title: string
     description: string | null
     slug: string
-    collection: { title: string; slug: string }
+    collection: { title: string }
     pages: Array<{ id: string; title: string; slug: string }>
   }> = []
 
@@ -200,7 +199,6 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
         collections.push({
           id: collection.id,
           title: collection.title,
-          slug: collection.slug,
           skripts: collection.collectionSkripts.map(cs => ({
             id: cs.skript.id,
             title: cs.skript.title,
@@ -224,7 +222,7 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
             take: 1,
             include: {
               collection: {
-                select: { title: true, slug: true }
+                select: { title: true }
               }
             }
           },
@@ -243,7 +241,6 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
           slug: skript.slug,
           collection: {
             title: skript.collectionSkripts[0].collection.title,
-            slug: skript.collectionSkripts[0].collection.slug
           },
           pages: skript.pages.map(p => ({
             id: p.id,

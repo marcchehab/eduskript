@@ -33,7 +33,6 @@ interface Teacher {
 interface SiteStructure {
   id: string
   title: string
-  slug: string
   accentColor?: string | null // Hex color for letter markers
   skripts: {
     id: string
@@ -56,7 +55,7 @@ interface RootSkript {
   description: string | null
   slug: string
   hasFrontpage?: boolean
-  collection: { title: string, slug: string }
+  collection: { title: string }
   pages: Array<{ id: string, title: string, slug: string }>
 }
 

@@ -18,7 +18,6 @@ export interface SnapWithPageInfo extends SnapData {
   skriptTitle: string
   skriptSlug: string
   collectionTitle: string | null
-  collectionSlug: string | null
   authorPageSlug: string | null
   createdAt: number
 }
@@ -76,7 +75,6 @@ export async function GET() {
                 collection: {
                   select: {
                     title: true,
-                    slug: true,
                     authors: {
                       where: { permission: 'author' },
                       take: 1,
@@ -142,7 +140,6 @@ export async function GET() {
           skriptTitle: pageInfo.skript.title,
           skriptSlug: pageInfo.skript.slug,
           collectionTitle: collection?.title || null,
-          collectionSlug: collection?.slug || null,
           authorPageSlug,
           createdAt: entry.createdAt.getTime(),
         })

@@ -11,7 +11,7 @@ import { updateCollectionForUser } from '@/lib/services/collections'
 export const updateCollectionConfig = {
   title: 'Update collection',
   description:
-    'Update an Eduskript collection. At least one of {title, description, slug, accentColor} must be provided. Caller must be a collection author.',
+    'Update an Eduskript collection. At least one of {title, description, accentColor} must be provided. Caller must be a collection author.',
   inputSchema: {
     collectionId: z.string().min(1),
     title: z.string().min(1).optional(),
@@ -20,7 +20,6 @@ export const updateCollectionConfig = {
       .nullable()
       .optional()
       .describe('Plain-text collection description. Pass null to clear.'),
-    slug: z.string().min(1).optional(),
     accentColor: z
       .string()
       .nullable()
@@ -33,7 +32,6 @@ export async function updateCollection(args: {
   collectionId: string
   title?: string
   description?: string | null
-  slug?: string
   accentColor?: string | null
 }) {
   requireScope('content:write')
@@ -53,7 +51,6 @@ export async function updateCollection(args: {
             id: updated.id,
             title: updated.title,
             description: updated.description,
-            slug: updated.slug,
             accentColor: updated.accentColor,
             updatedAt: updated.updatedAt,
           },

@@ -11,7 +11,6 @@ const log = createLogger('cache:queries')
 export const CACHE_TAGS = {
   user: (pageSlug: string) => `user:${pageSlug}`,
   collection: (id: string) => `collection:${id}`,
-  collectionBySlug: (pageSlug: string, slug: string) => `collection:${pageSlug}:${slug}`,
   skript: (id: string) => `skript:${id}`,
   skriptBySlug: (pageSlug: string, skriptSlug: string) =>
     `skript:${pageSlug}:${skriptSlug}`,
@@ -91,61 +90,6 @@ export const getTeacherWithLayout = (pageSlug: string) =>
     [`teacher-layout-${pageSlug}`],
     {
       tags: [CACHE_TAGS.user(pageSlug), CACHE_TAGS.teacherContent(pageSlug)],
-      revalidate: false,
-    }
-  )()
-
-/**
- * Get published collection with skripts and pages - cached
- * Only returns published content for public consumption
- */
-export const getPublishedCollection = (teacherId: string, pageSlug: string, collectionSlug: string) =>
-  unstable_cache(
-    async () => {
-      return prisma.collection.findFirst({
-        where: {
-          slug: collectionSlug,
-          authors: {
-            some: { userId: teacherId }
-          }
-        },
-        include: {
-          collectionSkripts: {
-            where: {
-              skript: { isPublished: true, isUnlisted: false }
-            },
-            include: {
-              skript: {
-                include: {
-                  frontPage: { select: { id: true } },
-                  pages: {
-                    where: { isPublished: true, isUnlisted: false },
-                    orderBy: { order: 'asc' },
-                    select: {
-                      id: true,
-                      title: true,
-                      slug: true,
-                      content: true,
-                      order: true,
-                      isPublished: true,
-                      pageType: true,
-                      examSettings: true,
-                    }
-                  }
-                }
-              }
-            },
-            orderBy: { order: 'asc' }
-          }
-        }
-      })
-    },
-    [`published-collection-${pageSlug}-${collectionSlug}`],
-    {
-      tags: [
-        CACHE_TAGS.collectionBySlug(pageSlug, collectionSlug),
-        CACHE_TAGS.teacherContent(pageSlug),
-      ],
       revalidate: false,
     }
   )()
@@ -235,7 +179,6 @@ export const getFullSiteStructure = (teacherId: string, pageSlug: string) =>
         select: {
           id: true,
           title: true,
-          slug: true,
           accentColor: true,
           updatedAt: true,
           collectionSkripts: {
@@ -350,7 +293,6 @@ export const getPublishedPage = (
         collection: collection ? {
           id: collection.id,
           title: collection.title,
-          slug: collection.slug,
           description: collection.description,
           accentColor: collection.accentColor,
         } : null,
@@ -397,7 +339,6 @@ export const getTeacherHomepageContent = (teacherId: string, pageSlug: string, p
       const collections: Array<{
         id: string
         title: string
-        slug: string
         accentColor: string | null
         skripts: Array<{
           id: string
@@ -412,7 +353,7 @@ export const getTeacherHomepageContent = (teacherId: string, pageSlug: string, p
         title: string
         description: string | null
         slug: string
-        collection: { title: string; slug: string }
+        collection: { title: string }
         pages: Array<{ id: string; title: string; slug: string }>
       }> = []
 
@@ -446,7 +387,6 @@ export const getTeacherHomepageContent = (teacherId: string, pageSlug: string, p
             collections.push({
               id: collection.id,
               title: collection.title,
-              slug: collection.slug,
               accentColor: collection.accentColor,
               skripts: collection.collectionSkripts.map((cs, index) => ({
                 id: cs.skript.id,
@@ -480,7 +420,9 @@ export const getTeacherHomepageContent = (teacherId: string, pageSlug: string, p
               title: skript.title,
               description: skript.description,
               slug: skript.slug,
-              collection: firstCollection || { title: 'Uncategorized', slug: 'uncategorized' },
+              collection: firstCollection
+                ? { title: firstCollection.title }
+                : { title: 'Uncategorized' },
               pages: skript.pages
             })
           }
@@ -495,46 +437,6 @@ export const getTeacherHomepageContent = (teacherId: string, pageSlug: string, p
       revalidate: false,
     }
   )()
-
-/**
- * Get collection for any user (including unpublished for authors)
- * NOT cached - used for preview mode
- */
-export const getCollectionForPreview = async (teacherId: string, collectionSlug: string) => {
-  return prisma.collection.findFirst({
-    where: {
-      slug: collectionSlug,
-      authors: {
-        some: { userId: teacherId }
-      }
-    },
-    include: {
-      collectionSkripts: {
-        include: {
-          skript: {
-            include: {
-              frontPage: { select: { id: true } },
-              pages: {
-                orderBy: { order: 'asc' },
-                select: {
-                  id: true,
-                  title: true,
-                  slug: true,
-                  content: true,
-                  order: true,
-                  isPublished: true,
-                  pageType: true,
-                  examSettings: true,
-                }
-              }
-            }
-          }
-        },
-        orderBy: { order: 'asc' }
-      }
-    }
-  })
-}
 
 /**
  * Get skript for preview (including unpublished) by unique slug.
@@ -661,7 +563,6 @@ export const getOrgFullSiteStructure = (orgId: string, orgSlug: string) =>
         select: {
           id: true,
           title: true,
-          slug: true,
           accentColor: true,
           updatedAt: true,
           collectionSkripts: {
@@ -805,7 +706,6 @@ export const getOrgPublishedPage = (
         collection: collection ? {
           id: collection.id,
           title: collection.title,
-          slug: collection.slug,
           description: collection.description,
           accentColor: collection.accentColor,
         } : null,
@@ -847,7 +747,6 @@ export const getOrgHomepageContent = (
       const collections: Array<{
         id: string
         title: string
-        slug: string
         accentColor: string | null
         skripts: Array<{
           id: string
@@ -862,7 +761,7 @@ export const getOrgHomepageContent = (
         title: string
         description: string | null
         slug: string
-        collection: { title: string; slug: string }
+        collection: { title: string }
         pages: Array<{ id: string; title: string; slug: string }>
       }> = []
 
@@ -896,7 +795,6 @@ export const getOrgHomepageContent = (
             collections.push({
               id: collection.id,
               title: collection.title,
-              slug: collection.slug,
               accentColor: collection.accentColor,
               skripts: collection.collectionSkripts.map((cs, index) => ({
                 id: cs.skript.id,
@@ -930,7 +828,9 @@ export const getOrgHomepageContent = (
               title: skript.title,
               description: skript.description,
               slug: skript.slug,
-              collection: firstCollection || { title: 'Uncategorized', slug: 'uncategorized' },
+              collection: firstCollection
+                ? { title: firstCollection.title }
+                : { title: 'Uncategorized' },
               pages: skript.pages
             })
           }
