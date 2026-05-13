@@ -67,8 +67,7 @@ export async function PATCH(request: NextRequest) {
       where: { id: session.user.id },
       select: {
         accountType: true,
-        pageSlug: true,
-        site: { select: { id: true } },
+        site: { select: { id: true, slug: true } },
       }
     })
 
@@ -158,9 +157,9 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Revalidate caches
-    if (user?.pageSlug) {
-      revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), { expire: 0 })
-      revalidatePath(`/${user.pageSlug}`)
+    if (user.site.slug) {
+      revalidateTag(CACHE_TAGS.teacherContent(user.site.slug), { expire: 0 })
+      revalidatePath(`/${user.site.slug}`)
       revalidatePath('/dashboard')
     }
 

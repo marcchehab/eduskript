@@ -151,18 +151,17 @@ export async function PATCH(
       }
     })
 
-    // Get user's username for revalidation
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { pageSlug: true }
+    // Get the user's site slug for cache invalidation.
+    const userSite = await prisma.site.findUnique({
+      where: { userId: session.user.id },
+      select: { slug: true }
     })
 
-    if (user?.pageSlug) {
-      // Invalidate cached data using tags
-      revalidateTag(CACHE_TAGS.skriptBySlug(user.pageSlug, updatedSkript.slug), { expire: 0 })
-      // Invalidate teacher content cache (homepage, sidebar)
-      revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), { expire: 0 })
-      revalidatePath(`/${user.pageSlug}/${updatedSkript.slug}`)
+    if (userSite?.slug) {
+      const pageSlug = userSite.slug
+      revalidateTag(CACHE_TAGS.skriptBySlug(pageSlug, updatedSkript.slug), { expire: 0 })
+      revalidateTag(CACHE_TAGS.teacherContent(pageSlug), { expire: 0 })
+      revalidatePath(`/${pageSlug}/${updatedSkript.slug}`)
       revalidatePath('/dashboard')
     }
 
@@ -216,15 +215,13 @@ export async function DELETE(
       where: { id }
     })
 
-    // Get user's username for revalidation
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { pageSlug: true }
+    const userSite = await prisma.site.findUnique({
+      where: { userId: session.user.id },
+      select: { slug: true }
     })
 
-    if (user?.pageSlug) {
-      // Invalidate teacher content cache (homepage, sidebar)
-      revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), { expire: 0 })
+    if (userSite?.slug) {
+      revalidateTag(CACHE_TAGS.teacherContent(userSite.slug), { expire: 0 })
       revalidatePath('/dashboard')
     }
 

@@ -24,7 +24,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     const source = await prisma.plugin.findFirst({
       where: {
         slug: pluginSlug,
-        author: { pageSlug: ownerSlug },
+        author: { site: { slug: ownerSlug } },
       },
     })
 
@@ -61,7 +61,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       },
       include: {
         author: {
-          select: { id: true, pageSlug: true, pageName: true, name: true },
+          select: { id: true, pageName: true, name: true, site: { select: { slug: true } } },
         },
       },
     })

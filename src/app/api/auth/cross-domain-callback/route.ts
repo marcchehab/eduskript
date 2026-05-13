@@ -54,7 +54,6 @@ export async function GET(request: NextRequest) {
           name: true,
           email: true,
           image: true,
-          pageSlug: true,
           pageName: true,
           pageDescription: true,
           pageIcon: true,
@@ -64,6 +63,7 @@ export async function GET(request: NextRequest) {
           accountType: true,
           studentPseudonym: true,
           typographyPreference: true,
+          site: { select: { slug: true } },
         }
       }
     }
@@ -110,7 +110,7 @@ export async function GET(request: NextRequest) {
       email: user.email,
       picture: user.image,
       image: user.image,
-      pageSlug: user.pageSlug,
+      pageSlug: user.site?.slug ?? null,
       pageName: user.pageName,
       pageDescription: user.pageDescription,
       pageIcon: user.pageIcon,

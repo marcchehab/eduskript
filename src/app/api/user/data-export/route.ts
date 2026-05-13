@@ -36,6 +36,7 @@ export async function GET(req: NextRequest) {
         },
         site: {
           select: {
+            slug: true,
             collections: {
               select: {
                 id: true,
@@ -136,7 +137,7 @@ export async function GET(req: NextRequest) {
         email: userData.email,
         emailVerified: userData.emailVerified,
         image: userData.image,
-        username: userData.pageSlug,
+        username: userData.site?.slug ?? null,
         title: userData.title,
         bio: userData.bio,
         pageDescription: userData.pageDescription,

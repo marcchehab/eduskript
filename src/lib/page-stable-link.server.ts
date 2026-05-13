@@ -37,7 +37,7 @@ export async function resolveStableLinks(ids: string[]): Promise<Map<string, Res
             orderBy: { createdAt: 'asc' },
             take: 1,
             select: {
-              user: { select: { pageSlug: true } },
+              user: { select: { site: { select: { slug: true } } } },
             },
           },
         },
@@ -47,7 +47,7 @@ export async function resolveStableLinks(ids: string[]): Promise<Map<string, Res
 
   for (const page of pages) {
     const author = page.skript.authors[0]
-    const domain = author?.user?.pageSlug
+    const domain = author?.user?.site?.slug
     if (!domain) continue
     map.set(page.id, {
       id: page.id,

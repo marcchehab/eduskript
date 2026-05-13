@@ -137,11 +137,13 @@ export const authOptions: NextAuthOptions = {
             // Legacy: "teacher:<slug>" or plain slug → student account (old teacher page format)
             const teacherSlug = rawValue.startsWith('teacher:') ? rawValue.substring(8) : rawValue
 
-            // Verify this slug belongs to an existing teacher
-            const teacher = await prisma.user.findUnique({
-              where: { pageSlug: teacherSlug },
-              select: { id: true, accountType: true, pageSlug: true }
+            // Verify this slug belongs to an existing teacher (URL slugs live
+            // on Site now; find the User behind that Site).
+            const slugSite = await prisma.site.findUnique({
+              where: { slug: teacherSlug },
+              select: { user: { select: { id: true, accountType: true } } },
             })
+            const teacher = slugSite?.user ?? null
 
             const isStudent = teacher !== null && teacher.accountType === 'teacher'
             log.info(`Legacy teacher lookup for "${teacherSlug}": ${teacher ? `found (accountType=${teacher.accountType})` : 'not found'} → signing up as ${isStudent ? 'STUDENT' : 'TEACHER'}`)
@@ -277,7 +279,9 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user, trigger, account, profile }) {
       if (user) {
         token.id = user.id
-        // Fetch additional user data once during sign-in and store in token
+        // Fetch additional user data once during sign-in and store in token.
+        // URL slug lives on Site now (Stage 5a); other page-display fields
+        // still live on User until Stage 5b.
         const dbUser = await prisma.user.findUnique({
           where: { id: user.id },
           select: {
@@ -286,7 +290,6 @@ export const authOptions: NextAuthOptions = {
             email: true,
             image: true,
             username: true,
-            pageSlug: true,
             pageName: true,
             pageDescription: true,
             pageIcon: true,
@@ -299,12 +302,13 @@ export const authOptions: NextAuthOptions = {
             studentPseudonym: true,
             billingPlan: true,
             typographyPreference: true,
+            site: { select: { slug: true } },
           }
         })
 
         if (dbUser) {
           token.username = dbUser.username
-          token.pageSlug = dbUser.pageSlug
+          token.pageSlug = dbUser.site?.slug ?? null
           token.pageName = dbUser.pageName
           token.pageDescription = dbUser.pageDescription
           token.pageIcon = dbUser.pageIcon
@@ -475,7 +479,6 @@ export const authOptions: NextAuthOptions = {
             email: true,
             image: true,
             username: true,
-            pageSlug: true,
             pageName: true,
             pageDescription: true,
             pageIcon: true,
@@ -488,12 +491,13 @@ export const authOptions: NextAuthOptions = {
             studentPseudonym: true,
             billingPlan: true,
             typographyPreference: true,
+            site: { select: { slug: true } },
           }
         })
 
         if (dbUser) {
           token.username = dbUser.username
-          token.pageSlug = dbUser.pageSlug
+          token.pageSlug = dbUser.site?.slug ?? null
           token.pageName = dbUser.pageName
           token.pageDescription = dbUser.pageDescription
           token.pageIcon = dbUser.pageIcon

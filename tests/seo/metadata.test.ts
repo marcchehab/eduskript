@@ -142,6 +142,10 @@ vi.mock('@/lib/prisma', () => ({
     organization: {
       findUnique: vi.fn(() => Promise.resolve(fixtureOrganization)),
     },
+    // Org pages now look up the org by Site.slug instead of Organization.slug.
+    site: {
+      findUnique: vi.fn(() => Promise.resolve({ organization: fixtureOrganization })),
+    },
     user: { findFirst: vi.fn() },
     frontPage: { findFirst: vi.fn() },
     userData: { findMany: vi.fn(() => Promise.resolve([])) },

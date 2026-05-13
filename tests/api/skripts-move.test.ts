@@ -22,6 +22,9 @@ vi.mock('@/lib/prisma', () => ({
     user: {
       findUnique: vi.fn(),
     },
+    site: {
+      findUnique: vi.fn(),
+    },
     organizationMember: {
       findMany: vi.fn().mockResolvedValue([]),
     },
@@ -179,7 +182,7 @@ describe('Skripts Move API', () => {
       it('should allow move when user has skript author permission', async () => {
         vi.mocked(prisma.skript.findUnique).mockResolvedValue(mockSkript)
         vi.mocked(prisma.$transaction).mockResolvedValue(mockSkript)
-        vi.mocked(prisma.user.findUnique).mockResolvedValue({ pageSlug: 'testuser' })
+        vi.mocked(prisma.site.findUnique).mockResolvedValue({ slug: 'testuser' } as never)
 
         const request = createRequest({ skriptId: 'skript-123' })
         const response = await POST(request)
@@ -206,7 +209,7 @@ describe('Skripts Move API', () => {
         }
         vi.mocked(prisma.skript.findUnique).mockResolvedValue(skriptWithCollectionPermission)
         vi.mocked(prisma.$transaction).mockResolvedValue(mockSkript)
-        vi.mocked(prisma.user.findUnique).mockResolvedValue({ pageSlug: 'testuser' })
+        vi.mocked(prisma.site.findUnique).mockResolvedValue({ slug: 'testuser' } as never)
 
         const request = createRequest({ skriptId: 'skript-123' })
         const response = await POST(request)
@@ -258,7 +261,7 @@ describe('Skripts Move API', () => {
         vi.mocked(getServerSession).mockResolvedValue(mockSession)
         vi.mocked(prisma.skript.findUnique).mockResolvedValue(mockSkript)
         vi.mocked(prisma.collection.findUnique).mockResolvedValue(mockTargetCollection)
-        vi.mocked(prisma.user.findUnique).mockResolvedValue({ pageSlug: 'testuser' })
+        vi.mocked(prisma.site.findUnique).mockResolvedValue({ slug: 'testuser' } as never)
       })
 
       it('should move skript to target collection', async () => {

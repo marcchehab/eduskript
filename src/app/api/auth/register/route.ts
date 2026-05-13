@@ -37,8 +37,9 @@ function generatePageSlugFromEmail(email: string): string {
  * Finds a unique page slug, adding numeric suffix if needed (e.g., john-doe, john-doe-2, john-doe-3)
  */
 async function findUniquePageSlug(baseSlug: string): Promise<string> {
-  const existing = await prisma.user.findUnique({
-    where: { pageSlug: baseSlug },
+  // URL slugs live on Site; uniqueness is global across user/org sites.
+  const existing = await prisma.site.findUnique({
+    where: { slug: baseSlug },
     select: { id: true }
   })
 
@@ -48,8 +49,8 @@ async function findUniquePageSlug(baseSlug: string): Promise<string> {
 
   for (let i = 2; i <= 100; i++) {
     const candidateSlug = `${baseSlug}-${i}`
-    const exists = await prisma.user.findUnique({
-      where: { pageSlug: candidateSlug },
+    const exists = await prisma.site.findUnique({
+      where: { slug: candidateSlug },
       select: { id: true }
     })
 
@@ -122,13 +123,13 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Generate unique page slug
+    // Generate unique page slug (lives on Site now).
     // If user provided one, use it (with uniqueness check); otherwise generate from email
     let pageSlug: string
     if (requestedPageSlug) {
       const normalizedPageSlug = generateSlug(requestedPageSlug)
-      const existingPageSlug = await prisma.user.findUnique({
-        where: { pageSlug: normalizedPageSlug }
+      const existingPageSlug = await prisma.site.findUnique({
+        where: { slug: normalizedPageSlug }
       })
 
       if (existingPageSlug) {
@@ -147,22 +148,31 @@ export async function POST(request: NextRequest) {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 12)
 
-    // Create user
-    const user = await prisma.user.create({
-      data: {
-        name,
-        email,
-        hashedPassword,
-        pageSlug,
-        emailVerified: null, // Explicitly set to null - will be updated when verified
-      }
+    // Create user + their Site row in a transaction so the URL slug lands
+    // atomically with the account.
+    const user = await prisma.$transaction(async (tx) => {
+      const u = await tx.user.create({
+        data: {
+          name,
+          email,
+          hashedPassword,
+          emailVerified: null,
+        },
+      })
+      await tx.site.create({
+        data: { slug: pageSlug, userId: u.id },
+      })
+      return u
     })
 
     // Auto-assign teacher to the default "eduskript" organization
-    // All teachers must belong to exactly one org
-    const defaultOrg = await prisma.organization.findUnique({
-      where: { slug: 'eduskript' }
+    const defaultOrgSite = await prisma.site.findUnique({
+      where: { slug: 'eduskript' },
+      select: { organizationId: true },
     })
+    const defaultOrg = defaultOrgSite?.organizationId
+      ? { id: defaultOrgSite.organizationId }
+      : null
 
     if (defaultOrg) {
       await prisma.organizationMember.create({
@@ -218,7 +228,7 @@ export async function POST(request: NextRequest) {
         id: user.id,
         name: user.name,
         email: user.email,
-        pageSlug: user.pageSlug,
+        pageSlug,
         emailVerified: user.emailVerified,
       },
       requiresEmailVerification: true

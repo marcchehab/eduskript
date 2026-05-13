@@ -130,6 +130,9 @@ vi.mock('@/lib/prisma', () => ({
     organization: {
       findUnique: vi.fn(() => Promise.resolve(fixtureOrganization)),
     },
+    site: {
+      findUnique: vi.fn(() => Promise.resolve({ organization: fixtureOrganization })),
+    },
     user: { findFirst: vi.fn() },
     frontPage: { findFirst: vi.fn(() => Promise.resolve(null)) },
     userData: {

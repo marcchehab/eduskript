@@ -27,10 +27,11 @@ export async function generateMetadata({ params }: SkriptPageProps): Promise<Met
   const { orgSlug, skriptSlug } = await params
 
   try {
-    const organization = await prisma.organization.findUnique({
+    const orgSite = await prisma.site.findUnique({
       where: { slug: orgSlug },
-      select: { id: true, name: true }
+      select: { organization: { select: { id: true, name: true } } }
     })
+    const organization = orgSite?.organization ?? null
 
     if (!organization) {
       return { title: 'Organization Not Found' }
@@ -71,17 +72,22 @@ export async function generateMetadata({ params }: SkriptPageProps): Promise<Met
 export default async function OrgSkriptPage({ params }: SkriptPageProps) {
   const { orgSlug, skriptSlug } = await params
 
-  const organization = await prisma.organization.findUnique({
+  const orgSite = await prisma.site.findUnique({
     where: { slug: orgSlug },
     select: {
-      id: true,
-      name: true,
-      description: true,
-      showIcon: true,
-      iconUrl: true,
-      sidebarBehavior: true
+      organization: {
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          showIcon: true,
+          iconUrl: true,
+          sidebarBehavior: true
+        }
+      }
     }
   })
+  const organization = orgSite?.organization ?? null
 
   if (!organization) {
     notFound()

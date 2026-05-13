@@ -541,11 +541,7 @@ export async function POST(request: NextRequest) {
                       collectionId: true,
                       collection: {
                         select: {
-                          site: {
-                            select: {
-                              user: { select: { pageSlug: true } },
-                            },
-                          },
+                          site: { select: { slug: true } },
                         },
                       },
                     },
@@ -560,12 +556,12 @@ export async function POST(request: NextRequest) {
             const contentPageSlug = page.slug
 
             // Invalidate paths for the page-owning teacher domain. Collection
-            // ownership is now 1:1 with a site, so at most one user owns each.
+            // ownership is now 1:1 with a site, so at most one slug per collection.
             for (const cs of page.skript.collectionSkripts) {
               if (!cs.collection) continue
-              const userPageSlug = cs.collection.site?.user?.pageSlug
-              if (userPageSlug) {
-                revalidatePath(`/${userPageSlug}/${skriptSlug}/${contentPageSlug}`)
+              const pageSlug = cs.collection.site?.slug
+              if (pageSlug) {
+                revalidatePath(`/${pageSlug}/${skriptSlug}/${contentPageSlug}`)
               }
             }
 
@@ -588,12 +584,12 @@ export async function POST(request: NextRequest) {
                   }
                 },
                 select: {
-                  site: { select: { organization: { select: { slug: true } } } }
+                  site: { select: { slug: true } }
                 }
               })
 
               for (const orgLayout of orgLayouts) {
-                const orgSlug = orgLayout.site?.organization?.slug
+                const orgSlug = orgLayout.site?.slug
                 if (orgSlug) {
                   // Org content routes are skript-only: /org/{orgSlug}/c/{skriptSlug}/{pageSlug}
                   revalidatePath(`/org/${orgSlug}/c/${skriptSlug}/${contentPageSlug}`)
@@ -610,8 +606,9 @@ export async function POST(request: NextRequest) {
               skriptId: true,
               site: {
                 select: {
-                  user: { select: { pageSlug: true } },
-                  organization: { select: { slug: true } },
+                  slug: true,
+                  userId: true,
+                  organizationId: true,
                 },
               },
               skript: {
@@ -621,11 +618,7 @@ export async function POST(request: NextRequest) {
                     select: {
                       collection: {
                         select: {
-                          site: {
-                            select: {
-                              user: { select: { pageSlug: true } },
-                            },
-                          },
+                          site: { select: { slug: true } },
                         },
                       },
                     },
@@ -636,24 +629,24 @@ export async function POST(request: NextRequest) {
           })
 
           if (frontPage) {
-            // User front page: /{pageSlug}
-            if (frontPage.site?.user?.pageSlug) {
-              revalidatePath(`/${frontPage.site.user.pageSlug}`)
+            // Site-level front page on a teacher's page: /{slug}
+            if (frontPage.site?.userId && frontPage.site.slug) {
+              revalidatePath(`/${frontPage.site.slug}`)
             }
 
-            // Organization front page: /org/{orgSlug}
-            if (frontPage.site?.organization?.slug) {
-              revalidatePath(`/org/${frontPage.site.organization.slug}`)
+            // Site-level front page on an org page: /org/{slug}
+            if (frontPage.site?.organizationId && frontPage.site.slug) {
+              revalidatePath(`/org/${frontPage.site.slug}`)
             }
 
-            // Skript front page: /{pageSlug}/{skriptSlug}
+            // Skript front page: /{slug}/{skriptSlug}
             if (frontPage.skriptId && frontPage.skript) {
               const skriptSlug = frontPage.skript.slug
               for (const cs of frontPage.skript.collectionSkripts) {
                 if (!cs.collection) continue
-                const userPageSlug = cs.collection.site?.user?.pageSlug
-                if (userPageSlug) {
-                  revalidatePath(`/${userPageSlug}/${skriptSlug}`)
+                const pageSlug = cs.collection.site?.slug
+                if (pageSlug) {
+                  revalidatePath(`/${pageSlug}/${skriptSlug}`)
                 }
               }
 
@@ -666,12 +659,12 @@ export async function POST(request: NextRequest) {
                   }
                 },
                 select: {
-                  site: { select: { organization: { select: { slug: true } } } }
+                  site: { select: { slug: true } }
                 }
               })
 
               for (const orgLayout of orgLayouts) {
-                const orgSlug = orgLayout.site?.organization?.slug
+                const orgSlug = orgLayout.site?.slug
                 if (orgSlug) {
                   revalidatePath(`/org/${orgSlug}/c/${skriptSlug}`)
                 }

@@ -31,6 +31,12 @@ const mockPrisma = {
     findFirst: vi.fn(),
     create: vi.fn(),
   },
+  // Site is the new owner of page slugs — used by findUniquePageSlug
+  // and by the teacher account upsert.
+  site: {
+    findUnique: vi.fn().mockResolvedValue(null),
+    create: vi.fn().mockResolvedValue({ id: 'site-1', slug: 'placeholder' }),
+  },
   // Required for autoJoinOrgByEmailDomain
   organization: {
     findMany: vi.fn().mockResolvedValue([]),

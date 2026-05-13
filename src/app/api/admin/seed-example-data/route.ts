@@ -9,39 +9,47 @@ export async function POST(request: Request) {
   if (error) return error
 
   try {
-    // Guard: check if eduskript org already exists
-    const existingOrg = await prisma.organization.findUnique({
+    // Guard: check if eduskript org already exists (URL slug lives on Site).
+    const existingOrgSite = await prisma.site.findUnique({
       where: { slug: 'eduskript' },
     })
 
-    if (existingOrg) {
+    if (existingOrgSite) {
       return NextResponse.json(
         { error: 'The "eduskript" organization already exists. Sample data was already seeded.' },
         { status: 400 }
       )
     }
 
-    // Create the eduskript organization
+    // Create the eduskript organization + its site atomically.
     const org = await prisma.organization.create({
       data: {
         name: 'Eduskript',
-        slug: 'eduskript',
         description: 'The Eduskript platform organization',
+        site: {
+          create: {
+            slug: 'eduskript',
+            pageName: 'Eduskript',
+            pageDescription: 'The Eduskript platform organization',
+          },
+        },
       },
     })
 
-    // Create teacher user (password: "teacher")
+    // Create teacher user (password: "teacher") + their Site row atomically.
     const hashedPassword = await bcrypt.hash('teacher', 12)
     const teacherUser = await prisma.user.create({
       data: {
         email: 'teacher@eduskript.org',
         name: 'Demo Teacher',
-        pageSlug: 'teacher',
         accountType: 'teacher',
         hashedPassword: hashedPassword,
         emailVerified: new Date(),
         requirePasswordReset: false,
         billingPlan: 'pro',
+        site: {
+          create: { slug: 'teacher' },
+        },
       },
     })
 
@@ -392,7 +400,7 @@ console.log("Even numbers:", evens);
       message: 'Sample data seeded successfully. Teacher: teacher@eduskript.org / teacher',
       data: {
         orgId: org.id,
-        orgSlug: org.slug,
+        orgSlug: 'eduskript',
         skripts: 3,
         pages: 5,
       },

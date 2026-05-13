@@ -30,32 +30,39 @@ export const getTeacherByPageSlug = (pageSlug: string) =>
   unstable_cache(
     async () => {
       log('MISS getTeacherByPageSlug', { pageSlug })
-      return prisma.user.findFirst({
-        where: { pageSlug },
+      // URL slug lives on Site now — look up the site by slug then return
+      // the linked user. The returned shape grafts `pageSlug` back onto the
+      // user object so consumers keep working without a sweep.
+      const site = await prisma.site.findUnique({
+        where: { slug: pageSlug },
         select: {
-          id: true,
-          name: true,
-          email: true,
-          pageSlug: true,
-          pageName: true,
-          pageDescription: true,
-          pageIcon: true,
-          pageLanguage: true,
-          pageTagline: true,
-          title: true,
-          bio: true,
-          sidebarBehavior: true,
-          typographyPreference: true,
-          // Used by public pages to skip annotation/snap/broadcast queries
-          // for free teachers, where those tables are empty by definition.
-          billingPlan: true,
-          customDomains: {
-            where: { isVerified: true, isPrimary: true },
-            select: { domain: true },
-            take: 1,
+          slug: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              pageName: true,
+              pageDescription: true,
+              pageIcon: true,
+              pageLanguage: true,
+              pageTagline: true,
+              title: true,
+              bio: true,
+              sidebarBehavior: true,
+              typographyPreference: true,
+              billingPlan: true,
+              customDomains: {
+                where: { isVerified: true, isPrimary: true },
+                select: { domain: true },
+                take: 1,
+              },
+            },
           },
-        }
+        },
       })
+      if (!site?.user) return null
+      return Object.assign(site.user, { pageSlug: site.slug })
     },
     [`teacher-${pageSlug}`],
     {
@@ -74,26 +81,25 @@ export const getTeacherByUsername = getTeacherByPageSlug
 export const getTeacherWithLayout = (pageSlug: string) =>
   unstable_cache(
     async () => {
-      // Page layout now lives on Site, not directly on User. We still return
-      // the User object for back-compat with callers reading pageSlug etc.,
-      // and graft the layout onto `user.pageLayout` so existing accessors
-      // keep working without sweeping every consumer.
-      const user = await prisma.user.findFirst({
-        where: { pageSlug },
+      // URL slug + page layout both live on Site. Look up the site by slug,
+      // then graft pageSlug and pageLayout onto the user object so existing
+      // accessors (`user.pageSlug`, `user.pageLayout`) keep working.
+      const site = await prisma.site.findUnique({
+        where: { slug: pageSlug },
         include: {
-          site: {
+          user: true,
+          pageLayout: {
             include: {
-              pageLayout: {
-                include: {
-                  items: { orderBy: { order: 'asc' } }
-                }
-              }
+              items: { orderBy: { order: 'asc' } }
             }
           }
         }
       })
-      if (!user) return null
-      return Object.assign(user, { pageLayout: user.site?.pageLayout ?? null })
+      if (!site?.user) return null
+      return Object.assign(site.user, {
+        pageSlug: site.slug,
+        pageLayout: site.pageLayout ?? null,
+      })
     },
     [`teacher-layout-${pageSlug}`],
     {
@@ -155,10 +161,10 @@ export const getFullSiteStructure = (teacherId: string, pageSlug: string) =>
   unstable_cache(
     async (): Promise<SiteStructure[]> => {
       log('MISS getFullSiteStructure', { pageSlug })
-      // Fetch page layout to determine collection order
+      // Fetch page layout via the user's site (URL slug now lives on Site).
       const pageLayout = await prisma.pageLayout.findFirst({
         where: {
-          site: { user: { pageSlug } }
+          site: { slug: pageSlug }
         },
         include: {
           items: {
@@ -496,30 +502,30 @@ export const getSkriptForPreview = async (teacherId: string, skriptSlug: string)
 export const getOrgWithLayout = (slug: string) =>
   unstable_cache(
     async () => {
-      const org = await prisma.organization.findUnique({
+      // URL slug lives on Site. Look up the site by slug, then return the
+      // attached organization with pageLayout/frontPage grafted under their
+      // legacy field names so consumers don't need to be touched.
+      const site = await prisma.site.findUnique({
         where: { slug },
         include: {
-          site: {
+          organization: {
             include: {
-              frontPage: true,
-              pageLayout: {
-                include: {
-                  items: { orderBy: { order: 'asc' } }
-                }
-              }
-            }
+              _count: { select: { members: true } },
+            },
           },
-          _count: {
-            select: { members: true }
+          frontPage: true,
+          pageLayout: {
+            include: {
+              items: { orderBy: { order: 'asc' } }
+            }
           }
         }
       })
-      if (!org) return null
-      // Surface the layout + frontpage under the legacy fields so call sites
-      // that still read org.pageLayout / org.frontPage keep working.
-      return Object.assign(org, {
-        pageLayout: org.site?.pageLayout ?? null,
-        frontPage: org.site?.frontPage ?? null,
+      if (!site?.organization) return null
+      return Object.assign(site.organization, {
+        slug: site.slug,
+        pageLayout: site.pageLayout ?? null,
+        frontPage: site.frontPage ?? null,
       })
     },
     [`org-layout-${slug}`],

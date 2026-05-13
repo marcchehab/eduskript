@@ -32,7 +32,7 @@ export async function ForkAttribution({
                 orderBy: { createdAt: 'asc' as const },
                 take: 1,
                 include: {
-                  user: { select: { pageSlug: true, name: true } },
+                  user: { select: { name: true, site: { select: { slug: true } } } },
                 },
               },
             },
@@ -46,14 +46,14 @@ export async function ForkAttribution({
     !originalPage && forkedFromAuthorId
       ? await prisma.user.findUnique({
           where: { id: forkedFromAuthorId },
-          select: { name: true, pageSlug: true },
+          select: { name: true, site: { select: { slug: true } } },
         })
       : null
 
   // Build attribution content
   const pageAuthor = originalPage?.skript.authors[0]?.user
   const authorName = pageAuthor?.name || originalAuthor?.name
-  const authorSlug = pageAuthor?.pageSlug || originalAuthor?.pageSlug
+  const authorSlug = pageAuthor?.site?.slug || originalAuthor?.site?.slug
 
   if (!authorName && !originalPage) return null
 

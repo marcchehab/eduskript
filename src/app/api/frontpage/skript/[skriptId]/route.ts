@@ -167,17 +167,17 @@ export async function PATCH(
     }
 
     // Revalidate caches
-    // Find the username of the skript owner for cache invalidation
+    // Find the URL slug of the skript owner for cache invalidation
     const skriptOwner = skript.authors[0]?.user
     if (skriptOwner) {
-      const ownerUser = await prisma.user.findUnique({
-        where: { id: skriptOwner.id },
-        select: { pageSlug: true }
+      const ownerSite = await prisma.site.findUnique({
+        where: { userId: skriptOwner.id },
+        select: { slug: true }
       })
 
-      if (ownerUser?.pageSlug) {
-        revalidateTag(CACHE_TAGS.skriptBySlug(ownerUser.pageSlug, skript.slug), { expire: 0 })
-        revalidateTag(CACHE_TAGS.teacherContent(ownerUser.pageSlug), { expire: 0 })
+      if (ownerSite?.slug) {
+        revalidateTag(CACHE_TAGS.skriptBySlug(ownerSite.slug, skript.slug), { expire: 0 })
+        revalidateTag(CACHE_TAGS.teacherContent(ownerSite.slug), { expire: 0 })
       }
     }
 

@@ -44,7 +44,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           where: { permission: 'author' },
           orderBy: { createdAt: 'asc' },
           take: 1,
-          include: { user: { select: { id: true, pageSlug: true, name: true } } },
+          include: { user: { select: { id: true, name: true } } },
         },
       },
     })

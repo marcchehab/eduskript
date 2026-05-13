@@ -14,11 +14,11 @@ export async function GET(request: NextRequest) {
 
     const plugins = await prisma.plugin.findMany({
       where: authorFilter
-        ? { author: { pageSlug: authorFilter } }
+        ? { author: { site: { slug: authorFilter } } }
         : undefined,
       include: {
         author: {
-          select: { id: true, pageSlug: true, pageName: true, name: true, image: true },
+          select: { id: true, pageName: true, name: true, image: true, site: { select: { slug: true } } },
         },
       },
       orderBy: { updatedAt: 'desc' },
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
       },
       include: {
         author: {
-          select: { id: true, pageSlug: true, pageName: true, name: true, image: true },
+          select: { id: true, pageName: true, name: true, image: true, site: { select: { slug: true } } },
         },
       },
     })

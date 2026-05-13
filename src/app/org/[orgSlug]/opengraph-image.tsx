@@ -13,16 +13,21 @@ interface Params {
 
 export default async function Image({ params }: Params) {
   const { orgSlug } = await params
-  const org = await prisma.organization.findUnique({
+  const orgSite = await prisma.site.findUnique({
     where: { slug: orgSlug },
     select: {
-      name: true,
-      description: true,
-      pageTagline: true,
-      showIcon: true,
-      iconUrl: true,
+      organization: {
+        select: {
+          name: true,
+          description: true,
+          pageTagline: true,
+          showIcon: true,
+          iconUrl: true,
+        },
+      },
     },
   }).catch(() => null)
+  const org = orgSite?.organization ?? null
 
   // Match the same SEO-tuned title source order as generateMetadata in
   // src/app/org/[orgSlug]/page.tsx so the OG card and the meta title align.

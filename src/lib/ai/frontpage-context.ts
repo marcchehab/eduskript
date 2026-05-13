@@ -43,10 +43,11 @@ export async function loadFrontPageContext(args: {
     include: {
       site: {
         select: {
+          slug: true,
           userId: true,
           organizationId: true,
-          user: { select: { id: true, name: true, pageName: true, pageSlug: true } },
-          organization: { select: { id: true, name: true, slug: true } },
+          user: { select: { id: true, name: true, pageName: true } },
+          organization: { select: { id: true, name: true } },
         },
       },
       skript: {
@@ -98,8 +99,8 @@ export async function loadFrontPageContext(args: {
     ?? 'Front Page'
 
   const slug = frontPage.skript?.slug
-    ?? frontPage.site?.organization?.slug
-    ?? frontPage.site?.user?.pageSlug
+    ?? frontPage.site?.slug
+    ?? frontPage.site?.slug
     ?? 'frontpage'
 
   const skriptContext: SkriptContext = {

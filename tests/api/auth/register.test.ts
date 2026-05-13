@@ -16,6 +16,10 @@ vi.mock('@/lib/prisma', () => ({
       findUnique: vi.fn(),
       create: vi.fn(),
     },
+    site: {
+      findUnique: vi.fn(),
+      create: vi.fn(),
+    },
     organization: {
       findUnique: vi.fn(),
     },
@@ -25,6 +29,7 @@ vi.mock('@/lib/prisma', () => ({
     verificationToken: {
       create: vi.fn(),
     },
+    $transaction: vi.fn(),
   },
 }))
 
@@ -86,6 +91,14 @@ describe('Registration API', () => {
     })
     vi.mocked(prisma.user.findUnique).mockResolvedValue(null)
     vi.mocked(prisma.organization.findUnique).mockResolvedValue(null)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue(null)
+    // Register route now wraps user + site create in a transaction.
+    // Have it invoke the callback against the same mocked prisma client so
+    // existing assertions on user.create still work.
+    vi.mocked(prisma.$transaction).mockImplementation(async (cb: unknown) => {
+      if (typeof cb === 'function') return (cb as (tx: unknown) => unknown)(prisma)
+      return cb
+    })
   })
 
   describe('POST /api/auth/register', () => {
@@ -220,11 +233,11 @@ describe('Registration API', () => {
 
     describe('Page Slug Handling', () => {
       it('should return 400 when requested pageSlug is taken', async () => {
-        // First call: check email (not found)
-        // Second call: check pageSlug (found - taken)
-        vi.mocked(prisma.user.findUnique)
-          .mockResolvedValueOnce(null) // email check
-          .mockResolvedValueOnce({ id: 'other-user', pageSlug: 'taken-slug' } as never) // pageSlug check
+        // Email check uses prisma.user.findUnique (returns null from beforeEach).
+        // Slug check now uses prisma.site.findUnique (slug lives on Site).
+        vi.mocked(prisma.site.findUnique).mockResolvedValueOnce(
+          { id: 'site-1', slug: 'taken-slug' } as never
+        )
 
         const request = createRequest({
           name: 'Test User',
@@ -303,17 +316,21 @@ describe('Registration API', () => {
       })
 
       it('should auto-assign user to default organization if exists', async () => {
-        const mockOrg = { id: 'default-org', slug: 'eduskript' }
-
         vi.mocked(prisma.user.findUnique).mockResolvedValue(null)
         vi.mocked(prisma.user.create).mockResolvedValue({
           id: 'new-user',
           name: 'Test',
           email: 'test@example.com',
-          pageSlug: 'test',
           emailVerified: null,
         } as never)
-        vi.mocked(prisma.organization.findUnique).mockResolvedValue(mockOrg as never)
+        // Default org is now looked up via Site.slug → organizationId.
+        // First site.findUnique = slug-uniqueness check on user's auto-generated
+        // slug (returns null = available). Second call = lookup for the
+        // 'eduskript' default org site → returns the org's id.
+        vi.mocked(prisma.site.findUnique).mockReset()
+        vi.mocked(prisma.site.findUnique)
+          .mockResolvedValueOnce(null)
+          .mockResolvedValueOnce({ organizationId: 'default-org' } as never)
         vi.mocked(prisma.organizationMember.create).mockResolvedValue({} as never)
         vi.mocked(prisma.verificationToken.create).mockResolvedValue({} as never)
 

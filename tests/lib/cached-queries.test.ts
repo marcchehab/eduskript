@@ -30,6 +30,9 @@ vi.mock('@/lib/prisma', () => ({
     user: {
       findFirst: vi.fn(),
     },
+    site: {
+      findUnique: vi.fn(),
+    },
     collection: {
       findFirst: vi.fn(),
       findMany: vi.fn(),
@@ -95,52 +98,43 @@ describe('cached-queries', () => {
 
   describe('getTeacherByUsername', () => {
     it('should call prisma with correct parameters', async () => {
-      const mockTeacher = {
+      const teacherCore = {
         id: 'teacher-1',
         name: 'John Doe',
         email: 'john@example.com',
         title: 'Professor',
         bio: 'Math teacher',
-        pageSlug: 'john',
         pageName: 'John\'s Page',
         pageDescription: 'Math resources',
+        pageIcon: null,
+        pageLanguage: null,
+        pageTagline: null,
         sidebarBehavior: 'contextual',
         typographyPreference: 'modern',
+        billingPlan: 'free',
+        customDomains: [],
       }
 
-      vi.mocked(prisma.user.findFirst).mockResolvedValue(mockTeacher)
+      vi.mocked(prisma.site.findUnique).mockResolvedValue({
+        slug: 'john',
+        user: teacherCore,
+      } as never)
 
       const result = await getTeacherByUsername('john')
 
-      expect(prisma.user.findFirst).toHaveBeenCalledWith({
-        where: { pageSlug: 'john' },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          title: true,
-          bio: true,
-          pageSlug: true,
-          pageName: true,
-          pageDescription: true,
-          pageIcon: true,
-          pageLanguage: true,
-          pageTagline: true,
-          sidebarBehavior: true,
-          typographyPreference: true,
-          billingPlan: true,
-          customDomains: {
-            where: { isVerified: true, isPrimary: true },
-            select: { domain: true },
-            take: 1,
-          },
-        },
+      expect(prisma.site.findUnique).toHaveBeenCalledWith({
+        where: { slug: 'john' },
+        select: expect.objectContaining({
+          slug: true,
+          user: expect.any(Object),
+        }),
       })
-      expect(result).toEqual(mockTeacher)
+      // pageSlug is grafted onto the user object from site.slug
+      expect(result).toEqual({ ...teacherCore, pageSlug: 'john' })
     })
 
     it('should return null for non-existent user', async () => {
-      vi.mocked(prisma.user.findFirst).mockResolvedValue(null)
+      vi.mocked(prisma.site.findUnique).mockResolvedValue(null)
 
       const result = await getTeacherByUsername('nonexistent')
 

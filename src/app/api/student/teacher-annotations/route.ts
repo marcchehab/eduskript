@@ -304,7 +304,7 @@ export async function GET(request: NextRequest) {
         user: {
           select: {
             name: true,
-            pageSlug: true,
+            site: { select: { slug: true } },
           },
         },
       },
@@ -324,7 +324,7 @@ export async function GET(request: NextRequest) {
         user: {
           select: {
             name: true,
-            pageSlug: true,
+            site: { select: { slug: true } },
           },
         },
       },
@@ -358,7 +358,7 @@ export async function GET(request: NextRequest) {
         user: {
           select: {
             name: true,
-            pageSlug: true,
+            site: { select: { slug: true } },
           },
         },
       },
@@ -423,14 +423,14 @@ export async function GET(request: NextRequest) {
         ? {
             data: individualFeedback.data,
             updatedAt: individualFeedback.updatedAt.getTime(),
-            teacherName: individualFeedback.user?.name || individualFeedback.user?.pageSlug || 'Teacher',
+            teacherName: individualFeedback.user?.name || individualFeedback.user?.site?.slug || 'Teacher',
           }
         : null,
       individualSnapFeedback: hasValidSnapFeedback && individualSnapFeedback
         ? {
             data: individualSnapFeedback.data,
             updatedAt: individualSnapFeedback.updatedAt.getTime(),
-            teacherName: individualSnapFeedback.user?.name || individualSnapFeedback.user?.pageSlug || 'Teacher',
+            teacherName: individualSnapFeedback.user?.name || individualSnapFeedback.user?.site?.slug || 'Teacher',
           }
         : null,
       individualSpacerFeedback: hasValidSpacerFeedback && individualSpacerFeedback
@@ -444,7 +444,7 @@ export async function GET(request: NextRequest) {
         ? {
             data: individualStickyNotes.data,
             updatedAt: individualStickyNotes.updatedAt.getTime(),
-            teacherName: individualStickyNotes.user?.name || individualStickyNotes.user?.pageSlug || 'Teacher',
+            teacherName: individualStickyNotes.user?.name || individualStickyNotes.user?.site?.slug || 'Teacher',
           }
         : null,
     }, {

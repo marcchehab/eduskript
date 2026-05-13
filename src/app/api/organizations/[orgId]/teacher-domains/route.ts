@@ -31,15 +31,19 @@ export async function GET(
             id: true,
             name: true,
             email: true,
-            pageSlug: true,
             image: true,
+            site: { select: { slug: true } },
           },
         },
       },
       orderBy: [{ createdAt: 'desc' }],
     })
 
-    return NextResponse.json({ domains: teacherDomains })
+    const domains = teacherDomains.map(d => ({
+      ...d,
+      user: { ...d.user, pageSlug: d.user.site?.slug ?? null, site: undefined },
+    }))
+    return NextResponse.json({ domains })
   } catch (error) {
     console.error('Error fetching teacher domains:', error)
     return NextResponse.json(

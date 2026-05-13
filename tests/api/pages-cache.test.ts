@@ -33,6 +33,9 @@ vi.mock('@/lib/prisma', () => ({
     user: {
       findUnique: vi.fn(),
     },
+    site: {
+      findUnique: vi.fn(),
+    },
     skript: {
       findFirst: vi.fn(),
     },
@@ -113,8 +116,8 @@ describe('PATCH /api/pages/[id] — cache invalidation contract', () => {
       ...existingPage,
       content: '# New content',
     } as never)
-    vi.mocked(prisma.user.findUnique).mockResolvedValue({
-      pageSlug: 'teacher',
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({
+      slug: 'teacher',
     } as never)
     vi.mocked(prisma.organizationMember.findMany).mockResolvedValue([])
   })
@@ -137,8 +140,8 @@ describe('PATCH /api/pages/[id] — cache invalidation contract', () => {
 
   it('also fires orgContent revalidateTag once per org membership', async () => {
     vi.mocked(prisma.organizationMember.findMany).mockResolvedValue([
-      { organization: { slug: 'school-a' } },
-      { organization: { slug: 'school-b' } },
+      { organization: { site: { slug: 'school-a' } } },
+      { organization: { site: { slug: 'school-b' } } },
     ] as never)
 
     await PATCH(buildPatchRequest({ content: '# New content' }), {

@@ -141,14 +141,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           orderBy: { order: 'asc' },
         },
         site: {
-          select: { organization: { select: { slug: true } } },
+          select: { slug: true },
         },
       },
     })
 
-    if (pageLayout.site?.organization?.slug) {
-      revalidateTag(CACHE_TAGS.organization(pageLayout.site.organization.slug), { expire: 0 })
-      revalidateTag(CACHE_TAGS.orgContent(pageLayout.site.organization.slug), { expire: 0 })
+    if (pageLayout.site?.slug) {
+      revalidateTag(CACHE_TAGS.organization(pageLayout.site.slug), { expire: 0 })
+      revalidateTag(CACHE_TAGS.orgContent(pageLayout.site.slug), { expire: 0 })
     }
 
     return NextResponse.json({ success: true, data: pageLayout })

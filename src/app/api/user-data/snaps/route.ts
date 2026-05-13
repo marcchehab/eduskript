@@ -75,25 +75,18 @@ export async function GET() {
                 collection: {
                   select: {
                     title: true,
-                    site: {
-                      select: {
-                        user: { select: { pageSlug: true } },
-                      },
-                    },
+                    site: { select: { slug: true } },
                   },
                 },
               },
             },
-            // Also get skript authors as fallback for pageSlug
+            // Fallback: a skript author's site provides the URL when the
+            // skript isn't placed in any collection.
             authors: {
               where: { permission: 'author' },
               take: 1,
               select: {
-                user: {
-                  select: {
-                    pageSlug: true,
-                  },
-                },
+                user: { select: { site: { select: { slug: true } } } },
               },
             },
           },
@@ -118,11 +111,11 @@ export async function GET() {
       const collectionSkript = pageInfo.skript.collectionSkripts[0]
       const collection = collectionSkript?.collection
 
-      // Get author pageSlug (prefer the collection's owning site, fallback
-      // to skript author).
+      // Author page slug: prefer the collection's owning Site; fall back to
+      // a skript author's own Site for collection-less skripts.
       const authorPageSlug =
-        collection?.site?.user?.pageSlug ||
-        pageInfo.skript.authors[0]?.user?.pageSlug ||
+        collection?.site?.slug ||
+        pageInfo.skript.authors[0]?.user?.site?.slug ||
         null
 
       // Add each snap with page info

@@ -73,13 +73,12 @@ export async function PUT(
       }
     })
 
-    // Revalidate cache for this user's content
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { pageSlug: true }
+    const userSite = await prisma.site.findUnique({
+      where: { userId: session.user.id },
+      select: { slug: true }
     })
-    if (user?.pageSlug) {
-      revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), { expire: 0 })
+    if (userSite?.slug) {
+      revalidateTag(CACHE_TAGS.teacherContent(userSite.slug), { expire: 0 })
     }
 
     return NextResponse.json({

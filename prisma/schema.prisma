@@ -66,13 +66,12 @@ model User {
   // User identity
   username String? @unique // User's unique identifier (for login, collaboration)
 
-  // Page-specific fields (for the user's public page)
-  pageSlug        String? @unique // URL slug for public page (e.g., eduskript.org/mypage)
+  // Page-specific fields (display only — URL slug lives on Site)
   pageName        String? // Display name for the public page
   pageDescription String? // Description shown below page title in sidebar
   pageIcon        String? // URL to page icon image (displayed in sidebar)
-  pageLanguage    String? @map("page_language") // BCP-47 tag for <html lang> when teacher has a custom domain (e.g. "de-CH"); null = "en"
-  pageTagline     String? @map("page_tagline") // Short SEO tagline appended to pageName as the home <title> on the teacher's custom domain
+  pageLanguage    String? @map("page_language") // BCP-47 tag for <html lang> when teacher has a custom domain
+  pageTagline     String? @map("page_tagline") // Short SEO tagline appended to pageName as the home <title>
 
   // Profile fields (shown to collaborators)
   bio   String?
@@ -80,8 +79,8 @@ model User {
 
   // User preferences
   themePreference      String? @default("system") // "light", "dark", or "system"
-  sidebarBehavior      String? @default("full") // "full" (default - always show all collections) or "contextual" (show only current collection)
-  typographyPreference String? @default("modern") // "modern" (Roboto Slab + Barlow Condensed) or "classic" (EB Garamond + Barlow Condensed)
+  sidebarBehavior      String? @default("full")
+  typographyPreference String? @default("modern")
 
   // AI customization
   aiSystemPrompt String? @db.Text // Custom system prompt prepended to AI assistant messages
@@ -120,10 +119,9 @@ model User {
   collaborationsAsRequester     Collaboration[]        @relation("RequesterCollaborations")
   collaborationsAsReceiver      Collaboration[]        @relation("ReceiverCollaborations")
 
-  // The user's public site (1:1). Owns collections, page layout, frontpage,
-  // and all page-display settings. User.pageSlug/pageName/etc. are mirrored
-  // on Site during the migration and will be dropped once all readers have
-  // switched over.
+  // The user's public site (1:1). Owns the URL slug, page-display fields,
+  // collections, page layout, and frontpage. Teachers get a Site; students
+  // typically don't.
   site Site?
 
   // Student data
@@ -202,20 +200,16 @@ model User {
 // personal page) or an Organization (a school/group page) — exactly one of
 // userId / organizationId is set. The polymorphism lives here, in one model,
 // so downstream tables (Collection, PageLayout, FrontPage) reference a single
-// siteId instead of inventing their own userId|organizationId pair.
-//
-// During the migration, User and Organization keep their original slug +
-// page-display columns (pageSlug, pageName, pageDescription, etc.) as
-// mirrors. Once all readers switch to Site, the duplicates get dropped.
+// siteId instead of inventing their own userId|organizationId pair. The URL
+// slug and every page-display setting also live here.
 model Site {
   id   String @id @default(cuid())
-  slug String @unique // Globally unique URL slug (replaces User.pageSlug + Organization.slug)
+  slug String @unique // Globally unique URL slug for the public page
 
   userId         String? @unique @map("user_id")
   organizationId String? @unique @map("organization_id")
 
-  // Page-display fields (mirrored from User/Organization until those columns
-  // are dropped in a later migration stage).
+  // Page-display fields
   pageName             String? @map("page_name")
   pageDescription      String? @map("page_description")
   pageIcon             String? @map("page_icon")
@@ -805,26 +799,27 @@ model ImportJob {
   @@map("import_jobs")
 }
 
-// Organization model - schools, companies, or groups
+// Organization model - schools, companies, or groups. Holds entity, display,
+// and governance fields. URL slug lives on the org's Site; display fields
+// will move next (Stage 5b).
 model Organization {
   id           String  @id @default(cuid())
-  name         String // "Eduskript", "Springfield High"
-  slug         String  @unique // URL slug for org page
+  name         String // "Eduskript", "Springfield High" — entity name
   description  String?
   showIcon     Boolean @default(true) @map("show_icon")
   iconUrl      String? @map("icon_url")
-  pageLanguage String? @map("page_language") // BCP-47 tag for <html lang> on the org's custom domain; null = "en"
-  pageTagline  String? @map("page_tagline") // Short SEO tagline appended to org name as the home <title> on the org's custom domain
+  pageLanguage String? @map("page_language")
+  pageTagline  String? @map("page_tagline")
 
   // Settings
-  allowMemberPages          Boolean @default(true) @map("allow_member_pages") // Members can have personal pages
-  allowTeacherCustomDomains Boolean @default(false) @map("allow_teacher_custom_domains") // Teachers can have custom domains
-  requireEmailDomain        String? @map("require_email_domain") // e.g., "@school.edu" - auto-join on signup
-  sidebarBehavior           String? @default("contextual") @map("sidebar_behavior") // "contextual" or "full"
-  aiSystemPrompt            String? @map("ai_system_prompt") @db.Text // Custom system prompt for AI assistant
+  allowMemberPages          Boolean @default(true) @map("allow_member_pages")
+  allowTeacherCustomDomains Boolean @default(false) @map("allow_teacher_custom_domains")
+  requireEmailDomain        String? @map("require_email_domain")
+  sidebarBehavior           String? @default("contextual") @map("sidebar_behavior")
+  aiSystemPrompt            String? @map("ai_system_prompt") @db.Text
 
   // Billing groundwork (payment provider TBD)
-  billingPlan String @default("free") @map("billing_plan") // "free" | "school" | "enterprise"
+  billingPlan String @default("free") @map("billing_plan")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -833,8 +828,8 @@ model Organization {
   members       OrganizationMember[]
   customDomains CustomDomain[]
 
-  // The org's public site (1:1). Page layout, collections, frontpage, and
-  // display settings all live under Site.
+  // The org's public site (1:1). Owns the URL slug, page layout, collections,
+  // frontpage. Display fields move here in a follow-up.
   site Site?
 
   @@map("organizations")

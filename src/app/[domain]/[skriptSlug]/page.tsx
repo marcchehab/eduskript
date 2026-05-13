@@ -26,10 +26,11 @@ export async function generateMetadata({ params }: SkriptPreviewProps): Promise<
   const { domain, skriptSlug } = await params
 
   try {
-    const teacher = await prisma.user.findUnique({
-      where: { pageSlug: domain },
-      select: { id: true, name: true, title: true, pageIcon: true }
+    const teacherSite = await prisma.site.findUnique({
+      where: { slug: domain },
+      select: { user: { select: { id: true, name: true, title: true, pageIcon: true } } }
     })
+    const teacher = teacherSite?.user
 
     if (!teacher) {
       return {
@@ -96,10 +97,11 @@ export default async function SkriptPreviewPage({ params }: SkriptPreviewProps) 
     // Queries here are the frontpage-specific parts only; Prisma request-scoped
     // dedup keeps the cost low when fields overlap with the layout's fetch.
 
-    const teacher = await prisma.user.findUnique({
-      where: { pageSlug: domain },
-      select: { id: true, email: true, billingPlan: true }
+    const teacherSiteRow = await prisma.site.findUnique({
+      where: { slug: domain },
+      select: { user: { select: { id: true, email: true, billingPlan: true } } }
     })
+    const teacher = teacherSiteRow?.user
 
     if (!teacher) {
       notFound()

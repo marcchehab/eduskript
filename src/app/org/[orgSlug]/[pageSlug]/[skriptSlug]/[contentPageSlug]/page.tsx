@@ -44,10 +44,11 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { orgSlug, pageSlug, skriptSlug, contentPageSlug } = await params
 
   try {
-    const organization = await prisma.organization.findUnique({
+    const orgSite = await prisma.site.findUnique({
       where: { slug: orgSlug },
-      select: { id: true, name: true }
+      select: { organization: { select: { id: true, name: true } } }
     })
+    const organization = orgSite?.organization
 
     if (!organization) {
       return { title: 'Page Not Found' }
@@ -55,7 +56,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
     const teacher = await prisma.user.findFirst({
       where: {
-        pageSlug: pageSlug,
+        site: { slug: pageSlug },
         organizationMemberships: { some: { organizationId: organization.id } }
       },
       select: { id: true, name: true, pageName: true }
@@ -104,16 +105,21 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
   const { orgSlug, pageSlug, skriptSlug, contentPageSlug } = await params
   const resolvedSearchParams = await searchParams
 
-  const organization = await prisma.organization.findUnique({
+  const orgSiteRow = await prisma.site.findUnique({
     where: { slug: orgSlug },
     select: {
-      id: true,
-      name: true,
-      description: true,
-      showIcon: true,
-      iconUrl: true
+      organization: {
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          showIcon: true,
+          iconUrl: true
+        }
+      }
     }
   })
+  const organization = orgSiteRow?.organization
 
   if (!organization) {
     notFound()
@@ -121,20 +127,20 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
 
   const teacher = await prisma.user.findFirst({
     where: {
-      pageSlug: pageSlug,
+      site: { slug: pageSlug },
       organizationMemberships: { some: { organizationId: organization.id } }
     },
     select: {
       id: true,
       name: true,
-      pageSlug: true,
       pageName: true,
       pageDescription: true,
       pageIcon: true,
       bio: true,
       title: true,
       sidebarBehavior: true,
-      typographyPreference: true
+      typographyPreference: true,
+      site: { select: { slug: true } }
     }
   })
 
@@ -419,12 +425,12 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
       }]
 
   const fullSiteStructure = teacher.sidebarBehavior === 'full'
-    ? await getFullSiteStructure(teacher.id, teacher.pageSlug || pageSlug)
+    ? await getFullSiteStructure(teacher.id, teacher.site?.slug || pageSlug)
     : undefined
 
   const teacherData = {
     name: teacher.name || 'Teacher',
-    pageSlug: teacher.pageSlug || pageSlug,
+    pageSlug: teacher.site?.slug || pageSlug,
     pageName: teacher.pageName || null,
     pageDescription: teacher.pageDescription || null,
     pageIcon: teacher.pageIcon || null,

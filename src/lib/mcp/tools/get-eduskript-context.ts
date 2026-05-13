@@ -32,7 +32,7 @@ export async function getEduskriptContext() {
   const ctx = getMcpContext()
   const user = await prisma.user.findUnique({
     where: { id: ctx.userId },
-    select: { aiSystemPrompt: true, name: true, pageSlug: true },
+    select: { aiSystemPrompt: true, name: true },
   })
 
   const sections: string[] = [

@@ -120,22 +120,23 @@ export async function updateCollectionForUser(
   void ctx.editSource
   void ctx.editClient
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { pageSlug: true },
+  const userSite = await prisma.site.findUnique({
+    where: { userId },
+    select: { slug: true },
   })
-  if (user?.pageSlug) {
-    revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), { expire: 0 })
+  if (userSite?.slug) {
+    revalidateTag(CACHE_TAGS.teacherContent(userSite.slug), { expire: 0 })
     revalidatePath('/dashboard')
 
     const orgMemberships = await prisma.organizationMember.findMany({
       where: { userId },
-      select: { organization: { select: { slug: true } } },
+      select: { organization: { select: { site: { select: { slug: true } } } } },
     })
     for (const membership of orgMemberships) {
-      revalidateTag(CACHE_TAGS.orgContent(membership.organization.slug), {
-        expire: 0,
-      })
+      const orgSlug = membership.organization.site?.slug
+      if (orgSlug) {
+        revalidateTag(CACHE_TAGS.orgContent(orgSlug), { expire: 0 })
+      }
     }
   }
 

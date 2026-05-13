@@ -15,13 +15,13 @@ export async function GET(
   const { id } = await params
 
   try {
-    const user = await prisma.user.findUnique({
+    const userRaw = await prisma.user.findUnique({
       where: { id },
       select: {
         id: true,
         email: true,
         name: true,
-        pageSlug: true,
+        site: { select: { slug: true } },
         title: true,
         isAdmin: true,
         requirePasswordReset: true,
@@ -31,12 +31,15 @@ export async function GET(
       },
     })
 
-    if (!user) {
+    if (!userRaw) {
       return NextResponse.json(
         { error: 'User not found' },
         { status: 404 }
       )
     }
+
+    const { site, ...rest } = userRaw
+    const user = { ...rest, pageSlug: site?.slug ?? null }
 
     return NextResponse.json({ user })
   } catch (error) {
@@ -99,16 +102,13 @@ export async function PATCH(
       }
     }
 
-    // Check if pageSlug is taken by another user
+    // Check if pageSlug is taken (URL slugs are unique across all sites).
     if (pageSlug) {
-      const pageSlugTaken = await prisma.user.findFirst({
-        where: {
-          pageSlug,
-          id: { not: id },
-        },
+      const taken = await prisma.site.findFirst({
+        where: { slug: pageSlug, NOT: { userId: id } },
       })
 
-      if (pageSlugTaken) {
+      if (taken) {
         return NextResponse.json(
           { error: 'Page slug already taken by another user' },
           { status: 409 }
@@ -116,32 +116,51 @@ export async function PATCH(
       }
     }
 
-    // Update user
-    const updatedUser = await prisma.user.update({
-      where: { id },
-      data: {
-        ...(email && { email }),
-        ...(name && { name }),
-        ...(pageSlug && { pageSlug }),
-        ...(title !== undefined && { title: title || null }),
-        ...(isAdmin !== undefined && { isAdmin }),
-        ...(requirePasswordReset !== undefined && { requirePasswordReset }),
-        ...(billingPlan !== undefined && { billingPlan }),
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        pageSlug: true,
-        title: true,
-        isAdmin: true,
-        billingPlan: true,
-        requirePasswordReset: true,
-        emailVerified: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+    // Update user (and Site row when pageSlug changes).
+    const updatedUserRaw = await prisma.$transaction(async (tx) => {
+      const u = await tx.user.update({
+        where: { id },
+        data: {
+          ...(email && { email }),
+          ...(name && { name }),
+          ...(title !== undefined && { title: title || null }),
+          ...(isAdmin !== undefined && { isAdmin }),
+          ...(requirePasswordReset !== undefined && { requirePasswordReset }),
+          ...(billingPlan !== undefined && { billingPlan }),
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          title: true,
+          isAdmin: true,
+          billingPlan: true,
+          requirePasswordReset: true,
+          emailVerified: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      })
+
+      let siteSlug: string | null = null
+      if (pageSlug) {
+        const upserted = await tx.site.upsert({
+          where: { userId: id },
+          update: { slug: pageSlug },
+          create: { slug: pageSlug, userId: id },
+        })
+        siteSlug = upserted.slug
+      } else {
+        const existing = await tx.site.findUnique({
+          where: { userId: id },
+          select: { slug: true },
+        })
+        siteSlug = existing?.slug ?? null
+      }
+
+      return { ...u, pageSlug: siteSlug }
     })
+    const updatedUser = updatedUserRaw
 
     // If billingPlan changed, create/update admin-granted subscription
     if (billingPlan !== undefined && billingPlan !== 'free') {

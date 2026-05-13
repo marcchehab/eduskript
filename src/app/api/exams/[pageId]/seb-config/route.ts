@@ -78,11 +78,18 @@ export async function GET(
       return NextResponse.json({ error: 'Exam page not found' }, { status: 404 })
     }
 
-    // Get the teacher (first author) to build the exam URL
+    // Get the teacher (first author) to build the exam URL. The teacher's URL
+    // slug lives on Site now — look it up alongside the user.
     const teacher = page.skript.authors[0]?.user
     const collectionSkript = page.skript.collectionSkripts[0]
 
-    if (!teacher?.pageSlug || !collectionSkript?.collection) {
+    const teacherSite = teacher
+      ? await prisma.site.findUnique({
+          where: { userId: teacher.id },
+          select: { slug: true },
+        })
+      : null
+    if (!teacherSite?.slug || !collectionSkript?.collection) {
       return NextResponse.json({ error: 'Invalid exam configuration' }, { status: 400 })
     }
 
@@ -91,7 +98,7 @@ export async function GET(
     const host = request.headers.get('host') || 'eduskript.org'
     const protocol = host.startsWith('localhost') ? 'http' : 'https'
     const orgSlug = process.env.DEFAULT_ORG_SLUG || 'eduskript'
-    const baseExamUrl = `${protocol}://${host}/org/${orgSlug}/${teacher.pageSlug}/${page.skript.slug}/${page.slug}`
+    const baseExamUrl = `${protocol}://${host}/org/${orgSlug}/${teacherSite.slug}/${page.skript.slug}/${page.slug}`
 
     // Generate one-time token for SEB authentication
     // This allows the user to be authenticated inside SEB without logging in again

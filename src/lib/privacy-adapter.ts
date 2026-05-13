@@ -111,9 +111,10 @@ function generateUsernameFromEmail(email: string): string {
  * Finds a unique page slug, adding numeric suffix if needed (e.g., john-doe, john-doe-2, john-doe-3)
  */
 async function findUniquePageSlug(prisma: PrismaClient, baseSlug: string): Promise<string> {
-  // First try the base slug
-  const existing = await prisma.user.findUnique({
-    where: { pageSlug: baseSlug },
+  // URL slugs live on Site (global uniqueness across users + orgs). Probe
+  // by site.slug rather than user.pageSlug.
+  const existing = await prisma.site.findUnique({
+    where: { slug: baseSlug },
     select: { id: true }
   })
 
@@ -121,21 +122,17 @@ async function findUniquePageSlug(prisma: PrismaClient, baseSlug: string): Promi
     return baseSlug
   }
 
-  // Add numeric suffix and try again (2, 3, 4, ...)
   for (let i = 2; i <= 100; i++) {
     const candidateSlug = `${baseSlug}-${i}`
-
-    const exists = await prisma.user.findUnique({
-      where: { pageSlug: candidateSlug },
+    const exists = await prisma.site.findUnique({
+      where: { slug: candidateSlug },
       select: { id: true }
     })
-
     if (!exists) {
       return candidateSlug
     }
   }
 
-  // Fallback: use timestamp (extremely unlikely to reach here)
   return `${baseSlug}-${Date.now().toString(36)}`
 }
 
@@ -227,24 +224,26 @@ async function autoJoinOrgBySignupContext(
     let orgIds: string[] = []
 
     if (context.teacherSlug) {
-      // Find the teacher and their org memberships
-      const teacher = await prisma.user.findUnique({
-        where: { pageSlug: context.teacherSlug },
+      // Resolve teacher via their site → user → orgs they're a member of.
+      const site = await prisma.site.findUnique({
+        where: { slug: context.teacherSlug },
         select: {
-          organizationMemberships: {
-            select: { organizationId: true },
+          user: {
+            select: {
+              organizationMemberships: { select: { organizationId: true } },
+            },
           },
         },
       })
-      orgIds = teacher?.organizationMemberships.map(m => m.organizationId) || []
+      orgIds = site?.user?.organizationMemberships.map(m => m.organizationId) || []
     } else if (context.orgSlug) {
-      // Find the org by slug
-      const org = await prisma.organization.findUnique({
+      // Resolve org via its site.
+      const site = await prisma.site.findUnique({
         where: { slug: context.orgSlug },
-        select: { id: true },
+        select: { organizationId: true },
       })
-      if (org) {
-        orgIds = [org.id]
+      if (site?.organizationId) {
+        orgIds = [site.organizationId]
       }
     }
 
@@ -374,10 +373,18 @@ export function PrivacyAdapter(options: PrivacyAdapterOptions): Adapter {
           data: {
             accountType: 'teacher',
             lastSeenAt: new Date(),
-            pageSlug,
             needsProfileCompletion: true,
           },
         })
+
+        // URL slug lives on Site — create the teacher's Site row if we
+        // managed to pick one. New teachers without a Site will be prompted
+        // to claim their page from the dashboard.
+        if (pageSlug) {
+          await prisma.site.create({
+            data: { slug: pageSlug, userId: createdUser.id },
+          })
+        }
 
         log.info(`Teacher account created: id=${createdUser.id}, pageSlug="${pageSlug}", email=${maskedEmail}`)
 

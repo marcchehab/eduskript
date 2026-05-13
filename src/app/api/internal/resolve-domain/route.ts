@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     // Normalize domain
     const normalizedDomain = domain.toLowerCase().trim()
 
-    // Check organization custom domains first
+    // Check organization custom domains first (slug lives on Site).
     const customDomain = await prisma.customDomain.findFirst({
       where: {
         domain: normalizedDomain,
@@ -28,8 +28,8 @@ export async function GET(request: NextRequest) {
         organization: {
           select: {
             id: true,
-            slug: true,
             name: true,
+            site: { select: { slug: true } },
           },
         },
       },
@@ -39,13 +39,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         type: 'org',
         orgId: customDomain.organization.id,
-        orgSlug: customDomain.organization.slug,
+        orgSlug: customDomain.organization.site?.slug ?? '',
         orgName: customDomain.organization.name,
         isPrimary: customDomain.isPrimary,
       })
     }
 
-    // Check teacher custom domains
+    // Check teacher custom domains (slug lives on Site).
     const teacherDomain = await prisma.teacherCustomDomain.findFirst({
       where: {
         domain: normalizedDomain,
@@ -55,8 +55,8 @@ export async function GET(request: NextRequest) {
         user: {
           select: {
             id: true,
-            pageSlug: true,
             name: true,
+            site: { select: { slug: true } },
           },
         },
       },
@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         type: 'teacher',
         userId: teacherDomain.user.id,
-        pageSlug: teacherDomain.user.pageSlug,
+        pageSlug: teacherDomain.user.site?.slug ?? null,
         userName: teacherDomain.user.name,
         isPrimary: teacherDomain.isPrimary,
       })

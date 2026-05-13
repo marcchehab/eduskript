@@ -317,7 +317,7 @@ async function performImport(
 
   const userSite = await prisma.site.findUnique({
     where: { userId },
-    select: { id: true },
+    select: { id: true, slug: true },
   })
   if (!userSite) {
     throw new Error(`User ${userId} has no Site — set up a public page before importing`)
@@ -566,14 +566,11 @@ async function performImport(
     }
   }
 
-  // Invalidate cache so imported content is visible immediately
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { pageSlug: true }
-  })
-  if (user?.pageSlug) {
-    revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), { expire: 0 })
-    revalidatePath(`/${user.pageSlug}`)
+  // Invalidate cache so imported content is visible immediately. `userSite`
+  // was fetched at the top of this function and is guaranteed non-null here.
+  if (userSite.slug) {
+    revalidateTag(CACHE_TAGS.teacherContent(userSite.slug), { expire: 0 })
+    revalidatePath(`/${userSite.slug}`)
     revalidatePath('/dashboard')
   }
 
@@ -861,13 +858,13 @@ export async function processImportZip(
   }
 
   // Invalidate cache so imported content is visible immediately
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { pageSlug: true }
+  const userSite = await prisma.site.findUnique({
+    where: { userId },
+    select: { slug: true }
   })
-  if (user?.pageSlug) {
-    revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), { expire: 0 })
-    revalidatePath(`/${user.pageSlug}`)
+  if (userSite?.slug) {
+    revalidateTag(CACHE_TAGS.teacherContent(userSite.slug), { expire: 0 })
+    revalidatePath(`/${userSite.slug}`)
     revalidatePath('/dashboard')
   }
 

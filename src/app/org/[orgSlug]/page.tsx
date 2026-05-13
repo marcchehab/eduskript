@@ -28,21 +28,26 @@ export async function generateMetadata({ params }: OrgPageProps): Promise<Metada
   const { orgSlug } = await params
 
   try {
-    const organization = await prisma.organization.findUnique({
+    const site = await prisma.site.findUnique({
       where: { slug: orgSlug },
       select: {
-        name: true,
-        description: true,
-        showIcon: true,
-        iconUrl: true,
-        pageTagline: true,
-        customDomains: {
-          where: { isVerified: true, isPrimary: true },
-          select: { domain: true },
-          take: 1,
-        },
+        organization: {
+          select: {
+            name: true,
+            description: true,
+            showIcon: true,
+            iconUrl: true,
+            pageTagline: true,
+            customDomains: {
+              where: { isVerified: true, isPrimary: true },
+              select: { domain: true },
+              take: 1,
+            },
+          }
+        }
       },
     })
+    const organization = site?.organization
 
     if (!organization) {
       return {

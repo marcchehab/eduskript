@@ -8,17 +8,18 @@ export async function GET() {
   if (error) return error
 
   try {
-    const organizations = await prisma.organization.findMany({
+    const orgsRaw = await prisma.organization.findMany({
       select: {
         id: true,
         name: true,
-        slug: true,
+        site: { select: { slug: true } },
         createdAt: true,
         _count: { select: { members: true } },
       },
       orderBy: { createdAt: 'desc' },
     })
 
+    const organizations = orgsRaw.map(({ site, ...o }) => ({ ...o, slug: site?.slug ?? '' }))
     return NextResponse.json({ organizations })
   } catch (error) {
     console.error('Error fetching organizations:', error)

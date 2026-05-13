@@ -33,18 +33,22 @@ export async function POST() {
   const pseudonym = user.email ? generatePseudonym(user.email) : null
   const anonymousName = `Student ${Math.random().toString(36).substring(2, 6)}`
 
-  await prisma.user.update({
-    where: { id: user.id },
-    data: {
-      accountType: 'student',
-      studentPseudonym: pseudonym,
-      name: anonymousName,
-      needsProfileCompletion: false,
-      // Clear teacher-specific fields
-      pageSlug: null,
-      pageName: null,
-      pageDescription: null,
-    },
+  // Convert to student and drop the teacher's Site (slug + display fields)
+  // so that pageSlug is freed up for another user to claim.
+  await prisma.$transaction(async (tx) => {
+    await tx.site.deleteMany({ where: { userId: user.id } })
+    await tx.user.update({
+      where: { id: user.id },
+      data: {
+        accountType: 'student',
+        studentPseudonym: pseudonym,
+        name: anonymousName,
+        needsProfileCompletion: false,
+        // Clear teacher-specific display fields (still live on User during Stage 5b)
+        pageName: null,
+        pageDescription: null,
+      },
+    })
   })
 
   return NextResponse.json({ message: 'Account converted to student' })

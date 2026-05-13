@@ -24,10 +24,9 @@ export async function POST(
       include: {
         site: {
           select: {
+            slug: true,
             userId: true,
             organizationId: true,
-            user: { select: { pageSlug: true } },
-            organization: { select: { slug: true } },
           },
         },
         skript: {
@@ -103,27 +102,26 @@ export async function POST(
       }
     })
 
-    // Revalidate caches
-    if (frontPage.site?.user?.pageSlug) {
-      const slug = frontPage.site.user.pageSlug
-      revalidateTag(CACHE_TAGS.teacherContent(slug), { expire: 0 })
-      revalidatePath(`/${slug}`)
-    } else if (frontPage.site?.organization?.slug) {
-      const slug = frontPage.site.organization.slug
-      revalidateTag(CACHE_TAGS.organization(slug), { expire: 0 })
-      revalidateTag(CACHE_TAGS.orgContent(slug), { expire: 0 })
-      revalidatePath(`/org/${slug}`)
+    // Revalidate caches. The page-level slug comes from Site directly now;
+    // the "user vs org" distinction is just which FK is set on Site.
+    if (frontPage.site?.userId && frontPage.site.slug) {
+      revalidateTag(CACHE_TAGS.teacherContent(frontPage.site.slug), { expire: 0 })
+      revalidatePath(`/${frontPage.site.slug}`)
+    } else if (frontPage.site?.organizationId && frontPage.site.slug) {
+      revalidateTag(CACHE_TAGS.organization(frontPage.site.slug), { expire: 0 })
+      revalidateTag(CACHE_TAGS.orgContent(frontPage.site.slug), { expire: 0 })
+      revalidatePath(`/org/${frontPage.site.slug}`)
     } else if (frontPage.skript) {
-      // Skript frontpage
+      // Skript frontpage — owner site provides the URL slug
       const skriptOwner = frontPage.skript.authors[0]?.user
       if (skriptOwner) {
-        const ownerUser = await prisma.user.findUnique({
-          where: { id: skriptOwner.id },
-          select: { pageSlug: true }
+        const ownerSite = await prisma.site.findUnique({
+          where: { userId: skriptOwner.id },
+          select: { slug: true }
         })
-        if (ownerUser?.pageSlug) {
-          revalidateTag(CACHE_TAGS.skriptBySlug(ownerUser.pageSlug, frontPage.skript.slug), { expire: 0 })
-          revalidatePath(`/${ownerUser.pageSlug}/${frontPage.skript.slug}`)
+        if (ownerSite?.slug) {
+          revalidateTag(CACHE_TAGS.skriptBySlug(ownerSite.slug, frontPage.skript.slug), { expire: 0 })
+          revalidatePath(`/${ownerSite.slug}/${frontPage.skript.slug}`)
         }
       }
     }

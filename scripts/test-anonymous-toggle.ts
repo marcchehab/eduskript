@@ -43,15 +43,15 @@ interface TestData {
 async function setupTestData(): Promise<TestData> {
   console.log('\n🔧 Setting up test data...\n')
 
-  // 1. Find existing eduadmin teacher
+  // 1. Find existing eduadmin teacher (by email or by their Site slug)
   const teacher = await prisma.user.findFirst({
     where: {
       OR: [
         { email: 'eduadmin@eduskript.org' },
-        { pageSlug: 'eduadmin' },
-        { username: 'eduadmin' }
+        { site: { slug: 'eduadmin' } },
       ]
-    }
+    },
+    include: { site: { select: { slug: true } } }
   })
 
   if (!teacher) {
@@ -60,7 +60,7 @@ async function setupTestData(): Promise<TestData> {
   }
 
   const teacherEmail = teacher.email || 'eduadmin'
-  console.log('✅ Using existing teacher:', teacherEmail, '(pageSlug:', teacher.pageSlug + ')')
+  console.log('✅ Using existing teacher:', teacherEmail, '(pageSlug:', teacher.site?.slug + ')')
 
   // 2. Create anonymous class (allowAnonymous = true)
   const anonymousClassCode = generateInviteCode()

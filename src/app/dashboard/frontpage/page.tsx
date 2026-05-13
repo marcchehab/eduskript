@@ -22,14 +22,14 @@ export default async function UserFrontPageEditPage() {
   // for site-level frontpages; the legacy userId column has been retired.
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { pageSlug: true, site: { select: { id: true } } }
+    select: { site: { select: { id: true, slug: true } } }
   })
 
   const frontPage = user?.site
     ? await prisma.frontPage.findUnique({ where: { siteId: user.site.id } })
     : null
 
-  const previewUrl = user?.pageSlug ? `/${user.pageSlug}` : undefined
+  const previewUrl = user?.site?.slug ? `/${user.site.slug}` : undefined
 
   return (
     <FrontPageEditor

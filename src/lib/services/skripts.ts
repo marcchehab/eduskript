@@ -193,31 +193,29 @@ export async function updateSkriptForUser(
   void ctx.editSource
   void ctx.editClient
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { pageSlug: true },
+  const userSite = await prisma.site.findUnique({
+    where: { userId },
+    select: { slug: true },
   })
-  if (user?.pageSlug) {
-    revalidateTag(CACHE_TAGS.skriptBySlug(user.pageSlug, updated.slug), {
-      expire: 0,
-    })
+  if (userSite?.slug) {
+    const pageSlug = userSite.slug
+    revalidateTag(CACHE_TAGS.skriptBySlug(pageSlug, updated.slug), { expire: 0 })
     if (normalizedSlug && normalizedSlug !== existing.slug) {
       // Old slug's tag also needs flushing so stale pages stop responding.
-      revalidateTag(CACHE_TAGS.skriptBySlug(user.pageSlug, existing.slug), {
-        expire: 0,
-      })
+      revalidateTag(CACHE_TAGS.skriptBySlug(pageSlug, existing.slug), { expire: 0 })
     }
-    revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), { expire: 0 })
+    revalidateTag(CACHE_TAGS.teacherContent(pageSlug), { expire: 0 })
     revalidatePath('/dashboard')
 
     const orgMemberships = await prisma.organizationMember.findMany({
       where: { userId },
-      select: { organization: { select: { slug: true } } },
+      select: { organization: { select: { site: { select: { slug: true } } } } },
     })
     for (const membership of orgMemberships) {
-      revalidateTag(CACHE_TAGS.orgContent(membership.organization.slug), {
-        expire: 0,
-      })
+      const orgSlug = membership.organization.site?.slug
+      if (orgSlug) {
+        revalidateTag(CACHE_TAGS.orgContent(orgSlug), { expire: 0 })
+      }
     }
   }
 

@@ -31,19 +31,24 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { orgSlug, skriptSlug, pageSlug } = await params
 
   try {
-    const organization = await prisma.organization.findUnique({
+    const orgSite = await prisma.site.findUnique({
       where: { slug: orgSlug },
       select: {
-        id: true,
-        name: true,
-        customDomains: {
-          where: { isVerified: true, isPrimary: true },
-          select: { domain: true },
-          take: 1,
-        },
+        organization: {
+          select: {
+            id: true,
+            name: true,
+            customDomains: {
+              where: { isVerified: true, isPrimary: true },
+              select: { domain: true },
+              take: 1,
+            },
+          }
+        }
       }
     })
 
+    const organization = orgSite?.organization
     if (!organization) {
       return { title: 'Page Not Found' }
     }
@@ -108,23 +113,28 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function OrgPublicPage({ params }: PageProps) {
   const { orgSlug, skriptSlug, pageSlug } = await params
 
-  const organization = await prisma.organization.findUnique({
+  const orgSiteRow = await prisma.site.findUnique({
     where: { slug: orgSlug },
     select: {
-      id: true,
-      name: true,
-      description: true,
-      showIcon: true,
-      iconUrl: true,
-      sidebarBehavior: true,
-      pageLanguage: true,
-      customDomains: {
-        where: { isVerified: true, isPrimary: true },
-        select: { domain: true },
-        take: 1,
-      },
+      organization: {
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          showIcon: true,
+          iconUrl: true,
+          sidebarBehavior: true,
+          pageLanguage: true,
+          customDomains: {
+            where: { isVerified: true, isPrimary: true },
+            select: { domain: true },
+            take: 1,
+          },
+        }
+      }
     }
   })
+  const organization = orgSiteRow?.organization
 
   if (!organization) {
     notFound()

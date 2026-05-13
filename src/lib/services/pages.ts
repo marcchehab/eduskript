@@ -340,45 +340,47 @@ export async function updatePageForUser(
     })
   }
 
-  // Revalidate the public page cache using tags.
-  // The whole block is gated on the author having a pageSlug — users without
+  // Revalidate the public page cache using tags. The whole block is gated
+  // on the author having a Site (URL slug lives on Site now); users without
   // a public page have nothing to invalidate.
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { pageSlug: true },
+  const userSite = await prisma.site.findUnique({
+    where: { userId },
+    select: { slug: true },
   })
 
-  if (user?.pageSlug) {
+  if (userSite?.slug) {
+    const pageSlug = userSite.slug
     log('Invalidating cache tags', {
-      pageSlug: user.pageSlug,
+      pageSlug,
       skriptSlug: existingPage.skript.slug,
       page: updatedPage.slug,
     })
     revalidateTag(
-      CACHE_TAGS.pageBySlug(user.pageSlug, existingPage.skript.slug, updatedPage.slug),
+      CACHE_TAGS.pageBySlug(pageSlug, existingPage.skript.slug, updatedPage.slug),
       { expire: 0 }
     )
     revalidateTag(
-      CACHE_TAGS.skriptBySlug(user.pageSlug, existingPage.skript.slug),
+      CACHE_TAGS.skriptBySlug(pageSlug, existingPage.skript.slug),
       { expire: 0 }
     )
 
     revalidatePath(
-      `/${user.pageSlug}/${existingPage.skript.slug}/${updatedPage.slug}`
+      `/${pageSlug}/${existingPage.skript.slug}/${updatedPage.slug}`
     )
 
-    revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), { expire: 0 })
+    revalidateTag(CACHE_TAGS.teacherContent(pageSlug), { expire: 0 })
 
     revalidatePath('/dashboard')
 
     const orgMemberships = await prisma.organizationMember.findMany({
       where: { userId },
-      select: { organization: { select: { slug: true } } },
+      select: { organization: { select: { site: { select: { slug: true } } } } },
     })
     for (const membership of orgMemberships) {
-      revalidateTag(CACHE_TAGS.orgContent(membership.organization.slug), {
-        expire: 0,
-      })
+      const orgSlug = membership.organization.site?.slug
+      if (orgSlug) {
+        revalidateTag(CACHE_TAGS.orgContent(orgSlug), { expire: 0 })
+      }
     }
   }
 
@@ -523,38 +525,37 @@ export async function restorePageVersionForUser(
     },
   })
 
-  // Same cache fan-out as updatePageForUser. The original REST route only
-  // hit revalidatePath; we add the tag-based invalidation so ISR routes
-  // pick up the rollback immediately.
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { pageSlug: true },
+  // Same cache fan-out as updatePageForUser. Gated on the user having a Site
+  // (URL slug lives on Site); users without one have nothing to invalidate.
+  const userSite = await prisma.site.findUnique({
+    where: { userId },
+    select: { slug: true },
   })
 
-  if (user?.pageSlug) {
+  if (userSite?.slug) {
+    const pageSlug = userSite.slug
     revalidateTag(
-      CACHE_TAGS.pageBySlug(user.pageSlug, existingPage.skript.slug, updatedPage.slug),
+      CACHE_TAGS.pageBySlug(pageSlug, existingPage.skript.slug, updatedPage.slug),
       { expire: 0 },
     )
     revalidateTag(
-      CACHE_TAGS.skriptBySlug(user.pageSlug, existingPage.skript.slug),
+      CACHE_TAGS.skriptBySlug(pageSlug, existingPage.skript.slug),
       { expire: 0 },
     )
     revalidatePath(
-      `/${user.pageSlug}/${existingPage.skript.slug}/${updatedPage.slug}`,
+      `/${pageSlug}/${existingPage.skript.slug}/${updatedPage.slug}`,
     )
-    revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), { expire: 0 })
+    revalidateTag(CACHE_TAGS.teacherContent(pageSlug), { expire: 0 })
     revalidatePath('/dashboard')
 
     const orgMemberships = await prisma.organizationMember.findMany({
       where: { userId },
-      select: { organization: { select: { slug: true } } },
+      select: { organization: { select: { site: { select: { slug: true } } } } },
     })
     for (const membership of orgMemberships) {
-      if (membership.organization?.slug) {
-        revalidateTag(CACHE_TAGS.orgContent(membership.organization.slug), {
-          expire: 0,
-        })
+      const orgSlug = membership.organization.site?.slug
+      if (orgSlug) {
+        revalidateTag(CACHE_TAGS.orgContent(orgSlug), { expire: 0 })
       }
     }
   }

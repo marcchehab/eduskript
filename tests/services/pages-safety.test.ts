@@ -21,6 +21,7 @@ vi.mock('@/lib/prisma', () => ({
     page: { findFirst: vi.fn(), update: vi.fn() },
     pageVersion: { create: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
     user: { findUnique: vi.fn() },
+    site: { findUnique: vi.fn() },
     organizationMember: { findMany: vi.fn() },
   },
 }))
@@ -56,7 +57,7 @@ const baseExistingPage = {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  vi.mocked(prisma.user.findUnique).mockResolvedValue({ pageSlug: 'marc' } as never)
+  vi.mocked(prisma.site.findUnique).mockResolvedValue({ slug: 'marc' } as never)
   vi.mocked(prisma.organizationMember.findMany).mockResolvedValue([] as never)
 })
 

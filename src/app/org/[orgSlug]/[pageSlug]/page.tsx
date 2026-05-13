@@ -25,11 +25,12 @@ export async function generateMetadata({ params }: OrgTeacherPageProps): Promise
   const { orgSlug, pageSlug } = await params
 
   try {
-    // Get organization
-    const organization = await prisma.organization.findUnique({
+    // Get organization (looked up via its Site, since URL slugs live there).
+    const orgSite = await prisma.site.findUnique({
       where: { slug: orgSlug },
-      select: { id: true, name: true }
+      select: { organization: { select: { id: true, name: true } } }
     })
+    const organization = orgSite?.organization
 
     if (!organization) {
       return {
@@ -38,10 +39,10 @@ export async function generateMetadata({ params }: OrgTeacherPageProps): Promise
       }
     }
 
-    // Find teacher who is a member of this org
+    // Find the teacher whose site slug matches pageSlug AND who is an org member.
     const teacher = await prisma.user.findFirst({
       where: {
-        pageSlug: pageSlug,
+        site: { slug: pageSlug },
         organizationMemberships: {
           some: { organizationId: organization.id }
         }
@@ -92,27 +93,32 @@ export async function generateMetadata({ params }: OrgTeacherPageProps): Promise
 export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
   const { orgSlug, pageSlug } = await params
 
-  // Get organization
-  const organization = await prisma.organization.findUnique({
+  // Get organization (looked up via its Site).
+  const orgSite = await prisma.site.findUnique({
     where: { slug: orgSlug },
     select: {
-      id: true,
-      name: true,
-      description: true,
-      showIcon: true,
-      iconUrl: true
+      organization: {
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          showIcon: true,
+          iconUrl: true
+        }
+      }
     }
   })
+  const organization = orgSite?.organization
 
   if (!organization) {
     notFound()
   }
 
-  // Find teacher who is a member of this org with their site-level page
-  // layout (PageLayout is now keyed on Site, not User).
+  // Find teacher whose Site slug matches pageSlug, and who is a member of
+  // this org. Layout lives on Site too.
   const teacher = await prisma.user.findFirst({
     where: {
-      pageSlug: pageSlug,
+      site: { slug: pageSlug },
       organizationMemberships: {
         some: { organizationId: organization.id }
       }
@@ -257,14 +263,16 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
     }
   }
 
-  // Fetch full site structure when sidebar is in "full" mode
+  // Fetch full site structure when sidebar is in "full" mode. The URL slug
+  // comes from Site now — the route param is the same value.
+  const teacherSlug = teacher.site?.slug ?? pageSlug
   const fullSiteStructure = teacher.sidebarBehavior === 'full'
-    ? await getFullSiteStructure(teacher.id, teacher.pageSlug || pageSlug)
+    ? await getFullSiteStructure(teacher.id, teacherSlug)
     : undefined
 
   const teacherData = {
     name: teacher.name || 'Teacher',
-    pageSlug: teacher.pageSlug || '',
+    pageSlug: teacherSlug,
     pageName: teacher.pageName || null,
     pageDescription: teacher.pageDescription || null,
     pageIcon: teacher.pageIcon || null,

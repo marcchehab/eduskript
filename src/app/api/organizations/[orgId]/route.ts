@@ -18,7 +18,6 @@ export async function GET(
         select: {
           id: true,
           name: true,
-          slug: true,
           description: true,
           showIcon: true,
           iconUrl: true,
@@ -30,6 +29,7 @@ export async function GET(
           billingPlan: true,
           createdAt: true,
           updatedAt: true,
+          site: { select: { slug: true } },
           _count: {
             select: { members: true },
           },
@@ -53,7 +53,9 @@ export async function GET(
       return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
     }
 
-    return NextResponse.json({ organization, teacherCount, studentCount })
+    // Surface slug at the legacy field name for the dashboard UI.
+    const orgWithSlug = { ...organization, slug: organization.site?.slug ?? '', site: undefined }
+    return NextResponse.json({ organization: orgWithSlug, teacherCount, studentCount })
   } catch (error) {
     console.error('Error fetching organization:', error)
     return NextResponse.json({ error: 'Failed to fetch organization' }, { status: 500 })
@@ -118,7 +120,6 @@ export async function PATCH(
       select: {
         id: true,
         name: true,
-        slug: true,
         description: true,
         showIcon: true,
         iconUrl: true,
@@ -130,13 +131,15 @@ export async function PATCH(
         billingPlan: true,
         createdAt: true,
         updatedAt: true,
+        site: { select: { slug: true } },
         _count: {
           select: { members: true },
         },
       },
     })
 
-    return NextResponse.json({ organization })
+    const orgWithSlug = { ...organization, slug: organization.site?.slug ?? '', site: undefined }
+    return NextResponse.json({ organization: orgWithSlug })
   } catch (error) {
     console.error('Error updating organization:', error)
     return NextResponse.json({ error: 'Failed to update organization' }, { status: 500 })
