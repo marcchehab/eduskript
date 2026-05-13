@@ -133,6 +133,27 @@ async function main() {
 
   const primaryAdminId = admins[0].id
 
+  // Docs sync needs a single owning Site. Collections are 1:1-owned by a
+  // Site now (CollectionAuthor is gone). Prefer the default org's Site so
+  // the docs render at eduskript.org/c/<skript>/<page>; fall back to the
+  // first admin's Site for self-hosted instances without an org.
+  const defaultOrgSlug = process.env.DEFAULT_ORG_SLUG || 'eduskript'
+  let ownerSite = await prisma.site.findFirst({
+    where: { slug: defaultOrgSlug, organizationId: { not: null } },
+    select: { id: true },
+  })
+  if (!ownerSite) {
+    ownerSite = await prisma.site.findUnique({
+      where: { userId: primaryAdminId },
+      select: { id: true },
+    })
+  }
+  if (!ownerSite) {
+    console.error(`❌ No suitable Site to own the docs collection (default org "${defaultOrgSlug}" missing AND admin ${primaryAdminId} has no Site).`)
+    process.exit(1)
+  }
+  const adminSite = ownerSite
+
   // 3. Collect all unique skript directories referenced
   const allSkriptDirs = new Set()
   for (const collectionDef of config.collections) {
@@ -227,48 +248,27 @@ async function main() {
   console.log(`\n   Processing ${config.collections.length} collection(s)...`)
 
   for (const collectionDef of config.collections) {
-    // Find or create collection
+    // Find or create collection. Collections are 1:1-owned by a Site now
+    // (no slug, no description, no CollectionAuthor); look up by
+    // (title, siteId) which is unique-enough for this admin-owned namespace.
     let collection = await prisma.collection.findFirst({
-      where: { slug: collectionDef.slug }
+      where: { title: collectionDef.title, siteId: adminSite.id }
     })
 
     if (collection) {
       collection = await prisma.collection.update({
         where: { id: collection.id },
-        data: {
-          title: collectionDef.title,
-          description: collectionDef.description || null
-        }
+        data: { title: collectionDef.title }
       })
-      console.log(`   ✓ Updated collection: ${collectionDef.slug}`)
+      console.log(`   ✓ Updated collection: ${collectionDef.title}`)
     } else {
       collection = await prisma.collection.create({
         data: {
           title: collectionDef.title,
-          slug: collectionDef.slug,
-          description: collectionDef.description || null,
-          isPublished: true
+          siteId: adminSite.id,
         }
       })
-      console.log(`   ✓ Created collection: ${collectionDef.slug}`)
-    }
-
-    // Grant admins author access on collection
-    for (const admin of admins) {
-      await prisma.collectionAuthor.upsert({
-        where: {
-          collectionId_userId: {
-            collectionId: collection.id,
-            userId: admin.id
-          }
-        },
-        update: { permission: 'author' },
-        create: {
-          collectionId: collection.id,
-          userId: admin.id,
-          permission: 'author'
-        }
-      })
+      console.log(`   ✓ Created collection: ${collectionDef.title}`)
     }
 
     // Link skripts to collection in specified order

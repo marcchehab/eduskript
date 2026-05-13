@@ -197,17 +197,26 @@ async function main() {
   // 5. Process collections and link skripts
   console.log(`\n   Processing ${config.collections.length} collection(s)...`)
 
-  // Docs sync requires a single owner site. We use the first admin's site
-  // (collections are 1:1-owned by a Site now; CollectionAuthor is gone).
+  // Docs sync needs a single owning Site. Prefer the default org's Site so
+  // the docs render at eduskript.org/c/<skript>/<page>; fall back to the
+  // first admin's Site for self-hosted instances without an org.
   const firstAdmin = admins[0]
   if (!firstAdmin) throw new Error('No admin users found for docs sync')
-  const adminSite = await prisma.site.findUnique({
-    where: { userId: firstAdmin.id },
+  const defaultOrgSlug = process.env.DEFAULT_ORG_SLUG || 'eduskript'
+  let ownerSite = await prisma.site.findFirst({
+    where: { slug: defaultOrgSlug, organizationId: { not: null } },
     select: { id: true },
   })
-  if (!adminSite) {
-    throw new Error(`Admin user ${firstAdmin.id} has no Site — set up a pageSlug first.`)
+  if (!ownerSite) {
+    ownerSite = await prisma.site.findUnique({
+      where: { userId: firstAdmin.id },
+      select: { id: true },
+    })
   }
+  if (!ownerSite) {
+    throw new Error(`No Site to own the docs collection (default org "${defaultOrgSlug}" missing AND admin ${firstAdmin.id} has no Site).`)
+  }
+  const adminSite = ownerSite
 
   for (const collectionDef of config.collections) {
     let collection = await prisma.collection.findFirst({
