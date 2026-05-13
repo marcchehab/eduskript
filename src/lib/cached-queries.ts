@@ -499,9 +499,9 @@ export const getOrgWithLayout = (slug: string) =>
       const org = await prisma.organization.findUnique({
         where: { slug },
         include: {
-          frontPage: true,
           site: {
             include: {
+              frontPage: true,
               pageLayout: {
                 include: {
                   items: { orderBy: { order: 'asc' } }
@@ -515,9 +515,12 @@ export const getOrgWithLayout = (slug: string) =>
         }
       })
       if (!org) return null
-      // Surface the layout under the legacy `pageLayout` field so call sites
-      // that still read org.pageLayout.items keep working during the migration.
-      return Object.assign(org, { pageLayout: org.site?.pageLayout ?? null })
+      // Surface the layout + frontpage under the legacy fields so call sites
+      // that still read org.pageLayout / org.frontPage keep working.
+      return Object.assign(org, {
+        pageLayout: org.site?.pageLayout ?? null,
+        frontPage: org.site?.frontPage ?? null,
+      })
     },
     [`org-layout-${slug}`],
     {

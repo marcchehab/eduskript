@@ -16,15 +16,22 @@ export async function GET(
     const { error, session, membership } = await requireOrgMember(orgId)
     if (error) return error
 
-    const frontPage = await prisma.frontPage.findUnique({
+    const site = await prisma.site.findUnique({
       where: { organizationId: orgId },
-      include: {
-        versions: {
-          orderBy: { version: 'desc' },
-          take: 1,
-        },
-      },
+      select: { id: true },
     })
+
+    const frontPage = site
+      ? await prisma.frontPage.findUnique({
+          where: { siteId: site.id },
+          include: {
+            versions: {
+              orderBy: { version: 'desc' },
+              take: 1,
+            },
+          },
+        })
+      : null
 
     // Determine if user can edit (admin/owner only)
     const canEdit =
@@ -61,19 +68,22 @@ export async function PATCH(
     const body = await request.json()
     const { content, isPublished } = body
 
-    // Get organization for cache revalidation
+    // Get organization (and its site) for the frontpage upsert + cache invalidation
     const organization = await prisma.organization.findUnique({
       where: { id: orgId },
-      select: { slug: true },
+      select: { slug: true, site: { select: { id: true } } },
     })
 
     if (!organization) {
       return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
     }
+    if (!organization.site) {
+      return NextResponse.json({ error: 'Organization has no site row' }, { status: 400 })
+    }
 
     // Get existing frontpage
     const existingFrontPage = await prisma.frontPage.findUnique({
-      where: { organizationId: orgId },
+      where: { siteId: organization.site.id },
       include: {
         versions: {
           orderBy: { version: 'desc' },
@@ -119,10 +129,10 @@ export async function PATCH(
         })
       }
     } else {
-      // Create new frontpage
+      // Create new frontpage scoped to the org's site
       frontPage = await prisma.frontPage.create({
         data: {
-          organizationId: orgId,
+          siteId: organization.site.id,
           content: content || '',
           isPublished: isPublished || false,
         },

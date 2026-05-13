@@ -39,10 +39,14 @@ export default async function OrgFrontPageEditPage({
     redirect('/dashboard')
   }
 
-  // Get organization's frontpage if it exists
-  const frontPage = await prisma.frontPage.findUnique({
+  // Get org's site and its frontpage (FrontPage now keys on siteId).
+  const orgSite = await prisma.site.findUnique({
     where: { organizationId: orgId },
+    select: { id: true },
   })
+  const frontPage = orgSite
+    ? await prisma.frontPage.findUnique({ where: { siteId: orgSite.id } })
+    : null
 
   const previewUrl = `/org/${organization.slug}`
 

@@ -145,8 +145,8 @@ model User {
   // "Check" press, and exam hand-in (see UserDataCheckpoint).
   userDataCheckpoints UserDataCheckpoint[] @relation("UserCheckpoints")
 
-  // Front page
-  frontPage         FrontPage?
+  // Front page versions authored by this user. Site-level frontpages live
+  // on Site, not on User, so no User.frontPage reverse relation.
   frontPageVersions FrontPageVersion[]
 
   // Import/Export jobs
@@ -234,6 +234,7 @@ model Site {
 
   collections Collection[]
   pageLayout  PageLayout?
+  frontPage   FrontPage?
 
   @@map("sites")
 }
@@ -736,20 +737,20 @@ model FrontPage {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  // Owner - exactly one of these should be set
-  userId         String? @unique @map("user_id") // For user landing pages
-  skriptId       String? @unique @map("skript_id") // For skript intro pages
-  organizationId String? @unique @map("organization_id") // For organization pages
+  // Owner. Exactly one of {siteId, skriptId} is set. Site-level frontpages
+  // (user / org page landing) live under siteId; skript frontpages still
+  // attach directly to a Skript.
+  siteId   String? @unique @map("site_id")
+  skriptId String? @unique @map("skript_id")
 
-  // File storage for user/org FrontPages (skript FrontPages use their skript's files)
+  // File storage for site-level FrontPages (skript FrontPages use their skript's files)
   fileSkriptId String? @unique @map("file_skript_id")
 
   // Relations
-  user         User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  skript       Skript?            @relation(fields: [skriptId], references: [id], onDelete: Cascade)
-  organization Organization?      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  fileSkript   Skript?            @relation("FrontPageFileStorage", fields: [fileSkriptId], references: [id])
-  versions     FrontPageVersion[]
+  site       Site?              @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  skript     Skript?            @relation(fields: [skriptId], references: [id], onDelete: Cascade)
+  fileSkript Skript?            @relation("FrontPageFileStorage", fields: [fileSkriptId], references: [id])
+  versions   FrontPageVersion[]
 
   @@map("front_pages")
 }
@@ -831,10 +832,9 @@ model Organization {
   // Relations
   members       OrganizationMember[]
   customDomains CustomDomain[]
-  frontPage     FrontPage?
 
-  // The org's public site (1:1). Page layout, collections, and display
-  // settings live under Site.
+  // The org's public site (1:1). Page layout, collections, frontpage, and
+  // display settings all live under Site.
   site Site?
 
   @@map("organizations")

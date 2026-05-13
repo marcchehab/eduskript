@@ -139,9 +139,10 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
   const session = await getServerSession(authOptions)
   const isOwner = session?.user?.id === teacher.id
 
-  // Check for frontpage (published for visitors, any for owner)
+  // Check for frontpage (published for visitors, any for owner). Site-level
+  // FrontPages link via Site, not directly via user.
   const frontPage = await prisma.frontPage.findFirst({
-    where: { userId: teacher.id }
+    where: { site: { userId: teacher.id } }
   })
 
   // Fetch public annotations, snaps, and sticky notes for this front page

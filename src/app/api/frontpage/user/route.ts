@@ -13,10 +13,11 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Only teachers can have frontpages
+    // Only teachers can have frontpages; we look up the user via their Site
+    // so the same query shape works once User.pageSlug is dropped later.
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { accountType: true }
+      select: { accountType: true, site: { select: { id: true } } }
     })
 
     if (user?.accountType !== 'teacher') {
@@ -25,9 +26,12 @@ export async function GET() {
         { status: 403 }
       )
     }
+    if (!user.site) {
+      return NextResponse.json({ frontPage: null, currentVersion: 0 })
+    }
 
     const frontPage = await prisma.frontPage.findUnique({
-      where: { userId: session.user.id },
+      where: { siteId: user.site.id },
       include: {
         versions: {
           orderBy: { version: 'desc' },
@@ -57,10 +61,15 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Only teachers can have frontpages
+    // Only teachers can have frontpages; we need the user's Site to scope
+    // the lookup/upsert.
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { accountType: true, pageSlug: true }
+      select: {
+        accountType: true,
+        pageSlug: true,
+        site: { select: { id: true } },
+      }
     })
 
     if (user?.accountType !== 'teacher') {
@@ -69,13 +78,19 @@ export async function PATCH(request: NextRequest) {
         { status: 403 }
       )
     }
+    if (!user.site) {
+      return NextResponse.json(
+        { error: 'You need to set up your public page before editing a frontpage' },
+        { status: 400 }
+      )
+    }
 
     const body = await request.json()
     const { content, isPublished } = body
 
     // Get existing frontpage
     const existingFrontPage = await prisma.frontPage.findUnique({
-      where: { userId: session.user.id },
+      where: { siteId: user.site.id },
       include: {
         versions: {
           orderBy: { version: 'desc' },
@@ -121,10 +136,10 @@ export async function PATCH(request: NextRequest) {
         })
       }
     } else {
-      // Create new frontpage
+      // Create new frontpage scoped to the site
       frontPage = await prisma.frontPage.create({
         data: {
-          userId: session.user.id,
+          siteId: user.site.id,
           content: content || '',
           isPublished: isPublished || false
         }

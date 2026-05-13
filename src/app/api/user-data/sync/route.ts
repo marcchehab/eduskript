@@ -607,11 +607,13 @@ export async function POST(request: NextRequest) {
           const frontPage = await prisma.frontPage.findUnique({
             where: { id: pageId },
             select: {
-              userId: true,
-              organizationId: true,
               skriptId: true,
-              user: { select: { pageSlug: true } },
-              organization: { select: { slug: true } },
+              site: {
+                select: {
+                  user: { select: { pageSlug: true } },
+                  organization: { select: { slug: true } },
+                },
+              },
               skript: {
                 select: {
                   slug: true,
@@ -635,13 +637,13 @@ export async function POST(request: NextRequest) {
 
           if (frontPage) {
             // User front page: /{pageSlug}
-            if (frontPage.userId && frontPage.user?.pageSlug) {
-              revalidatePath(`/${frontPage.user.pageSlug}`)
+            if (frontPage.site?.user?.pageSlug) {
+              revalidatePath(`/${frontPage.site.user.pageSlug}`)
             }
 
             // Organization front page: /org/{orgSlug}
-            if (frontPage.organizationId && frontPage.organization?.slug) {
-              revalidatePath(`/org/${frontPage.organization.slug}`)
+            if (frontPage.site?.organization?.slug) {
+              revalidatePath(`/org/${frontPage.site.organization.slug}`)
             }
 
             // Skript front page: /{pageSlug}/{skriptSlug}

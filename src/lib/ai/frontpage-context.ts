@@ -41,8 +41,14 @@ export async function loadFrontPageContext(args: {
   const frontPage = await prisma.frontPage.findUnique({
     where: { id: frontPageId },
     include: {
-      user: { select: { id: true, name: true, pageName: true, pageSlug: true } },
-      organization: { select: { id: true, name: true, slug: true } },
+      site: {
+        select: {
+          userId: true,
+          organizationId: true,
+          user: { select: { id: true, name: true, pageName: true, pageSlug: true } },
+          organization: { select: { id: true, name: true, slug: true } },
+        },
+      },
       skript: {
         include: {
           authors: { include: { user: true } },
@@ -58,15 +64,15 @@ export async function loadFrontPageContext(args: {
   }
 
   let canEdit = false
-  if (frontPage.userId && frontPage.userId === userId) canEdit = true
+  if (frontPage.site?.userId === userId) canEdit = true
   if (frontPage.skript) {
     const perms = checkSkriptPermissions(userId, frontPage.skript.authors, !!isAdmin)
     if (perms.canEdit) canEdit = true
   }
-  if (frontPage.organizationId) {
+  if (frontPage.site?.organizationId) {
     const membership = await prisma.organizationMember.findFirst({
       where: {
-        organizationId: frontPage.organizationId,
+        organizationId: frontPage.site.organizationId,
         userId,
         role: { in: ['owner', 'admin'] },
       },
@@ -86,14 +92,14 @@ export async function loadFrontPageContext(args: {
   const files = frontPage.skript?.files ?? frontPage.fileSkript?.files ?? []
 
   const title = frontPage.skript?.title
-    ?? frontPage.organization?.name
-    ?? frontPage.user?.pageName
-    ?? frontPage.user?.name
+    ?? frontPage.site?.organization?.name
+    ?? frontPage.site?.user?.pageName
+    ?? frontPage.site?.user?.name
     ?? 'Front Page'
 
   const slug = frontPage.skript?.slug
-    ?? frontPage.organization?.slug
-    ?? frontPage.user?.pageSlug
+    ?? frontPage.site?.organization?.slug
+    ?? frontPage.site?.user?.pageSlug
     ?? 'frontpage'
 
   const skriptContext: SkriptContext = {

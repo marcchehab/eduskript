@@ -18,16 +18,16 @@ export default async function UserFrontPageEditPage() {
 
   // Front page editing is free — part of the core publish-and-be-read experience.
 
-  // Get user's frontpage if it exists
-  const frontPage = await prisma.frontPage.findUnique({
-    where: { userId: session.user.id }
-  })
-
-  // Get user's username for preview URL
+  // Look up the user's site (1:1) and its frontpage. Site is the new owner
+  // for site-level frontpages; the legacy userId column has been retired.
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { pageSlug: true }
+    select: { pageSlug: true, site: { select: { id: true } } }
   })
+
+  const frontPage = user?.site
+    ? await prisma.frontPage.findUnique({ where: { siteId: user.site.id } })
+    : null
 
   const previewUrl = user?.pageSlug ? `/${user.pageSlug}` : undefined
 

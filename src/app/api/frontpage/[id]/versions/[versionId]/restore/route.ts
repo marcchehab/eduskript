@@ -22,7 +22,14 @@ export async function POST(
     const frontPage = await prisma.frontPage.findUnique({
       where: { id },
       include: {
-        user: true,
+        site: {
+          select: {
+            userId: true,
+            organizationId: true,
+            user: { select: { pageSlug: true } },
+            organization: { select: { slug: true } },
+          },
+        },
         skript: {
           include: {
             authors: { include: { user: true } },
@@ -37,9 +44,16 @@ export async function POST(
 
     // Check permissions based on owner type
     let canEdit = false
-    if (frontPage.userId) {
-      // User frontpage - only the owner can restore
-      canEdit = frontPage.userId === session.user.id
+    if (frontPage.site) {
+      const orgRoles = frontPage.site.organizationId
+        ? await prisma.organizationMember.findMany({
+            where: { userId: session.user.id, organizationId: frontPage.site.organizationId },
+            select: { organizationId: true, role: true },
+          })
+        : []
+      const isOwner = frontPage.site.userId === session.user.id
+      const isOrgEditor = orgRoles.some(r => r.role === 'owner' || r.role === 'admin')
+      canEdit = isOwner || isOrgEditor
     } else if (frontPage.skript) {
       const permissions = checkSkriptPermissions(session.user.id, frontPage.skript.authors)
       canEdit = permissions.canEdit
@@ -90,16 +104,15 @@ export async function POST(
     })
 
     // Revalidate caches
-    if (frontPage.userId) {
-      // User frontpage
-      const user = await prisma.user.findUnique({
-        where: { id: frontPage.userId },
-        select: { pageSlug: true }
-      })
-      if (user?.pageSlug) {
-        revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), { expire: 0 })
-        revalidatePath(`/${user.pageSlug}`)
-      }
+    if (frontPage.site?.user?.pageSlug) {
+      const slug = frontPage.site.user.pageSlug
+      revalidateTag(CACHE_TAGS.teacherContent(slug), { expire: 0 })
+      revalidatePath(`/${slug}`)
+    } else if (frontPage.site?.organization?.slug) {
+      const slug = frontPage.site.organization.slug
+      revalidateTag(CACHE_TAGS.organization(slug), { expire: 0 })
+      revalidateTag(CACHE_TAGS.orgContent(slug), { expire: 0 })
+      revalidatePath(`/org/${slug}`)
     } else if (frontPage.skript) {
       // Skript frontpage
       const skriptOwner = frontPage.skript.authors[0]?.user
