@@ -737,20 +737,31 @@ export const getOrgPublishedPage = (
 
       if (!skript) return null
 
-      // Verify the skript's collection is in the org's page layout
+      // The skript has to be reachable from the org's home page — either as a
+      // root skript pinned directly in the org's page layout, or via a
+      // collection that's in the layout. A skript can be both "in a
+      // collection" AND "pinned at root" since the page builder added root
+      // skripts; the old check only looked at the collection side and
+      // 404'd valid root pins.
       const collectionSkript = skript.collectionSkripts[0]
-      if (collectionSkript?.collection) {
-        const orgPageLayout = await prisma.pageLayout.findFirst({
-          where: { site: { organizationId: orgId } },
-          include: {
-            items: { where: { type: 'collection' } }
-          }
-        })
-        if (!orgPageLayout) return null
-        const configuredCollectionIds = orgPageLayout.items.map(item => item.contentId)
-        if (!configuredCollectionIds.includes(collectionSkript.collection.id)) {
-          return null
+      const orgPageLayout = await prisma.pageLayout.findFirst({
+        where: { site: { organizationId: orgId } },
+        include: {
+          items: { where: { type: { in: ['collection', 'skript'] } } }
         }
+      })
+      if (!orgPageLayout) return null
+      const layoutCollectionIds = new Set(
+        orgPageLayout.items.filter(i => i.type === 'collection').map(i => i.contentId)
+      )
+      const layoutSkriptIds = new Set(
+        orgPageLayout.items.filter(i => i.type === 'skript').map(i => i.contentId)
+      )
+      const reachableViaCollection =
+        !!collectionSkript?.collection && layoutCollectionIds.has(collectionSkript.collection.id)
+      const reachableAsRootSkript = layoutSkriptIds.has(skript.id)
+      if (!reachableViaCollection && !reachableAsRootSkript) {
+        return null
       }
 
       const page = skript.pages.find(p => p.slug === pageSlug)
