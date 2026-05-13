@@ -383,8 +383,19 @@ function PageBuilderItem({ item, index, onRemove, expandedCollections, onToggleC
                 <GripVertical className="w-4 h-4 text-muted-foreground" />
               </div>
             )}
-            {/* Remove button - positioned in top-right corner */}
-            <div className="absolute top-2 right-2 z-10">
+            {/* Remove button + publish toggle - top-right corner */}
+            <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
+              {item.type === 'skript' && item.permissions?.canEdit && item.isPublished !== undefined && (
+                <PublishToggle
+                  type="skript"
+                  itemId={item.id}
+                  isPublished={item.isPublished}
+                  isUnlisted={item.isUnlisted}
+                  onToggle={() => {}}
+                  size="sm"
+                  showText={false}
+                />
+              )}
               <Button
                 variant="ghost"
                 size="sm"
@@ -452,6 +463,12 @@ function PageBuilderItem({ item, index, onRemove, expandedCollections, onToggleC
               {item.type === 'collection' && (
                 <span className="text-xs text-muted-foreground">
                   • {item.skripts?.length || 0} skripts
+                </span>
+              )}
+              {item.type === 'skript' && item.isPublished === false && (
+                <span className="text-xs text-warning flex items-center gap-0.5">
+                  <EyeOff className="w-3 h-3" />
+                  Draft
                 </span>
               )}
             </div>

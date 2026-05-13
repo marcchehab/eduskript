@@ -174,7 +174,9 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
                         description: skript.description || contentData.description,
                         order: item.order,
                         slug: skript.slug || contentData.slug,
-                        permissions: contentData.permissions
+                        permissions: contentData.permissions,
+                        isPublished: skript.isPublished,
+                        isUnlisted: skript.isUnlisted,
                       }
                     }
                   }
@@ -295,22 +297,27 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
         dragData = { type: 'collection', id: collectionId, title: collection.title, description: collection.description }
       }
     } else if (draggableId.includes('-skript-')) {
-      // Handle skript dragging: parentId-skript-skriptId
-      const [parentId, , skriptId] = draggableId.split('-')
+      // Handle skript dragging: parentId-skript-skriptId. Split on the
+      // literal `-skript-` separator, not on every `-` — UUID-style skript
+      // IDs contain hyphens, so `split('-')[2]` would only return the first
+      // chunk and the lookup below would silently fail.
+      const sep = draggableId.indexOf('-skript-')
+      const parentId = draggableId.slice(0, sep)
+      const skriptId = draggableId.slice(sep + '-skript-'.length)
       const collection = pageItems.find(item => item.id === parentId)
       const skript = collection?.skripts?.find(s => s.id === skriptId)
       if (skript) {
-        dragData = { 
-          type: 'skript', 
-          id: skriptId, 
-          title: skript.title, 
+        dragData = {
+          type: 'skript',
+          id: skriptId,
+          title: skript.title,
           description: skript.description,
           parentId,
           permissions: skript.permissions
         }
       }
     }
-    
+
     setActiveItem(dragData)
     
     // Auto-expand editable collections when dragging skripts
@@ -379,7 +386,9 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
         dragData = { type: 'collection', id: collectionId, title: collection.title, description: collection.description }
       }
     } else if (draggableId.includes('-skript-')) {
-      const [parentId, , skriptId] = draggableId.split('-')
+      const sep = draggableId.indexOf('-skript-')
+      const parentId = draggableId.slice(0, sep)
+      const skriptId = draggableId.slice(sep + '-skript-'.length)
       const collection = pageItems.find(item => item.id === parentId)
       const skript = collection?.skripts?.find(s => s.id === skriptId)
       if (skript) {
@@ -398,7 +407,24 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
       return
     }
 
-    const destinationId = destination.droppableId
+    // Collections can never nest inside another collection. If the library
+    // picked a collection-internal droppable as destination (which happens
+    // whenever a collection drag overlaps another collection's body, since
+    // gap strips only cover ~12px between items), redirect the drop to the
+    // gap right after that collection. Without this the handler used to
+    // return early and @hello-pangea/dnd would snap the item back — looking
+    // like reordering randomly "didn't take."
+    let destinationId = destination.droppableId
+    if (dragData.type === 'collection') {
+      let targetCollectionId: string | null = null
+      if (destinationId.startsWith('collection-')) targetCollectionId = destinationId.replace('collection-', '')
+      else if (destinationId.startsWith('empty-')) targetCollectionId = destinationId.replace('empty-', '')
+      else if (destinationId.startsWith('skript-')) targetCollectionId = destinationId.replace('skript-', '')
+      if (targetCollectionId) {
+        const idx = pageItems.findIndex(i => i.id === targetCollectionId && i.type === 'collection')
+        if (idx !== -1) destinationId = `root-gap-${idx + 1}`
+      }
+    }
 
     // Simple insertion logic based on drop target
     let updatedItems = [...pageItems]
