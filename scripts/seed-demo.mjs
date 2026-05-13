@@ -87,23 +87,32 @@ async function main() {
   console.log('Creating demo user...')
 
   const hashedPassword = await bcrypt.hash(DEMO_PASSWORD, 12)
-  const user = await prisma.user.create({
-    data: {
-      email: DEMO_EMAIL,
-      name: 'Demo Teacher',
-      pageSlug: 'demo',
-      pageName: 'Demo',
-      accountType: 'teacher',
-      hashedPassword,
-      emailVerified: new Date(),
-      billingPlan: 'pro',
-    },
+  // URL slug + page-display fields live on Site now; create both rows
+  // atomically so /demo serves from the get-go.
+  const user = await prisma.$transaction(async (tx) => {
+    const u = await tx.user.create({
+      data: {
+        email: DEMO_EMAIL,
+        name: 'Demo Teacher',
+        accountType: 'teacher',
+        hashedPassword,
+        emailVerified: new Date(),
+        billingPlan: 'pro',
+      },
+    })
+    await tx.site.create({
+      data: { slug: 'demo', userId: u.id, pageName: 'Demo' },
+    })
+    return u
   })
 
-  // Add to eduskript org if it exists
-  const org = await prisma.organization.findUnique({
+  // Add to eduskript org if it exists. Organization.slug was dropped; the
+  // slug lives on the org's Site.
+  const orgSite = await prisma.site.findUnique({
     where: { slug: 'eduskript' },
+    select: { organizationId: true },
   })
+  const org = orgSite?.organizationId ? { id: orgSite.organizationId } : null
   if (org) {
     await prisma.organizationMember.create({
       data: {

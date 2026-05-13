@@ -133,23 +133,36 @@ async function main() {
   const requested =
     process.argv[2] || process.env.BUILTIN_PLUGIN_OWNER || 'eduadmin'
 
-  let user = await prisma.user.findFirst({ where: { pageSlug: requested } })
+  // URL slug + pageName both live on Site now — resolve the owner through
+  // the user's Site rather than the dropped User.pageSlug column.
+  let userSlug = requested
+  let site = await prisma.site.findUnique({
+    where: { slug: requested },
+    include: { user: true },
+  })
 
   // If the requested owner doesn't exist, fall back to the always-seeded
   // "eduadmin" account so a typo in BUILTIN_PLUGIN_OWNER doesn't stop seeding.
-  if (!user && requested !== 'eduadmin') {
+  if ((!site || !site.user) && requested !== 'eduadmin') {
     console.error(
       `No user found with pageSlug "${requested}" — falling back to "eduadmin"`,
     )
-    user = await prisma.user.findFirst({ where: { pageSlug: 'eduadmin' } })
+    userSlug = 'eduadmin'
+    site = await prisma.site.findUnique({
+      where: { slug: 'eduadmin' },
+      include: { user: true },
+    })
   }
 
-  if (!user) {
+  if (!site || !site.user) {
     console.error(`No user found with pageSlug "eduadmin" either — aborting`)
     process.exit(1)
   }
 
-  console.log(`Seeding plugins for user: ${user.pageName || user.name || user.pageSlug} (${user.pageSlug})`)
+  const user = site.user
+  const pageName = site.pageName ?? null
+
+  console.log(`Seeding plugins for user: ${pageName || user.name || userSlug} (${userSlug})`)
 
   let created = 0
   let updated = 0

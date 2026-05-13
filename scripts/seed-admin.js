@@ -34,17 +34,23 @@ async function main() {
   const randomPassword = crypto.randomBytes(12).toString('base64').slice(0, 16)
   const hashedPassword = await bcrypt.hash(randomPassword, 12)
 
-  await prisma.user.create({
-    data: {
-      email: 'eduadmin@eduskript.org',
-      name: 'Edu Admin',
-      username: 'eduadmin',
-      pageSlug: 'eduadmin',
-      hashedPassword,
-      emailVerified: new Date(),
-      isAdmin: true,
-      requirePasswordReset: true
-    }
+  // URL slug lives on Site now. Create user + Site atomically so the new
+  // admin can be served from /eduadmin immediately.
+  await prisma.$transaction(async (tx) => {
+    const u = await tx.user.create({
+      data: {
+        email: 'eduadmin@eduskript.org',
+        name: 'Edu Admin',
+        username: 'eduadmin',
+        hashedPassword,
+        emailVerified: new Date(),
+        isAdmin: true,
+        requirePasswordReset: true,
+      },
+    })
+    await tx.site.create({
+      data: { slug: 'eduadmin', userId: u.id, pageName: 'Edu Admin' },
+    })
   })
 
   console.log('========================================')
