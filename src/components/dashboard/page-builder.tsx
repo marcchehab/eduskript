@@ -1,10 +1,12 @@
 'use client'
 
-import { Fragment } from 'react'
+import { Fragment, useEffect, useRef } from 'react'
 import { Droppable, Draggable } from '@hello-pangea/dnd'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Layout, Eye, BookOpen, FileText, Plus, Edit, ChevronDown, ChevronRight, X, GripVertical, Pencil, EyeOff } from 'lucide-react'
+import { Sketch } from '@uiw/react-color'
 import { PublishToggle } from './publish-toggle'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
@@ -22,6 +24,7 @@ interface PageItem {
   isInLayout?: boolean // For skripts: whether they're explicitly in the page layout
   isPublished?: boolean // For skripts: whether the skript is published
   isUnlisted?: boolean // For skripts: whether the skript is hidden from navigation
+  accentColor?: string | null // For collections: hex color for sidebar letter markers
   permissions?: {
     canEdit: boolean
     canView: boolean
@@ -39,6 +42,11 @@ interface PageBuilderProps {
   onPreview?: () => void
   expandedCollections?: string[]
   onToggleCollection?: (collectionId: string) => void
+  // Called when the user saves the collection edit modal (rename + colour).
+  // Receives the full updated collection record from the API; the parent
+  // should merge it into local state. Null `accentColor` means "no tint,
+  // use default".
+  onCollectionUpdate?: (collection: { id: string; title: string; accentColor?: string | null }) => void
   draggedItem?: {
     type: 'collection' | 'skript'
     id: string
@@ -57,6 +65,7 @@ export function PageBuilder({
   onPreview,
   expandedCollections = [],
   onToggleCollection,
+  onCollectionUpdate,
   draggedItem,
   onRefresh,
   context = { type: 'user' }
@@ -281,6 +290,7 @@ export function PageBuilder({
                           onRemove={handleRemoveItem}
                           expandedCollections={expandedCollections}
                           onToggleCollection={onToggleCollection}
+                          onCollectionUpdate={onCollectionUpdate}
                           draggedItem={draggedItem}
                         />
                         <RootGap index={index + 1} />
@@ -337,6 +347,7 @@ interface PageBuilderItemProps {
   onRemove: (id: string, parentId?: string) => void
   expandedCollections: string[]
   onToggleCollection?: (collectionId: string) => void
+  onCollectionUpdate?: (collection: { id: string; title: string; accentColor?: string | null }) => void
   draggedItem?: {
     type: 'collection' | 'skript'
     id: string
@@ -347,7 +358,7 @@ interface PageBuilderItemProps {
   } | null
 }
 
-function PageBuilderItem({ item, index, onRemove, expandedCollections, onToggleCollection, draggedItem }: PageBuilderItemProps) {
+function PageBuilderItem({ item, index, onRemove, expandedCollections, onToggleCollection, onCollectionUpdate, draggedItem }: PageBuilderItemProps) {
   const Icon = item.type === 'collection' ? BookOpen : FileText
   // Root-level skripts use a distinct draggable prefix so the drag-end parser
   // can tell them apart from collections (both render through this component).
@@ -412,7 +423,14 @@ function PageBuilderItem({ item, index, onRemove, expandedCollections, onToggleC
           
           <div className="flex items-center gap-2">
             <div className="relative">
-              <Icon className="w-5 h-5 text-primary flex-shrink-0" />
+              <Icon
+                className="w-5 h-5 flex-shrink-0 text-primary"
+                style={
+                  item.type === 'collection' && item.accentColor
+                    ? { color: item.accentColor }
+                    : undefined
+                }
+              />
               {!item.permissions?.canEdit && (
                 <Eye className="w-3 h-3 text-muted-foreground absolute -bottom-1 -right-1 bg-background rounded-full" />
               )}
@@ -440,9 +458,22 @@ function PageBuilderItem({ item, index, onRemove, expandedCollections, onToggleC
               </div>
             ) : (
               <>
-                {item.permissions?.canEdit && item.slug ? (
+                {item.permissions?.canEdit && item.type === 'collection' ? (
+                  <div className="flex items-center gap-1.5">
+                    <CollectionTitleInlineEditor
+                      collectionId={item.id}
+                      title={item.title}
+                      onUpdated={onCollectionUpdate}
+                    />
+                    <CollectionColorButton
+                      collectionId={item.id}
+                      accentColor={item.accentColor ?? null}
+                      onUpdated={onCollectionUpdate}
+                    />
+                  </div>
+                ) : item.permissions?.canEdit && item.slug ? (
                   <Link
-                    href={item.type === 'collection' ? '#' : `/dashboard/skripts/${item.slug}`}
+                    href={`/dashboard/skripts/${item.slug}`}
                     className="font-medium text-sm truncate hover:underline flex items-center gap-1 w-fit"
                   >
                     {item.title}
@@ -502,6 +533,7 @@ function PageBuilderItem({ item, index, onRemove, expandedCollections, onToggleC
                           index={skriptIndex}
                           parentId={item.id}
                           parentCanEdit={item.permissions?.canEdit}
+                          parentAccentColor={item.accentColor ?? null}
                           onRemove={onRemove}
                         />
                       ))}
@@ -540,10 +572,13 @@ interface SimpleSkriptItemProps {
   index: number
   parentId: string
   parentCanEdit?: boolean
+  // Hex colour from the owning collection. When null we keep the default
+  // primary-blue icon (same as root skripts).
+  parentAccentColor?: string | null
   onRemove: (id: string, parentId?: string) => void
 }
 
-function SimpleSkriptItem({ item, index, parentId, parentCanEdit = true, onRemove }: SimpleSkriptItemProps) {
+function SimpleSkriptItem({ item, index, parentId, parentCanEdit = true, parentAccentColor = null, onRemove }: SimpleSkriptItemProps) {
 
   return (
     <Draggable 
@@ -574,10 +609,19 @@ function SimpleSkriptItem({ item, index, parentId, parentCanEdit = true, onRemov
             )}
 
             <div className="relative mt-0.5">
-              <FileText className={cn(
-                "w-4 h-4 flex-shrink-0",
-                !item.permissions?.canEdit ? "text-muted-foreground" : "text-primary"
-              )} />
+              <FileText
+                className={cn(
+                  "w-4 h-4 flex-shrink-0",
+                  !item.permissions?.canEdit
+                    ? "text-muted-foreground"
+                    : !parentAccentColor && "text-primary"
+                )}
+                style={
+                  item.permissions?.canEdit && parentAccentColor
+                    ? { color: parentAccentColor }
+                    : undefined
+                }
+              />
               {!item.permissions?.canEdit && (
                 <Eye className="w-3 h-3 text-muted-foreground absolute -bottom-1 -right-1 bg-background rounded-full" />
               )}
@@ -655,6 +699,190 @@ function SimpleSkriptItem({ item, index, parentId, parentCanEdit = true, onRemov
   )
 }
 
+// Curated palette shown at the bottom of the Sketch picker. Tailwind-500
+// hues — same family the public sidebar already uses for letter markers.
+const PRESET_ACCENT_COLORS = [
+  '#6b7280', // gray
+  '#ef4444', // red
+  '#f97316', // orange
+  '#eab308', // yellow
+  '#22c55e', // green
+  '#14b8a6', // teal
+  '#3b82f6', // blue
+  '#6366f1', // indigo
+  '#8b5cf6', // violet
+  '#ec4899', // pink
+]
 
+interface CollectionUpdate {
+  id: string
+  title: string
+  accentColor?: string | null
+}
+
+// Inline rename: title shows as text + small pencil. Click pencil (or the
+// title) → input replaces text, autofocus, save on Enter / blur, cancel on
+// Escape. PATCHes the API itself, then notifies the parent so local state
+// can refresh.
+function CollectionTitleInlineEditor({
+  collectionId,
+  title,
+  onUpdated,
+}: {
+  collectionId: string
+  title: string
+  onUpdated?: (collection: CollectionUpdate) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(title)
+  const [saving, setSaving] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  // Reset draft whenever the canonical title changes (e.g. successful save
+  // from elsewhere) and we're not actively editing.
+  useEffect(() => {
+    if (!editing) setDraft(title)
+  }, [title, editing])
+
+  // Autofocus + select on entry.
+  useEffect(() => {
+    if (editing) {
+      inputRef.current?.focus()
+      inputRef.current?.select()
+    }
+  }, [editing])
+
+  const commit = async () => {
+    const next = draft.trim()
+    if (!next || next === title) {
+      setEditing(false)
+      setDraft(title)
+      return
+    }
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/collections/${collectionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: next }),
+      })
+      if (!res.ok) throw new Error(await res.text())
+      const updated = await res.json()
+      onUpdated?.(updated)
+      setEditing(false)
+    } catch (err) {
+      console.error('Failed to rename collection:', err)
+      // Roll back the visible draft so the user isn't left with an
+      // unsavable input. They can click the pencil again to retry.
+      setDraft(title)
+      setEditing(false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            commit()
+          } else if (e.key === 'Escape') {
+            e.preventDefault()
+            setDraft(title)
+            setEditing(false)
+          }
+        }}
+        disabled={saving}
+        className="font-medium text-sm bg-transparent border-b border-primary outline-none w-fit min-w-[10ch] max-w-full"
+      />
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => setEditing(true)}
+      className="font-medium text-sm truncate hover:underline flex items-center gap-1 w-fit"
+      title="Rename collection"
+    >
+      {title}
+      <Edit className="w-3 h-3 flex-shrink-0" />
+    </button>
+  )
+}
+
+// Small coloured circle that opens a Sketch popover. The picker change fires
+// the PATCH immediately (no separate save step); reset clears accentColor
+// to null which the API treats as "no tint".
+function CollectionColorButton({
+  collectionId,
+  accentColor,
+  onUpdated,
+}: {
+  collectionId: string
+  accentColor: string | null
+  onUpdated?: (collection: CollectionUpdate) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const displayColor = accentColor || '#9ca3af' // muted gray when no colour set
+
+  const save = async (color: string | null) => {
+    try {
+      const res = await fetch(`/api/collections/${collectionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accentColor: color }),
+      })
+      if (!res.ok) throw new Error(await res.text())
+      const updated = await res.json()
+      onUpdated?.(updated)
+    } catch (err) {
+      console.error('Failed to update collection accent colour:', err)
+    }
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="rounded-full border border-border w-4 h-4 hover:scale-110 transition-transform flex-shrink-0"
+          style={{ backgroundColor: displayColor }}
+          title={accentColor ? `Accent: ${accentColor}` : 'Set accent colour'}
+          aria-label="Set collection accent colour"
+        />
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-2 color-picker-themed" align="start">
+        <Sketch
+          color={accentColor ?? '#9ca3af'}
+          presetColors={PRESET_ACCENT_COLORS}
+          disableAlpha
+          style={{ background: 'transparent', boxShadow: 'none' }}
+          onChange={(c) => save(c.hex)}
+        />
+        {accentColor && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="w-full mt-2 text-xs h-7"
+            onClick={() => {
+              save(null)
+              setOpen(false)
+            }}
+          >
+            Reset to default
+          </Button>
+        )}
+      </PopoverContent>
+    </Popover>
+  )
+}
 
 

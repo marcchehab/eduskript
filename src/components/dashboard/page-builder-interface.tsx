@@ -131,6 +131,7 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
                       type: 'collection' as const,
                       title: collection.title || contentData.title || `collection ${item.contentId}`,
                       description: collection.description || contentData.description,
+                      accentColor: collection.accentColor ?? null,
                       order: item.order,
                       permissions: contentData.permissions,
                       skripts: collectionSkripts.sort((a: { order: number }, b: { order: number }) => a.order - b.order)
@@ -911,6 +912,17 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
                 prev.includes(collectionId)
                   ? prev.filter(id => id !== collectionId)
                   : [...prev, collectionId]
+              )
+            }}
+            onCollectionUpdate={(updated) => {
+              // Modal handles the API call itself; we just sync local state
+              // so the title + accentColor refresh without a full reload.
+              setPageItems(items =>
+                items.map(it =>
+                  it.id === updated.id && it.type === 'collection'
+                    ? { ...it, title: updated.title, accentColor: updated.accentColor ?? null }
+                    : it
+                )
               )
             }}
             draggedItem={activeItem}

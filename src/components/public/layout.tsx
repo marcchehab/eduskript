@@ -617,10 +617,8 @@ export function PublicSiteLayout({
                     (displaySidebarItems[0].kind === 'collection' &&
                       displaySidebarItems[0].data.skripts.length === 1))
                 )
-                // Sequential letter index for root skripts only — collection
-                // skripts use their per-collection order. Counter advances
-                // across the interleaved list so root letters stay stable.
-                let rootLetterIdx = 0
+                // Root skripts render with no letter marker; collection
+                // skripts keep their per-collection letter (handled below).
                 return (
                   <>
                     {displaySidebarItems.map((item, index) => {
@@ -715,8 +713,9 @@ export function PublicSiteLayout({
                         )
                       }
                       // Root skript — render inline, no surrounding section
+                      // and no letter marker (those are reserved for skripts
+                      // inside collections, where the letter indicates order).
                       const skript = item.data
-                      const letterIdx = rootLetterIdx++
                       return (
                 <div key={`root-${skript.id}`} className={`${index > 0 ? 'mt-5' : ''} mb-4`}>
                   <div
@@ -726,9 +725,6 @@ export function PublicSiteLayout({
                         : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                     }`}
                   >
-                    <span className="w-5 h-5 rounded text-xs font-bold flex items-center justify-center mr-2 flex-shrink-0 text-white bg-gray-500">
-                      {String.fromCharCode(65 + letterIdx)}
-                    </span>
                     <button
                       onClick={() => navigateToSkript(skript.slug, skript.id, skript.hasFrontpage)}
                       className="truncate flex-1 text-left hover:text-primary"

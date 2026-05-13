@@ -2072,3 +2072,21 @@ mark.text-highlight-purple {
 }
 .prose-theme a.es-btn-outline { color: hsl(var(--foreground)); }
 .es-btn-outline:hover { background-color: hsl(var(--accent)); opacity: 1; }
+
+/* @uiw/react-color (Sketch picker) doesn't ship dark-mode styles — it
+   hardcodes white backgrounds on its wrapper + input fields. Wrap the
+   picker in .color-picker-themed and we repaint the chrome (the colour
+   swatches/sliders are colourful and theme-agnostic so we leave them
+   alone). The wrapper itself is transparent via inline style on Sketch
+   so the popover's themed background shows through. */
+.color-picker-themed .w-color-sketch {
+  color: hsl(var(--popover-foreground));
+}
+.dark .color-picker-themed .w-color-editable-input input {
+  background-color: hsl(var(--input)) !important;
+  color: hsl(var(--foreground)) !important;
+  box-shadow: inset 0 0 0 1px hsl(var(--border)) !important;
+}
+.dark .color-picker-themed .w-color-editable-input span {
+  color: hsl(var(--muted-foreground)) !important;
+}
