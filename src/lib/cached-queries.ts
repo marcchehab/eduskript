@@ -30,27 +30,28 @@ export const getTeacherByPageSlug = (pageSlug: string) =>
   unstable_cache(
     async () => {
       log('MISS getTeacherByPageSlug', { pageSlug })
-      // URL slug lives on Site now — look up the site by slug then return
-      // the linked user. The returned shape grafts `pageSlug` back onto the
-      // user object so consumers keep working without a sweep.
+      // URL slug AND page-display fields all live on Site now. Pull both
+      // sets in one query, then graft them onto the user object so
+      // consumers keep reading `user.pageName`, `user.pageSlug`, etc.
+      // without a sweep.
       const site = await prisma.site.findUnique({
         where: { slug: pageSlug },
         select: {
           slug: true,
+          pageName: true,
+          pageDescription: true,
+          pageIcon: true,
+          pageLanguage: true,
+          pageTagline: true,
+          sidebarBehavior: true,
+          typographyPreference: true,
           user: {
             select: {
               id: true,
               name: true,
               email: true,
-              pageName: true,
-              pageDescription: true,
-              pageIcon: true,
-              pageLanguage: true,
-              pageTagline: true,
               title: true,
               bio: true,
-              sidebarBehavior: true,
-              typographyPreference: true,
               billingPlan: true,
               customDomains: {
                 where: { isVerified: true, isPrimary: true },
@@ -62,7 +63,16 @@ export const getTeacherByPageSlug = (pageSlug: string) =>
         },
       })
       if (!site?.user) return null
-      return Object.assign(site.user, { pageSlug: site.slug })
+      return Object.assign(site.user, {
+        pageSlug: site.slug,
+        pageName: site.pageName,
+        pageDescription: site.pageDescription,
+        pageIcon: site.pageIcon,
+        pageLanguage: site.pageLanguage,
+        pageTagline: site.pageTagline,
+        sidebarBehavior: site.sidebarBehavior,
+        typographyPreference: site.typographyPreference,
+      })
     },
     [`teacher-${pageSlug}`],
     {
@@ -81,9 +91,10 @@ export const getTeacherByUsername = getTeacherByPageSlug
 export const getTeacherWithLayout = (pageSlug: string) =>
   unstable_cache(
     async () => {
-      // URL slug + page layout both live on Site. Look up the site by slug,
-      // then graft pageSlug and pageLayout onto the user object so existing
-      // accessors (`user.pageSlug`, `user.pageLayout`) keep working.
+      // URL slug, page layout, and page-display fields all live on Site.
+      // Look up the site by slug, then graft the site's fields onto the
+      // user object so existing accessors (`user.pageSlug`, `user.pageName`,
+      // `user.pageLayout`, …) keep working without a sweep.
       const site = await prisma.site.findUnique({
         where: { slug: pageSlug },
         include: {
@@ -98,6 +109,14 @@ export const getTeacherWithLayout = (pageSlug: string) =>
       if (!site?.user) return null
       return Object.assign(site.user, {
         pageSlug: site.slug,
+        pageName: site.pageName,
+        pageDescription: site.pageDescription,
+        pageIcon: site.pageIcon,
+        pageLanguage: site.pageLanguage,
+        pageTagline: site.pageTagline,
+        sidebarBehavior: site.sidebarBehavior,
+        typographyPreference: site.typographyPreference,
+        aiSystemPrompt: site.aiSystemPrompt,
         pageLayout: site.pageLayout ?? null,
       })
     },
@@ -522,8 +541,19 @@ export const getOrgWithLayout = (slug: string) =>
         }
       })
       if (!site?.organization) return null
+      // Graft slug + all page-display fields onto the org so consumers
+      // can keep reading `org.description`, `org.iconUrl`, etc. without
+      // a sweep. Map Site.pageIcon → org.iconUrl / Site.pageDescription
+      // → org.description for the legacy field names.
       return Object.assign(site.organization, {
         slug: site.slug,
+        description: site.pageDescription,
+        iconUrl: site.pageIcon,
+        showIcon: site.showIcon,
+        pageLanguage: site.pageLanguage,
+        pageTagline: site.pageTagline,
+        sidebarBehavior: site.sidebarBehavior,
+        aiSystemPrompt: site.aiSystemPrompt,
         pageLayout: site.pageLayout ?? null,
         frontPage: site.frontPage ?? null,
       })

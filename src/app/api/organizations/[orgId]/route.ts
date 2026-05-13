@@ -18,18 +18,23 @@ export async function GET(
         select: {
           id: true,
           name: true,
-          description: true,
-          showIcon: true,
-          iconUrl: true,
           allowMemberPages: true,
           allowTeacherCustomDomains: true,
           requireEmailDomain: true,
-          sidebarBehavior: true,
-          aiSystemPrompt: true,
           billingPlan: true,
           createdAt: true,
           updatedAt: true,
-          site: { select: { slug: true } },
+          // Page-display fields live on Site now.
+          site: {
+            select: {
+              slug: true,
+              pageDescription: true,
+              showIcon: true,
+              pageIcon: true,
+              sidebarBehavior: true,
+              aiSystemPrompt: true,
+            },
+          },
           _count: {
             select: { members: true },
           },
@@ -53,8 +58,18 @@ export async function GET(
       return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
     }
 
-    // Surface slug at the legacy field name for the dashboard UI.
-    const orgWithSlug = { ...organization, slug: organization.site?.slug ?? '', site: undefined }
+    // Surface slug + page-display fields at their legacy User/Org field
+    // names so the dashboard UI doesn't need to be touched.
+    const orgWithSlug = {
+      ...organization,
+      slug: organization.site?.slug ?? '',
+      description: organization.site?.pageDescription ?? null,
+      showIcon: organization.site?.showIcon ?? true,
+      iconUrl: organization.site?.pageIcon ?? null,
+      sidebarBehavior: organization.site?.sidebarBehavior ?? 'contextual',
+      aiSystemPrompt: organization.site?.aiSystemPrompt ?? null,
+      site: undefined,
+    }
     return NextResponse.json({ organization: orgWithSlug, teacherCount, studentCount })
   } catch (error) {
     console.error('Error fetching organization:', error)
@@ -94,51 +109,75 @@ export async function PATCH(
       }
     }
 
-    const updateData: Record<string, unknown> = {}
-    if (name !== undefined) updateData.name = name.trim()
-    if (description !== undefined) updateData.description = description || null
-    if (showIcon !== undefined) updateData.showIcon = Boolean(showIcon)
-    if (iconUrl !== undefined) updateData.iconUrl = iconUrl || null
-    if (allowMemberPages !== undefined) updateData.allowMemberPages = Boolean(allowMemberPages)
-    if (allowTeacherCustomDomains !== undefined) updateData.allowTeacherCustomDomains = Boolean(allowTeacherCustomDomains)
+    // Split fields between Organization (entity-level settings) and Site
+    // (page-display fields).
+    const orgUpdate: Record<string, unknown> = {}
+    if (name !== undefined) orgUpdate.name = name.trim()
+    if (allowMemberPages !== undefined) orgUpdate.allowMemberPages = Boolean(allowMemberPages)
+    if (allowTeacherCustomDomains !== undefined) orgUpdate.allowTeacherCustomDomains = Boolean(allowTeacherCustomDomains)
     if (requireEmailDomain !== undefined) {
-      updateData.requireEmailDomain = requireEmailDomain || null
+      orgUpdate.requireEmailDomain = requireEmailDomain || null
     }
+
+    const siteUpdate: Record<string, unknown> = {}
+    if (description !== undefined) siteUpdate.pageDescription = description || null
+    if (showIcon !== undefined) siteUpdate.showIcon = Boolean(showIcon)
+    if (iconUrl !== undefined) siteUpdate.pageIcon = iconUrl || null
     if (sidebarBehavior !== undefined) {
       if (sidebarBehavior && !['contextual', 'full'].includes(sidebarBehavior)) {
         return NextResponse.json({ error: 'Invalid sidebar behavior' }, { status: 400 })
       }
-      updateData.sidebarBehavior = sidebarBehavior || 'contextual'
+      siteUpdate.sidebarBehavior = sidebarBehavior || 'contextual'
     }
     if (aiSystemPrompt !== undefined) {
-      updateData.aiSystemPrompt = aiSystemPrompt || null
+      siteUpdate.aiSystemPrompt = aiSystemPrompt || null
+    }
+
+    if (Object.keys(siteUpdate).length > 0) {
+      await prisma.site.update({
+        where: { organizationId: orgId },
+        data: siteUpdate,
+      })
     }
 
     const organization = await prisma.organization.update({
       where: { id: orgId },
-      data: updateData,
+      data: orgUpdate,
       select: {
         id: true,
         name: true,
-        description: true,
-        showIcon: true,
-        iconUrl: true,
         allowMemberPages: true,
         allowTeacherCustomDomains: true,
         requireEmailDomain: true,
-        sidebarBehavior: true,
-        aiSystemPrompt: true,
         billingPlan: true,
         createdAt: true,
         updatedAt: true,
-        site: { select: { slug: true } },
+        site: {
+          select: {
+            slug: true,
+            pageDescription: true,
+            showIcon: true,
+            pageIcon: true,
+            sidebarBehavior: true,
+            aiSystemPrompt: true,
+          },
+        },
         _count: {
           select: { members: true },
         },
       },
     })
 
-    const orgWithSlug = { ...organization, slug: organization.site?.slug ?? '', site: undefined }
+    const orgWithSlug = {
+      ...organization,
+      slug: organization.site?.slug ?? '',
+      description: organization.site?.pageDescription ?? null,
+      showIcon: organization.site?.showIcon ?? true,
+      iconUrl: organization.site?.pageIcon ?? null,
+      sidebarBehavior: organization.site?.sidebarBehavior ?? 'contextual',
+      aiSystemPrompt: organization.site?.aiSystemPrompt ?? null,
+      site: undefined,
+    }
     return NextResponse.json({ organization: orgWithSlug })
   } catch (error) {
     console.error('Error updating organization:', error)

@@ -75,19 +75,23 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
   const orgSite = await prisma.site.findUnique({
     where: { slug: orgSlug },
     select: {
-      organization: {
-        select: {
-          id: true,
-          name: true,
-          description: true,
-          showIcon: true,
-          iconUrl: true,
-          sidebarBehavior: true
-        }
-      }
+      // Page-display fields live on Site; org carries only the entity name.
+      pageDescription: true,
+      pageIcon: true,
+      showIcon: true,
+      sidebarBehavior: true,
+      organization: { select: { id: true, name: true } },
     }
   })
-  const organization = orgSite?.organization ?? null
+  const organization = orgSite?.organization
+    ? {
+        ...orgSite.organization,
+        description: orgSite.pageDescription,
+        iconUrl: orgSite.pageIcon,
+        showIcon: orgSite.showIcon,
+        sidebarBehavior: orgSite.sidebarBehavior,
+      }
+    : null
 
   if (!organization) {
     notFound()

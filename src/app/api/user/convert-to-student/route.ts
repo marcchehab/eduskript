@@ -44,11 +44,10 @@ export async function POST() {
         studentPseudonym: pseudonym,
         name: anonymousName,
         needsProfileCompletion: false,
-        // Clear teacher-specific display fields (still live on User during Stage 5b)
-        pageName: null,
-        pageDescription: null,
       },
     })
+    // Page-display fields (pageName, pageDescription, …) all live on Site,
+    // and the Site was just deleted above — so they're gone for free.
   })
 
   return NextResponse.json({ message: 'Account converted to student' })

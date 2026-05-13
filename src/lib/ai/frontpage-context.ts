@@ -46,7 +46,10 @@ export async function loadFrontPageContext(args: {
           slug: true,
           userId: true,
           organizationId: true,
-          user: { select: { id: true, name: true, pageName: true } },
+          // pageName lives on Site now — title fallback uses site.pageName,
+          // user.name is just the personal name fallback below it.
+          pageName: true,
+          user: { select: { id: true, name: true } },
           organization: { select: { id: true, name: true } },
         },
       },
@@ -93,8 +96,8 @@ export async function loadFrontPageContext(args: {
   const files = frontPage.skript?.files ?? frontPage.fileSkript?.files ?? []
 
   const title = frontPage.skript?.title
+    ?? frontPage.site?.pageName
     ?? frontPage.site?.organization?.name
-    ?? frontPage.site?.user?.pageName
     ?? frontPage.site?.user?.name
     ?? 'Front Page'
 

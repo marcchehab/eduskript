@@ -116,15 +116,16 @@ export default async function OrgPublicPage({ params }: PageProps) {
   const orgSiteRow = await prisma.site.findUnique({
     where: { slug: orgSlug },
     select: {
+      // Page-display fields live on Site.
+      pageDescription: true,
+      pageIcon: true,
+      pageLanguage: true,
+      showIcon: true,
+      sidebarBehavior: true,
       organization: {
         select: {
           id: true,
           name: true,
-          description: true,
-          showIcon: true,
-          iconUrl: true,
-          sidebarBehavior: true,
-          pageLanguage: true,
           customDomains: {
             where: { isVerified: true, isPrimary: true },
             select: { domain: true },
@@ -135,6 +136,15 @@ export default async function OrgPublicPage({ params }: PageProps) {
     }
   })
   const organization = orgSiteRow?.organization
+    ? {
+        ...orgSiteRow.organization,
+        description: orgSiteRow.pageDescription,
+        iconUrl: orgSiteRow.pageIcon,
+        pageLanguage: orgSiteRow.pageLanguage,
+        showIcon: orgSiteRow.showIcon,
+        sidebarBehavior: orgSiteRow.sidebarBehavior,
+      }
+    : null
 
   if (!organization) {
     notFound()

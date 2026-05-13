@@ -22,10 +22,10 @@ export async function POST(request: Request) {
     }
 
     // Create the eduskript organization + its site atomically.
+    // Page-display fields (description, etc.) all live on Site now.
     const org = await prisma.organization.create({
       data: {
         name: 'Eduskript',
-        description: 'The Eduskript platform organization',
         site: {
           create: {
             slug: 'eduskript',

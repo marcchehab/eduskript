@@ -175,7 +175,6 @@ export async function POST(request: Request) {
         data: {
           email: normalizedEmail,
           name,
-          pageName: isStudent ? null : name,
           title: isStudent ? null : (title || null),
           hashedPassword,
           emailVerified: new Date(),
@@ -200,8 +199,10 @@ export async function POST(request: Request) {
       })
       let siteSlug: string | null = null
       if (!isStudent && pageSlug) {
+        // Mirror the display name on Site.pageName so the public page
+        // renders the teacher's name on first load (no separate edit step).
         const site = await tx.site.create({
-          data: { slug: pageSlug, userId: u.id },
+          data: { slug: pageSlug, userId: u.id, pageName: name },
         })
         siteSlug = site.slug
       }

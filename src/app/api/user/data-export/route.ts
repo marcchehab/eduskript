@@ -37,6 +37,8 @@ export async function GET(req: NextRequest) {
         site: {
           select: {
             slug: true,
+            pageDescription: true,
+            sidebarBehavior: true,
             collections: {
               select: {
                 id: true,
@@ -140,7 +142,7 @@ export async function GET(req: NextRequest) {
         username: userData.site?.slug ?? null,
         title: userData.title,
         bio: userData.bio,
-        pageDescription: userData.pageDescription,
+        pageDescription: userData.site?.pageDescription ?? null,
         accountType: userData.accountType,
         studentPseudonym: userData.studentPseudonym,
         createdAt: userData.createdAt,
@@ -150,7 +152,7 @@ export async function GET(req: NextRequest) {
       },
       preferences: {
         themePreference: userData.themePreference,
-        sidebarBehavior: userData.sidebarBehavior,
+        sidebarBehavior: userData.site?.sidebarBehavior ?? null,
       },
       accounts: userData.accounts,
       // Owned (1:1 site) collections — there's no permission level anymore.

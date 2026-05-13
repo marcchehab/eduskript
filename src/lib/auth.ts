@@ -280,8 +280,7 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id
         // Fetch additional user data once during sign-in and store in token.
-        // URL slug lives on Site now (Stage 5a); other page-display fields
-        // still live on User until Stage 5b.
+        // URL slug + page-display fields all live on Site now (Stage 5).
         const dbUser = await prisma.user.findUnique({
           where: { id: user.id },
           select: {
@@ -290,9 +289,6 @@ export const authOptions: NextAuthOptions = {
             email: true,
             image: true,
             username: true,
-            pageName: true,
-            pageDescription: true,
-            pageIcon: true,
             title: true,
             bio: true,
             isAdmin: true,
@@ -301,17 +297,24 @@ export const authOptions: NextAuthOptions = {
             accountType: true,
             studentPseudonym: true,
             billingPlan: true,
-            typographyPreference: true,
-            site: { select: { slug: true } },
+            site: {
+              select: {
+                slug: true,
+                pageName: true,
+                pageDescription: true,
+                pageIcon: true,
+                typographyPreference: true,
+              },
+            },
           }
         })
 
         if (dbUser) {
           token.username = dbUser.username
           token.pageSlug = dbUser.site?.slug ?? null
-          token.pageName = dbUser.pageName
-          token.pageDescription = dbUser.pageDescription
-          token.pageIcon = dbUser.pageIcon
+          token.pageName = dbUser.site?.pageName ?? null
+          token.pageDescription = dbUser.site?.pageDescription ?? null
+          token.pageIcon = dbUser.site?.pageIcon ?? null
           token.title = dbUser.title
           token.bio = dbUser.bio
           token.name = dbUser.name
@@ -350,7 +353,7 @@ export const authOptions: NextAuthOptions = {
           token.accountType = dbUser.accountType
           token.studentPseudonym = dbUser.studentPseudonym
           token.billingPlan = dbUser.billingPlan
-          token.typographyPreference = dbUser.typographyPreference
+          token.typographyPreference = dbUser.site?.typographyPreference ?? null
 
           // For students, store OAuth email in token (for display purposes, NOT stored in DB)
           // This allows showing the student their email when they need to share it with teachers
@@ -479,9 +482,6 @@ export const authOptions: NextAuthOptions = {
             email: true,
             image: true,
             username: true,
-            pageName: true,
-            pageDescription: true,
-            pageIcon: true,
             title: true,
             bio: true,
             isAdmin: true,
@@ -490,17 +490,24 @@ export const authOptions: NextAuthOptions = {
             accountType: true,
             studentPseudonym: true,
             billingPlan: true,
-            typographyPreference: true,
-            site: { select: { slug: true } },
+            site: {
+              select: {
+                slug: true,
+                pageName: true,
+                pageDescription: true,
+                pageIcon: true,
+                typographyPreference: true,
+              },
+            },
           }
         })
 
         if (dbUser) {
           token.username = dbUser.username
           token.pageSlug = dbUser.site?.slug ?? null
-          token.pageName = dbUser.pageName
-          token.pageDescription = dbUser.pageDescription
-          token.pageIcon = dbUser.pageIcon
+          token.pageName = dbUser.site?.pageName ?? null
+          token.pageDescription = dbUser.site?.pageDescription ?? null
+          token.pageIcon = dbUser.site?.pageIcon ?? null
           token.title = dbUser.title
           token.bio = dbUser.bio
           token.name = dbUser.name
@@ -514,7 +521,7 @@ export const authOptions: NextAuthOptions = {
           token.accountType = dbUser.accountType
           token.studentPseudonym = dbUser.studentPseudonym
           token.billingPlan = dbUser.billingPlan
-          token.typographyPreference = dbUser.typographyPreference
+          token.typographyPreference = dbUser.site?.typographyPreference ?? null
         }
       }
 

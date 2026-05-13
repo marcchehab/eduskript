@@ -50,10 +50,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           select: {
             id: true,
             name: true,
-            pageName: true,
             image: true,
             title: true,
-            site: { select: { slug: true } },
+            site: { select: { slug: true, pageName: true } },
           },
         },
       },
@@ -63,6 +62,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const teachers = members.map((m) => ({
       ...m.user,
       pageSlug: m.user.site?.slug ?? null,
+      pageName: m.user.site?.pageName ?? null,
       site: undefined,
     }))
 

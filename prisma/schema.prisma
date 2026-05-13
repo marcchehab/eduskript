@@ -66,24 +66,16 @@ model User {
   // User identity
   username String? @unique // User's unique identifier (for login, collaboration)
 
-  // Page-specific fields (display only — URL slug lives on Site)
-  pageName        String? // Display name for the public page
-  pageDescription String? // Description shown below page title in sidebar
-  pageIcon        String? // URL to page icon image (displayed in sidebar)
-  pageLanguage    String? @map("page_language") // BCP-47 tag for <html lang> when teacher has a custom domain
-  pageTagline     String? @map("page_tagline") // Short SEO tagline appended to pageName as the home <title>
-
-  // Profile fields (shown to collaborators)
+  // Profile fields (shown to collaborators).
+  // Public-page display fields (pageName, pageDescription, pageIcon,
+  // pageTagline, pageLanguage, sidebarBehavior, typographyPreference,
+  // aiSystemPrompt) all live on Site now — Site is the only public-page
+  // entity, and the duplicates made every write path a footgun.
   bio   String?
   title String?
 
-  // User preferences
-  themePreference      String? @default("system") // "light", "dark", or "system"
-  sidebarBehavior      String? @default("full")
-  typographyPreference String? @default("modern")
-
-  // AI customization
-  aiSystemPrompt String? @db.Text // Custom system prompt prepended to AI assistant messages
+  // User preferences (per-user, not per-site)
+  themePreference String? @default("system") // "light", "dark", or "system"
 
   // Admin and security
   isAdmin                Boolean @default(false)
@@ -803,20 +795,16 @@ model ImportJob {
 // and governance fields. URL slug lives on the org's Site; display fields
 // will move next (Stage 5b).
 model Organization {
-  id           String  @id @default(cuid())
-  name         String // "Eduskript", "Springfield High" — entity name
-  description  String?
-  showIcon     Boolean @default(true) @map("show_icon")
-  iconUrl      String? @map("icon_url")
-  pageLanguage String? @map("page_language")
-  pageTagline  String? @map("page_tagline")
+  id   String @id @default(cuid())
+  name String // "Eduskript", "Springfield High" — entity name
+  // Page-display fields (description, showIcon, iconUrl, pageLanguage,
+  // pageTagline, sidebarBehavior, aiSystemPrompt) all live on Site now —
+  // Site is the only public-page entity.
 
-  // Settings
+  // Settings (entity-level, not page-level)
   allowMemberPages          Boolean @default(true) @map("allow_member_pages")
   allowTeacherCustomDomains Boolean @default(false) @map("allow_teacher_custom_domains")
   requireEmailDomain        String? @map("require_email_domain")
-  sidebarBehavior           String? @default("contextual") @map("sidebar_behavior")
-  aiSystemPrompt            String? @map("ai_system_prompt") @db.Text
 
   // Billing groundwork (payment provider TBD)
   billingPlan String @default("free") @map("billing_plan")

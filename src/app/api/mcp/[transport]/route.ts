@@ -67,13 +67,14 @@ async function handle(request: NextRequest, transportSegment: string): Promise<R
   })
 
   // Load the teacher's personal AI prompt so the MCP connector honors the
-  // same customization as the in-product dashboard AI assistant.
-  const userRow = await prisma.user.findUnique({
-    where: { id: validated.userId },
+  // same customization as the in-product dashboard AI assistant. Prompt
+  // lives on Site now.
+  const site = await prisma.site.findUnique({
+    where: { userId: validated.userId },
     select: { aiSystemPrompt: true },
   })
 
-  const server = buildMcpServer({ userPrompt: userRow?.aiSystemPrompt ?? null })
+  const server = buildMcpServer({ userPrompt: site?.aiSystemPrompt ?? null })
   await server.connect(transport)
 
   try {

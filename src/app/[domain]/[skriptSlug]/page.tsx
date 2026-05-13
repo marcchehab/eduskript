@@ -28,9 +28,14 @@ export async function generateMetadata({ params }: SkriptPreviewProps): Promise<
   try {
     const teacherSite = await prisma.site.findUnique({
       where: { slug: domain },
-      select: { user: { select: { id: true, name: true, title: true, pageIcon: true } } }
+      select: {
+        pageIcon: true,
+        user: { select: { id: true, name: true, title: true } },
+      },
     })
     const teacher = teacherSite?.user
+      ? { ...teacherSite.user, pageIcon: teacherSite.pageIcon }
+      : null
 
     if (!teacher) {
       return {

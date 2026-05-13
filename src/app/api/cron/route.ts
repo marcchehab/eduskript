@@ -74,13 +74,12 @@ export async function POST(request: NextRequest) {
         data: {
           email: DEMO_EMAIL,
           name: 'Demo Teacher',
-          pageName: 'Demo',
           accountType: 'teacher',
           hashedPassword,
           emailVerified: new Date(),
           billingPlan: 'pro',
           site: {
-            create: { slug: 'demo' },
+            create: { slug: 'demo', pageName: 'Demo' },
           },
         },
       })

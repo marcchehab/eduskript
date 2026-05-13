@@ -39,7 +39,8 @@ export async function generateMetadata({ params }: OrgTeacherPageProps): Promise
       }
     }
 
-    // Find the teacher whose site slug matches pageSlug AND who is an org member.
+    // Find the teacher whose site slug matches pageSlug AND who is an org
+    // member. Page-display fields live on Site now.
     const teacher = await prisma.user.findFirst({
       where: {
         site: { slug: pageSlug },
@@ -49,9 +50,8 @@ export async function generateMetadata({ params }: OrgTeacherPageProps): Promise
       },
       select: {
         name: true,
-        pageName: true,
-        pageDescription: true,
-        bio: true
+        bio: true,
+        site: { select: { pageName: true, pageDescription: true } },
       }
     })
 
@@ -62,8 +62,8 @@ export async function generateMetadata({ params }: OrgTeacherPageProps): Promise
       }
     }
 
-    const title = `${teacher.pageName || teacher.name || 'Teacher'} | ${organization.name}`
-    const description = teacher.pageDescription || teacher.bio || `Educational content by ${teacher.name}`
+    const title = `${teacher.site?.pageName || teacher.name || 'Teacher'} | ${organization.name}`
+    const description = teacher.site?.pageDescription || teacher.bio || `Educational content by ${teacher.name}`
 
     return {
       title,
@@ -93,29 +93,33 @@ export async function generateMetadata({ params }: OrgTeacherPageProps): Promise
 export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
   const { orgSlug, pageSlug } = await params
 
-  // Get organization (looked up via its Site).
+  // Get organization (looked up via its Site, which also owns display fields).
   const orgSite = await prisma.site.findUnique({
     where: { slug: orgSlug },
     select: {
+      pageDescription: true,
+      pageIcon: true,
+      showIcon: true,
       organization: {
-        select: {
-          id: true,
-          name: true,
-          description: true,
-          showIcon: true,
-          iconUrl: true
-        }
+        select: { id: true, name: true }
       }
     }
   })
   const organization = orgSite?.organization
+    ? {
+        ...orgSite.organization,
+        description: orgSite.pageDescription,
+        iconUrl: orgSite.pageIcon,
+        showIcon: orgSite.showIcon,
+      }
+    : null
 
   if (!organization) {
     notFound()
   }
 
   // Find teacher whose Site slug matches pageSlug, and who is a member of
-  // this org. Layout lives on Site too.
+  // this org. Layout AND page-display fields all live on Site now.
   const teacher = await prisma.user.findFirst({
     where: {
       site: { slug: pageSlug },
@@ -135,6 +139,7 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
       }
     }
   })
+  const teacherSite = teacher?.site
 
   if (!teacher) {
     notFound()
@@ -263,19 +268,20 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
     }
   }
 
-  // Fetch full site structure when sidebar is in "full" mode. The URL slug
-  // comes from Site now — the route param is the same value.
+  // Fetch full site structure when sidebar is in "full" mode. URL slug +
+  // page-display fields all live on Site now.
   const teacherSlug = teacher.site?.slug ?? pageSlug
-  const fullSiteStructure = teacher.sidebarBehavior === 'full'
+  const sidebarBehavior = teacherSite?.sidebarBehavior ?? 'contextual'
+  const fullSiteStructure = sidebarBehavior === 'full'
     ? await getFullSiteStructure(teacher.id, teacherSlug)
     : undefined
 
   const teacherData = {
     name: teacher.name || 'Teacher',
     pageSlug: teacherSlug,
-    pageName: teacher.pageName || null,
-    pageDescription: teacher.pageDescription || null,
-    pageIcon: teacher.pageIcon || null,
+    pageName: teacherSite?.pageName ?? null,
+    pageDescription: teacherSite?.pageDescription ?? null,
+    pageIcon: teacherSite?.pageIcon ?? null,
     bio: teacher.bio || null,
     title: teacher.title || null
   }
@@ -286,8 +292,8 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
       siteStructure={collections}
       rootSkripts={rootSkripts}
       fullSiteStructure={fullSiteStructure}
-      sidebarBehavior={teacher.sidebarBehavior as 'contextual' | 'full' || 'contextual'}
-      typographyPreference={teacher.typographyPreference as 'modern' | 'classic' || 'modern'}
+      sidebarBehavior={(sidebarBehavior as 'contextual' | 'full') || 'contextual'}
+      typographyPreference={(teacherSite?.typographyPreference as 'modern' | 'classic') || 'modern'}
       routePrefix={`/org/${orgSlug}/${pageSlug}`}
     >
       <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border">

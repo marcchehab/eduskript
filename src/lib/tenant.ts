@@ -50,21 +50,24 @@ export async function getRequestHost(): Promise<string> {
  */
 const lookupTenantLang = unstable_cache(
   async (host: string): Promise<string> => {
+    // pageLanguage now lives on Site (org's Site, teacher's Site).
     const orgDomain = await prisma.customDomain.findFirst({
       where: { domain: host, isVerified: true },
-      select: { organization: { select: { pageLanguage: true } } },
+      select: {
+        organization: { select: { site: { select: { pageLanguage: true } } } },
+      },
     })
-    if (orgDomain?.organization?.pageLanguage) {
-      return orgDomain.organization.pageLanguage
-    }
+    const orgLang = orgDomain?.organization?.site?.pageLanguage
+    if (orgLang) return orgLang
 
     const teacherDomain = await prisma.teacherCustomDomain.findFirst({
       where: { domain: host, isVerified: true },
-      select: { user: { select: { pageLanguage: true } } },
+      select: {
+        user: { select: { site: { select: { pageLanguage: true } } } },
+      },
     })
-    if (teacherDomain?.user?.pageLanguage) {
-      return teacherDomain.user.pageLanguage
-    }
+    const teacherLang = teacherDomain?.user?.site?.pageLanguage
+    if (teacherLang) return teacherLang
 
     return DEFAULT_LANG
   },

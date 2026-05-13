@@ -11,13 +11,14 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
+    // sidebarBehavior lives on the user's Site.
+    const site = await prisma.site.findUnique({
+      where: { userId: session.user.id },
       select: { sidebarBehavior: true }
     })
 
-    return NextResponse.json({ 
-      sidebarBehavior: user?.sidebarBehavior || 'full'
+    return NextResponse.json({
+      sidebarBehavior: site?.sidebarBehavior || 'full'
     })
   } catch (error) {
     console.error('Error fetching sidebar preference:', error)
@@ -47,9 +48,9 @@ export async function POST(request: Request) {
       )
     }
 
-    // Update the user's preference
-    await prisma.user.update({
-      where: { id: session.user.id },
+    // Update on the user's Site (the per-page preference).
+    await prisma.site.update({
+      where: { userId: session.user.id },
       data: { sidebarBehavior }
     })
 
