@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
+import { revalidateTag } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { CACHE_TAGS } from '@/lib/cached-queries'
 
 export async function GET() {
   try {
@@ -132,6 +134,19 @@ export async function POST(request: NextRequest) {
         }
       }
     })
+
+    // The public sidebar reads page-layout items through two cached queries
+    // (getTeacherWithLayout + getTeacherHomepageContent). Both are tagged with
+    // teacherContent and user; without these invalidations a root-promoted
+    // skript stays invisible on the live site until the tag is bumped elsewhere.
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { pageSlug: true }
+    })
+    if (user?.pageSlug) {
+      revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), { expire: 0 })
+      revalidateTag(CACHE_TAGS.user(user.pageSlug), { expire: 0 })
+    }
 
     return NextResponse.json({ success: true, data: pageLayout })
   } catch (error) {
