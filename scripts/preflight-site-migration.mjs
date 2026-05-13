@@ -132,11 +132,14 @@ async function main() {
     const collectionAuthorTable = await tableExists('collection_authors')
     if (collectionAuthorTable) {
       // Pre-Stage-2 state: collections own themselves via CollectionAuthor.
+      // collection_authors is a legacy table without @map, so the FK column
+      // is camelCase ("collectionId") rather than snake_case. Quote so it
+      // parses against both casings if a fresh @map is ever added.
       const orphans = await client.query(`
         SELECT c.id, c.title
         FROM collections c
         WHERE NOT EXISTS (
-          SELECT 1 FROM collection_authors ca WHERE ca.collection_id = c.id
+          SELECT 1 FROM collection_authors ca WHERE ca."collectionId" = c.id
         )
       `)
       if (orphans.rowCount > 0) {
