@@ -11,7 +11,6 @@ interface ExportManifest {
   exportedAt: string
   collections: {
     title: string
-    description: string | null
     skripts: string[] // skript slugs
   }[]
   skripts: {
@@ -162,7 +161,6 @@ export async function GET(request: Request) {
 
       manifest.collections.push({
         title: collection.title,
-        description: collection.description,
         skripts: collectionSkriptSlugs
       })
     }

@@ -455,7 +455,6 @@ async function performImport(
       collection = await prisma.collection.create({
         data: {
           title: collectionData.title,
-          description: collectionData.description,
           siteId: userSite.id,
         }
       })

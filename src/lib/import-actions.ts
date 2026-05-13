@@ -336,7 +336,8 @@ async function performImport(
       collection = await prisma.collection.create({
         data: {
           title: collectionData.title,
-          description: collectionData.description,
+          // description was dropped from the Collection schema; imports
+          // silently discard the field (manifest may still carry it).
           siteId: userSite.id,
         }
       })
@@ -627,7 +628,6 @@ export async function processImportZip(
       collection = await prisma.collection.create({
         data: {
           title: collectionData.title,
-          description: collectionData.description,
           siteId: userSite2.id,
         }
       })

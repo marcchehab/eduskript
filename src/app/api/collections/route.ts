@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { title, description } = await request.json()
+    const { title } = await request.json()
 
     if (!title || !title.trim()) {
       return NextResponse.json(
@@ -40,7 +40,6 @@ export async function POST(request: NextRequest) {
     const collection = await prisma.collection.create({
       data: {
         title: title.trim(),
-        description: description || null,
         siteId: site.id,
       },
     })

@@ -139,9 +139,11 @@ describe('Collections API', () => {
       it('should create collection scoped to the user site', async () => {
         vi.mocked(prisma.collection.create).mockResolvedValue(mockCollection)
 
+        // description is dropped — collections no longer have one. The
+        // request body field is silently ignored.
         const request = createRequest({
           title: 'New Collection',
-          description: 'A new collection',
+          description: 'ignored',
         })
         const response = await POST(request)
 
@@ -149,7 +151,6 @@ describe('Collections API', () => {
         expect(prisma.collection.create).toHaveBeenCalledWith({
           data: {
             title: 'New Collection',
-            description: 'A new collection',
             siteId: 'site-123',
           },
         })
@@ -167,23 +168,6 @@ describe('Collections API', () => {
         expect(data.success).toBe(true)
         expect(data.data.id).toBe('col-123')
         expect(data.data.title).toBe('Test Collection')
-      })
-
-      it('should handle null description', async () => {
-        vi.mocked(prisma.collection.create).mockResolvedValue(mockCollection)
-
-        const request = createRequest({
-          title: 'New Collection',
-        })
-        await POST(request)
-
-        expect(prisma.collection.create).toHaveBeenCalledWith(
-          expect.objectContaining({
-            data: expect.objectContaining({
-              description: null,
-            }),
-          })
-        )
       })
 
       it('should 400 when user has no Site', async () => {

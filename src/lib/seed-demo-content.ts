@@ -18,7 +18,7 @@ type PrismaLike = any
 const DEMO_CONTENT_DIR = join(process.cwd(), 'demo-content')
 
 const COLLECTION_TITLE = 'Getting Started with Eduskript'
-const COLLECTION_DESCRIPTION = 'A quick tour of what you can do with Eduskript'
+// COLLECTION_DESCRIPTION removed — collections no longer have a description.
 
 interface SeedDemoContentOptions {
   userId: string
@@ -163,7 +163,6 @@ export async function seedDemoContent(options: SeedDemoContentOptions): Promise<
   const collection = await prisma.collection.create({
     data: {
       title: COLLECTION_TITLE,
-      description: COLLECTION_DESCRIPTION,
       siteId: site.id,
     },
   })
@@ -208,11 +207,12 @@ export async function seedDemoContent(options: SeedDemoContentOptions): Promise<
     })
   }
 
-  // Add collection to user's page layout
+  // Add collection to the user's site-level page layout. `site` was fetched
+  // earlier in this function so we can rely on it here.
   const layout = await prisma.pageLayout.upsert({
-    where: { userId },
+    where: { siteId: site.id },
     create: {
-      userId,
+      siteId: site.id,
       items: {
         create: {
           type: 'collection',

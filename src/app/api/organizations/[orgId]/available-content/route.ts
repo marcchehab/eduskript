@@ -35,23 +35,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       })
     }
 
-    // Fetch collections where any org admin has permission
+    // Fetch collections that belong to the org's site, OR to a personal site
+    // owned by any org admin (still useful so admins can pull their personal
+    // collections onto the org page).
     const collections = await prisma.collection.findMany({
       where: {
-        authors: {
-          some: {
-            userId: { in: adminUserIds },
-          },
-        },
+        OR: [
+          { site: { organizationId: orgId } },
+          { site: { userId: { in: adminUserIds } } },
+        ],
       },
       include: {
-        authors: {
-          include: {
-            user: {
-              select: { id: true, name: true, email: true },
-            },
-          },
-        },
+        site: { select: { userId: true, organizationId: true } },
         collectionSkripts: {
           include: {
             skript: true,
@@ -61,7 +56,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       orderBy: { title: 'asc' },
     })
 
-    // Fetch skripts where any org admin has permission
+    // Fetch skripts where any org admin is a SkriptAuthor.
     const skripts = await prisma.skript.findMany({
       where: {
         authors: {
@@ -83,13 +78,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             collection: {
               select: {
                 id: true,
-                authors: {
-                  include: {
-                    user: {
-                      select: { id: true, name: true, email: true },
-                    },
-                  },
-                },
+                title: true,
+                site: { select: { userId: true, organizationId: true } },
               },
             },
           },

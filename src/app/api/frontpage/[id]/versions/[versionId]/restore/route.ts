@@ -25,20 +25,7 @@ export async function POST(
         user: true,
         skript: {
           include: {
-            authors: {
-              include: { user: true }
-            },
-            collectionSkripts: {
-              include: {
-                collection: {
-                  include: {
-                    authors: {
-                      include: { user: true }
-                    }
-                  }
-                }
-              }
-            }
+            authors: { include: { user: true } },
           }
         }
       }

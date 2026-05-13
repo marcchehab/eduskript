@@ -74,18 +74,26 @@ export const getTeacherByUsername = getTeacherByPageSlug
 export const getTeacherWithLayout = (pageSlug: string) =>
   unstable_cache(
     async () => {
-      return prisma.user.findFirst({
+      // Page layout now lives on Site, not directly on User. We still return
+      // the User object for back-compat with callers reading pageSlug etc.,
+      // and graft the layout onto `user.pageLayout` so existing accessors
+      // keep working without sweeping every consumer.
+      const user = await prisma.user.findFirst({
         where: { pageSlug },
         include: {
-          pageLayout: {
+          site: {
             include: {
-              items: {
-                orderBy: { order: 'asc' }
+              pageLayout: {
+                include: {
+                  items: { orderBy: { order: 'asc' } }
+                }
               }
             }
           }
         }
       })
+      if (!user) return null
+      return Object.assign(user, { pageLayout: user.site?.pageLayout ?? null })
     },
     [`teacher-layout-${pageSlug}`],
     {
@@ -150,7 +158,7 @@ export const getFullSiteStructure = (teacherId: string, pageSlug: string) =>
       // Fetch page layout to determine collection order
       const pageLayout = await prisma.pageLayout.findFirst({
         where: {
-          user: { pageSlug }
+          site: { user: { pageSlug } }
         },
         include: {
           items: {
@@ -289,7 +297,6 @@ export const getPublishedPage = (
         collection: collection ? {
           id: collection.id,
           title: collection.title,
-          description: collection.description,
           accentColor: collection.accentColor,
         } : null,
         skript: {
@@ -489,14 +496,16 @@ export const getSkriptForPreview = async (teacherId: string, skriptSlug: string)
 export const getOrgWithLayout = (slug: string) =>
   unstable_cache(
     async () => {
-      return prisma.organization.findUnique({
+      const org = await prisma.organization.findUnique({
         where: { slug },
         include: {
           frontPage: true,
-          pageLayout: {
+          site: {
             include: {
-              items: {
-                orderBy: { order: 'asc' }
+              pageLayout: {
+                include: {
+                  items: { orderBy: { order: 'asc' } }
+                }
               }
             }
           },
@@ -505,6 +514,10 @@ export const getOrgWithLayout = (slug: string) =>
           }
         }
       })
+      if (!org) return null
+      // Surface the layout under the legacy `pageLayout` field so call sites
+      // that still read org.pageLayout.items keep working during the migration.
+      return Object.assign(org, { pageLayout: org.site?.pageLayout ?? null })
     },
     [`org-layout-${slug}`],
     {
@@ -534,9 +547,10 @@ export const getOrgFullSiteStructure = (orgId: string, orgSlug: string) =>
         return []
       }
 
-      // Fetch org page layout to determine collection order
-      const pageLayout = await prisma.orgPageLayout.findFirst({
-        where: { organizationId: orgId },
+      // Fetch org page layout (now in the unified PageLayout table keyed by
+      // siteId) to determine collection order.
+      const pageLayout = await prisma.pageLayout.findFirst({
+        where: { site: { organizationId: orgId } },
         include: {
           items: {
             where: { type: 'collection' },
@@ -687,8 +701,8 @@ export const getOrgPublishedPage = (
       // Verify the skript's collection is in the org's page layout
       const collectionSkript = skript.collectionSkripts[0]
       if (collectionSkript?.collection) {
-        const orgPageLayout = await prisma.orgPageLayout.findUnique({
-          where: { organizationId: orgId },
+        const orgPageLayout = await prisma.pageLayout.findFirst({
+          where: { site: { organizationId: orgId } },
           include: {
             items: { where: { type: 'collection' } }
           }
@@ -709,7 +723,6 @@ export const getOrgPublishedPage = (
         collection: collection ? {
           id: collection.id,
           title: collection.title,
-          description: collection.description,
           accentColor: collection.accentColor,
         } : null,
         skript: {

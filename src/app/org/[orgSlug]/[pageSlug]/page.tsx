@@ -108,7 +108,8 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
     notFound()
   }
 
-  // Find teacher who is a member of this org with their page layout
+  // Find teacher who is a member of this org with their site-level page
+  // layout (PageLayout is now keyed on Site, not User).
   const teacher = await prisma.user.findFirst({
     where: {
       pageSlug: pageSlug,
@@ -117,10 +118,12 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
       }
     },
     include: {
-      pageLayout: {
+      site: {
         include: {
-          items: {
-            orderBy: { order: 'asc' }
+          pageLayout: {
+            include: {
+              items: { orderBy: { order: 'asc' } }
+            }
           }
         }
       }
@@ -130,6 +133,7 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
   if (!teacher) {
     notFound()
   }
+  const teacherPageLayout = teacher.site?.pageLayout
 
   // Check if current user is the owner of this page
   const session = await getServerSession(authOptions)
@@ -149,7 +153,7 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
   const isPageAuthor = isOwner
 
   // Get page layout items
-  const pageItems = teacher.pageLayout?.items || []
+  const pageItems = teacherPageLayout?.items || []
 
   // Fetch collections and root skripts based on page layout
   const collections: Array<{

@@ -15,11 +15,6 @@ export const updateCollectionConfig = {
   inputSchema: {
     collectionId: z.string().min(1),
     title: z.string().min(1).optional(),
-    description: z
-      .string()
-      .nullable()
-      .optional()
-      .describe('Plain-text collection description. Pass null to clear.'),
     accentColor: z
       .string()
       .nullable()
@@ -31,7 +26,6 @@ export const updateCollectionConfig = {
 export async function updateCollection(args: {
   collectionId: string
   title?: string
-  description?: string | null
   accentColor?: string | null
 }) {
   requireScope('content:write')
@@ -50,7 +44,6 @@ export async function updateCollection(args: {
           {
             id: updated.id,
             title: updated.title,
-            description: updated.description,
             accentColor: updated.accentColor,
             updatedAt: updated.updatedAt,
           },

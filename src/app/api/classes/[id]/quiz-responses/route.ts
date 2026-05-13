@@ -88,15 +88,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           skript: {
             include: {
               authors: { include: { user: { select: { id: true } } } },
-              collectionSkripts: {
-                include: {
-                  collection: {
-                    include: {
-                      authors: { include: { user: { select: { id: true } } } },
-                    },
-                  },
-                },
-              },
             },
           },
         },

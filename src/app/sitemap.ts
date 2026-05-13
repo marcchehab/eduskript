@@ -74,8 +74,8 @@ async function resolveHost(host: string): Promise<Resolved> {
 async function getOrgEntries(baseUrl: string, orgId: string): Promise<MetadataRoute.Sitemap> {
   // Mirror getOrgFullSiteStructure: enumerate the collections referenced in
   // the org's page layout, then their published skripts and pages.
-  const pageLayout = await prisma.orgPageLayout.findFirst({
-    where: { organizationId: orgId },
+  const pageLayout = await prisma.pageLayout.findFirst({
+    where: { site: { organizationId: orgId } },
     select: {
       items: {
         where: { type: 'collection' },

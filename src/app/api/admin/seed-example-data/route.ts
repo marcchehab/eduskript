@@ -63,17 +63,19 @@ export async function POST(request: Request) {
       },
     })
 
-    // Create example collection authored by the teacher
+    // Create example collection on the teacher's site (collections are now
+    // 1:1-owned by a site, not multi-authored).
+    const seedTeacherSite = await prisma.site.findUnique({
+      where: { userId: teacherUser.id },
+      select: { id: true },
+    })
+    if (!seedTeacherSite) {
+      throw new Error(`Cannot seed example data: teacher user ${teacherUser.id} has no Site`)
+    }
     const tutorialCollection = await prisma.collection.create({
       data: {
         title: 'Eduskript Tutorial',
-        description: 'Learn how to use all of Eduskript\'s features',
-        authors: {
-          create: {
-            userId: teacherUser.id,
-            permission: 'author',
-          },
-        },
+        siteId: seedTeacherSite.id,
       },
     })
 
@@ -361,11 +363,11 @@ console.log("Even numbers:", evens);
       },
     })
 
-    // Add collection to teacher's public page layout
+    // Add collection to teacher's site-level page layout.
     await prisma.pageLayout.upsert({
-      where: { userId: teacherUser.id },
+      where: { siteId: seedTeacherSite.id },
       create: {
-        userId: teacherUser.id,
+        siteId: seedTeacherSite.id,
         items: {
           create: {
             type: 'collection',

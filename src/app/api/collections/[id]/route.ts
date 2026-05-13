@@ -67,7 +67,6 @@ export async function GET(
       data: collection,
       permissions: { canEdit: true, canView: true },
       title: collection.title,
-      description: collection.description
     })
   } catch (error) {
     console.error('Error fetching collection:', error)
@@ -87,7 +86,7 @@ export async function PATCH(
     }
 
     const { id } = await params
-    const { title, description, accentColor } = await request.json()
+    const { title, accentColor } = await request.json()
 
     const existingCollection = await loadCollectionWithOwner(id)
     if (!existingCollection) {
@@ -103,7 +102,6 @@ export async function PATCH(
       where: { id },
       data: {
         ...(title && { title }),
-        ...(description !== undefined && { description }),
         ...(accentColor !== undefined && { accentColor })
       },
     })

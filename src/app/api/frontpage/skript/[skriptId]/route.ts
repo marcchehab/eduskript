@@ -23,20 +23,7 @@ export async function GET(
     const skript = await prisma.skript.findFirst({
       where: { id: skriptId },
       include: {
-        authors: {
-          include: { user: true }
-        },
-        collectionSkripts: {
-          include: {
-            collection: {
-              include: {
-                authors: {
-                  include: { user: true }
-                }
-              }
-            }
-          }
-        }
+        authors: { include: { user: true } },
       }
     })
 
@@ -93,20 +80,7 @@ export async function PATCH(
     const skript = await prisma.skript.findFirst({
       where: { id: skriptId },
       include: {
-        authors: {
-          include: { user: true }
-        },
-        collectionSkripts: {
-          include: {
-            collection: {
-              include: {
-                authors: {
-                  include: { user: true }
-                }
-              }
-            }
-          }
-        }
+        authors: { include: { user: true } },
       }
     })
 

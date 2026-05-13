@@ -39,17 +39,6 @@ async function loadSkriptForFrontPageAccess(
     where: { id: skriptId },
     include: {
       authors: { include: { user: { select: { id: true, name: true } } } },
-      collectionSkripts: {
-        include: {
-          collection: {
-            include: {
-              authors: {
-                include: { user: { select: { id: true, name: true } } },
-              },
-            },
-          },
-        },
-      },
     },
   })
   if (!skript) throw new NotFoundError('Skript not found')

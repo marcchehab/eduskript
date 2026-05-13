@@ -41,15 +41,6 @@ export async function GET(
         skript: {
           include: {
             authors: { include: { user: { select: { id: true } } } },
-            collectionSkripts: {
-              include: {
-                collection: {
-                  include: {
-                    authors: { include: { user: { select: { id: true } } } },
-                  },
-                },
-              },
-            },
           },
         },
         implicitSurveyClass: {

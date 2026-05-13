@@ -197,47 +197,37 @@ async function main() {
   // 5. Process collections and link skripts
   console.log(`\n   Processing ${config.collections.length} collection(s)...`)
 
+  // Docs sync requires a single owner site. We use the first admin's site
+  // (collections are 1:1-owned by a Site now; CollectionAuthor is gone).
+  const firstAdmin = admins[0]
+  if (!firstAdmin) throw new Error('No admin users found for docs sync')
+  const adminSite = await prisma.site.findUnique({
+    where: { userId: firstAdmin.id },
+    select: { id: true },
+  })
+  if (!adminSite) {
+    throw new Error(`Admin user ${firstAdmin.id} has no Site — set up a pageSlug first.`)
+  }
+
   for (const collectionDef of config.collections) {
-    // Find or create collection (match by title since slug is no longer a Collection field)
     let collection = await prisma.collection.findFirst({
-      where: { title: collectionDef.title }
+      where: { title: collectionDef.title, siteId: adminSite.id }
     })
 
     if (collection) {
       collection = await prisma.collection.update({
         where: { id: collection.id },
-        data: {
-          title: collectionDef.title,
-          description: collectionDef.description || null
-        }
+        data: { title: collectionDef.title }
       })
       console.log(`   ✓ Updated collection: ${collectionDef.title}`)
     } else {
       collection = await prisma.collection.create({
         data: {
           title: collectionDef.title,
-          description: collectionDef.description || null,
+          siteId: adminSite.id,
         }
       })
       console.log(`   ✓ Created collection: ${collectionDef.title}`)
-    }
-
-    // Grant admins author access on collection
-    for (const admin of admins) {
-      await prisma.collectionAuthor.upsert({
-        where: {
-          collectionId_userId: {
-            collectionId: collection.id,
-            userId: admin.id
-          }
-        },
-        update: { permission: 'author' },
-        create: {
-          collectionId: collection.id,
-          userId: admin.id,
-          permission: 'author'
-        }
-      })
     }
 
     // Link skripts to collection in specified order

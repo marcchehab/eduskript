@@ -41,13 +41,7 @@ const skriptInclude = {
   collectionSkripts: {
     include: {
       collection: {
-        include: {
-          authors: {
-            include: {
-              user: { select: { id: true, name: true, email: true } },
-            },
-          },
-        },
+        select: { id: true, title: true },
       },
     },
   },

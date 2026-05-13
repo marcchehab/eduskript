@@ -74,7 +74,6 @@ export async function getCollectionForUser(
 
 export interface UpdateCollectionPatch {
   title?: string
-  description?: string | null
   accentColor?: string | null
 }
 
@@ -86,11 +85,10 @@ export async function updateCollectionForUser(
 ) {
   if (
     patch.title === undefined &&
-    patch.description === undefined &&
     patch.accentColor === undefined
   ) {
     throw new ValidationError(
-      'At least one of {title, description, accentColor} must be provided'
+      'At least one of {title, accentColor} must be provided'
     )
   }
   if (patch.title !== undefined && !patch.title.trim()) {
@@ -111,8 +109,6 @@ export async function updateCollectionForUser(
 
   const updateData: Record<string, unknown> = { updatedAt: new Date() }
   if (patch.title !== undefined) updateData.title = patch.title.trim()
-  if (patch.description !== undefined)
-    updateData.description = patch.description?.toString() ?? null
   if (patch.accentColor !== undefined)
     updateData.accentColor = patch.accentColor?.toString() ?? null
 

@@ -575,8 +575,9 @@ export async function POST(request: NextRequest) {
               .filter((id): id is string => Boolean(id))
 
             if (collectionIds.length > 0) {
-              const orgLayouts = await prisma.orgPageLayout.findMany({
+              const orgLayouts = await prisma.pageLayout.findMany({
                 where: {
+                  site: { organizationId: { not: null } },
                   items: {
                     some: {
                       OR: [
@@ -587,13 +588,16 @@ export async function POST(request: NextRequest) {
                   }
                 },
                 select: {
-                  organization: { select: { slug: true } }
+                  site: { select: { organization: { select: { slug: true } } } }
                 }
               })
 
               for (const orgLayout of orgLayouts) {
-                // Org content routes are skript-only: /org/{orgSlug}/c/{skriptSlug}/{pageSlug}
-                revalidatePath(`/org/${orgLayout.organization.slug}/c/${skriptSlug}/${contentPageSlug}`)
+                const orgSlug = orgLayout.site?.organization?.slug
+                if (orgSlug) {
+                  // Org content routes are skript-only: /org/{orgSlug}/c/{skriptSlug}/{pageSlug}
+                  revalidatePath(`/org/${orgSlug}/c/${skriptSlug}/${contentPageSlug}`)
+                }
               }
             }
             continue // Handled as regular page, skip front page check
@@ -652,19 +656,23 @@ export async function POST(request: NextRequest) {
               }
 
               // Also check orgs that have this skript in their layout
-              const orgLayouts = await prisma.orgPageLayout.findMany({
+              const orgLayouts = await prisma.pageLayout.findMany({
                 where: {
+                  site: { organizationId: { not: null } },
                   items: {
                     some: { type: 'skript', contentId: skriptSlug }
                   }
                 },
                 select: {
-                  organization: { select: { slug: true } }
+                  site: { select: { organization: { select: { slug: true } } } }
                 }
               })
 
               for (const orgLayout of orgLayouts) {
-                revalidatePath(`/org/${orgLayout.organization.slug}/c/${skriptSlug}`)
+                const orgSlug = orgLayout.site?.organization?.slug
+                if (orgSlug) {
+                  revalidatePath(`/org/${orgSlug}/c/${skriptSlug}`)
+                }
               }
             }
           }

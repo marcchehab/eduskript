@@ -241,22 +241,11 @@ export async function POST(request: NextRequest) {
           })
         }
       } else {
-        // Moving to root level (remove from all collections)
-        
-        // Remove from all collections
+        // Moving to root level — just detach from any collection. Root
+        // placement now lives in PageLayout.items (added separately by the
+        // page builder), not via a CollectionSkript row.
         await tx.collectionSkript.deleteMany({
           where: { skriptId: skriptId }
-        })
-        
-        // For root level, we could create a record with collectionId = null and userId = session.user.id
-        // But based on our schema design discussion, root placement is user-specific
-        await tx.collectionSkript.create({
-          data: {
-            collectionId: null,
-            skriptId: skriptId,
-            userId: session.user.id,
-            order: newOrder
-          }
         })
       }
       

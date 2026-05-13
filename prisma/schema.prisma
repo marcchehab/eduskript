@@ -120,14 +120,10 @@ model User {
   collaborationsAsRequester     Collaboration[]        @relation("RequesterCollaborations")
   collaborationsAsReceiver      Collaboration[]        @relation("ReceiverCollaborations")
 
-  // Page layout
-  pageLayout PageLayout?
-
-  // The user's public site (1:1). Created when they first set a pageSlug as a
-  // teacher; absent for students. Owns collections, page layout, frontpage,
-  // and all page-display settings going forward — User.pageSlug/pageName/etc.
-  // are mirrored on Site during the migration and will be dropped once all
-  // readers are switched over.
+  // The user's public site (1:1). Owns collections, page layout, frontpage,
+  // and all page-display settings. User.pageSlug/pageName/etc. are mirrored
+  // on Site during the migration and will be dropped once all readers have
+  // switched over.
   site Site?
 
   // Student data
@@ -237,6 +233,7 @@ model Site {
   organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   collections Collection[]
+  pageLayout  PageLayout?
 
   @@map("sites")
 }
@@ -516,12 +513,14 @@ model Collaboration {
 // Page layout for user's public page
 model PageLayout {
   id        String           @id @default(cuid())
-  userId    String           @unique @map("user_id")
+  // Single unified layout table keyed on Site. User-page and org-page
+  // layouts both live here; the polymorphism is handled by Site.
+  siteId    String           @unique @map("site_id")
   items     PageLayoutItem[]
   createdAt DateTime         @default(now()) @map("created_at")
   updatedAt DateTime         @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@map("page_layouts")
 }
@@ -539,34 +538,6 @@ model PageLayoutItem {
 
   @@unique([pageLayoutId, contentId, type])
   @@map("page_layout_items")
-}
-
-// Organization Page Layout - for org admin page builder
-model OrgPageLayout {
-  id             String              @id @default(cuid())
-  organizationId String              @unique @map("organization_id")
-  items          OrgPageLayoutItem[]
-  createdAt      DateTime            @default(now()) @map("created_at")
-  updatedAt      DateTime            @updatedAt @map("updated_at")
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  @@map("org_page_layouts")
-}
-
-// Individual items in an organization page layout
-model OrgPageLayoutItem {
-  id              String   @id @default(cuid())
-  orgPageLayoutId String   @map("org_page_layout_id")
-  type            String // "collection" or "skript"
-  contentId       String   @map("content_id")
-  order           Int
-  createdAt       DateTime @default(now()) @map("created_at")
-
-  orgPageLayout OrgPageLayout @relation(fields: [orgPageLayoutId], references: [id], onDelete: Cascade)
-
-  @@unique([orgPageLayoutId, contentId, type])
-  @@map("org_page_layout_items")
 }
 
 // Student Progress Tracking
@@ -861,9 +832,9 @@ model Organization {
   members       OrganizationMember[]
   customDomains CustomDomain[]
   frontPage     FrontPage?
-  pageLayout    OrgPageLayout?
 
-  // The org's public site (1:1). See User.site for the same migration plan.
+  // The org's public site (1:1). Page layout, collections, and display
+  // settings live under Site.
   site Site?
 
   @@map("organizations")

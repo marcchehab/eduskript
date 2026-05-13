@@ -37,7 +37,8 @@ vi.mock('@/lib/prisma', () => ({
     skript: {
       findFirst: vi.fn(),
     },
-    orgPageLayout: {
+    pageLayout: {
+      findFirst: vi.fn(),
       findUnique: vi.fn(),
     },
     organizationMember: {
@@ -430,16 +431,18 @@ describe('getOrgPublishedPage - Access Control', () => {
       pages: [mockPage],
     })
 
-    // Org page layout contains this collection
-    vi.mocked(prisma.orgPageLayout.findUnique).mockResolvedValue({
+    // Org page layout (now in the unified table, keyed by siteId) contains
+    // this collection.
+    vi.mocked(prisma.pageLayout.findFirst).mockResolvedValue({
       id: 'layout-1',
-      organizationId: 'org-1',
+      userId: null,
+      siteId: 'site-org-1',
       createdAt: new Date(),
       updatedAt: new Date(),
       items: [
-        { id: 'item-1', orgPageLayoutId: 'layout-1', type: 'collection', contentId: 'collection-A', order: 0, createdAt: new Date() }
+        { id: 'item-1', pageLayoutId: 'layout-1', type: 'collection', contentId: 'collection-A', order: 0, createdAt: new Date() }
       ]
-    })
+    } as never)
 
     const result = await getOrgPublishedPage('org-1', 'my-org', 'algebra', 'intro')
 
@@ -484,15 +487,16 @@ describe('getOrgPublishedPage - Access Control', () => {
     })
 
     // Org page layout only has "tutorial-collection"
-    vi.mocked(prisma.orgPageLayout.findUnique).mockResolvedValue({
+    vi.mocked(prisma.pageLayout.findFirst).mockResolvedValue({
       id: 'layout-1',
-      organizationId: 'org-1',
+      userId: null,
+      siteId: 'site-org-1',
       createdAt: new Date(),
       updatedAt: new Date(),
       items: [
-        { id: 'item-1', orgPageLayoutId: 'layout-1', type: 'collection', contentId: 'tutorial-collection', order: 0, createdAt: new Date() }
+        { id: 'item-1', pageLayoutId: 'layout-1', type: 'collection', contentId: 'tutorial-collection', order: 0, createdAt: new Date() }
       ]
-    })
+    } as never)
 
     const result = await getOrgPublishedPage('org-1', 'my-org', 'secret-skript', 'page')
 

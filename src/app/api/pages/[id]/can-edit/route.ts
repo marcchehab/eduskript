@@ -29,15 +29,6 @@ export async function GET(
         skript: {
           include: {
             authors: { include: { user: true } },
-            collectionSkripts: {
-              include: {
-                collection: {
-                  include: {
-                    authors: { include: { user: true } }
-                  }
-                }
-              }
-            }
           }
         }
       }

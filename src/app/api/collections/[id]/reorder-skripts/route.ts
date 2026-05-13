@@ -26,15 +26,20 @@ export async function PATCH(
       )
     }
 
-    // Check if collection exists and belongs to user
+    // Check if collection exists and belongs to the user's site (or to an
+    // org site they're an admin of).
+    const orgMemberships = await prisma.organizationMember.findMany({
+      where: { userId: session.user.id, role: { in: ['owner', 'admin'] } },
+      select: { organizationId: true },
+    })
+    const orgIds = orgMemberships.map(m => m.organizationId)
     const collection = await prisma.collection.findFirst({
       where: {
         id,
-        authors: {
-          some: {
-            userId: session.user.id
-          }
-        }
+        OR: [
+          { site: { userId: session.user.id } },
+          ...(orgIds.length > 0 ? [{ site: { organizationId: { in: orgIds } } }] : []),
+        ],
       },
       include: {
         collectionSkripts: {

@@ -33,7 +33,6 @@ export async function readCollection(args: { collectionId: string }) {
           {
             id: collection.id,
             title: collection.title,
-            description: collection.description,
             accentColor: collection.accentColor,
             updatedAt: collection.updatedAt,
             skripts: collection.collectionSkripts.map((cs) => ({

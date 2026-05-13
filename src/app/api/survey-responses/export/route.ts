@@ -78,15 +78,6 @@ export async function GET(request: NextRequest) {
         skript: {
           include: {
             authors: { include: { user: { select: { id: true } } } },
-            collectionSkripts: {
-              include: {
-                collection: {
-                  include: {
-                    authors: { include: { user: { select: { id: true } } } },
-                  },
-                },
-              },
-            },
           },
         },
         implicitSurveyClass: {

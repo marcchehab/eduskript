@@ -130,17 +130,6 @@ export async function getPageForUser(
       skript: {
         include: {
           authors: { include: { user: { select: { id: true, name: true } } } },
-          collectionSkripts: {
-            include: {
-              collection: {
-                include: {
-                  authors: {
-                    include: { user: { select: { id: true, name: true } } },
-                  },
-                },
-              },
-            },
-          },
         },
       },
     },

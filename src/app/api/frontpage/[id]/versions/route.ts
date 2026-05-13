@@ -23,20 +23,7 @@ export async function GET(
         user: true,
         skript: {
           include: {
-            authors: {
-              include: { user: true }
-            },
-            collectionSkripts: {
-              include: {
-                collection: {
-                  include: {
-                    authors: {
-                      include: { user: true }
-                    }
-                  }
-                }
-              }
-            }
+            authors: { include: { user: true } },
           }
         }
       }
