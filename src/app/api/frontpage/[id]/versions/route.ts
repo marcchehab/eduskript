@@ -53,16 +53,7 @@ export async function GET(
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
       }
     } else if (frontPage.skript) {
-      // Skript frontpage - check skript permissions
-      const collectionAuthors = frontPage.skript.collectionSkripts
-        .filter(cs => cs.collection !== null)
-        .flatMap(cs => cs.collection!.authors)
-      const permissions = checkSkriptPermissions(
-        session.user.id,
-        frontPage.skript.authors,
-        collectionAuthors
-      )
-
+      const permissions = checkSkriptPermissions(session.user.id, frontPage.skript.authors)
       if (!permissions.canView) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
       }

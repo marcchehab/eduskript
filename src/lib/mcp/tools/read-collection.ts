@@ -1,7 +1,8 @@
 /**
  * MCP tool: read_collection — fetch a collection's metadata + skript list.
  *
- * View permission gate (any collection author works).
+ * View permission gate: caller must own the collection's site (or be an
+ * admin of the owning org).
  */
 
 import { z } from 'zod'

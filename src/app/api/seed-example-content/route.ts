@@ -13,8 +13,9 @@ export async function POST() {
   }
 
   // Guard: only allow for teachers with no existing collections
-  const existing = await prisma.collectionAuthor.findFirst({
-    where: { userId: session.user.id },
+  const existing = await prisma.collection.findFirst({
+    where: { site: { userId: session.user.id } },
+    select: { id: true },
   })
 
   if (existing) {

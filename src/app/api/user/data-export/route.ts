@@ -34,16 +34,16 @@ export async function GET(req: NextRequest) {
             // Exclude tokens for security
           }
         },
-        collectionAuthors: {
-          include: {
-            collection: {
+        site: {
+          select: {
+            collections: {
               select: {
                 id: true,
                 title: true,
                 createdAt: true,
-              }
-            }
-          }
+              },
+            },
+          },
         },
         skriptAuthors: {
           include: {
@@ -152,12 +152,12 @@ export async function GET(req: NextRequest) {
         sidebarBehavior: userData.sidebarBehavior,
       },
       accounts: userData.accounts,
-      authoredCollections: userData.collectionAuthors.map(ca => ({
-        collectionId: ca.collection.id,
-        collectionTitle: ca.collection.title,
-        permission: ca.permission,
-        since: ca.createdAt,
-      })),
+      // Owned (1:1 site) collections — there's no permission level anymore.
+      ownedCollections: userData.site?.collections.map(c => ({
+        collectionId: c.id,
+        collectionTitle: c.title,
+        since: c.createdAt,
+      })) ?? [],
       authoredSkripts: userData.skriptAuthors.map(sa => ({
         skriptId: sa.skript.id,
         skriptTitle: sa.skript.title,

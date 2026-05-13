@@ -66,7 +66,7 @@ export async function listSkriptsForUser(
           {
             collectionSkripts: {
               some: {
-                collection: { authors: { some: { userId } } },
+                collection: { site: { userId } },
               },
             },
           },
@@ -97,15 +97,7 @@ export async function getSkriptForUser(
 
   if (!skript) throw new NotFoundError('Skript not found')
 
-  const collectionAuthors = skript.collectionSkripts.flatMap(
-    (cs) => cs.collection?.authors ?? []
-  )
-  const perms = checkSkriptPermissions(
-    userId,
-    skript.authors,
-    collectionAuthors,
-    ctx.isAdmin
-  )
+  const perms = checkSkriptPermissions(userId, skript.authors, ctx.isAdmin)
   if (!perms.canView) {
     throw new PermissionDeniedError('Cannot view this skript')
   }
@@ -164,30 +156,11 @@ export async function updateSkriptForUser(
     where: { id: skriptId },
     include: {
       authors: { include: { user: { select: { id: true, name: true } } } },
-      collectionSkripts: {
-        include: {
-          collection: {
-            include: {
-              authors: {
-                include: { user: { select: { id: true, name: true } } },
-              },
-            },
-          },
-        },
-      },
     },
   })
   if (!existing) throw new NotFoundError('Skript not found')
 
-  const collectionAuthors = existing.collectionSkripts.flatMap(
-    (cs) => cs.collection?.authors ?? []
-  )
-  const perms = checkSkriptPermissions(
-    userId,
-    existing.authors,
-    collectionAuthors,
-    ctx.isAdmin
-  )
+  const perms = checkSkriptPermissions(userId, existing.authors, ctx.isAdmin)
   if (!perms.canEdit) {
     throw new PermissionDeniedError('Cannot edit this skript')
   }

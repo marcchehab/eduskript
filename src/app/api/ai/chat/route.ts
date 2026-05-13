@@ -89,7 +89,7 @@ export async function POST(request: Request) {
     }
 
     // 6. Check permissions
-    const permissions = checkSkriptPermissions(userId, skript.authors, undefined, !!session.user.isAdmin)
+    const permissions = checkSkriptPermissions(userId, skript.authors, !!session.user.isAdmin)
     if (!permissions.canView) {
       return Response.json({ error: 'Access denied' }, { status: 403 })
     }

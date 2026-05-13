@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { PermissionIndicator } from './permission-indicator'
 import { cn } from '@/lib/utils'
-import { CollectionAuthor, SkriptAuthor, User } from '@prisma/client'
+import { SkriptAuthor, User } from '@prisma/client'
 import Link from 'next/link'
 
 interface BaseContentProps {
@@ -21,8 +21,8 @@ interface BaseContentProps {
 interface DraggableCollectionProps extends BaseContentProps {
   type: 'collection'
   skriptCount: number
-  authors: (CollectionAuthor & { user: Pick<User, 'id' | 'name' | 'email'> })[]
-  currentUserId: string
+  // Collections are owned 1:1 by a Site. The library only shows yours, so we
+  // don't render co-author chips on collection cards anymore.
 }
 
 interface DraggableSkriptProps extends BaseContentProps {
@@ -38,21 +38,10 @@ export function DraggableCollection({
   title,
   description,
   skriptCount,
-  authors,
-  currentUserId,
   isViewOnly = false,
   className,
   index = 0,
 }: DraggableCollectionProps) {
-  // Separate authors by permission
-  const editableBy = authors.filter(author => 
-    author.permission === 'author' && author.userId !== currentUserId
-  ).map(author => author.user)
-
-  const viewableBy = authors.filter(author => 
-    author.permission === 'viewer' && author.userId !== currentUserId
-  ).map(author => author.user)
-
   return (
     <Draggable draggableId={`library-collection-${id}`} index={index}>
       {(provided, snapshot) => (
@@ -102,11 +91,6 @@ export function DraggableCollection({
                   <span className="text-xs text-muted-foreground">
                     {skriptCount} skripts
                   </span>
-                  <PermissionIndicator
-                    editableBy={editableBy}
-                    viewableBy={viewableBy}
-                    isViewOnly={isViewOnly}
-                  />
                 </div>
               </div>
             </div>

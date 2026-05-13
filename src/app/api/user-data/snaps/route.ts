@@ -75,15 +75,9 @@ export async function GET() {
                 collection: {
                   select: {
                     title: true,
-                    authors: {
-                      where: { permission: 'author' },
-                      take: 1,
+                    site: {
                       select: {
-                        user: {
-                          select: {
-                            pageSlug: true,
-                          },
-                        },
+                        user: { select: { pageSlug: true } },
                       },
                     },
                   },
@@ -124,9 +118,10 @@ export async function GET() {
       const collectionSkript = pageInfo.skript.collectionSkripts[0]
       const collection = collectionSkript?.collection
 
-      // Get author pageSlug (prefer collection author, fallback to skript author)
+      // Get author pageSlug (prefer the collection's owning site, fallback
+      // to skript author).
       const authorPageSlug =
-        collection?.authors[0]?.user?.pageSlug ||
+        collection?.site?.user?.pageSlug ||
         pageInfo.skript.authors[0]?.user?.pageSlug ||
         null
 

@@ -94,32 +94,12 @@ async function canCreatePageAnnotations(userId: string, pageId: string, isAdmin?
 
   if (!page?.skriptId) return false
 
-  // Check SkriptAuthor (inherits to pages)
+  // Page-author rights come from SkriptAuthor only — collection ownership
+  // no longer inherits to skripts.
   const skriptAuthor = await prisma.skriptAuthor.findFirst({
     where: { skriptId: page.skriptId, userId, permission: 'author' }
   })
-  if (skriptAuthor) return true
-
-  // Check CollectionAuthor via CollectionSkript (inherits to skripts and pages)
-  const collectionSkripts = await prisma.collectionSkript.findMany({
-    where: { skriptId: page.skriptId },
-    select: { collectionId: true }
-  })
-  if (collectionSkripts.length > 0) {
-    const collectionIds = collectionSkripts.map(cs => cs.collectionId).filter((id): id is string => id !== null)
-    if (collectionIds.length > 0) {
-      const collectionAuthor = await prisma.collectionAuthor.findFirst({
-        where: {
-          collectionId: { in: collectionIds },
-          userId,
-          permission: 'author'
-        }
-      })
-      if (collectionAuthor) return true
-    }
-  }
-
-  return false
+  return !!skriptAuthor
 }
 
 export async function POST(request: NextRequest) {
@@ -561,35 +541,31 @@ export async function POST(request: NextRequest) {
                       collectionId: true,
                       collection: {
                         select: {
-                          authors: {
+                          site: {
                             select: {
-                              user: {
-                                select: { pageSlug: true }
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
+                              user: { select: { pageSlug: true } },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
           })
 
           if (page?.skript) {
             const skriptSlug = page.skript.slug
             const contentPageSlug = page.slug
 
-            // Invalidate paths for all authors' domains
+            // Invalidate paths for the page-owning teacher domain. Collection
+            // ownership is now 1:1 with a site, so at most one user owns each.
             for (const cs of page.skript.collectionSkripts) {
               if (!cs.collection) continue
-
-              for (const author of cs.collection.authors) {
-                const userPageSlug = author.user.pageSlug
-                if (userPageSlug) {
-                  revalidatePath(`/${userPageSlug}/${skriptSlug}/${contentPageSlug}`)
-                }
+              const userPageSlug = cs.collection.site?.user?.pageSlug
+              if (userPageSlug) {
+                revalidatePath(`/${userPageSlug}/${skriptSlug}/${contentPageSlug}`)
               }
             }
 
@@ -639,18 +615,18 @@ export async function POST(request: NextRequest) {
                     select: {
                       collection: {
                         select: {
-                          authors: {
+                          site: {
                             select: {
-                              user: { select: { pageSlug: true } }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
+                              user: { select: { pageSlug: true } },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
           })
 
           if (frontPage) {
@@ -669,13 +645,9 @@ export async function POST(request: NextRequest) {
               const skriptSlug = frontPage.skript.slug
               for (const cs of frontPage.skript.collectionSkripts) {
                 if (!cs.collection) continue
-
-                // Invalidate for all authors' domains
-                for (const author of cs.collection.authors) {
-                  const userPageSlug = author.user.pageSlug
-                  if (userPageSlug) {
-                    revalidatePath(`/${userPageSlug}/${skriptSlug}`)
-                  }
+                const userPageSlug = cs.collection.site?.user?.pageSlug
+                if (userPageSlug) {
+                  revalidatePath(`/${userPageSlug}/${skriptSlug}`)
                 }
               }
 

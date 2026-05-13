@@ -119,13 +119,13 @@ async function deleteDemoContent(prisma: PrismaLike, userId: string): Promise<vo
     await prisma.skript.delete({ where: { id: skript.id } })
   }
 
-  // Find and delete demo collections (cascades to collectionAuthors, collectionSkripts).
-  // Match by title since slug is no longer a Collection field — `reset` is a
-  // best-effort cleanup keyed on the seeded title.
+  // Find and delete demo collections (cascades to collectionSkripts).
+  // Collections are now owned by Site, so we match by title scoped to the
+  // user's own site.
   const collections = await prisma.collection.findMany({
     where: {
       title: COLLECTION_TITLE,
-      authors: { some: { userId } }
+      site: { userId }
     },
     select: { id: true }
   })
@@ -148,14 +148,23 @@ export async function seedDemoContent(options: SeedDemoContentOptions): Promise<
   const skriptMeta = readSkriptMeta()
   const pages = readDemoPages()
 
-  // Create collection
+  // Create collection. Ownership goes through the user's Site, not via a
+  // CollectionAuthor row — the demo seeder requires the user to already have
+  // a Site (every teacher with a pageSlug does).
+  const site = await prisma.site.findUnique({
+    where: { userId },
+    select: { id: true },
+  })
+  if (!site) {
+    throw new Error(
+      `Cannot seed demo content for user ${userId}: no Site exists. Set a pageSlug first.`
+    )
+  }
   const collection = await prisma.collection.create({
     data: {
       title: COLLECTION_TITLE,
       description: COLLECTION_DESCRIPTION,
-      authors: {
-        create: { userId, permission: 'author' },
-      },
+      siteId: site.id,
     },
   })
 

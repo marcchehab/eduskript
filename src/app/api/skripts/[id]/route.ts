@@ -42,39 +42,10 @@ export async function GET(
       return NextResponse.json({ error: 'Skript not found' }, { status: 404 })
     }
 
-    // Check if user has permission to view this skript
-    // First check direct skript permissions
-    let permissions = checkSkriptPermissions(session.user.id, skript.authors, undefined, session.user.isAdmin)
-
-    // If no direct permission, check collection-level permissions
-    // According to permission model: "Collection authors can view all skripts in their collections"
-    // Note: Collection-level access only grants VIEW permission, not EDIT
-    if (!permissions.canView && skript.collectionSkripts.length > 0) {
-      for (const cs of skript.collectionSkripts) {
-        if (cs.collection) {
-          // Fetch collection authors
-          const collection = await prisma.collection.findUnique({
-            where: { id: cs.collection.id },
-            include: {
-              authors: {
-                where: { userId: session.user.id }
-              }
-            }
-          })
-
-          if (collection && collection.authors.length > 0) {
-            // Collection-level access grants VIEW permission only (not EDIT)
-            // User needs explicit skript-level "author" permission to edit
-            permissions = {
-              canView: true,
-              canEdit: false,
-              canManageAuthors: false
-            }
-            break
-          }
-        }
-      }
-    }
+    // Skript permissions come solely from SkriptAuthor rows now; the old
+    // collection-author inheritance is gone (collections are sidebar-only
+    // groupings, not access-granting containers).
+    const permissions = checkSkriptPermissions(session.user.id, skript.authors, session.user.isAdmin)
 
     if (!permissions.canView) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
@@ -145,7 +116,7 @@ export async function PATCH(
           NOT: { id },
           OR: [
             { authors: { some: { userId: session.user.id } } },
-            { collectionSkripts: { some: { collection: { authors: { some: { userId: session.user.id } } } } } }
+            { collectionSkripts: { some: { collection: { site: { userId: session.user.id } } } } }
           ]
         }
       })

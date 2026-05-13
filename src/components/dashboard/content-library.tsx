@@ -168,8 +168,6 @@ export function ContentLibrary({ onDataLoad, refreshTrigger, context = { type: '
                         title={collection.title}
                         description={collection.description || undefined}
                         skriptCount={collection.collectionSkripts.length}
-                        authors={collection.authors}
-                        currentUserId={session.user.id}
                         isViewOnly={false}
                         index={index}
                       />

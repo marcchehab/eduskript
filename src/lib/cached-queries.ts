@@ -102,11 +102,7 @@ export const getAllPublishedCollections = (teacherId: string, pageSlug: string) 
   unstable_cache(
     async () => {
       return prisma.collection.findMany({
-        where: {
-          authors: {
-            some: { userId: teacherId }
-          }
-        },
+        where: { site: { userId: teacherId } },
         include: {
           collectionSkripts: {
             where: {
@@ -174,7 +170,7 @@ export const getFullSiteStructure = (teacherId: string, pageSlug: string) =>
       const collections = await prisma.collection.findMany({
         where: {
           id: { in: layoutCollectionIds },
-          authors: { some: { userId: teacherId } },
+          site: { userId: teacherId },
         },
         select: {
           id: true,
@@ -245,7 +241,7 @@ export const getPublishedPage = (
           isPublished: true,
           OR: [
             { authors: { some: { userId: teacherId } } },
-            { collectionSkripts: { some: { collection: { authors: { some: { userId: teacherId } } } } } }
+            { collectionSkripts: { some: { collection: { site: { userId: teacherId } } } } }
           ]
         },
         include: {
@@ -362,7 +358,7 @@ export const getTeacherHomepageContent = (teacherId: string, pageSlug: string, p
           const collection = await prisma.collection.findFirst({
             where: {
               id: item.contentId,
-              authors: { some: { userId: teacherId } }
+              site: { userId: teacherId }
             },
             include: {
               collectionSkripts: {
@@ -449,7 +445,7 @@ export const getSkriptForPreview = async (teacherId: string, skriptSlug: string)
       slug: skriptSlug,
       OR: [
         { authors: { some: { userId: teacherId } } },
-        { collectionSkripts: { some: { collection: { authors: { some: { userId: teacherId } } } } } }
+        { collectionSkripts: { some: { collection: { site: { userId: teacherId } } } } }
       ]
     },
     include: {
@@ -558,7 +554,13 @@ export const getOrgFullSiteStructure = (orgId: string, orgSlug: string) =>
       const collections = await prisma.collection.findMany({
         where: {
           id: { in: layoutCollectionIds },
-          authors: { some: { userId: { in: adminUserIds } } }
+          // Org pageLayout references collections owned by the org's site OR
+          // collections owned by an admin's personal site (mirrors the legacy
+          // "any admin author" gating). Mix should be rare but is permitted.
+          OR: [
+            { site: { organizationId: orgId } },
+            { site: { userId: { in: adminUserIds } } },
+          ],
         },
         select: {
           id: true,
@@ -647,7 +649,8 @@ export const getOrgPublishedPage = (
           isPublished: true,
           OR: [
             { authors: { some: { userId: { in: adminUserIds } } } },
-            { collectionSkripts: { some: { collection: { authors: { some: { userId: { in: adminUserIds } } } } } } }
+            { collectionSkripts: { some: { collection: { site: { organizationId: orgId } } } } },
+            { collectionSkripts: { some: { collection: { site: { userId: { in: adminUserIds } } } } } },
           ]
         },
         include: {
@@ -770,7 +773,10 @@ export const getOrgHomepageContent = (
           const collection = await prisma.collection.findFirst({
             where: {
               id: item.contentId,
-              authors: { some: { userId: { in: adminUserIds } } }
+              OR: [
+                { site: { organizationId: orgId } },
+                { site: { userId: { in: adminUserIds } } },
+              ],
             },
             include: {
               collectionSkripts: {
@@ -810,7 +816,10 @@ export const getOrgHomepageContent = (
             where: {
               id: item.contentId,
               isPublished: true,
-              authors: { some: { userId: { in: adminUserIds } } }
+              OR: [
+                { authors: { some: { userId: { in: adminUserIds } } } },
+                { collectionSkripts: { some: { collection: { site: { organizationId: orgId } } } } },
+              ],
             },
             include: {
               collectionSkripts: { include: { collection: true } },

@@ -54,7 +54,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
         slug: skriptSlug,
         OR: [
           { authors: { some: { userId: teacher.id } } },
-          { collectionSkripts: { some: { collection: { authors: { some: { userId: teacher.id } } } } } }
+          { collectionSkripts: { some: { collection: { site: { userId: teacher.id } } } } }
         ]
       },
       select: { title: true, description: true }
@@ -130,7 +130,7 @@ export default async function OrgTeacherSkriptPage({ params }: PageProps) {
       slug: skriptSlug,
       OR: [
         { authors: { some: { userId: teacher.id } } },
-        { collectionSkripts: { some: { collection: { authors: { some: { userId: teacher.id } } } } } }
+        { collectionSkripts: { some: { collection: { site: { userId: teacher.id } } } } }
       ]
     },
     include: {

@@ -124,9 +124,13 @@ export async function GET(req: NextRequest) {
         accountType: true,
         createdAt: true,
         isAdmin: true,
+        site: {
+          select: {
+            _count: { select: { collections: true } },
+          },
+        },
         _count: {
           select: {
-            collectionAuthors: true,
             skriptAuthors: true,
             pageAuthors: true,
             files: true,
@@ -154,7 +158,7 @@ export async function GET(req: NextRequest) {
         isAdmin: user.isAdmin,
       },
       stats: {
-        collections: user._count.collectionAuthors,
+        collections: user.site?._count.collections ?? 0,
         skripts: user._count.skriptAuthors,
         pages: user._count.pageAuthors,
         files: user._count.files,

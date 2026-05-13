@@ -106,13 +106,10 @@ model User {
   sessions     Session[]
   pageVersions PageVersion[]
 
-  // Many-to-many relations for authoring
-  collectionAuthors CollectionAuthor[]
-  skriptAuthors     SkriptAuthor[]
-  pageAuthors       PageAuthor[]
-
-  // Collection-skript relationships (for root-level placements)
-  collectionSkripts CollectionSkript[]
+  // Many-to-many relations for content authoring (skripts/pages stay
+  // multi-author across users; collections are owned 1:1 by a Site).
+  skriptAuthors SkriptAuthor[]
+  pageAuthors   PageAuthor[]
 
   // File uploads
   files File[]
@@ -125,6 +122,13 @@ model User {
 
   // Page layout
   pageLayout PageLayout?
+
+  // The user's public site (1:1). Created when they first set a pageSlug as a
+  // teacher; absent for students. Owns collections, page layout, frontpage,
+  // and all page-display settings going forward — User.pageSlug/pageName/etc.
+  // are mirrored on Site during the migration and will be dropped once all
+  // readers are switched over.
+  site Site?
 
   // Student data
   studentProgress    StudentProgress[]   @relation("StudentProgress")
@@ -198,53 +202,81 @@ model User {
   @@map("users")
 }
 
+// A public page/site. Owned polymorphically by either a User (a teacher's
+// personal page) or an Organization (a school/group page) — exactly one of
+// userId / organizationId is set. The polymorphism lives here, in one model,
+// so downstream tables (Collection, PageLayout, FrontPage) reference a single
+// siteId instead of inventing their own userId|organizationId pair.
+//
+// During the migration, User and Organization keep their original slug +
+// page-display columns (pageSlug, pageName, pageDescription, etc.) as
+// mirrors. Once all readers switch to Site, the duplicates get dropped.
+model Site {
+  id   String @id @default(cuid())
+  slug String @unique // Globally unique URL slug (replaces User.pageSlug + Organization.slug)
+
+  userId         String? @unique @map("user_id")
+  organizationId String? @unique @map("organization_id")
+
+  // Page-display fields (mirrored from User/Organization until those columns
+  // are dropped in a later migration stage).
+  pageName             String? @map("page_name")
+  pageDescription      String? @map("page_description")
+  pageIcon             String? @map("page_icon")
+  pageTagline          String? @map("page_tagline")
+  pageLanguage         String? @map("page_language") // BCP-47, null = "en"
+  sidebarBehavior      String  @default("full") @map("sidebar_behavior") // "full" | "contextual"
+  typographyPreference String? @default("modern") @map("typography_preference")
+  showIcon             Boolean @default(true) @map("show_icon")
+  aiSystemPrompt       String? @map("ai_system_prompt") @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user         User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  collections Collection[]
+
+  @@map("sites")
+}
+
 model Collection {
   id          String   @id @default(cuid())
+  // Owning site. A collection is just a sidebar grouping on a single site;
+  // there's no longer a per-collection author table — site ownership is the
+  // single source of truth.
+  siteId      String   @map("site_id")
   title       String
-  description String?
   accentColor String? // Hex color for sidebar letter markers (e.g., "#3b82f6")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  // Relations
+  site              Site               @relation(fields: [siteId], references: [id], onDelete: Cascade)
   collectionSkripts CollectionSkript[]
 
-  // Many-to-many relation for multiple authors
-  authors CollectionAuthor[]
-
+  @@index([siteId])
   @@map("collections")
 }
 
-// Junction table for Collection-User many-to-many relationship
-model CollectionAuthor {
+// Junction table for Collection-Skript many-to-many relationship. Pure
+// linkage between a collection and the skripts it contains; ordering lives
+// on this row. Root skripts live in PageLayout.items, not here.
+//
+// Existing columns keep their camelCase names (collectionId, skriptId,
+// createdAt) so the Prisma migration is purely structural — no column
+// renames — to avoid the drop+add behaviour that would lose data.
+model CollectionSkript {
   id           String   @id @default(cuid())
   collectionId String
-  userId       String
-  permission   String   @default("author") // "author" (can edit & manage), "viewer" (can only view)
+  skriptId     String
+  order        Int
   createdAt    DateTime @default(now())
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skript     Skript     @relation(fields: [skriptId], references: [id], onDelete: Cascade)
 
-  @@unique([collectionId, userId])
-  @@map("collection_authors")
-}
-
-// Junction table for Collection-Skript many-to-many relationship
-model CollectionSkript {
-  id           String   @id @default(cuid())
-  collectionId String? // Nullable - null means root level
-  skriptId     String
-  userId       String? // ONLY used for root level items (when collectionId is null)
-  order        Int // Order within the collection or root level
-  createdAt    DateTime @default(now())
-
-  collection Collection? @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  skript     Skript      @relation(fields: [skriptId], references: [id], onDelete: Cascade)
-  user       User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([collectionId, skriptId]) // One entry per skript per collection
-  @@unique([skriptId, userId]) // One root entry per skript per user (when collectionId is null)
+  @@unique([collectionId, skriptId])
   @@map("collection_skripts")
 }
 
@@ -830,6 +862,9 @@ model Organization {
   customDomains CustomDomain[]
   frontPage     FrontPage?
   pageLayout    OrgPageLayout?
+
+  // The org's public site (1:1). See User.site for the same migration plan.
+  site Site?
 
   @@map("organizations")
 }

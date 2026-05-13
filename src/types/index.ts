@@ -1,4 +1,4 @@
-import { User, Collection, Skript, Page, PageVersion, CollaborationRequest, Collaboration, CollectionAuthor, SkriptAuthor, PageAuthor } from '@prisma/client'
+import { User, Collection, Skript, Page, PageVersion, CollaborationRequest, Collaboration, SkriptAuthor, PageAuthor } from '@prisma/client'
 
 // Extended types with relations
 export type UserWithCollections = User & {
@@ -154,8 +154,8 @@ export interface CollaborationRequestResponse {
 // Permission types
 export type Permission = 'author' | 'viewer'
 
-export type CollectionWithAuthors = Collection & {
-  authors: (CollectionAuthor & { user: User })[]
+export type CollectionWithSite = Collection & {
+  site: { userId: string | null; organizationId: string | null } | null
   skripts?: Array<{
     id: string
     title: string

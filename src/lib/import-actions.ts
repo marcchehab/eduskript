@@ -95,11 +95,11 @@ export async function importContent(formData: FormData, action: 'preview' | 'imp
     const userId = session.user.id
     const errors: ImportError[] = []
 
-    // Dedup collections by title within this user (alpha — no slug to key on)
+    // Dedup collections by title within this user's site.
     const existingCollections = await prisma.collection.findMany({
       where: {
         title: { in: manifest.collections.map(c => c.title) },
-        authors: { some: { userId } }
+        site: { userId }
       },
       select: { title: true }
     })
@@ -315,12 +315,20 @@ async function performImport(
   const collectionIdMap = new Map<string, string>()
   const skriptIdMap = new Map<string, string>()
 
-  // Create or find collections (matched by title within this user's collections)
+  const userSite = await prisma.site.findUnique({
+    where: { userId },
+    select: { id: true },
+  })
+  if (!userSite) {
+    throw new Error(`User ${userId} has no Site — set up a public page before importing`)
+  }
+
+  // Create or find collections (matched by title within this user's site)
   for (const collectionData of manifest.collections) {
     let collection = await prisma.collection.findFirst({
       where: {
         title: collectionData.title,
-        authors: { some: { userId } }
+        siteId: userSite.id,
       }
     })
 
@@ -329,9 +337,7 @@ async function performImport(
         data: {
           title: collectionData.title,
           description: collectionData.description,
-          authors: {
-            create: { userId, permission: 'author' }
-          }
+          siteId: userSite.id,
         }
       })
       result.collections++
@@ -600,13 +606,20 @@ export async function processImportZip(
   const totalSkripts = Object.keys(manifest.skripts).length
   let processedSkripts = 0
 
-  // Create or find collections (matched by title)
+  // Create or find collections (matched by title within the user's site).
   await onProgress?.(0, 'Creating collections...')
+  const userSite2 = await prisma.site.findUnique({
+    where: { userId },
+    select: { id: true },
+  })
+  if (!userSite2) {
+    throw new Error(`User ${userId} has no Site — set up a public page before importing`)
+  }
   for (const collectionData of manifest.collections) {
     let collection = await prisma.collection.findFirst({
       where: {
         title: collectionData.title,
-        authors: { some: { userId } }
+        siteId: userSite2.id,
       }
     })
 
@@ -615,9 +628,7 @@ export async function processImportZip(
         data: {
           title: collectionData.title,
           description: collectionData.description,
-          authors: {
-            create: { userId, permission: 'author' }
-          }
+          siteId: userSite2.id,
         }
       })
       result.collectionsCreated++

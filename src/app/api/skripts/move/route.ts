@@ -33,9 +33,7 @@ export async function POST(request: NextRequest) {
           include: {
             collection: {
               include: {
-                authors: {
-                  include: { user: true }
-                }
+                site: { select: { userId: true, organizationId: true } }
               }
             }
           }
@@ -59,19 +57,29 @@ export async function POST(request: NextRequest) {
       skript.authors
     )
 
-    // Check if user has edit permission on the current collection(s)
+    // Check if user has edit permission on the current collection(s) via
+    // their owning site (or org-admin membership).
     let hasSourceCollectionEditPermission = false
     let sourceCollectionId: string | null = null
-    
+
     for (const collectionSkript of skript.collectionSkripts) {
-      // Skip root-level entries (where collection is null)
       if (!collectionSkript.collection) continue
-      
+
+      const orgRoles = collectionSkript.collection.site?.organizationId
+        ? await prisma.organizationMember.findMany({
+            where: {
+              userId: session.user.id,
+              organizationId: collectionSkript.collection.site.organizationId,
+            },
+            select: { organizationId: true, role: true },
+          })
+        : []
       const collectionPermissions = checkCollectionPermissions(
-        session.user.id, 
-        collectionSkript.collection.authors
+        session.user.id,
+        collectionSkript.collection,
+        orgRoles,
       )
-      
+
       if (collectionPermissions.canEdit) {
         hasSourceCollectionEditPermission = true
         sourceCollectionId = collectionSkript.collection.id
@@ -99,11 +107,7 @@ export async function POST(request: NextRequest) {
     if (targetCollectionId) {
       const targetCollection = await prisma.collection.findUnique({
         where: { id: targetCollectionId },
-        include: {
-          authors: {
-            include: { user: true }
-          }
-        }
+        include: { site: { select: { userId: true, organizationId: true } } }
       })
 
       if (!targetCollection) {
@@ -113,9 +117,16 @@ export async function POST(request: NextRequest) {
         )
       }
 
+      const targetOrgRoles = targetCollection.site?.organizationId
+        ? await prisma.organizationMember.findMany({
+            where: { userId: session.user.id, organizationId: targetCollection.site.organizationId },
+            select: { organizationId: true, role: true },
+          })
+        : []
       const targetPermissions = checkCollectionPermissions(
-        session.user.id, 
-        targetCollection.authors
+        session.user.id,
+        targetCollection,
+        targetOrgRoles,
       )
 
       if (!targetPermissions.canEdit) {

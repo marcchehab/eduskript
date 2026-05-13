@@ -47,9 +47,6 @@ export async function loadFrontPageContext(args: {
         include: {
           authors: { include: { user: true } },
           files: { select: { id: true, name: true, contentType: true } },
-          collectionSkripts: {
-            include: { collection: { include: { authors: { include: { user: true } } } } },
-          },
         },
       },
       fileSkript: { select: { id: true, files: { select: { id: true, name: true, contentType: true } } } },
@@ -63,10 +60,7 @@ export async function loadFrontPageContext(args: {
   let canEdit = false
   if (frontPage.userId && frontPage.userId === userId) canEdit = true
   if (frontPage.skript) {
-    const collectionAuthors = frontPage.skript.collectionSkripts
-      .filter((cs) => cs.collection !== null)
-      .flatMap((cs) => cs.collection!.authors)
-    const perms = checkSkriptPermissions(userId, frontPage.skript.authors, collectionAuthors, !!isAdmin)
+    const perms = checkSkriptPermissions(userId, frontPage.skript.authors, !!isAdmin)
     if (perms.canEdit) canEdit = true
   }
   if (frontPage.organizationId) {

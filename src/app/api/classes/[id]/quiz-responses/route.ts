@@ -102,13 +102,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         },
       })
       if (pageWithAuthors) {
-        const collectionAuthors = pageWithAuthors.skript.collectionSkripts
-          .flatMap((cs) => cs.collection?.authors ?? [])
         const perms = checkPagePermissions(
           session.user.id,
           pageWithAuthors.authors,
           pageWithAuthors.skript.authors,
-          collectionAuthors
         )
         authorized = perms.canEdit
       }

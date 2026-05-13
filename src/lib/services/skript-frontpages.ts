@@ -54,15 +54,7 @@ async function loadSkriptForFrontPageAccess(
   })
   if (!skript) throw new NotFoundError('Skript not found')
 
-  const collectionAuthors = skript.collectionSkripts.flatMap(
-    (cs) => cs.collection?.authors ?? []
-  )
-  const perms = checkSkriptPermissions(
-    userId,
-    skript.authors,
-    collectionAuthors,
-    isAdmin
-  )
+  const perms = checkSkriptPermissions(userId, skript.authors, isAdmin)
   return { skript, perms }
 }
 

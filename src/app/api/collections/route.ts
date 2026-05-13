@@ -23,25 +23,26 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create collection with the current user as the first author
+    // Collections belong to the creator's Site. Every teacher with a pageSlug
+    // gets a Site at signup; if there's none, the user hasn't claimed their
+    // page yet and can't own collections.
+    const site = await prisma.site.findUnique({
+      where: { userId: session.user.id },
+      select: { id: true },
+    })
+    if (!site) {
+      return NextResponse.json(
+        { error: 'You need to set up your public page before creating collections' },
+        { status: 400 }
+      )
+    }
+
     const collection = await prisma.collection.create({
       data: {
         title: title.trim(),
         description: description || null,
-        authors: {
-          create: {
-            userId: session.user.id,
-            permission: "author"
-          }
-        }
+        siteId: site.id,
       },
-      include: {
-        authors: {
-          include: {
-            user: true
-          }
-        }
-      }
     })
 
     return NextResponse.json({ success: true, data: collection })
@@ -57,7 +58,7 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-    
+
     if (!session?.user?.id) {
       return NextResponse.json(
         { error: 'Unauthorized' },
@@ -65,33 +66,25 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const { searchParams } = new URL(request.url)
-    const includeShared = searchParams.get('includeShared') === 'true'
+    // The `includeShared` flag used to widen the query to collections shared
+    // via CollectionAuthor. With the slim model, collections are 1:1 with a
+    // site, so "yours" = "owned by your user site" plus any org sites you're
+    // a member of. Both branches collapse to the same query.
+    void new URL(request.url).searchParams.get('includeShared')
 
-    let whereClause
-
-    if (includeShared) {
-      // Get collections where user is an author OR can view through any permission level
-      whereClause = {
-        authors: {
-          some: {
-            userId: session.user.id
-          }
-        }
-      }
-    } else {
-      // Get only collections where the user is an author
-      whereClause = {
-        authors: {
-          some: {
-            userId: session.user.id
-          }
-        }
-      }
-    }
+    const memberships = await prisma.organizationMember.findMany({
+      where: { userId: session.user.id },
+      select: { organizationId: true },
+    })
+    const orgIds = memberships.map(m => m.organizationId)
 
     const collections = await prisma.collection.findMany({
-      where: whereClause,
+      where: {
+        OR: [
+          { site: { userId: session.user.id } },
+          ...(orgIds.length > 0 ? [{ site: { organizationId: { in: orgIds } } }] : []),
+        ],
+      },
       include: {
         collectionSkripts: {
           include: {
@@ -112,17 +105,6 @@ export async function GET(request: NextRequest) {
               }
             }
           }
-        },
-        authors: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true
-              }
-            }
-          }
         }
       },
       orderBy: { updatedAt: 'desc' }
@@ -136,4 +118,4 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     )
   }
-} 
+}

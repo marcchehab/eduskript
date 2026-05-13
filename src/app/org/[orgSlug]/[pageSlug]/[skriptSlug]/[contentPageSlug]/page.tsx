@@ -150,7 +150,7 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
         slug: skriptSlug,
         OR: [
           { authors: { some: { userId: teacher.id } } },
-          { collectionSkripts: { some: { collection: { authors: { some: { userId: teacher.id } } } } } }
+          { collectionSkripts: { some: { collection: { site: { userId: teacher.id } } } } }
         ]
       }
     },
@@ -279,10 +279,29 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
     const skriptAuthorRecord = await prisma.skriptAuthor.findFirst({
       where: { skriptId: skript.id, userId: studentId, permission: 'author' }
     })
-    const collectionAuthorRecord = collection ? await prisma.collectionAuthor.findFirst({
-      where: { collectionId: collection.id, userId: studentId, permission: 'author' }
-    }) : null
-    const isTeacherAuthor = !!(skriptAuthorRecord || collectionAuthorRecord)
+    let isSiteOwner = false
+    if (!skriptAuthorRecord && collection) {
+      const collectionWithSite = await prisma.collection.findUnique({
+        where: { id: collection.id },
+        select: { site: { select: { userId: true, organizationId: true } } },
+      })
+      if (collectionWithSite?.site) {
+        if (collectionWithSite.site.userId === studentId) {
+          isSiteOwner = true
+        } else if (collectionWithSite.site.organizationId) {
+          const membership = await prisma.organizationMember.findFirst({
+            where: {
+              organizationId: collectionWithSite.site.organizationId,
+              userId: studentId,
+              role: { in: ['owner', 'admin'] },
+            },
+            select: { id: true },
+          })
+          if (membership) isSiteOwner = true
+        }
+      }
+    }
+    const isTeacherAuthor = !!skriptAuthorRecord || isSiteOwner
 
     if (!hasUnlock && !isTeacherAuthor) {
       return (

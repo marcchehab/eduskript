@@ -111,7 +111,7 @@ export async function POST(request: Request): Promise<Response> {
       return Response.json({ success: false, error: 'Skript not found' }, { status: 404 })
     }
 
-    const permissions = checkSkriptPermissions(userId, skript.authors, undefined, !!session.user.isAdmin)
+    const permissions = checkSkriptPermissions(userId, skript.authors, !!session.user.isAdmin)
     if (!permissions.canEdit) {
       return Response.json({ success: false, error: 'Edit access denied' }, { status: 403 })
     }

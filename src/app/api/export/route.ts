@@ -47,9 +47,9 @@ export async function GET(request: Request) {
 
     const userId = session.user.id
 
-    // Build query for collections
+    // Build query for collections (1:1 with the user's site now).
     const collectionsWhere = {
-      authors: { some: { userId, permission: 'author' } },
+      site: { userId },
       ...(collectionIds && { id: { in: collectionIds } })
     }
 

@@ -54,15 +54,7 @@ export async function POST(
       // User frontpage - only the owner can restore
       canEdit = frontPage.userId === session.user.id
     } else if (frontPage.skript) {
-      // Skript frontpage - check skript permissions
-      const collectionAuthors = frontPage.skript.collectionSkripts
-        .filter(cs => cs.collection !== null)
-        .flatMap(cs => cs.collection!.authors)
-      const permissions = checkSkriptPermissions(
-        session.user.id,
-        frontPage.skript.authors,
-        collectionAuthors
-      )
+      const permissions = checkSkriptPermissions(session.user.id, frontPage.skript.authors)
       canEdit = permissions.canEdit
     }
 

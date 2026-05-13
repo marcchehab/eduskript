@@ -47,7 +47,8 @@ export async function generateMetadata({ params }: SkriptPageProps): Promise<Met
         slug: skriptSlug,
         OR: [
           { authors: { some: { userId: { in: orgAdminIds } } } },
-          { collectionSkripts: { some: { collection: { authors: { some: { userId: { in: orgAdminIds } } } } } } }
+          { collectionSkripts: { some: { collection: { site: { organizationId: organization.id } } } } },
+          { collectionSkripts: { some: { collection: { site: { userId: { in: orgAdminIds } } } } } }
         ]
       },
       select: { title: true }
@@ -112,7 +113,8 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
       slug: skriptSlug,
       OR: [
         { authors: { some: { userId: { in: adminUserIds } } } },
-        { collectionSkripts: { some: { collection: { authors: { some: { userId: { in: adminUserIds } } } } } } }
+        { collectionSkripts: { some: { collection: { site: { organizationId: organization.id } } } } },
+        { collectionSkripts: { some: { collection: { site: { userId: { in: adminUserIds } } } } } }
       ]
     },
     include: {

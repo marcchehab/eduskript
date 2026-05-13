@@ -19,6 +19,12 @@ vi.mock('@/lib/prisma', () => ({
       findMany: vi.fn(),
       create: vi.fn(),
     },
+    site: {
+      findUnique: vi.fn(),
+    },
+    organizationMember: {
+      findMany: vi.fn(),
+    },
   },
 }))
 
@@ -125,9 +131,12 @@ describe('Collections API', () => {
     describe('Successful Creation', () => {
       beforeEach(() => {
         vi.mocked(getServerSession).mockResolvedValue(mockSession)
+        // Site lookup now precedes Collection.create — every successful path
+        // requires the user to have a Site (a public page).
+        vi.mocked(prisma.site.findUnique).mockResolvedValue({ id: 'site-123' } as never)
       })
 
-      it('should create collection with user as author', async () => {
+      it('should create collection scoped to the user site', async () => {
         vi.mocked(prisma.collection.create).mockResolvedValue(mockCollection)
 
         const request = createRequest({
@@ -141,19 +150,7 @@ describe('Collections API', () => {
           data: {
             title: 'New Collection',
             description: 'A new collection',
-            authors: {
-              create: {
-                userId: 'user-123',
-                permission: 'author',
-              },
-            },
-          },
-          include: {
-            authors: {
-              include: {
-                user: true,
-              },
-            },
+            siteId: 'site-123',
           },
         })
       })
@@ -188,11 +185,21 @@ describe('Collections API', () => {
           })
         )
       })
+
+      it('should 400 when user has no Site', async () => {
+        vi.mocked(prisma.site.findUnique).mockResolvedValue(null as never)
+
+        const request = createRequest({ title: 'My Collection' })
+        const response = await POST(request)
+
+        expect(response.status).toBe(400)
+      })
     })
 
     describe('Error Handling', () => {
       it('should return 500 on database error', async () => {
         vi.mocked(getServerSession).mockResolvedValue(mockSession)
+        vi.mocked(prisma.site.findUnique).mockResolvedValue({ id: 'site-123' } as never)
         vi.mocked(prisma.collection.create).mockRejectedValue(
           new Error('Database error')
         )
@@ -236,26 +243,20 @@ describe('Collections API', () => {
     describe('Fetching Collections', () => {
       beforeEach(() => {
         vi.mocked(getServerSession).mockResolvedValue(mockSession)
+        vi.mocked(prisma.organizationMember.findMany).mockResolvedValue([] as never)
       })
 
-      it('should fetch collections for authenticated user', async () => {
+      it('should fetch collections owned by the user site', async () => {
         vi.mocked(prisma.collection.findMany).mockResolvedValue([mockCollection])
 
         const request = createRequest()
         const response = await GET(request)
 
         expect(response.status).toBe(200)
-        expect(prisma.collection.findMany).toHaveBeenCalledWith(
-          expect.objectContaining({
-            where: {
-              authors: {
-                some: {
-                  userId: 'user-123',
-                },
-              },
-            },
-          })
-        )
+        const call = vi.mocked(prisma.collection.findMany).mock.calls[0][0]!
+        expect(call.where).toEqual({
+          OR: [{ site: { userId: 'user-123' } }],
+        })
       })
 
       it('should return collections with nested data', async () => {
@@ -297,23 +298,22 @@ describe('Collections API', () => {
         expect(data.data).toEqual([])
       })
 
-      it('should include shared collections when requested', async () => {
+      it('should also fetch collections owned by org sites the user is a member of', async () => {
+        vi.mocked(prisma.organizationMember.findMany).mockResolvedValue([
+          { organizationId: 'org-1' },
+        ] as never)
         vi.mocked(prisma.collection.findMany).mockResolvedValue([mockCollection])
 
-        const request = createRequest({ includeShared: 'true' })
+        const request = createRequest()
         await GET(request)
 
-        expect(prisma.collection.findMany).toHaveBeenCalledWith(
-          expect.objectContaining({
-            where: {
-              authors: {
-                some: {
-                  userId: 'user-123',
-                },
-              },
-            },
-          })
-        )
+        const call = vi.mocked(prisma.collection.findMany).mock.calls[0][0]!
+        expect(call.where).toEqual({
+          OR: [
+            { site: { userId: 'user-123' } },
+            { site: { organizationId: { in: ['org-1'] } } },
+          ],
+        })
       })
 
       it('should order collections by updatedAt descending', async () => {
@@ -333,6 +333,7 @@ describe('Collections API', () => {
     describe('Error Handling', () => {
       it('should return 500 on database error', async () => {
         vi.mocked(getServerSession).mockResolvedValue(mockSession)
+        vi.mocked(prisma.organizationMember.findMany).mockResolvedValue([] as never)
         vi.mocked(prisma.collection.findMany).mockRejectedValue(
           new Error('Database error')
         )

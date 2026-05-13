@@ -44,38 +44,10 @@ export async function GET(
     return NextResponse.json({ isPageAuthor: false })
   }
 
-  // Check SkriptAuthor
+  // Page-author rights come from SkriptAuthor only — collection ownership
+  // no longer grants page rights (collections are sidebar groupings now).
   const skriptAuthor = await prisma.skriptAuthor.findFirst({
     where: { skriptId: page.skriptId, userId, permission: 'author' }
   })
-  if (skriptAuthor) {
-    return NextResponse.json({ isPageAuthor: true })
-  }
-
-  // Check CollectionAuthor via CollectionSkript
-  const collectionSkripts = await prisma.collectionSkript.findMany({
-    where: { skriptId: page.skriptId },
-    select: { collectionId: true }
-  })
-
-  if (collectionSkripts.length > 0) {
-    const collectionIds = collectionSkripts
-      .map(cs => cs.collectionId)
-      .filter((id): id is string => id !== null)
-
-    if (collectionIds.length > 0) {
-      const collectionAuthor = await prisma.collectionAuthor.findFirst({
-        where: {
-          collectionId: { in: collectionIds },
-          userId,
-          permission: 'author'
-        }
-      })
-      if (collectionAuthor) {
-        return NextResponse.json({ isPageAuthor: true })
-      }
-    }
-  }
-
-  return NextResponse.json({ isPageAuthor: false })
+  return NextResponse.json({ isPageAuthor: !!skriptAuthor })
 }

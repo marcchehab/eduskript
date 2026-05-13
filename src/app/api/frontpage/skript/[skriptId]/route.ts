@@ -44,15 +44,7 @@ export async function GET(
       return NextResponse.json({ error: 'Skript not found' }, { status: 404 })
     }
 
-    // Check permissions
-    const collectionAuthors = skript.collectionSkripts
-      .filter(cs => cs.collection !== null)
-      .flatMap(cs => cs.collection!.authors)
-    const permissions = checkSkriptPermissions(
-      session.user.id,
-      skript.authors,
-      collectionAuthors
-    )
+    const permissions = checkSkriptPermissions(session.user.id, skript.authors)
 
     if (!permissions.canView) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -122,15 +114,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Skript not found' }, { status: 404 })
     }
 
-    // Check permissions
-    const collectionAuthors = skript.collectionSkripts
-      .filter(cs => cs.collection !== null)
-      .flatMap(cs => cs.collection!.authors)
-    const permissions = checkSkriptPermissions(
-      session.user.id,
-      skript.authors,
-      collectionAuthors
-    )
+    const permissions = checkSkriptPermissions(session.user.id, skript.authors)
 
     if (!permissions.canEdit) {
       return NextResponse.json(

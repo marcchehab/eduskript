@@ -26,9 +26,7 @@ interface ActorContext {
 }
 
 const collectionInclude = {
-  authors: {
-    include: { user: { select: { id: true, name: true, email: true } } },
-  },
+  site: { select: { userId: true, organizationId: true } },
   collectionSkripts: {
     include: {
       skript: {
@@ -46,6 +44,14 @@ const collectionInclude = {
   },
 } as const
 
+async function loadOrgRoles(userId: string, organizationId: string | null | undefined) {
+  if (!organizationId) return []
+  return prisma.organizationMember.findMany({
+    where: { userId, organizationId },
+    select: { organizationId: true, role: true },
+  })
+}
+
 export async function getCollectionForUser(
   userId: string,
   collectionId: string,
@@ -57,7 +63,8 @@ export async function getCollectionForUser(
   })
   if (!collection) throw new NotFoundError('Collection not found')
 
-  const perms = checkCollectionPermissions(userId, collection.authors, ctx.isAdmin)
+  const orgRoles = await loadOrgRoles(userId, collection.site?.organizationId)
+  const perms = checkCollectionPermissions(userId, collection, orgRoles, ctx.isAdmin)
   if (!perms.canView) {
     throw new PermissionDeniedError('Cannot view this collection')
   }
@@ -92,15 +99,12 @@ export async function updateCollectionForUser(
 
   const existing = await prisma.collection.findUnique({
     where: { id: collectionId },
-    include: { authors: true },
+    include: { site: { select: { userId: true, organizationId: true } } },
   })
   if (!existing) throw new NotFoundError('Collection not found')
 
-  const perms = checkCollectionPermissions(
-    userId,
-    existing.authors as Parameters<typeof checkCollectionPermissions>[1],
-    ctx.isAdmin
-  )
+  const orgRoles = await loadOrgRoles(userId, existing.site?.organizationId)
+  const perms = checkCollectionPermissions(userId, existing, orgRoles, ctx.isAdmin)
   if (!perms.canEdit) {
     throw new PermissionDeniedError('Cannot edit this collection')
   }

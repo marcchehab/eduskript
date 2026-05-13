@@ -1,8 +1,9 @@
 /**
  * MCP tool: list_my_skripts
  *
- * Returns the skripts the calling teacher authors (directly or via collection
- * authorship). Scoped by the access-token's userId via the MCP context.
+ * Returns the skripts the calling teacher authors directly, plus skripts
+ * placed in collections on the teacher's site. Scoped by the access-token's
+ * userId via the MCP context.
  */
 
 import { z } from 'zod'

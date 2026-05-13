@@ -76,7 +76,6 @@ export async function POST(request: Request): Promise<Response> {
     const permissions = checkSkriptPermissions(
       userId,
       skript.authors,
-      undefined,
       !!session.user.isAdmin
     )
     if (!permissions.canEdit) {

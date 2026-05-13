@@ -148,14 +148,10 @@ export async function getPageForUser(
 
   if (!page) throw new NotFoundError('Page not found')
 
-  const collectionAuthors = page.skript.collectionSkripts.flatMap(
-    (cs) => cs.collection?.authors ?? []
-  )
   const perms = checkPagePermissions(
     userId,
     page.authors,
     page.skript.authors,
-    collectionAuthors,
     ctx.isAdmin
   )
   if (!perms.canView) throw new PermissionDeniedError('Cannot view this page')
@@ -425,7 +421,7 @@ export async function searchPagesForUser(
           skript: {
             collectionSkripts: {
               some: {
-                collection: { authors: { some: { userId } } },
+                collection: { site: { userId } },
               },
             },
           },

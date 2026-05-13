@@ -47,16 +47,10 @@ export async function GET(
       return NextResponse.json({ canEdit: false })
     }
 
-    // Check permissions
-    const collectionAuthors = page.skript.collectionSkripts
-      .filter(cs => cs.collection !== null)
-      .flatMap(cs => cs.collection!.authors)
-
     const permissions = checkPagePermissions(
       session.user.id,
       page.authors,
       page.skript.authors,
-      collectionAuthors
     )
 
     if (!permissions.canEdit) {

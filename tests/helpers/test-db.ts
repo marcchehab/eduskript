@@ -132,25 +132,20 @@ export async function seedTestData(prisma: PrismaClient) {
     },
   })
 
-  // Create test collection
+  // Create a Site for user1 and attach the test collection to it.
+  // Collections are owned by sites now; user2 is just a co-author of the
+  // skript below, not of the collection.
+  const site1 = await prisma.site.create({
+    data: {
+      slug: 'test-site-1',
+      userId: user1.id,
+    },
+  })
   const collection = await prisma.collection.create({
     data: {
       title: 'Test Collection',
-      slug: 'test-collection',
       description: 'A test collection',
-      isPublished: true,
-      authors: {
-        create: [
-          {
-            userId: user1.id,
-            permission: 'author',
-          },
-          {
-            userId: user2.id,
-            permission: 'viewer',
-          },
-        ],
-      },
+      siteId: site1.id,
     },
   })
 
@@ -228,8 +223,8 @@ export async function clearDatabase(prisma: PrismaClient) {
   await prisma.page.deleteMany()
   await prisma.skriptAuthor.deleteMany()
   await prisma.skript.deleteMany()
-  await prisma.collectionAuthor.deleteMany()
   await prisma.collection.deleteMany()
+  await prisma.site.deleteMany()
   await prisma.collaborationRequest.deleteMany()
   await prisma.collaboration.deleteMany()
   await prisma.file.deleteMany()
@@ -310,9 +305,12 @@ export function createMockPrismaClient() {
       update: vi.fn(),
       delete: vi.fn(),
     },
-    collectionAuthor: {
+    site: {
       create: vi.fn(),
+      findUnique: vi.fn(),
+      findFirst: vi.fn(),
       findMany: vi.fn(),
+      update: vi.fn(),
       delete: vi.fn(),
     },
     skriptAuthor: {
