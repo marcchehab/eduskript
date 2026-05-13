@@ -1,5 +1,6 @@
 'use client'
 
+import { Fragment } from 'react'
 import { Droppable, Draggable } from '@hello-pangea/dnd'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -176,13 +177,16 @@ export function PageBuilder({
         </p>
       </CardHeader>
       <CardContent>
-        {/* Outer droppable accepts collections, library skripts, and skripts
-            being promoted out of a collection to root level. Note: @hello-pangea/dnd's
-            getFurthestAway picks the outer droppable when nested ones overlap,
-            so in-collection reorders may resolve here. The drop handler treats
-            a skript drop at root as a root-promotion — drag it back into the
-            collection if that wasn't the intent. */}
-        <Droppable droppableId="page-builder">
+        {/* Outer droppable only accepts drops in the empty state — the very
+            first item dropped onto a blank page builder. Once items exist
+            we disable it so it stops shadowing nested droppables: root drops
+            then happen via explicit RootGap strips between items, and
+            collection-internal drops resolve to the per-collection droppables
+            without competing with this wrapper. @hello-pangea/dnd picks the
+            outer droppable when a drag overlaps a nested one, so we have to
+            structurally remove the outer from the candidate set rather than
+            rely on z-index/priority. */}
+        <Droppable droppableId="page-builder" isDropDisabled={items.length > 0}>
           {(provided) => (
             <div
               {...provided.droppableProps}
@@ -265,19 +269,22 @@ export function PageBuilder({
                   {provided.placeholder}
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="flex flex-col">
+                  <RootGap index={0} />
                   {items
                     .sort((a, b) => a.order - b.order)
                     .map((item, index) => (
-                      <PageBuilderItem
-                        key={item.id}
-                        item={item}
-                        index={index}
-                        onRemove={handleRemoveItem}
-                        expandedCollections={expandedCollections}
-                        onToggleCollection={onToggleCollection}
-                        draggedItem={draggedItem}
-                      />
+                      <Fragment key={item.id}>
+                        <PageBuilderItem
+                          item={item}
+                          index={index}
+                          onRemove={handleRemoveItem}
+                          expandedCollections={expandedCollections}
+                          onToggleCollection={onToggleCollection}
+                          draggedItem={draggedItem}
+                        />
+                        <RootGap index={index + 1} />
+                      </Fragment>
                     ))}
                   {provided.placeholder}
                 </div>
@@ -295,6 +302,32 @@ export function PageBuilder({
         )}
       </CardContent>
     </Card>
+  )
+}
+
+// Slim drop strip between root items. The whole point is to give root drops
+// (insert here at the root level) their own droppable so they no longer
+// compete with collection-internal droppables. Index encodes the insertion
+// position (0..items.length). Visually invisible until something is dragged
+// over it, at which point the placeholder pushes neighbours apart.
+function RootGap({ index }: { index: number }) {
+  return (
+    <Droppable droppableId={`root-gap-${index}`} type="DEFAULT">
+      {(provided, snapshot) => (
+        <div
+          ref={provided.innerRef}
+          {...provided.droppableProps}
+          className={cn(
+            "transition-colors rounded",
+            snapshot.isDraggingOver
+              ? "h-3 my-1 bg-primary/20 ring-1 ring-primary/40"
+              : "h-3"
+          )}
+        >
+          {provided.placeholder}
+        </div>
+      )}
+    </Droppable>
   )
 }
 

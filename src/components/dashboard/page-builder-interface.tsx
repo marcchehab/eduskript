@@ -36,6 +36,10 @@ interface DragData {
   description?: string
   fromLibrary?: boolean
   parentId?: string
+  // Set when the drag source is an existing root-level skript (sibling of
+  // collections in pageItems). Distinguishes "root → collection" moves from
+  // library inserts so the source can be removed instead of copied.
+  fromRoot?: boolean
   permissions?: {
     canEdit: boolean
     canView: boolean
@@ -353,7 +357,9 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
         fromLibrary: true 
       }
     } else if (draggableId.startsWith('root-skript-')) {
-      // Root-level skript reorder (sibling of collections)
+      // Root-level skript (sibling of collections) — fromRoot lets the
+      // collection-destination handlers remove the source from pageItems so
+      // it moves rather than gets copied.
       const skriptId = draggableId.replace('root-skript-', '')
       const skript = pageItems.find(item => item.id === skriptId && item.type === 'skript')
       if (skript) {
@@ -362,8 +368,8 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
           id: skriptId,
           title: skript.title,
           description: skript.description,
-          permissions: skript.permissions
-          // No parentId — already at root
+          permissions: skript.permissions,
+          fromRoot: true,
         }
       }
     } else if (draggableId.startsWith('collection-')) {
@@ -402,7 +408,106 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
     // Track whether this is a move operation (not from library AND has a parent)
     const isMovingExistingSkript = !dragData?.fromLibrary && dragData?.type === 'skript' && dragData?.parentId
 
-    if (destinationId === 'page-builder') {
+    if (destinationId.startsWith('root-gap-')) {
+      // Gap-strip drop. The droppableId encodes the insertion position in
+      // the root list (0..items.length). Gap strips are how root-level
+      // moves happen now that the outer page-builder droppable is disabled
+      // when items exist — they isolate root drops from collection-internal
+      // ones so @hello-pangea/dnd doesn't shadow nested droppables.
+      const insertIndex = parseInt(destinationId.replace('root-gap-', ''), 10)
+
+      if (dragData?.type === 'collection') {
+        const existingIndex = updatedItems.findIndex(item => item.id === dragData.id && item.type === 'collection')
+        if (existingIndex !== -1) {
+          // Reorder an existing collection. Splice-then-insert needs an
+          // adjusted index because removal shifts subsequent items left.
+          const adjusted = existingIndex < insertIndex ? insertIndex - 1 : insertIndex
+          if (existingIndex !== adjusted) {
+            const [moved] = updatedItems.splice(existingIndex, 1)
+            updatedItems.splice(adjusted, 0, moved)
+            updatedItems.forEach((it, idx) => { it.order = idx })
+            hasChanges = true
+          }
+        } else if (dragData.fromLibrary) {
+          // New collection from the library, inserted at insertIndex.
+          const collection = libraryData.collections.find(c => c.id === dragData.id)
+          const collectionPermissions = { canEdit: true, canView: true }
+          const newItem: PageItem = {
+            id: dragData.id,
+            type: 'collection',
+            title: dragData.title,
+            description: dragData.description,
+            order: insertIndex,
+            permissions: collectionPermissions,
+            skripts: collection?.collectionSkripts?.map((cs: any, idx: number) => {
+              const skriptPermissions = session?.user?.id
+                ? checkSkriptPermissions(session.user.id, cs.skript.authors || [])
+                : { canEdit: false, canView: false }
+              return {
+                id: cs.skript.id,
+                type: 'skript' as const,
+                title: cs.skript.title,
+                description: cs.skript.description,
+                order: idx,
+                parentId: dragData.id,
+                slug: cs.skript.slug,
+                permissions: skriptPermissions
+              }
+            }) || []
+          }
+          updatedItems.splice(insertIndex, 0, newItem)
+          updatedItems.forEach((it, idx) => { it.order = idx })
+          hasChanges = true
+          setExpandedCollections(prev => [...new Set([...prev, dragData.id])])
+        }
+      } else if (dragData?.type === 'skript') {
+        const existingRootIndex = updatedItems.findIndex(item => item.id === dragData.id && item.type === 'skript')
+        if (existingRootIndex !== -1) {
+          // Already at root — reorder.
+          const adjusted = existingRootIndex < insertIndex ? insertIndex - 1 : insertIndex
+          if (existingRootIndex !== adjusted) {
+            const [moved] = updatedItems.splice(existingRootIndex, 1)
+            updatedItems.splice(adjusted, 0, moved)
+            updatedItems.forEach((it, idx) => { it.order = idx })
+            hasChanges = true
+          }
+        } else {
+          // Promoted from a collection or freshly dragged in from the library.
+          if (isMovingExistingSkript && dragData.parentId) {
+            const sourceCollectionIndex = updatedItems.findIndex(item => item.id === dragData.parentId)
+            if (sourceCollectionIndex !== -1) {
+              const sourceCollection = updatedItems[sourceCollectionIndex]
+              if (sourceCollection.skripts) {
+                sourceCollection.skripts = sourceCollection.skripts
+                  .filter(s => s.id !== dragData.id)
+                  .map((s, idx) => ({ ...s, order: idx }))
+                changedCollectionIds.add(dragData.parentId)
+              }
+            }
+          }
+
+          const librarySkript = libraryData.skripts.find(s => s.id === dragData.id)
+          const skriptPermissions = session?.user?.id && librarySkript?.authors
+            ? checkSkriptPermissions(session.user.id, librarySkript.authors)
+            : (dragData.permissions || { canEdit: true, canView: true })
+
+          const newRootSkript: PageItem = {
+            id: dragData.id,
+            type: 'skript',
+            title: dragData.title,
+            description: dragData.description,
+            order: insertIndex,
+            slug: librarySkript?.slug,
+            permissions: skriptPermissions,
+            isPublished: librarySkript?.isPublished,
+            isUnlisted: librarySkript?.isUnlisted,
+          }
+          updatedItems.splice(insertIndex, 0, newRootSkript)
+          updatedItems.forEach((it, idx) => { it.order = idx })
+          hasChanges = true
+        }
+      }
+    } else if (destinationId === 'page-builder') {
       // Drop to root level
       if (dragData?.type === 'collection') {
         if (dragData.fromLibrary && !pageItems.some(item => item.id === dragData.id && item.type === dragData.type)) {
@@ -511,21 +616,21 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
       // Drop into collection header
       const collectionId = destinationId.replace('collection-', '')
       const collectionIndex = updatedItems.findIndex(item => item.id === collectionId)
-      
+
       if (collectionIndex !== -1) {
         // Only allow skripts to be dropped on collection headers, not other collections
         if (dragData?.type === 'collection') {
           return // Collections can't be nested
         }
-        
+
         if (dragData?.type === 'skript') {
           const targetCollection = updatedItems[collectionIndex]
-          
+
           // Check target collection permissions FIRST
           if (!targetCollection.permissions?.canEdit) {
             return // No edit permissions
           }
-          
+
           // Remove from source if moving
           if (isMovingExistingSkript) {
             const sourceCollectionIndex = updatedItems.findIndex(item => item.id === dragData.parentId)
@@ -540,8 +645,17 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
                 if (dragData.parentId) changedCollectionIds.add(dragData.parentId)
               }
             }
+          } else if (dragData.fromRoot) {
+            // Demoting from root into a collection — drop the top-level entry
+            // so the skript is moved, not copied. The collection-index lookup
+            // above stays valid because dragData.id ≠ collectionId.
+            const rootIndex = updatedItems.findIndex(i => i.id === dragData.id && i.type === 'skript')
+            if (rootIndex !== -1) {
+              updatedItems.splice(rootIndex, 1)
+              updatedItems.forEach((it, idx) => { it.order = idx })
+            }
           }
-          
+
           // Add/move skript to collection header (above collection)
           if (!targetCollection.skripts) targetCollection.skripts = []
           
@@ -569,12 +683,12 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
       
       if (collectionIndex !== -1 && dragData?.type === 'skript') {
         const targetCollection = updatedItems[collectionIndex]
-        
+
         // Check target collection permissions FIRST
         if (!targetCollection.permissions?.canEdit) {
           return // No edit permissions
         }
-        
+
         // Remove from source if moving
         if (isMovingExistingSkript) {
           const sourceCollectionIndex = updatedItems.findIndex(item => item.id === dragData.parentId)
@@ -589,10 +703,16 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
               if (dragData.parentId) changedCollectionIds.add(dragData.parentId)
             }
           }
+        } else if (dragData.fromRoot) {
+          const rootIndex = updatedItems.findIndex(i => i.id === dragData.id && i.type === 'skript')
+          if (rootIndex !== -1) {
+            updatedItems.splice(rootIndex, 1)
+            updatedItems.forEach((it, idx) => { it.order = idx })
+          }
         }
-        
+
         if (!targetCollection.skripts) targetCollection.skripts = []
-        
+
         // Check if skript is already in this collection to prevent duplicates
         const isAlreadyInCollection = targetCollection.skripts.some(s => s.id === dragData.id)
         if (isAlreadyInCollection) {
@@ -661,11 +781,17 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
                 if (dragData.parentId) changedCollectionIds.add(dragData.parentId)
               }
             }
+          } else if (dragData.fromRoot) {
+            const rootIndex = updatedItems.findIndex(i => i.id === dragData.id && i.type === 'skript')
+            if (rootIndex !== -1) {
+              updatedItems.splice(rootIndex, 1)
+              updatedItems.forEach((it, idx) => { it.order = idx })
+            }
           }
-          
+
           // Check if skript is already in this collection to prevent duplicates
           const isAlreadyInCollection = targetCollection.skripts.some(s => s.id === dragData.id)
-          if (isAlreadyInCollection && !isMovingExistingSkript) {
+          if (isAlreadyInCollection && !isMovingExistingSkript && !dragData.fromRoot) {
             return // Already in collection
           }
           
