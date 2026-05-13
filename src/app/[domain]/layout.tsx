@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation'
-import { PublicSiteLayout } from '@/components/public/layout'
+import { PublicSiteLayout, type SidebarItem } from '@/components/public/layout'
 import { HtmlLangSetter } from '@/components/seo/html-lang-setter'
 import {
   getTeacherWithLayout,
@@ -39,13 +39,14 @@ export default async function DomainLayout({ params, children }: DomainLayoutPro
 
   const fullSiteStructure = await getFullSiteStructure(teacher.id, domain)
 
-  // rootSkripts (skripts featured on the homepage but not inside any
-  // collection) are only rendered in full mode — skip the query otherwise.
-  // Treat an empty/null sidebarBehavior as full (matches the Prisma default
-  // and the fallback passed to PublicSiteLayout below).
+  // Root skripts live at the top level of the page layout (siblings of
+  // collections) and need to render in both sidebar modes — the sidebar's
+  // displayRootSkripts memo handles contextual filtering on the client. Treat
+  // an empty/null sidebarBehavior as full (matches the Prisma default and the
+  // fallback passed to PublicSiteLayout below).
   const effectiveSidebarBehavior = teacher.sidebarBehavior || 'full'
   const pageItems = teacher.pageLayout?.items ?? []
-  const homepageContent = effectiveSidebarBehavior === 'full' && pageItems.length > 0
+  const homepageContent = pageItems.length > 0
     ? await getTeacherHomepageContent(
         teacher.id,
         domain,
@@ -53,6 +54,23 @@ export default async function DomainLayout({ params, children }: DomainLayoutPro
       )
     : null
   const rootSkripts = homepageContent?.rootSkripts ?? []
+
+  // Build the merged sidebar list in exact page-builder order: walk
+  // pageItems and dereference each entry against fullSiteStructure (for
+  // collections) or rootSkripts (for skripts). This is what makes root
+  // skripts appear as siblings of collections in the sidebar, interleaved
+  // wherever the teacher placed them.
+  const sidebarItems: SidebarItem[] = pageItems.flatMap((item): SidebarItem[] => {
+    if (item.type === 'collection') {
+      const col = fullSiteStructure.find(c => c.id === item.contentId)
+      return col ? [{ kind: 'collection', data: col }] : []
+    }
+    if (item.type === 'skript') {
+      const sk = rootSkripts.find(s => s.id === item.contentId)
+      return sk ? [{ kind: 'skript', data: sk }] : []
+    }
+    return []
+  })
 
   const teacherForLayout = {
     name: teacher.name || teacher.pageSlug || 'Unknown',
@@ -72,6 +90,7 @@ export default async function DomainLayout({ params, children }: DomainLayoutPro
         teacher={teacherForLayout}
         siteStructure={fullSiteStructure}
         rootSkripts={rootSkripts}
+        sidebarItems={sidebarItems}
         sidebarBehavior={effectiveSidebarBehavior as 'contextual' | 'full'}
         typographyPreference={(teacher.typographyPreference as 'modern' | 'classic') || 'modern'}
       >

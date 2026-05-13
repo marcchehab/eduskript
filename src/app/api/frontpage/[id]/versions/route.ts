@@ -16,27 +16,15 @@ export async function GET(
 
     const { id } = await params
 
-    // Get frontpage and check permissions
+    // Get frontpage and check permissions. Site-level frontpages authorise
+    // via Site ownership; skript frontpages via SkriptAuthor.
     const frontPage = await prisma.frontPage.findUnique({
       where: { id },
       include: {
-        user: true,
+        site: { select: { userId: true, organizationId: true } },
         skript: {
           include: {
-            authors: {
-              include: { user: true }
-            },
-            collectionSkripts: {
-              include: {
-                collection: {
-                  include: {
-                    authors: {
-                      include: { user: true }
-                    }
-                  }
-                }
-              }
-            }
+            authors: { include: { user: true } },
           }
         }
       }
@@ -46,23 +34,20 @@ export async function GET(
       return NextResponse.json({ error: 'Frontpage not found' }, { status: 404 })
     }
 
-    // Check permissions based on owner type
-    if (frontPage.userId) {
-      // User frontpage - only the owner can view versions
-      if (frontPage.userId !== session.user.id) {
+    if (frontPage.site) {
+      const orgRoles = frontPage.site.organizationId
+        ? await prisma.organizationMember.findMany({
+            where: { userId: session.user.id, organizationId: frontPage.site.organizationId },
+            select: { organizationId: true, role: true },
+          })
+        : []
+      const isOwner = frontPage.site.userId === session.user.id
+      const isOrgEditor = orgRoles.some(r => r.role === 'owner' || r.role === 'admin')
+      if (!isOwner && !isOrgEditor) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
       }
     } else if (frontPage.skript) {
-      // Skript frontpage - check skript permissions
-      const collectionAuthors = frontPage.skript.collectionSkripts
-        .filter(cs => cs.collection !== null)
-        .flatMap(cs => cs.collection!.authors)
-      const permissions = checkSkriptPermissions(
-        session.user.id,
-        frontPage.skript.authors,
-        collectionAuthors
-      )
-
+      const permissions = checkSkriptPermissions(session.user.id, frontPage.skript.authors)
       if (!permissions.canView) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
       }

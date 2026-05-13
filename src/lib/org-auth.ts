@@ -36,7 +36,7 @@ export async function getOrgMembership(
         select: {
           id: true,
           name: true,
-          slug: true,
+          site: { select: { slug: true } },
         },
       },
     },
@@ -48,7 +48,11 @@ export async function getOrgMembership(
     organizationId: membership.organizationId,
     userId: membership.userId,
     role: membership.role as OrgRole,
-    organization: membership.organization,
+    organization: {
+      id: membership.organization.id,
+      name: membership.organization.name,
+      slug: membership.organization.site?.slug ?? '',
+    },
   }
 }
 
@@ -63,15 +67,18 @@ export async function getUserOrganizations(userId: string) {
         select: {
           id: true,
           name: true,
-          slug: true,
           billingPlan: true,
+          site: { select: { slug: true } },
         },
       },
     },
   })
 
   return memberships.map((m) => ({
-    ...m.organization,
+    id: m.organization.id,
+    name: m.organization.name,
+    slug: m.organization.site?.slug ?? '',
+    billingPlan: m.organization.billingPlan,
     role: m.role as OrgRole,
   }))
 }

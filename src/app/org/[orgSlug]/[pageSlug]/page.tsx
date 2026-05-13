@@ -25,11 +25,12 @@ export async function generateMetadata({ params }: OrgTeacherPageProps): Promise
   const { orgSlug, pageSlug } = await params
 
   try {
-    // Get organization
-    const organization = await prisma.organization.findUnique({
+    // Get organization (looked up via its Site, since URL slugs live there).
+    const orgSite = await prisma.site.findUnique({
       where: { slug: orgSlug },
-      select: { id: true, name: true }
+      select: { organization: { select: { id: true, name: true } } }
     })
+    const organization = orgSite?.organization
 
     if (!organization) {
       return {
@@ -38,19 +39,19 @@ export async function generateMetadata({ params }: OrgTeacherPageProps): Promise
       }
     }
 
-    // Find teacher who is a member of this org
+    // Find the teacher whose site slug matches pageSlug AND who is an org
+    // member. Page-display fields live on Site now.
     const teacher = await prisma.user.findFirst({
       where: {
-        pageSlug: pageSlug,
+        site: { slug: pageSlug },
         organizationMemberships: {
           some: { organizationId: organization.id }
         }
       },
       select: {
         name: true,
-        pageName: true,
-        pageDescription: true,
-        bio: true
+        bio: true,
+        site: { select: { pageName: true, pageDescription: true } },
       }
     })
 
@@ -61,8 +62,8 @@ export async function generateMetadata({ params }: OrgTeacherPageProps): Promise
       }
     }
 
-    const title = `${teacher.pageName || teacher.name || 'Teacher'} | ${organization.name}`
-    const description = teacher.pageDescription || teacher.bio || `Educational content by ${teacher.name}`
+    const title = `${teacher.site?.pageName || teacher.name || 'Teacher'} | ${organization.name}`
+    const description = teacher.site?.pageDescription || teacher.bio || `Educational content by ${teacher.name}`
 
     return {
       title,
@@ -92,52 +93,67 @@ export async function generateMetadata({ params }: OrgTeacherPageProps): Promise
 export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
   const { orgSlug, pageSlug } = await params
 
-  // Get organization
-  const organization = await prisma.organization.findUnique({
+  // Get organization (looked up via its Site, which also owns display fields).
+  const orgSite = await prisma.site.findUnique({
     where: { slug: orgSlug },
     select: {
-      id: true,
-      name: true,
-      description: true,
+      pageDescription: true,
+      pageIcon: true,
       showIcon: true,
-      iconUrl: true
+      organization: {
+        select: { id: true, name: true }
+      }
     }
   })
+  const organization = orgSite?.organization
+    ? {
+        ...orgSite.organization,
+        description: orgSite.pageDescription,
+        iconUrl: orgSite.pageIcon,
+        showIcon: orgSite.showIcon,
+      }
+    : null
 
   if (!organization) {
     notFound()
   }
 
-  // Find teacher who is a member of this org with their page layout
+  // Find teacher whose Site slug matches pageSlug, and who is a member of
+  // this org. Layout AND page-display fields all live on Site now.
   const teacher = await prisma.user.findFirst({
     where: {
-      pageSlug: pageSlug,
+      site: { slug: pageSlug },
       organizationMemberships: {
         some: { organizationId: organization.id }
       }
     },
     include: {
-      pageLayout: {
+      site: {
         include: {
-          items: {
-            orderBy: { order: 'asc' }
+          pageLayout: {
+            include: {
+              items: { orderBy: { order: 'asc' } }
+            }
           }
         }
       }
     }
   })
+  const teacherSite = teacher?.site
 
   if (!teacher) {
     notFound()
   }
+  const teacherPageLayout = teacher.site?.pageLayout
 
   // Check if current user is the owner of this page
   const session = await getServerSession(authOptions)
   const isOwner = session?.user?.id === teacher.id
 
-  // Check for frontpage (published for visitors, any for owner)
+  // Check for frontpage (published for visitors, any for owner). Site-level
+  // FrontPages link via Site, not directly via user.
   const frontPage = await prisma.frontPage.findFirst({
-    where: { userId: teacher.id }
+    where: { site: { userId: teacher.id } }
   })
 
   // Fetch public annotations, snaps, and sticky notes for this front page
@@ -149,13 +165,12 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
   const isPageAuthor = isOwner
 
   // Get page layout items
-  const pageItems = teacher.pageLayout?.items || []
+  const pageItems = teacherPageLayout?.items || []
 
   // Fetch collections and root skripts based on page layout
   const collections: Array<{
     id: string
     title: string
-    slug: string
     skripts: Array<{
       id: string
       title: string
@@ -168,7 +183,7 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
     title: string
     description: string | null
     slug: string
-    collection: { title: string; slug: string }
+    collection: { title: string }
     pages: Array<{ id: string; title: string; slug: string }>
   }> = []
 
@@ -200,7 +215,6 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
         collections.push({
           id: collection.id,
           title: collection.title,
-          slug: collection.slug,
           skripts: collection.collectionSkripts.map(cs => ({
             id: cs.skript.id,
             title: cs.skript.title,
@@ -224,7 +238,7 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
             take: 1,
             include: {
               collection: {
-                select: { title: true, slug: true }
+                select: { title: true }
               }
             }
           },
@@ -243,7 +257,6 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
           slug: skript.slug,
           collection: {
             title: skript.collectionSkripts[0].collection.title,
-            slug: skript.collectionSkripts[0].collection.slug
           },
           pages: skript.pages.map(p => ({
             id: p.id,
@@ -255,17 +268,20 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
     }
   }
 
-  // Fetch full site structure when sidebar is in "full" mode
-  const fullSiteStructure = teacher.sidebarBehavior === 'full'
-    ? await getFullSiteStructure(teacher.id, teacher.pageSlug || pageSlug)
+  // Fetch full site structure when sidebar is in "full" mode. URL slug +
+  // page-display fields all live on Site now.
+  const teacherSlug = teacher.site?.slug ?? pageSlug
+  const sidebarBehavior = teacherSite?.sidebarBehavior ?? 'contextual'
+  const fullSiteStructure = sidebarBehavior === 'full'
+    ? await getFullSiteStructure(teacher.id, teacherSlug)
     : undefined
 
   const teacherData = {
     name: teacher.name || 'Teacher',
-    pageSlug: teacher.pageSlug || '',
-    pageName: teacher.pageName || null,
-    pageDescription: teacher.pageDescription || null,
-    pageIcon: teacher.pageIcon || null,
+    pageSlug: teacherSlug,
+    pageName: teacherSite?.pageName ?? null,
+    pageDescription: teacherSite?.pageDescription ?? null,
+    pageIcon: teacherSite?.pageIcon ?? null,
     bio: teacher.bio || null,
     title: teacher.title || null
   }
@@ -276,8 +292,8 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
       siteStructure={collections}
       rootSkripts={rootSkripts}
       fullSiteStructure={fullSiteStructure}
-      sidebarBehavior={teacher.sidebarBehavior as 'contextual' | 'full' || 'contextual'}
-      typographyPreference={teacher.typographyPreference as 'modern' | 'classic' || 'modern'}
+      sidebarBehavior={(sidebarBehavior as 'contextual' | 'full') || 'contextual'}
+      typographyPreference={(teacherSite?.typographyPreference as 'modern' | 'classic') || 'modern'}
       routePrefix={`/org/${orgSlug}/${pageSlug}`}
     >
       <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border">

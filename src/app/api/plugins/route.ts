@@ -12,17 +12,30 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const authorFilter = searchParams.get('author')
 
-    const plugins = await prisma.plugin.findMany({
+    const pluginsRaw = await prisma.plugin.findMany({
       where: authorFilter
-        ? { author: { pageSlug: authorFilter } }
+        ? { author: { site: { slug: authorFilter } } }
         : undefined,
       include: {
         author: {
-          select: { id: true, pageSlug: true, pageName: true, name: true, image: true },
+          select: { id: true, name: true, image: true, site: { select: { slug: true, pageName: true } } },
         },
       },
       orderBy: { updatedAt: 'desc' },
     })
+
+    // Flatten Site fields onto author under their legacy names (pageSlug,
+    // pageName) so the UI components don't need a sweep.
+    const plugins = pluginsRaw.map(p => ({
+      ...p,
+      author: {
+        id: p.author.id,
+        name: p.author.name,
+        image: p.author.image,
+        pageSlug: p.author.site?.slug ?? null,
+        pageName: p.author.site?.pageName ?? null,
+      },
+    }))
 
     return NextResponse.json({ plugins })
   } catch (error) {
@@ -71,7 +84,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const plugin = await prisma.plugin.create({
+    const pluginRaw = await prisma.plugin.create({
       data: {
         slug,
         name,
@@ -82,10 +95,21 @@ export async function POST(request: NextRequest) {
       },
       include: {
         author: {
-          select: { id: true, pageSlug: true, pageName: true, name: true, image: true },
+          select: { id: true, name: true, image: true, site: { select: { slug: true, pageName: true } } },
         },
       },
     })
+
+    const plugin = {
+      ...pluginRaw,
+      author: {
+        id: pluginRaw.author.id,
+        name: pluginRaw.author.name,
+        image: pluginRaw.author.image,
+        pageSlug: pluginRaw.author.site?.slug ?? null,
+        pageName: pluginRaw.author.site?.pageName ?? null,
+      },
+    }
 
     return NextResponse.json({ plugin }, { status: 201 })
   } catch (error) {

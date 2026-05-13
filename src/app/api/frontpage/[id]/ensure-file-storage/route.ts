@@ -17,15 +17,15 @@ export async function POST(
 
     const { id: frontPageId } = await params
 
-    // Get the front page
+    // Get the front page. Site-level frontpages own files via fileSkriptId;
+    // skript frontpages reuse their owning skript's files directly.
     const frontPage = await prisma.frontPage.findUnique({
       where: { id: frontPageId },
       select: {
         id: true,
-        userId: true,
         skriptId: true,
-        organizationId: true,
         fileSkriptId: true,
+        site: { select: { userId: true, organizationId: true } },
       }
     })
 
@@ -34,13 +34,13 @@ export async function POST(
     }
 
     // Verify ownership
-    const isOwner = frontPage.userId === session.user.id
+    const isOwner = frontPage.site?.userId === session.user.id
     let isOrgAdmin = false
 
-    if (frontPage.organizationId) {
+    if (frontPage.site?.organizationId) {
       const membership = await prisma.organizationMember.findFirst({
         where: {
-          organizationId: frontPage.organizationId,
+          organizationId: frontPage.site.organizationId,
           userId: session.user.id,
           role: { in: ['owner', 'admin'] }
         }
@@ -71,7 +71,7 @@ export async function POST(
 
     // Create a new hidden skript for file storage
     const slug = `__frontpage_files_${frontPageId}`
-    const title = frontPage.organizationId
+    const title = frontPage.site?.organizationId
       ? 'Organization Front Page Files'
       : 'User Front Page Files'
 

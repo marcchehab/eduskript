@@ -107,7 +107,7 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
   const isOwner = session?.user?.id === teacher.id
 
   const frontPage = await prisma.frontPage.findFirst({
-    where: { userId: teacher.id },
+    where: { site: { userId: teacher.id } },
     select: {
       id: true,
       content: true,

@@ -74,20 +74,23 @@ export async function POST(request: NextRequest) {
         data: {
           email: DEMO_EMAIL,
           name: 'Demo Teacher',
-          pageSlug: 'demo',
-          pageName: 'Demo',
           accountType: 'teacher',
           hashedPassword,
           emailVerified: new Date(),
           billingPlan: 'pro',
+          site: {
+            create: { slug: 'demo', pageName: 'Demo' },
+          },
         },
       })
     }
 
-    // Add to eduskript org if exists
-    const org = await prisma.organization.findUnique({
+    // Add to eduskript org if exists (lookup via the org's site).
+    const orgSite = await prisma.site.findUnique({
       where: { slug: 'eduskript' },
+      select: { organizationId: true },
     })
+    const org = orgSite?.organizationId ? { id: orgSite.organizationId } : null
     if (org) {
       await prisma.organizationMember.upsert({
         where: {

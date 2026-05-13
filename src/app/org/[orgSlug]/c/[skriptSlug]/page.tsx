@@ -27,10 +27,11 @@ export async function generateMetadata({ params }: SkriptPageProps): Promise<Met
   const { orgSlug, skriptSlug } = await params
 
   try {
-    const organization = await prisma.organization.findUnique({
+    const orgSite = await prisma.site.findUnique({
       where: { slug: orgSlug },
-      select: { id: true, name: true }
+      select: { organization: { select: { id: true, name: true } } }
     })
+    const organization = orgSite?.organization ?? null
 
     if (!organization) {
       return { title: 'Organization Not Found' }
@@ -47,7 +48,8 @@ export async function generateMetadata({ params }: SkriptPageProps): Promise<Met
         slug: skriptSlug,
         OR: [
           { authors: { some: { userId: { in: orgAdminIds } } } },
-          { collectionSkripts: { some: { collection: { authors: { some: { userId: { in: orgAdminIds } } } } } } }
+          { collectionSkripts: { some: { collection: { site: { organizationId: organization.id } } } } },
+          { collectionSkripts: { some: { collection: { site: { userId: { in: orgAdminIds } } } } } }
         ]
       },
       select: { title: true }
@@ -70,17 +72,26 @@ export async function generateMetadata({ params }: SkriptPageProps): Promise<Met
 export default async function OrgSkriptPage({ params }: SkriptPageProps) {
   const { orgSlug, skriptSlug } = await params
 
-  const organization = await prisma.organization.findUnique({
+  const orgSite = await prisma.site.findUnique({
     where: { slug: orgSlug },
     select: {
-      id: true,
-      name: true,
-      description: true,
+      // Page-display fields live on Site; org carries only the entity name.
+      pageDescription: true,
+      pageIcon: true,
       showIcon: true,
-      iconUrl: true,
-      sidebarBehavior: true
+      sidebarBehavior: true,
+      organization: { select: { id: true, name: true } },
     }
   })
+  const organization = orgSite?.organization
+    ? {
+        ...orgSite.organization,
+        description: orgSite.pageDescription,
+        iconUrl: orgSite.pageIcon,
+        showIcon: orgSite.showIcon,
+        sidebarBehavior: orgSite.sidebarBehavior,
+      }
+    : null
 
   if (!organization) {
     notFound()
@@ -112,7 +123,8 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
       slug: skriptSlug,
       OR: [
         { authors: { some: { userId: { in: adminUserIds } } } },
-        { collectionSkripts: { some: { collection: { authors: { some: { userId: { in: adminUserIds } } } } } } }
+        { collectionSkripts: { some: { collection: { site: { organizationId: organization.id } } } } },
+        { collectionSkripts: { some: { collection: { site: { userId: { in: adminUserIds } } } } } }
       ]
     },
     include: {
@@ -173,7 +185,6 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
       ? buildSiteStructure([{
           id: collection.id,
           title: collection.title,
-          slug: collection.slug,
           accentColor: collection.accentColor,
           collectionSkripts: [{
             order: collectionSkript.order,
@@ -186,7 +197,6 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
       : [{
           id: 'standalone',
           title: skript.title,
-          slug: skript.slug,
           skripts: [{
             id: skript.id,
             title: skript.title,

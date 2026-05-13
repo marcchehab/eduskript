@@ -75,9 +75,14 @@ export async function GET(request: NextRequest) {
       where: { id: session.user.id },
       select: {
         id: true, name: true, email: true, image: true,
-        pageSlug: true, pageName: true, pageDescription: true, pageIcon: true,
         title: true, bio: true, isAdmin: true, accountType: true,
-        studentPseudonym: true, typographyPreference: true,
+        studentPseudonym: true,
+        site: {
+          select: {
+            slug: true, pageName: true, pageDescription: true,
+            pageIcon: true, typographyPreference: true,
+          },
+        },
       }
     })
     if (!user) {
@@ -87,11 +92,13 @@ export async function GET(request: NextRequest) {
       token: {
         id: user.id, name: user.name, email: user.email,
         picture: user.image, image: user.image,
-        pageSlug: user.pageSlug, pageName: user.pageName,
-        pageDescription: user.pageDescription, pageIcon: user.pageIcon,
+        pageSlug: user.site?.slug ?? null,
+        pageName: user.site?.pageName ?? null,
+        pageDescription: user.site?.pageDescription ?? null,
+        pageIcon: user.site?.pageIcon ?? null,
         title: user.title, bio: user.bio, isAdmin: user.isAdmin,
         accountType: user.accountType, studentPseudonym: user.studentPseudonym,
-        typographyPreference: user.typographyPreference,
+        typographyPreference: user.site?.typographyPreference ?? null,
       },
       secret: process.env.NEXTAUTH_SECRET!,
     })

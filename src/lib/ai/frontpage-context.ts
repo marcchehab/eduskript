@@ -41,15 +41,22 @@ export async function loadFrontPageContext(args: {
   const frontPage = await prisma.frontPage.findUnique({
     where: { id: frontPageId },
     include: {
-      user: { select: { id: true, name: true, pageName: true, pageSlug: true } },
-      organization: { select: { id: true, name: true, slug: true } },
+      site: {
+        select: {
+          slug: true,
+          userId: true,
+          organizationId: true,
+          // pageName lives on Site now — title fallback uses site.pageName,
+          // user.name is just the personal name fallback below it.
+          pageName: true,
+          user: { select: { id: true, name: true } },
+          organization: { select: { id: true, name: true } },
+        },
+      },
       skript: {
         include: {
           authors: { include: { user: true } },
           files: { select: { id: true, name: true, contentType: true } },
-          collectionSkripts: {
-            include: { collection: { include: { authors: { include: { user: true } } } } },
-          },
         },
       },
       fileSkript: { select: { id: true, files: { select: { id: true, name: true, contentType: true } } } },
@@ -61,18 +68,15 @@ export async function loadFrontPageContext(args: {
   }
 
   let canEdit = false
-  if (frontPage.userId && frontPage.userId === userId) canEdit = true
+  if (frontPage.site?.userId === userId) canEdit = true
   if (frontPage.skript) {
-    const collectionAuthors = frontPage.skript.collectionSkripts
-      .filter((cs) => cs.collection !== null)
-      .flatMap((cs) => cs.collection!.authors)
-    const perms = checkSkriptPermissions(userId, frontPage.skript.authors, collectionAuthors, !!isAdmin)
+    const perms = checkSkriptPermissions(userId, frontPage.skript.authors, !!isAdmin)
     if (perms.canEdit) canEdit = true
   }
-  if (frontPage.organizationId) {
+  if (frontPage.site?.organizationId) {
     const membership = await prisma.organizationMember.findFirst({
       where: {
-        organizationId: frontPage.organizationId,
+        organizationId: frontPage.site.organizationId,
         userId,
         role: { in: ['owner', 'admin'] },
       },
@@ -92,14 +96,14 @@ export async function loadFrontPageContext(args: {
   const files = frontPage.skript?.files ?? frontPage.fileSkript?.files ?? []
 
   const title = frontPage.skript?.title
-    ?? frontPage.organization?.name
-    ?? frontPage.user?.pageName
-    ?? frontPage.user?.name
+    ?? frontPage.site?.pageName
+    ?? frontPage.site?.organization?.name
+    ?? frontPage.site?.user?.name
     ?? 'Front Page'
 
   const slug = frontPage.skript?.slug
-    ?? frontPage.organization?.slug
-    ?? frontPage.user?.pageSlug
+    ?? frontPage.site?.slug
+    ?? frontPage.site?.slug
     ?? 'frontpage'
 
   const skriptContext: SkriptContext = {

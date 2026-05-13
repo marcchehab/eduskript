@@ -25,7 +25,8 @@ export default async function Image({ params }: Params) {
           isPublished: true,
           OR: [
             { authors: { some: { user: { organizationMemberships: { some: { organizationId: org.id, role: { in: ['owner', 'admin'] } } } } } } },
-            { collectionSkripts: { some: { collection: { authors: { some: { user: { organizationMemberships: { some: { organizationId: org.id, role: { in: ['owner', 'admin'] } } } } } } } } } },
+            { collectionSkripts: { some: { collection: { site: { organizationId: org.id } } } } },
+            { collectionSkripts: { some: { collection: { site: { user: { organizationMemberships: { some: { organizationId: org.id, role: { in: ['owner', 'admin'] } } } } } } } } },
           ],
         },
         select: { title: true, description: true },

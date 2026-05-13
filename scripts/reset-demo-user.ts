@@ -42,12 +42,11 @@ async function main() {
       data: {
         email: DEMO_EMAIL,
         name: 'Demo Teacher',
-        pageSlug: DEMO_PAGE_SLUG,
-        pageName: 'Demo',
         accountType: 'teacher',
         hashedPassword,
         emailVerified: new Date(),
         billingPlan: 'pro',
+        site: { create: { slug: DEMO_PAGE_SLUG, pageName: 'Demo' } },
       }
     })
     console.log(`   ✓ Created demo user: ${DEMO_EMAIL}`)
@@ -55,10 +54,15 @@ async function main() {
     console.log(`   ✓ Found existing demo user: ${DEMO_EMAIL}`)
   }
 
-  // Add to eduskript org if it exists and user isn't already a member
-  const org = await prisma.organization.findUnique({
-    where: { slug: 'eduskript' }
+  // Add to eduskript org if it exists and user isn't already a member.
+  // Org slug now lives on Site.
+  const orgSite = await prisma.site.findUnique({
+    where: { slug: 'eduskript' },
+    select: { organizationId: true }
   })
+  const org = orgSite?.organizationId
+    ? await prisma.organization.findUnique({ where: { id: orgSite.organizationId } })
+    : null
   if (org) {
     const membership = await prisma.organizationMember.findUnique({
       where: {

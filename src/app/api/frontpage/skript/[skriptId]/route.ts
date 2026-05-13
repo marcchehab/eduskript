@@ -23,20 +23,7 @@ export async function GET(
     const skript = await prisma.skript.findFirst({
       where: { id: skriptId },
       include: {
-        authors: {
-          include: { user: true }
-        },
-        collectionSkripts: {
-          include: {
-            collection: {
-              include: {
-                authors: {
-                  include: { user: true }
-                }
-              }
-            }
-          }
-        }
+        authors: { include: { user: true } },
       }
     })
 
@@ -44,15 +31,7 @@ export async function GET(
       return NextResponse.json({ error: 'Skript not found' }, { status: 404 })
     }
 
-    // Check permissions
-    const collectionAuthors = skript.collectionSkripts
-      .filter(cs => cs.collection !== null)
-      .flatMap(cs => cs.collection!.authors)
-    const permissions = checkSkriptPermissions(
-      session.user.id,
-      skript.authors,
-      collectionAuthors
-    )
+    const permissions = checkSkriptPermissions(session.user.id, skript.authors)
 
     if (!permissions.canView) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -101,20 +80,7 @@ export async function PATCH(
     const skript = await prisma.skript.findFirst({
       where: { id: skriptId },
       include: {
-        authors: {
-          include: { user: true }
-        },
-        collectionSkripts: {
-          include: {
-            collection: {
-              include: {
-                authors: {
-                  include: { user: true }
-                }
-              }
-            }
-          }
-        }
+        authors: { include: { user: true } },
       }
     })
 
@@ -122,15 +88,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Skript not found' }, { status: 404 })
     }
 
-    // Check permissions
-    const collectionAuthors = skript.collectionSkripts
-      .filter(cs => cs.collection !== null)
-      .flatMap(cs => cs.collection!.authors)
-    const permissions = checkSkriptPermissions(
-      session.user.id,
-      skript.authors,
-      collectionAuthors
-    )
+    const permissions = checkSkriptPermissions(session.user.id, skript.authors)
 
     if (!permissions.canEdit) {
       return NextResponse.json(
@@ -209,17 +167,17 @@ export async function PATCH(
     }
 
     // Revalidate caches
-    // Find the username of the skript owner for cache invalidation
+    // Find the URL slug of the skript owner for cache invalidation
     const skriptOwner = skript.authors[0]?.user
     if (skriptOwner) {
-      const ownerUser = await prisma.user.findUnique({
-        where: { id: skriptOwner.id },
-        select: { pageSlug: true }
+      const ownerSite = await prisma.site.findUnique({
+        where: { userId: skriptOwner.id },
+        select: { slug: true }
       })
 
-      if (ownerUser?.pageSlug) {
-        revalidateTag(CACHE_TAGS.skriptBySlug(ownerUser.pageSlug, skript.slug), { expire: 0 })
-        revalidateTag(CACHE_TAGS.teacherContent(ownerUser.pageSlug), { expire: 0 })
+      if (ownerSite?.slug) {
+        revalidateTag(CACHE_TAGS.skriptBySlug(ownerSite.slug, skript.slug), { expire: 0 })
+        revalidateTag(CACHE_TAGS.teacherContent(ownerSite.slug), { expire: 0 })
       }
     }
 

@@ -22,6 +22,12 @@ vi.mock('@/lib/prisma', () => ({
     user: {
       findUnique: vi.fn(),
     },
+    site: {
+      findUnique: vi.fn(),
+    },
+    organizationMember: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
     $transaction: vi.fn(),
   },
 }))
@@ -69,13 +75,7 @@ describe('Skripts Move API', () => {
           id: 'col-123',
           title: 'Source Collection',
           slug: 'source-collection',
-          authors: [
-            {
-              userId: 'user-123',
-              permission: 'author' as const,
-              user: { id: 'user-123', name: 'Test User' },
-            },
-          ],
+          site: { userId: 'user-123', organizationId: null },
         },
       },
     ],
@@ -85,13 +85,7 @@ describe('Skripts Move API', () => {
     id: 'col-456',
     title: 'Target Collection',
     slug: 'target-collection',
-    authors: [
-      {
-        userId: 'user-123',
-        permission: 'author' as const,
-        user: { id: 'user-123', name: 'Test User', email: 'test@example.com' },
-      },
-    ],
+    site: { userId: 'user-123', organizationId: null },
   }
 
   beforeEach(() => {
@@ -170,13 +164,7 @@ describe('Skripts Move API', () => {
               ...mockSkript.collectionSkripts[0],
               collection: {
                 ...mockSkript.collectionSkripts[0].collection,
-                authors: [
-                  {
-                    userId: 'other-user',
-                    permission: 'author' as const,
-                    user: { id: 'other-user', name: 'Other' },
-                  },
-                ],
+                site: { userId: 'other-user', organizationId: null },
               },
             },
           ],
@@ -194,7 +182,7 @@ describe('Skripts Move API', () => {
       it('should allow move when user has skript author permission', async () => {
         vi.mocked(prisma.skript.findUnique).mockResolvedValue(mockSkript)
         vi.mocked(prisma.$transaction).mockResolvedValue(mockSkript)
-        vi.mocked(prisma.user.findUnique).mockResolvedValue({ pageSlug: 'testuser' })
+        vi.mocked(prisma.site.findUnique).mockResolvedValue({ slug: 'testuser' } as never)
 
         const request = createRequest({ skriptId: 'skript-123' })
         const response = await POST(request)
@@ -202,29 +190,26 @@ describe('Skripts Move API', () => {
         expect(response.status).toBe(200)
       })
 
-      it('should allow move when user has collection author permission', async () => {
+      it('should allow move when user owns the collection site', async () => {
+        // No direct SkriptAuthor; instead the user owns the site that the
+        // collection belongs to, which under the new model authorises the
+        // move and grants edit rights on the skript.
         const skriptWithCollectionPermission = {
           ...mockSkript,
-          authors: [], // No direct skript permission
+          authors: [],
           collectionSkripts: [
             {
               ...mockSkript.collectionSkripts[0],
               collection: {
                 ...mockSkript.collectionSkripts[0].collection,
-                authors: [
-                  {
-                    userId: 'user-123',
-                    permission: 'author' as const,
-                    user: { id: 'user-123', name: 'Test User' },
-                  },
-                ],
+                site: { userId: 'user-123', organizationId: null },
               },
             },
           ],
         }
         vi.mocked(prisma.skript.findUnique).mockResolvedValue(skriptWithCollectionPermission)
         vi.mocked(prisma.$transaction).mockResolvedValue(mockSkript)
-        vi.mocked(prisma.user.findUnique).mockResolvedValue({ pageSlug: 'testuser' })
+        vi.mocked(prisma.site.findUnique).mockResolvedValue({ slug: 'testuser' } as never)
 
         const request = createRequest({ skriptId: 'skript-123' })
         const response = await POST(request)
@@ -256,14 +241,8 @@ describe('Skripts Move API', () => {
       it('should return 403 when user cannot edit target collection', async () => {
         vi.mocked(prisma.collection.findUnique).mockResolvedValue({
           ...mockTargetCollection,
-          authors: [
-            {
-              userId: 'other-user',
-              permission: 'author' as const,
-              user: { id: 'other-user', name: 'Other', email: 'other@example.com' },
-            },
-          ],
-        })
+          site: { userId: 'other-user', organizationId: null },
+        } as never)
 
         const request = createRequest({
           skriptId: 'skript-123',
@@ -282,7 +261,7 @@ describe('Skripts Move API', () => {
         vi.mocked(getServerSession).mockResolvedValue(mockSession)
         vi.mocked(prisma.skript.findUnique).mockResolvedValue(mockSkript)
         vi.mocked(prisma.collection.findUnique).mockResolvedValue(mockTargetCollection)
-        vi.mocked(prisma.user.findUnique).mockResolvedValue({ pageSlug: 'testuser' })
+        vi.mocked(prisma.site.findUnique).mockResolvedValue({ slug: 'testuser' } as never)
       })
 
       it('should move skript to target collection', async () => {

@@ -18,20 +18,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Slug is required' }, { status: 400 })
     }
 
-    // Check if the slug is already taken by another user (check both pageSlug and username)
-    const existingUser = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { pageSlug: slug },
-          { username: slug }
-        ],
-        NOT: { id: session.user.id }
-      },
-      select: { id: true }
+    // Check if the slug is already taken by any Site (user OR organization)
+    // owned by anyone other than the current user.
+    const existingSite = await prisma.site.findUnique({
+      where: { slug },
+      select: { userId: true }
     })
 
-    // Available if no other user has this slug as pageSlug or username
-    const available = !existingUser
+    const available = !existingSite || existingSite.userId === session.user.id
 
     return NextResponse.json({ available })
   } catch (error) {

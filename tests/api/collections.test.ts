@@ -19,6 +19,12 @@ vi.mock('@/lib/prisma', () => ({
       findMany: vi.fn(),
       create: vi.fn(),
     },
+    site: {
+      findUnique: vi.fn(),
+    },
+    organizationMember: {
+      findMany: vi.fn(),
+    },
   },
 }))
 
@@ -44,7 +50,6 @@ describe('Collections API', () => {
   const mockCollection = {
     id: 'col-123',
     title: 'Test Collection',
-    slug: 'test-collection',
     description: 'A test collection',
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -78,7 +83,7 @@ describe('Collections API', () => {
       it('should return 401 when not authenticated', async () => {
         vi.mocked(getServerSession).mockResolvedValue(null)
 
-        const request = createRequest({ title: 'Test', slug: 'test' })
+        const request = createRequest({ title: 'Test' })
         const response = await POST(request)
 
         expect(response.status).toBe(401)
@@ -92,7 +97,7 @@ describe('Collections API', () => {
           user: { ...mockSession.user, id: undefined as any },
         })
 
-        const request = createRequest({ title: 'Test', slug: 'test' })
+        const request = createRequest({ title: 'Test' })
         const response = await POST(request)
 
         expect(response.status).toBe(401)
@@ -105,100 +110,40 @@ describe('Collections API', () => {
       })
 
       it('should return 400 when title is missing', async () => {
-        const request = createRequest({ slug: 'test' })
+        const request = createRequest({})
         const response = await POST(request)
 
         expect(response.status).toBe(400)
         const data = await response.json()
-        expect(data.error).toBe('Title and slug are required')
+        expect(data.error).toBe('Title is required')
       })
 
-      it('should return 400 when slug is missing', async () => {
-        const request = createRequest({ title: 'Test' })
+      it('should return 400 when title is an empty string', async () => {
+        const request = createRequest({ title: '   ' })
         const response = await POST(request)
 
         expect(response.status).toBe(400)
         const data = await response.json()
-        expect(data.error).toBe('Title and slug are required')
-      })
-
-      it('should return 400 for reserved slugs', async () => {
-        const request = createRequest({ title: 'Dashboard', slug: 'dashboard' })
-        const response = await POST(request)
-
-        expect(response.status).toBe(400)
-        const data = await response.json()
-        expect(data.error).toContain('reserved')
-      })
-
-      it('should return 400 for "api" reserved slug', async () => {
-        const request = createRequest({ title: 'API', slug: 'api' })
-        const response = await POST(request)
-
-        expect(response.status).toBe(400)
-        const data = await response.json()
-        expect(data.error).toContain('reserved')
-      })
-
-      it('should return 400 for "test" reserved slug', async () => {
-        const request = createRequest({ title: 'Test', slug: 'test' })
-        const response = await POST(request)
-
-        expect(response.status).toBe(400)
-        const data = await response.json()
-        expect(data.error).toContain('reserved')
-      })
-    })
-
-    describe('Slug Conflicts', () => {
-      beforeEach(() => {
-        vi.mocked(getServerSession).mockResolvedValue(mockSession)
-      })
-
-      it('should return 409 when slug already exists', async () => {
-        vi.mocked(prisma.collection.findFirst).mockResolvedValue(mockCollection)
-
-        const request = createRequest({
-          title: 'Another Collection',
-          slug: 'test-collection',
-        })
-        const response = await POST(request)
-
-        expect(response.status).toBe(409)
-        const data = await response.json()
-        expect(data.error).toContain('already have a collection')
-      })
-
-      it('should normalize slug before checking for conflicts', async () => {
-        vi.mocked(prisma.collection.findFirst).mockResolvedValue(null)
-        vi.mocked(prisma.collection.create).mockResolvedValue(mockCollection)
-
-        const request = createRequest({
-          title: 'Test',
-          slug: 'Test Collection!',
-        })
-        await POST(request)
-
-        // Should check with normalized slug scoped to user
-        expect(prisma.collection.findFirst).toHaveBeenCalledWith({
-          where: { slug: 'test-collection', authors: { some: { userId: 'user-123' } } },
-        })
+        expect(data.error).toBe('Title is required')
       })
     })
 
     describe('Successful Creation', () => {
       beforeEach(() => {
         vi.mocked(getServerSession).mockResolvedValue(mockSession)
-        vi.mocked(prisma.collection.findFirst).mockResolvedValue(null)
+        // Site lookup now precedes Collection.create — every successful path
+        // requires the user to have a Site (a public page).
+        vi.mocked(prisma.site.findUnique).mockResolvedValue({ id: 'site-123' } as never)
       })
 
-      it('should create collection with user as author', async () => {
+      it('should create collection scoped to the user site', async () => {
         vi.mocked(prisma.collection.create).mockResolvedValue(mockCollection)
 
+        // description is dropped — collections no longer have one. The
+        // request body field is silently ignored.
         const request = createRequest({
           title: 'New Collection',
-          slug: 'new-collection',
-          description: 'A new collection',
+          description: 'ignored',
         })
         const response = await POST(request)
 
@@ -206,21 +151,7 @@ describe('Collections API', () => {
         expect(prisma.collection.create).toHaveBeenCalledWith({
           data: {
             title: 'New Collection',
-            description: 'A new collection',
-            slug: 'new-collection',
-            authors: {
-              create: {
-                userId: 'user-123',
-                permission: 'author',
-              },
-            },
-          },
-          include: {
-            authors: {
-              include: {
-                user: true,
-              },
-            },
+            siteId: 'site-123',
           },
         })
       })
@@ -230,7 +161,6 @@ describe('Collections API', () => {
 
         const request = createRequest({
           title: 'New Collection',
-          slug: 'new-collection',
         })
         const response = await POST(request)
 
@@ -240,35 +170,26 @@ describe('Collections API', () => {
         expect(data.data.title).toBe('Test Collection')
       })
 
-      it('should handle null description', async () => {
-        vi.mocked(prisma.collection.create).mockResolvedValue(mockCollection)
+      it('should 400 when user has no Site', async () => {
+        vi.mocked(prisma.site.findUnique).mockResolvedValue(null as never)
 
-        const request = createRequest({
-          title: 'New Collection',
-          slug: 'new-collection',
-        })
-        await POST(request)
+        const request = createRequest({ title: 'My Collection' })
+        const response = await POST(request)
 
-        expect(prisma.collection.create).toHaveBeenCalledWith(
-          expect.objectContaining({
-            data: expect.objectContaining({
-              description: null,
-            }),
-          })
-        )
+        expect(response.status).toBe(400)
       })
     })
 
     describe('Error Handling', () => {
       it('should return 500 on database error', async () => {
         vi.mocked(getServerSession).mockResolvedValue(mockSession)
-        vi.mocked(prisma.collection.findFirst).mockRejectedValue(
+        vi.mocked(prisma.site.findUnique).mockResolvedValue({ id: 'site-123' } as never)
+        vi.mocked(prisma.collection.create).mockRejectedValue(
           new Error('Database error')
         )
 
         const request = createRequest({
           title: 'My Collection',
-          slug: 'my-collection',
         })
         const response = await POST(request)
 
@@ -306,26 +227,20 @@ describe('Collections API', () => {
     describe('Fetching Collections', () => {
       beforeEach(() => {
         vi.mocked(getServerSession).mockResolvedValue(mockSession)
+        vi.mocked(prisma.organizationMember.findMany).mockResolvedValue([] as never)
       })
 
-      it('should fetch collections for authenticated user', async () => {
+      it('should fetch collections owned by the user site', async () => {
         vi.mocked(prisma.collection.findMany).mockResolvedValue([mockCollection])
 
         const request = createRequest()
         const response = await GET(request)
 
         expect(response.status).toBe(200)
-        expect(prisma.collection.findMany).toHaveBeenCalledWith(
-          expect.objectContaining({
-            where: {
-              authors: {
-                some: {
-                  userId: 'user-123',
-                },
-              },
-            },
-          })
-        )
+        const call = vi.mocked(prisma.collection.findMany).mock.calls[0][0]!
+        expect(call.where).toEqual({
+          OR: [{ site: { userId: 'user-123' } }],
+        })
       })
 
       it('should return collections with nested data', async () => {
@@ -367,23 +282,22 @@ describe('Collections API', () => {
         expect(data.data).toEqual([])
       })
 
-      it('should include shared collections when requested', async () => {
+      it('should also fetch collections owned by org sites the user is a member of', async () => {
+        vi.mocked(prisma.organizationMember.findMany).mockResolvedValue([
+          { organizationId: 'org-1' },
+        ] as never)
         vi.mocked(prisma.collection.findMany).mockResolvedValue([mockCollection])
 
-        const request = createRequest({ includeShared: 'true' })
+        const request = createRequest()
         await GET(request)
 
-        expect(prisma.collection.findMany).toHaveBeenCalledWith(
-          expect.objectContaining({
-            where: {
-              authors: {
-                some: {
-                  userId: 'user-123',
-                },
-              },
-            },
-          })
-        )
+        const call = vi.mocked(prisma.collection.findMany).mock.calls[0][0]!
+        expect(call.where).toEqual({
+          OR: [
+            { site: { userId: 'user-123' } },
+            { site: { organizationId: { in: ['org-1'] } } },
+          ],
+        })
       })
 
       it('should order collections by updatedAt descending', async () => {
@@ -403,6 +317,7 @@ describe('Collections API', () => {
     describe('Error Handling', () => {
       it('should return 500 on database error', async () => {
         vi.mocked(getServerSession).mockResolvedValue(mockSession)
+        vi.mocked(prisma.organizationMember.findMany).mockResolvedValue([] as never)
         vi.mocked(prisma.collection.findMany).mockRejectedValue(
           new Error('Database error')
         )

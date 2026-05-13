@@ -2,6 +2,24 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { canEditSite } from '@/lib/permissions'
+
+async function loadCollectionWithOwner(collectionId: string) {
+  return prisma.collection.findUnique({
+    where: { id: collectionId },
+    include: {
+      site: { select: { userId: true, organizationId: true } },
+    },
+  })
+}
+
+async function loadOrgRoles(userId: string, organizationId: string | null | undefined) {
+  if (!organizationId) return []
+  return prisma.organizationMember.findMany({
+    where: { userId, organizationId },
+    select: { organizationId: true, role: true },
+  })
+}
 
 export async function GET(
   request: NextRequest,
@@ -19,6 +37,7 @@ export async function GET(
     const collection = await prisma.collection.findUnique({
       where: { id },
       include: {
+        site: { select: { userId: true, organizationId: true } },
         collectionSkripts: {
           include: {
             skript: {
@@ -30,11 +49,6 @@ export async function GET(
             }
           },
           orderBy: { order: 'asc' }
-        },
-        authors: {
-          include: {
-            user: true
-          }
         }
       }
     })
@@ -43,9 +57,8 @@ export async function GET(
       return NextResponse.json({ error: 'Collection not found' }, { status: 404 })
     }
 
-    // Simple ownership check: user must be an author or admin
-    const isAuthor = collection.authors.some(a => a.userId === session.user.id)
-    if (!isAuthor && !session.user.isAdmin) {
+    const orgRoles = await loadOrgRoles(session.user.id, collection.site?.organizationId)
+    if (!canEditSite(session.user.id, collection.site, orgRoles, session.user.isAdmin)) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
@@ -54,7 +67,6 @@ export async function GET(
       data: collection,
       permissions: { canEdit: true, canView: true },
       title: collection.title,
-      description: collection.description
     })
   } catch (error) {
     console.error('Error fetching collection:', error)
@@ -74,55 +86,24 @@ export async function PATCH(
     }
 
     const { id } = await params
-    const { title, slug, description, accentColor } = await request.json()
+    const { title, accentColor } = await request.json()
 
-    const existingCollection = await prisma.collection.findUnique({
-      where: { id },
-      include: { authors: true }
-    })
-
+    const existingCollection = await loadCollectionWithOwner(id)
     if (!existingCollection) {
       return NextResponse.json({ error: 'Collection not found' }, { status: 404 })
     }
 
-    const isAuthor = existingCollection.authors.some(a => a.userId === session.user.id)
-    if (!isAuthor && !session.user.isAdmin) {
+    const orgRoles = await loadOrgRoles(session.user.id, existingCollection.site?.organizationId)
+    if (!canEditSite(session.user.id, existingCollection.site, orgRoles, session.user.isAdmin)) {
       return NextResponse.json({ error: 'You do not have permission to edit this collection' }, { status: 403 })
-    }
-
-    // Check if slug is already used by another of this user's collections
-    if (slug && slug !== existingCollection.slug) {
-      const slugExists = await prisma.collection.findFirst({
-        where: {
-          slug,
-          NOT: { id },
-          authors: { some: { userId: session.user.id } }
-        }
-      })
-
-      if (slugExists) {
-        return NextResponse.json(
-          { error: 'You already have a collection with this slug' },
-          { status: 409 }
-        )
-      }
     }
 
     const collection = await prisma.collection.update({
       where: { id },
       data: {
         ...(title && { title }),
-        ...(slug && { slug }),
-        ...(description !== undefined && { description }),
         ...(accentColor !== undefined && { accentColor })
       },
-      include: {
-        authors: {
-          include: {
-            user: true
-          }
-        }
-      }
     })
 
     return NextResponse.json(collection)
@@ -145,17 +126,13 @@ export async function DELETE(
 
     const { id } = await params
 
-    const existingCollection = await prisma.collection.findUnique({
-      where: { id },
-      include: { authors: true }
-    })
-
+    const existingCollection = await loadCollectionWithOwner(id)
     if (!existingCollection) {
       return NextResponse.json({ error: 'Collection not found' }, { status: 404 })
     }
 
-    const isAuthor = existingCollection.authors.some(a => a.userId === session.user.id)
-    if (!isAuthor && !session.user.isAdmin) {
+    const orgRoles = await loadOrgRoles(session.user.id, existingCollection.site?.organizationId)
+    if (!canEditSite(session.user.id, existingCollection.site, orgRoles, session.user.isAdmin)) {
       return NextResponse.json({ error: 'You do not have permission to delete this collection' }, { status: 403 })
     }
 

@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
             {
               skript: {
                 collectionSkripts: {
-                  some: { collection: { authors: { some: { userId } } } },
+                  some: { collection: { site: { userId } } },
                 },
               },
             },

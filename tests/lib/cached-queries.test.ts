@@ -30,6 +30,9 @@ vi.mock('@/lib/prisma', () => ({
     user: {
       findFirst: vi.fn(),
     },
+    site: {
+      findUnique: vi.fn(),
+    },
     collection: {
       findFirst: vi.fn(),
       findMany: vi.fn(),
@@ -37,7 +40,8 @@ vi.mock('@/lib/prisma', () => ({
     skript: {
       findFirst: vi.fn(),
     },
-    orgPageLayout: {
+    pageLayout: {
+      findFirst: vi.fn(),
       findUnique: vi.fn(),
     },
     organizationMember: {
@@ -71,10 +75,6 @@ describe('cached-queries', () => {
       expect(CACHE_TAGS.collection('123')).toBe('collection:123')
     })
 
-    it('should generate correct collectionBySlug tag', () => {
-      expect(CACHE_TAGS.collectionBySlug('john', 'math')).toBe('collection:john:math')
-    })
-
     it('should generate correct skript tag', () => {
       expect(CACHE_TAGS.skript('456')).toBe('skript:456')
     })
@@ -98,52 +98,43 @@ describe('cached-queries', () => {
 
   describe('getTeacherByUsername', () => {
     it('should call prisma with correct parameters', async () => {
-      const mockTeacher = {
+      const teacherCore = {
         id: 'teacher-1',
         name: 'John Doe',
         email: 'john@example.com',
         title: 'Professor',
         bio: 'Math teacher',
-        pageSlug: 'john',
         pageName: 'John\'s Page',
         pageDescription: 'Math resources',
+        pageIcon: null,
+        pageLanguage: null,
+        pageTagline: null,
         sidebarBehavior: 'contextual',
         typographyPreference: 'modern',
+        billingPlan: 'free',
+        customDomains: [],
       }
 
-      vi.mocked(prisma.user.findFirst).mockResolvedValue(mockTeacher)
+      vi.mocked(prisma.site.findUnique).mockResolvedValue({
+        slug: 'john',
+        user: teacherCore,
+      } as never)
 
       const result = await getTeacherByUsername('john')
 
-      expect(prisma.user.findFirst).toHaveBeenCalledWith({
-        where: { pageSlug: 'john' },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          title: true,
-          bio: true,
-          pageSlug: true,
-          pageName: true,
-          pageDescription: true,
-          pageIcon: true,
-          pageLanguage: true,
-          pageTagline: true,
-          sidebarBehavior: true,
-          typographyPreference: true,
-          billingPlan: true,
-          customDomains: {
-            where: { isVerified: true, isPrimary: true },
-            select: { domain: true },
-            take: 1,
-          },
-        },
+      expect(prisma.site.findUnique).toHaveBeenCalledWith({
+        where: { slug: 'john' },
+        select: expect.objectContaining({
+          slug: true,
+          user: expect.any(Object),
+        }),
       })
-      expect(result).toEqual(mockTeacher)
+      // pageSlug is grafted onto the user object from site.slug
+      expect(result).toEqual({ ...teacherCore, pageSlug: 'john' })
     })
 
     it('should return null for non-existent user', async () => {
-      vi.mocked(prisma.user.findFirst).mockResolvedValue(null)
+      vi.mocked(prisma.site.findUnique).mockResolvedValue(null)
 
       const result = await getTeacherByUsername('nonexistent')
 
@@ -198,7 +189,6 @@ describe('cached-queries', () => {
           collection: {
             id: 'col-1',
             title: 'Math',
-            slug: 'math',
             description: 'Math collection',
             isPublished: true,
             accentColor: null,
@@ -212,7 +202,7 @@ describe('cached-queries', () => {
 
       expect(result).not.toBeNull()
       expect(result?.page).toEqual(mockPage)
-      expect(result?.collection?.slug).toBe('math')
+      expect(result?.collection?.title).toBe('Math')
       expect(result?.skript.slug).toBe('algebra')
     })
 
@@ -327,20 +317,6 @@ describe('Cache invalidation integration', () => {
     ])
   })
 
-  it('should use correct tags for collection cache invalidation', () => {
-    const username = 'john'
-    const collectionSlug = 'math'
-
-    const expectedTags = [
-      CACHE_TAGS.collectionBySlug(username, collectionSlug),
-      CACHE_TAGS.teacherContent(username),
-    ]
-
-    expect(expectedTags).toEqual([
-      'collection:john:math',
-      'teacher-content:john',
-    ])
-  })
 })
 
 describe('revalidateTag integration', () => {
@@ -449,16 +425,18 @@ describe('getOrgPublishedPage - Access Control', () => {
       pages: [mockPage],
     })
 
-    // Org page layout contains this collection
-    vi.mocked(prisma.orgPageLayout.findUnique).mockResolvedValue({
+    // Org page layout (now in the unified table, keyed by siteId) contains
+    // this collection.
+    vi.mocked(prisma.pageLayout.findFirst).mockResolvedValue({
       id: 'layout-1',
-      organizationId: 'org-1',
+      userId: null,
+      siteId: 'site-org-1',
       createdAt: new Date(),
       updatedAt: new Date(),
       items: [
-        { id: 'item-1', orgPageLayoutId: 'layout-1', type: 'collection', contentId: 'collection-A', order: 0, createdAt: new Date() }
+        { id: 'item-1', pageLayoutId: 'layout-1', type: 'collection', contentId: 'collection-A', order: 0, createdAt: new Date() }
       ]
-    })
+    } as never)
 
     const result = await getOrgPublishedPage('org-1', 'my-org', 'algebra', 'intro')
 
@@ -503,15 +481,16 @@ describe('getOrgPublishedPage - Access Control', () => {
     })
 
     // Org page layout only has "tutorial-collection"
-    vi.mocked(prisma.orgPageLayout.findUnique).mockResolvedValue({
+    vi.mocked(prisma.pageLayout.findFirst).mockResolvedValue({
       id: 'layout-1',
-      organizationId: 'org-1',
+      userId: null,
+      siteId: 'site-org-1',
       createdAt: new Date(),
       updatedAt: new Date(),
       items: [
-        { id: 'item-1', orgPageLayoutId: 'layout-1', type: 'collection', contentId: 'tutorial-collection', order: 0, createdAt: new Date() }
+        { id: 'item-1', pageLayoutId: 'layout-1', type: 'collection', contentId: 'tutorial-collection', order: 0, createdAt: new Date() }
       ]
-    })
+    } as never)
 
     const result = await getOrgPublishedPage('org-1', 'my-org', 'secret-skript', 'page')
 

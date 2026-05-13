@@ -73,7 +73,6 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     const description =
       content.page.description ||
       generateExcerpt(content.page.content, 160) ||
-      content.collection?.description ||
       `${content.page.title} by ${teacher.name}`
     const canonical = canonicalUrl({
       type: 'teacher',
@@ -176,7 +175,6 @@ export default async function PublicPage({ params }: PageProps) {
   })
   const description =
     generateExcerpt(page.content, 160) ||
-    content.collection?.description ||
     `${page.title} by ${teacher.name}`
   const ldSchemas = [
     learningResourceSchema({

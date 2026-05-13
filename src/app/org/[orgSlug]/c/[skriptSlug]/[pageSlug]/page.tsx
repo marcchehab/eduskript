@@ -31,19 +31,24 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { orgSlug, skriptSlug, pageSlug } = await params
 
   try {
-    const organization = await prisma.organization.findUnique({
+    const orgSite = await prisma.site.findUnique({
       where: { slug: orgSlug },
       select: {
-        id: true,
-        name: true,
-        customDomains: {
-          where: { isVerified: true, isPrimary: true },
-          select: { domain: true },
-          take: 1,
-        },
+        organization: {
+          select: {
+            id: true,
+            name: true,
+            customDomains: {
+              where: { isVerified: true, isPrimary: true },
+              select: { domain: true },
+              take: 1,
+            },
+          }
+        }
       }
     })
 
+    const organization = orgSite?.organization
     if (!organization) {
       return { title: 'Page Not Found' }
     }
@@ -66,7 +71,6 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     const description =
       content.page.description ||
       generateExcerpt(content.page.content, 160) ||
-      content.collection?.description ||
       `${content.page.title} by ${organization.name}`
     const canonical = canonicalUrl({
       type: 'org',
@@ -109,23 +113,38 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function OrgPublicPage({ params }: PageProps) {
   const { orgSlug, skriptSlug, pageSlug } = await params
 
-  const organization = await prisma.organization.findUnique({
+  const orgSiteRow = await prisma.site.findUnique({
     where: { slug: orgSlug },
     select: {
-      id: true,
-      name: true,
-      description: true,
-      showIcon: true,
-      iconUrl: true,
-      sidebarBehavior: true,
+      // Page-display fields live on Site.
+      pageDescription: true,
+      pageIcon: true,
       pageLanguage: true,
-      customDomains: {
-        where: { isVerified: true, isPrimary: true },
-        select: { domain: true },
-        take: 1,
-      },
+      showIcon: true,
+      sidebarBehavior: true,
+      organization: {
+        select: {
+          id: true,
+          name: true,
+          customDomains: {
+            where: { isVerified: true, isPrimary: true },
+            select: { domain: true },
+            take: 1,
+          },
+        }
+      }
     }
   })
+  const organization = orgSiteRow?.organization
+    ? {
+        ...orgSiteRow.organization,
+        description: orgSiteRow.pageDescription,
+        iconUrl: orgSiteRow.pageIcon,
+        pageLanguage: orgSiteRow.pageLanguage,
+        showIcon: orgSiteRow.showIcon,
+        sidebarBehavior: orgSiteRow.sidebarBehavior,
+      }
+    : null
 
   if (!organization) {
     notFound()
@@ -152,7 +171,6 @@ export default async function OrgPublicPage({ params }: PageProps) {
     ? buildSiteStructure([{
         id: collection.id,
         title: collection.title,
-        slug: collection.slug,
         accentColor: collection.accentColor,
         collectionSkripts: [{
           order: skript.order,
@@ -168,7 +186,6 @@ export default async function OrgPublicPage({ params }: PageProps) {
     : [{
         id: 'standalone',
         title: skript.title,
-        slug: skript.slug,
         skripts: [{
           id: skript.id,
           title: skript.title,
@@ -207,7 +224,6 @@ export default async function OrgPublicPage({ params }: PageProps) {
   })
   const description =
     generateExcerpt(page.content, 160) ||
-    collection?.description ||
     `${page.title} by ${organization.name}`
   const ldSchemas = [
     learningResourceSchema({

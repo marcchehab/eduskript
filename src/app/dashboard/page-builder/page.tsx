@@ -16,13 +16,20 @@ export default async function PageBuilderPage() {
   // Page builder is free — authoring is the core free experience.
   // AI/classes/sync gating happens at the relevant call sites.
 
-  // Show placeholder only for the default eduadmin account, not all admins
+  // Show placeholder only for the default eduadmin account, not all admins.
+  // session.user.pageSlug is grafted from Site.slug in auth.ts.
   if (session?.user?.pageSlug === 'eduadmin') {
-    const [userCount, orgCount] = await Promise.all([
-      prisma.user.count({ where: { NOT: { pageSlug: 'eduadmin' } } }),
+    // Count "real" user sites (everything other than the eduadmin admin site)
+    const [otherUserSiteCount, orgCount] = await Promise.all([
+      prisma.site.count({
+        where: {
+          userId: { not: null },
+          NOT: { slug: 'eduadmin' },
+        },
+      }),
       prisma.organization.count(),
     ])
-    const canSeed = userCount === 0 && orgCount === 0
+    const canSeed = otherUserSiteCount === 0 && orgCount === 0
 
     return (
       <div className="space-y-6">

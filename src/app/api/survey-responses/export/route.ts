@@ -78,15 +78,6 @@ export async function GET(request: NextRequest) {
         skript: {
           include: {
             authors: { include: { user: { select: { id: true } } } },
-            collectionSkripts: {
-              include: {
-                collection: {
-                  include: {
-                    authors: { include: { user: { select: { id: true } } } },
-                  },
-                },
-              },
-            },
           },
         },
         implicitSurveyClass: {
@@ -105,13 +96,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Page not found' }, { status: 404 })
     }
 
-    const collectionAuthors = page.skript.collectionSkripts
-      .flatMap((cs) => cs.collection?.authors ?? [])
     const perms = checkPagePermissions(
       session.user.id,
       page.authors,
       page.skript.authors,
-      collectionAuthors
     )
     if (!perms.canEdit) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })

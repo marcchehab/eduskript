@@ -15,20 +15,30 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
   try {
     const { ownerSlug, pluginSlug } = await params
 
-    const plugin = await prisma.plugin.findFirst({
+    const pluginRaw = await prisma.plugin.findFirst({
       where: {
         slug: pluginSlug,
-        author: { pageSlug: ownerSlug },
+        author: { site: { slug: ownerSlug } },
       },
       include: {
         author: {
-          select: { id: true, pageSlug: true, pageName: true, name: true },
+          select: { id: true, name: true, site: { select: { slug: true, pageName: true } } },
         },
       },
     })
 
-    if (!plugin) {
+    if (!pluginRaw) {
       return NextResponse.json({ error: 'Plugin not found' }, { status: 404 })
+    }
+
+    const plugin = {
+      ...pluginRaw,
+      author: {
+        id: pluginRaw.author.id,
+        name: pluginRaw.author.name,
+        pageSlug: pluginRaw.author.site?.slug ?? null,
+        pageName: pluginRaw.author.site?.pageName ?? null,
+      },
     }
 
     return NextResponse.json({ plugin })
@@ -54,7 +64,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     const plugin = await prisma.plugin.findFirst({
       where: {
         slug: pluginSlug,
-        author: { pageSlug: ownerSlug },
+        author: { site: { slug: ownerSlug } },
       },
     })
 
@@ -69,7 +79,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     const body = await request.json()
     const { name, description, manifest, entryHtml, version } = body
 
-    const updated = await prisma.plugin.update({
+    const updatedRaw = await prisma.plugin.update({
       where: { id: plugin.id },
       data: {
         ...(name !== undefined && { name }),
@@ -80,10 +90,20 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       },
       include: {
         author: {
-          select: { id: true, pageSlug: true, pageName: true, name: true },
+          select: { id: true, name: true, site: { select: { slug: true, pageName: true } } },
         },
       },
     })
+
+    const updated = {
+      ...updatedRaw,
+      author: {
+        id: updatedRaw.author.id,
+        name: updatedRaw.author.name,
+        pageSlug: updatedRaw.author.site?.slug ?? null,
+        pageName: updatedRaw.author.site?.pageName ?? null,
+      },
+    }
 
     return NextResponse.json({ plugin: updated })
   } catch (error) {
@@ -107,7 +127,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
     const plugin = await prisma.plugin.findFirst({
       where: {
         slug: pluginSlug,
-        author: { pageSlug: ownerSlug },
+        author: { site: { slug: ownerSlug } },
       },
     })
 

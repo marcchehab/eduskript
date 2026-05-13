@@ -9,12 +9,12 @@ export async function GET() {
   if (error) return error
 
   try {
-    const users = await prisma.user.findMany({
+    const usersRaw = await prisma.user.findMany({
       select: {
         id: true,
         email: true,
         name: true,
-        pageSlug: true,
+        site: { select: { slug: true } },
         title: true,
         isAdmin: true,
         requirePasswordReset: true,
@@ -49,6 +49,9 @@ export async function GET() {
         createdAt: 'desc',
       },
     })
+
+    // Expose URL slug under the legacy `pageSlug` field for the admin UI.
+    const users = usersRaw.map(({ site, ...u }) => ({ ...u, pageSlug: site?.slug ?? null }))
 
     return NextResponse.json({ users })
   } catch (error) {
@@ -119,13 +122,14 @@ export async function POST(request: Request) {
       }
     }
 
-    // Check if pageSlug already exists (only for teachers)
+    // Check if pageSlug already exists (only for teachers); URL slug lives
+    // on Site and is unique globally across user + org sites.
     if (!isStudent && pageSlug) {
-      const existingPageSlug = await prisma.user.findUnique({
-        where: { pageSlug },
+      const existingSlug = await prisma.site.findUnique({
+        where: { slug: pageSlug },
       })
 
-      if (existingPageSlug) {
+      if (existingSlug) {
         return NextResponse.json(
           { error: 'User with this page slug already exists' },
           { status: 409 }
@@ -163,39 +167,49 @@ export async function POST(request: Request) {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 12)
 
-    // Create user (normalize email for case-insensitive matching)
+    // Create user (normalize email for case-insensitive matching). For
+    // teachers, also create the Site row with the URL slug atomically.
     const normalizedEmail = email ? email.toLowerCase().trim() : null
-    const user = await prisma.user.create({
-      data: {
-        email: normalizedEmail,
-        name,
-        pageSlug: isStudent ? null : pageSlug,
-        pageName: isStudent ? null : name, // Use name as default page name for teachers
-        title: isStudent ? null : (title || null),
-        hashedPassword,
-        emailVerified: new Date(), // Auto-verify admin-created users
-        isAdmin: isStudent ? false : (isAdmin || false), // Students can't be admins
-        requirePasswordReset: requirePasswordReset !== undefined ? requirePasswordReset : true,
-        accountType: isStudent ? 'student' : 'teacher',
-        studentPseudonym: finalStudentPseudonym,
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        pageSlug: true,
-        title: true,
-        isAdmin: true,
-        requirePasswordReset: true,
-        emailVerified: true,
-        accountType: true,
-        studentPseudonym: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+    const createdRaw = await prisma.$transaction(async (tx) => {
+      const u = await tx.user.create({
+        data: {
+          email: normalizedEmail,
+          name,
+          title: isStudent ? null : (title || null),
+          hashedPassword,
+          emailVerified: new Date(),
+          isAdmin: isStudent ? false : (isAdmin || false),
+          requirePasswordReset: requirePasswordReset !== undefined ? requirePasswordReset : true,
+          accountType: isStudent ? 'student' : 'teacher',
+          studentPseudonym: finalStudentPseudonym,
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          title: true,
+          isAdmin: true,
+          requirePasswordReset: true,
+          emailVerified: true,
+          accountType: true,
+          studentPseudonym: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      })
+      let siteSlug: string | null = null
+      if (!isStudent && pageSlug) {
+        // Mirror the display name on Site.pageName so the public page
+        // renders the teacher's name on first load (no separate edit step).
+        const site = await tx.site.create({
+          data: { slug: pageSlug, userId: u.id, pageName: name },
+        })
+        siteSlug = site.slug
+      }
+      return { ...u, pageSlug: siteSlug }
     })
 
-    return NextResponse.json({ user }, { status: 201 })
+    return NextResponse.json({ user: createdRaw }, { status: 201 })
   } catch (error) {
     console.error('Error creating user:', error)
     return NextResponse.json(

@@ -39,7 +39,6 @@ interface FrontPageEditorProps {
     id: string
     slug: string
     title: string
-    collectionSlug?: string
   }
   organization?: {
     id: string

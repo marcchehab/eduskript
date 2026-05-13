@@ -18,7 +18,7 @@ type PrismaLike = any
 const DEMO_CONTENT_DIR = join(process.cwd(), 'demo-content')
 
 const COLLECTION_TITLE = 'Getting Started with Eduskript'
-const COLLECTION_DESCRIPTION = 'A quick tour of what you can do with Eduskript'
+// COLLECTION_DESCRIPTION removed — collections no longer have a description.
 
 interface SeedDemoContentOptions {
   userId: string
@@ -43,10 +43,6 @@ interface PageData {
 
 function slugSuffix(userId: string): string {
   return userId.slice(-8)
-}
-
-function collectionSlug(userId: string): string {
-  return `demo-getting-started-${slugSuffix(userId)}`
 }
 
 function skriptSlug(userId: string): string {
@@ -123,9 +119,14 @@ async function deleteDemoContent(prisma: PrismaLike, userId: string): Promise<vo
     await prisma.skript.delete({ where: { id: skript.id } })
   }
 
-  // Find and delete demo collections (cascades to collectionAuthors, collectionSkripts)
+  // Find and delete demo collections (cascades to collectionSkripts).
+  // Collections are now owned by Site, so we match by title scoped to the
+  // user's own site.
   const collections = await prisma.collection.findMany({
-    where: { slug: { startsWith: `demo-getting-started-${suffix}` } },
+    where: {
+      title: COLLECTION_TITLE,
+      site: { userId }
+    },
     select: { id: true }
   })
   for (const collection of collections) {
@@ -146,17 +147,23 @@ export async function seedDemoContent(options: SeedDemoContentOptions): Promise<
 
   const skriptMeta = readSkriptMeta()
   const pages = readDemoPages()
-  const suffix = slugSuffix(userId)
 
-  // Create collection
+  // Create collection. Ownership goes through the user's Site, not via a
+  // CollectionAuthor row — the demo seeder requires the user to already have
+  // a Site (every teacher with a pageSlug does).
+  const site = await prisma.site.findUnique({
+    where: { userId },
+    select: { id: true },
+  })
+  if (!site) {
+    throw new Error(
+      `Cannot seed demo content for user ${userId}: no Site exists. Set a pageSlug first.`
+    )
+  }
   const collection = await prisma.collection.create({
     data: {
       title: COLLECTION_TITLE,
-      slug: collectionSlug(userId),
-      description: COLLECTION_DESCRIPTION,
-      authors: {
-        create: { userId, permission: 'author' },
-      },
+      siteId: site.id,
     },
   })
 
@@ -200,11 +207,12 @@ export async function seedDemoContent(options: SeedDemoContentOptions): Promise<
     })
   }
 
-  // Add collection to user's page layout
+  // Add collection to the user's site-level page layout. `site` was fetched
+  // earlier in this function so we can rely on it here.
   const layout = await prisma.pageLayout.upsert({
-    where: { userId },
+    where: { siteId: site.id },
     create: {
-      userId,
+      siteId: site.id,
       items: {
         create: {
           type: 'collection',

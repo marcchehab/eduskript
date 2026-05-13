@@ -33,7 +33,6 @@ interface Teacher {
 interface SiteStructure {
   id: string
   title: string
-  slug: string
   accentColor?: string | null // Hex color for letter markers
   skripts: {
     id: string
@@ -56,14 +55,22 @@ interface RootSkript {
   description: string | null
   slug: string
   hasFrontpage?: boolean
-  collection: { title: string, slug: string }
+  collection: { title: string }
   pages: Array<{ id: string, title: string, slug: string }>
 }
+
+export type SidebarItem =
+  | { kind: 'collection'; data: SiteStructure }
+  | { kind: 'skript'; data: RootSkript }
 
 interface PublicSiteLayoutProps {
   teacher: Teacher
   siteStructure: SiteStructure[]
   rootSkripts?: RootSkript[]
+  // Interleaved collections + root skripts in page-builder order. When omitted,
+  // the layout falls back to collections-first then root skripts (preserves
+  // the legacy two-section behavior for callers that haven't migrated).
+  sidebarItems?: SidebarItem[]
   children: React.ReactNode
   currentPath?: string
   fullSiteStructure?: SiteStructure[] // Full site structure when sidebarBehavior is "full"
@@ -119,6 +126,7 @@ export function PublicSiteLayout({
   teacher,
   siteStructure,
   rootSkripts = [],
+  sidebarItems,
   children,
   currentPath: currentPathProp,
   fullSiteStructure,
@@ -166,34 +174,28 @@ export function PublicSiteLayout({
   const pageId = pageIdProp ?? currentPage?.id
   const hideSidebar = hideSidebarProp ?? currentPage?.pageType === 'exam'
 
-  // Contextual sidebar: from the full tenant siteStructure, show only the
-  // collection + skript the user is currently viewing. On the homepage (no
-  // skriptSlug), fall back to the full structure so visitors still see the
-  // tenant's content. In full mode, no filtering — the sidebar is identical
-  // across every route, which is what lets state persist across all
-  // navigation under /[domain]/.
-  const displayStructure = useMemo(() => {
-    if (sidebarBehavior !== 'contextual') return siteStructure
-    if (!paramSkriptSlug) return siteStructure
-    for (const col of siteStructure) {
-      const match = col.skripts.find(s => s.slug === paramSkriptSlug)
-      if (match) {
-        return [{ ...col, skripts: [match] }]
+  // Unified, page-builder-ordered sidebar list. When the server provides
+  // `sidebarItems` (interleaved), use it; otherwise reconstruct collections-
+  // first then root skripts to keep callers that haven't migrated working.
+  // Contextual mode filters to the single item containing the current skript.
+  const displaySidebarItems = useMemo<SidebarItem[]>(() => {
+    const base: SidebarItem[] = sidebarItems ?? [
+      ...siteStructure.map(c => ({ kind: 'collection' as const, data: c })),
+      ...rootSkripts.map(s => ({ kind: 'skript' as const, data: s })),
+    ]
+    if (sidebarBehavior !== 'contextual' || !paramSkriptSlug) return base
+    for (const item of base) {
+      if (item.kind === 'collection') {
+        const skript = item.data.skripts.find(s => s.slug === paramSkriptSlug)
+        if (skript) {
+          return [{ kind: 'collection', data: { ...item.data, skripts: [skript] } }]
+        }
+      } else if (item.data.slug === paramSkriptSlug) {
+        return [item]
       }
     }
-    // Current skript is a root skript (rendered in its own section below) —
-    // hide the collection list.
     return []
-  }, [sidebarBehavior, siteStructure, paramSkriptSlug])
-
-  // In contextual mode, also hide any non-current root skripts so only the
-  // skript being viewed shows.
-  const displayRootSkripts = useMemo(() => {
-    if (sidebarBehavior !== 'contextual') return rootSkripts
-    if (!paramSkriptSlug) return rootSkripts
-    const match = rootSkripts.find(s => s.slug === paramSkriptSlug)
-    return match ? [match] : []
-  }, [sidebarBehavior, rootSkripts, paramSkriptSlug])
+  }, [sidebarItems, siteStructure, rootSkripts, sidebarBehavior, paramSkriptSlug])
 
   // Base prefix for nav URLs. routePrefix is the full internal server path;
   // we strip whatever the proxy prepended for the current hostname so links
@@ -602,19 +604,30 @@ export function PublicSiteLayout({
             ) : (
               /* Full navigation when expanded */
               <nav className="space-y-2">
-              {/* displayStructure + displayRootSkripts are memoized above — in
-                  full mode they are the full tenant structure; in contextual
-                  mode they are filtered to the current skript. */}
+              {/* displaySidebarItems interleaves collections and root skripts
+                  in page-builder order. No "Individual Skripts" grouping —
+                  root skripts render as standalone items between collections,
+                  exactly where the teacher placed them. */}
               {(() => {
-                // In contextual mode with single skript, chevron is just decorative (always expanded)
-                const isContextualSingleSkript = sidebarBehavior === 'contextual' &&
-                  displayStructure.length === 1 &&
-                  displayStructure[0]?.skripts?.length === 1
-
+                // Decorative chevron when contextual mode has filtered to a
+                // single skript (whether inside a collection or at root).
+                const isContextualSingle = sidebarBehavior === 'contextual' && (
+                  displaySidebarItems.length === 1 &&
+                  (displaySidebarItems[0].kind === 'skript' ||
+                    (displaySidebarItems[0].kind === 'collection' &&
+                      displaySidebarItems[0].data.skripts.length === 1))
+                )
+                // Sequential letter index for root skripts only — collection
+                // skripts use their per-collection order. Counter advances
+                // across the interleaved list so root letters stay stable.
+                let rootLetterIdx = 0
                 return (
                   <>
-                    {displayStructure.map((collection, index) => (
-                <div key={collection.id} className={`${index > 0 ? 'mt-5' : ''} mb-4`}>
+                    {displaySidebarItems.map((item, index) => {
+                      if (item.kind === 'collection') {
+                        const collection = item.data
+                        return (
+                <div key={`col-${collection.id}`} className={`${index > 0 ? 'mt-5' : ''} mb-4`}>
                   {/* Collection Title - Docusaurus-style category header */}
                   <div className="py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     {collection.title}
@@ -647,7 +660,7 @@ export function PublicSiteLayout({
                               {skript.title}
                             </button>
                             {/* Chevron - toggle only, right-aligned (non-interactive in contextual single skript mode) */}
-                            {isContextualSingleSkript ? (
+                            {isContextualSingle ? (
                               <span className="p-1.5 ml-1 flex-shrink-0 text-muted-foreground">
                                 <ChevronDown className="w-4 h-4" />
                               </span>
@@ -699,89 +712,80 @@ export function PublicSiteLayout({
                       ))}
                     </div>
                 </div>
-                    ))}
+                        )
+                      }
+                      // Root skript — render inline, no surrounding section
+                      const skript = item.data
+                      const letterIdx = rootLetterIdx++
+                      return (
+                <div key={`root-${skript.id}`} className={`${index > 0 ? 'mt-5' : ''} mb-4`}>
+                  <div
+                    className={`flex items-center w-full text-left text-sm rounded-md transition-colors ${
+                      expandedSkripts.includes(skript.id)
+                        ? 'text-foreground font-medium bg-muted/50'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                    }`}
+                  >
+                    <span className="w-5 h-5 rounded text-xs font-bold flex items-center justify-center mr-2 flex-shrink-0 text-white bg-gray-500">
+                      {String.fromCharCode(65 + letterIdx)}
+                    </span>
+                    <button
+                      onClick={() => navigateToSkript(skript.slug, skript.id, skript.hasFrontpage)}
+                      className="truncate flex-1 text-left hover:text-primary"
+                    >
+                      {skript.title}
+                    </button>
+                    {isContextualSingle ? (
+                      <span className="p-1.5 ml-1 flex-shrink-0 text-muted-foreground">
+                        <ChevronDown className="w-4 h-4" />
+                      </span>
+                    ) : (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          toggleSkript(skript.id)
+                        }}
+                        className="p-1.5 ml-1 hover:bg-muted rounded flex-shrink-0 text-muted-foreground cursor-pointer"
+                        aria-label={expandedSkripts.includes(skript.id) ? 'Collapse' : 'Expand'}
+                      >
+                        {expandedSkripts.includes(skript.id) ? (
+                          <ChevronDown className="w-4 h-4" />
+                        ) : (
+                          <ChevronRight className="w-4 h-4" />
+                        )}
+                      </button>
+                    )}
+                  </div>
+                  <div className={`grid ${isInitialized ? 'transition-[grid-template-rows] duration-200 ease-out' : ''} ${
+                    expandedSkripts.includes(skript.id) ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+                  }`}>
+                    <div className="overflow-hidden">
+                      <div className="space-y-0.5 py-1 ml-4">
+                        {skript.pages.map((page, pageIndex) => (
+                          <button
+                            key={page.id}
+                            onClick={() => navigateToPage(skript.slug, page.slug)}
+                            className={`flex items-center w-full text-left py-1.5 px-2 text-sm rounded-md transition-colors ${
+                              isCurrentPage(skript.slug, page.slug)
+                                ? 'text-primary font-medium bg-primary/10'
+                                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                            }`}
+                          >
+                            <span className="w-5 h-5 rounded text-xs font-medium flex items-center justify-center mr-2 flex-shrink-0 bg-muted text-muted-foreground">
+                              {pageIndex + 1}
+                            </span>
+                            <span className="truncate">{page.title}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                      )
+                    })}
                   </>
                 )
               })()}
-              
-              {/* Root-level skripts */}
-              {displayRootSkripts.length > 0 && (
-                <div className="mt-5 mb-4">
-                  <div className="py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Individual Skripts
-                  </div>
-                  <div className="space-y-1.5 mt-1">
-                  {displayRootSkripts.map((skript, skriptIndex) => (
-                    <div key={skript.id}>
-                      {/* Root Skript Title - letter marker, title, chevron */}
-                      <div
-                        className={`flex items-center w-full text-left text-sm rounded-md transition-colors ${
-                          expandedSkripts.includes(skript.id)
-                            ? 'text-foreground font-medium bg-muted/50'
-                            : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                        }`}
-                      >
-                        {/* Letter marker */}
-                        <span
-                          className="w-5 h-5 rounded text-xs font-bold flex items-center justify-center mr-2 flex-shrink-0 text-white bg-gray-500"
-                        >
-                          {String.fromCharCode(65 + skriptIndex)}
-                        </span>
-                        {/* Title - navigate to frontpage (if exists) or toggle expand */}
-                        <button
-                          onClick={() => navigateToSkript(skript.slug, skript.id, skript.hasFrontpage)}
-                          className="truncate flex-1 text-left hover:text-primary"
-                        >
-                          {skript.title}
-                        </button>
-                        {/* Chevron - toggle only, right-aligned */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            toggleSkript(skript.id)
-                          }}
-                          className="p-1.5 ml-1 hover:bg-muted rounded flex-shrink-0 text-muted-foreground"
-                          aria-label={expandedSkripts.includes(skript.id) ? 'Collapse' : 'Expand'}
-                        >
-                          {expandedSkripts.includes(skript.id) ? (
-                            <ChevronDown className="w-4 h-4" />
-                          ) : (
-                            <ChevronRight className="w-4 h-4" />
-                          )}
-                        </button>
-                      </div>
-
-                      {/* Root Skript Pages - with smooth slide transition (disabled until initialized) */}
-                      <div className={`grid ${isInitialized ? 'transition-[grid-template-rows] duration-200 ease-out' : ''} ${
-                        expandedSkripts.includes(skript.id) ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
-                      }`}>
-                        <div className="overflow-hidden">
-                          <div className="space-y-0.5 py-1 ml-4">
-                            {skript.pages.map((page, pageIndex) => (
-                              <button
-                                key={page.id}
-                                onClick={() => navigateToPage(skript.slug, page.slug)}
-                                className={`flex items-center w-full text-left py-1.5 px-2 text-sm rounded-md transition-colors ${
-                                  isCurrentPage(skript.slug, page.slug)
-                                    ? 'text-primary font-medium bg-primary/10'
-                                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                                }`}
-                              >
-                                {/* Page number marker */}
-                                <span className="w-5 h-5 rounded text-xs font-medium flex items-center justify-center mr-2 flex-shrink-0 bg-muted text-muted-foreground">
-                                  {pageIndex + 1}
-                                </span>
-                                <span className="truncate">{page.title}</span>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                  </div>
-                </div>
-              )}
               </nav>
             )}
 

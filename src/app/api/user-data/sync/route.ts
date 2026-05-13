@@ -94,32 +94,12 @@ async function canCreatePageAnnotations(userId: string, pageId: string, isAdmin?
 
   if (!page?.skriptId) return false
 
-  // Check SkriptAuthor (inherits to pages)
+  // Page-author rights come from SkriptAuthor only — collection ownership
+  // no longer inherits to skripts.
   const skriptAuthor = await prisma.skriptAuthor.findFirst({
     where: { skriptId: page.skriptId, userId, permission: 'author' }
   })
-  if (skriptAuthor) return true
-
-  // Check CollectionAuthor via CollectionSkript (inherits to skripts and pages)
-  const collectionSkripts = await prisma.collectionSkript.findMany({
-    where: { skriptId: page.skriptId },
-    select: { collectionId: true }
-  })
-  if (collectionSkripts.length > 0) {
-    const collectionIds = collectionSkripts.map(cs => cs.collectionId).filter((id): id is string => id !== null)
-    if (collectionIds.length > 0) {
-      const collectionAuthor = await prisma.collectionAuthor.findFirst({
-        where: {
-          collectionId: { in: collectionIds },
-          userId,
-          permission: 'author'
-        }
-      })
-      if (collectionAuthor) return true
-    }
-  }
-
-  return false
+  return !!skriptAuthor
 }
 
 export async function POST(request: NextRequest) {
@@ -558,50 +538,42 @@ export async function POST(request: NextRequest) {
                   slug: true,
                   collectionSkripts: {
                     select: {
+                      collectionId: true,
                       collection: {
                         select: {
-                          slug: true,
-                          authors: {
-                            select: {
-                              user: {
-                                select: { pageSlug: true }
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
+                          site: { select: { slug: true } },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
           })
 
           if (page?.skript) {
             const skriptSlug = page.skript.slug
             const contentPageSlug = page.slug
 
-            // Invalidate paths for all authors' domains
+            // Invalidate paths for the page-owning teacher domain. Collection
+            // ownership is now 1:1 with a site, so at most one slug per collection.
             for (const cs of page.skript.collectionSkripts) {
               if (!cs.collection) continue
-
-              for (const author of cs.collection.authors) {
-                const userPageSlug = author.user.pageSlug
-                if (userPageSlug) {
-                  revalidatePath(`/${userPageSlug}/${skriptSlug}/${contentPageSlug}`)
-                }
+              const pageSlug = cs.collection.site?.slug
+              if (pageSlug) {
+                revalidatePath(`/${pageSlug}/${skriptSlug}/${contentPageSlug}`)
               }
             }
 
             // Also check if page is accessible via any organization
-            // Get collection IDs from the skript
             const collectionIds = page.skript.collectionSkripts
-              .filter(cs => cs.collection)
-              .map(cs => cs.collection!.slug)
+              .map(cs => cs.collectionId)
+              .filter((id): id is string => Boolean(id))
 
             if (collectionIds.length > 0) {
-              const orgLayouts = await prisma.orgPageLayout.findMany({
+              const orgLayouts = await prisma.pageLayout.findMany({
                 where: {
+                  site: { organizationId: { not: null } },
                   items: {
                     some: {
                       OR: [
@@ -612,15 +584,15 @@ export async function POST(request: NextRequest) {
                   }
                 },
                 select: {
-                  organization: { select: { slug: true } }
+                  site: { select: { slug: true } }
                 }
               })
 
               for (const orgLayout of orgLayouts) {
-                // Invalidate org page paths for all collections
-                for (const cs of page.skript.collectionSkripts) {
-                  if (!cs.collection) continue
-                  revalidatePath(`/org/${orgLayout.organization.slug}/c/${cs.collection.slug}/${skriptSlug}/${contentPageSlug}`)
+                const orgSlug = orgLayout.site?.slug
+                if (orgSlug) {
+                  // Org content routes are skript-only: /org/{orgSlug}/c/{skriptSlug}/{pageSlug}
+                  revalidatePath(`/org/${orgSlug}/c/${skriptSlug}/${contentPageSlug}`)
                 }
               }
             }
@@ -631,11 +603,14 @@ export async function POST(request: NextRequest) {
           const frontPage = await prisma.frontPage.findUnique({
             where: { id: pageId },
             select: {
-              userId: true,
-              organizationId: true,
               skriptId: true,
-              user: { select: { pageSlug: true } },
-              organization: { select: { slug: true } },
+              site: {
+                select: {
+                  slug: true,
+                  userId: true,
+                  organizationId: true,
+                },
+              },
               skript: {
                 select: {
                   slug: true,
@@ -643,63 +618,55 @@ export async function POST(request: NextRequest) {
                     select: {
                       collection: {
                         select: {
-                          slug: true,
-                          authors: {
-                            select: {
-                              user: { select: { pageSlug: true } }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
+                          site: { select: { slug: true } },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
           })
 
           if (frontPage) {
-            // User front page: /{pageSlug}
-            if (frontPage.userId && frontPage.user?.pageSlug) {
-              revalidatePath(`/${frontPage.user.pageSlug}`)
+            // Site-level front page on a teacher's page: /{slug}
+            if (frontPage.site?.userId && frontPage.site.slug) {
+              revalidatePath(`/${frontPage.site.slug}`)
             }
 
-            // Organization front page: /org/{orgSlug}
-            if (frontPage.organizationId && frontPage.organization?.slug) {
-              revalidatePath(`/org/${frontPage.organization.slug}`)
+            // Site-level front page on an org page: /org/{slug}
+            if (frontPage.site?.organizationId && frontPage.site.slug) {
+              revalidatePath(`/org/${frontPage.site.slug}`)
             }
 
-            // Skript front page: /{pageSlug}/{skriptSlug}
+            // Skript front page: /{slug}/{skriptSlug}
             if (frontPage.skriptId && frontPage.skript) {
               const skriptSlug = frontPage.skript.slug
               for (const cs of frontPage.skript.collectionSkripts) {
                 if (!cs.collection) continue
-
-                // Invalidate for all authors' domains
-                for (const author of cs.collection.authors) {
-                  const userPageSlug = author.user.pageSlug
-                  if (userPageSlug) {
-                    revalidatePath(`/${userPageSlug}/${skriptSlug}`)
-                  }
+                const pageSlug = cs.collection.site?.slug
+                if (pageSlug) {
+                  revalidatePath(`/${pageSlug}/${skriptSlug}`)
                 }
               }
 
               // Also check orgs that have this skript in their layout
-              const orgLayouts = await prisma.orgPageLayout.findMany({
+              const orgLayouts = await prisma.pageLayout.findMany({
                 where: {
+                  site: { organizationId: { not: null } },
                   items: {
                     some: { type: 'skript', contentId: skriptSlug }
                   }
                 },
                 select: {
-                  organization: { select: { slug: true } }
+                  site: { select: { slug: true } }
                 }
               })
 
               for (const orgLayout of orgLayouts) {
-                for (const cs of frontPage.skript.collectionSkripts) {
-                  if (!cs.collection) continue
-                  revalidatePath(`/org/${orgLayout.organization.slug}/c/${cs.collection.slug}/${skriptSlug}`)
+                const orgSlug = orgLayout.site?.slug
+                if (orgSlug) {
+                  revalidatePath(`/org/${orgSlug}/c/${skriptSlug}`)
                 }
               }
             }

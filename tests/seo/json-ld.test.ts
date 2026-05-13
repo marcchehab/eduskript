@@ -99,7 +99,6 @@ vi.mock('@/lib/cached-queries', () => ({
   CACHE_TAGS: {
     user: () => 'user',
     collection: () => 'collection',
-    collectionBySlug: () => 'collectionBySlug',
     skript: () => 'skript',
     skriptBySlug: () => 'skriptBySlug',
     page: () => 'page',
@@ -130,6 +129,9 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     organization: {
       findUnique: vi.fn(() => Promise.resolve(fixtureOrganization)),
+    },
+    site: {
+      findUnique: vi.fn(() => Promise.resolve({ organization: fixtureOrganization })),
     },
     user: { findFirst: vi.fn() },
     frontPage: { findFirst: vi.fn(() => Promise.resolve(null)) },

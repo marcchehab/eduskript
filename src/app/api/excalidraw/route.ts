@@ -122,15 +122,15 @@ export async function POST(request: NextRequest) {
       where: { skriptId },
       select: { slug: true, content: true }
     })
-    const editor = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { pageSlug: true }
+    const editorSite = await prisma.site.findUnique({
+      where: { userId: session.user.id },
+      select: { slug: true }
     })
-    if (editor?.pageSlug) {
+    if (editorSite?.slug) {
       for (const page of candidatePages) {
         if (page.content.includes(fileRef)) {
           revalidateTag(
-            CACHE_TAGS.pageBySlug(editor.pageSlug, skript.slug, page.slug),
+            CACHE_TAGS.pageBySlug(editorSite.slug, skript.slug, page.slug),
             { expire: 0 }
           )
         }

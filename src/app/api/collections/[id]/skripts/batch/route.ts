@@ -23,14 +23,9 @@ export async function PUT(
     const { id: collectionId } = await params
     const { skripts } = await request.json()
 
-    // Check if user has edit permission on the collection
     const collection = await prisma.collection.findUnique({
       where: { id: collectionId },
-      include: {
-        authors: {
-          include: { user: true }
-        }
-      }
+      include: { site: { select: { userId: true, organizationId: true } } }
     })
 
     if (!collection) {
@@ -40,10 +35,13 @@ export async function PUT(
       )
     }
 
-    const permissions = checkCollectionPermissions(
-      session.user.id,
-      collection.authors
-    )
+    const orgRoles = collection.site?.organizationId
+      ? await prisma.organizationMember.findMany({
+          where: { userId: session.user.id, organizationId: collection.site.organizationId },
+          select: { organizationId: true, role: true },
+        })
+      : []
+    const permissions = checkCollectionPermissions(session.user.id, collection, orgRoles)
 
     if (!permissions.canEdit) {
       return NextResponse.json(
@@ -75,13 +73,12 @@ export async function PUT(
       }
     })
 
-    // Revalidate cache for this user's content
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { pageSlug: true }
+    const userSite = await prisma.site.findUnique({
+      where: { userId: session.user.id },
+      select: { slug: true }
     })
-    if (user?.pageSlug) {
-      revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), { expire: 0 })
+    if (userSite?.slug) {
+      revalidateTag(CACHE_TAGS.teacherContent(userSite.slug), { expire: 0 })
     }
 
     return NextResponse.json({

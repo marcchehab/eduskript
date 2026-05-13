@@ -1,123 +1,101 @@
 /**
  * Permission System
  *
- * Eduskript uses a "no-access-by-default" permission model. Being a collaborator
- * doesn't automatically grant content access - content must be explicitly shared.
+ * Eduskript uses a "no-access-by-default" permission model. Skripts and pages
+ * are explicitly shared via SkriptAuthor / PageAuthor. Collections no longer
+ * have their own author table — they're owned by a Site (a user's page or an
+ * org's page), and editing a collection means editing the site.
  *
- * ## Permission Hierarchy (3 levels)
+ * ## Permission Hierarchy
  *
- * Content is organized: Collection → Skript → Page
- * Permissions flow DOWN but not UP:
- *
- * ```
- * Collection Author  → can VIEW all skripts in collection (but NOT edit)
- *                   ↓
- * Skript Author     → can EDIT all pages in skript
- *                   ↓
- * Page Author       → can EDIT that specific page only
- * ```
+ * - **Site**: owned by exactly one User or one Organization. Site owners can
+ *   edit anything that belongs to the site (collections, page layout,
+ *   frontpage). Org admins/owners can edit the org's site.
+ * - **Collection**: belongs to a site. No separate authors. Editing a
+ *   collection requires edit rights on its site.
+ * - **Skript**: editorial content, co-authored across users via SkriptAuthor.
+ *   Skripts get permissions ONLY from their own SkriptAuthor rows — there's
+ *   no inheritance from collections. A site's collections may contain
+ *   skripts the site owner doesn't author; those just render to visitors
+ *   if isPublished.
+ * - **Page**: inherits from skript or has its own PageAuthor row.
  *
  * ## Permission Types
  *
- * - `author`: Full edit rights (can modify content, manage other authors)
- * - `viewer`: Read-only access (can view but not modify)
- *
- * ## Important Behaviors
- *
- * 1. **Collection authors can only VIEW skripts** - they cannot edit skripts
- *    or pages unless they also have direct skript/page author permissions.
- *
- * 2. **Skript authors inherit page edit rights** - if you're an author on a
- *    skript, you can edit ALL pages within it.
- *
- * 3. **Page-level permissions override skript-level** - you can grant someone
- *    view-only access to a specific page even if they have edit access to the skript.
- *
- * 4. **At least one author required** - content cannot be left without an author.
- *    The last author cannot remove themselves.
- *
- * ## Examples
- *
- * - Alice is a collection author → she can VIEW all skripts but NOT edit them
- * - Bob is a skript author → he can EDIT all pages in that skript
- * - Carol is a page viewer → she can only VIEW that specific page
- *
- * ## Known Limitations
- *
- * 1. **O(n) lookups**: The check functions use Array.find() which is O(n).
- *    For content with many authors, this could be slow. A Map-based approach
- *    would be more efficient but adds complexity for typical use cases (<10 authors).
- *
- * 2. **Code duplication**: The three check functions share similar logic.
- *    A generic permission checker could reduce duplication, but the current
- *    approach is more readable and each level has subtle differences.
- *
- * 3. **No caching**: Permissions are recalculated on every check. For hot paths,
- *    consider caching the result per request using React context or similar.
+ * - `author`: full edit rights
+ * - `viewer`: read-only access (skripts/pages only)
  *
  * @see CLAUDE.md for the full permission model documentation
  */
 
-import { CollectionAuthor, SkriptAuthor, PageAuthor, User } from '@prisma/client'
+import { SkriptAuthor, PageAuthor, User } from '@prisma/client'
 import { Permission, UserPermissions } from '@/types'
 
+/** Minimal shape of a Site for ownership checks. */
+export interface SiteOwner {
+  userId?: string | null
+  organizationId?: string | null
+}
+
+/** Minimal shape of an OrganizationMember row for org-admin checks. */
+export interface OrgRole {
+  organizationId: string
+  role: string // "owner" | "admin" | "member"
+}
+
 /**
- * Check user permissions for a collection.
- *
- * Collections are the top-level container. Collection authors can view all
- * skripts within the collection but cannot edit them directly.
+ * True when the user can edit the given site — they own it directly, or
+ * they're an owner/admin of the organization that owns it. Used as the
+ * primitive behind every Collection/PageLayout/FrontPage edit check.
+ */
+export function canEditSite(
+  userId: string,
+  site: SiteOwner | null | undefined,
+  orgRoles: OrgRole[] = [],
+  isAdmin?: boolean
+): boolean {
+  if (isAdmin) return true
+  if (!site) return false
+  if (site.userId && site.userId === userId) return true
+  if (site.organizationId) {
+    const membership = orgRoles.find(m => m.organizationId === site.organizationId)
+    return membership?.role === 'owner' || membership?.role === 'admin'
+  }
+  return false
+}
+
+/**
+ * Check permissions for a collection. Collections are owned by a site;
+ * everyone with edit rights on the site can edit the collection. No
+ * per-collection author rows anymore.
  */
 export function checkCollectionPermissions(
   userId: string,
-  authors: (CollectionAuthor & { user: Partial<User> })[],
+  collection: { site?: SiteOwner | null },
+  orgRoles: OrgRole[] = [],
   isAdmin?: boolean
 ): UserPermissions {
-  if (isAdmin) {
-    return { canEdit: true, canView: true, canManageAuthors: true }
-  }
-
-  const userAuthor = authors.find(author => author.userId === userId)
-
-  if (!userAuthor) {
-    return {
-      canEdit: false,
-      canView: false,
-      canManageAuthors: false
-    }
-  }
-
-  const isAuthor = userAuthor.permission === 'author'
-  
+  const canEdit = canEditSite(userId, collection.site, orgRoles, isAdmin)
   return {
-    canEdit: isAuthor,
-    canView: true,
-    canManageAuthors: isAuthor,
-    permission: userAuthor.permission as Permission
+    canEdit,
+    canView: canEdit,
+    canManageAuthors: false, // collections have no authors to manage
   }
 }
 
 /**
- * Check user permissions for a skript.
- *
- * Permission resolution order:
- * 1. Direct skript author → full edit rights
- * 2. Collection author (inherited) → view-only
- * 3. No relationship → no access
- *
- * Note: Skript authors automatically get edit rights on all pages within
- * the skript. This is handled by checkPagePermissions().
+ * Check permissions for a skript. Skripts grant access strictly through
+ * their own SkriptAuthor rows — no inheritance from collections.
  */
 export function checkSkriptPermissions(
   userId: string,
   skriptAuthors: (SkriptAuthor & { user: Partial<User> })[],
-  collectionAuthors?: (CollectionAuthor & { user: Partial<User> })[],
   isAdmin?: boolean
 ): UserPermissions {
   if (isAdmin) {
     return { canEdit: true, canView: true, canManageAuthors: true }
   }
 
-  // Priority 1: Direct skript permissions (highest precedence)
   const userSkriptAuthor = skriptAuthors.find(author => author.userId === userId)
 
   if (userSkriptAuthor) {
@@ -130,21 +108,6 @@ export function checkSkriptPermissions(
     }
   }
 
-  // Priority 2: Inherited from collection (view-only, never edit)
-  // This is intentional - collection authors should explicitly be added
-  // as skript authors if they need to edit.
-  const userCollectionAuthor = collectionAuthors?.find(author => author.userId === userId)
-
-  if (userCollectionAuthor) {
-    return {
-      canEdit: false,
-      canView: true,
-      canManageAuthors: false,
-      permission: 'viewer'
-    }
-  }
-
-  // No access
   return {
     canEdit: false,
     canView: false,
@@ -153,30 +116,20 @@ export function checkSkriptPermissions(
 }
 
 /**
- * Check user permissions for a page.
- *
- * Permission resolution order (first match wins):
- * 1. Direct page author → uses that permission level
- * 2. Skript author → inherits edit rights (author) or view rights (viewer)
- * 3. Collection author → view-only
- * 4. No relationship → no access
- *
- * Key insight: Skript authors get EDIT rights on pages because pages are
- * considered part of the skript content. This differs from collections,
- * where collection authors only get VIEW rights on contained skripts.
+ * Check permissions for a page. Resolution:
+ * 1. Direct PageAuthor row.
+ * 2. Otherwise inherits from the skript's SkriptAuthor row.
  */
 export function checkPagePermissions(
   userId: string,
   pageAuthors: (PageAuthor & { user: Partial<User> })[],
   skriptAuthors: (SkriptAuthor & { user: Partial<User> })[],
-  collectionAuthors: (CollectionAuthor & { user: Partial<User> })[],
   isAdmin?: boolean
 ): UserPermissions {
   if (isAdmin) {
     return { canEdit: true, canView: true, canManageAuthors: true }
   }
 
-  // Priority 1: Direct page permissions (highest precedence)
   const userPageAuthor = pageAuthors.find(author => author.userId === userId)
 
   if (userPageAuthor) {
@@ -189,9 +142,6 @@ export function checkPagePermissions(
     }
   }
 
-  // Priority 2: Inherited from skript (EDIT rights for authors)
-  // Unlike collection→skript inheritance, skript→page inheritance grants
-  // edit rights because pages are considered integral to skript content.
   const userSkriptAuthor = skriptAuthors.find(author => author.userId === userId)
 
   if (userSkriptAuthor) {
@@ -204,19 +154,6 @@ export function checkPagePermissions(
     }
   }
 
-  // Priority 3: Inherited from collection (view-only, never edit)
-  const userCollectionAuthor = collectionAuthors.find(author => author.userId === userId)
-
-  if (userCollectionAuthor) {
-    return {
-      canEdit: false,
-      canView: true,
-      canManageAuthors: false,
-      permission: 'viewer'
-    }
-  }
-
-  // No access
   return {
     canEdit: false,
     canView: false,
@@ -225,53 +162,25 @@ export function checkPagePermissions(
 }
 
 /**
- * Check if user can remove themselves as an author.
- *
- * Prevents content from being orphaned by ensuring at least one author
- * always remains. The last author cannot remove themselves - they must
- * first add another author or delete the content entirely.
+ * Whether the user can remove themselves as an author. Prevents content
+ * from being orphaned — the last author cannot remove themselves.
  */
 export function canRemoveSelfAsAuthor(
   userId: string,
-  authors: (CollectionAuthor | SkriptAuthor | PageAuthor)[]
+  authors: (SkriptAuthor | PageAuthor)[]
 ): boolean {
   const authorCount = authors.filter(author => author.permission === 'author').length
-  const userIsAuthor = authors.find(author => 
+  const userIsAuthor = authors.find(author =>
     author.userId === userId && author.permission === 'author'
   )
-  
-  // Can remove self if they're an author and there's at least one other author
   return Boolean(userIsAuthor && authorCount > 1)
 }
 
 /**
- * Get all users who can view a collection (including skripts within it)
- */
-export function getCollectionViewers(
-  collectionAuthors: (CollectionAuthor & { user: Partial<User> })[]
-): Partial<User>[] {
-  return collectionAuthors.map(author => author.user)
-}
-
-/**
- * Get all users who can view a skript.
- *
- * Note: This deduplication is O(n²) due to nested findIndex.
- * For large author lists, consider using a Set or Map.
- * In practice, most content has <10 authors so this is fine.
+ * Get all users who can view a skript — just the direct SkriptAuthor rows.
  */
 export function getSkriptViewers(
-  skriptAuthors: (SkriptAuthor & { user: Partial<User> })[],
-  collectionAuthors: (CollectionAuthor & { user: Partial<User> })[]
+  skriptAuthors: (SkriptAuthor & { user: Partial<User> })[]
 ): Partial<User>[] {
-  const skriptUsers = skriptAuthors.map(author => author.user)
-  const collectionUsers = collectionAuthors.map(author => author.user)
-
-  // Combine and deduplicate (O(n²) but acceptable for small lists)
-  const allUsers = [...skriptUsers, ...collectionUsers]
-  const uniqueUsers = allUsers.filter((user, index, array) =>
-    array.findIndex(u => u.id === user.id) === index
-  )
-
-  return uniqueUsers
+  return skriptAuthors.map(author => author.user)
 }

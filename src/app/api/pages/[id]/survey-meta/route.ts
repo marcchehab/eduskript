@@ -41,15 +41,6 @@ export async function GET(
         skript: {
           include: {
             authors: { include: { user: { select: { id: true } } } },
-            collectionSkripts: {
-              include: {
-                collection: {
-                  include: {
-                    authors: { include: { user: { select: { id: true } } } },
-                  },
-                },
-              },
-            },
           },
         },
         implicitSurveyClass: {
@@ -65,13 +56,10 @@ export async function GET(
       return NextResponse.json({ isAuthor: false }, { status: 200 })
     }
 
-    const collectionAuthors = page.skript.collectionSkripts
-      .flatMap((cs) => cs.collection?.authors ?? [])
     const perms = checkPagePermissions(
       session.user.id,
       page.authors,
       page.skript.authors,
-      collectionAuthors,
       session.user.isAdmin
     )
 

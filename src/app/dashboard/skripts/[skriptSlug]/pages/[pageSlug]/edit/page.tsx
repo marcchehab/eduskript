@@ -69,7 +69,7 @@ async function getPageData(skriptSlug: string, pageSlug: string, userId: string,
 
   if (!page) return null
 
-  const permissions = checkSkriptPermissions(userId, skript.authors, undefined, isAdmin)
+  const permissions = checkSkriptPermissions(userId, skript.authors, isAdmin)
 
   return { skript, page, permissions }
 }

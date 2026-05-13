@@ -23,24 +23,26 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const roles = rolesParam.split(',').filter((r) => ['owner', 'admin', 'member'].includes(r))
     const limit = Math.min(Math.max(1, parseInt(limitParam, 10) || 20), 100)
 
-    // Get organization by slug
-    const organization = await prisma.organization.findUnique({
+    // Get organization via its site (URL slug source).
+    const orgSite = await prisma.site.findUnique({
       where: { slug: orgSlug },
-      select: { id: true },
+      select: { organization: { select: { id: true } } },
     })
+    const organization = orgSite?.organization
 
     if (!organization) {
       return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
     }
 
-    // Get member teachers with specified roles
+    // Get member teachers with specified roles. A teacher counts as one with
+    // their own Site (URL slug owned by that user).
     const members = await prisma.organizationMember.findMany({
       where: {
         organizationId: organization.id,
         role: { in: roles },
         user: {
           accountType: 'teacher',
-          pageSlug: { not: null },
+          site: { isNot: null },
         },
       },
       include: {
@@ -48,17 +50,21 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           select: {
             id: true,
             name: true,
-            pageSlug: true,
-            pageName: true,
             image: true,
             title: true,
+            site: { select: { slug: true, pageName: true } },
           },
         },
       },
       take: limit,
     })
 
-    const teachers = members.map((m) => m.user)
+    const teachers = members.map((m) => ({
+      ...m.user,
+      pageSlug: m.user.site?.slug ?? null,
+      pageName: m.user.site?.pageName ?? null,
+      site: undefined,
+    }))
 
     return NextResponse.json({ success: true, teachers })
   } catch (error) {

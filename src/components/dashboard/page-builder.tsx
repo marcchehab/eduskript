@@ -1,5 +1,6 @@
 'use client'
 
+import { Fragment } from 'react'
 import { Droppable, Draggable } from '@hello-pangea/dnd'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -16,7 +17,6 @@ interface PageItem {
   description?: string
   order: number
   slug?: string
-  collectionSlug?: string // For skripts
   parentId?: string // For nested skripts under collections
   skripts?: PageItem[] // For collections containing skripts
   isInLayout?: boolean // For skripts: whether they're explicitly in the page layout
@@ -148,11 +148,10 @@ export function PageBuilder({
                 // Collections are created via API and added to page builder
                 const title = prompt('Collection name:')
                 if (!title?.trim()) return
-                const slug = title.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').trim()
                 fetch('/api/collections', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ title: title.trim(), slug, description: '' })
+                  body: JSON.stringify({ title: title.trim(), description: '' })
                 }).then(res => {
                   if (res.ok) onRefresh?.()
                   else res.json().then(d => window.alert(d.error || 'Failed to create collection'))
@@ -178,17 +177,16 @@ export function PageBuilder({
         </p>
       </CardHeader>
       <CardContent>
-        {/* Disable the outer droppable while reordering a skript that's already
-            inside a collection. @hello-pangea/dnd's getFurthestAway picks the
-            droppable whose center is furthest from drag-start when several
-            overlap; with nested droppables that's always the outer one, so
-            in-collection reorders would otherwise resolve to root and trigger
-            the "add to a collection" dialog. Library skripts (no parentId)
-            still hit this droppable, preserving that dialog. */}
-        <Droppable
-          droppableId="page-builder"
-          isDropDisabled={draggedItem?.type === 'skript' && !!draggedItem.parentId}
-        >
+        {/* Outer droppable only accepts drops in the empty state — the very
+            first item dropped onto a blank page builder. Once items exist
+            we disable it so it stops shadowing nested droppables: root drops
+            then happen via explicit RootGap strips between items, and
+            collection-internal drops resolve to the per-collection droppables
+            without competing with this wrapper. @hello-pangea/dnd picks the
+            outer droppable when a drag overlaps a nested one, so we have to
+            structurally remove the outer from the candidate set rather than
+            rely on z-index/priority. */}
+        <Droppable droppableId="page-builder" isDropDisabled={items.length > 0}>
           {(provided) => (
             <div
               {...provided.droppableProps}
@@ -244,11 +242,10 @@ export function PageBuilder({
                       onClick={() => {
                         const title = prompt('Collection name:')
                         if (!title?.trim()) return
-                        const slug = title.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').trim()
                         fetch('/api/collections', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ title: title.trim(), slug, description: '' })
+                          body: JSON.stringify({ title: title.trim(), description: '' })
                         }).then(res => {
                           if (res.ok) onRefresh?.()
                           else res.json().then(d => window.alert(d.error || 'Failed to create collection'))
@@ -272,19 +269,22 @@ export function PageBuilder({
                   {provided.placeholder}
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="flex flex-col">
+                  <RootGap index={0} />
                   {items
                     .sort((a, b) => a.order - b.order)
                     .map((item, index) => (
-                      <PageBuilderItem
-                        key={item.id}
-                        item={item}
-                        index={index}
-                        onRemove={handleRemoveItem}
-                        expandedCollections={expandedCollections}
-                        onToggleCollection={onToggleCollection}
-                        draggedItem={draggedItem}
-                      />
+                      <Fragment key={item.id}>
+                        <PageBuilderItem
+                          item={item}
+                          index={index}
+                          onRemove={handleRemoveItem}
+                          expandedCollections={expandedCollections}
+                          onToggleCollection={onToggleCollection}
+                          draggedItem={draggedItem}
+                        />
+                        <RootGap index={index + 1} />
+                      </Fragment>
                     ))}
                   {provided.placeholder}
                 </div>
@@ -302,6 +302,32 @@ export function PageBuilder({
         )}
       </CardContent>
     </Card>
+  )
+}
+
+// Slim drop strip between root items. The whole point is to give root drops
+// (insert here at the root level) their own droppable so they no longer
+// compete with collection-internal droppables. Index encodes the insertion
+// position (0..items.length). Visually invisible until something is dragged
+// over it, at which point the placeholder pushes neighbours apart.
+function RootGap({ index }: { index: number }) {
+  return (
+    <Droppable droppableId={`root-gap-${index}`} type="DEFAULT">
+      {(provided, snapshot) => (
+        <div
+          ref={provided.innerRef}
+          {...provided.droppableProps}
+          className={cn(
+            "transition-colors rounded",
+            snapshot.isDraggingOver
+              ? "h-3 my-1 bg-primary/20 ring-1 ring-primary/40"
+              : "h-3"
+          )}
+        >
+          {provided.placeholder}
+        </div>
+      )}
+    </Droppable>
   )
 }
 
@@ -323,11 +349,15 @@ interface PageBuilderItemProps {
 
 function PageBuilderItem({ item, index, onRemove, expandedCollections, onToggleCollection, draggedItem }: PageBuilderItemProps) {
   const Icon = item.type === 'collection' ? BookOpen : FileText
-
+  // Root-level skripts use a distinct draggable prefix so the drag-end parser
+  // can tell them apart from collections (both render through this component).
+  const draggableId = item.type === 'collection'
+    ? `collection-${item.id}`
+    : `root-skript-${item.id}`
 
   return (
-    <Draggable 
-      draggableId={`collection-${item.id}`} 
+    <Draggable
+      draggableId={draggableId}
       index={index}
       isDragDisabled={item.permissions?.canView === false}
     >
@@ -353,8 +383,19 @@ function PageBuilderItem({ item, index, onRemove, expandedCollections, onToggleC
                 <GripVertical className="w-4 h-4 text-muted-foreground" />
               </div>
             )}
-            {/* Remove button - positioned in top-right corner */}
-            <div className="absolute top-2 right-2 z-10">
+            {/* Remove button + publish toggle - top-right corner */}
+            <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
+              {item.type === 'skript' && item.permissions?.canEdit && item.isPublished !== undefined && (
+                <PublishToggle
+                  type="skript"
+                  itemId={item.id}
+                  isPublished={item.isPublished}
+                  isUnlisted={item.isUnlisted}
+                  onToggle={() => {}}
+                  size="sm"
+                  showText={false}
+                />
+              )}
               <Button
                 variant="ghost"
                 size="sm"
@@ -422,6 +463,12 @@ function PageBuilderItem({ item, index, onRemove, expandedCollections, onToggleC
               {item.type === 'collection' && (
                 <span className="text-xs text-muted-foreground">
                   • {item.skripts?.length || 0} skripts
+                </span>
+              )}
+              {item.type === 'skript' && item.isPublished === false && (
+                <span className="text-xs text-warning flex items-center gap-0.5">
+                  <EyeOff className="w-3 h-3" />
+                  Draft
                 </span>
               )}
             </div>

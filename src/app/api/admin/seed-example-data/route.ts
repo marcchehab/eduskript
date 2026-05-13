@@ -9,39 +9,47 @@ export async function POST(request: Request) {
   if (error) return error
 
   try {
-    // Guard: check if eduskript org already exists
-    const existingOrg = await prisma.organization.findUnique({
+    // Guard: check if eduskript org already exists (URL slug lives on Site).
+    const existingOrgSite = await prisma.site.findUnique({
       where: { slug: 'eduskript' },
     })
 
-    if (existingOrg) {
+    if (existingOrgSite) {
       return NextResponse.json(
         { error: 'The "eduskript" organization already exists. Sample data was already seeded.' },
         { status: 400 }
       )
     }
 
-    // Create the eduskript organization
+    // Create the eduskript organization + its site atomically.
+    // Page-display fields (description, etc.) all live on Site now.
     const org = await prisma.organization.create({
       data: {
         name: 'Eduskript',
-        slug: 'eduskript',
-        description: 'The Eduskript platform organization',
+        site: {
+          create: {
+            slug: 'eduskript',
+            pageName: 'Eduskript',
+            pageDescription: 'The Eduskript platform organization',
+          },
+        },
       },
     })
 
-    // Create teacher user (password: "teacher")
+    // Create teacher user (password: "teacher") + their Site row atomically.
     const hashedPassword = await bcrypt.hash('teacher', 12)
     const teacherUser = await prisma.user.create({
       data: {
         email: 'teacher@eduskript.org',
         name: 'Demo Teacher',
-        pageSlug: 'teacher',
         accountType: 'teacher',
         hashedPassword: hashedPassword,
         emailVerified: new Date(),
         requirePasswordReset: false,
         billingPlan: 'pro',
+        site: {
+          create: { slug: 'teacher' },
+        },
       },
     })
 
@@ -63,18 +71,19 @@ export async function POST(request: Request) {
       },
     })
 
-    // Create example collection authored by the teacher
+    // Create example collection on the teacher's site (collections are now
+    // 1:1-owned by a site, not multi-authored).
+    const seedTeacherSite = await prisma.site.findUnique({
+      where: { userId: teacherUser.id },
+      select: { id: true },
+    })
+    if (!seedTeacherSite) {
+      throw new Error(`Cannot seed example data: teacher user ${teacherUser.id} has no Site`)
+    }
     const tutorialCollection = await prisma.collection.create({
       data: {
         title: 'Eduskript Tutorial',
-        slug: 'eduskript-tutorial',
-        description: 'Learn how to use all of Eduskript\'s features',
-        authors: {
-          create: {
-            userId: teacherUser.id,
-            permission: 'author',
-          },
-        },
+        siteId: seedTeacherSite.id,
       },
     })
 
@@ -362,11 +371,11 @@ console.log("Even numbers:", evens);
       },
     })
 
-    // Add collection to teacher's public page layout
+    // Add collection to teacher's site-level page layout.
     await prisma.pageLayout.upsert({
-      where: { userId: teacherUser.id },
+      where: { siteId: seedTeacherSite.id },
       create: {
-        userId: teacherUser.id,
+        siteId: seedTeacherSite.id,
         items: {
           create: {
             type: 'collection',
@@ -391,7 +400,7 @@ console.log("Even numbers:", evens);
       message: 'Sample data seeded successfully. Teacher: teacher@eduskript.org / teacher',
       data: {
         orgId: org.id,
-        orgSlug: org.slug,
+        orgSlug: 'eduskript',
         skripts: 3,
         pages: 5,
       },

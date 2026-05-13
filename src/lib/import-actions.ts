@@ -13,10 +13,9 @@ interface ExportManifest {
   version: number
   exportedAt: string
   collections: {
-    slug: string
     title: string
     description: string | null
-    skripts: string[]
+    skripts: string[] // skript slugs in this collection
   }[]
   skripts: {
     [slug: string]: {
@@ -34,7 +33,7 @@ interface ImportError {
 }
 
 interface ImportPreview {
-  collections: { slug: string; title: string; isNew: boolean }[]
+  collections: { title: string; isNew: boolean }[]
   skripts: { slug: string; title: string; pageCount: number; isNew: boolean }[]
   attachments: number
   errors: ImportError[]
@@ -89,22 +88,22 @@ export async function importContent(formData: FormData, action: 'preview' | 'imp
       return { success: false, error: 'Invalid manifest.json: not valid JSON' }
     }
 
-    if (manifest.version !== 1) {
+    if (manifest.version !== 2) {
       return { success: false, error: `Unsupported manifest version: ${manifest.version}` }
     }
 
     const userId = session.user.id
     const errors: ImportError[] = []
 
-    // Check for existing collections and skripts
+    // Dedup collections by title within this user's site.
     const existingCollections = await prisma.collection.findMany({
       where: {
-        slug: { in: manifest.collections.map(c => c.slug) },
-        authors: { some: { userId } }
+        title: { in: manifest.collections.map(c => c.title) },
+        site: { userId }
       },
-      select: { slug: true }
+      select: { title: true }
     })
-    const existingCollectionSlugs = new Set(existingCollections.map(c => c.slug))
+    const existingCollectionTitles = new Set(existingCollections.map(c => c.title))
 
     const existingSkripts = await prisma.skript.findMany({
       where: {
@@ -168,9 +167,8 @@ export async function importContent(formData: FormData, action: 'preview' | 'imp
     // Build preview
     const preview: ImportPreview = {
       collections: manifest.collections.map(c => ({
-        slug: c.slug,
         title: c.title,
-        isNew: !existingCollectionSlugs.has(c.slug)
+        isNew: !existingCollectionTitles.has(c.title)
       })),
       skripts: Object.entries(manifest.skripts).map(([slug, data]) => ({
         slug,
@@ -313,15 +311,24 @@ async function performImport(
   }
 
   const result = { collections: 0, skripts: 0, pages: 0, files: 0 }
+  // Map by collection title (manifest's stable identifier since slug is gone)
   const collectionIdMap = new Map<string, string>()
   const skriptIdMap = new Map<string, string>()
 
-  // Create or find collections
+  const userSite = await prisma.site.findUnique({
+    where: { userId },
+    select: { id: true, slug: true },
+  })
+  if (!userSite) {
+    throw new Error(`User ${userId} has no Site — set up a public page before importing`)
+  }
+
+  // Create or find collections (matched by title within this user's site)
   for (const collectionData of manifest.collections) {
     let collection = await prisma.collection.findFirst({
       where: {
-        slug: collectionData.slug,
-        authors: { some: { userId } }
+        title: collectionData.title,
+        siteId: userSite.id,
       }
     })
 
@@ -329,17 +336,15 @@ async function performImport(
       collection = await prisma.collection.create({
         data: {
           title: collectionData.title,
-          description: collectionData.description,
-          slug: collectionData.slug,
-          authors: {
-            create: { userId, permission: 'author' }
-          }
+          // description was dropped from the Collection schema; imports
+          // silently discard the field (manifest may still carry it).
+          siteId: userSite.id,
         }
       })
       result.collections++
     }
 
-    collectionIdMap.set(collectionData.slug, collection.id)
+    collectionIdMap.set(collectionData.title, collection.id)
   }
 
   // Create skripts and pages
@@ -352,8 +357,8 @@ async function performImport(
     })
 
     if (!skript) {
-      const collectionSlug = manifest.collections.find(c => c.skripts.includes(skriptSlug))?.slug
-      const collectionId = collectionSlug ? collectionIdMap.get(collectionSlug) : null
+      const owningCollection = manifest.collections.find(c => c.skripts.includes(skriptSlug))
+      const collectionId = owningCollection ? collectionIdMap.get(owningCollection.title) : null
 
       skript = await prisma.skript.create({
         data: {
@@ -561,14 +566,11 @@ async function performImport(
     }
   }
 
-  // Invalidate cache so imported content is visible immediately
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { pageSlug: true }
-  })
-  if (user?.pageSlug) {
-    revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), { expire: 0 })
-    revalidatePath(`/${user.pageSlug}`)
+  // Invalidate cache so imported content is visible immediately. `userSite`
+  // was fetched at the top of this function and is guaranteed non-null here.
+  if (userSite.slug) {
+    revalidateTag(CACHE_TAGS.teacherContent(userSite.slug), { expire: 0 })
+    revalidatePath(`/${userSite.slug}`)
     revalidatePath('/dashboard')
   }
 
@@ -602,13 +604,20 @@ export async function processImportZip(
   const totalSkripts = Object.keys(manifest.skripts).length
   let processedSkripts = 0
 
-  // Create or find collections
+  // Create or find collections (matched by title within the user's site).
   await onProgress?.(0, 'Creating collections...')
+  const userSite2 = await prisma.site.findUnique({
+    where: { userId },
+    select: { id: true },
+  })
+  if (!userSite2) {
+    throw new Error(`User ${userId} has no Site — set up a public page before importing`)
+  }
   for (const collectionData of manifest.collections) {
     let collection = await prisma.collection.findFirst({
       where: {
-        slug: collectionData.slug,
-        authors: { some: { userId } }
+        title: collectionData.title,
+        siteId: userSite2.id,
       }
     })
 
@@ -616,17 +625,13 @@ export async function processImportZip(
       collection = await prisma.collection.create({
         data: {
           title: collectionData.title,
-          description: collectionData.description,
-          slug: collectionData.slug,
-          authors: {
-            create: { userId, permission: 'author' }
-          }
+          siteId: userSite2.id,
         }
       })
       result.collectionsCreated++
     }
 
-    collectionIdMap.set(collectionData.slug, collection.id)
+    collectionIdMap.set(collectionData.title, collection.id)
   }
 
   // Create skripts and pages
@@ -643,8 +648,8 @@ export async function processImportZip(
     })
 
     if (!skript) {
-      const collectionSlug = manifest.collections.find(c => c.skripts.includes(skriptSlug))?.slug
-      const collectionId = collectionSlug ? collectionIdMap.get(collectionSlug) : null
+      const owningCollection = manifest.collections.find(c => c.skripts.includes(skriptSlug))
+      const collectionId = owningCollection ? collectionIdMap.get(owningCollection.title) : null
 
       skript = await prisma.skript.create({
         data: {
@@ -853,13 +858,13 @@ export async function processImportZip(
   }
 
   // Invalidate cache so imported content is visible immediately
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { pageSlug: true }
+  const userSite = await prisma.site.findUnique({
+    where: { userId },
+    select: { slug: true }
   })
-  if (user?.pageSlug) {
-    revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), { expire: 0 })
-    revalidatePath(`/${user.pageSlug}`)
+  if (userSite?.slug) {
+    revalidateTag(CACHE_TAGS.teacherContent(userSite.slug), { expire: 0 })
+    revalidatePath(`/${userSite.slug}`)
     revalidatePath('/dashboard')
   }
 

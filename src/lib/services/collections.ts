@@ -5,17 +5,15 @@
  * typed errors that the MCP `safe()` wrapper translates to structured
  * tool errors.
  *
- * Cache invalidation on update: collectionBySlug for the editing user's
- * pageSlug surface, plus teacherContent + per-org membership.
+ * Cache invalidation on update: teacherContent for the editing user's
+ * pageSlug surface, plus per-org membership.
  */
 
 import { revalidatePath, revalidateTag } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { CACHE_TAGS } from '@/lib/cached-queries'
 import { checkCollectionPermissions } from '@/lib/permissions'
-import { generateSlug } from '@/lib/markdown'
 import {
-  ConflictError,
   NotFoundError,
   PermissionDeniedError,
   ValidationError,
@@ -28,9 +26,7 @@ interface ActorContext {
 }
 
 const collectionInclude = {
-  authors: {
-    include: { user: { select: { id: true, name: true, email: true } } },
-  },
+  site: { select: { userId: true, organizationId: true } },
   collectionSkripts: {
     include: {
       skript: {
@@ -48,6 +44,14 @@ const collectionInclude = {
   },
 } as const
 
+async function loadOrgRoles(userId: string, organizationId: string | null | undefined) {
+  if (!organizationId) return []
+  return prisma.organizationMember.findMany({
+    where: { userId, organizationId },
+    select: { organizationId: true, role: true },
+  })
+}
+
 export async function getCollectionForUser(
   userId: string,
   collectionId: string,
@@ -59,7 +63,8 @@ export async function getCollectionForUser(
   })
   if (!collection) throw new NotFoundError('Collection not found')
 
-  const perms = checkCollectionPermissions(userId, collection.authors, ctx.isAdmin)
+  const orgRoles = await loadOrgRoles(userId, collection.site?.organizationId)
+  const perms = checkCollectionPermissions(userId, collection, orgRoles, ctx.isAdmin)
   if (!perms.canView) {
     throw new PermissionDeniedError('Cannot view this collection')
   }
@@ -69,8 +74,6 @@ export async function getCollectionForUser(
 
 export interface UpdateCollectionPatch {
   title?: string
-  description?: string | null
-  slug?: string
   accentColor?: string | null
 }
 
@@ -82,55 +85,30 @@ export async function updateCollectionForUser(
 ) {
   if (
     patch.title === undefined &&
-    patch.description === undefined &&
-    patch.slug === undefined &&
     patch.accentColor === undefined
   ) {
     throw new ValidationError(
-      'At least one of {title, description, slug, accentColor} must be provided'
+      'At least one of {title, accentColor} must be provided'
     )
   }
   if (patch.title !== undefined && !patch.title.trim()) {
     throw new ValidationError('Title cannot be empty')
   }
-  if (patch.slug !== undefined && !patch.slug.trim()) {
-    throw new ValidationError('Slug cannot be empty')
-  }
 
   const existing = await prisma.collection.findUnique({
     where: { id: collectionId },
-    include: { authors: true },
+    include: { site: { select: { userId: true, organizationId: true } } },
   })
   if (!existing) throw new NotFoundError('Collection not found')
 
-  const perms = checkCollectionPermissions(
-    userId,
-    existing.authors as Parameters<typeof checkCollectionPermissions>[1],
-    ctx.isAdmin
-  )
+  const orgRoles = await loadOrgRoles(userId, existing.site?.organizationId)
+  const perms = checkCollectionPermissions(userId, existing, orgRoles, ctx.isAdmin)
   if (!perms.canEdit) {
     throw new PermissionDeniedError('Cannot edit this collection')
   }
 
-  const normalizedSlug = patch.slug ? generateSlug(patch.slug) : undefined
-  if (normalizedSlug && normalizedSlug !== existing.slug) {
-    const conflict = await prisma.collection.findFirst({
-      where: {
-        slug: normalizedSlug,
-        authors: { some: { userId } },
-        id: { not: collectionId },
-      },
-    })
-    if (conflict) {
-      throw new ConflictError('Slug already exists in your collections')
-    }
-  }
-
   const updateData: Record<string, unknown> = { updatedAt: new Date() }
   if (patch.title !== undefined) updateData.title = patch.title.trim()
-  if (patch.description !== undefined)
-    updateData.description = patch.description?.toString() ?? null
-  if (normalizedSlug !== undefined) updateData.slug = normalizedSlug
   if (patch.accentColor !== undefined)
     updateData.accentColor = patch.accentColor?.toString() ?? null
 
@@ -142,31 +120,23 @@ export async function updateCollectionForUser(
   void ctx.editSource
   void ctx.editClient
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { pageSlug: true },
+  const userSite = await prisma.site.findUnique({
+    where: { userId },
+    select: { slug: true },
   })
-  if (user?.pageSlug) {
-    revalidateTag(CACHE_TAGS.collectionBySlug(user.pageSlug, updated.slug), {
-      expire: 0,
-    })
-    if (normalizedSlug && normalizedSlug !== existing.slug) {
-      revalidateTag(
-        CACHE_TAGS.collectionBySlug(user.pageSlug, existing.slug),
-        { expire: 0 }
-      )
-    }
-    revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), { expire: 0 })
+  if (userSite?.slug) {
+    revalidateTag(CACHE_TAGS.teacherContent(userSite.slug), { expire: 0 })
     revalidatePath('/dashboard')
 
     const orgMemberships = await prisma.organizationMember.findMany({
       where: { userId },
-      select: { organization: { select: { slug: true } } },
+      select: { organization: { select: { site: { select: { slug: true } } } } },
     })
     for (const membership of orgMemberships) {
-      revalidateTag(CACHE_TAGS.orgContent(membership.organization.slug), {
-        expire: 0,
-      })
+      const orgSlug = membership.organization.site?.slug
+      if (orgSlug) {
+        revalidateTag(CACHE_TAGS.orgContent(orgSlug), { expire: 0 })
+      }
     }
   }
 

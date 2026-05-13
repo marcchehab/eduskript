@@ -26,10 +26,16 @@ export async function generateMetadata({ params }: SkriptPreviewProps): Promise<
   const { domain, skriptSlug } = await params
 
   try {
-    const teacher = await prisma.user.findUnique({
-      where: { pageSlug: domain },
-      select: { id: true, name: true, title: true, pageIcon: true }
+    const teacherSite = await prisma.site.findUnique({
+      where: { slug: domain },
+      select: {
+        pageIcon: true,
+        user: { select: { id: true, name: true, title: true } },
+      },
     })
+    const teacher = teacherSite?.user
+      ? { ...teacherSite.user, pageIcon: teacherSite.pageIcon }
+      : null
 
     if (!teacher) {
       return {
@@ -43,7 +49,7 @@ export async function generateMetadata({ params }: SkriptPreviewProps): Promise<
         slug: skriptSlug,
         OR: [
           { authors: { some: { userId: teacher.id } } },
-          { collectionSkripts: { some: { collection: { authors: { some: { userId: teacher.id } } } } } }
+          { collectionSkripts: { some: { collection: { site: { userId: teacher.id } } } } }
         ]
       },
       select: { title: true }
@@ -96,10 +102,11 @@ export default async function SkriptPreviewPage({ params }: SkriptPreviewProps) 
     // Queries here are the frontpage-specific parts only; Prisma request-scoped
     // dedup keeps the cost low when fields overlap with the layout's fetch.
 
-    const teacher = await prisma.user.findUnique({
-      where: { pageSlug: domain },
-      select: { id: true, email: true, billingPlan: true }
+    const teacherSiteRow = await prisma.site.findUnique({
+      where: { slug: domain },
+      select: { user: { select: { id: true, email: true, billingPlan: true } } }
     })
+    const teacher = teacherSiteRow?.user
 
     if (!teacher) {
       notFound()
@@ -113,7 +120,7 @@ export default async function SkriptPreviewPage({ params }: SkriptPreviewProps) 
         slug: skriptSlug,
         OR: [
           { authors: { some: { userId: teacher.id } } },
-          { collectionSkripts: { some: { collection: { authors: { some: { userId: teacher.id } } } } } }
+          { collectionSkripts: { some: { collection: { site: { userId: teacher.id } } } } }
         ]
       },
       select: {

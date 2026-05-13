@@ -33,9 +33,7 @@ export async function POST(request: NextRequest) {
           include: {
             collection: {
               include: {
-                authors: {
-                  include: { user: true }
-                }
+                site: { select: { userId: true, organizationId: true } }
               }
             }
           }
@@ -59,19 +57,29 @@ export async function POST(request: NextRequest) {
       skript.authors
     )
 
-    // Check if user has edit permission on the current collection(s)
+    // Check if user has edit permission on the current collection(s) via
+    // their owning site (or org-admin membership).
     let hasSourceCollectionEditPermission = false
     let sourceCollectionId: string | null = null
-    
+
     for (const collectionSkript of skript.collectionSkripts) {
-      // Skip root-level entries (where collection is null)
       if (!collectionSkript.collection) continue
-      
+
+      const orgRoles = collectionSkript.collection.site?.organizationId
+        ? await prisma.organizationMember.findMany({
+            where: {
+              userId: session.user.id,
+              organizationId: collectionSkript.collection.site.organizationId,
+            },
+            select: { organizationId: true, role: true },
+          })
+        : []
       const collectionPermissions = checkCollectionPermissions(
-        session.user.id, 
-        collectionSkript.collection.authors
+        session.user.id,
+        collectionSkript.collection,
+        orgRoles,
       )
-      
+
       if (collectionPermissions.canEdit) {
         hasSourceCollectionEditPermission = true
         sourceCollectionId = collectionSkript.collection.id
@@ -99,11 +107,7 @@ export async function POST(request: NextRequest) {
     if (targetCollectionId) {
       const targetCollection = await prisma.collection.findUnique({
         where: { id: targetCollectionId },
-        include: {
-          authors: {
-            include: { user: true }
-          }
-        }
+        include: { site: { select: { userId: true, organizationId: true } } }
       })
 
       if (!targetCollection) {
@@ -113,9 +117,16 @@ export async function POST(request: NextRequest) {
         )
       }
 
+      const targetOrgRoles = targetCollection.site?.organizationId
+        ? await prisma.organizationMember.findMany({
+            where: { userId: session.user.id, organizationId: targetCollection.site.organizationId },
+            select: { organizationId: true, role: true },
+          })
+        : []
       const targetPermissions = checkCollectionPermissions(
-        session.user.id, 
-        targetCollection.authors
+        session.user.id,
+        targetCollection,
+        targetOrgRoles,
       )
 
       if (!targetPermissions.canEdit) {
@@ -230,22 +241,11 @@ export async function POST(request: NextRequest) {
           })
         }
       } else {
-        // Moving to root level (remove from all collections)
-        
-        // Remove from all collections
+        // Moving to root level — just detach from any collection. Root
+        // placement now lives in PageLayout.items (added separately by the
+        // page builder), not via a CollectionSkript row.
         await tx.collectionSkript.deleteMany({
           where: { skriptId: skriptId }
-        })
-        
-        // For root level, we could create a record with collectionId = null and userId = session.user.id
-        // But based on our schema design discussion, root placement is user-specific
-        await tx.collectionSkript.create({
-          data: {
-            collectionId: null,
-            skriptId: skriptId,
-            userId: session.user.id,
-            order: newOrder
-          }
         })
       }
       
@@ -264,32 +264,15 @@ export async function POST(request: NextRequest) {
       return updatedSkript
     })
 
-    // Get user's username for revalidation
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { pageSlug: true }
+    // Get the user's URL slug for revalidation (lives on Site now).
+    const userSite = await prisma.site.findUnique({
+      where: { userId: session.user.id },
+      select: { slug: true }
     })
 
-    if (user?.pageSlug) {
-      // Revalidate relevant paths
-      revalidatePath(`/${user.pageSlug}`)
+    if (userSite?.slug) {
+      revalidatePath(`/${userSite.slug}`)
       revalidatePath('/dashboard')
-
-      // Revalidate old collection paths
-      for (const cs of skript.collectionSkripts) {
-        if (cs.collection) {
-          revalidatePath(`/${user.pageSlug}/${cs.collection.slug}`)
-        }
-      }
-
-      // Revalidate new collection paths
-      if (result) {
-        for (const cs of result.collectionSkripts) {
-          if (cs.collection) {
-            revalidatePath(`/${user.pageSlug}/${cs.collection.slug}`)
-          }
-        }
-      }
     }
 
     return NextResponse.json({ 

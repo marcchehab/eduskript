@@ -39,30 +39,11 @@ async function loadSkriptForFrontPageAccess(
     where: { id: skriptId },
     include: {
       authors: { include: { user: { select: { id: true, name: true } } } },
-      collectionSkripts: {
-        include: {
-          collection: {
-            include: {
-              authors: {
-                include: { user: { select: { id: true, name: true } } },
-              },
-            },
-          },
-        },
-      },
     },
   })
   if (!skript) throw new NotFoundError('Skript not found')
 
-  const collectionAuthors = skript.collectionSkripts.flatMap(
-    (cs) => cs.collection?.authors ?? []
-  )
-  const perms = checkSkriptPermissions(
-    userId,
-    skript.authors,
-    collectionAuthors,
-    isAdmin
-  )
+  const perms = checkSkriptPermissions(userId, skript.authors, isAdmin)
   return { skript, perms }
 }
 
@@ -187,25 +168,25 @@ export async function upsertSkriptFrontPageForUser(
   // Cache invalidation: a skript frontpage rendering surface lives in the
   // skript-preview route plus any teacher home that surfaces it. Invalidate
   // skriptBySlug + teacherContent to be safe; org content if member.
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { pageSlug: true },
+  const userSite = await prisma.site.findUnique({
+    where: { userId },
+    select: { slug: true },
   })
-  if (user?.pageSlug) {
-    revalidateTag(CACHE_TAGS.skriptBySlug(user.pageSlug, skript.slug), {
-      expire: 0,
-    })
-    revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), { expire: 0 })
+  if (userSite?.slug) {
+    const pageSlug = userSite.slug
+    revalidateTag(CACHE_TAGS.skriptBySlug(pageSlug, skript.slug), { expire: 0 })
+    revalidateTag(CACHE_TAGS.teacherContent(pageSlug), { expire: 0 })
     revalidatePath('/dashboard')
 
     const orgMemberships = await prisma.organizationMember.findMany({
       where: { userId },
-      select: { organization: { select: { slug: true } } },
+      select: { organization: { select: { site: { select: { slug: true } } } } },
     })
     for (const membership of orgMemberships) {
-      revalidateTag(CACHE_TAGS.orgContent(membership.organization.slug), {
-        expire: 0,
-      })
+      const orgSlug = membership.organization.site?.slug
+      if (orgSlug) {
+        revalidateTag(CACHE_TAGS.orgContent(orgSlug), { expire: 0 })
+      }
     }
   }
 

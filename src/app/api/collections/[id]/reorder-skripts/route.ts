@@ -26,15 +26,20 @@ export async function PATCH(
       )
     }
 
-    // Check if collection exists and belongs to user
+    // Check if collection exists and belongs to the user's site (or to an
+    // org site they're an admin of).
+    const orgMemberships = await prisma.organizationMember.findMany({
+      where: { userId: session.user.id, role: { in: ['owner', 'admin'] } },
+      select: { organizationId: true },
+    })
+    const orgIds = orgMemberships.map(m => m.organizationId)
     const collection = await prisma.collection.findFirst({
       where: {
         id,
-        authors: {
-          some: {
-            userId: session.user.id
-          }
-        }
+        OR: [
+          { site: { userId: session.user.id } },
+          ...(orgIds.length > 0 ? [{ site: { organizationId: { in: orgIds } } }] : []),
+        ],
       },
       include: {
         collectionSkripts: {
@@ -78,13 +83,13 @@ export async function PATCH(
 
     await prisma.$transaction(updates)
 
-    // Revalidate cache for this user's content
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { pageSlug: true }
+    // Revalidate cache for this user's content (URL slug lives on Site).
+    const userSite = await prisma.site.findUnique({
+      where: { userId: session.user.id },
+      select: { slug: true }
     })
-    if (user?.pageSlug) {
-      revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), { expire: 0 })
+    if (userSite?.slug) {
+      revalidateTag(CACHE_TAGS.teacherContent(userSite.slug), { expire: 0 })
     }
 
     return NextResponse.json({ success: true })

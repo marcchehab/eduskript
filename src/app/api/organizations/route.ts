@@ -22,25 +22,32 @@ export async function POST(request: Request) {
       )
     }
 
-    const existing = await prisma.organization.findUnique({ where: { slug } })
-    if (existing) {
+    // URL slug uniqueness lives on Site (global across user + org sites).
+    const existingSlug = await prisma.site.findUnique({ where: { slug } })
+    if (existingSlug) {
       return NextResponse.json({ error: 'An organization with this slug already exists' }, { status: 400 })
     }
 
     const org = await prisma.organization.create({
       data: {
         name: name.trim(),
-        slug,
         members: {
           create: {
             userId: session!.user.id,
             role: 'owner',
           },
         },
+        site: {
+          create: {
+            slug,
+            pageName: name.trim(),
+          },
+        },
       },
+      select: { id: true, site: { select: { slug: true } } },
     })
 
-    return NextResponse.json({ id: org.id, slug: org.slug })
+    return NextResponse.json({ id: org.id, slug: org.site?.slug ?? slug })
   } catch (error) {
     console.error('Error creating organization:', error)
     return NextResponse.json({ error: 'Failed to create organization' }, { status: 500 })

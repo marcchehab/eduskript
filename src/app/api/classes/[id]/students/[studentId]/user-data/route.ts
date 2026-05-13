@@ -75,16 +75,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         skript: {
           include: {
             authors: { include: { user: { select: { id: true } } } },
-            // Navigate through junction table to get collection authors
-            collectionSkripts: {
-              include: {
-                collection: {
-                  include: {
-                    authors: { include: { user: { select: { id: true } } } },
-                  },
-                },
-              },
-            },
           },
         },
       },
@@ -94,15 +84,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Page not found' }, { status: 404 })
     }
 
-    // Collect all collection authors from all collections this skript belongs to
-    const collectionAuthors = page.skript?.collectionSkripts
-      ?.flatMap(cs => cs.collection?.authors || []) || []
-
     const pagePermissions = checkPagePermissions(
       teacherId,
       page.authors,
       page.skript?.authors || [],
-      collectionAuthors
     )
 
     if (!pagePermissions.canView) {

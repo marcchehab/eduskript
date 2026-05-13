@@ -9,7 +9,7 @@
  * Returns:
  *   - Platform overview (Eduskript hierarchy, role, language conventions)
  *   - Full markdown syntax reference (callouts, code editors, math, plugins, …)
- *   - The teacher's personal aiSystemPrompt (User.aiSystemPrompt) — same field
+ *   - The teacher's personal aiSystemPrompt (Site.aiSystemPrompt) — same field
  *     the in-product AI Edit and the dashboard chat assistant use.
  *
  * Other tool descriptions (`create_page`, `update_page`) nudge the assistant
@@ -30,9 +30,10 @@ export const getEduskriptContextConfig = {
 
 export async function getEduskriptContext() {
   const ctx = getMcpContext()
-  const user = await prisma.user.findUnique({
-    where: { id: ctx.userId },
-    select: { aiSystemPrompt: true, name: true, pageSlug: true },
+  // aiSystemPrompt lives on the teacher's Site.
+  const site = await prisma.site.findUnique({
+    where: { userId: ctx.userId },
+    select: { aiSystemPrompt: true },
   })
 
   const sections: string[] = [
@@ -43,11 +44,12 @@ export async function getEduskriptContext() {
     getCondensedSyntaxReference(),
   ]
 
-  if (user?.aiSystemPrompt && user.aiSystemPrompt.trim()) {
+  const teacherPrompt = site?.aiSystemPrompt?.trim()
+  if (teacherPrompt) {
     sections.push(
       '',
       "## Teacher's personal preferences",
-      user.aiSystemPrompt.trim()
+      teacherPrompt,
     )
   }
 

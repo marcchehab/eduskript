@@ -44,10 +44,11 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { orgSlug, pageSlug, skriptSlug, contentPageSlug } = await params
 
   try {
-    const organization = await prisma.organization.findUnique({
+    const orgSite = await prisma.site.findUnique({
       where: { slug: orgSlug },
-      select: { id: true, name: true }
+      select: { organization: { select: { id: true, name: true } } }
     })
+    const organization = orgSite?.organization
 
     if (!organization) {
       return { title: 'Page Not Found' }
@@ -55,10 +56,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
     const teacher = await prisma.user.findFirst({
       where: {
-        pageSlug: pageSlug,
+        site: { slug: pageSlug },
         organizationMemberships: { some: { organizationId: organization.id } }
       },
-      select: { id: true, name: true, pageName: true }
+      select: { id: true, name: true, site: { select: { pageName: true } } }
     })
 
     if (!teacher) {
@@ -80,7 +81,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       return { title: 'Page Not Found', robots: 'noindex' }
     }
 
-    const teacherName = teacher.pageName || teacher.name || 'Teacher'
+    const teacherName = teacher.site?.pageName || teacher.name || 'Teacher'
     const title = `${page.title} | ${teacherName} | ${organization.name}`
 
     return {
@@ -104,16 +105,23 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
   const { orgSlug, pageSlug, skriptSlug, contentPageSlug } = await params
   const resolvedSearchParams = await searchParams
 
-  const organization = await prisma.organization.findUnique({
+  const orgSiteRow = await prisma.site.findUnique({
     where: { slug: orgSlug },
     select: {
-      id: true,
-      name: true,
-      description: true,
+      pageDescription: true,
+      pageIcon: true,
       showIcon: true,
-      iconUrl: true
+      organization: { select: { id: true, name: true } }
     }
   })
+  const organization = orgSiteRow?.organization
+    ? {
+        ...orgSiteRow.organization,
+        description: orgSiteRow.pageDescription,
+        iconUrl: orgSiteRow.pageIcon,
+        showIcon: orgSiteRow.showIcon,
+      }
+    : null
 
   if (!organization) {
     notFound()
@@ -121,20 +129,24 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
 
   const teacher = await prisma.user.findFirst({
     where: {
-      pageSlug: pageSlug,
+      site: { slug: pageSlug },
       organizationMemberships: { some: { organizationId: organization.id } }
     },
     select: {
       id: true,
       name: true,
-      pageSlug: true,
-      pageName: true,
-      pageDescription: true,
-      pageIcon: true,
       bio: true,
       title: true,
-      sidebarBehavior: true,
-      typographyPreference: true
+      site: {
+        select: {
+          slug: true,
+          pageName: true,
+          pageDescription: true,
+          pageIcon: true,
+          sidebarBehavior: true,
+          typographyPreference: true,
+        },
+      },
     }
   })
 
@@ -150,7 +162,7 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
         slug: skriptSlug,
         OR: [
           { authors: { some: { userId: teacher.id } } },
-          { collectionSkripts: { some: { collection: { authors: { some: { userId: teacher.id } } } } } }
+          { collectionSkripts: { some: { collection: { site: { userId: teacher.id } } } } }
         ]
       }
     },
@@ -249,7 +261,7 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
       return (
         <ExamLockedPage
           pageTitle={page.title}
-          teacherName={teacher.name || teacher.pageName || 'Unknown'}
+          teacherName={teacher.name || teacher.site?.pageName || 'Unknown'}
           isLoggedIn={false}
           loginUrl={loginUrl}
         />
@@ -279,16 +291,35 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
     const skriptAuthorRecord = await prisma.skriptAuthor.findFirst({
       where: { skriptId: skript.id, userId: studentId, permission: 'author' }
     })
-    const collectionAuthorRecord = collection ? await prisma.collectionAuthor.findFirst({
-      where: { collectionId: collection.id, userId: studentId, permission: 'author' }
-    }) : null
-    const isTeacherAuthor = !!(skriptAuthorRecord || collectionAuthorRecord)
+    let isSiteOwner = false
+    if (!skriptAuthorRecord && collection) {
+      const collectionWithSite = await prisma.collection.findUnique({
+        where: { id: collection.id },
+        select: { site: { select: { userId: true, organizationId: true } } },
+      })
+      if (collectionWithSite?.site) {
+        if (collectionWithSite.site.userId === studentId) {
+          isSiteOwner = true
+        } else if (collectionWithSite.site.organizationId) {
+          const membership = await prisma.organizationMember.findFirst({
+            where: {
+              organizationId: collectionWithSite.site.organizationId,
+              userId: studentId,
+              role: { in: ['owner', 'admin'] },
+            },
+            select: { id: true },
+          })
+          if (membership) isSiteOwner = true
+        }
+      }
+    }
+    const isTeacherAuthor = !!skriptAuthorRecord || isSiteOwner
 
     if (!hasUnlock && !isTeacherAuthor) {
       return (
         <ExamLockedPage
           pageTitle={page.title}
-          teacherName={teacher.name || teacher.pageName || 'Unknown'}
+          teacherName={teacher.name || teacher.site?.pageName || 'Unknown'}
           isLoggedIn={true}
           loginUrl={loginUrl}
         />
@@ -350,7 +381,7 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
       return (
         <ExamLockedPage
           pageTitle={page.title}
-          teacherName={teacher.name || teacher.pageName || 'Unknown'}
+          teacherName={teacher.name || teacher.site?.pageName || 'Unknown'}
           isLoggedIn={true}
           loginUrl={`/auth/signin?callbackUrl=${encodeURIComponent(`/org/${orgSlug}/${pageSlug}/${skriptSlug}/${contentPageSlug}`)}`}
         />
@@ -375,7 +406,6 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
     ? buildSiteStructure([{
         id: collection.id,
         title: collection.title,
-        slug: collection.slug,
         accentColor: collection.accentColor,
         collectionSkripts: [{
           order: collectionSkript?.order ?? 0,
@@ -391,7 +421,6 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
     : [{
         id: 'standalone',
         title: skript.title,
-        slug: skript.slug,
         skripts: [{
           id: skript.id,
           title: skript.title,
@@ -401,16 +430,17 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
         }]
       }]
 
-  const fullSiteStructure = teacher.sidebarBehavior === 'full'
-    ? await getFullSiteStructure(teacher.id, teacher.pageSlug || pageSlug)
+  const teacherSite = teacher.site
+  const fullSiteStructure = teacherSite?.sidebarBehavior === 'full'
+    ? await getFullSiteStructure(teacher.id, teacherSite.slug)
     : undefined
 
   const teacherData = {
     name: teacher.name || 'Teacher',
-    pageSlug: teacher.pageSlug || pageSlug,
-    pageName: teacher.pageName || null,
-    pageDescription: teacher.pageDescription || null,
-    pageIcon: teacher.pageIcon || null,
+    pageSlug: teacherSite?.slug || pageSlug,
+    pageName: teacherSite?.pageName || null,
+    pageDescription: teacherSite?.pageDescription || null,
+    pageIcon: teacherSite?.pageIcon || null,
     bio: teacher.bio || null,
     title: teacher.title || null
   }
@@ -455,7 +485,7 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
             pageTitle={page.title}
             studentName={examSessionUserName}
             studentEmail={examSessionUserEmail}
-            typographyPreference={teacher.typographyPreference as 'modern' | 'classic' || 'modern'}
+            typographyPreference={(teacher.site?.typographyPreference as 'modern' | 'classic') || 'modern'}
             backupPublicKeyJwk={backupKey.publicKeyJwk}
             backupKeyId={backupKey.keyId}
             studentId={examAuthenticatedUserId}
@@ -487,7 +517,7 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
           pageTitle={page.title}
           studentName={examSessionUserName}
           studentEmail={examSessionUserEmail}
-          typographyPreference={teacher.typographyPreference as 'modern' | 'classic' || 'modern'}
+          typographyPreference={(teacher.site?.typographyPreference as 'modern' | 'classic') || 'modern'}
           backupPublicKeyJwk={backupKey.publicKeyJwk}
           backupKeyId={backupKey.keyId}
           studentId={examAuthenticatedUserId}
@@ -505,8 +535,8 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
       siteStructure={siteStructure}
       fullSiteStructure={fullSiteStructure}
       currentPath={currentPath}
-      sidebarBehavior={teacher.sidebarBehavior as 'contextual' | 'full' || 'contextual'}
-      typographyPreference={teacher.typographyPreference as 'modern' | 'classic' || 'modern'}
+      sidebarBehavior={(teacherSite?.sidebarBehavior as 'contextual' | 'full') || 'contextual'}
+      typographyPreference={(teacher.site?.typographyPreference as 'modern' | 'classic') || 'modern'}
       routePrefix={`/org/${orgSlug}/${pageSlug}`}
       pageId={page.id}
       hideSidebar={page.pageType === 'exam'}

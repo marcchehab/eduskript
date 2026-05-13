@@ -28,14 +28,11 @@ export async function POST(
       )
     }
 
-    // Check if user has edit permission on the target collection
+    // Check if user has edit permission on the target collection (via site
+    // ownership). Org-admin checks happen further down once we know the site.
     const collection = await prisma.collection.findUnique({
       where: { id: collectionId },
-      include: {
-        authors: {
-          include: { user: true }
-        }
-      }
+      include: { site: { select: { userId: true, organizationId: true } } }
     })
 
     if (!collection) {
@@ -45,10 +42,13 @@ export async function POST(
       )
     }
 
-    const permissions = checkCollectionPermissions(
-      session.user.id,
-      collection.authors
-    )
+    const orgRoles = collection.site?.organizationId
+      ? await prisma.organizationMember.findMany({
+          where: { userId: session.user.id, organizationId: collection.site.organizationId },
+          select: { organizationId: true, role: true },
+        })
+      : []
+    const permissions = checkCollectionPermissions(session.user.id, collection, orgRoles)
 
     if (!permissions.canEdit) {
       return NextResponse.json(

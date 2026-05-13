@@ -22,7 +22,7 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
   const { ownerSlug, pluginSlug } = await params
 
   const plugin = await prisma.plugin.findFirst({
-    where: { slug: pluginSlug, author: { pageSlug: ownerSlug } },
+    where: { slug: pluginSlug, author: { site: { slug: ownerSlug } } },
     select: { entryHtml: true, name: true },
   })
 

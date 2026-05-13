@@ -138,13 +138,34 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
 
   const hasUnlock = hasUnlockForAll || studentUnlock || classUnlock
 
+  // Teacher-author detection: SkriptAuthor, or owning the site the collection
+  // sits on (org-admin membership for org-owned sites).
   const skriptAuthorRecord = await prisma.skriptAuthor.findFirst({
     where: { skriptId: skript.id, userId: studentId, permission: 'author' }
   })
-  const collectionAuthorRecord = collection ? await prisma.collectionAuthor.findFirst({
-    where: { collectionId: collection.id, userId: studentId, permission: 'author' }
-  }) : null
-  const isTeacherAuthor = !!(skriptAuthorRecord || collectionAuthorRecord)
+  let isSiteOwner = false
+  if (!skriptAuthorRecord && collection) {
+    const collectionWithSite = await prisma.collection.findUnique({
+      where: { id: collection.id },
+      select: { site: { select: { userId: true, organizationId: true } } },
+    })
+    if (collectionWithSite?.site) {
+      if (collectionWithSite.site.userId === studentId) {
+        isSiteOwner = true
+      } else if (collectionWithSite.site.organizationId) {
+        const membership = await prisma.organizationMember.findFirst({
+          where: {
+            organizationId: collectionWithSite.site.organizationId,
+            userId: studentId,
+            role: { in: ['owner', 'admin'] },
+          },
+          select: { id: true },
+        })
+        if (membership) isSiteOwner = true
+      }
+    }
+  }
+  const isTeacherAuthor = !!skriptAuthorRecord || isSiteOwner
 
   // Gate 2: must have unlock OR be the teacher
   if (!hasUnlock && !isTeacherAuthor) {

@@ -1,12 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
+import { revalidateTag } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { CACHE_TAGS } from '@/lib/cached-queries'
+
+/** Look up the user's Site id (1:1 with the user). Page layouts now key on
+ *  site, not user, since orgs share the same table. */
+async function getUserSiteId(userId: string) {
+  const site = await prisma.site.findUnique({
+    where: { userId },
+    select: { id: true, slug: true },
+  })
+  return site
+}
 
 export async function GET() {
   try {
     const session = await getServerSession(authOptions)
-    
+
     if (!session?.user?.id) {
       return NextResponse.json(
         { error: 'Unauthorized' },
@@ -14,8 +26,13 @@ export async function GET() {
       )
     }
 
+    const site = await getUserSiteId(session.user.id)
+    if (!site) {
+      return NextResponse.json({ success: true, data: { items: [] } })
+    }
+
     const pageLayout = await prisma.pageLayout.findUnique({
-      where: { userId: session.user.id },
+      where: { siteId: site.id },
       include: {
         items: {
           orderBy: { order: 'asc' }
@@ -23,8 +40,8 @@ export async function GET() {
       }
     })
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       data: pageLayout || { items: [] }
     })
   } catch (error) {
@@ -56,45 +73,45 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // SECURITY: Validate that user has permission to access each item
+    const site = await getUserSiteId(session.user.id)
+    if (!site) {
+      return NextResponse.json(
+        { error: 'You need to set up your public page before editing the layout' },
+        { status: 400 }
+      )
+    }
+
+    // SECURITY: Validate that the user can place each item on their site.
+    // Collections must belong to the user's site; skripts must be authored
+    // by the user.
     const validatedItems: Array<{ id: string; type: string }> = []
 
     for (const item of items) {
       if (!item.id || !item.type) {
-        continue // Skip invalid items
+        continue
       }
 
       if (item.type === 'collection') {
-        // Check if user has any permission on this collection
         const collection = await prisma.collection.findFirst({
           where: {
             id: item.id,
-            authors: {
-              some: {
-                userId: session.user.id
-              }
-            }
+            siteId: site.id,
           }
         })
-
         if (collection) {
           validatedItems.push(item)
         } else {
           console.warn(`[Page Layout] User ${session.user.email} attempted to add collection ${item.id} without permission`)
         }
       } else if (item.type === 'skript') {
-        // Check if user has any permission on this skript
         const skript = await prisma.skript.findFirst({
           where: {
             id: item.id,
             authors: {
-              some: {
-                userId: session.user.id
-              }
+              some: { userId: session.user.id }
             }
           }
         })
-
         if (skript) {
           validatedItems.push(item)
         } else {
@@ -103,9 +120,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Upsert page layout with only validated items
     const pageLayout = await prisma.pageLayout.upsert({
-      where: { userId: session.user.id },
+      where: { siteId: site.id },
       update: {
         items: {
           deleteMany: {},
@@ -117,7 +133,7 @@ export async function POST(request: NextRequest) {
         }
       },
       create: {
-        userId: session.user.id,
+        siteId: site.id,
         items: {
           create: validatedItems.map((item, index) => ({
             type: item.type,
@@ -132,6 +148,15 @@ export async function POST(request: NextRequest) {
         }
       }
     })
+
+    // The public sidebar reads page-layout items through two cached queries
+    // (getTeacherWithLayout + getTeacherHomepageContent). Both are tagged with
+    // teacherContent and user; without these invalidations a root-promoted
+    // skript stays invisible on the live site until the tag is bumped elsewhere.
+    if (site.slug) {
+      revalidateTag(CACHE_TAGS.teacherContent(site.slug), { expire: 0 })
+      revalidateTag(CACHE_TAGS.user(site.slug), { expire: 0 })
+    }
 
     return NextResponse.json({ success: true, data: pageLayout })
   } catch (error) {

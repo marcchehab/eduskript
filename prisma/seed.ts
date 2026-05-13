@@ -30,13 +30,12 @@ async function main() {
     create: {
       email: 'eduadmin@eduskript.org',
       name: 'Edu Admin',
-      pageSlug: 'eduadmin',
-      pageName: 'Edu Admin',
       hashedPassword,
       emailVerified: new Date(),
       isAdmin: true,
       requirePasswordReset: true,
       billingPlan: 'pro',
+      site: { create: { slug: 'eduadmin', pageName: 'Edu Admin' } },
     }
   })
 

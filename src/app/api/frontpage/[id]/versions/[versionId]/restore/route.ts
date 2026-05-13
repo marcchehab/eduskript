@@ -22,23 +22,16 @@ export async function POST(
     const frontPage = await prisma.frontPage.findUnique({
       where: { id },
       include: {
-        user: true,
+        site: {
+          select: {
+            slug: true,
+            userId: true,
+            organizationId: true,
+          },
+        },
         skript: {
           include: {
-            authors: {
-              include: { user: true }
-            },
-            collectionSkripts: {
-              include: {
-                collection: {
-                  include: {
-                    authors: {
-                      include: { user: true }
-                    }
-                  }
-                }
-              }
-            }
+            authors: { include: { user: true } },
           }
         }
       }
@@ -50,19 +43,18 @@ export async function POST(
 
     // Check permissions based on owner type
     let canEdit = false
-    if (frontPage.userId) {
-      // User frontpage - only the owner can restore
-      canEdit = frontPage.userId === session.user.id
+    if (frontPage.site) {
+      const orgRoles = frontPage.site.organizationId
+        ? await prisma.organizationMember.findMany({
+            where: { userId: session.user.id, organizationId: frontPage.site.organizationId },
+            select: { organizationId: true, role: true },
+          })
+        : []
+      const isOwner = frontPage.site.userId === session.user.id
+      const isOrgEditor = orgRoles.some(r => r.role === 'owner' || r.role === 'admin')
+      canEdit = isOwner || isOrgEditor
     } else if (frontPage.skript) {
-      // Skript frontpage - check skript permissions
-      const collectionAuthors = frontPage.skript.collectionSkripts
-        .filter(cs => cs.collection !== null)
-        .flatMap(cs => cs.collection!.authors)
-      const permissions = checkSkriptPermissions(
-        session.user.id,
-        frontPage.skript.authors,
-        collectionAuthors
-      )
+      const permissions = checkSkriptPermissions(session.user.id, frontPage.skript.authors)
       canEdit = permissions.canEdit
     }
 
@@ -110,28 +102,26 @@ export async function POST(
       }
     })
 
-    // Revalidate caches
-    if (frontPage.userId) {
-      // User frontpage
-      const user = await prisma.user.findUnique({
-        where: { id: frontPage.userId },
-        select: { pageSlug: true }
-      })
-      if (user?.pageSlug) {
-        revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), { expire: 0 })
-        revalidatePath(`/${user.pageSlug}`)
-      }
+    // Revalidate caches. The page-level slug comes from Site directly now;
+    // the "user vs org" distinction is just which FK is set on Site.
+    if (frontPage.site?.userId && frontPage.site.slug) {
+      revalidateTag(CACHE_TAGS.teacherContent(frontPage.site.slug), { expire: 0 })
+      revalidatePath(`/${frontPage.site.slug}`)
+    } else if (frontPage.site?.organizationId && frontPage.site.slug) {
+      revalidateTag(CACHE_TAGS.organization(frontPage.site.slug), { expire: 0 })
+      revalidateTag(CACHE_TAGS.orgContent(frontPage.site.slug), { expire: 0 })
+      revalidatePath(`/org/${frontPage.site.slug}`)
     } else if (frontPage.skript) {
-      // Skript frontpage
+      // Skript frontpage — owner site provides the URL slug
       const skriptOwner = frontPage.skript.authors[0]?.user
       if (skriptOwner) {
-        const ownerUser = await prisma.user.findUnique({
-          where: { id: skriptOwner.id },
-          select: { pageSlug: true }
+        const ownerSite = await prisma.site.findUnique({
+          where: { userId: skriptOwner.id },
+          select: { slug: true }
         })
-        if (ownerUser?.pageSlug) {
-          revalidateTag(CACHE_TAGS.skriptBySlug(ownerUser.pageSlug, frontPage.skript.slug), { expire: 0 })
-          revalidatePath(`/${ownerUser.pageSlug}/${frontPage.skript.slug}`)
+        if (ownerSite?.slug) {
+          revalidateTag(CACHE_TAGS.skriptBySlug(ownerSite.slug, frontPage.skript.slug), { expire: 0 })
+          revalidatePath(`/${ownerSite.slug}/${frontPage.skript.slug}`)
         }
       }
     }

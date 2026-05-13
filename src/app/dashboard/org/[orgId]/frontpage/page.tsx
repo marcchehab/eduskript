@@ -25,32 +25,31 @@ export default async function OrgFrontPageEditPage({
     redirect(`/dashboard/org/${orgId}`)
   }
 
-  // Get organization details
+  // Get organization details — slug lives on its Site now.
   const organization = await prisma.organization.findUnique({
     where: { id: orgId },
     select: {
       id: true,
       name: true,
-      slug: true,
+      site: { select: { id: true, slug: true } },
     },
   })
 
-  if (!organization) {
+  if (!organization || !organization.site) {
     redirect('/dashboard')
   }
 
-  // Get organization's frontpage if it exists
   const frontPage = await prisma.frontPage.findUnique({
-    where: { organizationId: orgId },
+    where: { siteId: organization.site.id },
   })
 
-  const previewUrl = `/org/${organization.slug}`
+  const previewUrl = `/org/${organization.site.slug}`
 
   return (
     <FrontPageEditor
       type="organization"
       frontPage={frontPage}
-      organization={organization}
+      organization={{ id: organization.id, name: organization.name, slug: organization.site.slug }}
       backUrl={`/dashboard/org/${orgId}/page-builder`}
       previewUrl={previewUrl}
     />

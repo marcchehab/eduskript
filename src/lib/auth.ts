@@ -137,11 +137,13 @@ export const authOptions: NextAuthOptions = {
             // Legacy: "teacher:<slug>" or plain slug → student account (old teacher page format)
             const teacherSlug = rawValue.startsWith('teacher:') ? rawValue.substring(8) : rawValue
 
-            // Verify this slug belongs to an existing teacher
-            const teacher = await prisma.user.findUnique({
-              where: { pageSlug: teacherSlug },
-              select: { id: true, accountType: true, pageSlug: true }
+            // Verify this slug belongs to an existing teacher (URL slugs live
+            // on Site now; find the User behind that Site).
+            const slugSite = await prisma.site.findUnique({
+              where: { slug: teacherSlug },
+              select: { user: { select: { id: true, accountType: true } } },
             })
+            const teacher = slugSite?.user ?? null
 
             const isStudent = teacher !== null && teacher.accountType === 'teacher'
             log.info(`Legacy teacher lookup for "${teacherSlug}": ${teacher ? `found (accountType=${teacher.accountType})` : 'not found'} → signing up as ${isStudent ? 'STUDENT' : 'TEACHER'}`)
@@ -277,7 +279,8 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user, trigger, account, profile }) {
       if (user) {
         token.id = user.id
-        // Fetch additional user data once during sign-in and store in token
+        // Fetch additional user data once during sign-in and store in token.
+        // URL slug + page-display fields all live on Site now (Stage 5).
         const dbUser = await prisma.user.findUnique({
           where: { id: user.id },
           select: {
@@ -286,10 +289,6 @@ export const authOptions: NextAuthOptions = {
             email: true,
             image: true,
             username: true,
-            pageSlug: true,
-            pageName: true,
-            pageDescription: true,
-            pageIcon: true,
             title: true,
             bio: true,
             isAdmin: true,
@@ -298,16 +297,24 @@ export const authOptions: NextAuthOptions = {
             accountType: true,
             studentPseudonym: true,
             billingPlan: true,
-            typographyPreference: true,
+            site: {
+              select: {
+                slug: true,
+                pageName: true,
+                pageDescription: true,
+                pageIcon: true,
+                typographyPreference: true,
+              },
+            },
           }
         })
 
         if (dbUser) {
           token.username = dbUser.username
-          token.pageSlug = dbUser.pageSlug
-          token.pageName = dbUser.pageName
-          token.pageDescription = dbUser.pageDescription
-          token.pageIcon = dbUser.pageIcon
+          token.pageSlug = dbUser.site?.slug ?? null
+          token.pageName = dbUser.site?.pageName ?? null
+          token.pageDescription = dbUser.site?.pageDescription ?? null
+          token.pageIcon = dbUser.site?.pageIcon ?? null
           token.title = dbUser.title
           token.bio = dbUser.bio
           token.name = dbUser.name
@@ -346,7 +353,7 @@ export const authOptions: NextAuthOptions = {
           token.accountType = dbUser.accountType
           token.studentPseudonym = dbUser.studentPseudonym
           token.billingPlan = dbUser.billingPlan
-          token.typographyPreference = dbUser.typographyPreference
+          token.typographyPreference = dbUser.site?.typographyPreference ?? null
 
           // For students, store OAuth email in token (for display purposes, NOT stored in DB)
           // This allows showing the student their email when they need to share it with teachers
@@ -475,10 +482,6 @@ export const authOptions: NextAuthOptions = {
             email: true,
             image: true,
             username: true,
-            pageSlug: true,
-            pageName: true,
-            pageDescription: true,
-            pageIcon: true,
             title: true,
             bio: true,
             isAdmin: true,
@@ -487,16 +490,24 @@ export const authOptions: NextAuthOptions = {
             accountType: true,
             studentPseudonym: true,
             billingPlan: true,
-            typographyPreference: true,
+            site: {
+              select: {
+                slug: true,
+                pageName: true,
+                pageDescription: true,
+                pageIcon: true,
+                typographyPreference: true,
+              },
+            },
           }
         })
 
         if (dbUser) {
           token.username = dbUser.username
-          token.pageSlug = dbUser.pageSlug
-          token.pageName = dbUser.pageName
-          token.pageDescription = dbUser.pageDescription
-          token.pageIcon = dbUser.pageIcon
+          token.pageSlug = dbUser.site?.slug ?? null
+          token.pageName = dbUser.site?.pageName ?? null
+          token.pageDescription = dbUser.site?.pageDescription ?? null
+          token.pageIcon = dbUser.site?.pageIcon ?? null
           token.title = dbUser.title
           token.bio = dbUser.bio
           token.name = dbUser.name
@@ -510,7 +521,7 @@ export const authOptions: NextAuthOptions = {
           token.accountType = dbUser.accountType
           token.studentPseudonym = dbUser.studentPseudonym
           token.billingPlan = dbUser.billingPlan
-          token.typographyPreference = dbUser.typographyPreference
+          token.typographyPreference = dbUser.site?.typographyPreference ?? null
         }
       }
 

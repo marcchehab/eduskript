@@ -42,39 +42,10 @@ export async function GET(
       return NextResponse.json({ error: 'Skript not found' }, { status: 404 })
     }
 
-    // Check if user has permission to view this skript
-    // First check direct skript permissions
-    let permissions = checkSkriptPermissions(session.user.id, skript.authors, undefined, session.user.isAdmin)
-
-    // If no direct permission, check collection-level permissions
-    // According to permission model: "Collection authors can view all skripts in their collections"
-    // Note: Collection-level access only grants VIEW permission, not EDIT
-    if (!permissions.canView && skript.collectionSkripts.length > 0) {
-      for (const cs of skript.collectionSkripts) {
-        if (cs.collection) {
-          // Fetch collection authors
-          const collection = await prisma.collection.findUnique({
-            where: { id: cs.collection.id },
-            include: {
-              authors: {
-                where: { userId: session.user.id }
-              }
-            }
-          })
-
-          if (collection && collection.authors.length > 0) {
-            // Collection-level access grants VIEW permission only (not EDIT)
-            // User needs explicit skript-level "author" permission to edit
-            permissions = {
-              canView: true,
-              canEdit: false,
-              canManageAuthors: false
-            }
-            break
-          }
-        }
-      }
-    }
+    // Skript permissions come solely from SkriptAuthor rows now; the old
+    // collection-author inheritance is gone (collections are sidebar-only
+    // groupings, not access-granting containers).
+    const permissions = checkSkriptPermissions(session.user.id, skript.authors, session.user.isAdmin)
 
     if (!permissions.canView) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
@@ -127,13 +98,6 @@ export async function PATCH(
             userId: session.user.id
           }
         }
-      },
-      include: {
-        collectionSkripts: {
-          include: {
-            collection: true
-          }
-        }
       }
     })
 
@@ -152,7 +116,7 @@ export async function PATCH(
           NOT: { id },
           OR: [
             { authors: { some: { userId: session.user.id } } },
-            { collectionSkripts: { some: { collection: { authors: { some: { userId: session.user.id } } } } } }
+            { collectionSkripts: { some: { collection: { site: { userId: session.user.id } } } } }
           ]
         }
       })
@@ -187,23 +151,17 @@ export async function PATCH(
       }
     })
 
-    // Get user's username for revalidation
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { pageSlug: true }
+    // Get the user's site slug for cache invalidation.
+    const userSite = await prisma.site.findUnique({
+      where: { userId: session.user.id },
+      select: { slug: true }
     })
 
-    if (user?.pageSlug) {
-      // Invalidate cached data using tags
-      revalidateTag(CACHE_TAGS.skriptBySlug(user.pageSlug, updatedSkript.slug), { expire: 0 })
-      for (const cs of existingSkript.collectionSkripts) {
-        if (cs.collection) {
-          revalidateTag(CACHE_TAGS.collectionBySlug(user.pageSlug, cs.collection.slug), { expire: 0 })
-        }
-      }
-      // Invalidate teacher content cache (homepage, sidebar)
-      revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), { expire: 0 })
-      revalidatePath(`/${user.pageSlug}/${updatedSkript.slug}`)
+    if (userSite?.slug) {
+      const pageSlug = userSite.slug
+      revalidateTag(CACHE_TAGS.skriptBySlug(pageSlug, updatedSkript.slug), { expire: 0 })
+      revalidateTag(CACHE_TAGS.teacherContent(pageSlug), { expire: 0 })
+      revalidatePath(`/${pageSlug}/${updatedSkript.slug}`)
       revalidatePath('/dashboard')
     }
 
@@ -242,13 +200,6 @@ export async function DELETE(
             userId: session.user.id
           }
         }
-      },
-      include: {
-        collectionSkripts: {
-          include: {
-            collection: true
-          }
-        }
       }
     })
 
@@ -264,22 +215,13 @@ export async function DELETE(
       where: { id }
     })
 
-    // Get user's username for revalidation
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { pageSlug: true }
+    const userSite = await prisma.site.findUnique({
+      where: { userId: session.user.id },
+      select: { slug: true }
     })
 
-    if (user?.pageSlug) {
-      // Invalidate cached data using tags
-      for (const cs of existingSkript.collectionSkripts) {
-        if (cs.collection) {
-          // Invalidate collection-level cache (skript was removed)
-          revalidateTag(CACHE_TAGS.collectionBySlug(user.pageSlug, cs.collection.slug), { expire: 0 })
-        }
-      }
-      // Invalidate teacher content cache (homepage, sidebar)
-      revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), { expire: 0 })
+    if (userSite?.slug) {
+      revalidateTag(CACHE_TAGS.teacherContent(userSite.slug), { expire: 0 })
       revalidatePath('/dashboard')
     }
 

@@ -22,44 +22,57 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
   }
 
   if (from?.startsWith('org/')) {
-    // Org page context
+    // Org page context — resolve via the org's Site (URL slug + display).
     const orgSlug = from.substring(4)
-    const org = await prisma.organization.findUnique({
+    const site = await prisma.site.findUnique({
       where: { slug: orgSlug },
-      select: { name: true, slug: true, iconUrl: true },
+      select: {
+        slug: true,
+        pageIcon: true,
+        organization: { select: { name: true } },
+      },
     })
 
     context = {
       type: 'org-page',
       slug: orgSlug,
-      name: org?.name || 'Eduskript',
-      icon: org?.iconUrl || null,
+      name: site?.organization?.name || 'Eduskript',
+      icon: site?.pageIcon || null,
     }
   } else if (from) {
-    // Teacher page context
-    const teacher = await prisma.user.findUnique({
-      where: { pageSlug: from },
-      select: { pageName: true, name: true, pageSlug: true, pageIcon: true },
+    // Teacher page context — resolve via the teacher's Site.
+    const site = await prisma.site.findUnique({
+      where: { slug: from },
+      select: {
+        slug: true,
+        pageName: true,
+        pageIcon: true,
+        user: { select: { name: true } },
+      },
     })
 
     context = {
       type: 'teacher-page',
       slug: from,
-      name: teacher?.pageName || teacher?.name || from,
-      icon: teacher?.pageIcon || null,
+      name: site?.pageName || site?.user?.name || from,
+      icon: site?.pageIcon || null,
     }
   } else {
-    // No context — default to eduskript org-page layout
+    // No context — default to eduskript org-page layout. Pull the slug +
+    // icon from the org's Site (the org with the earliest createdAt).
     const defaultOrg = await prisma.organization.findFirst({
       orderBy: { createdAt: 'asc' },
-      select: { name: true, slug: true, iconUrl: true },
+      select: {
+        name: true,
+        site: { select: { slug: true, pageIcon: true } },
+      },
     })
 
     context = {
       type: 'org-page',
-      slug: defaultOrg?.slug || 'eduskript',
+      slug: defaultOrg?.site?.slug || 'eduskript',
       name: defaultOrg?.name || 'Eduskript',
-      icon: defaultOrg?.iconUrl || null,
+      icon: defaultOrg?.site?.pageIcon || null,
     }
   }
 

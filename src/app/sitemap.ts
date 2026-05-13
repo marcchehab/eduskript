@@ -37,34 +37,40 @@ type Resolved = ResolvedTenant | ResolvedTeacher | null
 async function resolveHost(host: string): Promise<Resolved> {
   const orgSlug = APP_DOMAIN_TO_ORG_SLUG[host]
   if (orgSlug) {
-    const org = await prisma.organization.findUnique({
+    // URL slug lives on Site now; resolve the org from there.
+    const site = await prisma.site.findUnique({
       where: { slug: orgSlug },
-      select: { id: true, slug: true },
+      select: { slug: true, organization: { select: { id: true } } },
     })
-    return org ? { type: 'org', orgId: org.id, orgSlug: org.slug } : null
+    if (site?.organization) {
+      return { type: 'org', orgId: site.organization.id, orgSlug: site.slug }
+    }
+    return null
   }
 
   const orgDomain = await prisma.customDomain.findFirst({
     where: { domain: host, isVerified: true },
-    select: { organization: { select: { id: true, slug: true } } },
+    select: {
+      organization: { select: { id: true, site: { select: { slug: true } } } },
+    },
   })
-  if (orgDomain?.organization) {
+  if (orgDomain?.organization?.site?.slug) {
     return {
       type: 'org',
       orgId: orgDomain.organization.id,
-      orgSlug: orgDomain.organization.slug,
+      orgSlug: orgDomain.organization.site.slug,
     }
   }
 
   const teacherDomain = await prisma.teacherCustomDomain.findFirst({
     where: { domain: host, isVerified: true },
-    select: { user: { select: { id: true, pageSlug: true } } },
+    select: { user: { select: { id: true, site: { select: { slug: true } } } } },
   })
-  if (teacherDomain?.user?.pageSlug) {
+  if (teacherDomain?.user?.site?.slug) {
     return {
       type: 'teacher',
       userId: teacherDomain.user.id,
-      pageSlug: teacherDomain.user.pageSlug,
+      pageSlug: teacherDomain.user.site.slug,
     }
   }
 
@@ -74,8 +80,8 @@ async function resolveHost(host: string): Promise<Resolved> {
 async function getOrgEntries(baseUrl: string, orgId: string): Promise<MetadataRoute.Sitemap> {
   // Mirror getOrgFullSiteStructure: enumerate the collections referenced in
   // the org's page layout, then their published skripts and pages.
-  const pageLayout = await prisma.orgPageLayout.findFirst({
-    where: { organizationId: orgId },
+  const pageLayout = await prisma.pageLayout.findFirst({
+    where: { site: { organizationId: orgId } },
     select: {
       items: {
         where: { type: 'collection' },

@@ -8,14 +8,27 @@ interface RouteParams {
   params: Promise<{ orgId: string }>
 }
 
+/** Look up the org's Site row. Backs the single unified pageLayout table. */
+async function getOrgSite(orgId: string) {
+  return prisma.site.findUnique({
+    where: { organizationId: orgId },
+    select: { id: true, slug: true },
+  })
+}
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { orgId } = await params
     const { error } = await requireOrgAdmin(orgId)
     if (error) return error
 
-    const pageLayout = await prisma.orgPageLayout.findUnique({
-      where: { organizationId: orgId },
+    const site = await getOrgSite(orgId)
+    if (!site) {
+      return NextResponse.json({ success: true, data: { items: [] } })
+    }
+
+    const pageLayout = await prisma.pageLayout.findUnique({
+      where: { siteId: site.id },
       include: {
         items: {
           orderBy: { order: 'asc' },
@@ -45,6 +58,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Items must be an array' }, { status: 400 })
     }
 
+    const site = await getOrgSite(orgId)
+    if (!site) {
+      return NextResponse.json({ error: 'Organization has no site row' }, { status: 400 })
+    }
+
     // Get all org admin/owner user IDs to check content permissions
     const orgAdmins = await prisma.organizationMember.findMany({
       where: {
@@ -55,27 +73,23 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     })
     const adminUserIds = orgAdmins.map((m) => m.userId)
 
-    // SECURITY: Validate that at least one org admin has permission on each item
+    // SECURITY: Collection must belong to this org's site OR an admin's
+    // personal site. Skript must be authored by some org admin.
     const validatedItems: Array<{ id: string; type: string }> = []
 
     for (const item of items) {
-      if (!item.id || !item.type) {
-        continue // Skip invalid items
-      }
+      if (!item.id || !item.type) continue
 
       if (item.type === 'collection') {
-        // Check if any org admin has permission on this collection
         const collection = await prisma.collection.findFirst({
           where: {
             id: item.id,
-            authors: {
-              some: {
-                userId: { in: adminUserIds },
-              },
-            },
+            OR: [
+              { site: { organizationId: orgId } },
+              { site: { userId: { in: adminUserIds } } },
+            ],
           },
         })
-
         if (collection) {
           validatedItems.push(item)
         } else {
@@ -84,18 +98,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           )
         }
       } else if (item.type === 'skript') {
-        // Check if any org admin has permission on this skript
         const skript = await prisma.skript.findFirst({
           where: {
             id: item.id,
-            authors: {
-              some: {
-                userId: { in: adminUserIds },
-              },
-            },
+            authors: { some: { userId: { in: adminUserIds } } },
           },
         })
-
         if (skript) {
           validatedItems.push(item)
         } else {
@@ -106,9 +114,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    // Upsert page layout with only validated items
-    const pageLayout = await prisma.orgPageLayout.upsert({
-      where: { organizationId: orgId },
+    const pageLayout = await prisma.pageLayout.upsert({
+      where: { siteId: site.id },
       update: {
         items: {
           deleteMany: {},
@@ -120,7 +127,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         },
       },
       create: {
-        organizationId: orgId,
+        siteId: site.id,
         items: {
           create: validatedItems.map((item, index) => ({
             type: item.type,
@@ -133,16 +140,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         items: {
           orderBy: { order: 'asc' },
         },
-        organization: {
+        site: {
           select: { slug: true },
         },
       },
     })
 
-    // Revalidate org content cache so sidebar updates
-    if (pageLayout.organization?.slug) {
-      revalidateTag(CACHE_TAGS.organization(pageLayout.organization.slug), { expire: 0 })
-      revalidateTag(CACHE_TAGS.orgContent(pageLayout.organization.slug), { expire: 0 })
+    if (pageLayout.site?.slug) {
+      revalidateTag(CACHE_TAGS.organization(pageLayout.site.slug), { expire: 0 })
+      revalidateTag(CACHE_TAGS.orgContent(pageLayout.site.slug), { expire: 0 })
     }
 
     return NextResponse.json({ success: true, data: pageLayout })

@@ -28,10 +28,11 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { orgSlug, pageSlug, skriptSlug } = await params
 
   try {
-    const organization = await prisma.organization.findUnique({
+    const orgSite = await prisma.site.findUnique({
       where: { slug: orgSlug },
-      select: { id: true, name: true }
+      select: { organization: { select: { id: true, name: true } } }
     })
+    const organization = orgSite?.organization
 
     if (!organization) {
       return { title: 'Page Not Found' }
@@ -39,10 +40,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
     const teacher = await prisma.user.findFirst({
       where: {
-        pageSlug: pageSlug,
+        site: { slug: pageSlug },
         organizationMemberships: { some: { organizationId: organization.id } }
       },
-      select: { id: true, name: true, pageName: true }
+      select: { id: true, name: true, site: { select: { pageName: true } } }
     })
 
     if (!teacher) {
@@ -54,7 +55,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
         slug: skriptSlug,
         OR: [
           { authors: { some: { userId: teacher.id } } },
-          { collectionSkripts: { some: { collection: { authors: { some: { userId: teacher.id } } } } } }
+          { collectionSkripts: { some: { collection: { site: { userId: teacher.id } } } } }
         ]
       },
       select: { title: true, description: true }
@@ -64,7 +65,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       return { title: 'Skript Not Found', robots: 'noindex' }
     }
 
-    const teacherName = teacher.pageName || teacher.name || 'Teacher'
+    const teacherName = teacher.site?.pageName || teacher.name || 'Teacher'
     const title = `${skript.title} | ${teacherName} | ${organization.name}`
 
     return {
@@ -86,37 +87,49 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function OrgTeacherSkriptPage({ params }: PageProps) {
   const { orgSlug, pageSlug, skriptSlug } = await params
 
-  const organization = await prisma.organization.findUnique({
+  const orgSiteRow = await prisma.site.findUnique({
     where: { slug: orgSlug },
     select: {
-      id: true,
-      name: true,
-      description: true,
+      pageDescription: true,
+      pageIcon: true,
       showIcon: true,
-      iconUrl: true
+      organization: { select: { id: true, name: true } }
     }
   })
+  const organization = orgSiteRow?.organization
+    ? {
+        ...orgSiteRow.organization,
+        description: orgSiteRow.pageDescription,
+        iconUrl: orgSiteRow.pageIcon,
+        showIcon: orgSiteRow.showIcon,
+      }
+    : null
 
   if (!organization) {
     notFound()
   }
 
+  // Page-display fields + sidebar/typography prefs live on Site.
   const teacher = await prisma.user.findFirst({
     where: {
-      pageSlug: pageSlug,
+      site: { slug: pageSlug },
       organizationMemberships: { some: { organizationId: organization.id } }
     },
     select: {
       id: true,
       name: true,
-      pageSlug: true,
-      pageName: true,
-      pageDescription: true,
-      pageIcon: true,
       bio: true,
       title: true,
-      sidebarBehavior: true,
-      typographyPreference: true
+      site: {
+        select: {
+          slug: true,
+          pageName: true,
+          pageDescription: true,
+          pageIcon: true,
+          sidebarBehavior: true,
+          typographyPreference: true,
+        },
+      },
     }
   })
 
@@ -130,7 +143,7 @@ export default async function OrgTeacherSkriptPage({ params }: PageProps) {
       slug: skriptSlug,
       OR: [
         { authors: { some: { userId: teacher.id } } },
-        { collectionSkripts: { some: { collection: { authors: { some: { userId: teacher.id } } } } } }
+        { collectionSkripts: { some: { collection: { site: { userId: teacher.id } } } } }
       ]
     },
     include: {
@@ -166,7 +179,6 @@ export default async function OrgTeacherSkriptPage({ params }: PageProps) {
     ? buildSiteStructure([{
         id: collection.id,
         title: collection.title,
-        slug: collection.slug,
         accentColor: collection.accentColor,
         collectionSkripts: [{
           order: collectionSkript.order,
@@ -188,7 +200,6 @@ export default async function OrgTeacherSkriptPage({ params }: PageProps) {
     : [{
         id: 'standalone',
         title: skript.title,
-        slug: skript.slug,
         skripts: [{
           id: skript.id,
           title: skript.title,
@@ -198,16 +209,17 @@ export default async function OrgTeacherSkriptPage({ params }: PageProps) {
         }]
       }]
 
-  const fullSiteStructure = teacher.sidebarBehavior === 'full'
-    ? await getFullSiteStructure(teacher.id, teacher.pageSlug || pageSlug)
+  const teacherSite = teacher.site
+  const fullSiteStructure = teacherSite?.sidebarBehavior === 'full'
+    ? await getFullSiteStructure(teacher.id, teacherSite.slug)
     : undefined
 
   const teacherData = {
     name: teacher.name || 'Teacher',
-    pageSlug: teacher.pageSlug || pageSlug,
-    pageName: teacher.pageName || null,
-    pageDescription: teacher.pageDescription || null,
-    pageIcon: teacher.pageIcon || null,
+    pageSlug: teacherSite?.slug || pageSlug,
+    pageName: teacherSite?.pageName || null,
+    pageDescription: teacherSite?.pageDescription || null,
+    pageIcon: teacherSite?.pageIcon || null,
     bio: teacher.bio || null,
     title: teacher.title || null
   }
@@ -220,8 +232,8 @@ export default async function OrgTeacherSkriptPage({ params }: PageProps) {
       siteStructure={siteStructure}
       fullSiteStructure={fullSiteStructure}
       currentPath={currentPath}
-      sidebarBehavior={teacher.sidebarBehavior as 'contextual' | 'full' || 'contextual'}
-      typographyPreference={teacher.typographyPreference as 'modern' | 'classic' || 'modern'}
+      sidebarBehavior={(teacherSite?.sidebarBehavior as 'contextual' | 'full') || 'contextual'}
+      typographyPreference={(teacherSite?.typographyPreference as 'modern' | 'classic') || 'modern'}
       routePrefix={`/org/${orgSlug}/${pageSlug}`}
     >
       <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border">

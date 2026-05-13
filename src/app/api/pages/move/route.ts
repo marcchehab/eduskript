@@ -183,13 +183,13 @@ export async function POST(request: NextRequest) {
     })
 
     // Revalidate paths
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { pageSlug: true },
+    const userSite = await prisma.site.findUnique({
+      where: { userId: session.user.id },
+      select: { slug: true },
     })
 
-    if (user?.pageSlug) {
-      revalidatePath(`/${user.pageSlug}`)
+    if (userSite?.slug) {
+      revalidatePath(`/${userSite.slug}`)
       revalidatePath('/dashboard')
     }
 

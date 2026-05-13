@@ -28,16 +28,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verify the user can edit the collection
+    // Verify the user can edit the collection (via its site's ownership)
     const collection = await prisma.collection.findUnique({
       where: { id: collectionId },
-      include: {
-        authors: {
-          include: {
-            user: true
-          }
-        }
-      }
+      include: { site: { select: { userId: true, organizationId: true } } }
     })
 
     if (!collection) {
@@ -47,7 +41,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const permissions = checkCollectionPermissions(session.user.id, collection.authors)
+    const orgRoles = collection.site?.organizationId
+      ? await prisma.organizationMember.findMany({
+          where: { userId: session.user.id, organizationId: collection.site.organizationId },
+          select: { organizationId: true, role: true },
+        })
+      : []
+    const permissions = checkCollectionPermissions(session.user.id, collection, orgRoles)
     if (!permissions.canEdit) {
       return NextResponse.json(
         { error: 'You do not have permission to create skripts in this collection' },
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
         slug: normalizedSlug,
         OR: [
           { authors: { some: { userId: session.user.id } } },
-          { collectionSkripts: { some: { collection: { authors: { some: { userId: session.user.id } } } } } }
+          { collectionSkripts: { some: { collection: { site: { userId: session.user.id } } } } }
         ]
       }
     })

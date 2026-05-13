@@ -1,7 +1,8 @@
 /**
  * MCP tool: read_collection — fetch a collection's metadata + skript list.
  *
- * View permission gate (any collection author works).
+ * View permission gate: caller must own the collection's site (or be an
+ * admin of the owning org).
  */
 
 import { z } from 'zod'
@@ -11,7 +12,7 @@ import { getCollectionForUser } from '@/lib/services/collections'
 export const readCollectionConfig = {
   title: 'Read collection',
   description:
-    'Read a single Eduskript collection by ID. Returns metadata (title, slug, description, accentColor) and the skripts contained in the collection.',
+    'Read a single Eduskript collection by ID. Returns metadata (title, description, accentColor) and the skripts contained in the collection.',
   inputSchema: {
     collectionId: z.string().min(1).describe('The Eduskript collection ID (cuid).'),
   },
@@ -32,8 +33,6 @@ export async function readCollection(args: { collectionId: string }) {
           {
             id: collection.id,
             title: collection.title,
-            slug: collection.slug,
-            description: collection.description,
             accentColor: collection.accentColor,
             updatedAt: collection.updatedAt,
             skripts: collection.collectionSkripts.map((cs) => ({

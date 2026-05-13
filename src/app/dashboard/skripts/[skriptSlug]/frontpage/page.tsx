@@ -59,11 +59,11 @@ export default async function SkriptFrontPageEditPage({ params }: SkriptFrontPag
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { pageSlug: true }
+    select: { site: { select: { slug: true } } }
   })
 
-  const previewUrl = user?.pageSlug
-    ? `/${user.pageSlug}/${skriptSlug}`
+  const previewUrl = user?.site?.slug
+    ? `/${user.site.slug}/${skriptSlug}`
     : undefined
 
   return (

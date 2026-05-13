@@ -26,6 +26,9 @@ vi.mock('@/lib/prisma', () => ({
       findFirst: vi.fn(),
       create: vi.fn(),
     },
+    organizationMember: {
+      findMany: vi.fn(),
+    },
     $transaction: vi.fn(),
   },
 }))
@@ -52,19 +55,12 @@ describe('Skripts API', () => {
     expires: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
   }
 
+  // Collection now owned by a Site (1:1 with the user). `site.userId === user-123`
+  // is what grants edit rights for skript-creation here.
   const mockCollection = {
     id: 'col-123',
     title: 'Test Collection',
-    slug: 'test-collection',
-    authors: [
-      {
-        id: 'author-1',
-        userId: 'user-123',
-        collectionId: 'col-123',
-        permission: 'author' as const,
-        user: { id: 'user-123', name: 'Test User', email: 'test@example.com' },
-      },
-    ],
+    site: { userId: 'user-123', organizationId: null },
   }
 
   const mockSkript = {
@@ -191,14 +187,8 @@ describe('Skripts API', () => {
       it('should return 403 when user cannot edit collection', async () => {
         vi.mocked(prisma.collection.findUnique).mockResolvedValue({
           ...mockCollection,
-          authors: [
-            {
-              ...mockCollection.authors[0],
-              userId: 'other-user',
-              user: { id: 'other-user', name: 'Other', email: 'other@example.com' },
-            },
-          ],
-        })
+          site: { userId: 'other-user', organizationId: null },
+        } as never)
 
         const request = createRequest({
           title: 'Test',
@@ -212,16 +202,12 @@ describe('Skripts API', () => {
         expect(data.error).toContain('permission')
       })
 
-      it('should return 403 when user has viewer permission only', async () => {
+      it('should return 403 when collection is owned by an org the user is not in', async () => {
         vi.mocked(prisma.collection.findUnique).mockResolvedValue({
           ...mockCollection,
-          authors: [
-            {
-              ...mockCollection.authors[0],
-              permission: 'viewer' as const,
-            },
-          ],
-        })
+          site: { userId: null, organizationId: 'org-1' },
+        } as never)
+        vi.mocked(prisma.organizationMember.findMany).mockResolvedValue([] as never)
 
         const request = createRequest({
           title: 'Test',
@@ -237,7 +223,7 @@ describe('Skripts API', () => {
     describe('Slug Conflicts', () => {
       beforeEach(() => {
         vi.mocked(getServerSession).mockResolvedValue(mockSession)
-        vi.mocked(prisma.collection.findUnique).mockResolvedValue(mockCollection)
+        vi.mocked(prisma.collection.findUnique).mockResolvedValue(mockCollection as never)
       })
 
       it('should return 409 when slug already exists', async () => {
@@ -259,7 +245,7 @@ describe('Skripts API', () => {
     describe('Successful Creation', () => {
       beforeEach(() => {
         vi.mocked(getServerSession).mockResolvedValue(mockSession)
-        vi.mocked(prisma.collection.findUnique).mockResolvedValue(mockCollection)
+        vi.mocked(prisma.collection.findUnique).mockResolvedValue(mockCollection as never)
         vi.mocked(prisma.skript.findFirst).mockResolvedValue(null)
         vi.mocked(prisma.collectionSkript.findFirst).mockResolvedValue(null)
       })

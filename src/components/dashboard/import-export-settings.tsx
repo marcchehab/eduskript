@@ -11,7 +11,7 @@ import { Download, Upload, Loader2, FileArchive, AlertTriangle, CheckCircle, Pac
 const LARGE_FILE_THRESHOLD = 10 * 1024 * 1024
 
 interface ImportPreview {
-  collections: { slug: string; title: string; isNew: boolean }[]
+  collections: { title: string; isNew: boolean }[]
   skripts: { slug: string; title: string; pageCount: number; isNew: boolean }[]
   attachments: number
   errors: { type: 'error' | 'warning'; location: string; message: string }[]

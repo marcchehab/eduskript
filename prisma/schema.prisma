@@ -66,25 +66,16 @@ model User {
   // User identity
   username String? @unique // User's unique identifier (for login, collaboration)
 
-  // Page-specific fields (for the user's public page)
-  pageSlug        String? @unique // URL slug for public page (e.g., eduskript.org/mypage)
-  pageName        String? // Display name for the public page
-  pageDescription String? // Description shown below page title in sidebar
-  pageIcon        String? // URL to page icon image (displayed in sidebar)
-  pageLanguage    String? @map("page_language") // BCP-47 tag for <html lang> when teacher has a custom domain (e.g. "de-CH"); null = "en"
-  pageTagline     String? @map("page_tagline") // Short SEO tagline appended to pageName as the home <title> on the teacher's custom domain
-
-  // Profile fields (shown to collaborators)
+  // Profile fields (shown to collaborators).
+  // Public-page display fields (pageName, pageDescription, pageIcon,
+  // pageTagline, pageLanguage, sidebarBehavior, typographyPreference,
+  // aiSystemPrompt) all live on Site now — Site is the only public-page
+  // entity, and the duplicates made every write path a footgun.
   bio   String?
   title String?
 
-  // User preferences
-  themePreference      String? @default("system") // "light", "dark", or "system"
-  sidebarBehavior      String? @default("full") // "full" (default - always show all collections) or "contextual" (show only current collection)
-  typographyPreference String? @default("modern") // "modern" (Roboto Slab + Barlow Condensed) or "classic" (EB Garamond + Barlow Condensed)
-
-  // AI customization
-  aiSystemPrompt String? @db.Text // Custom system prompt prepended to AI assistant messages
+  // User preferences (per-user, not per-site)
+  themePreference String? @default("system") // "light", "dark", or "system"
 
   // Admin and security
   isAdmin                Boolean @default(false)
@@ -106,13 +97,10 @@ model User {
   sessions     Session[]
   pageVersions PageVersion[]
 
-  // Many-to-many relations for authoring
-  collectionAuthors CollectionAuthor[]
-  skriptAuthors     SkriptAuthor[]
-  pageAuthors       PageAuthor[]
-
-  // Collection-skript relationships (for root-level placements)
-  collectionSkripts CollectionSkript[]
+  // Many-to-many relations for content authoring (skripts/pages stay
+  // multi-author across users; collections are owned 1:1 by a Site).
+  skriptAuthors SkriptAuthor[]
+  pageAuthors   PageAuthor[]
 
   // File uploads
   files File[]
@@ -123,8 +111,10 @@ model User {
   collaborationsAsRequester     Collaboration[]        @relation("RequesterCollaborations")
   collaborationsAsReceiver      Collaboration[]        @relation("ReceiverCollaborations")
 
-  // Page layout
-  pageLayout PageLayout?
+  // The user's public site (1:1). Owns the URL slug, page-display fields,
+  // collections, page layout, and frontpage. Teachers get a Site; students
+  // typically don't.
+  site Site?
 
   // Student data
   studentProgress    StudentProgress[]   @relation("StudentProgress")
@@ -145,8 +135,8 @@ model User {
   // "Check" press, and exam hand-in (see UserDataCheckpoint).
   userDataCheckpoints UserDataCheckpoint[] @relation("UserCheckpoints")
 
-  // Front page
-  frontPage         FrontPage?
+  // Front page versions authored by this user. Site-level frontpages live
+  // on Site, not on User, so no User.frontPage reverse relation.
   frontPageVersions FrontPageVersion[]
 
   // Import/Export jobs
@@ -198,55 +188,79 @@ model User {
   @@map("users")
 }
 
+// A public page/site. Owned polymorphically by either a User (a teacher's
+// personal page) or an Organization (a school/group page) — exactly one of
+// userId / organizationId is set. The polymorphism lives here, in one model,
+// so downstream tables (Collection, PageLayout, FrontPage) reference a single
+// siteId instead of inventing their own userId|organizationId pair. The URL
+// slug and every page-display setting also live here.
+model Site {
+  id   String @id @default(cuid())
+  slug String @unique // Globally unique URL slug for the public page
+
+  userId         String? @unique @map("user_id")
+  organizationId String? @unique @map("organization_id")
+
+  // Page-display fields
+  pageName             String? @map("page_name")
+  pageDescription      String? @map("page_description")
+  pageIcon             String? @map("page_icon")
+  pageTagline          String? @map("page_tagline")
+  pageLanguage         String? @map("page_language") // BCP-47, null = "en"
+  sidebarBehavior      String  @default("full") @map("sidebar_behavior") // "full" | "contextual"
+  typographyPreference String? @default("modern") @map("typography_preference")
+  showIcon             Boolean @default(true) @map("show_icon")
+  aiSystemPrompt       String? @map("ai_system_prompt") @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user         User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  collections Collection[]
+  pageLayout  PageLayout?
+  frontPage   FrontPage?
+
+  @@map("sites")
+}
+
 model Collection {
   id          String   @id @default(cuid())
+  // Owning site. A collection is just a sidebar grouping on a single site;
+  // there's no longer a per-collection author table — site ownership is the
+  // single source of truth.
+  siteId      String   @map("site_id")
   title       String
-  description String?
-  slug        String
   accentColor String? // Hex color for sidebar letter markers (e.g., "#3b82f6")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  // Relations
+  site              Site               @relation(fields: [siteId], references: [id], onDelete: Cascade)
   collectionSkripts CollectionSkript[]
 
-  // Many-to-many relation for multiple authors
-  authors CollectionAuthor[]
-
-  @@index([slug])
+  @@index([siteId])
   @@map("collections")
 }
 
-// Junction table for Collection-User many-to-many relationship
-model CollectionAuthor {
+// Junction table for Collection-Skript many-to-many relationship. Pure
+// linkage between a collection and the skripts it contains; ordering lives
+// on this row. Root skripts live in PageLayout.items, not here.
+//
+// Existing columns keep their camelCase names (collectionId, skriptId,
+// createdAt) so the Prisma migration is purely structural — no column
+// renames — to avoid the drop+add behaviour that would lose data.
+model CollectionSkript {
   id           String   @id @default(cuid())
   collectionId String
-  userId       String
-  permission   String   @default("author") // "author" (can edit & manage), "viewer" (can only view)
+  skriptId     String
+  order        Int
   createdAt    DateTime @default(now())
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skript     Skript     @relation(fields: [skriptId], references: [id], onDelete: Cascade)
 
-  @@unique([collectionId, userId])
-  @@map("collection_authors")
-}
-
-// Junction table for Collection-Skript many-to-many relationship
-model CollectionSkript {
-  id           String   @id @default(cuid())
-  collectionId String? // Nullable - null means root level
-  skriptId     String
-  userId       String? // ONLY used for root level items (when collectionId is null)
-  order        Int // Order within the collection or root level
-  createdAt    DateTime @default(now())
-
-  collection Collection? @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  skript     Skript      @relation(fields: [skriptId], references: [id], onDelete: Cascade)
-  user       User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([collectionId, skriptId]) // One entry per skript per collection
-  @@unique([skriptId, userId]) // One root entry per skript per user (when collectionId is null)
+  @@unique([collectionId, skriptId])
   @@map("collection_skripts")
 }
 
@@ -486,12 +500,14 @@ model Collaboration {
 // Page layout for user's public page
 model PageLayout {
   id        String           @id @default(cuid())
-  userId    String           @unique @map("user_id")
+  // Single unified layout table keyed on Site. User-page and org-page
+  // layouts both live here; the polymorphism is handled by Site.
+  siteId    String           @unique @map("site_id")
   items     PageLayoutItem[]
   createdAt DateTime         @default(now()) @map("created_at")
   updatedAt DateTime         @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@map("page_layouts")
 }
@@ -509,34 +525,6 @@ model PageLayoutItem {
 
   @@unique([pageLayoutId, contentId, type])
   @@map("page_layout_items")
-}
-
-// Organization Page Layout - for org admin page builder
-model OrgPageLayout {
-  id             String              @id @default(cuid())
-  organizationId String              @unique @map("organization_id")
-  items          OrgPageLayoutItem[]
-  createdAt      DateTime            @default(now()) @map("created_at")
-  updatedAt      DateTime            @updatedAt @map("updated_at")
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  @@map("org_page_layouts")
-}
-
-// Individual items in an organization page layout
-model OrgPageLayoutItem {
-  id              String   @id @default(cuid())
-  orgPageLayoutId String   @map("org_page_layout_id")
-  type            String // "collection" or "skript"
-  contentId       String   @map("content_id")
-  order           Int
-  createdAt       DateTime @default(now()) @map("created_at")
-
-  orgPageLayout OrgPageLayout @relation(fields: [orgPageLayoutId], references: [id], onDelete: Cascade)
-
-  @@unique([orgPageLayoutId, contentId, type])
-  @@map("org_page_layout_items")
 }
 
 // Student Progress Tracking
@@ -735,20 +723,20 @@ model FrontPage {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  // Owner - exactly one of these should be set
-  userId         String? @unique @map("user_id") // For user landing pages
-  skriptId       String? @unique @map("skript_id") // For skript intro pages
-  organizationId String? @unique @map("organization_id") // For organization pages
+  // Owner. Exactly one of {siteId, skriptId} is set. Site-level frontpages
+  // (user / org page landing) live under siteId; skript frontpages still
+  // attach directly to a Skript.
+  siteId   String? @unique @map("site_id")
+  skriptId String? @unique @map("skript_id")
 
-  // File storage for user/org FrontPages (skript FrontPages use their skript's files)
+  // File storage for site-level FrontPages (skript FrontPages use their skript's files)
   fileSkriptId String? @unique @map("file_skript_id")
 
   // Relations
-  user         User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  skript       Skript?            @relation(fields: [skriptId], references: [id], onDelete: Cascade)
-  organization Organization?      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  fileSkript   Skript?            @relation("FrontPageFileStorage", fields: [fileSkriptId], references: [id])
-  versions     FrontPageVersion[]
+  site       Site?              @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  skript     Skript?            @relation(fields: [skriptId], references: [id], onDelete: Cascade)
+  fileSkript Skript?            @relation("FrontPageFileStorage", fields: [fileSkriptId], references: [id])
+  versions   FrontPageVersion[]
 
   @@map("front_pages")
 }
@@ -803,26 +791,23 @@ model ImportJob {
   @@map("import_jobs")
 }
 
-// Organization model - schools, companies, or groups
+// Organization model - schools, companies, or groups. Holds entity, display,
+// and governance fields. URL slug lives on the org's Site; display fields
+// will move next (Stage 5b).
 model Organization {
-  id           String  @id @default(cuid())
-  name         String // "Eduskript", "Springfield High"
-  slug         String  @unique // URL slug for org page
-  description  String?
-  showIcon     Boolean @default(true) @map("show_icon")
-  iconUrl      String? @map("icon_url")
-  pageLanguage String? @map("page_language") // BCP-47 tag for <html lang> on the org's custom domain; null = "en"
-  pageTagline  String? @map("page_tagline") // Short SEO tagline appended to org name as the home <title> on the org's custom domain
+  id   String @id @default(cuid())
+  name String // "Eduskript", "Springfield High" — entity name
+  // Page-display fields (description, showIcon, iconUrl, pageLanguage,
+  // pageTagline, sidebarBehavior, aiSystemPrompt) all live on Site now —
+  // Site is the only public-page entity.
 
-  // Settings
-  allowMemberPages          Boolean @default(true) @map("allow_member_pages") // Members can have personal pages
-  allowTeacherCustomDomains Boolean @default(false) @map("allow_teacher_custom_domains") // Teachers can have custom domains
-  requireEmailDomain        String? @map("require_email_domain") // e.g., "@school.edu" - auto-join on signup
-  sidebarBehavior           String? @default("contextual") @map("sidebar_behavior") // "contextual" or "full"
-  aiSystemPrompt            String? @map("ai_system_prompt") @db.Text // Custom system prompt for AI assistant
+  // Settings (entity-level, not page-level)
+  allowMemberPages          Boolean @default(true) @map("allow_member_pages")
+  allowTeacherCustomDomains Boolean @default(false) @map("allow_teacher_custom_domains")
+  requireEmailDomain        String? @map("require_email_domain")
 
   // Billing groundwork (payment provider TBD)
-  billingPlan String @default("free") @map("billing_plan") // "free" | "school" | "enterprise"
+  billingPlan String @default("free") @map("billing_plan")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -830,8 +815,10 @@ model Organization {
   // Relations
   members       OrganizationMember[]
   customDomains CustomDomain[]
-  frontPage     FrontPage?
-  pageLayout    OrgPageLayout?
+
+  // The org's public site (1:1). Owns the URL slug, page layout, collections,
+  // frontpage. Display fields move here in a follow-up.
+  site Site?
 
   @@map("organizations")
 }

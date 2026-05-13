@@ -11,12 +11,14 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id }
+    // typographyPreference lives on the user's Site.
+    const site = await prisma.site.findUnique({
+      where: { userId: session.user.id },
+      select: { typographyPreference: true }
     })
 
     return NextResponse.json({
-      typographyPreference: user?.typographyPreference || 'modern'
+      typographyPreference: site?.typographyPreference || 'modern'
     })
   } catch (error) {
     console.error('Error fetching typography preference:', error)
@@ -46,9 +48,9 @@ export async function POST(request: Request) {
       )
     }
 
-    // Update the user's preference
-    await prisma.user.update({
-      where: { id: session.user.id },
+    // Update on the user's Site.
+    await prisma.site.update({
+      where: { userId: session.user.id },
       data: { typographyPreference }
     })
 

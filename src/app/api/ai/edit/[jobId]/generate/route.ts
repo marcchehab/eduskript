@@ -189,28 +189,28 @@ export async function POST(
     defaultHeaders: { 'HTTP-Referer': 'https://eduskript.org', 'X-Title': 'Eduskript' },
   })
 
-  // Fetch user and organization custom AI prompts
+  // Fetch user and organization custom AI prompts (both live on Site).
   let orgPrompt: string | undefined
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
-      aiSystemPrompt: true,
+      site: { select: { aiSystemPrompt: true } },
       organizationMemberships: {
-        include: { organization: true },
+        include: { organization: { include: { site: { select: { aiSystemPrompt: true } } } } },
       },
     },
   })
 
   const orgWithPrompt = user?.organizationMemberships.find(
-    (m) => m.organization.aiSystemPrompt
+    (m) => m.organization.site?.aiSystemPrompt
   )?.organization
 
   const customPrompts: string[] = []
-  if (orgWithPrompt?.aiSystemPrompt) {
-    customPrompts.push(`## Organization Guidelines\n${orgWithPrompt.aiSystemPrompt}`)
+  if (orgWithPrompt?.site?.aiSystemPrompt) {
+    customPrompts.push(`## Organization Guidelines\n${orgWithPrompt.site.aiSystemPrompt}`)
   }
-  if (user?.aiSystemPrompt) {
-    customPrompts.push(`## Teacher Preferences\n${user.aiSystemPrompt}`)
+  if (user?.site?.aiSystemPrompt) {
+    customPrompts.push(`## Teacher Preferences\n${user.site.aiSystemPrompt}`)
   }
   if (customPrompts.length > 0) {
     orgPrompt = customPrompts.join('\n\n')

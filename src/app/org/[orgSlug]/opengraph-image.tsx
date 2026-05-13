@@ -13,14 +13,15 @@ interface Params {
 
 export default async function Image({ params }: Params) {
   const { orgSlug } = await params
-  const org = await prisma.organization.findUnique({
+  // Page-display fields all live on Site now.
+  const orgSite = await prisma.site.findUnique({
     where: { slug: orgSlug },
     select: {
-      name: true,
-      description: true,
+      pageDescription: true,
       pageTagline: true,
+      pageIcon: true,
       showIcon: true,
-      iconUrl: true,
+      organization: { select: { name: true } },
     },
   }).catch(() => null)
 
@@ -28,11 +29,11 @@ export default async function Image({ params }: Params) {
   // src/app/org/[orgSlug]/page.tsx so the OG card and the meta title align.
   const title = orgSlug === 'eduskript'
     ? 'Eduskript'
-    : (org?.name || 'Eduskript')
+    : (orgSite?.organization?.name || 'Eduskript')
   const subtitle = orgSlug === 'eduskript'
     ? 'Open-source platform for interactive lessons.'
-    : (org?.pageTagline || org?.description || null)
-  const iconUrl = org?.showIcon ? org?.iconUrl : null
+    : (orgSite?.pageTagline || orgSite?.pageDescription || null)
+  const iconUrl = orgSite?.showIcon ? orgSite?.pageIcon : null
 
   return new ImageResponse(
     <OgLayout title={title} subtitle={subtitle} iconUrl={iconUrl} />,

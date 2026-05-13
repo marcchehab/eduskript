@@ -34,17 +34,19 @@ export async function GET(req: NextRequest) {
             // Exclude tokens for security
           }
         },
-        collectionAuthors: {
-          include: {
-            collection: {
+        site: {
+          select: {
+            slug: true,
+            pageDescription: true,
+            sidebarBehavior: true,
+            collections: {
               select: {
                 id: true,
                 title: true,
-                slug: true,
                 createdAt: true,
-              }
-            }
-          }
+              },
+            },
+          },
         },
         skriptAuthors: {
           include: {
@@ -137,10 +139,10 @@ export async function GET(req: NextRequest) {
         email: userData.email,
         emailVerified: userData.emailVerified,
         image: userData.image,
-        username: userData.pageSlug,
+        username: userData.site?.slug ?? null,
         title: userData.title,
         bio: userData.bio,
-        pageDescription: userData.pageDescription,
+        pageDescription: userData.site?.pageDescription ?? null,
         accountType: userData.accountType,
         studentPseudonym: userData.studentPseudonym,
         createdAt: userData.createdAt,
@@ -150,16 +152,15 @@ export async function GET(req: NextRequest) {
       },
       preferences: {
         themePreference: userData.themePreference,
-        sidebarBehavior: userData.sidebarBehavior,
+        sidebarBehavior: userData.site?.sidebarBehavior ?? null,
       },
       accounts: userData.accounts,
-      authoredCollections: userData.collectionAuthors.map(ca => ({
-        collectionId: ca.collection.id,
-        collectionTitle: ca.collection.title,
-        collectionSlug: ca.collection.slug,
-        permission: ca.permission,
-        since: ca.createdAt,
-      })),
+      // Owned (1:1 site) collections — there's no permission level anymore.
+      ownedCollections: userData.site?.collections.map(c => ({
+        collectionId: c.id,
+        collectionTitle: c.title,
+        since: c.createdAt,
+      })) ?? [],
       authoredSkripts: userData.skriptAuthors.map(sa => ({
         skriptId: sa.skript.id,
         skriptTitle: sa.skript.title,

@@ -10,9 +10,7 @@ interface ExportManifest {
   version: number
   exportedAt: string
   collections: {
-    slug: string
     title: string
-    description: string | null
     skripts: string[] // skript slugs
   }[]
   skripts: {
@@ -48,9 +46,9 @@ export async function GET(request: Request) {
 
     const userId = session.user.id
 
-    // Build query for collections
+    // Build query for collections (1:1 with the user's site now).
     const collectionsWhere = {
-      authors: { some: { userId, permission: 'author' } },
+      site: { userId },
       ...(collectionIds && { id: { in: collectionIds } })
     }
 
@@ -95,7 +93,7 @@ export async function GET(request: Request) {
 
     // Build manifest
     const manifest: ExportManifest = {
-      version: 1,
+      version: 2,
       exportedAt: new Date().toISOString(),
       collections: [],
       skripts: {}
@@ -162,9 +160,7 @@ export async function GET(request: Request) {
       }
 
       manifest.collections.push({
-        slug: collection.slug,
         title: collection.title,
-        description: collection.description,
         skripts: collectionSkriptSlugs
       })
     }

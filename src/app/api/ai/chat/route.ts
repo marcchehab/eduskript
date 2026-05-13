@@ -89,34 +89,34 @@ export async function POST(request: Request) {
     }
 
     // 6. Check permissions
-    const permissions = checkSkriptPermissions(userId, skript.authors, undefined, !!session.user.isAdmin)
+    const permissions = checkSkriptPermissions(userId, skript.authors, !!session.user.isAdmin)
     if (!permissions.canView) {
       return Response.json({ error: 'Access denied' }, { status: 403 })
     }
 
-    // 7. Get organization and teacher prompts
+    // 7. Get organization and teacher prompts (aiSystemPrompt lives on Site for both).
     let orgPrompt: string | undefined
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: {
-        aiSystemPrompt: true,
+        site: { select: { aiSystemPrompt: true } },
         organizationMemberships: {
-          include: { organization: true },
+          include: { organization: { include: { site: { select: { aiSystemPrompt: true } } } } },
         },
       },
     })
 
     // Combine org prompt and teacher prompt
     const orgWithPrompt = user?.organizationMemberships.find(
-      (m) => m.organization.aiSystemPrompt
+      (m) => m.organization.site?.aiSystemPrompt
     )?.organization
 
     const prompts: string[] = []
-    if (orgWithPrompt?.aiSystemPrompt) {
-      prompts.push(`## Organization Guidelines\n${orgWithPrompt.aiSystemPrompt}`)
+    if (orgWithPrompt?.site?.aiSystemPrompt) {
+      prompts.push(`## Organization Guidelines\n${orgWithPrompt.site.aiSystemPrompt}`)
     }
-    if (user?.aiSystemPrompt) {
-      prompts.push(`## Teacher Preferences\n${user.aiSystemPrompt}`)
+    if (user?.site?.aiSystemPrompt) {
+      prompts.push(`## Teacher Preferences\n${user.site.aiSystemPrompt}`)
     }
     if (prompts.length > 0) {
       orgPrompt = prompts.join('\n\n')

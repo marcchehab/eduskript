@@ -15,7 +15,6 @@
 export interface SiteStructure {
   id: string
   title: string
-  slug: string
   accentColor?: string | null // Hex color for letter markers
   skripts: SiteStructureSkript[]
 }
@@ -67,7 +66,6 @@ interface RawCollectionSkript {
 interface RawCollection {
   id: string
   title: string
-  slug: string
   accentColor?: string | null
   collectionSkripts: RawCollectionSkript[]
 }
@@ -105,7 +103,6 @@ export function buildSiteStructure(
     .map(col => ({
       id: col.id,
       title: col.title,
-      slug: col.slug,
       accentColor: col.accentColor,
       skripts: col.collectionSkripts
         // Filter unpublished skripts

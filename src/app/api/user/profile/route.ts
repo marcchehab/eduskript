@@ -81,13 +81,17 @@ export async function GET() {
       id: true,
       name: true,
       email: true,
-      pageSlug: true,
-      pageName: true,
-      pageDescription: true,
-      pageIcon: true,
-      pageLanguage: true,
       title: true,
       bio: true,
+      site: {
+        select: {
+          slug: true,
+          pageName: true,
+          pageDescription: true,
+          pageIcon: true,
+          pageLanguage: true,
+        },
+      },
     },
   })
 
@@ -95,7 +99,20 @@ export async function GET() {
     return NextResponse.json({ error: 'User not found' }, { status: 404 })
   }
 
-  return NextResponse.json(user)
+  // Flatten Site fields onto the response under their legacy names so the
+  // dashboard UI doesn't need to be touched. Source of truth is Site.
+  return NextResponse.json({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    title: user.title,
+    bio: user.bio,
+    pageSlug: user.site?.slug ?? null,
+    pageName: user.site?.pageName ?? null,
+    pageDescription: user.site?.pageDescription ?? null,
+    pageIcon: user.site?.pageIcon ?? null,
+    pageLanguage: user.site?.pageLanguage ?? null,
+  })
 }
 
 export async function PATCH(request: NextRequest) {
@@ -107,11 +124,12 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Fetch user's admin status, org admin status, and current page slug
+    // (slug lives on Site now).
     const currentUser = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: {
         isAdmin: true,
-        pageSlug: true,
+        site: { select: { id: true, slug: true } },
         organizationMemberships: {
           where: { role: { in: ['owner', 'admin'] } },
           select: { id: true },
@@ -128,58 +146,115 @@ export async function PATCH(request: NextRequest) {
     const validatedData = schema.parse(body)
 
     const result = await withDatabaseConnection(async () => {
-      // Check if page slug is already taken by another user (check both pageSlug and username)
+      // pageSlug now lives on Site, not User. Uniqueness is checked against
+      // Site.slug across user + org sites. Username collisions still live on
+      // User and need a separate check.
       if (validatedData.pageSlug) {
-        const existingUser = await prisma.user.findFirst({
-          where: {
-            OR: [
-              { pageSlug: validatedData.pageSlug },
-              { username: validatedData.pageSlug }
-            ],
-            NOT: { id: session.user.id }
-          }
-        })
-
-        if (existingUser) {
+        const conflict = await prisma.$transaction([
+          prisma.site.findFirst({
+            where: { slug: validatedData.pageSlug, NOT: { userId: session.user.id } },
+            select: { id: true },
+          }),
+          prisma.user.findFirst({
+            where: { username: validatedData.pageSlug, NOT: { id: session.user.id } },
+            select: { id: true },
+          }),
+        ])
+        if (conflict[0] || conflict[1]) {
           throw new Error('This page slug is already taken')
         }
       }
 
-      // Build update data with only the fields that were provided,
-      // so saving profile settings doesn't wipe out page settings and vice versa
-      const updateData: Record<string, unknown> = {
+      // Profile fields (name, title, bio) live on User. Page-display fields
+      // (pageName, pageDescription, …) and the URL slug live on Site. Split
+      // the patch and apply each side independently — only touching the
+      // fields the client actually sent so saving profile settings doesn't
+      // wipe out page settings and vice versa.
+      const userUpdate: Record<string, unknown> = {
         name: validatedData.name,
         needsProfileCompletion: false,
       }
-      if ('pageSlug' in body) updateData.pageSlug = validatedData.pageSlug
-      if ('pageName' in body) updateData.pageName = validatedData.pageName || null
-      if ('pageDescription' in body) updateData.pageDescription = validatedData.pageDescription || null
-      if ('pageIcon' in body) updateData.pageIcon = validatedData.pageIcon || null
-      if ('pageLanguage' in body) updateData.pageLanguage = validatedData.pageLanguage || null
-      if ('title' in body) updateData.title = validatedData.title || null
-      if ('bio' in body) updateData.bio = validatedData.bio || null
+      if ('title' in body) userUpdate.title = validatedData.title || null
+      if ('bio' in body) userUpdate.bio = validatedData.bio || null
 
-      // Update the user profile and clear needsProfileCompletion flag
-      return await prisma.user.update({
+      const siteUpdate: Record<string, unknown> = {}
+      if ('pageName' in body) siteUpdate.pageName = validatedData.pageName || null
+      if ('pageDescription' in body) siteUpdate.pageDescription = validatedData.pageDescription || null
+      if ('pageIcon' in body) siteUpdate.pageIcon = validatedData.pageIcon || null
+      if ('pageLanguage' in body) siteUpdate.pageLanguage = validatedData.pageLanguage || null
+
+      const updatedUser = await prisma.user.update({
         where: { id: session.user.id },
-        data: updateData,
+        data: userUpdate,
         select: {
           id: true,
           name: true,
           email: true,
-          pageSlug: true,
-          pageName: true,
-          pageDescription: true,
-          pageIcon: true,
-          pageLanguage: true,
           title: true,
-          bio: true
+          bio: true,
         }
       })
+
+      let newSlug = currentUser?.site?.slug ?? null
+      // Upsert the Site row if there's a slug change or any site-field change
+      // to apply. Creating-on-demand keeps OAuth-signup teachers who haven't
+      // claimed a slug yet from getting silently dropped here.
+      const hasSiteFields = Object.keys(siteUpdate).length > 0
+      const hasNewSlug = 'pageSlug' in body && validatedData.pageSlug
+      let siteRow: { slug: string; pageName: string | null; pageDescription: string | null; pageIcon: string | null; pageLanguage: string | null } | null = null
+      if (hasNewSlug || hasSiteFields) {
+        // Without an existing slug we can't create a Site (slug is required).
+        // Fall back to keeping whatever's there if no slug was provided.
+        if (hasNewSlug || newSlug) {
+          siteRow = await prisma.site.upsert({
+            where: { userId: session.user.id },
+            update: {
+              ...(hasNewSlug ? { slug: validatedData.pageSlug } : {}),
+              ...siteUpdate,
+            },
+            create: {
+              slug: (validatedData.pageSlug ?? newSlug)!,
+              userId: session.user.id,
+              ...siteUpdate,
+            },
+            select: {
+              slug: true,
+              pageName: true,
+              pageDescription: true,
+              pageIcon: true,
+              pageLanguage: true,
+            },
+          })
+          newSlug = siteRow.slug
+        }
+      }
+
+      // Read back the latest site fields if we didn't just write them.
+      if (!siteRow && newSlug) {
+        siteRow = await prisma.site.findUnique({
+          where: { userId: session.user.id },
+          select: {
+            slug: true,
+            pageName: true,
+            pageDescription: true,
+            pageIcon: true,
+            pageLanguage: true,
+          },
+        })
+      }
+
+      return {
+        ...updatedUser,
+        pageSlug: newSlug,
+        pageName: siteRow?.pageName ?? null,
+        pageDescription: siteRow?.pageDescription ?? null,
+        pageIcon: siteRow?.pageIcon ?? null,
+        pageLanguage: siteRow?.pageLanguage ?? null,
+      }
     })
 
     // Invalidate caches for the user's public page
-    const oldPageSlug = currentUser?.pageSlug
+    const oldPageSlug = currentUser?.site?.slug ?? null
     const newPageSlug = result.pageSlug
 
     // Revalidate cache tags for both old and new page slugs

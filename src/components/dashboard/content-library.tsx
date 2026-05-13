@@ -7,15 +7,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { DraggableCollection, DraggableSkript } from './draggable-content'
 import { Search, BookOpen, FileText } from 'lucide-react'
-import { CollectionAuthor, SkriptAuthor, User, Collection, Skript } from '@prisma/client'
+import { SkriptAuthor, User, Collection, Skript } from '@prisma/client'
 import { checkSkriptPermissions } from '@/lib/permissions'
 import { api, handleJsonResponse } from '@/lib/api-error-handler'
 import { CreateSkriptModal } from './create-skript-modal'
 import { useRouter } from 'next/navigation'
 import type { PageBuilderContext } from './page-builder-interface'
 
-interface CollectionWithAuthors extends Collection {
-  authors: (CollectionAuthor & { user: Pick<User, 'id' | 'name' | 'email'> })[]
+interface LibraryCollection extends Collection {
   collectionSkripts: Array<{
     skript: Skript
   }>
@@ -25,8 +24,7 @@ interface SkriptWithAuthors extends Skript {
   authors: (SkriptAuthor & { user: Pick<User, 'id' | 'name' | 'email'> })[]
   collectionSkripts: Array<{
     collection: {
-      slug: string
-      authors: (CollectionAuthor & { user: Pick<User, 'id' | 'name' | 'email'> })[]
+      site: { userId: string | null; organizationId: string | null } | null
     }
   }>
   pages: Array<{ id: string }>
@@ -41,7 +39,7 @@ interface ContentLibraryProps {
 export function ContentLibrary({ onDataLoad, refreshTrigger, context = { type: 'user' } }: ContentLibraryProps = {}) {
   const { data: session } = useSession()
   const router = useRouter()
-  const [collections, setCollections] = useState<CollectionWithAuthors[]>([])
+  const [collections, setCollections] = useState<LibraryCollection[]>([])
   const [skripts, setSkripts] = useState<SkriptWithAuthors[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [loading, setLoading] = useState(true)
@@ -50,7 +48,7 @@ export function ContentLibrary({ onDataLoad, refreshTrigger, context = { type: '
     if (!session?.user?.id) return
 
     try {
-      let collectionsData: CollectionWithAuthors[] = []
+      let collectionsData: LibraryCollection[] = []
       let skriptsData: SkriptWithAuthors[] = []
 
       if (context.type === 'organization' && context.organizationId) {
@@ -90,10 +88,10 @@ export function ContentLibrary({ onDataLoad, refreshTrigger, context = { type: '
     fetchContent()
   }, [fetchContent, refreshTrigger])
 
-  // Filter content based on search term
+  // Filter content based on search term. Collections no longer have a
+  // description field, so we search the title only.
   const filteredCollections = collections.filter(collection =>
-    collection.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (collection.description?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+    collection.title.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   const filteredSkripts = skripts.filter(skript =>
@@ -167,13 +165,9 @@ export function ContentLibrary({ onDataLoad, refreshTrigger, context = { type: '
                         type="collection"
                         id={collection.id}
                         title={collection.title}
-                        description={collection.description || undefined}
                         skriptCount={collection.collectionSkripts.length}
-                        authors={collection.authors}
-                        currentUserId={session.user.id}
                         isViewOnly={false}
                         index={index}
-                        slug={collection.slug}
                       />
                     )
                   })}

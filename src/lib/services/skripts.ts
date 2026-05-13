@@ -41,13 +41,7 @@ const skriptInclude = {
   collectionSkripts: {
     include: {
       collection: {
-        include: {
-          authors: {
-            include: {
-              user: { select: { id: true, name: true, email: true } },
-            },
-          },
-        },
+        select: { id: true, title: true },
       },
     },
   },
@@ -66,7 +60,7 @@ export async function listSkriptsForUser(
           {
             collectionSkripts: {
               some: {
-                collection: { authors: { some: { userId } } },
+                collection: { site: { userId } },
               },
             },
           },
@@ -97,15 +91,7 @@ export async function getSkriptForUser(
 
   if (!skript) throw new NotFoundError('Skript not found')
 
-  const collectionAuthors = skript.collectionSkripts.flatMap(
-    (cs) => cs.collection?.authors ?? []
-  )
-  const perms = checkSkriptPermissions(
-    userId,
-    skript.authors,
-    collectionAuthors,
-    ctx.isAdmin
-  )
+  const perms = checkSkriptPermissions(userId, skript.authors, ctx.isAdmin)
   if (!perms.canView) {
     throw new PermissionDeniedError('Cannot view this skript')
   }
@@ -164,30 +150,11 @@ export async function updateSkriptForUser(
     where: { id: skriptId },
     include: {
       authors: { include: { user: { select: { id: true, name: true } } } },
-      collectionSkripts: {
-        include: {
-          collection: {
-            include: {
-              authors: {
-                include: { user: { select: { id: true, name: true } } },
-              },
-            },
-          },
-        },
-      },
     },
   })
   if (!existing) throw new NotFoundError('Skript not found')
 
-  const collectionAuthors = existing.collectionSkripts.flatMap(
-    (cs) => cs.collection?.authors ?? []
-  )
-  const perms = checkSkriptPermissions(
-    userId,
-    existing.authors,
-    collectionAuthors,
-    ctx.isAdmin
-  )
+  const perms = checkSkriptPermissions(userId, existing.authors, ctx.isAdmin)
   if (!perms.canEdit) {
     throw new PermissionDeniedError('Cannot edit this skript')
   }
@@ -226,31 +193,29 @@ export async function updateSkriptForUser(
   void ctx.editSource
   void ctx.editClient
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { pageSlug: true },
+  const userSite = await prisma.site.findUnique({
+    where: { userId },
+    select: { slug: true },
   })
-  if (user?.pageSlug) {
-    revalidateTag(CACHE_TAGS.skriptBySlug(user.pageSlug, updated.slug), {
-      expire: 0,
-    })
+  if (userSite?.slug) {
+    const pageSlug = userSite.slug
+    revalidateTag(CACHE_TAGS.skriptBySlug(pageSlug, updated.slug), { expire: 0 })
     if (normalizedSlug && normalizedSlug !== existing.slug) {
       // Old slug's tag also needs flushing so stale pages stop responding.
-      revalidateTag(CACHE_TAGS.skriptBySlug(user.pageSlug, existing.slug), {
-        expire: 0,
-      })
+      revalidateTag(CACHE_TAGS.skriptBySlug(pageSlug, existing.slug), { expire: 0 })
     }
-    revalidateTag(CACHE_TAGS.teacherContent(user.pageSlug), { expire: 0 })
+    revalidateTag(CACHE_TAGS.teacherContent(pageSlug), { expire: 0 })
     revalidatePath('/dashboard')
 
     const orgMemberships = await prisma.organizationMember.findMany({
       where: { userId },
-      select: { organization: { select: { slug: true } } },
+      select: { organization: { select: { site: { select: { slug: true } } } } },
     })
     for (const membership of orgMemberships) {
-      revalidateTag(CACHE_TAGS.orgContent(membership.organization.slug), {
-        expire: 0,
-      })
+      const orgSlug = membership.organization.site?.slug
+      if (orgSlug) {
+        revalidateTag(CACHE_TAGS.orgContent(orgSlug), { expire: 0 })
+      }
     }
   }
 

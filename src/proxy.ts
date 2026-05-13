@@ -74,11 +74,13 @@ export async function proxy(request: NextRequest) {
     return rewriteToOrg(request, APP_DOMAINS[domain])
   }
 
-  // For localhost, only rewrite the root path to the default org.
-  // Sub-paths like /teacher-slug/skript/page are handled by the [domain]
-  // route directly — rewriting them to /org/... would break teacher pages.
+  // For localhost: rewrite root and the org-content prefix /c/* to the
+  // default org, otherwise let /<teacher-slug>/... fall through to the
+  // [domain] route directly. On a real custom host /c/* gets rewritten
+  // for free; localhost has no host to disambiguate so we treat the
+  // /c/ prefix as the explicit "this is the default org's content" signal.
   if (domain === 'localhost') {
-    if (pathname === '/') {
+    if (pathname === '/' || pathname === '/c' || pathname.startsWith('/c/')) {
       return rewriteToOrg(request, DEFAULT_ORG_SLUG)
     }
     return NextResponse.next()

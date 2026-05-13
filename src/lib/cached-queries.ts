@@ -11,7 +11,6 @@ const log = createLogger('cache:queries')
 export const CACHE_TAGS = {
   user: (pageSlug: string) => `user:${pageSlug}`,
   collection: (id: string) => `collection:${id}`,
-  collectionBySlug: (pageSlug: string, slug: string) => `collection:${pageSlug}:${slug}`,
   skript: (id: string) => `skript:${id}`,
   skriptBySlug: (pageSlug: string, skriptSlug: string) =>
     `skript:${pageSlug}:${skriptSlug}`,
@@ -31,31 +30,48 @@ export const getTeacherByPageSlug = (pageSlug: string) =>
   unstable_cache(
     async () => {
       log('MISS getTeacherByPageSlug', { pageSlug })
-      return prisma.user.findFirst({
-        where: { pageSlug },
+      // URL slug AND page-display fields all live on Site now. Pull both
+      // sets in one query, then graft them onto the user object so
+      // consumers keep reading `user.pageName`, `user.pageSlug`, etc.
+      // without a sweep.
+      const site = await prisma.site.findUnique({
+        where: { slug: pageSlug },
         select: {
-          id: true,
-          name: true,
-          email: true,
-          pageSlug: true,
+          slug: true,
           pageName: true,
           pageDescription: true,
           pageIcon: true,
           pageLanguage: true,
           pageTagline: true,
-          title: true,
-          bio: true,
           sidebarBehavior: true,
           typographyPreference: true,
-          // Used by public pages to skip annotation/snap/broadcast queries
-          // for free teachers, where those tables are empty by definition.
-          billingPlan: true,
-          customDomains: {
-            where: { isVerified: true, isPrimary: true },
-            select: { domain: true },
-            take: 1,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              title: true,
+              bio: true,
+              billingPlan: true,
+              customDomains: {
+                where: { isVerified: true, isPrimary: true },
+                select: { domain: true },
+                take: 1,
+              },
+            },
           },
-        }
+        },
+      })
+      if (!site?.user) return null
+      return Object.assign(site.user, {
+        pageSlug: site.slug,
+        pageName: site.pageName,
+        pageDescription: site.pageDescription,
+        pageIcon: site.pageIcon,
+        pageLanguage: site.pageLanguage,
+        pageTagline: site.pageTagline,
+        sidebarBehavior: site.sidebarBehavior,
+        typographyPreference: site.typographyPreference,
       })
     },
     [`teacher-${pageSlug}`],
@@ -75,77 +91,38 @@ export const getTeacherByUsername = getTeacherByPageSlug
 export const getTeacherWithLayout = (pageSlug: string) =>
   unstable_cache(
     async () => {
-      return prisma.user.findFirst({
-        where: { pageSlug },
+      // URL slug, page layout, and page-display fields all live on Site.
+      // Look up the site by slug, then graft the site's fields onto the
+      // user object so existing accessors (`user.pageSlug`, `user.pageName`,
+      // `user.pageLayout`, …) keep working without a sweep.
+      const site = await prisma.site.findUnique({
+        where: { slug: pageSlug },
         include: {
+          user: true,
           pageLayout: {
             include: {
-              items: {
-                orderBy: { order: 'asc' }
-              }
+              items: { orderBy: { order: 'asc' } }
             }
           }
         }
+      })
+      if (!site?.user) return null
+      return Object.assign(site.user, {
+        pageSlug: site.slug,
+        pageName: site.pageName,
+        pageDescription: site.pageDescription,
+        pageIcon: site.pageIcon,
+        pageLanguage: site.pageLanguage,
+        pageTagline: site.pageTagline,
+        sidebarBehavior: site.sidebarBehavior,
+        typographyPreference: site.typographyPreference,
+        aiSystemPrompt: site.aiSystemPrompt,
+        pageLayout: site.pageLayout ?? null,
       })
     },
     [`teacher-layout-${pageSlug}`],
     {
       tags: [CACHE_TAGS.user(pageSlug), CACHE_TAGS.teacherContent(pageSlug)],
-      revalidate: false,
-    }
-  )()
-
-/**
- * Get published collection with skripts and pages - cached
- * Only returns published content for public consumption
- */
-export const getPublishedCollection = (teacherId: string, pageSlug: string, collectionSlug: string) =>
-  unstable_cache(
-    async () => {
-      return prisma.collection.findFirst({
-        where: {
-          slug: collectionSlug,
-          authors: {
-            some: { userId: teacherId }
-          }
-        },
-        include: {
-          collectionSkripts: {
-            where: {
-              skript: { isPublished: true, isUnlisted: false }
-            },
-            include: {
-              skript: {
-                include: {
-                  frontPage: { select: { id: true } },
-                  pages: {
-                    where: { isPublished: true, isUnlisted: false },
-                    orderBy: { order: 'asc' },
-                    select: {
-                      id: true,
-                      title: true,
-                      slug: true,
-                      content: true,
-                      order: true,
-                      isPublished: true,
-                      pageType: true,
-                      examSettings: true,
-                    }
-                  }
-                }
-              }
-            },
-            orderBy: { order: 'asc' }
-          }
-        }
-      })
-    },
-    [`published-collection-${pageSlug}-${collectionSlug}`],
-    {
-      tags: [
-        CACHE_TAGS.collectionBySlug(pageSlug, collectionSlug),
-        CACHE_TAGS.teacherContent(pageSlug),
-      ],
       revalidate: false,
     }
   )()
@@ -158,11 +135,7 @@ export const getAllPublishedCollections = (teacherId: string, pageSlug: string) 
   unstable_cache(
     async () => {
       return prisma.collection.findMany({
-        where: {
-          authors: {
-            some: { userId: teacherId }
-          }
-        },
+        where: { site: { userId: teacherId } },
         include: {
           collectionSkripts: {
             where: {
@@ -207,10 +180,10 @@ export const getFullSiteStructure = (teacherId: string, pageSlug: string) =>
   unstable_cache(
     async (): Promise<SiteStructure[]> => {
       log('MISS getFullSiteStructure', { pageSlug })
-      // Fetch page layout to determine collection order
+      // Fetch page layout via the user's site (URL slug now lives on Site).
       const pageLayout = await prisma.pageLayout.findFirst({
         where: {
-          user: { pageSlug }
+          site: { slug: pageSlug }
         },
         include: {
           items: {
@@ -230,12 +203,11 @@ export const getFullSiteStructure = (teacherId: string, pageSlug: string) =>
       const collections = await prisma.collection.findMany({
         where: {
           id: { in: layoutCollectionIds },
-          authors: { some: { userId: teacherId } },
+          site: { userId: teacherId },
         },
         select: {
           id: true,
           title: true,
-          slug: true,
           accentColor: true,
           updatedAt: true,
           collectionSkripts: {
@@ -302,7 +274,7 @@ export const getPublishedPage = (
           isPublished: true,
           OR: [
             { authors: { some: { userId: teacherId } } },
-            { collectionSkripts: { some: { collection: { authors: { some: { userId: teacherId } } } } } }
+            { collectionSkripts: { some: { collection: { site: { userId: teacherId } } } } }
           ]
         },
         include: {
@@ -350,8 +322,6 @@ export const getPublishedPage = (
         collection: collection ? {
           id: collection.id,
           title: collection.title,
-          slug: collection.slug,
-          description: collection.description,
           accentColor: collection.accentColor,
         } : null,
         skript: {
@@ -397,7 +367,6 @@ export const getTeacherHomepageContent = (teacherId: string, pageSlug: string, p
       const collections: Array<{
         id: string
         title: string
-        slug: string
         accentColor: string | null
         skripts: Array<{
           id: string
@@ -412,7 +381,7 @@ export const getTeacherHomepageContent = (teacherId: string, pageSlug: string, p
         title: string
         description: string | null
         slug: string
-        collection: { title: string; slug: string }
+        collection: { title: string }
         pages: Array<{ id: string; title: string; slug: string }>
       }> = []
 
@@ -421,7 +390,7 @@ export const getTeacherHomepageContent = (teacherId: string, pageSlug: string, p
           const collection = await prisma.collection.findFirst({
             where: {
               id: item.contentId,
-              authors: { some: { userId: teacherId } }
+              site: { userId: teacherId }
             },
             include: {
               collectionSkripts: {
@@ -446,7 +415,6 @@ export const getTeacherHomepageContent = (teacherId: string, pageSlug: string, p
             collections.push({
               id: collection.id,
               title: collection.title,
-              slug: collection.slug,
               accentColor: collection.accentColor,
               skripts: collection.collectionSkripts.map((cs, index) => ({
                 id: cs.skript.id,
@@ -480,7 +448,9 @@ export const getTeacherHomepageContent = (teacherId: string, pageSlug: string, p
               title: skript.title,
               description: skript.description,
               slug: skript.slug,
-              collection: firstCollection || { title: 'Uncategorized', slug: 'uncategorized' },
+              collection: firstCollection
+                ? { title: firstCollection.title }
+                : { title: 'Uncategorized' },
               pages: skript.pages
             })
           }
@@ -497,46 +467,6 @@ export const getTeacherHomepageContent = (teacherId: string, pageSlug: string, p
   )()
 
 /**
- * Get collection for any user (including unpublished for authors)
- * NOT cached - used for preview mode
- */
-export const getCollectionForPreview = async (teacherId: string, collectionSlug: string) => {
-  return prisma.collection.findFirst({
-    where: {
-      slug: collectionSlug,
-      authors: {
-        some: { userId: teacherId }
-      }
-    },
-    include: {
-      collectionSkripts: {
-        include: {
-          skript: {
-            include: {
-              frontPage: { select: { id: true } },
-              pages: {
-                orderBy: { order: 'asc' },
-                select: {
-                  id: true,
-                  title: true,
-                  slug: true,
-                  content: true,
-                  order: true,
-                  isPublished: true,
-                  pageType: true,
-                  examSettings: true,
-                }
-              }
-            }
-          }
-        },
-        orderBy: { order: 'asc' }
-      }
-    }
-  })
-}
-
-/**
  * Get skript for preview (including unpublished) by unique slug.
  * NOT cached - used for preview mode.
  * Verifies teacher authorship via skript or collection authors.
@@ -547,7 +477,7 @@ export const getSkriptForPreview = async (teacherId: string, skriptSlug: string)
       slug: skriptSlug,
       OR: [
         { authors: { some: { userId: teacherId } } },
-        { collectionSkripts: { some: { collection: { authors: { some: { userId: teacherId } } } } } }
+        { collectionSkripts: { some: { collection: { site: { userId: teacherId } } } } }
       ]
     },
     include: {
@@ -591,21 +521,41 @@ export const getSkriptForPreview = async (teacherId: string, skriptSlug: string)
 export const getOrgWithLayout = (slug: string) =>
   unstable_cache(
     async () => {
-      return prisma.organization.findUnique({
+      // URL slug lives on Site. Look up the site by slug, then return the
+      // attached organization with pageLayout/frontPage grafted under their
+      // legacy field names so consumers don't need to be touched.
+      const site = await prisma.site.findUnique({
         where: { slug },
         include: {
+          organization: {
+            include: {
+              _count: { select: { members: true } },
+            },
+          },
           frontPage: true,
           pageLayout: {
             include: {
-              items: {
-                orderBy: { order: 'asc' }
-              }
+              items: { orderBy: { order: 'asc' } }
             }
-          },
-          _count: {
-            select: { members: true }
           }
         }
+      })
+      if (!site?.organization) return null
+      // Graft slug + all page-display fields onto the org so consumers
+      // can keep reading `org.description`, `org.iconUrl`, etc. without
+      // a sweep. Map Site.pageIcon → org.iconUrl / Site.pageDescription
+      // → org.description for the legacy field names.
+      return Object.assign(site.organization, {
+        slug: site.slug,
+        description: site.pageDescription,
+        iconUrl: site.pageIcon,
+        showIcon: site.showIcon,
+        pageLanguage: site.pageLanguage,
+        pageTagline: site.pageTagline,
+        sidebarBehavior: site.sidebarBehavior,
+        aiSystemPrompt: site.aiSystemPrompt,
+        pageLayout: site.pageLayout ?? null,
+        frontPage: site.frontPage ?? null,
       })
     },
     [`org-layout-${slug}`],
@@ -636,9 +586,10 @@ export const getOrgFullSiteStructure = (orgId: string, orgSlug: string) =>
         return []
       }
 
-      // Fetch org page layout to determine collection order
-      const pageLayout = await prisma.orgPageLayout.findFirst({
-        where: { organizationId: orgId },
+      // Fetch org page layout (now in the unified PageLayout table keyed by
+      // siteId) to determine collection order.
+      const pageLayout = await prisma.pageLayout.findFirst({
+        where: { site: { organizationId: orgId } },
         include: {
           items: {
             where: { type: 'collection' },
@@ -656,12 +607,17 @@ export const getOrgFullSiteStructure = (orgId: string, orgSlug: string) =>
       const collections = await prisma.collection.findMany({
         where: {
           id: { in: layoutCollectionIds },
-          authors: { some: { userId: { in: adminUserIds } } }
+          // Org pageLayout references collections owned by the org's site OR
+          // collections owned by an admin's personal site (mirrors the legacy
+          // "any admin author" gating). Mix should be rare but is permitted.
+          OR: [
+            { site: { organizationId: orgId } },
+            { site: { userId: { in: adminUserIds } } },
+          ],
         },
         select: {
           id: true,
           title: true,
-          slug: true,
           accentColor: true,
           updatedAt: true,
           collectionSkripts: {
@@ -746,7 +702,8 @@ export const getOrgPublishedPage = (
           isPublished: true,
           OR: [
             { authors: { some: { userId: { in: adminUserIds } } } },
-            { collectionSkripts: { some: { collection: { authors: { some: { userId: { in: adminUserIds } } } } } } }
+            { collectionSkripts: { some: { collection: { site: { organizationId: orgId } } } } },
+            { collectionSkripts: { some: { collection: { site: { userId: { in: adminUserIds } } } } } },
           ]
         },
         include: {
@@ -780,20 +737,31 @@ export const getOrgPublishedPage = (
 
       if (!skript) return null
 
-      // Verify the skript's collection is in the org's page layout
+      // The skript has to be reachable from the org's home page — either as a
+      // root skript pinned directly in the org's page layout, or via a
+      // collection that's in the layout. A skript can be both "in a
+      // collection" AND "pinned at root" since the page builder added root
+      // skripts; the old check only looked at the collection side and
+      // 404'd valid root pins.
       const collectionSkript = skript.collectionSkripts[0]
-      if (collectionSkript?.collection) {
-        const orgPageLayout = await prisma.orgPageLayout.findUnique({
-          where: { organizationId: orgId },
-          include: {
-            items: { where: { type: 'collection' } }
-          }
-        })
-        if (!orgPageLayout) return null
-        const configuredCollectionIds = orgPageLayout.items.map(item => item.contentId)
-        if (!configuredCollectionIds.includes(collectionSkript.collection.id)) {
-          return null
+      const orgPageLayout = await prisma.pageLayout.findFirst({
+        where: { site: { organizationId: orgId } },
+        include: {
+          items: { where: { type: { in: ['collection', 'skript'] } } }
         }
+      })
+      if (!orgPageLayout) return null
+      const layoutCollectionIds = new Set(
+        orgPageLayout.items.filter(i => i.type === 'collection').map(i => i.contentId)
+      )
+      const layoutSkriptIds = new Set(
+        orgPageLayout.items.filter(i => i.type === 'skript').map(i => i.contentId)
+      )
+      const reachableViaCollection =
+        !!collectionSkript?.collection && layoutCollectionIds.has(collectionSkript.collection.id)
+      const reachableAsRootSkript = layoutSkriptIds.has(skript.id)
+      if (!reachableViaCollection && !reachableAsRootSkript) {
+        return null
       }
 
       const page = skript.pages.find(p => p.slug === pageSlug)
@@ -805,8 +773,6 @@ export const getOrgPublishedPage = (
         collection: collection ? {
           id: collection.id,
           title: collection.title,
-          slug: collection.slug,
-          description: collection.description,
           accentColor: collection.accentColor,
         } : null,
         skript: {
@@ -847,7 +813,6 @@ export const getOrgHomepageContent = (
       const collections: Array<{
         id: string
         title: string
-        slug: string
         accentColor: string | null
         skripts: Array<{
           id: string
@@ -862,7 +827,7 @@ export const getOrgHomepageContent = (
         title: string
         description: string | null
         slug: string
-        collection: { title: string; slug: string }
+        collection: { title: string }
         pages: Array<{ id: string; title: string; slug: string }>
       }> = []
 
@@ -871,7 +836,10 @@ export const getOrgHomepageContent = (
           const collection = await prisma.collection.findFirst({
             where: {
               id: item.contentId,
-              authors: { some: { userId: { in: adminUserIds } } }
+              OR: [
+                { site: { organizationId: orgId } },
+                { site: { userId: { in: adminUserIds } } },
+              ],
             },
             include: {
               collectionSkripts: {
@@ -896,7 +864,6 @@ export const getOrgHomepageContent = (
             collections.push({
               id: collection.id,
               title: collection.title,
-              slug: collection.slug,
               accentColor: collection.accentColor,
               skripts: collection.collectionSkripts.map((cs, index) => ({
                 id: cs.skript.id,
@@ -912,7 +879,10 @@ export const getOrgHomepageContent = (
             where: {
               id: item.contentId,
               isPublished: true,
-              authors: { some: { userId: { in: adminUserIds } } }
+              OR: [
+                { authors: { some: { userId: { in: adminUserIds } } } },
+                { collectionSkripts: { some: { collection: { site: { organizationId: orgId } } } } },
+              ],
             },
             include: {
               collectionSkripts: { include: { collection: true } },
@@ -930,7 +900,9 @@ export const getOrgHomepageContent = (
               title: skript.title,
               description: skript.description,
               slug: skript.slug,
-              collection: firstCollection || { title: 'Uncategorized', slug: 'uncategorized' },
+              collection: firstCollection
+                ? { title: firstCollection.title }
+                : { title: 'Uncategorized' },
               pages: skript.pages
             })
           }

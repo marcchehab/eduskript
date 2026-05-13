@@ -24,7 +24,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     const source = await prisma.plugin.findFirst({
       where: {
         slug: pluginSlug,
-        author: { pageSlug: ownerSlug },
+        author: { site: { slug: ownerSlug } },
       },
     })
 
@@ -49,7 +49,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       forkSlug = `${pluginSlug}-${suffix}`
     }
 
-    const forked = await prisma.plugin.create({
+    const forkedRaw = await prisma.plugin.create({
       data: {
         slug: forkSlug,
         name: source.name,
@@ -61,10 +61,20 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       },
       include: {
         author: {
-          select: { id: true, pageSlug: true, pageName: true, name: true },
+          select: { id: true, name: true, site: { select: { slug: true, pageName: true } } },
         },
       },
     })
+
+    const forked = {
+      ...forkedRaw,
+      author: {
+        id: forkedRaw.author.id,
+        name: forkedRaw.author.name,
+        pageSlug: forkedRaw.author.site?.slug ?? null,
+        pageName: forkedRaw.author.site?.pageName ?? null,
+      },
+    }
 
     return NextResponse.json({ plugin: forked }, { status: 201 })
   } catch (error) {
