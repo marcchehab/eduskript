@@ -295,6 +295,11 @@ export function ContentLibrary({ onDataLoad, refreshTrigger, context = { type: '
       type={alertDialog.type}
       title={alertDialog.title}
       message={alertDialog.message}
+      onConfirm={alertDialog.onConfirm}
+      showCancel={alertDialog.showCancel}
+      confirmText={alertDialog.confirmText}
+      cancelText={alertDialog.cancelText}
+      destructive={alertDialog.destructive}
     />
     </>
   )

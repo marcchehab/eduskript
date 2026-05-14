@@ -955,13 +955,17 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
         </div>
       </div>
 
-      {/* Alert Dialog */}
       <AlertDialogModal
         open={alert.open}
         onOpenChange={alert.setOpen}
         type={alert.type}
         title={alert.title}
         message={alert.message}
+        onConfirm={alert.onConfirm}
+        showCancel={alert.showCancel}
+        confirmText={alert.confirmText}
+        cancelText={alert.cancelText}
+        destructive={alert.destructive}
       />
     </DragDropContext>
   )

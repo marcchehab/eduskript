@@ -22,6 +22,8 @@ interface AlertDialogModalProps {
   confirmText?: string
   showCancel?: boolean
   cancelText?: string
+  /** Render the confirm button in the destructive (red) variant. */
+  destructive?: boolean
 }
 
 export function AlertDialogModal({
@@ -34,6 +36,7 @@ export function AlertDialogModal({
   confirmText = 'OK',
   showCancel = false,
   cancelText = 'Cancel',
+  destructive = false,
 }: AlertDialogModalProps) {
   const handleConfirm = () => {
     onConfirm?.()
@@ -70,7 +73,9 @@ export function AlertDialogModal({
               {cancelText}
             </Button>
           )}
-          <Button onClick={handleConfirm}>{confirmText}</Button>
+          <Button variant={destructive ? 'destructive' : 'default'} onClick={handleConfirm}>
+            {confirmText}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
