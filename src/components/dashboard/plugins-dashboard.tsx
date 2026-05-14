@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { buildPluginSrcdoc } from '@/lib/plugin-sdk'
 import { useIsFreeTeacher } from '@/hooks/use-billing'
+import { useAlertDialog } from '@/hooks/use-alert-dialog'
+import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { Plus, Pencil, Trash2, Copy, Search, ArrowLeft, Eye, Sparkles, Check } from 'lucide-react'
 
 interface Plugin {
@@ -37,6 +39,7 @@ type View = 'list' | 'editor'
 
 export function PluginsDashboard({ userId, userPageSlug }: PluginsDashboardProps) {
   const isFreePlan = useIsFreeTeacher()
+  const dialog = useAlertDialog()
   const [plugins, setPlugins] = useState<Plugin[]>([])
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState<View>('list')
@@ -157,18 +160,22 @@ export function PluginsDashboard({ userId, userPageSlug }: PluginsDashboardProps
     }
   }
 
-  const handleDelete = async (plugin: Plugin) => {
-    if (!confirm(`Delete plugin "${plugin.name}"? This cannot be undone.`)) return
-
-    try {
-      await fetch(
-        `/api/plugins/${encodeURIComponent(plugin.author.pageSlug || '')}/${encodeURIComponent(plugin.slug)}`,
-        { method: 'DELETE' },
-      )
-      await fetchPlugins()
-    } catch (err) {
-      console.error('Failed to delete:', err)
-    }
+  const handleDelete = (plugin: Plugin) => {
+    dialog.showConfirm(
+      `Delete plugin "${plugin.name}"? This cannot be undone.`,
+      async () => {
+        try {
+          await fetch(
+            `/api/plugins/${encodeURIComponent(plugin.author.pageSlug || '')}/${encodeURIComponent(plugin.slug)}`,
+            { method: 'DELETE' },
+          )
+          await fetchPlugins()
+        } catch (err) {
+          console.error('Failed to delete:', err)
+        }
+      },
+      { destructive: true, title: 'Delete plugin', confirmText: 'Delete' },
+    )
   }
 
   const handleFork = async (plugin: Plugin) => {
@@ -244,9 +251,20 @@ export function PluginsDashboard({ userId, userPageSlug }: PluginsDashboardProps
     )
   })
 
+  const alertModal = (
+    <AlertDialogModal
+      open={dialog.open} onOpenChange={dialog.setOpen}
+      type={dialog.type} title={dialog.title} message={dialog.message}
+      onConfirm={dialog.onConfirm} showCancel={dialog.showCancel}
+      confirmText={dialog.confirmText} cancelText={dialog.cancelText}
+      destructive={dialog.destructive}
+    />
+  )
+
   // === LIST VIEW ===
   if (view === 'list') {
     return (
+      <>
       <div className="space-y-4">
         {/* Controls */}
         <div className="flex items-center gap-3">
@@ -360,6 +378,8 @@ export function PluginsDashboard({ userId, userPageSlug }: PluginsDashboardProps
           </div>
         )}
       </div>
+      {alertModal}
+      </>
     )
   }
 
@@ -369,6 +389,7 @@ export function PluginsDashboard({ userId, userPageSlug }: PluginsDashboardProps
   const canEdit = isNewPlugin || isOwner
 
   return (
+    <>
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center gap-3">
@@ -498,6 +519,8 @@ export function PluginsDashboard({ userId, userPageSlug }: PluginsDashboardProps
         </div>
       </div>
     </div>
+    {alertModal}
+    </>
   )
 }
 

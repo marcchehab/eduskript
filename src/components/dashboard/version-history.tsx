@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { History, RotateCcw, Eye, GitBranch } from 'lucide-react'
+import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
+import { useAlertDialog } from '@/hooks/use-alert-dialog'
 
 interface PageVersion {
   id: string
@@ -34,6 +36,7 @@ interface VersionHistoryProps {
 export function VersionHistory({ versions, currentContent, onRestoreVersion }: VersionHistoryProps) {
   const [selectedVersion, setSelectedVersion] = useState<string | null>(null)
   const [showPreview, setShowPreview] = useState(false)
+  const alert = useAlertDialog()
 
   const getContentPreview = (content: string) => {
     return content.length > 100 ? content.substring(0, 100) + '...' : content
@@ -44,9 +47,13 @@ export function VersionHistory({ versions, currentContent, onRestoreVersion }: V
   }
 
   const handleRestore = async (version: PageVersion) => {
-    if (window.confirm(`Are you sure you want to restore to version ${version.version}? This will create a new version with the restored content.`)) {
-      onRestoreVersion(version.id, version.content)
-    }
+    alert.showConfirm(
+      `Are you sure you want to restore to version ${version.version}? This will create a new version with the restored content.`,
+      () => {
+        onRestoreVersion(version.id, version.content)
+      },
+      { destructive: true, title: 'Restore version', confirmText: 'Restore' }
+    )
   }
 
   if (versions.length === 0) {
@@ -65,6 +72,7 @@ export function VersionHistory({ versions, currentContent, onRestoreVersion }: V
   }
 
   return (
+    <>
     <div className="bg-card rounded-lg border border-border">
       <div className="p-6 border-b border-border">
         <div className="flex items-center justify-between">
@@ -158,5 +166,18 @@ export function VersionHistory({ versions, currentContent, onRestoreVersion }: V
         ))}
       </div>
     </div>
+    <AlertDialogModal
+      open={alert.open}
+      onOpenChange={alert.setOpen}
+      type={alert.type}
+      title={alert.title}
+      message={alert.message}
+      onConfirm={alert.onConfirm}
+      showCancel={alert.showCancel}
+      confirmText={alert.confirmText}
+      cancelText={alert.cancelText}
+      destructive={alert.destructive}
+    />
+    </>
   )
 }

@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
+import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { ChevronLeft, KeyRound, Trash2 } from 'lucide-react'
 
 interface ConnectedApp {
@@ -32,6 +34,7 @@ export function ConnectedAppsSettings() {
   const [apps, setApps] = useState<ConnectedApp[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [revoking, setRevoking] = useState<string | null>(null)
+  const alert = useAlertDialog()
 
   async function load() {
     setError(null)
@@ -49,24 +52,30 @@ export function ConnectedAppsSettings() {
     load()
   }, [])
 
-  async function revoke(clientId: string, name: string) {
-    if (!confirm(`Revoke access for "${name}"?`)) return
-    setRevoking(clientId)
-    try {
-      const response = await fetch(
-        `/api/user/connected-apps/${encodeURIComponent(clientId)}`,
-        { method: 'DELETE' }
-      )
-      if (!response.ok) throw new Error('Revocation failed')
-      await load()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error')
-    } finally {
-      setRevoking(null)
-    }
+  function revoke(clientId: string, name: string) {
+    alert.showConfirm(
+      `Revoke access for "${name}"?`,
+      async () => {
+        setRevoking(clientId)
+        try {
+          const response = await fetch(
+            `/api/user/connected-apps/${encodeURIComponent(clientId)}`,
+            { method: 'DELETE' }
+          )
+          if (!response.ok) throw new Error('Revocation failed')
+          await load()
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Unknown error')
+        } finally {
+          setRevoking(null)
+        }
+      },
+      { destructive: true, title: 'Revoke access', confirmText: 'Revoke' }
+    )
   }
 
   return (
+    <>
     <div className="space-y-6">
       <div className="flex items-center gap-3">
         <Link href="/dashboard/settings">
@@ -135,5 +144,18 @@ export function ConnectedAppsSettings() {
         </div>
       )}
     </div>
+    <AlertDialogModal
+      open={alert.open}
+      onOpenChange={alert.setOpen}
+      type={alert.type}
+      title={alert.title}
+      message={alert.message}
+      onConfirm={alert.onConfirm}
+      showCancel={alert.showCancel}
+      confirmText={alert.confirmText}
+      cancelText={alert.cancelText}
+      destructive={alert.destructive}
+    />
+    </>
   )
 }

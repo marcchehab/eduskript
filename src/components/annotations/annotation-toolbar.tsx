@@ -9,6 +9,8 @@ import { cn } from '@/lib/utils'
 import { useLayout } from '@/contexts/layout-context'
 import { useIsExamPage } from '@/contexts/exam-page-context'
 import { createLogger } from '@/lib/logger'
+import { useAlertDialog } from '@/hooks/use-alert-dialog'
+import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 
 const log = createLogger('annotations:toolbar')
 
@@ -243,6 +245,8 @@ export function AnnotationToolbar({
 }: AnnotationToolbarProps) {
   // Get layout context for centering toolbar on page content (not viewport)
   const { sidebarWidth } = useLayout()
+
+  const dialog = useAlertDialog()
 
   // On exam pages, the TeacherExamToolbar owns class+student selection; hide
   // the duplicate audience selector here. Default false on non-exam pages.
@@ -482,9 +486,9 @@ export function AnnotationToolbar({
     setShowDeleteControls(false)
 
     if (confirmBeforeDelete) {
-      if (confirm('Clear all annotations on this page?')) {
+      dialog.showConfirm('Clear all annotations on this page?', () => {
         onClear()
-      }
+      }, { destructive: true, title: 'Clear annotations', confirmText: 'Clear' })
     } else {
       onClear()
     }
@@ -593,6 +597,7 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
   }
 
   const toolbarContent = (
+    <>
     <div
       data-annotation-toolbar
       className="fixed bottom-6 z-50 select-none"
@@ -1221,6 +1226,14 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
         </ToolbarSection>
       </div>
     </div>
+    <AlertDialogModal
+      open={dialog.open} onOpenChange={dialog.setOpen}
+      type={dialog.type} title={dialog.title} message={dialog.message}
+      onConfirm={dialog.onConfirm} showCancel={dialog.showCancel}
+      confirmText={dialog.confirmText} cancelText={dialog.cancelText}
+      destructive={dialog.destructive}
+    />
+    </>
   )
 
   // Render to document.body to avoid zoom transforms

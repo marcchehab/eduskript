@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { Film, Copy, Check, Search, Plus, X, Loader2, Link, Upload, AlertCircle, Trash2 } from 'lucide-react'
 import type { VideoInfo } from '@/lib/skript-files'
 import { VideoUploadModal } from './video-upload-modal'
+import { useAlertDialog } from '@/hooks/use-alert-dialog'
+import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 
 interface VideoBrowserProps {
   videos: VideoInfo[]
@@ -28,6 +30,7 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
   const [addError, setAddError] = useState('')
   const [adding, setAdding] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const dialog = useAlertDialog()
 
   const filtered = query.trim()
     ? videos.filter(v => v.filename.toLowerCase().includes(query.toLowerCase()))
@@ -103,23 +106,27 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
     }
   }
 
-  const handleDelete = async (video: VideoInfo) => {
-    if (!confirm(`Delete "${video.filename}" from the database?`)) return
-
-    setDeletingId(video.id)
-    try {
-      const res = await fetch(`/api/videos/${video.id}`, { method: 'DELETE' })
-      if (!res.ok) {
-        const data = await res.json()
-        alert(data.error || 'Failed to delete video')
-        return
-      }
-      onVideoAdded?.() // triggers refresh
-    } catch {
-      alert('Network error')
-    } finally {
-      setDeletingId(null)
-    }
+  const handleDelete = (video: VideoInfo) => {
+    dialog.showConfirm(
+      `Delete "${video.filename}" from the database?`,
+      async () => {
+        setDeletingId(video.id)
+        try {
+          const res = await fetch(`/api/videos/${video.id}`, { method: 'DELETE' })
+          if (!res.ok) {
+            const data = await res.json()
+            dialog.showError(data.error || 'Failed to delete video')
+            return
+          }
+          onVideoAdded?.() // triggers refresh
+        } catch {
+          dialog.showError('Network error')
+        } finally {
+          setDeletingId(null)
+        }
+      },
+      { destructive: true, title: 'Delete video', confirmText: 'Delete' },
+    )
   }
 
   const getStatusIndicator = (video: VideoInfo) => {
@@ -180,6 +187,7 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
   }
 
   return (
+    <>
     <div className={`flex flex-col ${className}`}>
       {/* Search + Upload + Admin Add buttons */}
       <div className="px-2 pt-2 pb-1 flex items-center gap-1.5">
@@ -357,5 +365,13 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
         skriptId={skriptId}
       />
     </div>
+    <AlertDialogModal
+      open={dialog.open} onOpenChange={dialog.setOpen}
+      type={dialog.type} title={dialog.title} message={dialog.message}
+      onConfirm={dialog.onConfirm} showCancel={dialog.showCancel}
+      confirmText={dialog.confirmText} cancelText={dialog.cancelText}
+      destructive={dialog.destructive}
+    />
+    </>
   )
 }

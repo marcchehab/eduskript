@@ -45,6 +45,8 @@ import {
   removeUnmappedEmail,
   saveEmailMapping,
 } from '@/lib/email-mapping-db'
+import { useAlertDialog } from '@/hooks/use-alert-dialog'
+import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 
 interface Student {
   id: string
@@ -79,6 +81,7 @@ interface ClassWithDetails extends Class {
 export default function ClassesPage() {
   const router = useRouter()
   const { data: session, status } = useSession()
+  const dialog = useAlertDialog()
   const [classes, setClasses] = useState<ClassWithDetails[]>([])
   const [expandedClassId, setExpandedClassId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -334,33 +337,31 @@ export default function ClassesPage() {
   }
 
   const handleUnenrollStudent = async (classId: string, studentId: string, studentName: string) => {
-    if (!confirm(`Are you sure you want to unenroll ${studentName} from this class?`)) {
-      return
-    }
+    dialog.showConfirm(`Are you sure you want to unenroll ${studentName} from this class?`, async () => {
+      try {
+        const response = await fetch(`/api/classes/${classId}/students/${studentId}`, {
+          method: 'DELETE',
+        })
 
-    try {
-      const response = await fetch(`/api/classes/${classId}/students/${studentId}`, {
-        method: 'DELETE',
-      })
+        if (!response.ok) {
+          throw new Error('Failed to unenroll student')
+        }
 
-      if (!response.ok) {
-        throw new Error('Failed to unenroll student')
+        // Reload class details
+        await loadClassDetails(classId)
+
+        setDialogType('success')
+        setDialogTitle('Student Unenrolled')
+        setDialogMessage(`${studentName} has been removed from the class.`)
+        setDialogOpen(true)
+      } catch (error) {
+        console.error('Error unenrolling student:', error)
+        setDialogType('error')
+        setDialogTitle('Failed to Unenroll')
+        setDialogMessage(error instanceof Error ? error.message : 'An unexpected error occurred.')
+        setDialogOpen(true)
       }
-
-      // Reload class details
-      await loadClassDetails(classId)
-
-      setDialogType('success')
-      setDialogTitle('Student Unenrolled')
-      setDialogMessage(`${studentName} has been removed from the class.`)
-      setDialogOpen(true)
-    } catch (error) {
-      console.error('Error unenrolling student:', error)
-      setDialogType('error')
-      setDialogTitle('Failed to Unenroll')
-      setDialogMessage(error instanceof Error ? error.message : 'An unexpected error occurred.')
-      setDialogOpen(true)
-    }
+    }, { destructive: true, title: 'Unenroll student', confirmText: 'Unenroll' })
   }
 
   const handleDeleteUnmappedEmail = async (classId: string, email: string) => {
@@ -570,6 +571,14 @@ export default function ClassesPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <AlertDialogModal
+          open={dialog.open} onOpenChange={dialog.setOpen}
+          type={dialog.type} title={dialog.title} message={dialog.message}
+          onConfirm={dialog.onConfirm} showCancel={dialog.showCancel}
+          confirmText={dialog.confirmText} cancelText={dialog.cancelText}
+          destructive={dialog.destructive}
+        />
 
         <div className="container mx-auto p-6">
         <div className="max-w-4xl mx-auto">

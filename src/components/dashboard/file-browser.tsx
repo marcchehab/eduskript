@@ -339,24 +339,26 @@ export function FileBrowser({ skriptId, onFileSelect, className = '', onUploadCo
   }
 
   const handleFileDelete = async (file: FileItem) => {
-    if (!window.confirm(`Are you sure you want to delete "${getFileName(file)}"?`)) {
-      return
-    }
+    alert.showConfirm(
+      `Are you sure you want to delete "${getFileName(file)}"?`,
+      async () => {
+        try {
+          const response = await fetch(`/api/files/${file.id}`, {
+            method: 'DELETE'
+          })
 
-    try {
-      const response = await fetch(`/api/files/${file.id}`, {
-        method: 'DELETE'
-      })
-
-      if (response.ok) {
-        if (onUploadComplete) onUploadComplete()
-      } else {
-        const error = await response.json()
-        console.error('Delete failed:', error.error)
-      }
-    } catch (error) {
-      console.error('Delete error:', error)
-    }
+          if (response.ok) {
+            if (onUploadComplete) onUploadComplete()
+          } else {
+            const error = await response.json()
+            console.error('Delete failed:', error.error)
+          }
+        } catch (error) {
+          console.error('Delete error:', error)
+        }
+      },
+      { destructive: true, title: 'Delete file', confirmText: 'Delete' }
+    )
   }
 
   if (loading) {
@@ -758,6 +760,11 @@ export function FileBrowser({ skriptId, onFileSelect, className = '', onUploadCo
         type={alert.type}
         title={alert.title}
         message={alert.message}
+        onConfirm={alert.onConfirm}
+        showCancel={alert.showCancel}
+        confirmText={alert.confirmText}
+        cancelText={alert.cancelText}
+        destructive={alert.destructive}
       />
       {skriptId && (
         <FileImportDialog

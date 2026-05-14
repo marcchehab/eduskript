@@ -27,6 +27,8 @@ import { postCheckpoint } from '@/lib/userdata/checkpoints'
 import { useSyncedUserData, type SyncedUserDataOptions } from '@/lib/userdata/provider'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
 import { useStudentSnapshot } from '@/contexts/student-snapshot-context'
+import { useAlertDialog } from '@/hooks/use-alert-dialog'
+import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useTeacherBroadcast } from '@/hooks/use-teacher-broadcast'
 import { useSession } from 'next-auth/react'
 import type { CodeEditorData, CodeHighlight, HighlightColor, HighlightComment, SqlVerificationData, GlobalImportsData, PythonCheckData, BinaryFile, BinaryFileData } from '@/lib/userdata/types'
@@ -272,6 +274,7 @@ export const CodeEditor = memo(function CodeEditor({
   const { resolvedTheme } = useTheme()
   const { data: session } = useSession()
   const { selectedClass, selectedStudent, viewMode, isTeacher } = useTeacherClass()
+  const dialog = useAlertDialog()
   const [mounted, setMounted] = useState(false)
   const [runState, setRunState] = useState<RunState>(RunState.STOPPED)
   const [output, setOutput] = useState<OutputEntry[]>([])
@@ -4364,7 +4367,12 @@ plots
                                 onClick={(e) => {
                                   e.stopPropagation()
                                   if (f.content.trim() && f.content !== '# Shared import file') {
-                                    if (!window.confirm(`Delete "${f.name}"?`)) return
+                                    dialog.showConfirm(
+                                      `Delete "${f.name}"?`,
+                                      () => deleteImportFile('skript', f.name),
+                                      { destructive: true, title: 'Delete file', confirmText: 'Delete' }
+                                    )
+                                    return
                                   }
                                   deleteImportFile('skript', f.name)
                                 }}
@@ -4419,7 +4427,12 @@ plots
                             onClick={(e) => {
                               e.stopPropagation()
                               if (f.content.trim() && f.content !== '# Shared import file') {
-                                if (!window.confirm(`Delete "${f.name}"?`)) return
+                                dialog.showConfirm(
+                                  `Delete "${f.name}"?`,
+                                  () => deleteImportFile('global', f.name),
+                                  { destructive: true, title: 'Delete file', confirmText: 'Delete' }
+                                )
+                                return
                               }
                               deleteImportFile('global', f.name)
                             }}
@@ -4574,8 +4587,11 @@ plots
                             </button>
                             <button
                               onClick={() => {
-                                if (!window.confirm(`Remove "${f.name}"?`)) return
-                                removeBinary(scope, f.name)
+                                dialog.showConfirm(
+                                  `Remove "${f.name}"?`,
+                                  () => removeBinary(scope, f.name),
+                                  { destructive: true, title: 'Remove file', confirmText: 'Remove' }
+                                )
                               }}
                               className="h-5 w-5 flex items-center justify-center rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive"
                               title="Remove"
@@ -5430,9 +5446,18 @@ plots
                           e.stopPropagation()
                           const defaultName = defaultVersionLabels.get(version.id ?? `v-${version.versionNumber}`) ?? `v${version.versionNumber}`
                           const displayName = version.label || defaultName
-                          if (!confirmDeletion || confirm(`Delete ${displayName}?`)) {
+                          const doDelete = async () => {
                             await deleteVersion({ id: version.id, versionNumber: version.versionNumber })
                             await refreshVersions()
+                          }
+                          if (confirmDeletion) {
+                            dialog.showConfirm(
+                              `Delete ${displayName}?`,
+                              doDelete,
+                              { destructive: true, title: 'Delete version', confirmText: 'Delete' }
+                            )
+                          } else {
+                            await doDelete()
                           }
                         }}
                         disabled={isDeleting}
@@ -5808,6 +5833,13 @@ plots
       </div>,
       document.body
     )}
+    <AlertDialogModal
+      open={dialog.open} onOpenChange={dialog.setOpen}
+      type={dialog.type} title={dialog.title} message={dialog.message}
+      onConfirm={dialog.onConfirm} showCancel={dialog.showCancel}
+      confirmText={dialog.confirmText} cancelText={dialog.cancelText}
+      destructive={dialog.destructive}
+    />
     </>
   )
 })

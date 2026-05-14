@@ -186,44 +186,52 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
   }
 
   const handleDeleteSkript = async () => {
-    if (!confirm(`Delete "${skript.title}" and all its pages?`)) return
-
-    setIsDeleting(true)
-    try {
-      const response = await fetch(`/api/skripts/${skript.id}`, {
-        method: 'DELETE'
-      })
-      if (response.ok) {
-        router.push('/dashboard/page-builder')
-      } else {
-        alert.showError('Failed to delete skript')
-      }
-    } catch (error) {
-      console.error('Error deleting skript:', error)
-      alert.showError('Failed to delete skript')
-    } finally {
-      setIsDeleting(false)
-    }
+    alert.showConfirm(
+      `Delete "${skript.title}" and all its pages?`,
+      async () => {
+        setIsDeleting(true)
+        try {
+          const response = await fetch(`/api/skripts/${skript.id}`, {
+            method: 'DELETE'
+          })
+          if (response.ok) {
+            router.push('/dashboard/page-builder')
+          } else {
+            alert.showError('Failed to delete skript')
+          }
+        } catch (error) {
+          console.error('Error deleting skript:', error)
+          alert.showError('Failed to delete skript')
+        } finally {
+          setIsDeleting(false)
+        }
+      },
+      { destructive: true, title: 'Delete skript', confirmText: 'Delete' }
+    )
   }
 
   const handleDeletePage = async (pageId: string, pageTitle: string) => {
-    if (!confirm(`Delete "${pageTitle}"?`)) return
-
-    try {
-      const res = await fetch(`/api/pages/${pageId}`, { method: 'DELETE' })
-      if (res.ok) {
-        if (pageId === page.id) {
-          router.push(`/dashboard/skripts/${skript.slug}`)
-        } else {
-          router.refresh()
+    alert.showConfirm(
+      `Delete "${pageTitle}"?`,
+      async () => {
+        try {
+          const res = await fetch(`/api/pages/${pageId}`, { method: 'DELETE' })
+          if (res.ok) {
+            if (pageId === page.id) {
+              router.push(`/dashboard/skripts/${skript.slug}`)
+            } else {
+              router.refresh()
+            }
+          } else {
+            alert.showError('Failed to delete page')
+          }
+        } catch (error) {
+          console.error('Error deleting page:', error)
+          alert.showError('Failed to delete page')
         }
-      } else {
-        alert.showError('Failed to delete page')
-      }
-    } catch (error) {
-      console.error('Error deleting page:', error)
-      alert.showError('Failed to delete page')
-    }
+      },
+      { destructive: true, title: 'Delete page', confirmText: 'Delete' }
+    )
   }
 
   // The shell handles file/Excalidraw/PDF state. Track shell-driven content
@@ -986,6 +994,11 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
         type={alert.type}
         title={alert.title}
         message={alert.message}
+        onConfirm={alert.onConfirm}
+        showCancel={alert.showCancel}
+        confirmText={alert.confirmText}
+        cancelText={alert.cancelText}
+        destructive={alert.destructive}
       />
 
       {/* Move page to another skript dialog */}

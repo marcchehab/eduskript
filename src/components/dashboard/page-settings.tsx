@@ -12,10 +12,13 @@ import { Save, Loader2, FileText, Upload, X, ExternalLink, Globe, Wand2, KeyRoun
 import Link from 'next/link'
 import Image from 'next/image'
 import { InlineMarkdown } from '@/components/ui/inline-markdown'
+import { useAlertDialog } from '@/hooks/use-alert-dialog'
+import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 
 export function PageSettings() {
   const { data: session, update } = useSession()
   const router = useRouter()
+  const dialog = useAlertDialog()
   const [sidebarBehavior, setSidebarBehavior] = useState<string>('full')
   const [typographyPreference, setTypographyPreference] = useState<string>('modern')
   const [loading, setLoading] = useState(false)
@@ -273,13 +276,13 @@ export function PageSettings() {
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
-      alert('Please select an image file')
+      dialog.showError('Please select an image file')
       return
     }
 
     // Validate file size (max 2MB)
     if (file.size > 2 * 1024 * 1024) {
-      alert('Image must be less than 2MB')
+      dialog.showError('Image must be less than 2MB')
       return
     }
 
@@ -299,11 +302,11 @@ export function PageSettings() {
         setPageIcon(data.url)
       } else {
         const data = await response.json()
-        alert(`Upload failed: ${data.error || 'Unknown error'}`)
+        dialog.showError(`Upload failed: ${data.error || 'Unknown error'}`)
       }
     } catch (error) {
       console.error('Failed to upload icon:', error)
-      alert('Failed to upload icon. Please try again.')
+      dialog.showError('Failed to upload icon. Please try again.')
     } finally {
       setIconUploadLoading(false)
     }
@@ -336,6 +339,7 @@ export function PageSettings() {
   }
 
   return (
+    <>
     <Card>
       <CardHeader>
         <CardTitle>Page Settings</CardTitle>
@@ -841,5 +845,13 @@ export function PageSettings() {
         </div>
       </CardContent>
     </Card>
+    <AlertDialogModal
+      open={dialog.open} onOpenChange={dialog.setOpen}
+      type={dialog.type} title={dialog.title} message={dialog.message}
+      onConfirm={dialog.onConfirm} showCancel={dialog.showCancel}
+      confirmText={dialog.confirmText} cancelText={dialog.cancelText}
+      destructive={dialog.destructive}
+    />
+    </>
   )
 }

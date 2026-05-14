@@ -11,6 +11,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Badge } from '@/components/ui/badge'
 import { Globe, Plus, Trash2, CheckCircle, AlertCircle, Star, ChevronLeft, Copy, RefreshCw } from 'lucide-react'
 import Link from 'next/link'
+import { useAlertDialog } from '@/hooks/use-alert-dialog'
+import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 
 interface TeacherDomain {
   id: string
@@ -34,6 +36,7 @@ interface VerificationInstructions {
 export default function TeacherDomainsPage() {
   const { data: session } = useSession()
   const router = useRouter()
+  const dialog = useAlertDialog()
   const [domains, setDomains] = useState<TeacherDomain[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -156,29 +159,27 @@ export default function TeacherDomainsPage() {
 
   // Delete domain
   const handleDeleteDomain = async (domain: TeacherDomain) => {
-    if (!confirm(`Are you sure you want to remove "${domain.domain}"?`)) {
-      return
-    }
+    dialog.showConfirm(`Are you sure you want to remove "${domain.domain}"?`, async () => {
+      setError('')
+      setSuccess('')
 
-    setError('')
-    setSuccess('')
+      try {
+        const response = await fetch(
+          `/api/user/domains/${domain.id}`,
+          { method: 'DELETE' }
+        )
 
-    try {
-      const response = await fetch(
-        `/api/user/domains/${domain.id}`,
-        { method: 'DELETE' }
-      )
+        if (!response.ok) {
+          const data = await response.json()
+          throw new Error(data.error || 'Failed to delete domain')
+        }
 
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to delete domain')
+        setDomains(domains.filter(d => d.id !== domain.id))
+        setSuccess('Domain removed successfully')
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'An error occurred')
       }
-
-      setDomains(domains.filter(d => d.id !== domain.id))
-      setSuccess('Domain removed successfully')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
-    }
+    }, { destructive: true, title: 'Remove domain', confirmText: 'Remove' })
   }
 
   // Set primary domain
@@ -455,6 +456,14 @@ export default function TeacherDomainsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialogModal
+        open={dialog.open} onOpenChange={dialog.setOpen}
+        type={dialog.type} title={dialog.title} message={dialog.message}
+        onConfirm={dialog.onConfirm} showCancel={dialog.showCancel}
+        confirmText={dialog.confirmText} cancelText={dialog.cancelText}
+        destructive={dialog.destructive}
+      />
     </div>
   )
 }

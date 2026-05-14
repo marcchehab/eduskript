@@ -10,6 +10,8 @@ import { Card } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { Globe, Plus, Trash2, CheckCircle, AlertCircle, Star, Copy, RefreshCw, Search } from 'lucide-react'
+import { useAlertDialog } from '@/hooks/use-alert-dialog'
+import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 
 interface CustomDomain {
   id: string
@@ -51,6 +53,7 @@ export default function OrgDomainsPage({ params }: { params: Promise<{ orgId: st
   const { orgId } = use(params)
   const { data: session } = useSession()
   const router = useRouter()
+  const dialog = useAlertDialog()
 
   // Organization domains state
   const [orgDomains, setOrgDomains] = useState<CustomDomain[]>([])
@@ -196,58 +199,54 @@ export default function OrgDomainsPage({ params }: { params: Promise<{ orgId: st
 
   // Delete organization domain
   const handleDeleteOrgDomain = async (domain: CustomDomain) => {
-    if (!confirm(`Are you sure you want to remove "${domain.domain}"?`)) {
-      return
-    }
+    dialog.showConfirm(`Are you sure you want to remove "${domain.domain}"?`, async () => {
+      setError('')
+      setSuccess('')
 
-    setError('')
-    setSuccess('')
+      try {
+        const response = await fetch(
+          `/api/organizations/${orgId}/domains/${domain.id}`,
+          { method: 'DELETE' }
+        )
 
-    try {
-      const response = await fetch(
-        `/api/organizations/${orgId}/domains/${domain.id}`,
-        { method: 'DELETE' }
-      )
+        if (!response.ok) {
+          const data = await response.json()
+          throw new Error(data.error || 'Failed to delete domain')
+        }
 
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to delete domain')
+        setOrgDomains(orgDomains.filter(d => d.id !== domain.id))
+        setSuccess('Domain removed successfully')
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'An error occurred')
       }
-
-      setOrgDomains(orgDomains.filter(d => d.id !== domain.id))
-      setSuccess('Domain removed successfully')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
-    }
+    }, { destructive: true, title: 'Remove domain', confirmText: 'Remove' })
   }
 
   // Delete teacher domain
   const handleDeleteTeacherDomain = async (domain: TeacherDomain) => {
     const teacherName = domain.user.name || domain.user.email || 'this teacher'
-    if (!confirm(`Are you sure you want to remove "${domain.domain}" from ${teacherName}?`)) {
-      return
-    }
+    dialog.showConfirm(`Are you sure you want to remove "${domain.domain}" from ${teacherName}?`, async () => {
+      setError('')
+      setSuccess('')
 
-    setError('')
-    setSuccess('')
+      try {
+        const response = await fetch(
+          `/api/organizations/${orgId}/teacher-domains/${domain.id}`,
+          { method: 'DELETE' }
+        )
 
-    try {
-      const response = await fetch(
-        `/api/organizations/${orgId}/teacher-domains/${domain.id}`,
-        { method: 'DELETE' }
-      )
+        const data = await response.json()
 
-      const data = await response.json()
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to delete domain')
+        }
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to delete domain')
+        setTeacherDomains(teacherDomains.filter(d => d.id !== domain.id))
+        setSuccess(data.message || 'Domain removed successfully')
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'An error occurred')
       }
-
-      setTeacherDomains(teacherDomains.filter(d => d.id !== domain.id))
-      setSuccess(data.message || 'Domain removed successfully')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
-    }
+    }, { destructive: true, title: 'Remove domain', confirmText: 'Remove' })
   }
 
   // Set primary organization domain
@@ -604,6 +603,14 @@ export default function OrgDomainsPage({ params }: { params: Promise<{ orgId: st
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialogModal
+        open={dialog.open} onOpenChange={dialog.setOpen}
+        type={dialog.type} title={dialog.title} message={dialog.message}
+        onConfirm={dialog.onConfirm} showCancel={dialog.showCancel}
+        confirmText={dialog.confirmText} cancelText={dialog.cancelText}
+        destructive={dialog.destructive}
+      />
     </div>
   )
 }

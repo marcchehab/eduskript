@@ -96,19 +96,9 @@ export function ExcalidrawEditor({
     }
   }, [open, initialData])
 
-  const handleGenerate = useCallback(async () => {
+  const runGenerate = useCallback(async () => {
     const prompt = aiPrompt.trim()
     if (!prompt || !excalidrawAPI) return
-
-    // Replace-confirm if there's already content on the canvas. Mermaid output
-    // overwrites the scene wholesale; there's no merge.
-    const existing = excalidrawAPI.getSceneElements()
-    if (existing.length > 0) {
-      const ok = window.confirm(
-        'This will replace the current drawing with an AI-generated one. Continue?'
-      )
-      if (!ok) return
-    }
 
     setIsGenerating(true)
     try {
@@ -167,6 +157,24 @@ export function ExcalidrawEditor({
       setIsGenerating(false)
     }
   }, [aiPrompt, excalidrawAPI, alert])
+
+  const handleGenerate = useCallback(() => {
+    if (!aiPrompt.trim() || !excalidrawAPI) return
+
+    // Replace-confirm if there's already content on the canvas. Mermaid output
+    // overwrites the scene wholesale; there's no merge.
+    const existing = excalidrawAPI.getSceneElements()
+    if (existing.length > 0) {
+      alert.showConfirm(
+        'This will replace the current drawing with an AI-generated one. Continue?',
+        () => runGenerate(),
+        { destructive: true, title: 'Replace drawing', confirmText: 'Replace' }
+      )
+      return
+    }
+
+    runGenerate()
+  }, [aiPrompt, excalidrawAPI, alert, runGenerate])
 
   const handleSave = useCallback(async () => {
     if (!excalidrawAPI || !drawingName.trim()) {
@@ -384,6 +392,11 @@ export function ExcalidrawEditor({
         type={alert.type}
         title={alert.title}
         message={alert.message}
+        onConfirm={alert.onConfirm}
+        showCancel={alert.showCancel}
+        confirmText={alert.confirmText}
+        cancelText={alert.cancelText}
+        destructive={alert.destructive}
       />
     </Dialog>
   )

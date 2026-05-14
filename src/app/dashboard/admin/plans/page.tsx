@@ -11,6 +11,8 @@ import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
 import { Pencil, Plus } from 'lucide-react'
+import { useAlertDialog } from '@/hooks/use-alert-dialog'
+import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 
 interface Plan {
   id: string
@@ -28,6 +30,7 @@ interface Plan {
 export default function AdminPlansPage() {
   const { data: session } = useSession()
   const router = useRouter()
+  const dialog = useAlertDialog()
   const [plans, setPlans] = useState<Plan[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -134,17 +137,18 @@ export default function AdminPlansPage() {
   }
 
   const handleDeactivate = async (plan: Plan) => {
-    if (!confirm(`Deactivate plan "${plan.name}"?`)) return
-    setError('')
-    try {
-      const res = await fetch(`/api/admin/plans/${plan.id}`, { method: 'DELETE' })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error)
-      setSuccess(`Plan "${plan.name}" deactivated`)
-      fetchPlans()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to deactivate plan')
-    }
+    dialog.showConfirm(`Deactivate plan "${plan.name}"?`, async () => {
+      setError('')
+      try {
+        const res = await fetch(`/api/admin/plans/${plan.id}`, { method: 'DELETE' })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error)
+        setSuccess(`Plan "${plan.name}" deactivated`)
+        fetchPlans()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to deactivate plan')
+      }
+    }, { destructive: true, title: 'Deactivate plan', confirmText: 'Deactivate' })
   }
 
   const handleReactivate = async (plan: Plan) => {
@@ -301,6 +305,14 @@ export default function AdminPlansPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <AlertDialogModal
+        open={dialog.open} onOpenChange={dialog.setOpen}
+        type={dialog.type} title={dialog.title} message={dialog.message}
+        onConfirm={dialog.onConfirm} showCancel={dialog.showCancel}
+        confirmText={dialog.confirmText} cancelText={dialog.cancelText}
+        destructive={dialog.destructive}
+      />
     </div>
   )
 }

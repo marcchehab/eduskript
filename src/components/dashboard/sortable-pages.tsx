@@ -32,24 +32,26 @@ function SortablePageItem({ page, index, skriptSlug, onPageUpdated, canEdit = tr
   const alert = useAlertDialog()
 
   const handleDeletePage = async () => {
-    if (!confirm(`Are you sure you want to delete the page "${page.title}"?`)) {
-      return
-    }
+    alert.showConfirm(
+      `Are you sure you want to delete the page "${page.title}"?`,
+      async () => {
+        try {
+          const response = await fetch(`/api/pages/${page.id}`, {
+            method: 'DELETE'
+          })
 
-    try {
-      const response = await fetch(`/api/pages/${page.id}`, {
-        method: 'DELETE'
-      })
-
-      if (response.ok) {
-        onPageUpdated?.()
-      } else {
-        alert.showError('Failed to delete page')
-      }
-    } catch (error) {
-      console.error('Error deleting page:', error)
-      alert.showError('Failed to delete page')
-    }
+          if (response.ok) {
+            onPageUpdated?.()
+          } else {
+            alert.showError('Failed to delete page')
+          }
+        } catch (error) {
+          console.error('Error deleting page:', error)
+          alert.showError('Failed to delete page')
+        }
+      },
+      { destructive: true, title: 'Delete page', confirmText: 'Delete' }
+    )
   }
 
   return (
@@ -120,6 +122,11 @@ function SortablePageItem({ page, index, skriptSlug, onPageUpdated, canEdit = tr
             type={alert.type}
             title={alert.title}
             message={alert.message}
+            onConfirm={alert.onConfirm}
+            showCancel={alert.showCancel}
+            confirmText={alert.confirmText}
+            cancelText={alert.cancelText}
+            destructive={alert.destructive}
           />
         </div>
       )}
@@ -131,24 +138,26 @@ function StaticPageItem({ page, index, skriptSlug, onPageUpdated, canEdit = true
   const alert = useAlertDialog()
 
   const handleDeletePage = async () => {
-    if (!confirm(`Are you sure you want to delete the page "${page.title}"?`)) {
-      return
-    }
+    alert.showConfirm(
+      `Are you sure you want to delete the page "${page.title}"?`,
+      async () => {
+        try {
+          const response = await fetch(`/api/pages/${page.id}`, {
+            method: 'DELETE'
+          })
 
-    try {
-      const response = await fetch(`/api/pages/${page.id}`, {
-        method: 'DELETE'
-      })
-
-      if (response.ok) {
-        onPageUpdated?.()
-      } else {
-        alert.showError('Failed to delete page')
-      }
-    } catch (error) {
-      console.error('Error deleting page:', error)
-      alert.showError('Failed to delete page')
-    }
+          if (response.ok) {
+            onPageUpdated?.()
+          } else {
+            alert.showError('Failed to delete page')
+          }
+        } catch (error) {
+          console.error('Error deleting page:', error)
+          alert.showError('Failed to delete page')
+        }
+      },
+      { destructive: true, title: 'Delete page', confirmText: 'Delete' }
+    )
   }
 
   return (
@@ -206,6 +215,11 @@ function StaticPageItem({ page, index, skriptSlug, onPageUpdated, canEdit = true
         type={alert.type}
         title={alert.title}
         message={alert.message}
+        onConfirm={alert.onConfirm}
+        showCancel={alert.showCancel}
+        confirmText={alert.confirmText}
+        cancelText={alert.cancelText}
+        destructive={alert.destructive}
       />
     </div>
   )
@@ -356,6 +370,11 @@ export function SortablePages({
         type={alert.type}
         title={alert.title}
         message={alert.message}
+        onConfirm={alert.onConfirm}
+        showCancel={alert.showCancel}
+        confirmText={alert.confirmText}
+        cancelText={alert.cancelText}
+        destructive={alert.destructive}
       />
     </div>
   )

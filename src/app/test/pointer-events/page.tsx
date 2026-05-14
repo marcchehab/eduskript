@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useRef } from 'react'
+import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
+import { useAlertDialog } from '@/hooks/use-alert-dialog'
 
 interface EventLog {
   timestamp: number
@@ -18,6 +20,7 @@ interface EventLog {
 }
 
 export default function PointerEventsTest() {
+  const dialog = useAlertDialog()
   const [events, setEvents] = useState<EventLog[]>([])
   const canvasRef = useRef<HTMLDivElement>(null)
   const [currentDevice, setCurrentDevice] = useState<'pen' | 'mouse' | 'touch' | null>(null)
@@ -158,7 +161,7 @@ export default function PointerEventsTest() {
     ).join('\n')
 
     navigator.clipboard.writeText(text)
-    alert('Copied to clipboard!')
+    dialog.showSuccess('Copied to clipboard!')
   }
 
   const clear = () => {
@@ -296,6 +299,19 @@ export default function PointerEventsTest() {
           </ol>
         </div>
       </div>
+
+      <AlertDialogModal
+        open={dialog.open}
+        onOpenChange={dialog.setOpen}
+        type={dialog.type}
+        title={dialog.title}
+        message={dialog.message}
+        onConfirm={dialog.onConfirm}
+        showCancel={dialog.showCancel}
+        confirmText={dialog.confirmText}
+        cancelText={dialog.cancelText}
+        destructive={dialog.destructive}
+      />
     </div>
   )
 }

@@ -13,6 +13,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Pencil, Trash2, RotateCw, Search, ChevronDown, Plus, Users } from 'lucide-react'
+import { useAlertDialog } from '@/hooks/use-alert-dialog'
+import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 
 interface OrgMember {
   id: string
@@ -70,6 +72,7 @@ interface User {
 export default function AdminPanelPage() {
   const { data: session, update: updateSession } = useSession()
   const router = useRouter()
+  const dialog = useAlertDialog()
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -170,19 +173,20 @@ export default function AdminPanelPage() {
   }
 
   const handleDeleteOrg = async (orgId: string, orgName: string) => {
-    if (!confirm(`Delete organization "${orgName}"? This cannot be undone.`)) return
-    setError('')
-    setSuccess('')
-    try {
-      const res = await fetch(`/api/admin/organizations/${orgId}`, { method: 'DELETE' })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed to delete organization')
-      setSuccess(`Organization "${orgName}" deleted`)
-      if (expandedOrg === orgId) setExpandedOrg(null)
-      fetchOrgs()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
-    }
+    dialog.showConfirm(`Delete organization "${orgName}"? This cannot be undone.`, async () => {
+      setError('')
+      setSuccess('')
+      try {
+        const res = await fetch(`/api/admin/organizations/${orgId}`, { method: 'DELETE' })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || 'Failed to delete organization')
+        setSuccess(`Organization "${orgName}" deleted`)
+        if (expandedOrg === orgId) setExpandedOrg(null)
+        fetchOrgs()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'An error occurred')
+      }
+    }, { destructive: true, title: 'Delete organization', confirmText: 'Delete' })
   }
 
   const toggleExpandOrg = (orgId: string) => {
@@ -212,17 +216,18 @@ export default function AdminPanelPage() {
   }
 
   const handleRemoveOrgMember = async (orgId: string, userId: string) => {
-    if (!confirm('Remove this member from the organization?')) return
-    setError('')
-    try {
-      const res = await fetch(`/api/organizations/${orgId}/members?userId=${userId}`, { method: 'DELETE' })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed to remove member')
-      fetchOrgMembers(orgId)
-      fetchOrgs()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
-    }
+    dialog.showConfirm('Remove this member from the organization?', async () => {
+      setError('')
+      try {
+        const res = await fetch(`/api/organizations/${orgId}/members?userId=${userId}`, { method: 'DELETE' })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || 'Failed to remove member')
+        fetchOrgMembers(orgId)
+        fetchOrgs()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'An error occurred')
+      }
+    }, { destructive: true, title: 'Remove member', confirmText: 'Remove' })
   }
 
   const handleAddOrgMember = async (orgId: string) => {
@@ -350,29 +355,27 @@ export default function AdminPanelPage() {
 
   // Delete user
   const handleDeleteUser = async (userId: string) => {
-    if (!confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
-      return
-    }
+    dialog.showConfirm('Are you sure you want to delete this user? This action cannot be undone.', async () => {
+      setError('')
+      setSuccess('')
 
-    setError('')
-    setSuccess('')
+      try {
+        const response = await fetch(`/api/admin/users/${userId}`, {
+          method: 'DELETE',
+        })
 
-    try {
-      const response = await fetch(`/api/admin/users/${userId}`, {
-        method: 'DELETE',
-      })
+        const data = await response.json()
 
-      const data = await response.json()
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to delete user')
+        }
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to delete user')
+        setSuccess('User deleted successfully')
+        fetchUsers()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'An error occurred')
       }
-
-      setSuccess('User deleted successfully')
-      fetchUsers()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
-    }
+    }, { destructive: true, title: 'Delete user', confirmText: 'Delete' })
   }
 
   // Reset password
@@ -425,56 +428,52 @@ export default function AdminPanelPage() {
 
   // Seed example data
   const handleSeedData = async () => {
-    if (!confirm('This will create example users, collections, and content. Continue?')) {
-      return
-    }
+    dialog.showConfirm('This will create example users, collections, and content. Continue?', async () => {
+      setSeeding(true)
+      setError('')
+      setSuccess('')
 
-    setSeeding(true)
-    setError('')
-    setSuccess('')
+      try {
+        const response = await fetch('/api/admin/seed-example-data', {
+          method: 'POST',
+        })
 
-    try {
-      const response = await fetch('/api/admin/seed-example-data', {
-        method: 'POST',
-      })
+        const data = await response.json()
 
-      const data = await response.json()
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to seed data')
+        }
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to seed data')
+        setSuccess(`Example data seeded successfully! Created ${data.data.skripts} skripts with ${data.data.pages} pages.`)
+        fetchUsers()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'An error occurred')
+      } finally {
+        setSeeding(false)
       }
-
-      setSuccess(`Example data seeded successfully! Created ${data.data.skripts} skripts with ${data.data.pages} pages.`)
-      fetchUsers()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
-    } finally {
-      setSeeding(false)
-    }
+    }, { title: 'Insert example data', confirmText: 'Continue' })
   }
 
   // Unlink OAuth account
   const handleUnlinkOAuth = async (userId: string, accountId: string, provider: string) => {
-    if (!confirm(`Are you sure you want to unlink the ${provider} account?`)) {
-      return
-    }
+    dialog.showConfirm(`Are you sure you want to unlink the ${provider} account?`, async () => {
+      try {
+        const response = await fetch(`/api/admin/users/${userId}/oauth/${accountId}`, {
+          method: 'DELETE',
+        })
 
-    try {
-      const response = await fetch(`/api/admin/users/${userId}/oauth/${accountId}`, {
-        method: 'DELETE',
-      })
+        const data = await response.json()
 
-      const data = await response.json()
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to unlink OAuth account')
+        }
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to unlink OAuth account')
+        setSuccess(data.message)
+        fetchUsers()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'An error occurred')
       }
-
-      setSuccess(data.message)
-      fetchUsers()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
-    }
+    }, { destructive: true, title: 'Unlink account', confirmText: 'Unlink' })
   }
 
   // Create organization
@@ -1292,6 +1291,14 @@ export default function AdminPanelPage() {
             </form>
         </DialogContent>
       </Dialog>
+
+      <AlertDialogModal
+        open={dialog.open} onOpenChange={dialog.setOpen}
+        type={dialog.type} title={dialog.title} message={dialog.message}
+        onConfirm={dialog.onConfirm} showCancel={dialog.showCancel}
+        confirmText={dialog.confirmText} cancelText={dialog.cancelText}
+        destructive={dialog.destructive}
+      />
     </div>
   )
 }

@@ -118,29 +118,31 @@ export default function MyClassesPage() {
   }
 
   const handleLeaveClass = async (classId: string, className: string) => {
-    if (!confirm(`Are you sure you want to leave "${className}"? You may need to be re-invited to rejoin.`)) {
-      return
-    }
+    alert.showConfirm(
+      `Are you sure you want to leave "${className}"? You may need to be re-invited to rejoin.`,
+      async () => {
+        try {
+          setLeaving(classId)
+          const response = await fetch(`/api/classes/${classId}/leave`, {
+            method: 'DELETE'
+          })
 
-    try {
-      setLeaving(classId)
-      const response = await fetch(`/api/classes/${classId}/leave`, {
-        method: 'DELETE'
-      })
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+            throw new Error(errorData.error || 'Failed to leave class')
+          }
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
-        throw new Error(errorData.error || 'Failed to leave class')
-      }
-
-      // Reload classes to reflect the change
-      await loadClasses()
-    } catch (error) {
-      console.error('Error leaving class:', error)
-      alert.showError(error instanceof Error ? error.message : 'Failed to leave class')
-    } finally {
-      setLeaving(null)
-    }
+          // Reload classes to reflect the change
+          await loadClasses()
+        } catch (error) {
+          console.error('Error leaving class:', error)
+          alert.showError(error instanceof Error ? error.message : 'Failed to leave class')
+        } finally {
+          setLeaving(null)
+        }
+      },
+      { destructive: true, title: 'Leave class', confirmText: 'Leave' }
+    )
   }
 
   if (loading) {
@@ -269,6 +271,11 @@ export default function MyClassesPage() {
           type={alert.type}
           title={alert.title}
           message={alert.message}
+          onConfirm={alert.onConfirm}
+          showCancel={alert.showCancel}
+          confirmText={alert.confirmText}
+          cancelText={alert.cancelText}
+          destructive={alert.destructive}
         />
       </div>
     </div>

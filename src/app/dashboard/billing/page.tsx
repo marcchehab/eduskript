@@ -5,6 +5,8 @@ import { useSession } from 'next-auth/react'
 import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { CreditCard, Check, AlertCircle, Loader2 } from 'lucide-react'
+import { useAlertDialog } from '@/hooks/use-alert-dialog'
+import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 
 interface PlanData {
   id: string
@@ -27,6 +29,7 @@ interface SubscriptionData {
 export default function BillingPage() {
   const { update: updateSession } = useSession()
   const searchParams = useSearchParams()
+  const dialog = useAlertDialog()
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null)
   const [plans, setPlans] = useState<PlanData[]>([])
   const [loading, setLoading] = useState(true)
@@ -88,26 +91,27 @@ export default function BillingPage() {
     }
   }
 
-  async function handleCancel() {
-    if (!confirm('Are you sure you want to cancel your subscription?')) return
-    setActionLoading('cancel')
-    setError(null)
-    try {
-      const res = await fetch('/api/subscriptions/cancel', { method: 'POST' })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed to cancel')
-      if (data.activeUntil) {
-        setSuccessMessage(`Subscription cancelled. You'll keep access until ${formatDate(data.activeUntil)}.`)
-      } else {
-        setSuccessMessage('Subscription cancelled.')
+  function handleCancel() {
+    dialog.showConfirm('Are you sure you want to cancel your subscription?', async () => {
+      setActionLoading('cancel')
+      setError(null)
+      try {
+        const res = await fetch('/api/subscriptions/cancel', { method: 'POST' })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || 'Failed to cancel')
+        if (data.activeUntil) {
+          setSuccessMessage(`Subscription cancelled. You'll keep access until ${formatDate(data.activeUntil)}.`)
+        } else {
+          setSuccessMessage('Subscription cancelled.')
+        }
+        await fetchData()
+        await updateSession()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to cancel subscription')
+      } finally {
+        setActionLoading(null)
       }
-      await fetchData()
-      await updateSession()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to cancel subscription')
-    } finally {
-      setActionLoading(null)
-    }
+    }, { destructive: true, title: 'Cancel subscription', confirmText: 'Cancel subscription' })
   }
 
   function formatPrice(rappen: number): string {
@@ -136,6 +140,7 @@ export default function BillingPage() {
   }
 
   return (
+    <>
     <div className="max-w-4xl mx-auto space-y-8">
       <div>
         <h1 className="text-2xl font-bold">Billing</h1>
@@ -252,6 +257,14 @@ export default function BillingPage() {
         </div>
       )}
     </div>
+    <AlertDialogModal
+      open={dialog.open} onOpenChange={dialog.setOpen}
+      type={dialog.type} title={dialog.title} message={dialog.message}
+      onConfirm={dialog.onConfirm} showCancel={dialog.showCancel}
+      confirmText={dialog.confirmText} cancelText={dialog.cancelText}
+      destructive={dialog.destructive}
+    />
+    </>
   )
 }
 

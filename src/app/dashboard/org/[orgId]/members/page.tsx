@@ -12,6 +12,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { UserMinus, RotateCw, Search, Shield, ShieldCheck, User, Users } from 'lucide-react'
+import { useAlertDialog } from '@/hooks/use-alert-dialog'
+import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 
 interface OrgMember {
   id: string
@@ -47,6 +49,7 @@ export default function OrgMembersPage({ params }: { params: Promise<{ orgId: st
   const { orgId } = use(params)
   const { data: session } = useSession()
   const router = useRouter()
+  const dialog = useAlertDialog()
   const [members, setMembers] = useState<OrgMember[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -165,29 +168,27 @@ export default function OrgMembersPage({ params }: { params: Promise<{ orgId: st
 
   // Remove member
   const handleRemoveMember = async (userId: string) => {
-    if (!confirm('Are you sure you want to remove this member from the organization?')) {
-      return
-    }
+    dialog.showConfirm('Are you sure you want to remove this member from the organization?', async () => {
+      setError('')
+      setSuccess('')
 
-    setError('')
-    setSuccess('')
+      try {
+        const response = await fetch(`/api/organizations/${orgId}/members?userId=${userId}`, {
+          method: 'DELETE',
+        })
 
-    try {
-      const response = await fetch(`/api/organizations/${orgId}/members?userId=${userId}`, {
-        method: 'DELETE',
-      })
+        const data = await response.json()
 
-      const data = await response.json()
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to remove member')
+        }
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to remove member')
+        setSuccess('Member removed successfully')
+        refetchMembers()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'An error occurred')
       }
-
-      setSuccess('Member removed successfully')
-      refetchMembers()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
-    }
+    }, { destructive: true, title: 'Remove member', confirmText: 'Remove' })
   }
 
   // Reset password
@@ -550,6 +551,14 @@ export default function OrgMembersPage({ params }: { params: Promise<{ orgId: st
           </form>
         </DialogContent>
       </Dialog>
+
+      <AlertDialogModal
+        open={dialog.open} onOpenChange={dialog.setOpen}
+        type={dialog.type} title={dialog.title} message={dialog.message}
+        onConfirm={dialog.onConfirm} showCancel={dialog.showCancel}
+        confirmText={dialog.confirmText} cancelText={dialog.cancelText}
+        destructive={dialog.destructive}
+      />
     </div>
   )
 }

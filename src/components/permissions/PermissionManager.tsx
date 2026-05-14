@@ -6,6 +6,8 @@ import { Users, ArrowLeft, ArrowRight, Plus, X, GripVertical } from 'lucide-reac
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ConfirmationDialog } from '@/components/ui/confirmation-dialog'
+import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
+import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
 
 interface User {
@@ -150,6 +152,7 @@ export function PermissionManager({
   compact = false
 }: PermissionManagerProps) {
   const [localPermissions, setLocalPermissions] = useState<UserPermission[]>(permissions)
+  const dialog = useAlertDialog()
 
   useEffect(() => {
     setLocalPermissions(permissions)
@@ -209,38 +212,46 @@ export function PermissionManager({
       return
     }
 
+    // Applies the optimistic move + API update. Extracted so it can run either
+    // immediately or after the "remove your own write access" confirm modal.
+    const applyMove = async () => {
+      // Store original state for potential rollback
+      const originalPermissions = [...localPermissions]
+
+      // Create new arrays with the moved user in the correct position
+      const currentAuthors = localPermissions.filter(p => p.permission === 'author' && p.user.id !== userId)
+      const currentViewers = localPermissions.filter(p => p.permission === 'viewer' && p.user.id !== userId)
+      const updatedUser = { ...userPermission, permission: newPermission }
+
+      if (newPermission === 'author') {
+        currentAuthors.splice(destination.index, 0, updatedUser)
+        setLocalPermissions([...currentAuthors, ...currentViewers])
+      } else {
+        currentViewers.splice(destination.index, 0, updatedUser)
+        setLocalPermissions([...currentAuthors, ...currentViewers])
+      }
+
+      // Update permission via API
+      try {
+        await handlePermissionChange(userId, newPermission)
+      } catch (error) {
+        console.error('Failed to update permission:', error)
+        // Revert optimistic update on error - restore original state
+        setLocalPermissions(originalPermissions)
+      }
+    }
+
     // For current user removing their own author access, show confirmation
     if (userId === currentUserId && userPermission.permission === 'author' && newPermission === 'viewer') {
-      const confirmed = window.confirm(
-        'Remove your write access?\n\nYou will no longer be able to edit this content or manage permissions. Another author will need to restore your access.'
+      dialog.showConfirm(
+        'Remove your write access?\n\nYou will no longer be able to edit this content or manage permissions. Another author will need to restore your access.',
+        applyMove,
+        { destructive: true, title: 'Remove write access', confirmText: 'Remove access' }
       )
-      if (!confirmed) return
+      return
     }
 
-    // Store original state for potential rollback
-    const originalPermissions = [...localPermissions]
-    
-    // Create new arrays with the moved user in the correct position
-    const currentAuthors = localPermissions.filter(p => p.permission === 'author' && p.user.id !== userId)
-    const currentViewers = localPermissions.filter(p => p.permission === 'viewer' && p.user.id !== userId)
-    const updatedUser = { ...userPermission, permission: newPermission }
-    
-    if (newPermission === 'author') {
-      currentAuthors.splice(destination.index, 0, updatedUser)
-      setLocalPermissions([...currentAuthors, ...currentViewers])
-    } else {
-      currentViewers.splice(destination.index, 0, updatedUser)
-      setLocalPermissions([...currentAuthors, ...currentViewers])
-    }
-
-    // Update permission via API
-    try {
-      await handlePermissionChange(userId, newPermission)
-    } catch (error) {
-      console.error('Failed to update permission:', error)
-      // Revert optimistic update on error - restore original state
-      setLocalPermissions(originalPermissions)
-    }
+    await applyMove()
   }
 
   const shareButton = canManageAccess && onShareClick && (
@@ -374,12 +385,23 @@ export function PermissionManager({
           </div>
   )
 
+  const alertModal = (
+    <AlertDialogModal
+      open={dialog.open} onOpenChange={dialog.setOpen}
+      type={dialog.type} title={dialog.title} message={dialog.message}
+      onConfirm={dialog.onConfirm} showCancel={dialog.showCancel}
+      confirmText={dialog.confirmText} cancelText={dialog.cancelText}
+      destructive={dialog.destructive}
+    />
+  )
+
   if (compact) {
     return (
       <DragDropContext onDragEnd={handleDragEnd}>
         <div className="p-3">
           {content}
         </div>
+        {alertModal}
       </DragDropContext>
     )
   }
@@ -406,6 +428,7 @@ export function PermissionManager({
           {content}
         </CardContent>
       </Card>
+      {alertModal}
     </DragDropContext>
   )
 }

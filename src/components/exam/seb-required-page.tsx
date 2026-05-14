@@ -4,6 +4,8 @@ import { Shield, ExternalLink, Play, AlertTriangle, Loader2 } from 'lucide-react
 import { Button } from '@/components/ui/button'
 import { useEffect, useState } from 'react'
 import { SEBQuitButton } from './seb-quit-button'
+import { useAlertDialog } from '@/hooks/use-alert-dialog'
+import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 
 interface SEBRequiredPageProps {
   pageTitle: string
@@ -19,6 +21,7 @@ export function SEBRequiredPage({
 }: SEBRequiredPageProps) {
   const [isInSEB, setIsInSEB] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const dialog = useAlertDialog()
 
   useEffect(() => {
     // Check if we're already inside SEB (client-side check)
@@ -39,13 +42,14 @@ export function SEBRequiredPage({
       window.location.href = url
     } catch (error) {
       console.error('Error opening SEB:', error)
-      alert('Failed to open Safe Exam Browser. Please try again.')
+      dialog.showError('Failed to open Safe Exam Browser. Please try again.')
     } finally {
       setIsLoading(false)
     }
   }
 
   return (
+    <>
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="max-w-md w-full text-center">
         <div className="mb-6 flex justify-center">
@@ -116,5 +120,13 @@ export function SEBRequiredPage({
         )}
       </div>
     </div>
+    <AlertDialogModal
+      open={dialog.open} onOpenChange={dialog.setOpen}
+      type={dialog.type} title={dialog.title} message={dialog.message}
+      onConfirm={dialog.onConfirm} showCancel={dialog.showCancel}
+      confirmText={dialog.confirmText} cancelText={dialog.cancelText}
+      destructive={dialog.destructive}
+    />
+    </>
   )
 }

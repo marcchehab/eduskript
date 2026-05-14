@@ -5,6 +5,10 @@ import { Droppable, Draggable } from '@hello-pangea/dnd'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
+import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { Layout, Eye, BookOpen, FileText, Plus, Edit, ChevronDown, ChevronRight, X, GripVertical, Pencil, EyeOff } from 'lucide-react'
 import { Sketch } from '@uiw/react-color'
 import { PublishToggle } from './publish-toggle'
@@ -77,6 +81,10 @@ export function PageBuilder({
   const [seeding, setSeeding] = useState(false)
   const [seedError, setSeedError] = useState('')
   const [seedSuccess, setSeedSuccess] = useState('')
+  const dialog = useAlertDialog()
+  const [createCollectionOpen, setCreateCollectionOpen] = useState(false)
+  const [newCollectionTitle, setNewCollectionTitle] = useState('')
+  const [creatingCollection, setCreatingCollection] = useState(false)
 
   const handleSeedData = async () => {
     setSeeding(true)
@@ -100,6 +108,33 @@ export function PageBuilder({
       setSeedError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
       setSeeding(false)
+    }
+  }
+
+  // Create a collection from the "New Collection" / "Start from scratch"
+  // dialog, then refresh so it shows up in the builder + library.
+  const handleCreateCollection = async () => {
+    const title = newCollectionTitle.trim()
+    if (!title) return
+    setCreatingCollection(true)
+    try {
+      const res = await fetch('/api/collections', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, description: '' }),
+      })
+      if (res.ok) {
+        setCreateCollectionOpen(false)
+        setNewCollectionTitle('')
+        onRefresh?.()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        dialog.showError(data.error || 'Failed to create collection')
+      }
+    } catch {
+      dialog.showError('Failed to create collection')
+    } finally {
+      setCreatingCollection(false)
     }
   }
 
@@ -131,6 +166,7 @@ export function PageBuilder({
 
 
   return (
+    <>
     <Card className="min-h-[400px]">
       <CardHeader>
         <div className="flex items-center justify-between">
@@ -153,19 +189,7 @@ export function PageBuilder({
               variant="outline"
               size="sm"
               className="flex items-center gap-2"
-              onClick={() => {
-                // Collections are created via API and added to page builder
-                const title = prompt('Collection name:')
-                if (!title?.trim()) return
-                fetch('/api/collections', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ title: title.trim(), description: '' })
-                }).then(res => {
-                  if (res.ok) onRefresh?.()
-                  else res.json().then(d => window.alert(d.error || 'Failed to create collection'))
-                })
-              }}
+              onClick={() => setCreateCollectionOpen(true)}
             >
               <Plus className="w-4 h-4" />
               New Collection
@@ -248,18 +272,7 @@ export function PageBuilder({
 
                     {/* Start from scratch */}
                     <button
-                      onClick={() => {
-                        const title = prompt('Collection name:')
-                        if (!title?.trim()) return
-                        fetch('/api/collections', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ title: title.trim(), description: '' })
-                        }).then(res => {
-                          if (res.ok) onRefresh?.()
-                          else res.json().then(d => window.alert(d.error || 'Failed to create collection'))
-                        })
-                      }}
+                      onClick={() => setCreateCollectionOpen(true)}
                       className={cn(
                         "flex flex-col items-center gap-3 p-6 rounded-lg border-2 border-dashed",
                         "hover:border-primary hover:bg-primary/5 transition-colors text-left"
@@ -312,6 +325,58 @@ export function PageBuilder({
         )}
       </CardContent>
     </Card>
+
+    {/* New-collection prompt (replaces window.prompt). Both "New Collection"
+        and the empty-state "Start from scratch" open this. */}
+    <Dialog open={createCollectionOpen} onOpenChange={setCreateCollectionOpen}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>New collection</DialogTitle>
+        </DialogHeader>
+        <Input
+          autoFocus
+          placeholder="Collection name"
+          value={newCollectionTitle}
+          onChange={(e) => setNewCollectionTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              handleCreateCollection()
+            }
+          }}
+          disabled={creatingCollection}
+        />
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => setCreateCollectionOpen(false)}
+            disabled={creatingCollection}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleCreateCollection}
+            disabled={creatingCollection || !newCollectionTitle.trim()}
+          >
+            {creatingCollection ? 'Creating…' : 'Create'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <AlertDialogModal
+      open={dialog.open}
+      onOpenChange={dialog.setOpen}
+      type={dialog.type}
+      title={dialog.title}
+      message={dialog.message}
+      onConfirm={dialog.onConfirm}
+      showCancel={dialog.showCancel}
+      confirmText={dialog.confirmText}
+      cancelText={dialog.cancelText}
+      destructive={dialog.destructive}
+    />
+    </>
   )
 }
 
