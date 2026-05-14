@@ -73,3 +73,6 @@ export-output/
 
 # SEO strategy notes (lives in user's Obsidian vault — see .seo/README.md)
 .seo/
+
+# personal scratch task list
+prompts.md
