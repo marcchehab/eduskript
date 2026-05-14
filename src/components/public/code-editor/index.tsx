@@ -17,7 +17,7 @@ import { basicSetup } from 'codemirror'
 import { autocompletion } from '@codemirror/autocomplete'
 import { createPythonCompletions } from './python-completions'
 import { Button } from '@/components/ui/button'
-import { Play, Square, RotateCcw, Maximize2, Minimize2, X, Plus, FileText, ZoomIn, ZoomOut, Save, History, Highlighter, MessageSquare, WrapText, Circle, CheckCircle2, Package, Trash2, Paperclip, Upload, Pencil, Cloud, HardDrive } from 'lucide-react'
+import { Play, Square, RotateCcw, Maximize2, Minimize2, Scan, X, Plus, FileText, ZoomIn, ZoomOut, Save, History, Highlighter, MessageSquare, WrapText, Circle, CheckCircle2, Package, Trash2, Paperclip, Upload, Pencil, Cloud, HardDrive } from 'lucide-react'
 import { useZoom } from '@/contexts/zoom-context'
 import { useUserData, useCreateVersion, useVersionHistory, useRestoreVersion, useDeleteVersion, useUpdateVersionLabel, useOrphanedComponentIds, useReassignVersionHistory } from '@/lib/userdata/hooks'
 import { userDataService } from '@/lib/userdata'
@@ -208,6 +208,53 @@ function preloadSkulpt(): Promise<void> {
   }
 
   return loadScript('/js/skulpt.min.js').then(() => loadScript('/js/skulpt-stdlib.js'))
+}
+
+/**
+ * Bounding box (CSS px, relative to the canvas element's top-left) of the
+ * actually-painted pixels on a canvas. Skulpt's turtle canvas is a fixed
+ * 2000×2000, almost all of it blank — framing the element would shrink the
+ * real drawing to a dot, so we scan for non-transparent pixels instead.
+ * Returns null for an empty/unreadable canvas (caller falls back to the
+ * element's own bounds).
+ */
+function getCanvasDrawnBounds(
+  cv: HTMLCanvasElement,
+): { left: number; top: number; width: number; height: number } | null {
+  const w = cv.width
+  const h = cv.height
+  if (w === 0 || h === 0) return null
+  let data: Uint8ClampedArray
+  try {
+    const ctx = cv.getContext('2d')
+    if (!ctx) return null
+    data = ctx.getImageData(0, 0, w, h).data
+  } catch {
+    return null // tainted canvas — can't read pixels
+  }
+  let minX = w, minY = h, maxX = -1, maxY = -1
+  for (let y = 0; y < h; y++) {
+    const row = y * w * 4
+    for (let x = 0; x < w; x++) {
+      if (data[row + x * 4 + 3] !== 0) {
+        if (x < minX) minX = x
+        if (x > maxX) maxX = x
+        if (y < minY) minY = y
+        if (y > maxY) maxY = y
+      }
+    }
+  }
+  if (maxX < minX) return null // nothing painted
+  // The canvas may be displayed at a different size than its backing-store
+  // resolution — convert pixel coords to CSS px.
+  const sx = cv.offsetWidth / w
+  const sy = cv.offsetHeight / h
+  return {
+    left: minX * sx,
+    top: minY * sy,
+    width: (maxX - minX + 1) * sx,
+    height: (maxY - minY + 1) * sy,
+  }
 }
 
 /**
@@ -3406,27 +3453,20 @@ export const CodeEditor = memo(function CodeEditor({
         execLimit: Number.POSITIVE_INFINITY,
       } as SkulptConfig)
 
-      // Configure turtle graphics if canvas exists
+      // Configure turtle graphics if canvas exists. Assign a FRESH
+      // Sk.TurtleGraphics every run: Skulpt's turtle module mutates this
+      // global with internal canvas/context references, so reusing it (||=)
+      // after the target div was cleared makes the next run draw into a
+      // detached, invisible canvas.
       if (canvas) {
-        ;(Sk.TurtleGraphics ||= {
+        Sk.TurtleGraphics = {
           width: 2000,
           height: 2000,
-        }).target = canvas
+          target: canvas,
+        }
 
-        // Center the canvas after Skulpt creates it
-        // Wait for the canvas element to be created
-        setTimeout(() => {
-          const turtleCanvas = canvas.querySelector('canvas')
-          const container = canvasContainerRef.current
-          if (turtleCanvas && container) {
-            const containerRect = container.getBoundingClientRect()
-            const canvasWidth = turtleCanvas.width
-            const canvasHeight = turtleCanvas.height
-            const centerX = (containerRect.width - canvasWidth) / 2
-            const centerY = (containerRect.height - canvasHeight) / 2
-            setCanvasTransform({ x: centerX, y: centerY, scale: 1 })
-          }
-        }, 100)
+        // Frame the turtle canvas once Skulpt has created it.
+        setTimeout(() => fitToView(), 100)
       }
 
       const promise = Sk.misceval.asyncToPromise(() => {
@@ -3467,9 +3507,12 @@ export const CodeEditor = memo(function CodeEditor({
     setRunState(RunState.RUNNING)
     setOutput([]) // Clear previous output
 
-    // Clear previous matplotlib plots
+    // Fully clear the shared graphics canvas. Both turtle (Skulpt) and
+    // matplotlib (Pyodide) render into this same div — only removing
+    // `.matplotlib-plot` would leave a previous turtle <canvas> (2000×2000)
+    // behind, pushing this run's plots out of view. Each run starts empty.
     if (canvasRef.current) {
-      canvasRef.current.querySelectorAll('.matplotlib-plot').forEach(el => el.remove())
+      canvasRef.current.innerHTML = ''
     }
 
     try {
@@ -3756,12 +3799,12 @@ plots
           // Force the canvas open even if our static heuristic missed the import
           // (e.g. the code uses display() with a PIL import we couldn't detect statically).
           setCanvasVisible(true)
-          // Clear previous matplotlib plots (but keep turtle graphics)
+          // canvasRef was already cleared at the start of this run; just
+          // append the fresh plots.
           const canvas = canvasRef.current
-          // Remove existing matplotlib images
-          canvas.querySelectorAll('.matplotlib-plot').forEach(el => el.remove())
 
           // Add new plots
+          const plotImgs: HTMLImageElement[] = []
           for (let i = 0; i < plotsData.length; i++) {
             const imgData = plotsData[i]
             const img = document.createElement('img')
@@ -3771,8 +3814,14 @@ plots
             img.draggable = false // Prevent browser image drag behavior
             img.style.cssText = 'max-width: 100%; height: auto; display: block; margin: 8px auto; border-radius: 4px; user-select: none;'
             canvas.appendChild(img)
+            plotImgs.push(img)
           }
 
+          // Wait for the plot images to decode so their layout size is known,
+          // then frame them — otherwise a transform left over from a previous
+          // turtle run leaves the plot outside the visible area.
+          await Promise.all(plotImgs.map(img => img.decode().catch(() => {})))
+          fitToView()
         }
       } catch {
         // Failed to capture plots - non-critical error
@@ -4152,6 +4201,60 @@ plots
     // Fallback if canvas not found
     setCanvasTransform({ x: 0, y: 0, scale: 1 })
   }
+
+  // "Show everything" — frame whatever is in the graphics pane (turtle
+  // canvas, matplotlib plots, SQL schema images) so it all fits, centred,
+  // in the visible area. Runs after every render and is also a toolbar
+  // button. offsetLeft/Top/Width/Height are layout metrics, unaffected by
+  // the CSS transform on canvasRef, so content bounds can be read directly.
+  const fitToView = useCallback(() => {
+    const container = canvasContainerRef.current
+    const canvas = canvasRef.current
+    if (!container || !canvas) return
+
+    const children = Array.from(canvas.children) as HTMLElement[]
+    if (children.length === 0) {
+      setCanvasTransform({ x: 0, y: 0, scale: 1 })
+      return
+    }
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    for (const child of children) {
+      // For a turtle <canvas>, frame the painted pixels, not the full
+      // (mostly blank) 2000×2000 element. Other content (matplotlib / SQL
+      // schema <img>s) fills its element, so the element bounds are right.
+      const drawn = child instanceof HTMLCanvasElement ? getCanvasDrawnBounds(child) : null
+      const left = child.offsetLeft + (drawn?.left ?? 0)
+      const top = child.offsetTop + (drawn?.top ?? 0)
+      const width = drawn?.width ?? child.offsetWidth
+      const height = drawn?.height ?? child.offsetHeight
+      minX = Math.min(minX, left)
+      minY = Math.min(minY, top)
+      maxX = Math.max(maxX, left + width)
+      maxY = Math.max(maxY, top + height)
+    }
+    const contentW = maxX - minX
+    const contentH = maxY - minY
+    if (contentW <= 0 || contentH <= 0) {
+      setCanvasTransform({ x: 0, y: 0, scale: 1 })
+      return
+    }
+
+    const { width: containerW, height: containerH } = container.getBoundingClientRect()
+    const PADDING = 24
+    const scale = Math.max(
+      0.05,
+      Math.min(
+        (containerW - PADDING * 2) / contentW,
+        (containerH - PADDING * 2) / contentH,
+        1, // never upscale past natural size
+      ),
+    )
+    // Center the content's bounding box in the container.
+    const x = (containerW - contentW * scale) / 2 - minX * scale
+    const y = (containerH - contentH * scale) / 2 - minY * scale
+    setCanvasTransform({ x, y, scale })
+  }, [])
 
   // Toggle fullscreen
   const toggleFullscreen = () => {
@@ -5115,6 +5218,9 @@ plots
             >
               {/* Floating Control Buttons */}
               <div className="absolute top-2 right-2 flex items-center gap-1 z-10">
+                <Button onClick={fitToView} size="sm" variant="outline" className="h-7 w-7 p-0 shadow-lg" title="Fit to view — show everything">
+                  <Scan className="w-3 h-3" />
+                </Button>
                 <Button onClick={toggleFullscreen} size="sm" variant="outline" className="h-7 w-7 p-0 shadow-lg" title="Fullscreen">
                   {fullscreen ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
                 </Button>
