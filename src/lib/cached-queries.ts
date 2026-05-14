@@ -22,6 +22,39 @@ export const CACHE_TAGS = {
   orgContent: (slug: string) => `org-content:${slug}`,
 } as const
 
+/** The public-page fields that live on Site but get read off the user object. */
+type SitePageFields = {
+  slug: string
+  pageName: string | null
+  pageDescription: string | null
+  pageIcon: string | null
+  pageLanguage: string | null
+  pageTagline: string | null
+  sidebarBehavior: string
+  typographyPreference: string | null
+}
+
+/**
+ * Graft a Site's public-page fields onto its owner's user object — the
+ * backwards-compat shim that lets consumers keep reading `user.pageSlug`,
+ * `user.pageName`, etc. without a sweep. Used by getTeacherByPageSlug and
+ * getTeacherWithLayout (the latter additionally attaches aiSystemPrompt +
+ * pageLayout). Org pages have their own graft — Organization maps the same
+ * Site fields under different names (description, iconUrl).
+ */
+function graftSitePageFields<U extends object>(user: U, site: SitePageFields) {
+  return Object.assign(user, {
+    pageSlug: site.slug,
+    pageName: site.pageName,
+    pageDescription: site.pageDescription,
+    pageIcon: site.pageIcon,
+    pageLanguage: site.pageLanguage,
+    pageTagline: site.pageTagline,
+    sidebarBehavior: site.sidebarBehavior,
+    typographyPreference: site.typographyPreference,
+  })
+}
+
 /**
  * Get teacher by page slug - cached
  * Used for public page rendering
@@ -63,16 +96,7 @@ export const getTeacherByPageSlug = (pageSlug: string) =>
         },
       })
       if (!site?.user) return null
-      return Object.assign(site.user, {
-        pageSlug: site.slug,
-        pageName: site.pageName,
-        pageDescription: site.pageDescription,
-        pageIcon: site.pageIcon,
-        pageLanguage: site.pageLanguage,
-        pageTagline: site.pageTagline,
-        sidebarBehavior: site.sidebarBehavior,
-        typographyPreference: site.typographyPreference,
-      })
+      return graftSitePageFields(site.user, site)
     },
     [`teacher-${pageSlug}`],
     {
@@ -107,15 +131,7 @@ export const getTeacherWithLayout = (pageSlug: string) =>
         }
       })
       if (!site?.user) return null
-      return Object.assign(site.user, {
-        pageSlug: site.slug,
-        pageName: site.pageName,
-        pageDescription: site.pageDescription,
-        pageIcon: site.pageIcon,
-        pageLanguage: site.pageLanguage,
-        pageTagline: site.pageTagline,
-        sidebarBehavior: site.sidebarBehavior,
-        typographyPreference: site.typographyPreference,
+      return Object.assign(graftSitePageFields(site.user, site), {
         aiSystemPrompt: site.aiSystemPrompt,
         pageLayout: site.pageLayout ?? null,
       })

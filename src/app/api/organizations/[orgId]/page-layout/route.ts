@@ -3,6 +3,7 @@ import { revalidateTag } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { requireOrgAdmin } from '@/lib/org-auth'
 import { CACHE_TAGS } from '@/lib/cached-queries'
+import { hydratePageLayoutItems } from '@/lib/page-layout'
 
 interface RouteParams {
   params: Promise<{ orgId: string }>
@@ -19,7 +20,7 @@ async function getOrgSite(orgId: string) {
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { orgId } = await params
-    const { error } = await requireOrgAdmin(orgId)
+    const { error, session } = await requireOrgAdmin(orgId)
     if (error) return error
 
     const site = await getOrgSite(orgId)
@@ -35,10 +36,25 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         },
       },
     })
+    if (!pageLayout) {
+      return NextResponse.json({ success: true, data: { items: [] } })
+    }
+
+    // The org page can pin collections from the org site OR from an admin's
+    // personal site, so per-item edit rights need the viewer's org roles.
+    const orgRoles = await prisma.organizationMember.findMany({
+      where: { userId: session!.user.id },
+      select: { organizationId: true, role: true },
+    })
+    const items = await hydratePageLayoutItems(pageLayout.items, {
+      userId: session!.user.id,
+      isAdmin: !!session!.user.isAdmin,
+      orgRoles,
+    })
 
     return NextResponse.json({
       success: true,
-      data: pageLayout || { items: [] },
+      data: { id: pageLayout.id, items },
     })
   } catch (error) {
     console.error('Error fetching org page layout:', error)
