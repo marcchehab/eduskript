@@ -429,7 +429,15 @@ Interactive multiple choice using \`<question>\` and \`<answer>\` HTML tags:
 
 **question attributes:**
 - \`id="unique-id"\` — Optional, auto-generated if omitted
-- \`type="single"\` — Single choice (default)
+- \`type="single"\` — Single choice (default). Other types: \`multiple\`, \`text\` (free-text answer), \`number\` (slider)
+
+**Number sliders** (\`type="number"\`) — set the range with \`minValue\` / \`maxValue\` / \`step\`. Use \`minLabel\` / \`maxLabel\` to caption the two ends; the captions render beneath the slider at either end, so don't bake them into the body text:
+
+\`\`\`markdown
+<question id="python-rating" type="number" minValue="1" maxValue="10" step="0.1" minLabel="irrelevant" maxLabel="would use it">
+How relevant is Python for your work?
+</question>
+\`\`\`
 
 **answer attributes:**
 - \`correct="true"\` — Marks the correct answer

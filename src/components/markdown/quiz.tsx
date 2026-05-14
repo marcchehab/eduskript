@@ -19,6 +19,10 @@ interface QuestionProps {
   minValue?: number
   maxValue?: number
   step?: number
+  // Optional labels for the two ends of a `number` slider. Rendered beneath
+  // the track, left = min end, right = max end.
+  minLabel?: string
+  maxLabel?: string
 }
 
 interface OptionProps {
@@ -45,6 +49,8 @@ function QuestionInner({
   minValue = 0,
   maxValue = 100,
   step = 1,
+  minLabel,
+  maxLabel,
   initialData,
   updateData,
   surveyMode = false,
@@ -287,6 +293,14 @@ function QuestionInner({
                 isSubmitted && !allowUpdate && 'opacity-70 cursor-not-allowed'
               )}
             />
+            {/* Optional end labels — sit directly under the track, one at
+                each extreme. */}
+            {(minLabel || maxLabel) && (
+              <div className="flex justify-between gap-4 text-xs text-muted-foreground">
+                <span className="text-left">{minLabel}</span>
+                <span className="text-right">{maxLabel}</span>
+              </div>
+            )}
           </div>
           <div className="text-muted-foreground text-sm">
             {children}

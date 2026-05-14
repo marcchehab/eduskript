@@ -496,6 +496,9 @@ export function createMarkdownComponents(
     const minValue = props['minValue'] !== undefined ? Number(props['minValue']) : (props['minvalue'] !== undefined ? Number(props['minvalue']) : undefined)
     const maxValue = props['maxValue'] !== undefined ? Number(props['maxValue']) : (props['maxvalue'] !== undefined ? Number(props['maxvalue']) : undefined)
     const step = props['step'] !== undefined ? Number(props['step']) : undefined
+    // Optional labels for the two ends of a number-slider question.
+    const minLabel = (props['minLabel'] as string) ?? (props['minlabel'] as string)
+    const maxLabel = (props['maxLabel'] as string) ?? (props['maxlabel'] as string)
 
     // Don't render quiz if pageId is missing (e.g., in dashboard preview without context)
     if (!pageId) {
@@ -516,6 +519,8 @@ export function createMarkdownComponents(
         minValue={minValue}
         maxValue={maxValue}
         step={step}
+        minLabel={minLabel}
+        maxLabel={maxLabel}
       >
         {children}
       </Question>

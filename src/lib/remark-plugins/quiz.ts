@@ -82,6 +82,8 @@ export function remarkQuiz() {
         if (attrs.minValue) attrStr += ` minValue="${attrs.minValue}"`
         if (attrs.maxValue) attrStr += ` maxValue="${attrs.maxValue}"`
         if (attrs.step) attrStr += ` step="${attrs.step}"`
+        if (attrs.minLabel) attrStr += ` minLabel="${escapeAttr(attrs.minLabel)}"`
+        if (attrs.maxLabel) attrStr += ` maxLabel="${escapeAttr(attrs.maxLabel)}"`
 
         // For choice questions: inner content = <answer> children.
         // For text/number/range questions: inner content = the prompt text
@@ -146,6 +148,8 @@ interface QuestionAttributes {
   minValue?: string
   maxValue?: string
   step?: string
+  minLabel?: string
+  maxLabel?: string
 }
 
 function parseQuestionBlock(content: string): { attrs: QuestionAttributes; options: ParsedOption[]; prompt?: string } | null {
@@ -161,6 +165,8 @@ function parseQuestionBlock(content: string): { attrs: QuestionAttributes; optio
   const minValueMatch = attrString.match(/minValue=["']([^"']+)["']/)
   const maxValueMatch = attrString.match(/maxValue=["']([^"']+)["']/)
   const stepMatch = attrString.match(/step=["']([^"']+)["']/)
+  const minLabelMatch = attrString.match(/minLabel=["']([^"']+)["']/)
+  const maxLabelMatch = attrString.match(/maxLabel=["']([^"']+)["']/)
 
   // Auto-generate ID from content hash when no explicit id provided
   const fallbackId = (() => {
@@ -181,6 +187,8 @@ function parseQuestionBlock(content: string): { attrs: QuestionAttributes; optio
     minValue: minValueMatch?.[1],
     maxValue: maxValueMatch?.[1],
     step: stepMatch?.[1],
+    minLabel: minLabelMatch?.[1],
+    maxLabel: maxLabelMatch?.[1],
   }
 
   // Extract options
