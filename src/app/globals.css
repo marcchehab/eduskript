@@ -2090,3 +2090,24 @@ mark.text-highlight-purple {
 .dark .color-picker-themed .w-color-editable-input span {
   color: hsl(var(--muted-foreground)) !important;
 }
+
+/* Thin, subtle horizontal scrollbar for the code-editor file-tabs strip.
+   The strip is a fixed-height row, so this 6px bar sits inside it (floating
+   under the tab names) instead of adding a second row of height. */
+.file-tabs-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.35) transparent;
+}
+.file-tabs-scroll::-webkit-scrollbar {
+  height: 6px;
+}
+.file-tabs-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.file-tabs-scroll::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--muted-foreground) / 0.35);
+  border-radius: 3px;
+}
+.file-tabs-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--muted-foreground) / 0.55);
+}

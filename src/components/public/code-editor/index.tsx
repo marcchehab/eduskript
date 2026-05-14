@@ -1032,6 +1032,23 @@ export const CodeEditor = memo(function CodeEditor({
   const showGraphics = containerRef.current ? ((100 - editorWidth) / 100) * containerRef.current.offsetWidth >= MIN_VISIBLE_WIDTH : true
   const [canvasVisible, setCanvasVisible] = useState(false) // Start hidden, show only when graphics detected
 
+  // The floating toolbar (highlighter / zoom / kernel indicator) is absolutely
+  // positioned over the editor's top-right corner — in multi-file mode it sits
+  // over the file-tabs row. Reserve its measured width as padding-right on that
+  // row so the tab scrollbar stops before it. Width is dynamic (kernel label
+  // text, conditional file buttons), so a fixed `pr-*` would let the scrollbar
+  // run underneath the toolbar. `showEditor` is a dep because the toolbar
+  // mounts/unmounts as the user resizes the editor/graphics split.
+  const [toolbarWidth, setToolbarWidth] = useState(96)
+  useEffect(() => {
+    const el = kernelMenuRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => setToolbarWidth(el.offsetWidth))
+    ro.observe(el)
+    setToolbarWidth(el.offsetWidth)
+    return () => ro.disconnect()
+  }, [showEditor])
+
   // Calculate auto-height based on number of lines in the code (editor area only, output adds separately)
   const lineCount = currentCode.split('\n').length
   const fileTabsHeight = singleFile ? 0 : 36 // height of file tabs row
@@ -4827,8 +4844,11 @@ plots
 
             {/* File Tabs - hidden in single-file mode */}
             {!singleFile && (
-              <div className="flex items-center gap-1 px-2 py-1 border-b bg-muted/10 pr-24">
-                  <div className="flex items-center gap-1 overflow-x-auto flex-1">
+              <div
+                className="flex items-center gap-1 pl-2 border-b bg-muted/10 h-9"
+                style={{ paddingRight: toolbarWidth + 8 }}
+              >
+                  <div className="flex items-center gap-1 overflow-x-auto overflow-y-hidden flex-1 h-full file-tabs-scroll">
                     {/* Local file tabs */}
                     {files.map((file, index) => (
                       <div key={`local-${index}`} className="flex items-center">
