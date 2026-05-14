@@ -1,9 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { Film, Copy, Check, Search, Plus, X, Loader2, Link, Upload, AlertCircle, Trash2 } from 'lucide-react'
+import { Film, Copy, Check, Search, Plus, X, Loader2, Link, Upload, AlertCircle, Trash2, Import } from 'lucide-react'
 import type { VideoInfo } from '@/lib/skript-files'
 import { VideoUploadModal } from './video-upload-modal'
+import { VideoImportDialog } from './video-import-dialog'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 
@@ -24,6 +25,7 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
   const [copiedPlaybackId, setCopiedPlaybackId] = useState<string | null>(null)
   const [showAddForm, setShowAddForm] = useState(false)
   const [showUploadModal, setShowUploadModal] = useState(false)
+  const [showImportDialog, setShowImportDialog] = useState(false)
   const [addFilename, setAddFilename] = useState('')
   const [addPlaybackId, setAddPlaybackId] = useState('')
   const [addAspectRatio, setAddAspectRatio] = useState('')
@@ -168,20 +170,39 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
       <div className={`p-4 text-center text-sm text-muted-foreground ${className}`}>
         <Film className="w-8 h-8 mx-auto mb-2 opacity-40" />
         <p>No videos available.</p>
-        <p className="mt-1 text-xs">Click the upload button to add a video.</p>
-        <button
-          onClick={() => setShowUploadModal(true)}
-          className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-        >
-          <Upload className="w-3.5 h-3.5" />
-          Upload Video
-        </button>
+        <p className="mt-1 text-xs">Upload a video, or import one from another skript.</p>
+        <div className="mt-3 flex items-center justify-center gap-2">
+          <button
+            onClick={() => setShowUploadModal(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            Upload Video
+          </button>
+          {skriptId && (
+            <button
+              onClick={() => setShowImportDialog(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border border-border hover:bg-muted transition-colors"
+            >
+              <Import className="w-3.5 h-3.5" />
+              Import
+            </button>
+          )}
+        </div>
         <VideoUploadModal
           open={showUploadModal}
           onOpenChange={setShowUploadModal}
           onUploadComplete={onUploadComplete}
           skriptId={skriptId}
         />
+        {skriptId && (
+          <VideoImportDialog
+            open={showImportDialog}
+            onOpenChange={setShowImportDialog}
+            targetSkriptId={skriptId}
+            onImported={onVideoAdded}
+          />
+        )}
       </div>
     )
   }
@@ -209,6 +230,16 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
         >
           <Upload className="w-3.5 h-3.5" />
         </button>
+        {/* Import a video from another skript (just a SkriptVideos link) */}
+        {skriptId && (
+          <button
+            onClick={() => setShowImportDialog(true)}
+            className="flex-shrink-0 p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+            title="Import video from another skript"
+          >
+            <Import className="w-3.5 h-3.5" />
+          </button>
+        )}
         {/* Admin manual add form toggle */}
         {isAdmin && (
           <button
@@ -364,6 +395,14 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
         onUploadComplete={onUploadComplete}
         skriptId={skriptId}
       />
+      {skriptId && (
+        <VideoImportDialog
+          open={showImportDialog}
+          onOpenChange={setShowImportDialog}
+          targetSkriptId={skriptId}
+          onImported={onVideoAdded}
+        />
+      )}
     </div>
     <AlertDialogModal
       open={dialog.open} onOpenChange={dialog.setOpen}
