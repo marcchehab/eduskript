@@ -8,8 +8,6 @@ declare module "next-auth" {
       name?: string | null
       email?: string | null
       image?: string | null
-      // User identity
-      username?: string | null
       // Page fields
       pageSlug?: string | null
       pageName?: string | null
@@ -35,8 +33,6 @@ declare module "next-auth" {
     name?: string | null
     email?: string | null
     image?: string | null
-    // User identity
-    username?: string | null
     // Page fields
     pageSlug?: string | null
     pageName?: string | null
@@ -59,8 +55,6 @@ declare module "next-auth/jwt" {
     name?: string | null
     email?: string | null
     image?: string | null
-    // User identity
-    username?: string | null
     // Page fields
     pageSlug?: string | null
     pageName?: string | null

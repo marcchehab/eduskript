@@ -92,7 +92,7 @@ async function main() {
   console.log('🔧 Importing missing excalidraw SVG files...\n')
 
   // Get admin user
-  const admin = await prisma.user.findFirst({ where: { username: 'eduadmin' } })
+  const admin = await prisma.user.findFirst({ where: { email: 'eduadmin@eduskript.org' } })
   if (!admin) throw new Error('Admin user not found')
 
   // Get building-an-adder skript

@@ -99,7 +99,7 @@ async function main() {
   console.log('Importing missing fde-demo excalidraw SVG files...\n')
 
   // Get admin user
-  const admin = await prisma.user.findFirst({ where: { username: 'eduadmin' } })
+  const admin = await prisma.user.findFirst({ where: { email: 'eduadmin@eduskript.org' } })
   if (!admin) throw new Error('Admin user not found')
 
   // Get computer-os skript (where von-neumann-architektur page is)

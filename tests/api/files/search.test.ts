@@ -19,7 +19,6 @@ const mockSession: Session = {
     id: 'user-1',
     email: 'a@b.com',
     name: 'A',
-    username: 'a',
     title: 'T',
     isAdmin: false,
     requirePasswordReset: false,

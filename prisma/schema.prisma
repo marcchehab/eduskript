@@ -63,9 +63,6 @@ model User {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  // User identity
-  username String? @unique // User's unique identifier (for login, collaboration)
-
   // Profile fields (shown to collaborators).
   // Public-page display fields (pageName, pageDescription, pageIcon,
   // pageTagline, pageLanguage, sidebarBehavior, typographyPreference,

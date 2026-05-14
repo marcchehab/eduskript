@@ -109,7 +109,6 @@ export async function seedTestData(prisma: PrismaClient) {
     data: {
       email: 'test1@example.com',
       hashedPassword: 'hashed_password_1',
-      username: 'test1',
       emailVerified: new Date(),
     },
   })
@@ -118,7 +117,6 @@ export async function seedTestData(prisma: PrismaClient) {
     data: {
       email: 'test2@example.com',
       hashedPassword: 'hashed_password_2',
-      username: 'test2',
       emailVerified: new Date(),
     },
   })
@@ -127,7 +125,6 @@ export async function seedTestData(prisma: PrismaClient) {
     data: {
       email: 'test3@example.com',
       hashedPassword: 'hashed_password_3',
-      username: 'test3',
       // emailVerified: null (unverified user for auth tests)
     },
   })

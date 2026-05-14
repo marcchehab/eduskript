@@ -52,7 +52,6 @@ export function createMockSession(userId: string, overrides: Partial<Session> = 
       id: userId,
       email: `user-${userId}@example.com`,
       name: `User ${userId}`,
-      username: `user${userId}`,
       title: 'Teacher',
       isAdmin: false,
       requirePasswordReset: false,

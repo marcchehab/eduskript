@@ -46,7 +46,6 @@ describe('Skripts Move API', () => {
       id: 'user-123',
       email: 'test@example.com',
       name: 'Test User',
-      username: 'testuser',
       title: 'Teacher',
       isAdmin: false,
       requirePasswordReset: false,

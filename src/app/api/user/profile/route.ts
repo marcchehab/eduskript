@@ -146,21 +146,14 @@ export async function PATCH(request: NextRequest) {
     const validatedData = schema.parse(body)
 
     const result = await withDatabaseConnection(async () => {
-      // pageSlug now lives on Site, not User. Uniqueness is checked against
-      // Site.slug across user + org sites. Username collisions still live on
-      // User and need a separate check.
+      // pageSlug lives on Site. Uniqueness is the Site.slug unique constraint,
+      // global across user + org sites.
       if (validatedData.pageSlug) {
-        const conflict = await prisma.$transaction([
-          prisma.site.findFirst({
-            where: { slug: validatedData.pageSlug, NOT: { userId: session.user.id } },
-            select: { id: true },
-          }),
-          prisma.user.findFirst({
-            where: { username: validatedData.pageSlug, NOT: { id: session.user.id } },
-            select: { id: true },
-          }),
-        ])
-        if (conflict[0] || conflict[1]) {
+        const conflict = await prisma.site.findFirst({
+          where: { slug: validatedData.pageSlug, NOT: { userId: session.user.id } },
+          select: { id: true },
+        })
+        if (conflict) {
           throw new Error('This page slug is already taken')
         }
       }

@@ -22,13 +22,13 @@ async function main() {
           "requirePasswordReset" = false,
           "updatedAt" = NOW()
       WHERE "isAdmin" = true
-      RETURNING email, username
+      RETURNING email
     `)
 
     if (result.rows.length > 0) {
       console.log('\n✅ Password reset for admin users:')
       result.rows.forEach(row => {
-        console.log(`   - ${row.email} (${row.username})`)
+        console.log(`   - ${row.email}`)
       })
       console.log('\n🔑 New password: letseducate')
     } else {

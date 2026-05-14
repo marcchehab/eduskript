@@ -69,7 +69,6 @@ const session: Session = {
     id: 'user-123',
     email: 'teacher@example.com',
     name: 'Teacher',
-    username: 'teacher',
     title: 'Teacher',
     isAdmin: false,
     requirePasswordReset: false,
