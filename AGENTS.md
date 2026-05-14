@@ -226,17 +226,18 @@ Eduskript is a multi-tenant education platform where teachers create educational
 ## Markdown Transformation Pipeline
 
 ### Overview
-**IMPORTANT**: Eduskript has TWO different markdown processors. Understanding which one to modify is critical:
+**IMPORTANT**: Markdown rendering goes through the React processor below.
+`src/lib/markdown.ts` is a separate *utility* module — not a processor.
 
-1. **PRIMARY: Client-Side React Processor** (`src/components/markdown/markdown-renderer.tsx`)
+1. **Markdown processor** (`src/components/markdown/markdown-renderer.client.tsx`,
+   with a `markdown-renderer.server.tsx` SSR variant)
    - **Used by**: Public pages, dashboard, interactive preview
    - **Output**: React components via `rehype-react`
    - **When to modify**: For all remark/rehype plugin additions
 
-2. **LEGACY: Server-Side HTML Processor** (`src/lib/markdown.ts`)
-   - **Used by**: Only `src/components/public/markdown-renderer.tsx` (rarely used component)
-   - **Output**: HTML string via `rehype-stringify`
-   - **Status**: Keep for compatibility but not actively used for main content
+2. **Markdown utilities** (`src/lib/markdown.ts`)
+   - Not a processor — small helpers used by API routes/services:
+     `generateSlug`, `generateExcerpt`, `isReservedSlug`, `validateMarkdown`
 
 ### Primary Processor Architecture (src/components/markdown/markdown-renderer.tsx)
 
@@ -254,18 +255,14 @@ Eduskript is a multi-tenant education platform where teachers create educational
 - `src/components/public/annotatable-content.tsx` - Annotatable content
 - `src/components/dashboard/interactive-preview.tsx` - Dashboard preview
 
-### Legacy Processor (src/lib/markdown.ts)
+### Markdown utilities (src/lib/markdown.ts)
 
-**File:** `/home/chris/git/eduskript/src/lib/markdown.ts`
+Not a markdown *processor* — a small utility module. Exports:
+- `generateSlug(title)` / `isReservedSlug(slug)` — URL slug generation + reserved-word guard
+- `generateExcerpt(content)` — plain-text excerpt for previews/SEO
+- `validateMarkdown(content)` — lightweight content validation
 
-**Processing Flow:**
-- Entry point: `processMarkdown(markdown, context)`
-- Transforms: Markdown String → MDAST → HAST → HTML String
-- Uses `rehype-stringify` to output HTML
-- Returns serialized HTML + frontmatter + excerpt
-
-**Used By:**
-- `src/components/public/markdown-renderer.tsx` - Dynamically imports processMarkdown (rarely used)
+Used by API routes and `src/lib/services/{skripts,pages}.ts`.
 
 ### Plugin Execution Order (Primary Processor)
 
@@ -355,32 +352,20 @@ The markdown transformation follows this **exact plugin order** (critical for pr
      </figure>
      ```
 
-6. **`rehypeImageWrapper`** (`src/lib/rehype-plugins/image-wrapper.ts`)
-   - Wraps regular images (non-Excalidraw) in `<figure>` tags
-   - Adds alignment classes: `mx-auto` (center), `mr-auto` (left), `ml-auto` (right)
-   - Supports floated layout: `float-left`, `float-right` when `data-wrap="true"`
-   - Adds captions from alt text
-
-7. **`rehypeImageOptimizer`** (`src/lib/rehype-plugins/image-optimizer.ts`)
+6. **`rehypeImageOptimizer`** (`src/lib/rehype-plugins/image-optimizer.ts`)
    - Adds `loading="lazy"` and `decoding="async"` to all images
    - Improves page load performance
 
-8. **`rehypeInteractiveElements`** (`src/lib/rehype-plugins/interactive-elements.ts`)
-   - Adds metadata to interactive elements
-   - Adds `data-interactive`, `data-block-id` to code blocks
-   - Adds `data-image-id` to images
-   - Enables UI controls in preview mode
-
-9. **`rehypeKatex`** - Process LaTeX math to HTML
+7. **`rehypeKatex`** - Process LaTeX math to HTML
    - Converts math blocks to styled HTML using KaTeX library
 
-10. **`rehypeHighlight`** - Syntax highlighting
-    - Adds `<span class="hljs-*">` for syntax-highlighted code
-    - Only applies to non-editor code blocks
+8. **`rehypeHighlight`** - Syntax highlighting
+   - Adds `<span class="hljs-*">` for syntax-highlighted code
+   - Only applies to non-editor code blocks
 
-11. **`rehypeStringify`** - Convert HAST → HTML string
-    - Final serialization step
-    - `allowDangerousHtml: true` preserves custom elements
+9. **`rehypeStringify`** - Convert HAST → HTML string
+   - Final serialization step
+   - `allowDangerousHtml: true` preserves custom elements
 
 ### Client-Side Hydration Process
 
