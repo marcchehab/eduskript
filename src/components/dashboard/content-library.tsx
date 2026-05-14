@@ -34,9 +34,13 @@ interface ContentLibraryProps {
   onDataLoad?: (data: { collections: any[], skripts: any[] }) => void
   refreshTrigger?: number
   context?: PageBuilderContext
+  // A collection edited in the page builder (rename / accent colour). When the
+  // reference changes we merge it into the library list so the card updates
+  // without a full refetch.
+  collectionUpdate?: { id: string; title: string; accentColor?: string | null } | null
 }
 
-export function ContentLibrary({ onDataLoad, refreshTrigger, context = { type: 'user' } }: ContentLibraryProps = {}) {
+export function ContentLibrary({ onDataLoad, refreshTrigger, context = { type: 'user' }, collectionUpdate }: ContentLibraryProps = {}) {
   const { data: session } = useSession()
   const router = useRouter()
   const [collections, setCollections] = useState<LibraryCollection[]>([])
@@ -87,6 +91,20 @@ export function ContentLibrary({ onDataLoad, refreshTrigger, context = { type: '
   useEffect(() => {
     fetchContent()
   }, [fetchContent, refreshTrigger])
+
+  // Merge an in-place collection edit (rename / accent colour) from the page
+  // builder. Avoids a full refetch — fetchContent would also pick it up, but
+  // only on the next refreshTrigger bump.
+  useEffect(() => {
+    if (!collectionUpdate) return
+    setCollections(prev =>
+      prev.map(c =>
+        c.id === collectionUpdate.id
+          ? { ...c, title: collectionUpdate.title, accentColor: collectionUpdate.accentColor ?? null }
+          : c
+      )
+    )
+  }, [collectionUpdate])
 
   // Filter content based on search term. Collections no longer have a
   // description field, so we search the title only.
@@ -166,6 +184,7 @@ export function ContentLibrary({ onDataLoad, refreshTrigger, context = { type: '
                         id={collection.id}
                         title={collection.title}
                         skriptCount={collection.collectionSkripts.length}
+                        accentColor={collection.accentColor}
                         isViewOnly={false}
                         index={index}
                       />
@@ -195,7 +214,8 @@ export function ContentLibrary({ onDataLoad, refreshTrigger, context = { type: '
                   {filteredSkripts.map((skript, index) => {
                     const permissions = checkSkriptPermissions(
                       session.user.id,
-                      skript.authors
+                      skript.authors,
+                      session.user.isAdmin
                     )
                     const isViewOnly = !permissions.canEdit
 

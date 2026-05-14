@@ -1,8 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidateTag } from 'next/cache'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { canEditSite } from '@/lib/permissions'
+import { CACHE_TAGS } from '@/lib/cached-queries'
+
+/**
+ * Bust the cached public-page queries for every site that pins this
+ * collection in its page layout. Collection title + accentColor surface in
+ * the public sidebar, but those pages read through unstable_cache
+ * (`revalidate: false`), so without an explicit bust an edit only shows up
+ * once the cache happens to drop. A collection can appear on more than one
+ * site's page (e.g. a teacher collection pinned onto an org page), hence the
+ * findMany rather than just touching the owning site.
+ */
+async function revalidateCollectionPages(collectionId: string) {
+  const layouts = await prisma.pageLayout.findMany({
+    where: { items: { some: { type: 'collection', contentId: collectionId } } },
+    select: {
+      site: { select: { slug: true, userId: true, organizationId: true } },
+    },
+  })
+  for (const { site } of layouts) {
+    if (site.organizationId) {
+      revalidateTag(CACHE_TAGS.organization(site.slug), { expire: 0 })
+      revalidateTag(CACHE_TAGS.orgContent(site.slug), { expire: 0 })
+    } else if (site.userId) {
+      revalidateTag(CACHE_TAGS.user(site.slug), { expire: 0 })
+      revalidateTag(CACHE_TAGS.teacherContent(site.slug), { expire: 0 })
+    }
+  }
+}
 
 async function loadCollectionWithOwner(collectionId: string) {
   return prisma.collection.findUnique({
@@ -105,6 +134,8 @@ export async function PATCH(
         ...(accentColor !== undefined && { accentColor })
       },
     })
+
+    await revalidateCollectionPages(id)
 
     return NextResponse.json(collection)
   } catch (error) {

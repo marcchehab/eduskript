@@ -21,6 +21,10 @@ interface BaseContentProps {
 interface DraggableCollectionProps extends BaseContentProps {
   type: 'collection'
   skriptCount: number
+  // Hex accent colour from the collection. Tints the BookOpen icon to match
+  // the page builder + public sidebar. Null/undefined keeps the default
+  // primary blue.
+  accentColor?: string | null
   // Collections are owned 1:1 by a Site. The library only shows yours, so we
   // don't render co-author chips on collection cards anymore.
 }
@@ -41,6 +45,7 @@ export function DraggableCollection({
   isViewOnly = false,
   className,
   index = 0,
+  accentColor = null,
 }: DraggableCollectionProps) {
   return (
     <Draggable draggableId={`library-collection-${id}`} index={index}>
@@ -67,10 +72,13 @@ export function DraggableCollection({
                 <GripVertical className="w-4 h-4 text-muted-foreground" />
               </div>
               <div className="relative">
-                <BookOpen className={cn(
-                  "w-5 h-5 mt-0.5 flex-shrink-0",
-                  isViewOnly ? "text-muted-foreground" : "text-primary"
-                )} />
+                <BookOpen
+                  className={cn(
+                    "w-5 h-5 mt-0.5 flex-shrink-0",
+                    isViewOnly ? "text-muted-foreground" : "text-primary"
+                  )}
+                  style={accentColor ? { color: accentColor } : undefined}
+                />
                 {isViewOnly && (
                   <Eye className="w-3 h-3 text-muted-foreground absolute -bottom-1 -right-1 bg-background rounded-full" />
                 )}

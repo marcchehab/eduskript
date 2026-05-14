@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
+import { revalidateTag } from 'next/cache'
 import { requireAdmin } from '@/lib/admin-auth'
 import { prisma } from '@/lib/prisma'
+import { CACHE_TAGS } from '@/lib/cached-queries'
 import bcrypt from 'bcryptjs'
 
 // POST /api/admin/seed-example-data - Create eduskript org + teacher user with example content
@@ -23,6 +25,7 @@ export async function POST(request: Request) {
 
     // Create the eduskript organization + its site atomically.
     // Page-display fields (description, etc.) all live on Site now.
+    // Include the site row so we can seed the org's page layout below.
     const org = await prisma.organization.create({
       data: {
         name: 'Eduskript',
@@ -34,6 +37,7 @@ export async function POST(request: Request) {
           },
         },
       },
+      include: { site: { select: { id: true } } },
     })
 
     // Create teacher user (password: "teacher") + their Site row atomically.
@@ -394,6 +398,47 @@ console.log("Even numbers:", evens);
         },
       },
     })
+
+    // Also place the collection on the org's page layout. The org admin who
+    // runs this seed lands on the org page builder; without this they'd have
+    // to drag the tutorial in by hand. available-content already surfaces it
+    // (collection lives on a teacher site whose owner is an org owner).
+    if (org.site) {
+      await prisma.pageLayout.upsert({
+        where: { siteId: org.site.id },
+        create: {
+          siteId: org.site.id,
+          items: {
+            create: {
+              type: 'collection',
+              contentId: tutorialCollection.id,
+              order: 0,
+            },
+          },
+        },
+        update: {
+          items: {
+            create: {
+              type: 'collection',
+              contentId: tutorialCollection.id,
+              order: 0,
+            },
+          },
+        },
+      })
+    }
+
+    // Bust the cached public-page queries. getOrgWithLayout / getTeacherByPageSlug
+    // use unstable_cache with `revalidate: false`, so a `null` cached before the
+    // org existed (e.g. from visiting localhost:3000 after a db:reset, which
+    // routes to /org/eduskript) sticks forever — sending visitors to
+    // /auth/signin even after seeding. Invalidate the tags so the next request
+    // re-queries.
+    revalidateTag(CACHE_TAGS.organization('eduskript'), { expire: 0 })
+    revalidateTag(CACHE_TAGS.orgContent('eduskript'), { expire: 0 })
+    revalidateTag(CACHE_TAGS.user('teacher'), { expire: 0 })
+    revalidateTag(CACHE_TAGS.teacherContent('teacher'), { expire: 0 })
+    revalidateTag('teachers', { expire: 0 })
 
     return NextResponse.json({
       success: true,

@@ -69,6 +69,11 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
   const [expandedCollections, setExpandedCollections] = useState<string[]>([])
   const [libraryData, setLibraryData] = useState<{ collections: any[], skripts: any[] }>({ collections: [], skripts: [] })
   const [refreshTrigger, setRefreshTrigger] = useState(0)
+  // Last collection edited in the page builder (rename / accent colour). Fed to
+  // ContentLibrary so its card updates in place without waiting for a refetch.
+  const [libraryCollectionUpdate, setLibraryCollectionUpdate] = useState<
+    { id: string; title: string; accentColor?: string | null } | null
+  >(null)
   const alert = useAlertDialog()
 
   // Load existing page layout on component mount
@@ -468,7 +473,7 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
             permissions: collectionPermissions,
             skripts: collection?.collectionSkripts?.map((cs: any, idx: number) => {
               const skriptPermissions = session?.user?.id
-                ? checkSkriptPermissions(session.user.id, cs.skript.authors || [])
+                ? checkSkriptPermissions(session.user.id, cs.skript.authors || [], session.user.isAdmin)
                 : { canEdit: false, canView: false }
               return {
                 id: cs.skript.id,
@@ -515,7 +520,7 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
 
           const librarySkript = libraryData.skripts.find(s => s.id === dragData.id)
           const skriptPermissions = session?.user?.id && librarySkript?.authors
-            ? checkSkriptPermissions(session.user.id, librarySkript.authors)
+            ? checkSkriptPermissions(session.user.id, librarySkript.authors, session.user.isAdmin)
             : (dragData.permissions || { canEdit: true, canView: true })
 
           const newRootSkript: PageItem = {
@@ -552,7 +557,7 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
             permissions: collectionPermissions,
             skripts: collection?.collectionSkripts?.map((cs: any, idx: number) => {
               const skriptPermissions = session?.user?.id
-                ? checkSkriptPermissions(session.user.id, cs.skript.authors || [])
+                ? checkSkriptPermissions(session.user.id, cs.skript.authors || [], session.user.isAdmin)
                 : { canEdit: false, canView: false }
 
               return {
@@ -618,7 +623,7 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
           // Resolve the skript's slug + permissions
           const librarySkript = libraryData.skripts.find(s => s.id === dragData.id)
           const skriptPermissions = session?.user?.id && librarySkript?.authors
-            ? checkSkriptPermissions(session.user.id, librarySkript.authors)
+            ? checkSkriptPermissions(session.user.id, librarySkript.authors, session.user.isAdmin)
             : (dragData.permissions || { canEdit: true, canView: true })
 
           const newRootSkript: PageItem = {
@@ -886,6 +891,7 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
             <ContentLibrary
               onDataLoad={setLibraryData}
               refreshTrigger={refreshTrigger}
+              collectionUpdate={libraryCollectionUpdate}
               context={context}
             />
           </div>
@@ -924,6 +930,8 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
                     : it
                 )
               )
+              // Mirror the edit into the content library card.
+              setLibraryCollectionUpdate(updated)
             }}
             draggedItem={activeItem}
             onRefresh={() => setRefreshTrigger(prev => prev + 1)}
@@ -939,6 +947,7 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
           <ContentLibrary
             onDataLoad={setLibraryData}
             refreshTrigger={refreshTrigger}
+            collectionUpdate={libraryCollectionUpdate}
             context={context}
           />
         </div>
