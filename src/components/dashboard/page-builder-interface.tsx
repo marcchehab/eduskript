@@ -45,6 +45,11 @@ interface DragData {
     canEdit: boolean
     canView: boolean
   }
+  // Full source PageItem for skript drags. Spread verbatim on drop so the
+  // moved skript keeps every field. Rebuilding it from scattered sources
+  // used to silently drop slug + isPublished, which killed the edit button
+  // (needs slug) and the publish badge (needs isPublished) on drop.
+  sourceItem?: PageItem
 }
 
 export interface PageBuilderContext {
@@ -246,14 +251,28 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
       }
     } else if (draggableId.startsWith('library-skript-')) {
       const skriptId = draggableId.replace('library-skript-', '')
-      // Find skript in library data  
+      // Find skript in library data
       const skript = libraryData.skripts.find(s => s.id === skriptId)
-      dragData = { 
-        type: 'skript', 
-        id: skriptId, 
-        title: skript?.title || `Skript ${skriptId}`, 
+      const skriptPermissions = session?.user?.id && skript?.authors
+        ? checkSkriptPermissions(session.user.id, skript.authors, session.user.isAdmin)
+        : { canEdit: true, canView: true }
+      dragData = {
+        type: 'skript',
+        id: skriptId,
+        title: skript?.title || `Skript ${skriptId}`,
         description: skript?.description,
-        fromLibrary: true 
+        fromLibrary: true,
+        sourceItem: skript ? {
+          id: skript.id,
+          type: 'skript',
+          title: skript.title,
+          description: skript.description,
+          order: 0,
+          slug: skript.slug,
+          isPublished: skript.isPublished,
+          isUnlisted: skript.isUnlisted,
+          permissions: skriptPermissions,
+        } : undefined,
       }
     } else if (draggableId.startsWith('root-skript-')) {
       // Root-level skript (sibling of collections) — fromRoot lets the
@@ -267,7 +286,7 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
           id: skriptId,
           title: skript.title,
           description: skript.description,
-          permissions: skript.permissions,
+          sourceItem: skript,
           fromRoot: true,
         }
       }
@@ -290,7 +309,7 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
           title: skript.title,
           description: skript.description,
           parentId,
-          permissions: skript.permissions
+          sourceItem: skript,
         }
       }
     }
@@ -411,21 +430,13 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
             }
           }
 
-          const librarySkript = libraryData.skripts.find(s => s.id === dragData.id)
-          const skriptPermissions = session?.user?.id && librarySkript?.authors
-            ? checkSkriptPermissions(session.user.id, librarySkript.authors, session.user.isAdmin)
-            : (dragData.permissions || { canEdit: true, canView: true })
-
+          // Spread the full source item so slug / isPublished / permissions
+          // survive the move — parentId cleared since this lands at root.
           const newRootSkript: PageItem = {
-            id: dragData.id,
+            ...dragData.sourceItem!,
             type: 'skript',
-            title: dragData.title,
-            description: dragData.description,
             order: insertIndex,
-            slug: librarySkript?.slug,
-            permissions: skriptPermissions,
-            isPublished: librarySkript?.isPublished,
-            isUnlisted: librarySkript?.isUnlisted,
+            parentId: undefined,
           }
           updatedItems.splice(insertIndex, 0, newRootSkript)
           updatedItems.forEach((it, idx) => { it.order = idx })
@@ -513,22 +524,13 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
             }
           }
 
-          // Resolve the skript's slug + permissions
-          const librarySkript = libraryData.skripts.find(s => s.id === dragData.id)
-          const skriptPermissions = session?.user?.id && librarySkript?.authors
-            ? checkSkriptPermissions(session.user.id, librarySkript.authors, session.user.isAdmin)
-            : (dragData.permissions || { canEdit: true, canView: true })
-
+          // Spread the full source item so slug / isPublished / permissions
+          // survive the move — parentId cleared since this lands at root.
           const newRootSkript: PageItem = {
-            id: dragData.id,
+            ...dragData.sourceItem!,
             type: 'skript',
-            title: dragData.title,
-            description: dragData.description,
             order: destination.index ?? updatedItems.length,
-            slug: librarySkript?.slug,
-            permissions: skriptPermissions,
-            isPublished: librarySkript?.isPublished,
-            isUnlisted: librarySkript?.isUnlisted,
+            parentId: undefined,
           }
 
           // Insert at destination.index
@@ -586,14 +588,13 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
           
           // Check if already exists
           if (!targetCollection.skripts.some(s => s.id === dragData.id)) {
-            const newSkript = {
-              id: dragData.id,
-              type: 'skript' as const,
-              title: dragData.title,
-              description: dragData.description,
+            // Spread the full source item so slug / isPublished / permissions
+            // survive the move.
+            const newSkript: PageItem = {
+              ...dragData.sourceItem!,
+              type: 'skript',
               order: 0, // Place at beginning when dropping on header
               parentId: collectionId,
-              permissions: dragData.permissions
             }
             targetCollection.skripts.unshift(newSkript) // Add at beginning
             changedCollectionIds.add(collectionId)
@@ -644,14 +645,13 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
           return // Already in collection
         }
         
-        const newSkript = {
-          id: dragData.id,
-          type: 'skript' as const,
-          title: dragData.title,
-          description: dragData.description,
+        // Spread the full source item so slug / isPublished / permissions
+        // survive the move.
+        const newSkript: PageItem = {
+          ...dragData.sourceItem!,
+          type: 'skript',
           order: 0,
           parentId: collectionId,
-          permissions: dragData.permissions
         }
         targetCollection.skripts.push(newSkript)
         changedCollectionIds.add(collectionId)
@@ -720,16 +720,15 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
             return // Already in collection
           }
           
-          const newSkript = {
-            id: dragData.id,
-            type: 'skript' as const,
-            title: dragData.title,
-            description: dragData.description,
+          // Spread the full source item so slug / isPublished / permissions
+          // survive the move.
+          const newSkript: PageItem = {
+            ...dragData.sourceItem!,
+            type: 'skript',
             order: destination.index,
             parentId: collectionId,
-            permissions: dragData.permissions
           }
-          
+
           // Insert at the specified position
           targetCollection.skripts.splice(destination.index, 0, newSkript)
           
