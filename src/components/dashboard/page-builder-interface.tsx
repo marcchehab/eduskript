@@ -318,8 +318,15 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
       }
     }
 
-    // Simple insertion logic based on drop target
-    let updatedItems = [...pageItems]
+    // Simple insertion logic based on drop target.
+    // Clone each item AND its skripts array — the branches below mutate
+    // skripts in place (push/splice) and reassign collection.skripts. A plain
+    // [...pageItems] shares those nested arrays with React state, so drags
+    // leak into each other and skripts get duplicated (the "ghost" rows).
+    let updatedItems: PageItem[] = pageItems.map(item => ({
+      ...item,
+      skripts: item.skripts ? [...item.skripts] : item.skripts,
+    }))
     let hasChanges = false
     const changedCollectionIds = new Set<string>()
 

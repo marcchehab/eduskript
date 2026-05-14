@@ -393,10 +393,15 @@ function RootGap({ index }: { index: number }) {
           ref={provided.innerRef}
           {...provided.droppableProps}
           className={cn(
-            "transition-colors rounded",
-            snapshot.isDraggingOver
-              ? "h-3 my-1 bg-primary/20 ring-1 ring-primary/40"
-              : "h-3"
+            // Fixed height, always. The strip must NOT change size as a side
+            // effect of a drag: @hello-pangea/dnd captures element positions
+            // at drag-start, so a reactive size change shifts the layout and
+            // throws the drag clone's offset off by the shift amount. h-8 is
+            // a comfortable target on its own; while a drag is over it, dnd's
+            // own placeholder (skript-sized) makes the zone obvious.
+            // isDraggingOver only changes colour — not the box.
+            "h-8 rounded transition-colors",
+            snapshot.isDraggingOver && "bg-primary/20 ring-1 ring-primary/40"
           )}
         >
           {provided.placeholder}

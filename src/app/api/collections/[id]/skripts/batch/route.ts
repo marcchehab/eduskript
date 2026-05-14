@@ -59,16 +59,18 @@ export async function PUT(
         }
       })
 
-      // Then create new entries with the correct order
+      // Then create new entries with the correct order. skipDuplicates
+      // guards against a client payload that lists the same skript twice —
+      // without it createMany throws P2002 on the (collectionId, skriptId)
+      // unique constraint and the whole save 500s.
       if (skripts && skripts.length > 0) {
-        // Use createMany with skipDuplicates to avoid unique constraint errors
-        // This shouldn't happen since we delete all first, but just in case
         await tx.collectionSkript.createMany({
           data: skripts.map((skript: { id: string; order: number }) => ({
             collectionId: collectionId,
             skriptId: skript.id,
             order: skript.order
-          }))
+          })),
+          skipDuplicates: true,
         })
       }
     })
