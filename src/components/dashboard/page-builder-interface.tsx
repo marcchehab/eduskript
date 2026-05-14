@@ -18,6 +18,7 @@ interface PageItem {
   order: number
   slug?: string
   parentId?: string // For nested skripts under collections
+  accentColor?: string | null // For collections: sidebar accent colour
   skripts?: PageItem[] // For collections containing skripts
   isInLayout?: boolean // For skripts: whether they're explicitly in the page layout
   isFromLibrary?: boolean // For skripts: whether they were just added from library (skip move API)
@@ -83,130 +84,15 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
         const response = await fetch(pageLayoutEndpoint)
         if (response.ok) {
           const data = await response.json()
-          if (data.data?.items) {
-            // Separate collections and skripts
-            const collections = data.data.items.filter((item: { type: string }) => item.type === 'collection')
-            const skripts = data.data.items.filter((item: { type: string }) => item.type === 'skript')
-            
-            // Fetch collection details with their skripts from junction table
-            const collectionsWithSkripts = await Promise.all(
-              collections.map(async (item: { contentId: string; order: number }) => {
-                try {
-                  const contentResponse = await fetch(`/api/collections/${item.contentId}`)
-                  if (contentResponse.ok) {
-                    const contentData = await contentResponse.json()
-                    const collection = contentData.data || contentData
-                    
-                    // Get skripts from the junction table (CollectionSkript) and fetch their individual permissions
-                    const collectionSkripts = await Promise.all(
-                      (collection.collectionSkripts || [])
-                        .map(async (cs: { skript: { id: string; title: string; description?: string; slug: string; isPublished: boolean; isUnlisted?: boolean }, order: number }) => {
-                          // Fetch individual skript permissions
-                          // Note: The API now properly handles collection-level permission inheritance
-                          // If the user has collection access, the API will return at minimum view-only permissions
-                          let skriptPermissions = { canEdit: false, canView: true }
-                          try {
-                            const skriptResponse = await fetch(`/api/skripts/${cs.skript.id}`)
-                            if (skriptResponse.ok) {
-                              const skriptData = await skriptResponse.json()
-                              skriptPermissions = skriptData.permissions || skriptPermissions
-                            }
-                          } catch {
-                            // Silently use default permissions
-                          }
-
-                          return {
-                            id: cs.skript.id,
-                            type: 'skript' as const,
-                            title: cs.skript.title || `skript ${cs.skript.id}`,
-                            description: cs.skript.description,
-                            order: cs.order, // Use order from junction table
-                            slug: cs.skript.slug,
-                            parentId: item.contentId,
-                            permissions: skriptPermissions, // Use individual skript permissions
-                            isInLayout: true, // All skripts in CollectionSkript are part of the layout
-                            isPublished: cs.skript.isPublished,
-                            isUnlisted: cs.skript.isUnlisted
-                          }
-                        })
-                    )
-
-                    return {
-                      id: item.contentId,
-                      type: 'collection' as const,
-                      title: collection.title || contentData.title || `collection ${item.contentId}`,
-                      description: collection.description || contentData.description,
-                      accentColor: collection.accentColor ?? null,
-                      order: item.order,
-                      permissions: contentData.permissions,
-                      skripts: collectionSkripts.sort((a: { order: number }, b: { order: number }) => a.order - b.order)
-                    }
-                  }
-                } catch {
-                  // Silently use fallback
-                }
-                
-                return {
-                  id: item.contentId,
-                  type: 'collection' as const,
-                  title: `collection ${item.contentId}`,
-                  order: item.order,
-                  skripts: []
-                }
-              })
-            )
-            
-            // Fetch root-level skripts from junction table (collectionId = null, userId = currentUser)
-            // For now, we'll use the skripts from page layout that aren't in collections
-            // TODO: Later we should fetch actual root-level skripts from CollectionSkript with collectionId = null
-            const rootSkripts = await Promise.all(
-              skripts.map(async (item: { contentId: string; order: number }) => {
-                try {
-                  const contentResponse = await fetch(`/api/skripts/${item.contentId}`)
-                  if (contentResponse.ok) {
-                    const contentData = await contentResponse.json()
-                    const skript = contentData.data || contentData
-                    
-                    // Check if this skript is already included in a collection above
-                    const isInCollection = collectionsWithSkripts.some(c => 
-                      c.skripts?.some((s: PageItem) => s.id === item.contentId)
-                    )
-                    
-                    if (!isInCollection) {
-                      return {
-                        id: item.contentId,
-                        type: 'skript' as const,
-                        title: skript.title || contentData.title || `skript ${item.contentId}`,
-                        description: skript.description || contentData.description,
-                        order: item.order,
-                        slug: skript.slug || contentData.slug,
-                        permissions: contentData.permissions,
-                        isPublished: skript.isPublished,
-                        isUnlisted: skript.isUnlisted,
-                      }
-                    }
-                  }
-                } catch {
-                  // Silently continue
-                }
-                return null
-              })
-            )
-            
-            const validRootSkripts = rootSkripts.filter(s => s !== null)
-            
-            // Combine collections and root skripts
-            const allItems = [...collectionsWithSkripts, ...validRootSkripts]
-              .sort((a, b) => a.order - b.order)
-            
-            setPageItems(allItems)
-            
-            // Auto-expand all collections by default
-            const collectionsToExpand = allItems
-              .filter(item => item.type === 'collection')
-              .map(item => item.id)
-            setExpandedCollections(collectionsToExpand)
-          }
+          // The endpoint returns items fully hydrated (collections with their
+          // skripts + permissions) in one request — no per-item fetches.
+          const items: PageItem[] = data.data?.items ?? []
+          const sorted = [...items].sort((a, b) => a.order - b.order)
+          setPageItems(sorted)
+          // Auto-expand all collections by default
+          setExpandedCollections(
+            sorted.filter(item => item.type === 'collection').map(item => item.id)
+          )
         }
       } catch {
         // Silent error - will show empty page builder

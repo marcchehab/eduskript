@@ -4,6 +4,7 @@ import { revalidateTag } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { CACHE_TAGS } from '@/lib/cached-queries'
+import { hydratePageLayoutItems } from '@/lib/page-layout'
 
 /** Look up the user's Site id (1:1 with the user). Page layouts now key on
  *  site, not user, since orgs share the same table. */
@@ -39,10 +40,23 @@ export async function GET() {
         }
       }
     })
+    if (!pageLayout) {
+      return NextResponse.json({ success: true, data: { items: [] } })
+    }
+
+    // Return items fully hydrated (collections + their skripts + permissions)
+    // so the page builder renders from one request instead of one API call
+    // per collection/skript. Collections in a user's own layout live on the
+    // user's own site, so canEditSite resolves without org roles.
+    const items = await hydratePageLayoutItems(pageLayout.items, {
+      userId: session.user.id,
+      isAdmin: !!session.user.isAdmin,
+      orgRoles: [],
+    })
 
     return NextResponse.json({
       success: true,
-      data: pageLayout || { items: [] }
+      data: { id: pageLayout.id, items },
     })
   } catch (error) {
     console.error('Error fetching page layout:', error)
