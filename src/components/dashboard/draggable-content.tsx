@@ -1,10 +1,11 @@
 'use client'
 
 import { Draggable } from '@hello-pangea/dnd'
-import { BookOpen, FileText, Eye, Edit, GripVertical } from 'lucide-react'
+import { BookOpen, FileText, Eye, Edit, GripVertical, Trash2 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { PermissionIndicator } from './permission-indicator'
+import { ConfirmationDialog } from '@/components/ui/confirmation-dialog'
 import { cn } from '@/lib/utils'
 import { SkriptAuthor, User } from '@prisma/client'
 import Link from 'next/link'
@@ -25,8 +26,11 @@ interface DraggableCollectionProps extends BaseContentProps {
   // the page builder + public sidebar. Null/undefined keeps the default
   // primary blue.
   accentColor?: string | null
-  // Collections are owned 1:1 by a Site. The library only shows yours, so we
-  // don't render co-author chips on collection cards anymore.
+  // Delete the collection. When provided, renders a trash button mirroring
+  // the skript card's edit button. Collections are owned 1:1 by a Site; the
+  // library only shows yours, so we don't render co-author chips on
+  // collection cards anymore.
+  onDelete?: (id: string) => void
 }
 
 interface DraggableSkriptProps extends BaseContentProps {
@@ -46,6 +50,7 @@ export function DraggableCollection({
   className,
   index = 0,
   accentColor = null,
+  onDelete,
 }: DraggableCollectionProps) {
   return (
     <Draggable draggableId={`library-collection-${id}`} index={index}>
@@ -62,7 +67,29 @@ export function DraggableCollection({
           )}
         >
           <CardContent className="p-4 relative">
-            {/* Collections are managed via page builder - no standalone edit page */}
+            {/* Collections are managed via page builder - no standalone edit
+                page. The delete button mirrors the skript card's edit button
+                (same size/position/variant); ConfirmationDialog gates it with
+                a modal rather than a browser confirm(). */}
+            {onDelete && (
+              <ConfirmationDialog
+                title="Delete collection"
+                description={`Delete the collection "${title}"? The skripts inside it won't be deleted.`}
+                confirmText="Delete"
+                variant="destructive"
+                onConfirm={() => onDelete(id)}
+                trigger={
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="absolute top-2 right-2 z-10 h-7 w-7 p-0"
+                    title="Delete collection"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                }
+              />
+            )}
             <div className="flex items-start gap-3">
               {/* Drag Handle */}
               <div 

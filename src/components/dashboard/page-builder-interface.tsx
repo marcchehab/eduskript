@@ -892,6 +892,7 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
               onDataLoad={setLibraryData}
               refreshTrigger={refreshTrigger}
               collectionUpdate={libraryCollectionUpdate}
+              onRefresh={() => setRefreshTrigger(prev => prev + 1)}
               context={context}
             />
           </div>
@@ -948,6 +949,7 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
             onDataLoad={setLibraryData}
             refreshTrigger={refreshTrigger}
             collectionUpdate={libraryCollectionUpdate}
+            onRefresh={() => setRefreshTrigger(prev => prev + 1)}
             context={context}
           />
         </div>

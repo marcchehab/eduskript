@@ -11,6 +11,8 @@ import { SkriptAuthor, User, Collection, Skript } from '@prisma/client'
 import { checkSkriptPermissions } from '@/lib/permissions'
 import { api, handleJsonResponse } from '@/lib/api-error-handler'
 import { CreateSkriptModal } from './create-skript-modal'
+import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
+import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { useRouter } from 'next/navigation'
 import type { PageBuilderContext } from './page-builder-interface'
 
@@ -38,15 +40,20 @@ interface ContentLibraryProps {
   // reference changes we merge it into the library list so the card updates
   // without a full refetch.
   collectionUpdate?: { id: string; title: string; accentColor?: string | null } | null
+  // Bump the parent's refreshTrigger — reloads both the library and the page
+  // builder. Used after a destructive action (e.g. deleting a collection that
+  // may also be pinned in the layout). Falls back to a library-only refetch.
+  onRefresh?: () => void
 }
 
-export function ContentLibrary({ onDataLoad, refreshTrigger, context = { type: 'user' }, collectionUpdate }: ContentLibraryProps = {}) {
+export function ContentLibrary({ onDataLoad, refreshTrigger, context = { type: 'user' }, collectionUpdate, onRefresh }: ContentLibraryProps = {}) {
   const { data: session } = useSession()
   const router = useRouter()
   const [collections, setCollections] = useState<LibraryCollection[]>([])
   const [skripts, setSkripts] = useState<SkriptWithAuthors[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [loading, setLoading] = useState(true)
+  const alertDialog = useAlertDialog()
 
   const fetchContent = useCallback(async () => {
     if (!session?.user?.id) return
@@ -106,6 +113,25 @@ export function ContentLibrary({ onDataLoad, refreshTrigger, context = { type: '
     )
   }, [collectionUpdate])
 
+  // Runs after the card's ConfirmationDialog is accepted — the confirm step
+  // is the modal, not a browser confirm().
+  const handleDeleteCollection = async (id: string) => {
+    try {
+      const res = await fetch(`/api/collections/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        alertDialog.showError(data.error || 'Failed to delete collection')
+        return
+      }
+      // onRefresh reloads the page builder too (the collection may be pinned
+      // there); without it, fall back to a library-only refetch.
+      if (onRefresh) onRefresh()
+      else fetchContent()
+    } catch {
+      alertDialog.showError('Failed to delete collection')
+    }
+  }
+
   // Filter content based on search term. Collections no longer have a
   // description field, so we search the title only.
   const filteredCollections = collections.filter(collection =>
@@ -138,6 +164,7 @@ export function ContentLibrary({ onDataLoad, refreshTrigger, context = { type: '
   }
 
   return (
+    <>
     <Card className="min-h-[400px]">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
@@ -187,6 +214,7 @@ export function ContentLibrary({ onDataLoad, refreshTrigger, context = { type: '
                         accentColor={collection.accentColor}
                         isViewOnly={false}
                         index={index}
+                        onDelete={handleDeleteCollection}
                       />
                     )
                   })}
@@ -261,5 +289,13 @@ export function ContentLibrary({ onDataLoad, refreshTrigger, context = { type: '
         )}
       </CardContent>
     </Card>
+    <AlertDialogModal
+      open={alertDialog.open}
+      onOpenChange={alertDialog.setOpen}
+      type={alertDialog.type}
+      title={alertDialog.title}
+      message={alertDialog.message}
+    />
+    </>
   )
 }

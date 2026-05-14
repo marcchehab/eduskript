@@ -167,6 +167,18 @@ export async function DELETE(
       return NextResponse.json({ error: 'You do not have permission to delete this collection' }, { status: 403 })
     }
 
+    // Revalidate before the layout rows are gone so we still know which pages
+    // pinned this collection.
+    await revalidateCollectionPages(id)
+
+    // PageLayoutItem.contentId is a plain string, not an FK, so deleting the
+    // collection won't cascade to layout rows. Clean them up explicitly —
+    // otherwise the page builder renders a ghost "collection {id}" entry for
+    // a collection that no longer exists.
+    await prisma.pageLayoutItem.deleteMany({
+      where: { type: 'collection', contentId: id },
+    })
+
     await prisma.collection.delete({
       where: { id }
     })
