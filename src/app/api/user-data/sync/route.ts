@@ -536,6 +536,11 @@ export async function POST(request: NextRequest) {
               skript: {
                 select: {
                   slug: true,
+                  authors: {
+                    select: {
+                      user: { select: { site: { select: { slug: true } } } },
+                    },
+                  },
                   collectionSkripts: {
                     select: {
                       collectionId: true,
@@ -555,13 +560,29 @@ export async function POST(request: NextRequest) {
             const skriptSlug = page.skript.slug
             const contentPageSlug = page.slug
 
-            // Invalidate paths for the page-owning teacher domain. Collection
-            // ownership is now 1:1 with a site, so at most one slug per collection.
+            // Revalidate teacher paths via author→site directly. The collection
+            // loop below misses skripts that aren't in any collection (e.g. survey
+            // skripts created outside the dashboard's collection-default flow) —
+            // those are still routable at /{teacherSlug}/{skriptSlug}/{pageSlug}
+            // via the SkriptAuthor relation, so the cache must invalidate there too.
+            const revalidatedTeacherSlugs = new Set<string>()
+            for (const author of page.skript.authors) {
+              const teacherSlug = author.user?.site?.slug
+              if (teacherSlug && !revalidatedTeacherSlugs.has(teacherSlug)) {
+                revalidatePath(`/${teacherSlug}/${skriptSlug}/${contentPageSlug}`)
+                revalidatedTeacherSlugs.add(teacherSlug)
+              }
+            }
+
+            // Invalidate paths for the page-owning teacher domain via collection.
+            // Collection ownership is now 1:1 with a site, so at most one slug per
+            // collection. Dedup against the author loop above.
             for (const cs of page.skript.collectionSkripts) {
               if (!cs.collection) continue
               const pageSlug = cs.collection.site?.slug
-              if (pageSlug) {
+              if (pageSlug && !revalidatedTeacherSlugs.has(pageSlug)) {
                 revalidatePath(`/${pageSlug}/${skriptSlug}/${contentPageSlug}`)
+                revalidatedTeacherSlugs.add(pageSlug)
               }
             }
 
