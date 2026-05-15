@@ -693,6 +693,35 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
     pageBroadcastSyncOptions
   )
 
+  // Dedicated write hooks for the page-broadcast (public) layer's snaps and
+  // sticky notes. Without these, deletePageBroadcastData would route through
+  // the generic updateSnapsData / clearStickyNotes hooks, which are bound to
+  // the author's *current* viewMode targeting. If the author trashed the
+  // public layer while in my-view, those calls cleared the personal layer and
+  // the public rows survived. These hooks are page-broadcast-targeted, so the
+  // trash button clears the right adapter rows. Gated to authors only —
+  // anonymous / non-author visitors don't need write paths, and the empty
+  // pageId sentinel keeps useSyncedUserData from firing for them.
+  const { updateData: updatePageBroadcastSnaps } = useSyncedUserData<SnapsData>(
+    isPageAuthor ? pageId : '',
+    'snaps',
+    emptySnapsData,
+    pageBroadcastSyncOptions,
+  )
+  const emptyStickyNotesData = useMemo(() => ({ notes: [] }), [])
+  const { updateData: updatePageBroadcastStickyNotes } = useSyncedUserData<{ notes: unknown[] }>(
+    isPageAuthor ? pageId : '',
+    'sticky-notes',
+    emptyStickyNotesData,
+    pageBroadcastSyncOptions,
+  )
+  const { updateData: updatePageBroadcastSpacers } = useSyncedUserData<SpacersData>(
+    isPageAuthor ? pageId : '',
+    'spacers',
+    emptySpacersData,
+    pageBroadcastSyncOptions,
+  )
+
   // Ref to sync pageBroadcastData when switching away from page-broadcast mode.
   // Captures current canvas state and pushes it into the reference hook so the
   // public reference layer shows fresh data without a re-fetch.
@@ -890,14 +919,17 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
   const deletePageBroadcastData = useCallback(async () => {
     log('deletePageBroadcastData called', { viewMode })
 
-    // Clear via the page-broadcast data hook
+    // Each adapter is cleared through its page-broadcast-targeted hook so
+    // the trash button works regardless of the author's current viewMode.
+    // Previously these used the generic updateSnapsData / clearStickyNotes
+    // hooks bound to viewMode-derived targeting, so trashing from my-view
+    // cleared the personal layer and left the public rows intact.
     if (updatePageBroadcastData) {
       await updatePageBroadcastData({ canvasData: '', headingOffsets: {}, pageVersion: '' }, { immediate: true })
     }
-    // Also clear spacers, snaps, and sticky notes for page broadcast
-    updateSpacersData({ spacers: [] })
-    updateSnapsData({ snaps: [] })
-    clearStickyNotes()
+    await updatePageBroadcastSpacers({ spacers: [] }, { immediate: true })
+    await updatePageBroadcastSnaps({ snaps: [] }, { immediate: true })
+    await updatePageBroadcastStickyNotes({ notes: [] }, { immediate: true })
 
     // If currently viewing page broadcast, also clear local state
     if (viewMode === 'page-broadcast') {
@@ -905,7 +937,13 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
       setHasAnnotations(false)
       canvasRef.current?.clear()
     }
-  }, [viewMode, updatePageBroadcastData, updateSpacersData, updateSnapsData, clearStickyNotes])
+  }, [
+    viewMode,
+    updatePageBroadcastData,
+    updatePageBroadcastSpacers,
+    updatePageBroadcastSnaps,
+    updatePageBroadcastStickyNotes,
+  ])
 
   // Build list of available layers for the toolbar UI
   // This includes reference layers AND the currently active/editable layer
