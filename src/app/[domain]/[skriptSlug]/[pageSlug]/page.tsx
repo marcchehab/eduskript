@@ -153,14 +153,17 @@ export default async function PublicPage({ params }: PageProps) {
 
   // Public annotations/snaps are broadcast to every visitor — same data for
   // everyone, so safe to fetch inside the ISR cache. Invalidated via
-  // revalidateTag when content changes.
-  // Free teachers can't write to UserData (sync endpoint returns 402), so the
-  // tables are empty by definition — skip the queries to keep anonymous visits
-  // free of per-page DB roundtrips.
-  const isFreeTeacher = teacher.billingPlan === 'free'
-  const { publicAnnotations, publicSnaps, publicStickyNotes } = isFreeTeacher
-    ? EMPTY_PUBLIC_LAYERS
-    : await getPublicLayers(page.id)
+  // revalidatePath when content changes.
+  //
+  // Always run the lookup, even for free teachers. Reading `teacher.billingPlan`
+  // here was unsafe: the field comes from `getTeacherByPageSlug`'s
+  // unstable_cache (cached-queries.ts:62-106), and none of the billing_plan
+  // mutation sites (cron, Payrexx webhook, admin tools, trial grant) invalidate
+  // its tags — so a free→pro upgrade left the cache returning 'free' forever,
+  // permanently zero-ing out every public layer for the upgraded teacher.
+  // The three findFirst/findMany queries are indexed and cheap (~3 ms) for
+  // free teachers' empty rows; not worth a permanent silent-empty failure mode.
+  const { publicAnnotations, publicSnaps, publicStickyNotes } = await getPublicLayers(page.id)
 
   const canonical = canonicalUrl({
     type: 'teacher',

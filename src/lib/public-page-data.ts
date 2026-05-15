@@ -7,9 +7,12 @@
  * the ISR cache: `revalidatePath` triggers fire when any public-targeted
  * record is written via /api/user-data/sync (see sync/route.ts).
  *
- * Free-teacher routes still skip the call and return EMPTY_PUBLIC_LAYERS —
- * the sync endpoint refuses writes for them, so these tables stay empty by
- * definition and the round-trip is wasted.
+ * Called unconditionally even for free teachers — the previous billing-plan
+ * short-circuit relied on a stale unstable_cache that no billing_plan mutation
+ * site invalidates, which silently zero-ed every public layer after a free→pro
+ * upgrade. The three indexed lookups return empty arrays for free teachers
+ * (sync endpoint refuses their writes), so the round-trip is ~3 ms wasted —
+ * cheaper than a permanent silent-empty failure mode.
  */
 
 import { prisma } from '@/lib/prisma'

@@ -116,10 +116,12 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
     }
   })
 
-  // Free teachers can't write to UserData (sync endpoint returns 402), so the
-  // public-annotation/snap tables are empty by definition — skip the queries.
-  const isFreeTeacher = teacher.billingPlan === 'free'
-  const { publicAnnotations, publicSnaps, publicStickyNotes } = frontPage && !isFreeTeacher
+  // Always run the lookup when there's a frontpage. Reading `teacher.billingPlan`
+  // here was unsafe: it comes from `getTeacherByPageSlug`'s unstable_cache and
+  // none of the billing_plan mutation sites invalidate its tags, so a free→pro
+  // upgrade left the cache returning 'free' forever and permanently zero-ed
+  // every public layer for the upgraded teacher.
+  const { publicAnnotations, publicSnaps, publicStickyNotes } = frontPage
     ? await getPublicLayers(frontPage.id)
     : EMPTY_PUBLIC_LAYERS
 

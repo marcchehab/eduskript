@@ -113,7 +113,6 @@ export default async function SkriptPreviewPage({ params }: SkriptPreviewProps) 
     }
 
     const isAuthor = session?.user?.email === teacher.email
-    const isFreeTeacher = teacher.billingPlan === 'free'
 
     const skript = await prisma.skript.findFirst({
       where: {
@@ -156,9 +155,11 @@ export default async function SkriptPreviewPage({ params }: SkriptPreviewProps) 
       where: { skriptId: skript.id }
     })
 
-    // Free teachers can't write to UserData (sync endpoint returns 402), so
-    // these tables are empty by definition — skip the queries.
-    const { publicAnnotations, publicSnaps, publicStickyNotes } = frontPage && !isFreeTeacher
+    // Always run the lookup when there's a frontpage. The previous
+    // `isFreeTeacher` gate read from `getTeacherByPageSlug`'s unstable_cache,
+    // which is never invalidated on billing_plan changes — so a free→pro
+    // upgrade left public layers permanently empty.
+    const { publicAnnotations, publicSnaps, publicStickyNotes } = frontPage
       ? await getPublicLayers(frontPage.id)
       : EMPTY_PUBLIC_LAYERS
 
