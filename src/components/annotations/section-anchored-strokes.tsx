@@ -30,12 +30,14 @@
  * before this refactor.
  */
 
-import { memo, useLayoutEffect, useMemo, useState } from 'react'
+import { memo, useLayoutEffect, useMemo, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { getStroke } from 'perfect-freehand'
 import { getSvgPathFromStroke, getStrokeOptions, hasUniformPressure, smoothPoints } from '@/lib/annotations/svg-path'
 import type { AnimatedStroke } from '@/hooks/use-stroke-animation'
 import { useZoom } from '@/contexts/zoom-context'
+
+type BadgeColor = 'purple' | 'blue' | 'orange' | 'green'
 
 interface SectionAnchoredStrokesProps {
   strokes: AnimatedStroke[]
@@ -53,6 +55,20 @@ interface SectionAnchoredStrokesProps {
    *  section element would leave us pointing at a detached node and the
    *  portaled strokes would silently disappear until the next data change. */
   headingPositions?: Array<{ sectionId: string; offsetY: number }>
+  /** Reference-layer styling. Applied to each per-section SVG so the whole
+   *  layer dims uniformly (e.g. 0.5 for class-broadcast-as-reference). */
+  opacity?: number
+  /** Stacking order across overlapping reference layers in the same section. */
+  zIndex?: number
+  /** When set, one badge per section that has strokes — anchored top-right of
+   *  the section element. Use for public/class/individual-feedback layers. */
+  badge?: {
+    layerId: string
+    layerName: string
+    layerColor: BadgeColor
+    icon: ReactNode
+  }
+  showBadge?: boolean
 }
 
 interface PathDatum {
@@ -85,6 +101,10 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
   markedForDeletion,
   onOrphansChange,
   headingPositions,
+  opacity,
+  zIndex,
+  badge,
+  showBadge = true,
 }: SectionAnchoredStrokesProps) {
   // Group renderable strokes by sectionId; build path data once per stroke.
   const grouped = useMemo(() => {
@@ -210,6 +230,8 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
     // recreated by the spacer-injection effect.
   }, [grouped, strokes, onOrphansChange, headingPositions])
 
+  const zoom = getZoom() || 1
+
   return (
     <>
       {Array.from(grouped.entries()).map(([sid, paths]) => {
@@ -217,15 +239,28 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
         if (!target) return null
         const geom = sectionGeom.get(sid) ?? { borderTop: 0, borderLeft: 0, leftFromPaper: paperPaddingLeft }
         return createPortal(
-          <SectionStrokeSvg
-            paths={paths}
-            paperWidth={paperWidth}
-            paperHeight={paperHeight}
-            sectionLeftFromPaper={geom.leftFromPaper}
-            sectionBorderTop={geom.borderTop}
-            sectionBorderLeft={geom.borderLeft}
-            markedForDeletion={markedForDeletion}
-          />,
+          <>
+            <SectionStrokeSvg
+              paths={paths}
+              paperWidth={paperWidth}
+              paperHeight={paperHeight}
+              sectionLeftFromPaper={geom.leftFromPaper}
+              sectionBorderTop={geom.borderTop}
+              sectionBorderLeft={geom.borderLeft}
+              markedForDeletion={markedForDeletion}
+              opacity={opacity}
+              zIndex={zIndex}
+            />
+            {badge && showBadge && (
+              <SectionLayerBadge
+                layerId={badge.layerId}
+                layerName={badge.layerName}
+                layerColor={badge.layerColor}
+                icon={badge.icon}
+                zoom={zoom}
+              />
+            )}
+          </>,
           target,
           // Stable React reconciliation key per section
           `stroke-portal:${sid}`,
@@ -235,6 +270,52 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
   )
 })
 
+const BADGE_COLOR_CLASSES: Record<BadgeColor, string> = {
+  purple: 'layer-badge-purple',
+  blue: 'layer-badge-blue',
+  orange: 'layer-badge-orange',
+  green: 'layer-badge-green',
+}
+
+/**
+ * One badge per section that owns reference-layer strokes. Lives inside the
+ * same portal as the section's SVG, so it follows the section through reflow
+ * — no JS reposition. Badge scales inversely with zoom so it stays readable.
+ */
+function SectionLayerBadge({
+  layerId,
+  layerName,
+  layerColor,
+  icon,
+  zoom,
+}: {
+  layerId: string
+  layerName: string
+  layerColor: BadgeColor
+  icon: ReactNode
+  zoom: number
+}) {
+  const badgeScale = 1 / zoom
+  return (
+    <div
+      key={layerId}
+      className={`layer-badge ${BADGE_COLOR_CLASSES[layerColor]}`}
+      style={{
+        position: 'absolute',
+        top: -24 * badgeScale,
+        right: 8 * badgeScale,
+        transform: `scale(${badgeScale})`,
+        transformOrigin: 'top right',
+        zIndex: 50,
+        pointerEvents: 'none',
+      }}
+    >
+      {icon}
+      <span className="layer-badge-text">{layerName}</span>
+    </div>
+  )
+}
+
 function SectionStrokeSvg({
   paths,
   paperWidth,
@@ -243,6 +324,8 @@ function SectionStrokeSvg({
   sectionBorderTop,
   sectionBorderLeft,
   markedForDeletion,
+  opacity,
+  zIndex,
 }: {
   paths: PathDatum[]
   paperWidth: number
@@ -251,6 +334,8 @@ function SectionStrokeSvg({
   sectionBorderTop: number
   sectionBorderLeft: number
   markedForDeletion?: Set<string>
+  opacity?: number
+  zIndex?: number
 }) {
   // Strokes drawn at different sectionOffsetY values (e.g. user drew, then layout
   // shifted, then drew again before saving) need their own translate so each lands
@@ -289,6 +374,8 @@ function SectionStrokeSvg({
         height: paperHeight,
         pointerEvents: 'none',
         overflow: 'visible',
+        opacity,
+        zIndex,
       }}
     >
       {Array.from(offsetGroups.entries()).map(([offsetY, ps]) => (

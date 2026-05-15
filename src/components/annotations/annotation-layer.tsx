@@ -87,7 +87,6 @@ import { cn } from '@/lib/utils'
 import { SimpleCanvas, type SimpleCanvasHandle, type DrawMode } from './simple-canvas'
 import { AnnotationSvgLayer } from './annotation-svg-layer'
 import { SectionAnchoredStrokes } from './section-anchored-strokes'
-import { computeSectionTransforms, type SectionTransform } from '@/lib/annotations/svg-path'
 import { AnnotationToolbar, formatStudentLabel, type AnnotationMode } from './annotation-toolbar'
 import { getReverseMappingsForClass } from '@/lib/email-mapping-db'
 import { useSyncedUserData, useUserDataContext, type SyncedUserDataOptions } from '@/lib/userdata/provider'
@@ -115,171 +114,6 @@ import { SpacersDisplay } from './spacers-display'
 import { createLogger } from '@/lib/logger'
 
 const log = createLogger('annotations:layer')
-
-/**
- * CSS-based animated reference layer
- * Uses a separate overlay canvas for new strokes with CSS opacity transition (GPU accelerated)
- * More performant than per-stroke canvas animation - no React re-renders during animation
- */
-const AnimatedReferenceLayer = memo(function AnimatedReferenceLayer({
-  canvasData,
-  paperWidth,
-  pageHeight,
-  zoom,
-  zIndex = 38, // Below main canvas (40), above code editor buttons (z-30)
-  className = '',
-  badge,
-  showBadge = true,
-  sectionTransforms,
-}: {
-  canvasData: string
-  paperWidth: number
-  pageHeight: number
-  zoom: number
-  zIndex?: number
-  className?: string
-  badge?: {
-    layerId: string
-    layerName: string
-    layerColor: 'purple' | 'blue' | 'orange' | 'green'
-    icon: React.ReactNode
-  }
-  showBadge?: boolean
-  sectionTransforms?: Map<string, SectionTransform>
-}) {
-  // Parse strokes from data
-  const allStrokes = useMemo(() => parseStrokes(canvasData), [canvasData])
-
-  // Track which strokes are "established" (already animated in)
-  const [establishedIds, setEstablishedIds] = useState<Set<string>>(new Set())
-  const hasInitializedRef = useRef(false)
-  const hasStabilizedRef = useRef(false)  // True after first render with newStrokes.length === 0
-  const overlayRef = useRef<HTMLDivElement>(null)
-
-  // Separate strokes into established vs new
-  const { establishedStrokes, newStrokes } = useMemo(() => {
-    const established: typeof allStrokes = []
-    const newOnes: typeof allStrokes = []
-
-    allStrokes.forEach(stroke => {
-      if (establishedIds.has(stroke.id)) {
-        established.push(stroke)
-      } else {
-        newOnes.push(stroke)
-      }
-    })
-
-    return { establishedStrokes: established, newStrokes: newOnes }
-  }, [allStrokes, establishedIds])
-
-  // Handle initial load and sync establishedIds with current strokes
-  useEffect(() => {
-    const currentIds = new Set(allStrokes.map(s => s.id))
-
-    if (!hasInitializedRef.current) {
-      // First load - mark all current strokes as established (even if empty)
-      hasInitializedRef.current = true
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional: sync state with incoming prop
-      setEstablishedIds(currentIds)
-    } else {
-      // Sync: update establishedIds to match current strokes
-      // This handles both additions (via handleTransitionEnd) and deletions
-      setEstablishedIds(prev => {
-        const filtered = new Set([...prev].filter(id => currentIds.has(id)))
-        // Only update if something was actually removed
-        if (filtered.size !== prev.size) {
-          return filtered
-        }
-        return prev
-      })
-    }
-  }, [allStrokes])
-
-  // When new strokes arrive (after initial load), trigger fade-in via DOM
-  useEffect(() => {
-    // Mark as stabilized once we've seen newStrokes become empty
-    // (happens after initialization moves all strokes to established)
-    if (newStrokes.length === 0) {
-      hasStabilizedRef.current = true
-      return
-    }
-
-    // Only animate if we've stabilized (prevents animation on initial mount)
-    if (!hasStabilizedRef.current || !overlayRef.current) return
-
-    // Double RAF ensures browser has painted at opacity 0 before triggering transition
-    const el = overlayRef.current
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        el.style.opacity = '1'
-      })
-    })
-  }, [newStrokes.length])
-
-  // After animation completes, merge new strokes into established
-  const handleTransitionEnd = useCallback(() => {
-    if (newStrokes.length > 0) {
-      setEstablishedIds(prev => {
-        const next = new Set(prev)
-        newStrokes.forEach(s => next.add(s.id))
-        return next
-      })
-    }
-  }, [newStrokes])
-
-  return (
-    <div
-      className={className}
-      style={{
-        position: 'absolute',
-        inset: 0,
-        height: pageHeight,
-        pointerEvents: 'none',
-        zIndex,
-      }}
-    >
-      {/* SVG layer with established strokes - React diffs paths naturally */}
-      <AnnotationSvgLayer
-        strokes={establishedStrokes}
-        width={paperWidth}
-        height={pageHeight}
-        sectionTransforms={sectionTransforms}
-      />
-      {/* Overlay for new strokes with CSS fade-in */}
-      {newStrokes.length > 0 && (
-        <div
-          ref={overlayRef}
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            opacity: 0,
-            transition: 'opacity 300ms ease-out',
-          }}
-          onTransitionEnd={handleTransitionEnd}
-        >
-          <AnnotationSvgLayer
-            strokes={newStrokes}
-            width={paperWidth}
-            height={pageHeight}
-            sectionTransforms={sectionTransforms}
-          />
-        </div>
-      )}
-      {/* Floating badges to identify layer ownership - hidden by default, shown on toolbar hover */}
-      {badge && showBadge && (
-        <LayerBadges
-          canvasData={canvasData}
-          layerId={badge.layerId}
-          layerName={badge.layerName}
-          layerColor={badge.layerColor}
-          icon={badge.icon}
-          zoom={zoom}
-        />
-      )}
-    </div>
-  )
-})
 
 import type { PublicAnnotation, PublicSnap } from '@/components/public/annotation-wrapper'
 
@@ -3483,151 +3317,78 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
           props that are stable from first paint. */}
       {paperElement && pageHeight > 0 && (
         <>
-          {/* Teacher's personal annotations as reference (when broadcasting to class/student) */}
-          {hasPersonalContent && isLayerVisible('personal') && (() => {
-            const transforms = computeSectionTransforms(
-              personalAnnotationData!.headingOffsets,
-              headingPositions,
-              personalAnnotationData!.paddingLeft,
-              currentPaddingLeft
-            )
+          {/* All reference layers below use SectionAnchoredStrokes — strokes
+              portal into [data-section-id] elements so the browser carries
+              them with section reflow. Same deterministic positioning as the
+              active drawing layer (and snaps + sticky notes). No JS
+              measure-and-translate pass, no headingPositions race. */}
 
-            return createPortal(
-              <div
-                className="reference-layer"
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  height: pageHeight,
-                  pointerEvents: 'none',
-                  zIndex: 37, // Below main canvas (40), above code editor buttons (z-30)
-                  opacity: 0.5,
-                }}
-              >
-                <AnnotationSvgLayer
-                  strokes={parseStrokes(personalAnnotationData!.canvasData)}
-                  width={paperWidth}
-                  height={pageHeight}
-                  sectionTransforms={transforms}
-                />
-                {/* Badge for personal reference layer */}
-                {shouldShowReferenceBadge('personal') && (
-                  <LayerBadges
-                    canvasData={personalAnnotationData!.canvasData}
-                    layerId="personal"
-                    layerName="Personal"
-                    layerColor="blue"
-                    icon={<User className="w-3 h-3" />}
-                    zoom={zoom}
-                  />
-                )}
-              </div>,
-              paperElement
-            )
-          })()}
+          {/* Teacher's personal annotations as reference (when broadcasting to class/student) */}
+          {hasPersonalContent && isLayerVisible('personal') && (
+            <SectionAnchoredStrokes
+              strokes={parseStrokes(personalAnnotationData!.canvasData)}
+              paperWidth={paperWidth}
+              paperHeight={pageHeight}
+              paperPaddingLeft={currentPaddingLeft}
+              headingPositions={headingPositions}
+              opacity={0.5}
+              zIndex={37}
+              badge={{
+                layerId: 'personal',
+                layerName: 'Personal',
+                layerColor: 'blue',
+                icon: <User className="w-3 h-3" />,
+              }}
+              showBadge={shouldShowReferenceBadge('personal')}
+            />
+          )}
 
           {/* Teacher's class broadcast as reference (when giving individual student feedback) */}
           {isTeacher && viewMode === 'student-view' && isLayerVisible('class-broadcast') && (() => {
-            // Use classBroadcastData if available, otherwise fall back to stored canvas data
             const broadcastCanvasData = classBroadcastData?.canvasData || classBroadcastCanvasRef.current
             if (!broadcastCanvasData || broadcastCanvasData === '[]') return null
-
-            const transforms = computeSectionTransforms(
-              classBroadcastData?.headingOffsets,
-              headingPositions,
-              classBroadcastData?.paddingLeft,
-              currentPaddingLeft
-            )
-
             const layerId = `class-${selectedClass?.id}`
-
-            return createPortal(
-              <div
-                className="reference-layer"
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  height: pageHeight,
-                  pointerEvents: 'none',
-                  zIndex: 37, // Below main canvas (40), above code editor buttons (z-30)
-                  opacity: 0.5,
+            return (
+              <SectionAnchoredStrokes
+                strokes={parseStrokes(broadcastCanvasData)}
+                paperWidth={paperWidth}
+                paperHeight={pageHeight}
+                paperPaddingLeft={currentPaddingLeft}
+                headingPositions={headingPositions}
+                opacity={0.5}
+                zIndex={37}
+                badge={{
+                  layerId,
+                  layerName: selectedClass?.name || 'Class',
+                  layerColor: 'blue',
+                  icon: <Users className="w-3 h-3" />,
                 }}
-              >
-                <AnnotationSvgLayer
-                  strokes={parseStrokes(broadcastCanvasData)}
-                  width={paperWidth}
-                  height={pageHeight}
-                  sectionTransforms={transforms}
-                />
-                {/* Badge for class broadcast reference layer */}
-                {shouldShowReferenceBadge(layerId) && (
-                  <LayerBadges
-                    canvasData={broadcastCanvasData}
-                    layerId={layerId}
-                    layerName={selectedClass?.name || 'Class'}
-                    layerColor="blue"
-                    icon={<Users className="w-3 h-3" />}
-                    zoom={zoom}
-                  />
-                )}
-              </div>,
-              paperElement
+                showBadge={shouldShowReferenceBadge(layerId)}
+              />
             )
           })()}
 
           {/* Student feedback as reference (when broadcasting to entire class but want to see last student's feedback) */}
           {isTeacher && viewMode === 'class-broadcast' && isLayerVisible('student-feedback') && (() => {
-            // Use hook data if available, otherwise use the fallback ref
             const feedbackCanvasData = studentFeedbackData?.canvasData || studentFeedbackCanvasRef.current
             if (!feedbackCanvasData || feedbackCanvasData === '[]') return null
-
-            const transforms = computeSectionTransforms(
-              studentFeedbackData?.headingOffsets,
-              headingPositions,
-              studentFeedbackData?.paddingLeft,
-              currentPaddingLeft
-            )
-
-            return createPortal(
-              <div
-                className="reference-layer"
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  height: pageHeight,
-                  pointerEvents: 'none',
-                  zIndex: 37, // Below main canvas (40), above code editor buttons (z-30)
-                  opacity: 0.5,
+            return (
+              <SectionAnchoredStrokes
+                strokes={parseStrokes(feedbackCanvasData)}
+                paperWidth={paperWidth}
+                paperHeight={pageHeight}
+                paperPaddingLeft={currentPaddingLeft}
+                headingPositions={headingPositions}
+                opacity={0.5}
+                zIndex={37}
+                badge={{
+                  layerId: 'individual-feedback',
+                  layerName: studentForFeedback ? formatStudentLabel(studentForFeedback) : 'Feedback',
+                  layerColor: 'orange',
+                  icon: <MessageSquare className="w-3 h-3" />,
                 }}
-              >
-                <AnnotationSvgLayer
-                  strokes={parseStrokes(feedbackCanvasData)}
-                  width={paperWidth}
-                  height={pageHeight}
-                  sectionTransforms={transforms}
-                />
-                {/* Badge for student feedback reference layer */}
-                {shouldShowReferenceBadge('individual-feedback') && (
-                  <LayerBadges
-                    canvasData={feedbackCanvasData}
-                    layerId="individual-feedback"
-                    layerName={studentForFeedback ? formatStudentLabel(studentForFeedback) : 'Feedback'}
-                    layerColor="orange"
-                    icon={<MessageSquare className="w-3 h-3" />}
-                    zoom={zoom}
-                  />
-                )}
-              </div>,
-              paperElement
+                showBadge={shouldShowReferenceBadge('individual-feedback')}
+              />
             )
           })()}
 
@@ -3636,48 +3397,23 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
             const studentAnnotations = studentWorkData?.annotations?.data as { canvasData?: string; headingOffsets?: Record<string, number>; paddingLeft?: number } | undefined
             const studentCanvasData = studentAnnotations?.canvasData
             if (!studentCanvasData || studentCanvasData === '[]') return null
-
-            const transforms = computeSectionTransforms(
-              studentAnnotations?.headingOffsets,
-              headingPositions,
-              studentAnnotations?.paddingLeft,
-              currentPaddingLeft
-            )
-
-            return createPortal(
-              <div
-                className="reference-layer"
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  height: pageHeight,
-                  pointerEvents: 'none',
-                  zIndex: 36, // Below other layers
-                  opacity: 0.85, // Slightly reduced to show depth, but no color distortion
+            return (
+              <SectionAnchoredStrokes
+                strokes={parseStrokes(studentCanvasData)}
+                paperWidth={paperWidth}
+                paperHeight={pageHeight}
+                paperPaddingLeft={currentPaddingLeft}
+                headingPositions={headingPositions}
+                opacity={0.85}
+                zIndex={36}
+                badge={{
+                  layerId: 'student-work',
+                  layerName: formatStudentLabel(studentForFeedback),
+                  layerColor: 'purple',
+                  icon: <User className="w-3 h-3" />,
                 }}
-              >
-                <AnnotationSvgLayer
-                  strokes={parseStrokes(studentCanvasData)}
-                  width={paperWidth}
-                  height={pageHeight}
-                  sectionTransforms={transforms}
-                />
-                {/* Floating badges to identify student work - shown on toolbar hover or while drawing */}
-                {shouldShowReferenceBadge('student-work') && (
-                  <LayerBadges
-                    canvasData={studentCanvasData}
-                    layerId="student-work"
-                    layerName={formatStudentLabel(studentForFeedback)}
-                    layerColor="purple"
-                    icon={<User className="w-3 h-3" />}
-                    zoom={zoom}
-                  />
-                )}
-              </div>,
-              paperElement
+                showBadge={shouldShowReferenceBadge('student-work')}
+              />
             )
           })()}
 
@@ -3685,37 +3421,24 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
           {isStudent && teacherClassAnnotations.map((classAnnotation) => {
             const layerId = `class-${classAnnotation.classId}`
             if (!isLayerVisible(layerId)) return null
-
             const layerAnnotationData = classAnnotation.data as AnnotationData | null
             if (!layerAnnotationData?.canvasData || layerAnnotationData.canvasData === '[]') return null
-
-            const transforms = computeSectionTransforms(
-              layerAnnotationData.headingOffsets,
-              headingPositions,
-              layerAnnotationData.paddingLeft,
-              currentPaddingLeft
-            )
-
             return (
-              <div key={classAnnotation.classId}>
-                {createPortal(
-                  <AnimatedReferenceLayer
-                    canvasData={layerAnnotationData.canvasData}
-                    paperWidth={paperWidth}
-                    pageHeight={pageHeight}
-                    zoom={zoom}
-                    sectionTransforms={transforms}
-                    badge={{
-                      layerId,
-                      layerName: classAnnotation.className || 'Class',
-                      layerColor: 'blue',
-                      icon: <Users className="w-3 h-3" />
-                    }}
-                    showBadge={shouldShowReferenceBadge(layerId)}
-                  />,
-                  paperElement
-                )}
-              </div>
+              <SectionAnchoredStrokes
+                key={classAnnotation.classId}
+                strokes={parseStrokes(layerAnnotationData.canvasData)}
+                paperWidth={paperWidth}
+                paperHeight={pageHeight}
+                paperPaddingLeft={currentPaddingLeft}
+                headingPositions={headingPositions}
+                badge={{
+                  layerId,
+                  layerName: classAnnotation.className || 'Class',
+                  layerColor: 'blue',
+                  icon: <Users className="w-3 h-3" />,
+                }}
+                showBadge={shouldShowReferenceBadge(layerId)}
+              />
             )
           })}
 
@@ -3723,117 +3446,80 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
           {isStudent && teacherIndividualFeedback && isLayerVisible('individual') && (() => {
             const layerAnnotationData = teacherIndividualFeedback.data as AnnotationData | null
             if (!layerAnnotationData?.canvasData || layerAnnotationData.canvasData === '[]') return null
-
-            const transforms = computeSectionTransforms(
-              layerAnnotationData.headingOffsets,
-              headingPositions,
-              layerAnnotationData.paddingLeft,
-              currentPaddingLeft
-            )
-
-            return createPortal(
-              <AnimatedReferenceLayer
-                canvasData={layerAnnotationData.canvasData}
+            return (
+              <SectionAnchoredStrokes
+                strokes={parseStrokes(layerAnnotationData.canvasData)}
                 paperWidth={paperWidth}
-                pageHeight={pageHeight}
-                zoom={zoom}
-                zIndex={39} // Below main canvas (40), above code editor buttons (z-30)
-                sectionTransforms={transforms}
+                paperHeight={pageHeight}
+                paperPaddingLeft={currentPaddingLeft}
+                headingPositions={headingPositions}
+                zIndex={39}
                 badge={{
                   layerId: 'individual-feedback',
                   layerName: teacherIndividualFeedback.teacherName || 'Teacher',
                   layerColor: 'orange',
-                  icon: <MessageSquare className="w-3 h-3" />
+                  icon: <MessageSquare className="w-3 h-3" />,
                 }}
                 showBadge={shouldShowReferenceBadge('individual-feedback')}
-              />,
-              paperElement
+              />
             )
           })()}
 
-          {/* Public page annotations - visible to everyone */}
-          {/* Don't show when user is actively editing page-broadcast (they see their own edits in the main layer) */}
-          {/* Render immediately — `publicAnnotations` arrives as a prop from
-              the server (see public-page-data.ts), so there's nothing to wait
-              for. The previous `initialLoadComplete` gate held the public
-              layer back until the personal-layer useSyncedUserData hooks
-              resolved, which is why sticky-notes (no such gate) painted
-              first and the rest of the public content appeared 1-2s later.
-              The pageBroadcastData hook can still swap in fresher data
-              after it loads via the SSR-fallback branch below; switching
-              from SSR data to synced data is a same-shape swap, not a
-              double render. */}
-          {viewMode !== 'page-broadcast' && isLayerVisible('public') && createPortal(
-            <div className="annotation-content-wrapper" style={{ zIndex: 36 }}>
-              {(() => {
-                // Use synced pageBroadcastData (updates dynamically) or fall back to server-passed publicAnnotations
-                const syncedData = pageBroadcastData?.canvasData
-                if (syncedData && syncedData !== '[]') {
-                  const transforms = computeSectionTransforms(
-                    pageBroadcastData?.headingOffsets ?? {},
-                    headingPositions,
-                    pageBroadcastData?.paddingLeft,
-                    currentPaddingLeft
-                  )
-
-                  return (
-                    <AnimatedReferenceLayer
-                      canvasData={syncedData}
-                      paperWidth={paperWidth}
-                      pageHeight={pageHeight}
-                      zoom={zoom}
-                      zIndex={36} // Public annotations - lowest layer, above code editor buttons (z-30)
-                      sectionTransforms={transforms}
-                      badge={{
-                        layerId: 'public',
-                        layerName: 'Public',
-                        layerColor: 'green',
-                        icon: <Globe className="w-3 h-3" />
-                      }}
-                      showBadge={shouldShowReferenceBadge('public')}
-                    />
-                  )
-                }
-
-                // Fall back to server-passed publicAnnotations (for non-logged-in users or first load)
-                // If synced hook has loaded (non-null), it's the source of truth — don't fall back to SSR
-                if (pageBroadcastData !== null) return null
-                if (publicAnnotations.length === 0) return null
-
-                return publicAnnotations.map((annotation, index) => {
-                  const layerAnnotationData = annotation.data as AnnotationData | null
-                  if (!layerAnnotationData?.canvasData || layerAnnotationData.canvasData === '[]') return null
-
-                  const transforms = computeSectionTransforms(
-                    layerAnnotationData.headingOffsets,
-                    headingPositions,
-                    layerAnnotationData.paddingLeft,
-                    currentPaddingLeft
-                  )
-
-                  return (
-                    <AnimatedReferenceLayer
-                      key={`public-${annotation.userId}-${index}`}
-                      canvasData={layerAnnotationData.canvasData}
-                      paperWidth={paperWidth}
-                      pageHeight={pageHeight}
-                      zoom={zoom}
-                      zIndex={36} // Public annotations - lowest layer, above code editor buttons (z-30)
-                      sectionTransforms={transforms}
-                      badge={{
-                        layerId: `public-${annotation.userId}`,
-                        layerName: 'Public',
-                        layerColor: 'green',
-                        icon: <Globe className="w-3 h-3" />
-                      }}
-                      showBadge={shouldShowReferenceBadge('public')}
-                    />
-                  )
-                })
-              })()}
-            </div>,
-            paperElement
-          )}
+          {/* Public page annotations - visible to everyone (incl. anon).
+              Don't show when user is actively editing page-broadcast (they see
+              their own edits in the main layer). Synced data wins when the
+              hook resolves; SSR-passed `publicAnnotations` carries first paint
+              for anon and cold cache. Both paths portal per-section so anon
+              and author land identically — no measure-and-transform race. */}
+          {viewMode !== 'page-broadcast' && isLayerVisible('public') && (() => {
+            const syncedData = pageBroadcastData?.canvasData
+            if (syncedData && syncedData !== '[]') {
+              return (
+                <SectionAnchoredStrokes
+                  strokes={parseStrokes(syncedData)}
+                  paperWidth={paperWidth}
+                  paperHeight={pageHeight}
+                  paperPaddingLeft={currentPaddingLeft}
+                  headingPositions={headingPositions}
+                  zIndex={36}
+                  badge={{
+                    layerId: 'public',
+                    layerName: 'Public',
+                    layerColor: 'green',
+                    icon: <Globe className="w-3 h-3" />,
+                  }}
+                  showBadge={shouldShowReferenceBadge('public')}
+                />
+              )
+            }
+            // SSR fallback: render each author's public annotations as a
+            // separate SectionAnchoredStrokes (each may belong to a different
+            // userId on multi-author skripts). Skip once synced data loaded.
+            if (pageBroadcastData !== null) return null
+            if (publicAnnotations.length === 0) return null
+            return publicAnnotations.map((annotation, index) => {
+              const layerAnnotationData = annotation.data as AnnotationData | null
+              if (!layerAnnotationData?.canvasData || layerAnnotationData.canvasData === '[]') return null
+              return (
+                <SectionAnchoredStrokes
+                  key={`public-${annotation.userId}-${index}`}
+                  strokes={parseStrokes(layerAnnotationData.canvasData)}
+                  paperWidth={paperWidth}
+                  paperHeight={pageHeight}
+                  paperPaddingLeft={currentPaddingLeft}
+                  headingPositions={headingPositions}
+                  zIndex={36}
+                  badge={{
+                    layerId: `public-${annotation.userId}`,
+                    layerName: 'Public',
+                    layerColor: 'green',
+                    icon: <Globe className="w-3 h-3" />,
+                  }}
+                  showBadge={shouldShowReferenceBadge('public')}
+                />
+              )
+            })
+          })()}
         </>
       )}
 
