@@ -31,9 +31,12 @@
  *
  * ## Cross-Device Alignment
  *
- * Annotations are stored with section IDs and Y-offsets. When displayed on
- * a different device, strokes are repositioned based on current heading
- * positions via `repositionStrokes()`. This handles responsive layouts.
+ * Each stroke / snap / sticky-note stores a `sectionId` + `sectionOffsetY`
+ * captured at draw / placement time. At render time the artifact is portaled
+ * into the matching `[data-section-id]` element and the browser's own layout
+ * engine carries it through reflow — no JS reposition pass. See
+ * `section-anchored-strokes.tsx` for the stroke renderer; snaps and sticky
+ * notes use the same per-section createPortal pattern.
  *
  * ## Known Limitations & Technical Debt
  *
@@ -95,7 +98,7 @@ import type { SnapsData, SpacersData } from '@/lib/userdata/adapters'
 import type { Spacer, SpacerPattern } from '@/types/spacer'
 import { generateContentHash, type HeadingPosition, type StrokeData } from '@/lib/indexeddb/annotations'
 import { getStrokeAvg } from '@/lib/annotations/stroke-grouping'
-import { repositionSnaps, determineSectionFromY } from '@/lib/annotations/reposition-strokes'
+import { determineSectionFromY } from '@/lib/annotations/reposition-strokes'
 import { useLayout } from '@/contexts/layout-context'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
 import { useStickyNotesContext } from '@/contexts/sticky-notes-context'
@@ -1151,8 +1154,6 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
   // These get rendered in a paper-anchored fallback overlay (no section to follow).
   // Updated by SectionAnchoredStrokes' onOrphansChange.
   const [domOrphanedStrokes, setDomOrphanedStrokes] = useState<AnimatedStroke[]>([])
-  const [storedHeadingOffsets, setStoredHeadingOffsets] = useState<Record<string, number>>({})
-  const [storedPaddingLeft, setStoredPaddingLeft] = useState<number | undefined>(undefined)
   const [currentPaddingLeft, setCurrentPaddingLeft] = useState<number>(0)
 
   // Derive snaps from synced data (convert SnapData to Snap type)
@@ -1598,8 +1599,6 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
     // Clear local canvas state to allow new data to load
     setCanvasData('')
     setHasAnnotations(false)
-    setStoredHeadingOffsets({})
-    setStoredPaddingLeft(undefined)
   }, [targetingKey, syncOptions])
 
   // Load annotations from user data service
@@ -1620,73 +1619,12 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
           setHasAnnotations(true)
           setCanvasData(annotationData.canvasData)
           log('loaded strokes sectionIds:', strokes.map(s => s.sectionId).join(', '))
-          log('loaded storedHeadingOffsets:', JSON.stringify(annotationData.headingOffsets))
-          hasLoadedAnnotationOffsets.current = true
-          const offsets = annotationData.headingOffsets || {}
-          setStoredHeadingOffsets(offsets)
-          setStoredPaddingLeft(annotationData.paddingLeft)
         }
       } catch {
         // Ignore parse errors
       }
     }
   }, [annotationData, canvasData, targetingKey])
-
-  // Initialize storedHeadingOffsets when heading positions are first available
-  // BUT only if there are no annotations loaded (which carry their own saved offsets).
-  // Using a ref to avoid the race condition where this effect's stale closure
-  // overwrites offsets that the annotationData effect just set.
-  const hasLoadedAnnotationOffsets = useRef(false)
-  useEffect(() => {
-    // While the user has no content yet, keep the baseline tracking the
-    // current layout. Dynamic-height elements (code editors, callouts) can
-    // grow AFTER the initial 500ms recalc but BEFORE the user draws — if we
-    // froze the baseline at page load, the first stroke would render with
-    // dy = (post-grow current) - (pre-grow baseline) and visibly shift until
-    // performSave rebases the baseline 2s later.
-    if (headingPositions.length === 0) return
-    if (hasLoadedAnnotationOffsets.current) return
-    if (hasAnnotations) return
-    const currentOffsets = Object.fromEntries(
-      headingPositions.map(h => [h.sectionId, h.offsetY])
-    )
-    setStoredHeadingOffsets(currentOffsets)
-  }, [headingPositions, hasAnnotations])
-
-  // Reposition snaps when heading positions change (snaps use CSS top/left, not SVG transforms).
-  // Strokes no longer need repositioning here — the SVG layer handles it via per-stroke
-  // sectionOffsetY transforms at render time, keeping stroke data pristine.
-  useEffect(() => {
-    if (headingPositions.length === 0 || Object.keys(storedHeadingOffsets).length === 0) return
-
-    const currentOffsets = Object.fromEntries(
-      headingPositions.map(h => [h.sectionId, h.offsetY])
-    )
-
-    const needsVerticalReposition = Object.keys(storedHeadingOffsets).some(
-      key => storedHeadingOffsets[key] !== currentOffsets[key]
-    )
-    const needsHorizontalReposition = storedPaddingLeft !== undefined &&
-      Math.abs(currentPaddingLeft - storedPaddingLeft) > 1
-
-    if (!needsVerticalReposition && !needsHorizontalReposition) return
-
-    // Reposition snaps if we have any
-    if (snaps.length > 0) {
-      const snapResult = repositionSnaps(
-        snaps,
-        headingPositions,
-        storedHeadingOffsets,
-        currentPaddingLeft,
-        storedPaddingLeft
-      )
-      updateSnapsData({ snaps: snapResult.snaps })
-    }
-
-    // Update stored values so we don't reposition snaps again
-    setStoredHeadingOffsets(currentOffsets)
-    setStoredPaddingLeft(currentPaddingLeft)
-  }, [headingPositions, storedHeadingOffsets, currentPaddingLeft, storedPaddingLeft, snaps, updateSnapsData])
 
   // Helper function to recalculate heading positions and paper dimensions
   const recalculateHeadingPositions = useCallback(() => {
@@ -2787,8 +2725,9 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
 
     // Anchor the snap to the section that currently contains its top edge so
     // it follows that section through layout reflow (spacers, callouts, etc).
-    // Without this, the SnapData fields stay undefined and repositionSnaps
-    // is a silent no-op — which is the snap-doesn't-follow-spacer bug.
+    // Without this, sectionId/sectionOffsetY stay undefined and the
+    // section-portal renderer falls back to paper-absolute coords — which is
+    // the snap-doesn't-follow-spacer bug.
     const sectionId = (headingPositions.length > 0 ? determineSectionFromY(snap.top, headingPositions) : null) ?? undefined
     const sectionOffsetY = sectionId
       ? headingPositions.find(h => h.sectionId === sectionId)?.offsetY
