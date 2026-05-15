@@ -107,15 +107,20 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
   showBadge = true,
 }: SectionAnchoredStrokesProps) {
   // Group renderable strokes by sectionId; build path data once per stroke.
+  // Legacy 'unknown' strokes (drawn before paper-top existed, when the
+  // capture fallback was the literal string 'unknown') are remapped to
+  // 'paper-top' — same effect as if they'd been captured today. Cheaper
+  // than a DB migration and the only call site for this component.
   const grouped = useMemo(() => {
     const map = new Map<string, PathDatum[]>()
     for (const s of strokes) {
       if (!isRenderable(s)) continue
       if (!s.sectionId) continue
-      const arr = map.get(s.sectionId)
+      const sid = s.sectionId === 'unknown' ? 'paper-top' : s.sectionId
+      const arr = map.get(sid)
       const datum = buildPath(s)
       if (arr) arr.push(datum)
-      else map.set(s.sectionId, [datum])
+      else map.set(sid, [datum])
     }
     return map
   }, [strokes])
@@ -251,11 +256,16 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
       // is meaningless. Drop them silently. Heading-/spacer- orphans still
       // surface (transient unmount during Fast Refresh, or genuinely lost
       // references the user can clean up via the orphans banner).
-      const orphans = strokes.filter(s =>
-        isRenderable(s) &&
-        (!s.sectionId || !next.has(s.sectionId)) &&
-        !(s.sectionId && /^(callout|editor|plugin)-/.test(s.sectionId))
-      )
+      const orphans = strokes.filter(s => {
+        if (!isRenderable(s)) return false
+        // Mirror the 'unknown' → 'paper-top' remap in `grouped` so legacy
+        // strokes anchored to 'unknown' aren't surfaced as orphans when the
+        // paper-top sentinel exists.
+        const sid = s.sectionId === 'unknown' ? 'paper-top' : s.sectionId
+        if (sid && next.has(sid)) return false
+        if (sid && /^(callout|editor|plugin)-/.test(sid)) return false
+        return true
+      })
       onOrphansChange(orphans)
     }
     // headingPositions is in deps purely as a re-run trigger; we don't read its

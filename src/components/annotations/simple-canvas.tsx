@@ -851,7 +851,11 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
 
         // Determine which section this stroke belongs to based on first point
         const firstPoint = currentPathRef.current[0]
-        const sectionId = determineSectionFromY(firstPoint.y, headingPositions) || 'unknown'
+        // 'paper-top' is the always-present sentinel injected by the
+        // heading-section-ids rehype plugin at the top of the markdown tree.
+        // Falling back to it (rather than 'unknown') means even strokes drawn
+        // above the first real heading have a valid DOM anchor.
+        const sectionId = determineSectionFromY(firstPoint.y, headingPositions) || 'paper-top'
         // Live-measure the section's current paper-top against the canvas's
         // own coord origin (the wrapper element that contains the canvas, which
         // sits at paper's padding edge — `position: absolute; inset: 0`).
@@ -867,7 +871,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         //   3. Live-measure rather than trust the debounced headingPositions
         //      cache, which can be stale at draw-commit time.
         let sectionOffsetY = headingPositions.find(h => h.sectionId === sectionId)?.offsetY ?? 0
-        if (sectionId !== 'unknown' && typeof document !== 'undefined') {
+        if (typeof document !== 'undefined') {
           const sectionEl = document.querySelector(`[data-section-id="${CSS.escape(sectionId)}"]`)
           const paperEl = document.getElementById('paper')
           if (sectionEl instanceof HTMLElement && paperEl) {

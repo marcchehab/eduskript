@@ -42,6 +42,25 @@ export function rehypeHeadingSectionIds() {
   }
 
   return (tree: Root) => {
+    // Always-present synthetic "first section" at the top of the rendered
+    // content. Anything drawn above the first real heading would otherwise
+    // anchor to nothing (determineSectionFromY returns null → simple-canvas
+    // stores sectionId='unknown' → renderer can't find a DOM element →
+    // stroke silently disappears). With a paper-top sentinel at offsetY≈0,
+    // every stroke has a valid anchor regardless of what headings the
+    // markdown contains. ColorTitleHeading also strips data-section-id off
+    // h1, so without this even pages WITH an h1 are vulnerable.
+    tree.children.unshift({
+      type: 'element',
+      tagName: 'div',
+      properties: {
+        'data-section-id': 'paper-top',
+        'aria-hidden': 'true',
+        style: 'height:0;pointer-events:none',
+      },
+      children: [],
+    })
+
     // Collect end-sentinel insertions during visit; apply after the walk so we
     // don't perturb traversal indices. Each entry: { parent, index, sectionId }.
     const inserts: Array<{ parent: Element | Root; index: number; sectionId: string }> = []
