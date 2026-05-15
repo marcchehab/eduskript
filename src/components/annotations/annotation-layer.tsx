@@ -693,35 +693,6 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
     pageBroadcastSyncOptions
   )
 
-  // Dedicated write hooks for the page-broadcast (public) layer's snaps and
-  // sticky notes. Without these, deletePageBroadcastData would route through
-  // the generic updateSnapsData / clearStickyNotes hooks, which are bound to
-  // the author's *current* viewMode targeting. If the author trashed the
-  // public layer while in my-view, those calls cleared the personal layer and
-  // the public rows survived. These hooks are page-broadcast-targeted, so the
-  // trash button clears the right adapter rows. Gated to authors only —
-  // anonymous / non-author visitors don't need write paths, and the empty
-  // pageId sentinel keeps useSyncedUserData from firing for them.
-  const { updateData: updatePageBroadcastSnaps } = useSyncedUserData<SnapsData>(
-    isPageAuthor ? pageId : '',
-    'snaps',
-    emptySnapsData,
-    pageBroadcastSyncOptions,
-  )
-  const emptyStickyNotesData = useMemo(() => ({ notes: [] }), [])
-  const { updateData: updatePageBroadcastStickyNotes } = useSyncedUserData<{ notes: unknown[] }>(
-    isPageAuthor ? pageId : '',
-    'sticky-notes',
-    emptyStickyNotesData,
-    pageBroadcastSyncOptions,
-  )
-  const { updateData: updatePageBroadcastSpacers } = useSyncedUserData<SpacersData>(
-    isPageAuthor ? pageId : '',
-    'spacers',
-    emptySpacersData,
-    pageBroadcastSyncOptions,
-  )
-
   // Ref to sync pageBroadcastData when switching away from page-broadcast mode.
   // Captures current canvas state and pushes it into the reference hook so the
   // public reference layer shows fresh data without a re-fetch.
@@ -915,34 +886,67 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
     ))
   }, [isTeacher, studentForFeedback, updateStudentFeedbackData, viewMode, updateSpacersData, updateSnapsData, clearStickyNotes])
 
-  // Delete page broadcast annotations (for page authors)
+  // Delete page broadcast annotations (for page authors).
+  //
+  // Annotations go through the dedicated `updatePageBroadcastData` hook
+  // (always bound to targetType='page'). Snaps / sticky notes / spacers
+  // are cleared by reusing the existing viewMode-driven hooks with explicit
+  // targetTypeOverride='page' — this avoids mounting parallel hooks on the
+  // same DB row, which caused redundant loads and racy IDB cache writes
+  // that silently overwrote in-flight drafts in page-broadcast mode.
   const deletePageBroadcastData = useCallback(async () => {
     log('deletePageBroadcastData called', { viewMode })
 
-    // Each adapter is cleared through its page-broadcast-targeted hook so
-    // the trash button works regardless of the author's current viewMode.
-    // Previously these used the generic updateSnapsData / clearStickyNotes
-    // hooks bound to viewMode-derived targeting, so trashing from my-view
-    // cleared the personal layer and left the public rows intact.
     if (updatePageBroadcastData) {
       await updatePageBroadcastData({ canvasData: '', headingOffsets: {}, pageVersion: '' }, { immediate: true })
     }
-    await updatePageBroadcastSpacers({ spacers: [] }, { immediate: true })
-    await updatePageBroadcastSnaps({ snaps: [] }, { immediate: true })
-    await updatePageBroadcastStickyNotes({ notes: [] }, { immediate: true })
+    await updateSpacersData({ spacers: [] }, { immediate: true, targetTypeOverride: 'page', targetIdOverride: pageId })
+    await updateSnapsData({ snaps: [] }, { immediate: true, targetTypeOverride: 'page', targetIdOverride: pageId })
+    // Sticky notes go through the StickyNotesContext (sticky-notes-layer owns
+    // its own useSyncedUserData hook). For page-broadcast clearing we issue
+    // the sync POST directly with the right targeting; sticky-notes-layer's
+    // own clear handler can't override the target. Fetch current version
+    // first so the conflict check (server.version > item.version) passes
+    // without poisoning the version counter for future writes.
+    try {
+      const currentRes = await fetch(
+        `/api/user-data/sticky-notes/${encodeURIComponent(pageId)}?targetType=page&targetId=${encodeURIComponent(pageId)}`,
+      )
+      const current = currentRes.ok ? await currentRes.json() : null
+      const nextVersion = (current?.version ?? 0) + 1
+      await fetch('/api/user-data/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: [{
+            adapter: 'sticky-notes',
+            itemId: pageId,
+            data: JSON.stringify({ notes: [] }),
+            version: nextVersion,
+            updatedAt: Date.now(),
+            targetType: 'page',
+            targetId: pageId,
+          }],
+        }),
+      })
+    } catch (err) {
+      log('sticky-notes page-broadcast clear failed', err)
+    }
 
     // If currently viewing page broadcast, also clear local state
     if (viewMode === 'page-broadcast') {
       setCanvasData('')
       setHasAnnotations(false)
       canvasRef.current?.clear()
+      clearStickyNotes()
     }
   }, [
     viewMode,
+    pageId,
     updatePageBroadcastData,
-    updatePageBroadcastSpacers,
-    updatePageBroadcastSnaps,
-    updatePageBroadcastStickyNotes,
+    updateSpacersData,
+    updateSnapsData,
+    clearStickyNotes,
   ])
 
   // Build list of available layers for the toolbar UI
