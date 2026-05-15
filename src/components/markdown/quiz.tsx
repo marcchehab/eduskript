@@ -176,7 +176,7 @@ function QuestionInner({
   const isButtonDisabled = isEmptyAnswer || isUnchangedSinceSave
 
   return (
-    <div className="space-y-4 border rounded-lg p-4 shadow-sm bg-card">
+    <div className="space-y-4 border rounded-lg p-4 shadow-sm bg-card my-4">
       {/* Single/Multiple Choice */}
       {(type === 'single' || type === 'multiple') && (
         <div className="space-y-2">

@@ -408,9 +408,9 @@ article.prose-theme > div > :first-child {
 }
 
 .prose-theme h2 {
-  @apply text-2xl mb-4;
+  @apply mb-4;
   position: relative;
-  margin-top: 4rem;
+  margin-top: 8rem;
   padding-left: 0.75rem;
 }
 
@@ -455,7 +455,12 @@ article.prose-theme > div > :first-child {
 }
 
 .prose-theme h3 {
-  @apply text-xl mt-6 mb-2;
+  @apply text-xl mb-2;
+  margin-top: 3rem;
+}
+
+.prose-theme h3 + p {
+  margin-top: 0;
 }
 
 .prose-theme h4 {
@@ -1442,7 +1447,7 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
 }
 
 .prose-theme h2 {
-  font-size: 1.875em;
+  font-size: 3em;
 }
 
 .prose-theme h3 {
