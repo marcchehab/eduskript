@@ -8,6 +8,7 @@ import { Check, X } from 'lucide-react'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
 import { QuizProgressBar } from './quiz-progress-bar'
 import { useSurvey, type SurveyContextValue, type SurveyAnswerType } from './survey-provider'
+import { useInSurveyRegion } from './survey'
 
 interface QuestionProps {
   children: ReactNode
@@ -450,13 +451,16 @@ function extractOptionsInfo(children: ReactNode, type: 'single' | 'multiple' | '
   return { correctIndices, optionLabels }
 }
 
-// Router: branch on whether we're inside a <Survey> region. The two leaf
-// components have disjoint hook usage (SyncedQuestion calls useSyncedUserData,
-// SurveyQuestion doesn't), so this lifts the conditional out cleanly above
-// the hook boundary instead of trying to gate hooks per render.
+// Router: branch on whether we're inside a <Survey> region. Both predicates
+// must hold — the page-level SurveyProvider is mounted whenever ANY <survey>
+// tag exists on the page, so its presence alone would wrongly survey-mode a
+// demo/info question that happens to live on a page with a survey but outside
+// any <survey> block. useInSurveyRegion() comes from the <Survey> wrapper and
+// is only true for actual descendants.
 function Question(props: QuestionProps) {
   const survey = useSurvey()
-  if (survey) {
+  const inSurveyRegion = useInSurveyRegion()
+  if (survey && inSurveyRegion) {
     return <SurveyQuestion {...props} survey={survey} />
   }
   return <SyncedQuestion {...props} />
