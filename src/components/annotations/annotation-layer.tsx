@@ -135,7 +135,7 @@ interface AnnotationLayerProps {
   isExamStudent?: boolean
 }
 
-export function AnnotationLayer({ pageId, content, children, publicAnnotations = [], publicSnaps = [], isPageAuthor: isPageAuthorProp = false, isExamStudent = false }: AnnotationLayerProps) {
+export function AnnotationLayer({ pageId, content, children, publicAnnotations: publicAnnotationsSeed = [], publicSnaps: publicSnapsSeed = [], isPageAuthor: isPageAuthorProp = false, isExamStudent = false }: AnnotationLayerProps) {
   const { sidebarWidth, viewportWidth, viewportHeight } = useLayout()
   const { data: session } = useSession()
   const { selectedClass, setSelectedClass, selectedStudent, setSelectedStudent, broadcastToPage, setBroadcastToPage, viewMode, isTeacher } = useTeacherClass()
@@ -207,6 +207,47 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
 
     checkPermission()
   }, [pageId, session?.user, isPageAuthorProp])
+
+  // Public layers (page-broadcast annotations + snaps) for non-author viewers.
+  // SSR prop seeds first paint; we always reconcile with the server on mount
+  // and on visibility/focus, since revalidatePath() only clears the receiving
+  // Koyeb instance's ISR cache — a sibling can serve stale empty SSR forever.
+  //
+  // Page authors are excluded: they load the same data via the live-sync
+  // pageBroadcastData hook (see ~line 692), which is authoritative for them.
+  // Mirrors the sticky-notes-layer recovery path; both refresh paths can fire
+  // independently because they hit different rows.
+  const [publicAnnotations, setPublicAnnotations] = useState(publicAnnotationsSeed)
+  const [publicSnaps, setPublicSnaps] = useState(publicSnapsSeed)
+  useEffect(() => {
+    if (isPageAuthor || !pageId) return
+    let cancelled = false
+    const refresh = async () => {
+      try {
+        const res = await fetch(`/api/user-data/public/${encodeURIComponent(pageId)}`)
+        if (!res.ok || cancelled) return
+        const json = await res.json() as { publicAnnotations?: PublicAnnotation[]; publicSnaps?: PublicSnap[] }
+        if (cancelled) return
+        // Server is authoritative — replace whatever the SSR seed (or a prior
+        // refresh) put in state. Missing arrays default to empty.
+        setPublicAnnotations(json.publicAnnotations ?? [])
+        setPublicSnaps(json.publicSnaps ?? [])
+      } catch {
+        // Network errors are non-critical; SSR seed remains in place.
+      }
+    }
+    refresh()
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refresh()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', refresh)
+    return () => {
+      cancelled = true
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', refresh)
+    }
+  }, [isPageAuthor, pageId])
 
   // Fetch students when a class is selected (with annotation status for current page)
   useEffect(() => {
