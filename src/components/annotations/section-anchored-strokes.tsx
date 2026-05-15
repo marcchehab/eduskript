@@ -142,6 +142,20 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
   >(() => new Map())
   const getZoom = useZoom()
 
+  // Bump on viewport resize so the layout effect re-measures geometry against
+  // the current --paper-scale. The scale is set imperatively on
+  // document.documentElement by public/layout.tsx (no React state, no
+  // re-render), so without this trigger the cached leftFromPaper stays at the
+  // old paper-scale and every stroke drifts horizontally as the user resizes
+  // the window.
+  const [resizeTick, setResizeTick] = useState(0)
+  const [liveScale, setLiveScale] = useState(1)
+  useLayoutEffect(() => {
+    const handle = () => setResizeTick(t => t + 1)
+    window.addEventListener('resize', handle)
+    return () => window.removeEventListener('resize', handle)
+  }, [])
+
   // useLayoutEffect (not useEffect) so the resolve+setTargets+re-render cycle
   // completes synchronously before the browser paints. Otherwise, when a new
   // section gains its first stroke, there's one paint where the portal target
@@ -158,18 +172,38 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
     // on bordered themes — visible as a small leftward drift on every stroke).
     //
     // Both rects come from getBoundingClientRect, which is post-transform —
-    // i.e. in zoomed viewport pixels. Strokes are stored in paper-local
-    // (unzoomed) pixels, and the SVG itself is sized in paper-local pixels
-    // (width=paperWidth, viewBox=0 0 paperWidth paperHeight). Divide the
-    // measured delta by the live zoom factor so the offset we hand the SVG
-    // is also paper-local; otherwise zoom != 1 produces a left/right shift
-    // proportional to (1 - zoom) * sectionLeftFromPaper.
+    // i.e. in viewport pixels with every ancestor scale applied. Strokes are
+    // stored in paper-local (unscaled) pixels, and the SVG itself is sized in
+    // paper-local pixels (width=paperWidth, viewBox=0 0 paperWidth paperHeight).
+    //
+    // Two distinct scales sit between paper-local and viewport pixels:
+    //  - annotation-layer page zoom on <main> (`transform: scale(Z)`, exposed
+    //    via ZoomContext)
+    //  - paper-responsive shrink on .paper-responsive at narrow viewports
+    //    (`transform: scale(var(--paper-scale))`, set imperatively by the
+    //    public layout's resize observer — see public/layout.tsx)
+    //
+    // The annotation hook only knows about the page zoom; combining both is
+    // critical, because the section sits INSIDE the paper-responsive scale
+    // and getBoundingClientRect picks up both factors. Without the paper
+    // scale the delta is undermeasured by `paperScale`, the SVG's `left`
+    // (a CSS pixel value inside the paper's transform space) lands too far
+    // right, and every stroke drifts horizontally as the viewport narrows.
     const paperEl = document.getElementById('paper')
     const paperRect = paperEl?.getBoundingClientRect()
     const paperBorderLeft = paperEl
       ? parseFloat(window.getComputedStyle(paperEl).borderLeftWidth) || 0
       : 0
     const zoom = getZoom() || 1
+    const paperScale = parseFloat(
+      window.getComputedStyle(document.documentElement).getPropertyValue('--paper-scale'),
+    ) || 1
+    const combinedScale = zoom * paperScale
+    // Expose paperScale to the render path so the badge counter-scale can
+    // factor it in too. setLiveScale is a no-op if value is unchanged so the
+    // common case (no resize) doesn't re-render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- mirrors the same DOM-measurement → state pattern used for targets/sectionGeom below.
+    setLiveScale(prev => (prev === paperScale ? prev : paperScale))
     for (const sid of grouped.keys()) {
       const el = document.querySelector(`[data-section-id="${CSS.escape(sid)}"]`)
       if (el instanceof HTMLElement) {
@@ -180,7 +214,7 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
           borderTop: parseFloat(cs.borderTopWidth) || 0,
           borderLeft: parseFloat(cs.borderLeftWidth) || 0,
           leftFromPaper: paperRect
-            ? (sectionLeft - paperRect.left) / zoom - paperBorderLeft
+            ? (sectionLeft - paperRect.left) / combinedScale - paperBorderLeft
             : paperPaddingLeft,
         })
       }
@@ -227,10 +261,14 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
     // headingPositions is in deps purely as a re-run trigger; we don't read its
     // values here. Including it ensures we re-query DOM targets on every layout
     // recomputation, which is the moment when section elements may have been
-    // recreated by the spacer-injection effect.
-  }, [grouped, strokes, onOrphansChange, headingPositions])
+    // recreated by the spacer-injection effect. resizeTick has the same role
+    // for viewport-width changes that update --paper-scale.
+  }, [grouped, strokes, onOrphansChange, headingPositions, resizeTick])
 
   const zoom = getZoom() || 1
+  // Counter-scale the badge against BOTH transforms in its ancestor chain
+  // (page zoom × paper-responsive scale) so it stays readable at any combo.
+  const badgeScaleSource = zoom * liveScale
 
   return (
     <>
@@ -257,7 +295,7 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
                 layerName={badge.layerName}
                 layerColor={badge.layerColor}
                 icon={badge.icon}
-                zoom={zoom}
+                zoom={badgeScaleSource}
               />
             )}
           </>,
