@@ -1906,12 +1906,16 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
 
 /* ===== Text Highlight Styles ===== */
 :root {
-  /* Mark background (translucent, overlaid on text) */
+  /* Mark background (translucent, overlaid on text). Author-written
+   * <span class="es-bg-NAME"> highlights reference the same vars below, so
+   * the two paths render identically. */
   --text-highlight-yellow: rgba(250, 204, 21, 0.32);
   --text-highlight-red: rgba(239, 68, 68, 0.28);
   --text-highlight-green: rgba(74, 222, 128, 0.28);
   --text-highlight-blue: rgba(96, 165, 250, 0.28);
   --text-highlight-purple: rgba(168, 85, 247, 0.28);
+  --text-highlight-pink: rgba(236, 72, 153, 0.28);
+  --text-highlight-orange: rgba(251, 146, 60, 0.32);
   /* Toolbar swatch dots (opaque, need to read as solid color) */
   --text-highlight-swatch-yellow: rgb(250, 204, 21);
   --text-highlight-swatch-red: rgb(239, 68, 68);
@@ -1926,6 +1930,8 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
   --text-highlight-green: rgba(74, 222, 128, 0.65);
   --text-highlight-blue: rgba(96, 165, 250, 0.65);
   --text-highlight-purple: rgba(168, 85, 247, 0.65);
+  --text-highlight-pink: rgba(236, 72, 153, 0.65);
+  --text-highlight-orange: rgba(251, 146, 60, 0.65);
   --text-highlight-swatch-yellow: rgb(202, 163, 17);
   --text-highlight-swatch-red: rgb(200, 50, 50);
   --text-highlight-swatch-green: rgb(52, 168, 96);
@@ -1989,14 +1995,15 @@ mark.text-highlight-purple {
   --es-color-purple: #9333ea;     /* purple-600 — kept as-is, it's the house color and reads on both modes */
   --es-color-lightblue: #0369a1;  /* sky-700 */
 
-  /* Background highlight colors (translucent in light mode) */
-  --es-bg-yellow: rgba(250, 204, 21, 0.4);
-  --es-bg-green: rgba(74, 222, 128, 0.35);
-  --es-bg-blue: rgba(96, 165, 250, 0.35);
-  --es-bg-pink: rgba(236, 72, 153, 0.35);
-  --es-bg-orange: rgba(251, 146, 60, 0.35);
-  --es-bg-red: rgba(239, 68, 68, 0.3);
-  --es-bg-purple: rgba(168, 85, 247, 0.3);
+  /* Background highlight colors — share the user-highlight palette so
+   * <span class="es-bg-NAME"> renders identically to mark.text-highlight-NAME. */
+  --es-bg-yellow: var(--text-highlight-yellow);
+  --es-bg-green:  var(--text-highlight-green);
+  --es-bg-blue:   var(--text-highlight-blue);
+  --es-bg-pink:   var(--text-highlight-pink);
+  --es-bg-orange: var(--text-highlight-orange);
+  --es-bg-red:    var(--text-highlight-red);
+  --es-bg-purple: var(--text-highlight-purple);
 }
 
 .dark {
@@ -2010,13 +2017,8 @@ mark.text-highlight-purple {
   --es-color-purple: #d8b4fe;     /* purple-300 */
   --es-color-lightblue: #bae6fd;  /* sky-200 */
 
-  --es-bg-yellow: rgba(250, 204, 21, 0.6);
-  --es-bg-green: rgba(74, 222, 128, 0.5);
-  --es-bg-blue: rgba(96, 165, 250, 0.5);
-  --es-bg-pink: rgba(236, 72, 153, 0.5);
-  --es-bg-orange: rgba(251, 146, 60, 0.5);
-  --es-bg-red: rgba(239, 68, 68, 0.5);
-  --es-bg-purple: rgba(168, 85, 247, 0.5);
+  /* --es-bg-* derive from --text-highlight-* (defined above on :root and .dark),
+   * so dark-mode values follow the user-highlight palette automatically. */
 }
 
 .es-color-cyan       { color: var(--es-color-cyan); }
@@ -2028,6 +2030,16 @@ mark.text-highlight-purple {
 .es-color-violet     { color: var(--es-color-violet); }
 .es-color-purple     { color: var(--es-color-purple); }
 .es-color-lightblue  { color: var(--es-color-lightblue); }
+
+/* Author-written highlights match <mark>'s UA-default dark text so they read
+ * the same as user-highlights on the translucent background in both themes. */
+.es-bg-yellow,
+.es-bg-green,
+.es-bg-blue,
+.es-bg-pink,
+.es-bg-orange,
+.es-bg-red,
+.es-bg-purple { color: #18181b; }
 
 .es-bg-yellow { background-color: var(--es-bg-yellow); border-radius: 2px; padding: 0 1px; }
 .es-bg-green  { background-color: var(--es-bg-green);  border-radius: 2px; padding: 0 1px; }
