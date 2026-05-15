@@ -890,55 +890,70 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
   //
   // Annotations go through the dedicated `updatePageBroadcastData` hook
   // (always bound to targetType='page'). Snaps / sticky notes / spacers
-  // are cleared by reusing the existing viewMode-driven hooks with explicit
-  // targetTypeOverride='page' — this avoids mounting parallel hooks on the
-  // same DB row, which caused redundant loads and racy IDB cache writes
-  // that silently overwrote in-flight drafts in page-broadcast mode.
+  // are cleared by reusing the existing viewMode-driven hooks. When the
+  // author is already in page-broadcast view those hooks are page-targeted,
+  // so a plain update both writes the DB and refreshes local state. From
+  // any other viewMode we route through `targetTypeOverride='page'` so the
+  // active target (personal / class / student) is left untouched — at the
+  // cost of the local state of the override target not updating, but that
+  // doesn't matter because the author isn't looking at the page layer right
+  // now anyway.
   const deletePageBroadcastData = useCallback(async () => {
     log('deletePageBroadcastData called', { viewMode })
+
+    const inPageBroadcast = viewMode === 'page-broadcast'
+    const clearOpts = inPageBroadcast
+      ? { immediate: true as const }
+      : { immediate: true as const, targetTypeOverride: 'page' as const, targetIdOverride: pageId }
 
     if (updatePageBroadcastData) {
       await updatePageBroadcastData({ canvasData: '', headingOffsets: {}, pageVersion: '' }, { immediate: true })
     }
-    await updateSpacersData({ spacers: [] }, { immediate: true, targetTypeOverride: 'page', targetIdOverride: pageId })
-    await updateSnapsData({ snaps: [] }, { immediate: true, targetTypeOverride: 'page', targetIdOverride: pageId })
-    // Sticky notes go through the StickyNotesContext (sticky-notes-layer owns
-    // its own useSyncedUserData hook). For page-broadcast clearing we issue
-    // the sync POST directly with the right targeting; sticky-notes-layer's
-    // own clear handler can't override the target. Fetch current version
-    // first so the conflict check (server.version > item.version) passes
-    // without poisoning the version counter for future writes.
-    try {
-      const currentRes = await fetch(
-        `/api/user-data/sticky-notes/${encodeURIComponent(pageId)}?targetType=page&targetId=${encodeURIComponent(pageId)}`,
-      )
-      const current = currentRes.ok ? await currentRes.json() : null
-      const nextVersion = (current?.version ?? 0) + 1
-      await fetch('/api/user-data/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          items: [{
-            adapter: 'sticky-notes',
-            itemId: pageId,
-            data: JSON.stringify({ notes: [] }),
-            version: nextVersion,
-            updatedAt: Date.now(),
-            targetType: 'page',
-            targetId: pageId,
-          }],
-        }),
-      })
-    } catch (err) {
-      log('sticky-notes page-broadcast clear failed', err)
-    }
+    await updateSpacersData({ spacers: [] }, clearOpts)
+    await updateSnapsData({ snaps: [] }, clearOpts)
 
-    // If currently viewing page broadcast, also clear local state
-    if (viewMode === 'page-broadcast') {
+    // Sticky notes go through StickyNotesContext (sticky-notes-layer owns its
+    // own useSyncedUserData hook).
+    //
+    // - In page-broadcast view the active sticky-notes hook is already
+    //   page-targeted, so clearStickyNotes() persists empty notes to the same
+    //   row and updates local state. No direct POST needed; doing both would
+    //   race two writers against the same version counter.
+    //
+    // - From any other viewMode the active hook targets personal/class/student
+    //   data, so we issue a direct sync POST against the page-targeted row.
+    //   Fetch the current version first so the conflict check
+    //   (server.version > item.version) passes cleanly.
+    if (inPageBroadcast) {
       setCanvasData('')
       setHasAnnotations(false)
       canvasRef.current?.clear()
       clearStickyNotes()
+    } else {
+      try {
+        const currentRes = await fetch(
+          `/api/user-data/sticky-notes/${encodeURIComponent(pageId)}?targetType=page&targetId=${encodeURIComponent(pageId)}`,
+        )
+        const current = currentRes.ok ? await currentRes.json() : null
+        const nextVersion = (current?.version ?? 0) + 1
+        await fetch('/api/user-data/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            items: [{
+              adapter: 'sticky-notes',
+              itemId: pageId,
+              data: JSON.stringify({ notes: [] }),
+              version: nextVersion,
+              updatedAt: Date.now(),
+              targetType: 'page',
+              targetId: pageId,
+            }],
+          }),
+        })
+      } catch (err) {
+        log('sticky-notes page-broadcast clear failed', err)
+      }
     }
   }, [
     viewMode,
