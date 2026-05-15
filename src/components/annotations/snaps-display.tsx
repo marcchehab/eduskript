@@ -375,12 +375,19 @@ const TeacherSnapItem = memo(function TeacherSnapItem({
   overridePosition,
   onPositionChange,
   paperWidth,
+  originX = 0,
+  originY = 0,
 }: {
   snap: TeacherSnap
   onExpand: (id: string) => void
   overridePosition?: { top: number; left: number; width: number; height: number }
   onPositionChange?: (position: { top: number; left: number; width: number; height: number }) => void
   paperWidth: number
+  /** Same semantics as SnapItem: when portaled into a section instead of the
+   *  paper wrapper, subtract these from the rendered top/left so the snap
+   *  stays in paper-absolute coords (which is what snap.top/left store). */
+  originX?: number
+  originY?: number
 }) {
   if (DEBUG_STATE) console.log(`[TeacherSnapItem ${snap.id.slice(-4)}] Render`)
 
@@ -576,8 +583,8 @@ const TeacherSnapItem = memo(function TeacherSnapItem({
       ref={elementRef}
       className="absolute z-50 bg-sky-50 dark:bg-sky-950/50 border border-sky-200 dark:border-sky-800 shadow-md rounded-xl overflow-hidden group transition-shadow duration-150 hover:shadow-xl teacher-snap-fade-in"
       style={{
-        top: position.top,
-        left: position.left,
+        top: position.top - originY,
+        left: position.left - originX,
         width: position.width,
         willChange: 'transform',
       }}
@@ -1101,14 +1108,19 @@ export function SnapsDisplay({ snaps, onRemoveSnap, onRenameSnap, onUpdateSnap, 
     return () => clearTimeout(t)
   }, [])
 
-  // Resolve each owned snap's anchor section to a live DOM element. Re-runs
-  // when snaps change (add/remove or anchor change). Snaps whose sectionId
-  // doesn't resolve fall back to the wrapper portal — same as before.
+  // Resolve each snap's anchor section to a live DOM element. Re-runs when
+  // snaps change (add/remove or anchor change). Snaps whose sectionId doesn't
+  // resolve fall back to the wrapper portal — same as before.
+  // Includes teacher snaps (class/individual/public) so they reflow with
+  // section content too — otherwise public snaps anchored to a section render
+  // at their stored absolute paper Y, which drifts on anon views where
+  // author-only UI (response bars, save buttons) is missing above them.
   const ownSnapAnchors = useMemo(() => {
     const ids = new Set<string>()
     for (const s of snaps) if (s.sectionId) ids.add(s.sectionId)
+    for (const s of teacherSnaps) if (s.sectionId) ids.add(s.sectionId)
     return Array.from(ids)
-  }, [snaps])
+  }, [snaps, teacherSnaps])
 
   const [sectionTargets, setSectionTargets] = useState<Map<string, HTMLElement>>(() => new Map())
 
@@ -1315,7 +1327,35 @@ export function SnapsDisplay({ snaps, onRemoveSnap, onRenameSnap, onUpdateSnap, 
           const layerType = isPublicSnap ? 'public' : isClassSnap ? 'class' : 'individual' as const
           const overridePosition = snapOverrides?.[overrideKey]?.[snap.id]
 
-          return (
+          // Same section-portal trick as personal snaps: if the snap is
+          // anchored to a section that resolves to a live DOM element,
+          // portal it into that section so the browser's layout engine
+          // carries it through reflows. Without this, public snaps render
+          // at their stored absolute paper Y and drift on views where
+          // author-only UI above them (response bars, save buttons) is
+          // missing — visible as snaps appearing ~400 px lower for anon
+          // visitors than for the logged-in author.
+          const sectionTarget = snap.sectionId && snap.sectionOffsetY !== undefined
+            ? sectionTargets.get(snap.sectionId)
+            : undefined
+
+          if (
+            !sectionTarget &&
+            snap.sectionId &&
+            /^(callout|editor|plugin)-/.test(snap.sectionId)
+          ) {
+            return null
+          }
+
+          let sectionBorderTop = 0
+          let sectionBorderLeft = 0
+          if (sectionTarget) {
+            const cs = window.getComputedStyle(sectionTarget)
+            sectionBorderTop = parseFloat(cs.borderTopWidth) || 0
+            sectionBorderLeft = parseFloat(cs.borderLeftWidth) || 0
+          }
+
+          const item = (
             <TeacherSnapItem
               key={snap.id}
               snap={snap}
@@ -1323,8 +1363,14 @@ export function SnapsDisplay({ snaps, onRemoveSnap, onRenameSnap, onUpdateSnap, 
               overridePosition={overridePosition}
               onPositionChange={onTeacherSnapOverride ? (pos) => onTeacherSnapOverride(snap.id, layerType, pos) : undefined}
               paperWidth={paperWidth}
+              originX={sectionTarget ? paperPaddingLeft + sectionBorderLeft : 0}
+              originY={sectionTarget ? snap.sectionOffsetY! + sectionBorderTop : 0}
             />
           )
+
+          return sectionTarget
+            ? createPortal(item, sectionTarget, `snap-portal:${snap.id}`)
+            : item
         })}
 
         {/* Student work snaps (moveable by teachers viewing student's work) */}
