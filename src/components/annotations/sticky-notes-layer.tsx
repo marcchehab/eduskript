@@ -192,10 +192,10 @@ interface StickyNotesLayerProps {
   /**
    * Pre-fetched public (page-broadcast) sticky notes from the server.
    *
-   * When provided (even as an empty array), the client-side `fetch` for the
-   * public layer is skipped — public notes render at first paint without a
-   * post-hydration waterfall. Pass `undefined` only on routes that don't
-   * SSR-prefetch this data.
+   * Used as the SSR seed for first paint. The layer always fetches the
+   * authoritative server row on mount and on visibility/focus regardless of
+   * whether this prop is supplied — the prop just avoids a one-frame "empty"
+   * flash before the post-hydration fetch lands.
    */
   publicStickyNotes?: StickyNote[]
 }
@@ -250,23 +250,43 @@ export function StickyNotesLayer({ pageId, children, isExamStudent, publicSticky
   // For students and unauthenticated visitors: render public (page-broadcast) sticky notes.
   // Teachers use the pageBroadcastStickyNotes hook instead (supports live sync).
   //
-  // Initial value comes from the server-rendered `publicStickyNotes` prop when
-  // the route SSR-prefetches it (the four public page routes). When the prop is
-  // omitted (legacy callers), we fall back to a client fetch on mount.
+  // SSR seed (`publicStickyNotes` prop) drives first paint, then a background
+  // refresh fetches the authoritative server state on mount and again whenever
+  // the tab regains visibility/focus. Without the visibility refresh the layer
+  // had no recovery path: any stale SSR (e.g. ISR cache miss on a sibling
+  // instance) would be permanent for the session, since the prop is the only
+  // input and never changes after hydration.
   const [publicNotes, setPublicNotes] = useState<StickyNote[]>(publicStickyNotes ?? [])
   const isLoggedIn = !!session?.user
   useEffect(() => {
-    // Prop-supplied data is authoritative for the initial render — skip the fetch.
-    if (publicStickyNotes !== undefined) return
     if (isTeacher || !pageId) return
-    fetch(`/api/user-data/sticky-notes/${encodeURIComponent(pageId)}?targetType=page`)
-      .then(res => res.ok ? res.json() : null)
-      .then(json => {
+    let cancelled = false
+    const refresh = async () => {
+      try {
+        const res = await fetch(`/api/user-data/sticky-notes/${encodeURIComponent(pageId)}?targetType=page`)
+        if (!res.ok || cancelled) return
+        const json = await res.json()
         const d = json?.data as StickyNotesData | null
-        if (d?.notes?.length) setPublicNotes(d.notes)
-      })
-      .catch(() => {}) // Silently ignore — not critical
-  }, [isTeacher, pageId, publicStickyNotes])
+        if (cancelled) return
+        // Server is authoritative for the public layer — replace, don't merge.
+        // Treat "no row" (null data) as "no notes" rather than leaving stale state.
+        setPublicNotes(d?.notes ?? [])
+      } catch {
+        // Network errors are non-critical; SSR seed remains in place.
+      }
+    }
+    refresh()
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refresh()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', refresh)
+    return () => {
+      cancelled = true
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', refresh)
+    }
+  }, [isTeacher, pageId])
 
   // For teachers: load page-broadcast sticky notes as a read-only reference layer
   // when NOT actively editing page-broadcast (mirrors pageBroadcastData in annotation-layer).
