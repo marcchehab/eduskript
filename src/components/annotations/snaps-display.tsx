@@ -58,8 +58,23 @@ export interface StudentWorkSnap extends Snap {
   isStudentWorkSnap: true
 }
 
-// Position override type
-export type SnapPositionOverrides = Record<string, { top: number; left: number; width: number; height: number }>
+// Position override type.
+//
+// `basedOn` snapshots the underlying snap's position at the moment the override
+// was written. At render time we compare against the current snap props: when
+// the author moves the snap to a new position, basedOn no longer matches and
+// the override is discarded so every viewer sees the author's new position
+// without a manual reset. Old overrides without `basedOn` keep applying — the
+// supersession only kicks in once the viewer touches the snap again, which is
+// fine for back-compat.
+export type SnapPositionOverride = {
+  top: number
+  left: number
+  width: number
+  height: number
+  basedOn?: { top: number; left: number; width: number; height: number }
+}
+export type SnapPositionOverrides = Record<string, SnapPositionOverride>
 export type SnapOverridesData = { classSnaps: SnapPositionOverrides; feedbackSnaps: SnapPositionOverrides; publicSnaps?: SnapPositionOverrides; studentWorkSnaps?: SnapPositionOverrides }
 
 // Helper to get icon and color based on layer type
@@ -89,8 +104,8 @@ interface SnapsDisplayProps {
   teacherSnaps?: TeacherSnap[]
   studentWorkSnaps?: StudentWorkSnap[]
   snapOverrides?: SnapOverridesData | null
-  onTeacherSnapOverride?: (snapId: string, layerType: 'class' | 'individual' | 'public', position: { top: number; left: number; width: number; height: number }) => void
-  onStudentWorkSnapOverride?: (snapId: string, position: { top: number; left: number; width: number; height: number }) => void
+  onTeacherSnapOverride?: (snapId: string, layerType: 'class' | 'individual' | 'public', position: SnapPositionOverride) => void
+  onStudentWorkSnapOverride?: (snapId: string, position: SnapPositionOverride) => void
   paperWidth: number // Paper width in pixels for drag delta conversion
   initialLoadComplete?: boolean // Whether all annotation/snap data has loaded (for unified fade-in)
   /** Re-resolution trigger for section-portaled snaps. When the section DOM
@@ -115,8 +130,8 @@ const StudentWorkSnapItem = memo(function StudentWorkSnapItem({
 }: {
   snap: StudentWorkSnap
   onExpand: (id: string) => void
-  overridePosition?: { top: number; left: number; width: number; height: number }
-  onPositionChange?: (position: { top: number; left: number; width: number; height: number }) => void
+  overridePosition?: SnapPositionOverride
+  onPositionChange?: (position: SnapPositionOverride) => void
   paperWidth: number
 }) {
   if (DEBUG_STATE) console.log(`[StudentWorkSnapItem ${snap.id.slice(-4)}] Render`)
@@ -125,11 +140,16 @@ const StudentWorkSnapItem = memo(function StudentWorkSnapItem({
   const imageRef = useRef<HTMLImageElement>(null)
   const getZoom = useZoom()
 
-  // Use override position if available, otherwise use original snap position
-  const position = useMemo(() =>
-    overridePosition || { top: snap.top, left: snap.left, width: snap.width, height: snap.height },
-    [overridePosition, snap.top, snap.left, snap.width, snap.height]
-  )
+  // Apply override iff its basedOn still matches the current snap position;
+  // see SnapPositionOverride doc.
+  const position = useMemo(() => {
+    if (!overridePosition) return { top: snap.top, left: snap.left, width: snap.width, height: snap.height }
+    const b = overridePosition.basedOn
+    if (b && (b.top !== snap.top || b.left !== snap.left || b.width !== snap.width || b.height !== snap.height)) {
+      return { top: snap.top, left: snap.left, width: snap.width, height: snap.height }
+    }
+    return { top: overridePosition.top, left: overridePosition.left, width: overridePosition.width, height: overridePosition.height }
+  }, [overridePosition, snap.top, snap.left, snap.width, snap.height])
 
   const dragStateRef = useRef<{
     isDragging: boolean
@@ -228,6 +248,10 @@ const StudentWorkSnapItem = memo(function StudentWorkSnapItem({
       element.style.zIndex = ''
       element.style.cursor = ''
 
+      // Snapshot the snap's author-side position so the render path can
+      // detect future author updates and discard this stale override.
+      const basedOn = { top: snap.top, left: snap.left, width: snap.width, height: snap.height }
+
       if (state.isDragging) {
         const finalTop = state.startTop + state.currentY
         const finalLeft = state.startLeft + state.currentX
@@ -237,6 +261,7 @@ const StudentWorkSnapItem = memo(function StudentWorkSnapItem({
           left: finalLeft,
           width: positionRef.current.width,
           height: positionRef.current.height,
+          basedOn,
         })
       } else if (state.isResizing) {
         // Persist the new size via callback
@@ -245,13 +270,14 @@ const StudentWorkSnapItem = memo(function StudentWorkSnapItem({
           left: positionRef.current.left,
           width: state.currentWidth,
           height: state.currentHeight,
+          basedOn,
         })
       }
 
       state.isDragging = false
       state.isResizing = false
     }
-  }, [])
+  }, [snap.top, snap.left, snap.width, snap.height])
 
   const handleDragStart = useCallback((e: React.PointerEvent) => {
     e.preventDefault()
@@ -380,8 +406,8 @@ const TeacherSnapItem = memo(function TeacherSnapItem({
 }: {
   snap: TeacherSnap
   onExpand: (id: string) => void
-  overridePosition?: { top: number; left: number; width: number; height: number }
-  onPositionChange?: (position: { top: number; left: number; width: number; height: number }) => void
+  overridePosition?: SnapPositionOverride
+  onPositionChange?: (position: SnapPositionOverride) => void
   paperWidth: number
   /** Same semantics as SnapItem: when portaled into a section instead of the
    *  paper wrapper, subtract these from the rendered top/left so the snap
@@ -395,11 +421,19 @@ const TeacherSnapItem = memo(function TeacherSnapItem({
   const imageRef = useRef<HTMLImageElement>(null)
   const getZoom = useZoom()
 
-  // Use override position if available, otherwise use original snap position
-  const position = useMemo(() =>
-    overridePosition || { top: snap.top, left: snap.left, width: snap.width, height: snap.height },
-    [overridePosition, snap.top, snap.left, snap.width, snap.height]
-  )
+  // Apply override iff its `basedOn` still matches the current author snap
+  // position; otherwise the author has moved the snap and this viewer-set
+  // override is stale → drop it so the author's new position renders.
+  // Overrides written before basedOn existed are applied unconditionally
+  // (back-compat — see SnapPositionOverride doc).
+  const position = useMemo(() => {
+    if (!overridePosition) return { top: snap.top, left: snap.left, width: snap.width, height: snap.height }
+    const b = overridePosition.basedOn
+    if (b && (b.top !== snap.top || b.left !== snap.left || b.width !== snap.width || b.height !== snap.height)) {
+      return { top: snap.top, left: snap.left, width: snap.width, height: snap.height }
+    }
+    return { top: overridePosition.top, left: overridePosition.left, width: overridePosition.width, height: overridePosition.height }
+  }, [overridePosition, snap.top, snap.left, snap.width, snap.height])
 
   const dragStateRef = useRef<{
     isDragging: boolean
@@ -498,6 +532,10 @@ const TeacherSnapItem = memo(function TeacherSnapItem({
       element.style.zIndex = ''
       element.style.cursor = ''
 
+      // Snapshot the snap's author-side position so the render path can
+      // detect future author updates and discard this stale override.
+      const basedOn = { top: snap.top, left: snap.left, width: snap.width, height: snap.height }
+
       if (state.isDragging) {
         const finalTop = state.startTop + state.currentY
         const finalLeft = state.startLeft + state.currentX
@@ -507,6 +545,7 @@ const TeacherSnapItem = memo(function TeacherSnapItem({
           left: finalLeft,
           width: positionRef.current.width,
           height: positionRef.current.height,
+          basedOn,
         })
       } else if (state.isResizing) {
         // Persist the new size via callback
@@ -515,13 +554,14 @@ const TeacherSnapItem = memo(function TeacherSnapItem({
           left: positionRef.current.left,
           width: state.currentWidth,
           height: state.currentHeight,
+          basedOn,
         })
       }
 
       state.isDragging = false
       state.isResizing = false
     }
-  }, [])
+  }, [snap.top, snap.left, snap.width, snap.height])
 
   const handleDragStart = useCallback((e: React.PointerEvent) => {
     e.preventDefault()

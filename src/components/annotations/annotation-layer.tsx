@@ -108,7 +108,7 @@ import { parseStrokes, type AnimatedStroke } from '@/hooks/use-stroke-animation'
 import { useSession } from 'next-auth/react'
 import type { Snap } from '@/types/snap'
 import { PasteSnapHandler } from './paste-snap-handler'
-import { SnapsDisplay, type StudentWorkSnap } from './snaps-display'
+import { SnapsDisplay, type StudentWorkSnap, type SnapOverridesData, type SnapPositionOverride, type SnapPositionOverrides } from './snaps-display'
 import { LayerBadges } from './layer-badges'
 import { SpacersDisplay } from './spacers-display'
 import { createLogger } from '@/lib/logger'
@@ -1274,10 +1274,10 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
     }))
   }, [isTeacher, studentForFeedback, studentWorkData, isLayerVisible])
 
-  // Position overrides for teacher/public snaps (persisted via useSyncedUserData for all users)
-  // Students can reposition class/individual feedback snaps, all users can reposition public snaps
-  type SnapPositionOverrides = Record<string, { top: number; left: number; width: number; height: number }>
-  type SnapOverridesData = { classSnaps: SnapPositionOverrides; feedbackSnaps: SnapPositionOverrides; publicSnaps?: SnapPositionOverrides; studentWorkSnaps?: SnapPositionOverrides }
+  // Position overrides for teacher/public snaps (persisted via useSyncedUserData for all users).
+  // Students can reposition class/individual feedback snaps, all users can reposition public snaps.
+  // Types now live in snaps-display.ts (imported above) so the basedOn supersession shape stays
+  // canonical across the override producer and consumer.
   const emptySnapOverrides = useMemo(() => ({ classSnaps: {}, feedbackSnaps: {}, publicSnaps: {} } as SnapOverridesData), [])
   const { data: userSnapOverrides, updateData: updateSnapOverrides, isLoading: snapOverridesLoading } = useSyncedUserData<SnapOverridesData>(
     pageId, // Persist for all users (not just students) so public snap overrides work
@@ -1320,11 +1320,13 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
     return base
   }, [userSnapOverrides, teacherSnapOverrides, isTeacher])
 
-  // Callback for when user moves/resizes a teacher or public snap
+  // Callback for when user moves/resizes a teacher or public snap.
+  // `position` carries `basedOn` from the snap item so the render path can later
+  // discard this override when the author's snap position no longer matches.
   const handleTeacherSnapOverride = useCallback((
     snapId: string,
     layerType: 'class' | 'individual' | 'public',
-    position: { top: number; left: number; width: number; height: number }
+    position: SnapPositionOverride
   ) => {
     const key = layerType === 'class' ? 'classSnaps' : layerType === 'public' ? 'publicSnaps' : 'feedbackSnaps'
     const currentOverrides = userSnapOverrides ?? { classSnaps: {}, feedbackSnaps: {}, publicSnaps: {} }
@@ -1342,7 +1344,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
   // Callback for when teacher moves/resizes a student work snap
   const handleStudentWorkSnapOverride = useCallback((
     snapId: string,
-    position: { top: number; left: number; width: number; height: number }
+    position: SnapPositionOverride
   ) => {
     setTeacherSnapOverrides(prev => ({
       ...prev,

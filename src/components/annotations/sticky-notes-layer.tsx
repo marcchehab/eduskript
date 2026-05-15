@@ -95,6 +95,30 @@ export interface StickyNotesData {
   notes: StickyNote[]
 }
 
+/**
+ * Per-viewer position override for a public sticky note. Viewers can drag a
+ * public note off where the author placed it without mutating the author's
+ * canonical position. `basedOn` captures the author's x/y/width/height at the
+ * moment the override was written: when the author later moves or resizes the
+ * note, basedOn no longer matches and the override is discarded so every
+ * viewer sees the author's new placement.
+ *
+ * Mirrors SnapPositionOverride in snaps-display.tsx. Color and content are
+ * never overridable by viewers — they always reflect the author's state.
+ */
+export interface StickyNotePositionOverride {
+  x: number
+  y: number
+  width: number
+  height: number
+  basedOn?: { x: number; y: number; width: number; height: number }
+}
+
+export interface StickyNotePositionOverridesData {
+  /** Keyed by note id */
+  overrides: Record<string, StickyNotePositionOverride>
+}
+
 // ---------------------------------------------------------------------------
 // Constants & colour config
 // ---------------------------------------------------------------------------
@@ -255,6 +279,49 @@ export function StickyNotesLayer({ pageId, children, isExamStudent, publicSticky
     INITIAL_DATA,
     pageBroadcastSyncOptions,
   )
+
+  // Per-viewer overrides for public sticky-note positions. Same model as snap
+  // overrides (see SnapOverridesData in snaps-display.tsx): every viewer
+  // (auth + anon) can drag a public note to their preferred spot without
+  // mutating the author's canonical position. Stored in the viewer's personal
+  // user_data — IndexedDB-only for anon, synced cross-device for logged-in.
+  const emptyStickyOverrides = useMemo<StickyNotePositionOverridesData>(() => ({ overrides: {} }), [])
+  const { data: stickyNoteOverrides, updateData: updateStickyNoteOverrides } = useSyncedUserData<StickyNotePositionOverridesData>(
+    pageId,
+    'sticky-note-overrides',
+    emptyStickyOverrides,
+  )
+
+  const applyOverride = useCallback((note: StickyNote): StickyNote => {
+    const o = stickyNoteOverrides?.overrides?.[note.id]
+    if (!o) return note
+    // Author has moved/resized the note since the override was written →
+    // basedOn no longer matches → discard so the author's new placement wins.
+    if (o.basedOn && (
+      o.basedOn.x !== note.x ||
+      o.basedOn.y !== note.y ||
+      o.basedOn.width !== note.width ||
+      o.basedOn.height !== note.height
+    )) {
+      return note
+    }
+    return { ...note, x: o.x, y: o.y, width: o.width, height: o.height }
+  }, [stickyNoteOverrides])
+
+  const overrideNotePosition = useCallback((note: StickyNote, updates: Partial<Pick<StickyNote, 'x' | 'y' | 'width' | 'height'>>) => {
+    const cur = stickyNoteOverrides?.overrides ?? {}
+    const existing = cur[note.id]
+    const next: StickyNotePositionOverride = {
+      x: updates.x ?? existing?.x ?? note.x,
+      y: updates.y ?? existing?.y ?? note.y,
+      width: updates.width ?? existing?.width ?? note.width,
+      height: updates.height ?? existing?.height ?? note.height,
+      basedOn: { x: note.x, y: note.y, width: note.width, height: note.height },
+    }
+    updateStickyNoteOverrides({
+      overrides: { ...cur, [note.id]: next },
+    })
+  }, [stickyNoteOverrides, updateStickyNoteOverrides])
 
   // Collect broadcast notes per layer so visibility can be checked independently
   const broadcastNotesByLayer: { layerKey: string; notes: StickyNote[] }[] = useMemo(() => {
@@ -685,11 +752,17 @@ export function StickyNotesLayer({ pageId, children, isExamStudent, publicSticky
         )
       })}
 
-      {/* Broadcast notes from teacher (read-only). Anchored the same way as
-          owned notes — no display-only repositionStickyNote call needed; the
-          section portal carries them through layout changes. */}
+      {/* Broadcast notes from teacher. Anchored the same way as owned notes
+          — the section portal carries them through layout changes.
+          Public-layer notes are viewer-overridable for position: any viewer
+          can drag/resize without mutating the author's canonical placement.
+          Color, content, delete, and minimize remain author-only. */}
       {paperEl && broadcastNotesByLayer.map(layer =>
-        isLayerVisible(layer.layerKey) && layer.notes.map(note => {
+        isLayerVisible(layer.layerKey) && layer.notes.map(rawNote => {
+          const isPublicLayer = layer.layerKey === 'public'
+          // Apply per-viewer position override only for public notes; class /
+          // individual broadcasts stay where the teacher placed them.
+          const note = isPublicLayer ? applyOverride(rawNote) : rawNote
           const r = resolveTarget(note)
           if (!r) return null
           return createPortal(
@@ -700,6 +773,9 @@ export function StickyNotesLayer({ pageId, children, isExamStudent, publicSticky
               readOnly
               originX={r.originX}
               originY={r.originY}
+              onPositionOverride={isPublicLayer
+                ? (updates) => overrideNotePosition(rawNote, updates)
+                : undefined}
             />,
             r.target,
             `note-portal:broadcast:${note.id}`,
@@ -719,8 +795,16 @@ interface StickyNoteCardProps {
   paperEl: HTMLElement
   onUpdate?: (updates: Partial<StickyNote>) => void
   onDelete?: () => void
-  /** When true, note is non-interactive (broadcast notes for students) */
+  /** When true, content / color / minimize / delete are non-interactive
+   *  (broadcast notes). Drag and resize stay disabled too UNLESS
+   *  `onPositionOverride` is provided — see below. */
   readOnly?: boolean
+  /** When defined, drag and resize are enabled even with `readOnly`, but the
+   *  new position is reported back here instead of through `onUpdate`. Used
+   *  for the viewer-overridable mode on public sticky notes: viewers can
+   *  reposition the note locally without mutating the author's canonical
+   *  placement. */
+  onPositionOverride?: (updates: { x?: number; y?: number; width?: number; height?: number }) => void
   /** When the card is portaled into a section (rather than the paper), the
    *  section's top-left isn't aligned with the paper's top-left. We subtract
    *  these offsets from note.x/note.y at render time so the note still appears
@@ -730,7 +814,7 @@ interface StickyNoteCardProps {
   originY?: number
 }
 
-function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly, originX = 0, originY = 0 }: StickyNoteCardProps) {
+function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly, onPositionOverride, originX = 0, originY = 0 }: StickyNoteCardProps) {
   const cardRef = useRef<HTMLDivElement>(null)
   const getZoom = useZoom()
   const [showColorPicker, setShowColorPicker] = useState(false)
@@ -759,10 +843,19 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly, originX =
     }
   }, [note.content])
 
+  // Drag/resize are gated on either onUpdate (author edits) or
+  // onPositionOverride (viewer overrides). When both are unset the card is
+  // truly inert (eg. class-broadcast notes shown to students).
+  const positionMutable = !!onUpdate || !!onPositionOverride
+  const reportPosition = useCallback((p: { x?: number; y?: number; width?: number; height?: number }) => {
+    if (onPositionOverride) onPositionOverride(p)
+    else onUpdate?.(p)
+  }, [onPositionOverride, onUpdate])
+
   // ---- Drag ----------------------------------------------------------------
 
   const handleDragStart = useCallback((e: React.MouseEvent) => {
-    if (readOnly) return
+    if (!positionMutable) return
     if ((e.target as HTMLElement).closest('textarea,button,input')) return
     e.preventDefault()
 
@@ -786,7 +879,7 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly, originX =
     }
 
     const onUp = (ev: MouseEvent) => {
-      onUpdate?.({
+      reportPosition({
         x: startNoteX + (ev.clientX - startMouseX) / zoom,
         y: startNoteY + (ev.clientY - startMouseY) / zoom,
       })
@@ -797,12 +890,12 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly, originX =
 
     document.addEventListener('mousemove', onMove)
     document.addEventListener('mouseup', onUp)
-  }, [readOnly, note.x, note.y, onUpdate, getZoom])
+  }, [positionMutable, note.x, note.y, reportPosition, getZoom, originX, originY])
 
   // ---- Resize --------------------------------------------------------------
 
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
-    if (readOnly) return
+    if (!positionMutable) return
     e.preventDefault()
     e.stopPropagation()
 
@@ -825,7 +918,7 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly, originX =
     }
 
     const onUp = (ev: MouseEvent) => {
-      onUpdate?.({
+      reportPosition({
         width: Math.max(MIN_WIDTH, startW + (ev.clientX - startMouseX) / zoom),
         height: Math.max(MIN_HEIGHT, startH + (ev.clientY - startMouseY) / zoom),
       })
@@ -836,7 +929,7 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly, originX =
 
     document.addEventListener('mousemove', onMove)
     document.addEventListener('mouseup', onUp)
-  }, [readOnly, note.width, note.height, onUpdate, getZoom])
+  }, [positionMutable, note.width, note.height, reportPosition, getZoom])
 
   // ---- Content -------------------------------------------------------------
 
@@ -895,11 +988,11 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly, originX =
         className={cn(
           'flex items-center gap-1 px-2 py-1.5 select-none shrink-0',
           cfg.header,
-          readOnly ? 'cursor-default' : 'cursor-grab active:cursor-grabbing',
+          positionMutable ? 'cursor-grab active:cursor-grabbing' : 'cursor-default',
           'border-b',
           cfg.border,
         )}
-        onMouseDown={readOnly ? undefined : handleDragStart}
+        onMouseDown={positionMutable ? handleDragStart : undefined}
       >
         {readOnly
           ? <span title="From teacher"><Radio className="w-3 h-3 opacity-50 shrink-0" aria-hidden /></span>
@@ -1012,8 +1105,10 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly, originX =
             spellCheck={!readOnly}
           />
 
-          {/* Resize handle (hidden in read-only mode) */}
-          {!readOnly && (
+          {/* Resize handle. Author edit mode + viewer-override mode both
+              expose it; truly read-only cards (class-broadcast notes shown
+              to students) hide it. */}
+          {positionMutable && (
             <div
               className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize opacity-30 hover:opacity-70 flex items-end justify-end pb-0.5 pr-0.5 transition-opacity"
               onMouseDown={handleResizeStart}
