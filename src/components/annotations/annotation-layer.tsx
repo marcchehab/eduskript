@@ -1352,14 +1352,21 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations =
 
   // Filter out local snaps that are duplicates of public/teacher snaps
   // This prevents showing the same snap twice (once as deletable local, once as read-only public)
-  // The public version takes precedence since it's the authoritative source
+  // The public version takes precedence since it's the authoritative source.
+  // Also gate by activeLayerVisible — the author's own snaps live on the active
+  // layer (personal / page-broadcast / class-broadcast / student-feedback), so
+  // they should hide when that layer is toggled off, the same way annotations
+  // and sticky notes already do. Without this gate, hiding "Public" (= page-
+  // broadcast for the author) hides their public strokes + post-its but leaves
+  // the public snap stuck on screen.
   const filteredSnaps = useMemo(() => {
+    if (!activeLayerVisible) return []
     if (allTeacherSnaps.length === 0) return snaps
     // Create a set of public snap imageUrls for fast lookup
     const publicSnapUrls = new Set(allTeacherSnaps.map(s => s.imageUrl))
     // Filter out any local snaps that have the same imageUrl as a public snap
     return snaps.filter(snap => !publicSnapUrls.has(snap.imageUrl))
-  }, [snaps, allTeacherSnaps])
+  }, [snaps, allTeacherSnaps, activeLayerVisible])
 
   // Extract student work snaps for teachers viewing student's work
   const studentWorkSnapsData: StudentWorkSnap[] = useMemo(() => {
