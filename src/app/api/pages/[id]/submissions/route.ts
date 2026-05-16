@@ -20,6 +20,11 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { checkPagePermissions } from '@/lib/permissions'
+import { generatePseudonym } from '@/lib/privacy/pseudonym'
+
+// UUID v4 shape — the survey provider mints sessionIds as UUIDs (see
+// SurveyProvider). Reject anything else without hitting the DB.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 // Adapters that don't count toward "answers given". annotations/snaps/
 // telemetry are markup or instrumentation; survey-meta is a per-page
@@ -44,6 +49,12 @@ export interface PageSubmissionsResponse {
   isAuthor: boolean
   /** Empty for non-authors (auth gate doubles as data gate). */
   submissions: PageSubmissionRow[]
+  /**
+   * When the caller passes `?sessionId=<uuid>` matching a survey shell user
+   * on this page, this is that user's id. Lets the toolbar highlight the
+   * caller's own anonymous row ("which one is me"). Null otherwise.
+   */
+  yourAnonymousUserId: string | null
 }
 
 /**
@@ -52,13 +63,17 @@ export interface PageSubmissionsResponse {
  * and self-hide based on the response. Same shape as `/author-check`.
  */
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id: pageId } = await params
 
-    const empty: PageSubmissionsResponse = { isAuthor: false, submissions: [] }
+    const empty: PageSubmissionsResponse = {
+      isAuthor: false,
+      submissions: [],
+      yourAnonymousUserId: null,
+    }
 
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
@@ -92,6 +107,30 @@ export async function GET(
       return NextResponse.json(empty)
     }
 
+    // Optional sessionId lookup: caller passes their browser's
+    // localStorage `survey:${pageId}:sessionId` so we can tell them which
+    // anonymous row is theirs. Computing the pseudonym requires the server
+    // HMAC secret, so this has to happen here, not client-side.
+    const sessionIdParam = req.nextUrl.searchParams.get('sessionId')
+    let yourAnonymousUserId: string | null = null
+    if (sessionIdParam && UUID_RE.test(sessionIdParam)) {
+      try {
+        const pseudonym = generatePseudonym(sessionIdParam)
+        const shell = await prisma.user.findFirst({
+          where: {
+            oauthProvider: 'survey',
+            studentPseudonym: pseudonym,
+          },
+          select: { id: true },
+        })
+        if (shell) yourAnonymousUserId = shell.id
+      } catch (err) {
+        // generatePseudonym throws when STUDENT_PSEUDONYM_SECRET is unset
+        // or weak — surface in logs but don't blow up the whole request.
+        console.warn('[API] could not resolve survey sessionId:', err)
+      }
+    }
+
     // Pull every userData row for this page. Volume is bounded by page reach;
     // we group in JS rather than via groupBy to keep one round-trip and have
     // adapter strings available for the answer-vs-markup classification.
@@ -106,7 +145,11 @@ export async function GET(
 
     const userIds = Array.from(new Set(rows.map(r => r.userId)))
     if (userIds.length === 0) {
-      return NextResponse.json({ isAuthor: true, submissions: [] } satisfies PageSubmissionsResponse)
+      return NextResponse.json({
+        isAuthor: true,
+        submissions: [],
+        yourAnonymousUserId,
+      } satisfies PageSubmissionsResponse)
     }
 
     const [users, examSubmissions] = await Promise.all([
@@ -172,7 +215,11 @@ export async function GET(
       })
       .filter((r): r is PageSubmissionRow => r !== null)
 
-    return NextResponse.json({ isAuthor: true, submissions } satisfies PageSubmissionsResponse)
+    return NextResponse.json({
+      isAuthor: true,
+      submissions,
+      yourAnonymousUserId,
+    } satisfies PageSubmissionsResponse)
   } catch (err) {
     console.error('[API] page submissions failed:', err)
     return NextResponse.json({ error: 'Failed to fetch submissions' }, { status: 500 })

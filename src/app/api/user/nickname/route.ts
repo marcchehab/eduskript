@@ -28,7 +28,6 @@ const bodySchema = z.object({
         .string()
         .min(3, 'Nickname must be at least 3 characters')
         .max(32, 'Nickname must be 32 characters or fewer')
-        // eslint-disable-next-line no-control-regex
         .regex(/^[^\x00-\x1f\x7f]+$/, 'Nickname cannot contain control characters'),
     ),
 })

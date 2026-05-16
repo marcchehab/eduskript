@@ -42,6 +42,7 @@ import {
   Trash2,
   ArrowUp,
   ArrowDown,
+  UserCircle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -129,6 +130,7 @@ export function TeacherPageToolbar({
     isAuthor,
     isResolving,
     submissions,
+    yourAnonymousUserId,
     refresh: refreshSubmissions,
   } = usePageSubmissions({ pageId })
 
@@ -210,6 +212,14 @@ export function TeacherPageToolbar({
     out.sort(makeComparator(sortKey, sortDir))
     return out
   }, [students, submissions, resolvedEmails, sortKey, sortDir])
+
+  // Display name of the viewer's own anonymous row (when their browser has a
+  // matching survey sessionId in localStorage). Lets the toolbar show a
+  // "you are X" chip up top so the teacher can spot their own test row.
+  const yourAnonymousDisplayName = useMemo(() => {
+    if (!yourAnonymousUserId) return null
+    return submissions.find(s => s.userId === yourAnonymousUserId)?.displayName ?? null
+  }, [submissions, yourAnonymousUserId])
 
   const counts = useMemo(() => {
     const total = rows.length
@@ -442,6 +452,21 @@ export function TeacherPageToolbar({
             </div>
           )}
 
+          {/* "You are X" chip — visible when this browser's survey sessionId
+              matches a shell user on this page. Lets the viewing teacher
+              spot their own anonymous response row at a glance. */}
+          {yourAnonymousDisplayName && (
+            <div
+              className="flex items-center gap-1 text-xs px-2 py-1 rounded-md border border-dashed border-border text-muted-foreground"
+              title="Your own anonymous survey response on this page"
+            >
+              <UserCircle className="w-3.5 h-3.5" />
+              <span className="truncate max-w-[200px]">
+                You are <strong className="text-foreground">{yourAnonymousDisplayName}</strong>
+              </span>
+            </div>
+          )}
+
           {isExam && selectedClass && (
             <label
               className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none"
@@ -532,6 +557,11 @@ export function TeacherPageToolbar({
                             {row.isAnonymous && (
                               <span className="text-[10px] uppercase tracking-wide px-1 py-0.5 rounded bg-muted text-muted-foreground">
                                 anon
+                              </span>
+                            )}
+                            {row.userId === yourAnonymousUserId && (
+                              <span className="text-[10px] uppercase tracking-wide px-1 py-0.5 rounded bg-primary/15 text-primary">
+                                you
                               </span>
                             )}
                             {isViewingThis && <Eye className="w-3 h-3 text-amber-600 flex-shrink-0" />}

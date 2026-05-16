@@ -28,10 +28,19 @@ interface UsePageSubmissionsResult {
   /** True before the first response. Use to gate the initial "is the viewer an author?" render. */
   isResolving: boolean
   submissions: PageSubmissionRow[]
+  /**
+   * UserId of the survey shell user matching this browser's
+   * `survey:${pageId}:sessionId` localStorage entry, when the viewer ever
+   * answered the page anonymously. Lets the toolbar show "(you)" on that
+   * row. Null when no match.
+   */
+  yourAnonymousUserId: string | null
   refresh: () => void
 }
 
 const POLL_INTERVAL_MS = 10_000
+
+const SURVEY_SESSION_KEY = (pageId: string) => `survey:${pageId}:sessionId`
 
 export function usePageSubmissions({
   pageId,
@@ -40,6 +49,7 @@ export function usePageSubmissions({
   const [isAuthor, setIsAuthor] = useState(false)
   const [isResolving, setIsResolving] = useState(true)
   const [submissions, setSubmissions] = useState<PageSubmissionRow[]>([])
+  const [yourAnonymousUserId, setYourAnonymousUserId] = useState<string | null>(null)
   const [refetchToken, setRefetchToken] = useState(0)
 
   const refresh = useCallback(() => setRefetchToken(n => n + 1), [])
@@ -48,6 +58,7 @@ export function usePageSubmissions({
     if (!enabled) {
       setSubmissions([])
       setIsAuthor(false)
+      setYourAnonymousUserId(null)
       setIsResolving(false)
       return
     }
@@ -55,15 +66,29 @@ export function usePageSubmissions({
     let cancelled = false
     let interval: ReturnType<typeof setInterval> | null = null
 
+    // Read once on mount: if this browser ever answered the survey on this
+    // page anonymously, the sessionId is in localStorage and we pass it to
+    // the server so the server can resolve it to a userId. The pseudonym
+    // derivation needs the server HMAC secret, so the client can't do it.
+    let sessionId: string | null = null
+    try {
+      sessionId = window.localStorage.getItem(SURVEY_SESSION_KEY(pageId))
+    } catch { /* localStorage unavailable */ }
+
+    const url = sessionId
+      ? `/api/pages/${pageId}/submissions?sessionId=${encodeURIComponent(sessionId)}`
+      : `/api/pages/${pageId}/submissions`
+
     const load = async () => {
       try {
-        const res = await fetch(`/api/pages/${pageId}/submissions`, { cache: 'no-store' })
+        const res = await fetch(url, { cache: 'no-store' })
         if (cancelled) return
         if (res.ok) {
           const data: PageSubmissionsResponse = await res.json()
           if (cancelled) return
           setIsAuthor(data.isAuthor)
           setSubmissions(data.submissions ?? [])
+          setYourAnonymousUserId(data.yourAnonymousUserId ?? null)
           // Stop the heartbeat for non-authors — they'll never see the
           // toolbar, so polling wastes a request every 10s per public viewer.
           if (!data.isAuthor && interval) {
@@ -86,5 +111,5 @@ export function usePageSubmissions({
     }
   }, [pageId, enabled, refetchToken])
 
-  return { isAuthor, isResolving, submissions, refresh }
+  return { isAuthor, isResolving, submissions, yourAnonymousUserId, refresh }
 }

@@ -1,11 +1,18 @@
 #!/usr/bin/env tsx
 /**
- * Backfill legacy student nicknames.
+ * Backfill legacy + anonymous-survey student nicknames.
  *
- * Existing students were created with `name = "Student abc1"` — a 4-char
- * random suffix. After the signup paths were switched to write the stable
- * "Adjective Philosopher xxxx" form, this script rewrites the legacy rows
- * to match. Idempotent: only touches names matching the legacy regex.
+ * Two passes:
+ *   1. Legacy student accounts whose `name` matches `^Student [a-z0-9]{4}$`
+ *      (the old eager-random pattern). Rewritten to the stable form.
+ *   2. Anonymous survey shell users (`oauthProvider = 'survey'`) created
+ *      before the signup path was patched — `name IS NULL`. Filled in with
+ *      the same stable form. After this pass, every survey row in the
+ *      teacher submissions toolbar has a friendly name; the UI no longer
+ *      shows two `—` rows that the teacher can't tell apart.
+ *
+ * Idempotent: pass 1 only touches names matching the legacy regex; pass 2
+ * only touches null names. Re-running is a no-op once converged.
  *
  * Usage:
  *   npx tsx scripts/backfill-student-nicknames.ts [--dry-run]
@@ -75,12 +82,46 @@ for (const u of candidates) {
   updated++
 }
 
+/* --- Pass 2: anonymous survey shell users with null name --- */
+
+const anonCandidates = await prisma.user.findMany({
+  where: {
+    oauthProvider: 'survey',
+    name: null,
+    studentPseudonym: { not: null },
+  },
+  select: { id: true, studentPseudonym: true },
+})
+
+let anonUpdated = 0
+
+for (const u of anonCandidates) {
+  if (!u.studentPseudonym) continue
+  const next = getStableStudentNickname(u.studentPseudonym)
+  if (dryRun) {
+    console.log(`[dry] ${u.id}: null -> "${next}" (anon survey)`)
+  } else {
+    await prisma.user.update({
+      where: { id: u.id },
+      data: { name: next },
+      select: { id: true },
+    })
+  }
+  anonUpdated++
+}
+
 console.log(JSON.stringify({
   mode: dryRun ? 'dry-run' : 'apply',
-  scanned: candidates.length,
-  updated,
-  skippedNonLegacyShape: skippedShape,
-  unchanged,
+  pass1: {
+    scanned: candidates.length,
+    updated,
+    skippedNonLegacyShape: skippedShape,
+    unchanged,
+  },
+  pass2: {
+    scanned: anonCandidates.length,
+    updated: anonUpdated,
+  },
 }, null, 2))
 
 await prisma.$disconnect()
