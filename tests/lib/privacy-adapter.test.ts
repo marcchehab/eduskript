@@ -72,6 +72,7 @@ vi.mock('@/lib/trial', () => ({
 // Mock pseudonym generation
 vi.mock('@/lib/privacy/pseudonym', () => ({
   generatePseudonym: vi.fn((email: string) => `pseudonym_${email.split('@')[0]}`),
+  getStableStudentNickname: vi.fn((pseudonym: string) => `Wise Seneca ${pseudonym.slice(0, 4)}`),
 }))
 
 describe('OAuth Signup Flow', () => {
@@ -180,8 +181,10 @@ describe('OAuth Signup Flow', () => {
 
       // Should NOT use the real name
       expect(createCall.data.name).not.toBe('John Doe')
-      // Should use anonymous name pattern
-      expect(createCall.data.name).toMatch(/^Student [a-z0-9]+$/)
+      // Should use the deterministic Adjective Philosopher xxxx pattern from
+      // getStableStudentNickname (mocked above to return "Wise Seneca <4>"
+      // so the assertion stays decoupled from the production word list).
+      expect(createCall.data.name).toMatch(/^Wise Seneca [a-z0-9]+$/)
     })
   })
 

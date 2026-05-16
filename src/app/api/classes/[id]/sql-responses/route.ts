@@ -98,7 +98,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
       return {
         studentId: m.student.id,
-        displayName: m.student.name ?? `Student ${(m.student.studentPseudonym ?? '').slice(0, 6)}`,
+        displayName: m.student.name ?? '—',
         isCorrect,
         submittedAt: record?.updatedAt ? record.updatedAt.getTime() : null,
       }

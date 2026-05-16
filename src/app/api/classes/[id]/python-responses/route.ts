@@ -85,7 +85,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         notAttempted++
         return {
           studentId: m.student.id,
-          displayName: m.student.name ?? `Student ${(m.student.studentPseudonym ?? '').slice(0, 6)}`,
+          displayName: m.student.name ?? '—',
           testsPassed: null,
           totalTests: null,
           earnedPoints: null,
@@ -106,7 +106,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
       return {
         studentId: m.student.id,
-        displayName: m.student.name ?? `Student ${(m.student.studentPseudonym ?? '').slice(0, 6)}`,
+        displayName: m.student.name ?? '—',
         testsPassed,
         totalTests,
         earnedPoints: data.earnedPoints,

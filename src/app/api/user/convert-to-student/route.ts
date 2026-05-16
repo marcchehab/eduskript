@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { generatePseudonym } from '@/lib/privacy/pseudonym'
+import { generatePseudonym, getStableStudentNickname } from '@/lib/privacy/pseudonym'
 
 /**
  * POST /api/user/convert-to-student
@@ -31,7 +31,7 @@ export async function POST() {
   }
 
   const pseudonym = user.email ? generatePseudonym(user.email) : null
-  const anonymousName = `Student ${Math.random().toString(36).substring(2, 6)}`
+  const anonymousName = pseudonym ? getStableStudentNickname(pseudonym) : null
 
   // Convert to student and drop the teacher's Site (slug + display fields)
   // so that pageSlug is freed up for another user to claim.

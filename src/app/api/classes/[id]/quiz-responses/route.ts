@@ -201,7 +201,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return {
         studentId: m.student.id,
         pseudonym: m.student.studentPseudonym ?? '',
-        displayName: m.student.name ?? `Student ${m.student.studentPseudonym?.slice(0, 6)}`,
+        displayName: m.student.name ?? '—',
         data: quizData,
         submittedAt: response?.updatedAt ? response.updatedAt.getTime() : null,
         isCorrect,

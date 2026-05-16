@@ -126,13 +126,12 @@ export function AuthButton({ pageId, teacherPageSlug, teacherBillingPlan, isOrgP
     )
   }
 
-  // Logged in - show edit button or user avatar/icon
+  // Logged in - show edit button or user avatar/icon.
+  // Students get the stable nickname written to `name` at signup (e.g.
+  // "Wise Seneca a3f5"). Don't synthesise a fallback from the pseudonym —
+  // the DB column is the source of truth.
   const isStudent = session.user?.accountType === 'student'
-  const userName = isStudent
-    ? (session.user?.studentPseudonym
-        ? `Student ${session.user.studentPseudonym.substring(0, 4)}`
-        : 'Student')
-    : session.user?.name || 'User'
+  const userName = session.user?.name || (isStudent ? 'Student' : 'User')
 
   // If user can edit this page, show profile picture with edit overlay
   if (editUrl && !isStudent) {

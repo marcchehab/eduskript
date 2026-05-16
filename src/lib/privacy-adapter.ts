@@ -72,7 +72,7 @@
 import type { Adapter, AdapterUser, AdapterAccount } from 'next-auth/adapters'
 import { PrismaAdapter } from '@auth/prisma-adapter'
 import { PrismaClient } from '@prisma/client'
-import { generatePseudonym } from './privacy/pseudonym'
+import { generatePseudonym, getStableStudentNickname } from './privacy/pseudonym'
 import { createLogger } from '@/lib/logger'
 import { createTrialSubscription } from '@/lib/trial'
 
@@ -328,8 +328,12 @@ export function PrivacyAdapter(options: PrivacyAdapterOptions): Adapter {
       if (signupContext.isStudent) {
         let createdUser
         try {
-          const anonymousName = `Student ${Math.random().toString(36).substring(2, 6)}`
           const emailPseudonym = user.email ? generatePseudonym(user.email) : null
+          // Deterministic from the pseudonym so the nickname is stable across
+          // sessions/devices. The 4-char hex tail comes from chars 8-12 of
+          // the same pseudonym — collisions need both the adj/phil pair AND
+          // the tail to match, ~26M combinations.
+          const anonymousName = emailPseudonym ? getStableStudentNickname(emailPseudonym) : null
 
           createdUser = await prisma.user.create({
             data: {

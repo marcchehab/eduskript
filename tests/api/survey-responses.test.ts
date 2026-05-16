@@ -31,6 +31,7 @@ vi.mock('@/lib/prisma', () => ({
 }))
 vi.mock('@/lib/privacy/pseudonym', () => ({
   generatePseudonym: (input: string) => `pseudo-${input}`,
+  getStableStudentNickname: (pseudonym: string) => `Wise Seneca ${pseudonym.slice(0, 4)}`,
 }))
 
 import { getServerSession } from 'next-auth'

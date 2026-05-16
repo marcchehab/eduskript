@@ -185,10 +185,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       updatedAtMap[item.adapter] = item.updatedAt.getTime()
     }
 
-    // Determine display name based on identity consent
+    // Determine display name based on identity consent. We never synthesise
+    // a fallback nickname — the DB column is the source of truth, and signup
+    // writes a stable nickname into User.name.
     const displayName = membership.identityConsent
-      ? membership.student.name || membership.student.email || 'Unknown'
-      : `Student ${membership.student.studentPseudonym?.slice(0, 8) || studentId.slice(0, 8)}`
+      ? membership.student.name || membership.student.email || '—'
+      : membership.student.name || '—'
 
     return NextResponse.json({
       studentId,

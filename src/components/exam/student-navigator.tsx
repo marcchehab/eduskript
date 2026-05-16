@@ -55,8 +55,7 @@ export function StudentNavigator({ pageId }: StudentNavigatorProps) {
     const resolved = s.studentPseudonym ? resolvedEmails[s.studentPseudonym] : null
     if (resolved) return resolved
     if (s.name) return s.name
-    if (s.studentPseudonym) return `Student ${s.studentPseudonym.slice(0, 8)}`
-    return 'Unknown student'
+    return '—'
   }, [resolvedEmails])
 
   // Filtered list the arrows cycle through. Sorted: submitted first (most

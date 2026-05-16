@@ -187,3 +187,18 @@ export function getStudentDisplayName(pseudonym: string): string {
 
   return `${adjective} ${philosopher}`
 }
+
+/**
+ * Stable student nickname for writing into `User.name` at signup.
+ *
+ * Adjective + Philosopher + 4-char hex tail derived from the pseudonym.
+ * The tail makes cross-class collisions effectively impossible (20 × 20 ×
+ * 65536 ≈ 26M combinations) without an active collision-check at class-join
+ * time. Deterministic — same pseudonym always produces the same nickname.
+ *
+ * @example
+ * getStableStudentNickname('a3f5b9c2d8e1f4a7...') // => 'Wise Seneca d8e1'
+ */
+export function getStableStudentNickname(pseudonym: string): string {
+  return `${getStudentDisplayName(pseudonym)} ${pseudonym.slice(8, 12)}`
+}

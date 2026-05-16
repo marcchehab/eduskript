@@ -21,7 +21,7 @@ import { getServerSession } from 'next-auth'
 import { Prisma } from '@prisma/client'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { generatePseudonym } from '@/lib/privacy/pseudonym'
+import { generatePseudonym, getStableStudentNickname } from '@/lib/privacy/pseudonym'
 import { RateLimiter, getClientIdentifier } from '@/lib/rate-limit'
 
 const SURVEY_PROVIDER = 'survey'
@@ -185,6 +185,9 @@ export async function POST(request: NextRequest) {
           oauthProvider: SURVEY_PROVIDER,
           oauthProviderId: sessionId,
           studentPseudonym: pseudonym,
+          // Deterministic stable nickname so survey rows render the same
+          // friendly name as any other student row in the submissions toolbar.
+          name: getStableStudentNickname(pseudonym),
         },
       })
 
