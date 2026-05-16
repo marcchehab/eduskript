@@ -4,7 +4,7 @@
  * Marks the React tree as "this is an exam page".
  *
  * Currently used by `AnnotationToolbar` to hide its class/student/audience
- * selector — the `TeacherExamToolbar` at the top of the exam page is the
+ * selector — the `TeacherPageToolbar` at the top of the exam page is the
  * canonical class+student controller there, and two selectors writing to
  * the same `useTeacherClass()` context just confused teachers. Non-exam
  * pages don't mount this provider, so the default `false` keeps existing

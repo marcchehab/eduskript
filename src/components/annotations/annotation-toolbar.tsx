@@ -248,7 +248,7 @@ export function AnnotationToolbar({
 
   const dialog = useAlertDialog()
 
-  // On exam pages, the TeacherExamToolbar owns class+student selection; hide
+  // On exam pages, the TeacherPageToolbar owns class+student selection; hide
   // the duplicate audience selector here. Default false on non-exam pages.
   const isExamPage = useIsExamPage()
 
@@ -609,7 +609,7 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
       <div className="bg-background/95 backdrop-blur border border-border rounded-lg shadow-lg p-2 flex items-center gap-1">
 
         {/* ============ SECTION 1: Broadcast Controls (Teachers and Page Authors) ============
-            Hidden on exam pages: the TeacherExamToolbar at the top of the
+            Hidden on exam pages: the TeacherPageToolbar at the top of the
             page is the canonical class+student controller there, and having
             two selectors writing to the same useTeacherClass() context
             confuses teachers. */}

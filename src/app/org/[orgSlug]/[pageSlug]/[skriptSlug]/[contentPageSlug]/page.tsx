@@ -9,7 +9,7 @@ import { SEBRequiredPage } from '@/components/exam/seb-required-page'
 import { ExamSubmittedPage } from '@/components/exam/exam-submitted-page'
 import { ExamLayout } from '@/components/exam/exam-layout'
 import { ExamWaitingRoom } from '@/components/exam/exam-waiting-room'
-import { TeacherExamToolbar } from '@/components/exam/teacher-exam-toolbar'
+import { TeacherPageToolbar } from '@/components/teacher/page-toolbar'
 import { ExamDataSync } from '@/components/exam/exam-data-sync'
 import { isSEBRequest, type ExamSettings } from '@/lib/seb'
 import { validateExamToken, validateExamSession } from '@/lib/exam-tokens'
@@ -541,9 +541,14 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
       pageId={page.id}
       hideSidebar={page.pageType === 'exam'}
     >
-      {isTeacherViewingExam && (
-        <TeacherExamToolbar
+      {/* Toolbar shows for teachers on their own page. On exam pages it carries
+          the full exam controls (state, reopen) + the submissions list; on
+          non-exam pages it's the submissions list alone. Suppressed when an
+          exam student is actively in-session on this page. */}
+      {(isTeacherViewingExam || (isPageAuthor && !isInExamSession)) && (
+        <TeacherPageToolbar
           pageId={page.id}
+          pageType={page.pageType ?? 'standard'}
           unlockedClasses={unlockedClassesForExam}
         />
       )}

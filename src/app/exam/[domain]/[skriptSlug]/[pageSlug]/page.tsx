@@ -14,7 +14,7 @@ import { PublicPageBody } from '@/components/public/public-page-body'
 import { ExamLockedPage } from '@/components/exam/exam-locked-page'
 import { SEBRequiredPage } from '@/components/exam/seb-required-page'
 import { ExamSubmittedPage } from '@/components/exam/exam-submitted-page'
-import { TeacherExamToolbar } from '@/components/exam/teacher-exam-toolbar'
+import { TeacherPageToolbar } from '@/components/teacher/page-toolbar'
 import { ExamDataSync } from '@/components/exam/exam-data-sync'
 import { StudentNavigator } from '@/components/exam/student-navigator'
 import { StudentSnapshotProvider } from '@/contexts/student-snapshot-context'
@@ -277,8 +277,9 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
   const body = (
     <>
       {isTeacherAuthor && (
-        <TeacherExamToolbar
+        <TeacherPageToolbar
           pageId={page.id}
+          pageType="exam"
           unlockedClasses={unlockedClassesForExam}
         />
       )}
