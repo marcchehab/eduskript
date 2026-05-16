@@ -124,7 +124,27 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     })
 
     // Get the student IDs
-    const studentIds = memberships.map(m => m.student.id)
+    let studentIds = memberships.map(m => m.student.id)
+
+    // For implicit (survey) classes, drop members who haven't actually saved
+    // any quiz answer on this page. The survey POST creates a membership
+    // before writing answers, and a Send with all-empty fields (or a session
+    // abandoned mid-answer in an older client) can leave a member row that
+    // never gets a `quiz-*` userData. Without this filter the per-question
+    // progress bar shows "1/2 answered" when only one person really answered.
+    if (classRecord.isImplicit && studentIds.length > 0) {
+      const respondingRows = await prisma.userData.findMany({
+        where: {
+          userId: { in: studentIds },
+          itemId: pageId,
+          adapter: { startsWith: 'quiz-' },
+        },
+        select: { userId: true },
+        distinct: ['userId'],
+      })
+      const responders = new Set(respondingRows.map(r => r.userId))
+      studentIds = studentIds.filter(id => responders.has(id))
+    }
 
     // Get quiz responses for all students in the class
     // The adapter is the componentId (e.g., "quiz-q1"), itemId is the pageId
@@ -152,16 +172,24 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       ? JSON.parse(correctIndicesParam)
       : []
 
+    // For implicit classes we've filtered `studentIds` to actual responders;
+    // narrow the memberships set the same way so stats.total and the row
+    // list both reflect the filtered roster. For non-implicit (classroom)
+    // classes this is a no-op.
+    const visibleMemberships = classRecord.isImplicit
+      ? memberships.filter(m => studentIds.includes(m.student.id))
+      : memberships
+
     // Build response items and calculate stats
     const stats: QuizStats = {
       correct: 0,
       partial: 0,
       wrong: 0,
       notAnswered: 0,
-      total: memberships.length
+      total: visibleMemberships.length
     }
 
-    const responseItems: QuizResponseItem[] = memberships.map(m => {
+    const responseItems: QuizResponseItem[] = visibleMemberships.map(m => {
       const response = responseMap.get(m.student.id)
       const quizData = response?.data ?? null
       const isSubmitted = quizData?.isSubmitted ?? false
