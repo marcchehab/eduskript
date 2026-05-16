@@ -143,7 +143,16 @@ export async function GET(
       },
     })
 
-    const userIds = Array.from(new Set(rows.map(r => r.userId)))
+    // Authors are not respondents. Skript-level authors inherit page edit
+    // rights via the permission model (see checkPagePermissions), so they're
+    // excluded too — otherwise a co-author who once previewed the page would
+    // show up in the teacher's own submission roster as a "student".
+    const authorIds = new Set<string>([
+      ...page.authors.map(a => a.user.id),
+      ...page.skript.authors.map(a => a.user.id),
+    ])
+
+    const userIds = Array.from(new Set(rows.map(r => r.userId))).filter(id => !authorIds.has(id))
     if (userIds.length === 0) {
       return NextResponse.json({
         isAuthor: true,

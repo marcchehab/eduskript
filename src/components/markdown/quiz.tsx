@@ -424,7 +424,32 @@ function QuestionInner({
   )
 }
 
-// Helper to extract correct indices and option labels from children
+// Recursively walk a ReactNode and concatenate its text content. Needed
+// because option content can be more than a bare string (e.g. inline HTML
+// like <br>, or rehype-raw splitting "foo&amp;bar" into multiple nodes).
+function extractTextFromChildren(node: ReactNode): string {
+  if (node == null || node === false || node === true) return ''
+  if (typeof node === 'string') return node
+  if (typeof node === 'number') return String(node)
+  if (Array.isArray(node)) return node.map(extractTextFromChildren).join('')
+  if (typeof node === 'object' && 'props' in node) {
+    return extractTextFromChildren((node as ReactElement<{ children?: ReactNode }>).props.children)
+  }
+  return ''
+}
+
+// Build the option-label and correct-index arrays the teacher view consumes.
+//
+// IMPORTANT: indexing matches what the rendering UI passes to handleSelect,
+// which is `Children.toArray(children).map((child, index)`. After rehype-raw,
+// the remark plugin's `<answer>…</answer>\n<answer>…</answer>` emission leaves
+// whitespace text nodes between each <answer>, so element-only positions are
+// odd numbers (1, 3, 5, …) — not 0, 1, 2.
+//
+// Storing labels at the raw index keeps stored `selected` indices, the URL-
+// param `correctIndices`, and `options[i]` lookups in `quiz-progress-bar`
+// all aligned without a data migration. The resulting array is sparse; gaps
+// are intentional (whitespace positions are unselectable).
 function extractOptionsInfo(children: ReactNode, type: 'single' | 'multiple' | 'text' | 'number' | 'range') {
   const correctIndices: number[] = []
   const optionLabels: string[] = []
@@ -434,15 +459,11 @@ function extractOptionsInfo(children: ReactNode, type: 'single' | 'multiple' | '
       if (child && typeof child === 'object' && 'props' in child) {
         const element = child as ReactElement<OptionProps>
         if (element.props) {
-          // Check if this option is marked as correct
           if (element.props.correct === 'true') {
             correctIndices.push(index)
           }
-          // Extract text content for option label
-          const label = typeof element.props.children === 'string'
-            ? element.props.children
-            : `Option ${index + 1}`
-          optionLabels.push(label)
+          const text = extractTextFromChildren(element.props.children).trim()
+          optionLabels[index] = text || `Option ${index + 1}`
         }
       }
     })
