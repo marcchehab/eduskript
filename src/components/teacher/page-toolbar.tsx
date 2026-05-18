@@ -23,7 +23,7 @@
  */
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   Users,
   CheckCircle2,
@@ -54,6 +54,7 @@ import {
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
+import { useLayout } from '@/contexts/layout-context'
 import { useExamRoster, type ExamRosterStudent } from '@/hooks/use-exam-roster'
 import { usePageSubmissions, type PageSubmissionRow } from '@/hooks/use-page-submissions'
 import { getReverseMappingsForClass } from '@/lib/email-mapping-db'
@@ -115,6 +116,7 @@ export function TeacherPageToolbar({
   const [sortKey, setSortKey] = useState<SortKey>('activity')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const dialog = useAlertDialog()
+  const { sidebarWidth } = useLayout()
 
   const {
     students,
@@ -330,18 +332,21 @@ export function TeacherPageToolbar({
   // Empty-shell case: exam page with no unlocked classes AND no submissions.
   if (isExam && unlockedClasses.length === 0 && submissions.length === 0) {
     return (
-      <div className="bg-muted/50 border border-border rounded-lg p-3 mb-4">
-        <p className="text-sm text-muted-foreground text-center">
-          No classes have been unlocked for this exam yet.
-        </p>
-      </div>
+      <FixedToolbarFrame sidebarWidth={sidebarWidth}>
+        <div className="bg-muted/50 border border-border rounded-lg p-3">
+          <p className="text-sm text-muted-foreground text-center">
+            No classes have been unlocked for this exam yet.
+          </p>
+        </div>
+      </FixedToolbarFrame>
     )
   }
 
   const stateConfig = getStateConfig(examState)
 
   return (
-    <div className="sticky top-0 z-30 bg-card border border-border rounded-lg mb-4 shadow-sm overflow-hidden">
+    <FixedToolbarFrame sidebarWidth={sidebarWidth}>
+      <div className="bg-card border border-border rounded-lg shadow-sm overflow-hidden">
       <div className="p-3">
         <div className="flex flex-wrap items-center gap-3">
           {/* Class selector — only when there are unlocked classes (exam pages) */}
@@ -635,6 +640,7 @@ export function TeacherPageToolbar({
         </div>
       )}
 
+      </div>
       <AlertDialogModal
         open={dialog.open}
         onOpenChange={dialog.setOpen}
@@ -647,6 +653,31 @@ export function TeacherPageToolbar({
         cancelText={dialog.cancelText}
         destructive={dialog.destructive}
       />
+    </FixedToolbarFrame>
+  )
+}
+
+/**
+ * Anchors the toolbar to the viewport (not the paper) so it doesn't inherit
+ * the `transform: scale()` applied to `.paper-responsive` at narrow widths.
+ * Left-offset matches the desktop sidebar; inner wrapper recenters within the
+ * remaining area at the same max-width as the paper.
+ */
+function FixedToolbarFrame({
+  sidebarWidth,
+  children,
+}: {
+  sidebarWidth: number
+  children: ReactNode
+}) {
+  return (
+    <div
+      className="fixed top-2 z-30 px-2 pointer-events-none"
+      style={{ left: `${sidebarWidth}px`, right: 0 }}
+    >
+      <div className="mx-auto max-w-[1280px] pointer-events-auto">
+        {children}
+      </div>
     </div>
   )
 }
