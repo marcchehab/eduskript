@@ -283,6 +283,39 @@ A centered paragraph below.
 
 The closing \`:::\` is required. Inner content is normal markdown — multi-block blocks need blank lines between them as usual.`)
 
+  // Flex layouts
+  sections.push(`## Flex Layouts (\`<flex>\` / \`<flex-item>\`)
+
+Side-by-side columns that stack on mobile (\`flex-col\` below md, \`flex-row\` at md+).
+
+\`\`\`html
+<flex gap="medium">
+  <flex-item>
+    Left column content. Markdown works inside.
+  </flex-item>
+  <flex-item>
+    Right column content.
+  </flex-item>
+</flex>
+\`\`\`
+
+**\`<flex>\` attributes** (all optional):
+- \`gap="none|small|medium|large"\` (default \`medium\`)
+- \`direction="row|column"\` (default \`row\`; note: mobile always stacks)
+- \`justify="start|center|end|between|around|evenly"\`
+- \`align="start|center|end|stretch|baseline"\`
+- \`wrap="true|false"\` (default \`true\`)
+- \`style="..."\` and \`class="..."\` pass through
+
+**\`<flex-item>\` attributes** (all optional):
+- \`width="49%"\` — explicit width (overrides equal-share distribution)
+- \`grow="false"\` — opt out of growing
+- \`style="..."\` (e.g. \`background-color\`, \`padding\`) and \`class="..."\` pass through
+
+**Equal columns:** omit \`width\` entirely — items default to \`flex: 1\` with \`flex-basis: 0\`, so they divide space equally regardless of content. Only set \`width\` when you want a deliberately uneven split (e.g. \`width="30%"\` + an auto-growing sibling).
+
+Blank lines around markdown blocks inside \`<flex-item>\` are required (standard CommonMark).`)
+
   // Custom CSS
   sections.push(`## Custom CSS
 
@@ -489,6 +522,8 @@ export function getCondensedSyntaxReference(): string {
 **Images:** \`![alt](img.png)\` or \`<img src="img.png" alt="alt" style="width: 50%" align="left" wrap="true" />\`
 
 **Custom CSS:** \`<style>.my-class { ... }</style>\` — scoped CSS blocks are supported. Inline \`style="..."\` also works on any element.
+
+**Flex layouts:** \`<flex gap="medium"><flex-item>Left</flex-item><flex-item>Right</flex-item></flex>\` — side-by-side columns that stack on mobile. Items divide space equally by default (no \`width\` needed); set \`width="30%"\` only for deliberately uneven splits. \`<flex>\` takes \`gap\`, \`direction\`, \`justify\`, \`align\`, \`wrap\`. \`<flex-item>\` accepts \`style\`/\`class\` for backgrounds and padding.
 
 **Tabs:** HTML syntax only:
   \`<tabs-container data-items='["Tab1", "Tab2"]'><tab-item>Content1</tab-item><tab-item>Content2</tab-item></tabs-container>\`

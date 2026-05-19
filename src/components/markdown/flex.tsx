@@ -1,7 +1,7 @@
 'use client'
 
 import { cn } from '@/lib/utils'
-import { ReactNode } from 'react'
+import { CSSProperties, ReactNode } from 'react'
 
 // `data-*` props let the rehypeHeadingSectionIds plugin's section attributes
 // (data-section-id, data-dynamic-height) survive the component substitution —
@@ -11,6 +11,7 @@ interface FlexProps {
   children: ReactNode
   gap?: 'none' | 'small' | 'medium' | 'large'
   className?: string
+  style?: CSSProperties
   wrap?: boolean
   direction?: 'row' | 'column'
   justify?: 'start' | 'center' | 'end' | 'between' | 'around' | 'evenly'
@@ -22,22 +23,27 @@ interface FlexProps {
 interface FlexItemProps {
   children: ReactNode
   className?: string
+  style?: CSSProperties
   width?: string
   grow?: boolean
 }
 
 /**
- * Flex.Item - Child component for flex layouts
+ * Flex.Item - Child component for flex layouts.
+ * When `grow` and no `width` is set, applies `basis-0` so items divide remaining
+ * space equally regardless of content length (otherwise flex-grow sizes from
+ * intrinsic content width first and you get lopsided columns).
  */
-export function FlexItem({ children, className, width, grow = true }: FlexItemProps) {
+export function FlexItem({ children, className, style, width, grow = true }: FlexItemProps) {
   return (
     <div
       className={cn(
         'min-w-0 [&>*:first-child]:!mt-0',
         grow ? 'flex-grow' : 'flex-grow-0',
+        grow && !width && 'basis-0',
         className
       )}
-      style={width ? { width } : undefined}
+      style={{ ...(width ? { width } : {}), ...style }}
     >
       {children}
     </div>
@@ -52,6 +58,7 @@ export function Flex({
   children,
   gap = 'medium',
   className,
+  style,
   wrap = true,
   direction = 'row',
   justify = 'start',
@@ -95,6 +102,7 @@ export function Flex({
         'flex-col md:flex-row',
         className
       )}
+      style={style}
       {...dataAttrs}
     >
       {children}
