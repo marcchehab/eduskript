@@ -820,6 +820,42 @@ export function EditorWithMedia({
                     <Maximize2 className="w-3.5 h-3.5" />
                     Embed pages as images
                   </button>
+                  <button
+                    className="w-full px-3 py-1.5 text-sm text-left hover:bg-accent hover:text-accent-foreground flex items-center gap-2"
+                    onClick={async () => {
+                      const file = insertionMenuFile
+                      setInsertionMenuFile(null)
+
+                      if (file.rawFile) {
+                        const formData = new FormData()
+                        formData.append('file', file.rawFile)
+                        formData.append('uploadType', 'skript')
+                        formData.append('skriptId', skriptId)
+                        try {
+                          const response = await fetch('/api/upload', { method: 'POST', body: formData })
+                          if (!response.ok) {
+                            const err = await response.json().catch(() => ({ error: 'Upload failed' }))
+                            throw new Error(err.error || 'Upload failed')
+                          }
+                          const uploaded = await response.json()
+                          if (uploaded.existed) {
+                            alert.showInfo('A file with this name already existed and was linked. Rename or delete the existing file to re-upload.', 'Existing file used')
+                          }
+                          handleFileInsert({ ...file, id: uploaded.id, url: uploaded.url }, 'link')
+                        } catch (error) {
+                          console.error('PDF upload failed:', error)
+                          alert.showError(error instanceof Error ? error.message : 'Failed to upload PDF')
+                          return
+                        }
+                      } else {
+                        handleFileInsert(file, 'link')
+                      }
+                      refreshFileList()
+                    }}
+                  >
+                    <Link2 className="w-3.5 h-3.5" />
+                    File Link
+                  </button>
                 </>
               )}
             </div>
