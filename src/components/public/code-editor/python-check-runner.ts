@@ -403,21 +403,6 @@ export interface ParsedAssertion {
 }
 
 /**
- * Strip `{interpolation}` parts from a label string (so f-string interpolations
- * don't render literally as `{var}` in the displayed test name). Falls back to
- * the original string if stripping leaves nothing meaningful — better to show
- * the raw `{detail}` body than an `…`-only label.
- */
-function cleanLabel(s: string): string {
-  const stripped = s.replace(/\{[^{}]*\}/g, '…').trim()
-  // If stripping interpolations leaves only the `…` placeholder(s), the
-  // original message had no static text. Show the raw body instead so the
-  // student sees something concrete rather than an opaque ellipsis.
-  const meaningful = stripped.replace(/…/g, '').trim()
-  return meaningful.length > 0 ? stripped : s
-}
-
-/**
  * Parse assertion lines from check code and extract labels.
  * Lines starting with `assert ` are test cases.
  * Non-assert lines are setup code (runs before assertions).
@@ -425,9 +410,10 @@ function cleanLabel(s: string): string {
  * Message syntax:
  *   - `"single message"`        — used for both pass and fail
  *   - `"fail message|pass msg"` — pipe splits fail (left) and pass (right)
- *   - f/r/b string prefixes are accepted; `{interpolations}` are stripped
- *     from the displayed label (the rendered string still surfaces in
- *     `error` when an f-string assert actually fires)
+ *   - f/r/b string prefixes are accepted; `{var}` placeholders are kept
+ *     verbatim and evaluated at runtime as Python f-strings in the
+ *     student's namespace (see `__interp` in the harness below). Failures
+ *     fall back to `…` so a broken interpolation never shows raw braces.
  *
  * Exported for testing.
  */
@@ -458,12 +444,14 @@ export function parseAssertions(checkCode: string): { setupLines: string[]; asse
         // stay in the pass message. Without a pipe, both states share the
         // same label (backward compatible).
         const pipeIdx = raw.indexOf('|')
-        const failRaw = pipeIdx === -1 ? raw : raw.slice(0, pipeIdx)
-        const passRaw = pipeIdx === -1 ? raw : raw.slice(pipeIdx + 1)
+        const failRaw = (pipeIdx === -1 ? raw : raw.slice(0, pipeIdx)).trim()
+        const passRaw = (pipeIdx === -1 ? raw : raw.slice(pipeIdx + 1)).trim()
+        // When the teacher writes `"fail|"` (empty pass), fall back to the
+        // fail label so the row never renders blank on a green checkmark.
         assertions.push({
           line: trimmed,
-          failLabel: cleanLabel(failRaw),
-          passLabel: cleanLabel(passRaw),
+          failLabel: failRaw,
+          passLabel: passRaw.length > 0 ? passRaw : failRaw,
         })
       } else {
         const fallback = `Test ${assertions.length + 1}: \`${trimmed}\``
@@ -532,22 +520,27 @@ export async function runPythonChecks(
   // The harness script reads files from FS and runs them
   const harness = `
 import json
+import re as __re
 
 with open('__eduskript_labels.json') as f:
     __labels = json.load(f)
 
 # Label design:
-#   label  = always the failLabel (describes what the test checks)
-#   detail = passLabel on success (iff teacher wrote one distinct from fail),
-#            "Expected X, got Y" on failed ==, else None
-# This way the student always sees what was tested; the detail line carries
-# the reaction or the value mismatch, and collapses when there's nothing new.
+#   label  = passLabel on pass, failLabel on fail
+#   detail = "Expected X, got Y" on failed ==, else None
+# Labels are wrapped as f-strings and eval'd against the student's namespace
+# so teachers can write \`f"got {x}"\` and have the variable's value rendered
+# at the moment the assertion runs. If evaluation fails (NameError, syntax,
+# anything else) the {…} regions are replaced with an ellipsis so the row
+# never shows broken braces to the student.
 
-def __detail_pass(__i):
-    __entry = __labels[__i]
-    __f = __entry.get("fail")
-    __p = __entry.get("pass")
-    return __p if (__p and __p != __f) else None
+def __interp(s, ns):
+    if not s or '{' not in s:
+        return s
+    try:
+        return eval('f' + repr(s), ns)
+    except Exception:
+        return __re.sub(r'\\{[^{}]*\\}', '…', s)
 
 __count = ${assertions.length}
 __results = []
@@ -578,10 +571,11 @@ try:
     with __cl.redirect_stdout(__stdout_buf):
         exec(compile(__student_code, '<student>', 'exec'), __ns)
 except Exception as __e:
-    # Student code failed — all tests fail with this error
+    # Student code failed — all tests fail with this error. Namespace may be
+    # partially populated; __interp falls back to … on NameError.
     __err = str(__e)
     for __i in range(__count):
-        __results.append({"index": __i, "passed": False, "label": __labels[__i]["fail"], "error": "Code error: " + __err})
+        __results.append({"index": __i, "passed": False, "label": __interp(__labels[__i]["fail"], __ns), "error": "Code error: " + __err})
 
 # Expose captured stdout to setup + asserts as 'output'.
 # Set even on student-error so assertions referencing 'output' get a
@@ -599,13 +593,12 @@ if not __results:
             pass
 
     # Run each assertion independently
-    import re as __re
     for __i in range(__count):
         with open(f'__eduskript_assert_{__i}.py') as f:
             __assert_code = f.read()
         try:
             exec(compile(__assert_code, '<check>', 'exec'), __ns)
-            __results.append({"index": __i, "passed": True, "label": __labels[__i]["fail"], "error": __detail_pass(__i)})
+            __results.append({"index": __i, "passed": True, "label": __interp(__labels[__i]["pass"], __ns), "error": None})
         except AssertionError:
             # Default to no error detail — str(AssertionError) is just the
             # assert's custom message, which we already show as the label.
@@ -621,9 +614,9 @@ if not __results:
                     __err_msg = f"Expected {__expected!r}, got {__actual!r}"
                 except Exception:
                     pass
-            __results.append({"index": __i, "passed": False, "label": __labels[__i]["fail"], "error": __err_msg})
+            __results.append({"index": __i, "passed": False, "label": __interp(__labels[__i]["fail"], __ns), "error": __err_msg})
         except Exception as __e:
-            __results.append({"index": __i, "passed": False, "label": __labels[__i]["fail"], "error": str(__e)})
+            __results.append({"index": __i, "passed": False, "label": __interp(__labels[__i]["fail"], __ns), "error": str(__e)})
 
 json.dumps(__results)
 `

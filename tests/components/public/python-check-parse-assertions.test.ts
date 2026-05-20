@@ -10,17 +10,17 @@ describe('parseAssertions', () => {
       expect(assertions[0].passLabel).toBe('fn(5) sollte 25 ergeben.')
     })
 
-    it('extracts f-string messages and strips {interpolations} from the label', () => {
-      // Regression: the previous regex required a bare quote, missed the `f`
-      // prefix, and fell back to showing the whole raw assert source as the
-      // test name. f-string labels with `{var}` parts were doubly bad — they'd
-      // show the raw assert plus the rendered error.
+    it('extracts f-string messages and keeps {interpolations} verbatim for runtime eval', () => {
+      // The Python harness evaluates each label as an f-string against the
+      // student's namespace, so `{var}` placeholders must reach Python intact.
+      // (The harness falls back to `…` on NameError, so a missing var still
+      // never renders raw braces to the student.)
       const { assertions } = parseAssertions(
         `assert "regenschirm" in res.lower(), f"Bei (10, True) fehlt 'Regenschirm'. Antwort war: {res}"`,
       )
       expect(assertions).toHaveLength(1)
       expect(assertions[0].failLabel).toBe(
-        "Bei (10, True) fehlt 'Regenschirm'. Antwort war: …",
+        "Bei (10, True) fehlt 'Regenschirm'. Antwort war: {res}",
       )
     })
 
@@ -42,10 +42,10 @@ describe('parseAssertions', () => {
       expect(assertions[0].passLabel).toBe(assertions[0].failLabel)
     })
 
-    it('keeps the original body when stripping interpolations leaves nothing', () => {
-      // f-string consisting of *only* an interpolation — `f"{x}"`. Stripping
-      // would leave an empty label; fall back to showing the original body
-      // so the student sees something instead of a blank row.
+    it('passes a pure-interpolation body through verbatim for runtime eval', () => {
+      // f-string consisting of *only* an interpolation — `f"{x}"`. Reaches
+      // Python intact; the harness evals it as an f-string and substitutes
+      // the rendered value (or `…` if the var isn't in scope).
       const { assertions } = parseAssertions(`assert ok, f"{detail}"`)
       expect(assertions[0].failLabel).toBe('{detail}')
     })
@@ -80,16 +80,16 @@ describe('parseAssertions', () => {
       const { assertions } = parseAssertions(
         `assert ok, f"Bei {input} ist falsch.|Top — {input} stimmt!"`,
       )
-      expect(assertions[0].failLabel).toBe('Bei … ist falsch.')
-      expect(assertions[0].passLabel).toBe('Top — … stimmt!')
+      expect(assertions[0].failLabel).toBe('Bei {input} ist falsch.')
+      expect(assertions[0].passLabel).toBe('Top — {input} stimmt!')
     })
 
-    it('handles empty pass after pipe by falling back to the empty body', () => {
+    it('falls back to the fail label when the pass slot is empty', () => {
+      // `"fail|"` — teacher only cares about the fail message. On pass we
+      // reuse the fail text rather than rendering a blank row.
       const { assertions } = parseAssertions(`assert ok, "fail message|"`)
       expect(assertions[0].failLabel).toBe('fail message')
-      // Empty pass → cleanLabel falls back to the original (empty) string.
-      // Not great UX but at least no crash; teachers shouldn't write this.
-      expect(assertions[0].passLabel).toBe('')
+      expect(assertions[0].passLabel).toBe('fail message')
     })
   })
 
