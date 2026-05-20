@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Eduskript AI Model Ranking</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #0f1115;
+    --panel: #181b21;
+    --border: #2a2f38;
+    --fg: #e6e8eb;
+    --muted: #8a8f99;
+    --accent: #5dadec;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #fafbfc;
+      --panel: #ffffff;
+      --border: #e5e7eb;
+      --fg: #1a1d21;
+      --muted: #6b7280;
+      --accent: #2563eb;
+    }
+  }
+  body {
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg); color: var(--fg);
+    margin: 0; padding: 2rem;
+    max-width: 1280px; margin: 0 auto;
+  }
+  h1 { font-size: 1.5rem; margin: 0 0 0.5rem; }
+  .meta { color: var(--muted); font-size: 0.875rem; margin-bottom: 2rem; line-height: 1.6; }
+  .meta code { background: var(--panel); padding: 0.1em 0.4em; border-radius: 4px; font-size: 0.85em; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem; margin-bottom: 1.5rem;
+  }
+  .panel h2 { font-size: 1rem; margin: 0 0 0.5rem; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.875rem; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 500; cursor: pointer; user-select: none; }
+  th:hover { color: var(--fg); }
+  tr:hover { background: rgba(127,127,127,0.05); }
+  td.num { text-align: right; }
+  .pareto-yes { color: var(--accent); font-weight: 600; }
+  .footer { color: var(--muted); font-size: 0.75rem; text-align: center; margin-top: 2rem; }
+</style>
+</head>
+<body>
+
+<h1>AI Model Ranking for Eduskript AI Edit</h1>
+<p class="meta">
+  <strong>Last updated: 2026-05-20 08:33 UTC</strong><br>
+  Weights: <code>50% intelligence + 30% speed + 20% cost</code>;
+  speed sub-score <code>70% throughput + 30% TTFT</code>;
+  intelligence floor <code>≥ 40</code>.<br>
+  Intelligence: live via Artificial Analysis API, data by <a href="https://artificialanalysis.ai" target="_blank" rel="noopener">Artificial Analysis</a>. Speed &amp; cost: OpenRouter live data (2026-05-20 08:33 UTC).
+</p>
+
+<div class="panel">
+  <h2>3D scatter — Intelligence × Throughput × 1/Cost</h2>
+  <div id="plot3d" style="height:580px"></div>
+</div>
+
+<div class="panel">
+  <h2>2D view — Intelligence × Throughput, bubble size = 1/cost, colour = TTFT</h2>
+  <div id="plot2d" style="height:480px"></div>
+</div>
+
+<div class="panel">
+  <h2>All models ranked by composite score (click headers to sort)</h2>
+  <table id="ranking">
+    <thead>
+      <tr>
+        <th data-key="rank" data-numeric="true">#</th>
+        <th data-key="slug">Model</th>
+        <th data-key="intelligence" data-numeric="true">Intel</th>
+        <th data-key="provider">Provider</th>
+        <th data-key="throughput" data-numeric="true">Throughput (tok/s)</th>
+        <th data-key="ttft" data-numeric="true">TTFT (ms)</th>
+        <th data-key="cost" data-numeric="true">$/M out</th>
+        <th data-key="score" data-numeric="true">Score</th>
+        <th data-key="pareto">Pareto</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<p class="footer">Pareto-optimal entries (rendered as diamonds in the scatter, ✓ in the table) aren't dominated on all three axes by another model in the candidate set.<br>
+Intelligence Index data by <a href="https://artificialanalysis.ai" target="_blank" rel="noopener">Artificial Analysis</a>. Speed and cost data from <a href="https://openrouter.ai" target="_blank" rel="noopener">OpenRouter</a>.</p>
+
+<script>
+const data = [{"slug":"moonshotai/kimi-k2.6","intelligence":53.9,"provider":"WandB","throughput":132,"ttft":514,"cost":3.4,"score":0.7083750985978197,"pareto":true},{"slug":"google/gemini-3.1-pro-preview","intelligence":57.2,"provider":"Google","throughput":88,"ttft":4854.5,"cost":12,"score":0.6395036297640655,"pareto":true},{"slug":"z-ai/glm-5.1","intelligence":51.4,"provider":"Friendli","throughput":62,"ttft":444.5,"cost":0,"score":0.6185062363008719,"pareto":true},{"slug":"openai/gpt-5.4","intelligence":56.8,"provider":"Azure","throughput":52,"ttft":3600,"cost":15,"score":0.6085420582306067,"pareto":true},{"slug":"anthropic/claude-opus-4.7","intelligence":57.3,"provider":"Google","throughput":69,"ttft":1730,"cost":25,"score":0.5907756062621508,"pareto":true},{"slug":"z-ai/glm-5","intelligence":49.8,"provider":"Venice","throughput":102,"ttft":1042,"cost":1.92,"score":0.559384332308311,"pareto":true},{"slug":"qwen/qwen3.6-plus","intelligence":50,"provider":"Alibaba","throughput":13,"ttft":1159,"cost":1.95,"score":0.5173742568587641,"pareto":false},{"slug":"openai/gpt-5.3-codex","intelligence":53.6,"provider":"OpenAI","throughput":48,"ttft":3895,"cost":14,"score":0.5033741286860866,"pareto":false},{"slug":"z-ai/glm-4.7","intelligence":42.1,"provider":"Cerebras","throughput":419,"ttft":305,"cost":1.75,"score":0.486,"pareto":true},{"slug":"anthropic/claude-sonnet-4.6","intelligence":51.7,"provider":"Google","throughput":44,"ttft":1239,"cost":15,"score":0.4833472007553932,"pareto":false},{"slug":"openai/gpt-5.2","intelligence":51.3,"provider":"Azure","throughput":39,"ttft":1797,"cost":14,"score":0.4645645234543433,"pareto":false},{"slug":"anthropic/claude-opus-4.6","intelligence":52.9,"provider":"Google","throughput":44,"ttft":1515,"cost":25,"score":0.43736094431310035,"pareto":false}];
+
+// Build hover text shared by both plots — keeps tooltip layout consistent.
+const hovers = data.map(d =>
+  '<b>' + d.slug + '</b><br>' +
+  'Provider: ' + d.provider + '<br>' +
+  'Intelligence: ' + d.intelligence.toFixed(1) + '<br>' +
+  'Throughput: ' + Math.round(d.throughput) + ' tok/s<br>' +
+  'TTFT: ' + Math.round(d.ttft) + ' ms<br>' +
+  'Cost: $' + d.cost.toFixed(2) + ' / Mtok<br>' +
+  'Score: ' + d.score.toFixed(3) + (d.pareto ? '<br>★ Pareto-optimal' : '')
+);
+
+// Inverse-TTFT marker size for the 3D plot: faster TTFT (lower ms) → bigger
+// marker. Clamped so very-slow models still appear.
+const markerSize = data.map(d => Math.max(8, Math.min(28, 4000 / d.ttft)));
+
+const symbols = data.map(d => d.pareto ? 'diamond' : 'circle');
+const labels = data.map(d => d.slug.split('/')[1] || d.slug);
+
+Plotly.newPlot('plot3d', [{
+  x: data.map(d => d.intelligence),
+  y: data.map(d => d.throughput),
+  z: data.map(d => d.cost),
+  text: labels,
+  hovertext: hovers,
+  hoverinfo: 'text',
+  mode: 'markers+text',
+  textposition: 'top center',
+  textfont: { size: 10, color: 'rgba(180,180,180,0.7)' },
+  type: 'scatter3d',
+  marker: {
+    size: markerSize,
+    color: data.map(d => d.score),
+    colorscale: 'Viridis',
+    colorbar: { title: { text: 'Score', font: { size: 11 } }, thickness: 12, len: 0.75 },
+    symbol: symbols,
+    line: { color: 'rgba(0,0,0,0.4)', width: 1 },
+    opacity: 0.9,
+  },
+}], {
+  scene: {
+    xaxis: { title: 'Intelligence (AA Index)' },
+    yaxis: { title: 'Throughput (tok/s)' },
+    zaxis: { title: 'Cost ($/Mtok, lower is better)', range: [0, 5] },
+    camera: { eye: { x: 1.6, y: 1.6, z: 1.0 } },
+  },
+  margin: { l: 0, r: 0, t: 0, b: 0 },
+  paper_bgcolor: 'rgba(0,0,0,0)',
+  font: { color: getComputedStyle(document.body).color, family: 'system-ui' },
+}, { displayModeBar: false, responsive: true });
+
+Plotly.newPlot('plot2d', [{
+  x: data.map(d => d.intelligence),
+  y: data.map(d => d.throughput),
+  text: labels,
+  hovertext: hovers,
+  hoverinfo: 'text',
+  mode: 'markers+text',
+  textposition: 'top center',
+  textfont: { size: 10, color: 'rgba(140,140,140,0.8)' },
+  type: 'scatter',
+  marker: {
+    size: data.map(d => Math.max(10, Math.min(50, 30 / Math.sqrt(d.cost)))),
+    color: data.map(d => d.ttft),
+    colorscale: 'RdYlGn',
+    reversescale: true,
+    colorbar: { title: { text: 'TTFT (ms)', font: { size: 11 } }, thickness: 12, len: 0.75 },
+    line: { color: 'rgba(0,0,0,0.3)', width: 1 },
+    opacity: 0.85,
+    symbol: symbols,
+  },
+}], {
+  xaxis: { title: 'Intelligence (AA Index)' },
+  yaxis: { title: 'Throughput (tok/s)' },
+  margin: { l: 60, r: 20, t: 20, b: 50 },
+  paper_bgcolor: 'rgba(0,0,0,0)',
+  plot_bgcolor: 'rgba(127,127,127,0.04)',
+  font: { color: getComputedStyle(document.body).color, family: 'system-ui' },
+}, { displayModeBar: false, responsive: true });
+
+// Sortable table.
+const tbody = document.querySelector('#ranking tbody');
+const ranked = data.map((d, i) => ({ ...d, rank: i + 1 }));
+let sortKey = 'rank';
+let sortAsc = true;
+
+function render() {
+  const sorted = [...ranked].sort((a, b) => {
+    const av = a[sortKey], bv = b[sortKey];
+    if (typeof av === 'number') return sortAsc ? av - bv : bv - av;
+    return sortAsc ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av));
+  });
+  tbody.innerHTML = sorted.map(r => '<tr>' +
+    '<td class="num">' + r.rank + '</td>' +
+    '<td><code>' + r.slug + '</code></td>' +
+    '<td class="num">' + r.intelligence.toFixed(1) + '</td>' +
+    '<td>' + r.provider + '</td>' +
+    '<td class="num">' + Math.round(r.throughput) + '</td>' +
+    '<td class="num">' + Math.round(r.ttft) + '</td>' +
+    '<td class="num">$' + r.cost.toFixed(2) + '</td>' +
+    '<td class="num">' + r.score.toFixed(3) + '</td>' +
+    '<td>' + (r.pareto ? '<span class="pareto-yes">✓</span>' : '') + '</td>' +
+  '</tr>').join('');
+}
+document.querySelectorAll('#ranking thead th').forEach(th => {
+  th.addEventListener('click', () => {
+    const key = th.dataset.key;
+    if (sortKey === key) sortAsc = !sortAsc;
+    else { sortKey = key; sortAsc = key !== 'score' && key !== 'pareto'; }
+    render();
+  });
+});
+render();
+</script>
+</body>
+</html>

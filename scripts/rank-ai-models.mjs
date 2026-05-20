@@ -17,16 +17,22 @@
  *   node scripts/rank-ai-models.mjs --top 20              # change list length
  *   node scripts/rank-ai-models.mjs --no-floor            # show all candidates
  *   node scripts/rank-ai-models.mjs --floor 45            # custom intelligence floor
- *   node scripts/rank-ai-models.mjs --html                # write model-ranking.html
+ *   node scripts/rank-ai-models.mjs --html                # write public/model-ranking.html (served at /model-ranking.html)
  *   node scripts/rank-ai-models.mjs --html /tmp/x.html    # custom path
  *   node scripts/rank-ai-models.mjs --no-floor --html     # combine flags
+ *   pnpm ai:ranking:update                                # refresh live data + regenerate the public page in one step
  *
  * Data sources:
- *   - scripts/data/ai-model-intelligence.json (intelligence; manual cache)
+ *   - scripts/data/ai-model-intelligence.json (OpenRouter -> Artificial Analysis slug map)
+ *   - https://artificialanalysis.ai/api/v2/data/llms/models (intelligence; live, needs ARTIFICIAL_ANALYSIS_API_KEY in .env)
  *   - https://openrouter.ai/api/v1/models (cost; live)
  *   - https://openrouter.ai/api/frontend/stats/endpoint (speed; live, undocumented)
+ *
+ * Intelligence data is provided by Artificial Analysis (artificialanalysis.ai);
+ * their terms require attribution, which the generated HTML renders.
  */
 
+import 'dotenv/config'
 import { readFileSync, writeFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, join, resolve } from 'path'
@@ -52,7 +58,10 @@ const opts = {
   noFloor: args.includes('--no-floor'),
   floor: parseFloat(flag('floor', DEFAULT_FLOOR)),
   top: parseInt(flag('top', DEFAULT_TOP), 10),
-  html: args.includes('--html') ? (typeof flag('html') === 'string' ? flag('html') : 'model-ranking.html') : null,
+  // Default --html target is public/model-ranking.html so the page is served
+  // statically at /model-ranking.html (the build copies public/ into the
+  // standalone output). Pass an explicit path to override.
+  html: args.includes('--html') ? (typeof flag('html') === 'string' ? flag('html') : join(__dirname, '..', 'public', 'model-ranking.html')) : null,
 }
 
 async function fetchJson(url) {
@@ -121,6 +130,38 @@ async function fetchModelCost(slug) {
     if (prices.length === 0) return null
     return Math.min(...prices) * 1_000_000
   } catch {
+    return null
+  }
+}
+
+/**
+ * Fetch the Artificial Analysis Intelligence Index for every model, keyed by
+ * AA slug. Returns Map<aaSlug, number>, or null if no API key is set or the
+ * request fails — the caller then falls back to static values in the slug map.
+ * AA lists multiple variants per model (reasoning / non-reasoning / effort),
+ * each its own slug + index, so the data file pins which slug to read.
+ * AA terms require attribution to artificialanalysis.ai (rendered in the HTML).
+ */
+async function fetchArtificialAnalysisIndex() {
+  const key = process.env.ARTIFICIAL_ANALYSIS_API_KEY
+  if (!key) {
+    console.error('No ARTIFICIAL_ANALYSIS_API_KEY set — falling back to static intelligence values where available.')
+    return null
+  }
+  try {
+    const res = await fetch('https://artificialanalysis.ai/api/v2/data/llms/models', {
+      headers: { 'x-api-key': key },
+    })
+    if (!res.ok) throw new Error(`${res.status}`)
+    const json = await res.json()
+    const map = new Map()
+    for (const m of json.data ?? []) {
+      const idx = m.evaluations?.artificial_analysis_intelligence_index
+      if (idx != null) map.set(m.slug, idx)
+    }
+    return map
+  } catch (e) {
+    console.error(`AA API fetch failed (${e.message}) — falling back to static intelligence values.`)
     return null
   }
 }
@@ -210,10 +251,11 @@ function renderHtml(rows, meta) {
 
 <h1>AI Model Ranking for Eduskript AI Edit</h1>
 <p class="meta">
+  <strong>Last updated: ${meta.generated}</strong><br>
   Weights: <code>${(meta.weights.intelligence * 100).toFixed(0)}% intelligence + ${(meta.weights.speed * 100).toFixed(0)}% speed + ${(meta.weights.cost * 100).toFixed(0)}% cost</code>;
   speed sub-score <code>${(meta.speedWeights.throughput * 100).toFixed(0)}% throughput + ${(meta.speedWeights.ttft * 100).toFixed(0)}% TTFT</code>;
   intelligence floor <code>${meta.floor === -Infinity ? 'none' : '≥ ' + meta.floor}</code>.<br>
-  Sources: Artificial Analysis Index (manual cache, ${meta.intelUpdated}); OpenRouter live data (${meta.generated}).
+  Intelligence: ${meta.intelSource}, data by <a href="https://artificialanalysis.ai" target="_blank" rel="noopener">Artificial Analysis</a>. Speed &amp; cost: OpenRouter live data (${meta.generated}).
 </p>
 
 <div class="panel">
@@ -246,7 +288,8 @@ function renderHtml(rows, meta) {
   </table>
 </div>
 
-<p class="footer">Pareto-optimal entries (rendered as diamonds in the scatter, ✓ in the table) aren't dominated on all three axes by another model in the candidate set.</p>
+<p class="footer">Pareto-optimal entries (rendered as diamonds in the scatter, ✓ in the table) aren't dominated on all three axes by another model in the candidate set.<br>
+Intelligence Index data by <a href="https://artificialanalysis.ai" target="_blank" rel="noopener">Artificial Analysis</a>. Speed and cost data from <a href="https://openrouter.ai" target="_blank" rel="noopener">OpenRouter</a>.</p>
 
 <script>
 const data = ${JSON.stringify(data)};
@@ -402,8 +445,27 @@ function paretoMask(rows) {
 
 async function main() {
   const intelData = JSON.parse(readFileSync(INTEL_CACHE, 'utf-8'))
+  const aaIndex = await fetchArtificialAnalysisIndex()
+
+  // Resolve each model's intelligence: prefer the live AA index for its mapped
+  // slug, else the static fallback. Models with neither are dropped.
+  const intelNotes = []
   const allModels = Object.entries(intelData.models)
-    .map(([slug, intelligence]) => ({ slug, intelligence }))
+    .map(([slug, spec]) => {
+      let intelligence = null
+      if (spec.aa && aaIndex?.has(spec.aa)) {
+        intelligence = aaIndex.get(spec.aa)
+      } else if (spec.fallback != null) {
+        intelligence = spec.fallback
+        if (spec.aa) intelNotes.push(`${slug}: AA slug "${spec.aa}" not found — used fallback ${spec.fallback}`)
+      } else {
+        intelNotes.push(`${slug}: no AA data and no fallback — skipped`)
+      }
+      return { slug, intelligence }
+    })
+    .filter(m => m.intelligence != null)
+
+  if (intelNotes.length) console.error('Intelligence notes:\n  ' + intelNotes.join('\n  '))
 
   const floor = opts.noFloor ? -Infinity : opts.floor
   const candidates = allModels.filter(m => m.intelligence >= floor)
@@ -482,12 +544,16 @@ async function main() {
       weights: WEIGHTS,
       speedWeights: SPEED_WEIGHTS,
       floor: opts.noFloor ? -Infinity : opts.floor,
-      intelUpdated: intelData._updated,
+      intelSource: aaIndex ? 'live via Artificial Analysis API' : 'static fallback values',
       generated: new Date().toISOString().replace('T', ' ').slice(0, 16) + ' UTC',
     })
     writeFileSync(outPath, html, 'utf-8')
     console.error(`Wrote ${outPath}`)
-    console.error(`Open with: xdg-open ${outPath}  (or just double-click)`)
+    if (outPath.includes('/public/')) {
+      console.error(`Served at /model-ranking.html once deployed. Commit + push public/model-ranking.html to publish.`)
+    } else {
+      console.error(`Open with: xdg-open ${outPath}  (or just double-click)`)
+    }
     return
   }
 
@@ -516,7 +582,7 @@ async function main() {
   console.log(`Weights: ${(WEIGHTS.intelligence * 100).toFixed(0)}% intelligence + ${(WEIGHTS.speed * 100).toFixed(0)}% speed + ${(WEIGHTS.cost * 100).toFixed(0)}% cost`)
   console.log(`Speed:   ${(SPEED_WEIGHTS.throughput * 100).toFixed(0)}% throughput + ${(SPEED_WEIGHTS.ttft * 100).toFixed(0)}% TTFT (lower better)`)
   console.log(`Floor:   intelligence ≥ ${opts.noFloor ? 'none' : floor}`)
-  console.log(`Sources: AA Index (manual cache, ${intelData._updated}); OpenRouter (live)`)
+  console.log(`Sources: Artificial Analysis Intelligence Index (${aaIndex ? 'live via API' : 'static fallback'}); OpenRouter (live)`)
   console.log()
   console.log(`Pareto-optimal entries are marked with *. They aren't dominated on all axes by another model in the set.`)
 }
