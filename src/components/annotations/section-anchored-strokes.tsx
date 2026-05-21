@@ -78,6 +78,16 @@ interface PathDatum {
   sectionOffsetY: number
 }
 
+interface SectionBounds {
+  /** Paper-y of the topmost stroke point across all strokes in this section. */
+  minY: number
+  /** Paper-x of the rightmost stroke point across all strokes in this section. */
+  maxX: number
+  /** sectionOffsetY taken from the first stroke seen for the section (paper-y
+   *  of the section's top). All strokes in a section share the same value. */
+  sectionOffsetY: number
+}
+
 const isRenderable = (s: AnimatedStroke) => s.mode !== 'erase' && s.points.length >= 2
 
 function buildPath(stroke: AnimatedStroke): PathDatum {
@@ -112,15 +122,29 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
   // 'paper-top' — same effect as if they'd been captured today. Cheaper
   // than a DB migration and the only call site for this component.
   const grouped = useMemo(() => {
-    const map = new Map<string, PathDatum[]>()
+    const map = new Map<string, { paths: PathDatum[]; bounds: SectionBounds }>()
     for (const s of strokes) {
       if (!isRenderable(s)) continue
       if (!s.sectionId) continue
       const sid = s.sectionId === 'unknown' ? 'paper-top' : s.sectionId
-      const arr = map.get(sid)
       const datum = buildPath(s)
-      if (arr) arr.push(datum)
-      else map.set(sid, [datum])
+      let minY = Infinity
+      let maxX = -Infinity
+      for (const p of s.points) {
+        if (p.y < minY) minY = p.y
+        if (p.x > maxX) maxX = p.x
+      }
+      const entry = map.get(sid)
+      if (entry) {
+        entry.paths.push(datum)
+        if (minY < entry.bounds.minY) entry.bounds.minY = minY
+        if (maxX > entry.bounds.maxX) entry.bounds.maxX = maxX
+      } else {
+        map.set(sid, {
+          paths: [datum],
+          bounds: { minY, maxX, sectionOffsetY: s.sectionOffsetY },
+        })
+      }
     }
     return map
   }, [strokes])
@@ -282,7 +306,7 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
 
   return (
     <>
-      {Array.from(grouped.entries()).map(([sid, paths]) => {
+      {Array.from(grouped.entries()).map(([sid, { paths, bounds }]) => {
         const target = targets.get(sid)
         if (!target) return null
         const geom = sectionGeom.get(sid) ?? { borderTop: 0, borderLeft: 0, leftFromPaper: paperPaddingLeft }
@@ -306,6 +330,8 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
                 layerColor={badge.layerColor}
                 icon={badge.icon}
                 zoom={badgeScaleSource}
+                bounds={bounds}
+                leftFromPaper={geom.leftFromPaper}
               />
             )}
           </>,
@@ -329,6 +355,12 @@ const BADGE_COLOR_CLASSES: Record<BadgeColor, string> = {
  * One badge per section that owns reference-layer strokes. Lives inside the
  * same portal as the section's SVG, so it follows the section through reflow
  * — no JS reposition. Badge scales inversely with zoom so it stays readable.
+ *
+ * Positioned next to the stroke cluster (not at the section's top-right
+ * corner) so it sits visually adjacent to the strokes it labels — same UX as
+ * the active-layer `LayerBadges`. For a tall section whose strokes live at
+ * the bottom, this keeps the badge near the strokes instead of floating
+ * above the section heading.
  */
 function SectionLayerBadge({
   layerId,
@@ -336,24 +368,36 @@ function SectionLayerBadge({
   layerColor,
   icon,
   zoom,
+  bounds,
+  leftFromPaper,
 }: {
   layerId: string
   layerName: string
   layerColor: BadgeColor
   icon: ReactNode
   zoom: number
+  bounds: SectionBounds
+  /** Section's left edge in paper coords. Used to convert paper-x to
+   *  section-local x for `left` positioning. */
+  leftFromPaper: number
 }) {
   const badgeScale = 1 / zoom
+  // Convert paper coords to section-local. SVG inside the portal uses
+  // <g transform="translate(0, -sectionOffsetY)"> to shift paper-y back to
+  // section-local-y; we mirror that here. Section-local x = paper-x minus
+  // section's leftFromPaper.
+  const sectionLocalTop = bounds.minY - bounds.sectionOffsetY
+  const sectionLocalRight = bounds.maxX - leftFromPaper
   return (
     <div
       key={layerId}
       className={`layer-badge ${BADGE_COLOR_CLASSES[layerColor]}`}
       style={{
         position: 'absolute',
-        top: -24 * badgeScale,
-        right: 8 * badgeScale,
+        top: sectionLocalTop - 24 * badgeScale,
+        left: sectionLocalRight + 8 * badgeScale,
         transform: `scale(${badgeScale})`,
-        transformOrigin: 'top right',
+        transformOrigin: 'top left',
         zIndex: 50,
         pointerEvents: 'none',
       }}

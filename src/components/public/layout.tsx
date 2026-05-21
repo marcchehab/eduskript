@@ -587,6 +587,7 @@ export function PublicSiteLayout({
                     <ChevronLeft className="w-5 h-5" />
                   </Button>
                 </div>
+
               </>
             )}
           </div>
@@ -785,33 +786,43 @@ export function PublicSiteLayout({
               </nav>
             )}
 
-            {/* Sync Status + Legal links - bottom of sidebar */}
-            <div className={`mt-auto pt-4 ${isSidebarCollapsed ? 'flex flex-col items-center gap-2' : ''}`}>
-              <SyncStatusButton />
+            {/* Footer: class toolbar (top row) + sync + legal/terms/built-with
+                (bottom row). The class-toolbar-slot is the portal target for
+                ClassToolbar (id="class-toolbar"); the page-level mount in
+                PublicPageBody / exam / org routes portals into here.
+                Slot exists only in the expanded sidebar so the floating
+                toolbar self-hides when the user collapses. */}
+            <div className={`mt-auto pt-4 ${isSidebarCollapsed ? 'flex flex-col items-center gap-2' : 'space-y-2'}`}>
               {!isSidebarCollapsed && (
-                <div className="pt-2 text-center text-[11px] text-muted-foreground/40 space-y-1">
-                  {/* prefetch={false}: footer links are rarely clicked, but
-                      Next 16 emits 2-3 RSC prefetches per visible Link during
-                      idle time, which kept the public-page tab in "loading"
-                      state for 4-5 s on Slow 4G even after LCP. */}
-                  <div>
-                    <Link href="/impressum" className="hover:text-muted-foreground" prefetch={false}>Legal</Link>
-                    <span className="mx-1.5">·</span>
-                    <Link href="/terms" className="hover:text-muted-foreground" prefetch={false}>Terms (Mar 2026)</Link>
-                  </div>
-                  <div>
-                    Built with{' '}
-                    <a
-                      href="https://eduskript.org"
-                      target="_blank"
-                      rel="noopener"
-                      className="hover:text-muted-foreground"
-                    >
-                      Eduskript
-                    </a>
-                  </div>
-                </div>
+                <div id="class-toolbar-slot" />
               )}
+              <div className={isSidebarCollapsed ? '' : 'flex items-start justify-between gap-2'}>
+                <SyncStatusButton />
+                {!isSidebarCollapsed && (
+                  <div className="text-right text-[11px] text-muted-foreground/40 space-y-0.5 leading-tight">
+                    {/* prefetch={false}: footer links are rarely clicked, but
+                        Next 16 emits 2-3 RSC prefetches per visible Link
+                        during idle time, which kept the public-page tab in
+                        "loading" state for 4-5 s on Slow 4G even after LCP. */}
+                    <div>
+                      <Link href="/impressum" className="hover:text-muted-foreground" prefetch={false}>Legal</Link>
+                      <span className="mx-1.5">·</span>
+                      <Link href="/terms" className="hover:text-muted-foreground" prefetch={false}>Terms (Mar 2026)</Link>
+                    </div>
+                    <div>
+                      Built with{' '}
+                      <a
+                        href="https://eduskript.org"
+                        target="_blank"
+                        rel="noopener"
+                        className="hover:text-muted-foreground"
+                      >
+                        Eduskript
+                      </a>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

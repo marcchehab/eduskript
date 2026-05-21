@@ -3,7 +3,7 @@
 /**
  * Shared roster hook for the exam page.
  *
- * Both `TeacherPageToolbar` (top) and `StudentNavigator` (gutter arrows)
+ * Both `ClassToolbar` (top) and `StudentNavigator` (gutter arrows)
  * need the same `{ students, counts }` data plus the live `examState`. They
  * used to each fetch independently; lifting the fetch here keeps them in
  * lockstep, halves the network footprint, and lets one realtime

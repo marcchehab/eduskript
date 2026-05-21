@@ -209,6 +209,7 @@ export default async function PublicPage({ params }: PageProps) {
         publicAnnotations={publicAnnotations}
         publicSnaps={publicSnaps}
         publicStickyNotes={publicStickyNotes}
+        teacherPageSlug={teacher.pageSlug}
       />
     </>
   )

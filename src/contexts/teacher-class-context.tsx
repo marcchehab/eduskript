@@ -10,6 +10,7 @@ const STORAGE_KEY = 'eduskript-teacher-class'
 const STUDENT_STORAGE_KEY = 'eduskript-teacher-selected-student'
 const PAGE_BROADCAST_KEY = 'eduskript-page-broadcast'
 const SUBMITTED_ONLY_KEY = 'eduskript-teacher-submitted-only'
+const BROADCAST_PAUSED_KEY = 'eduskript-broadcast-paused'
 
 interface SelectedClass {
   id: string
@@ -49,6 +50,14 @@ interface TeacherClassContextValue {
    */
   submittedOnly: boolean
   setSubmittedOnly: (value: boolean) => void
+  /**
+   * Master broadcast toggle. When true, the teacher's strokes are personal
+   * regardless of selectedClass/selectedStudent/broadcastToPage — flipping it
+   * back to false resumes the previously selected target without forcing a
+   * re-pick. Drives `viewMode` to 'my-view' when paused.
+   */
+  broadcastingPaused: boolean
+  setBroadcastingPaused: (paused: boolean) => void
   viewMode: ViewMode
   isTeacher: boolean
   isLoading: boolean
@@ -62,6 +71,11 @@ export function TeacherClassProvider({ children }: { children: ReactNode }) {
   const [selectedStudent, setSelectedStudentState] = useState<SelectedStudent | null>(null)
   const [broadcastToPage, setBroadcastToPageState] = useState(false)
   const [submittedOnly, setSubmittedOnlyState] = useState(false)
+  // Default OFF so the floating-bar's existing audience selector keeps working
+  // out of the box: picking a class there broadcasts immediately (today's
+  // behavior). The top toolbar's "Broadcasting" toggle then pauses to personal
+  // mode and back, matching its activate/deactivate semantics.
+  const [broadcastingPaused, setBroadcastingPausedState] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
 
   const isTeacher = session?.user?.accountType === 'teacher'
@@ -96,6 +110,16 @@ export function TeacherClassProvider({ children }: { children: ReactNode }) {
       const storedSubmittedOnly = localStorage.getItem(SUBMITTED_ONLY_KEY)
       if (storedSubmittedOnly === 'true') {
         setSubmittedOnlyState(true)
+      }
+
+      // Honor an explicit stored value either way; the default is unpaused
+      // so the floating-bar audience selector keeps working as before for
+      // teachers who haven't interacted with the top toolbar's toggle yet.
+      const storedBroadcastingPaused = localStorage.getItem(BROADCAST_PAUSED_KEY)
+      if (storedBroadcastingPaused === 'true') {
+        setBroadcastingPausedState(true)
+      } else if (storedBroadcastingPaused === 'false') {
+        setBroadcastingPausedState(false)
       }
     } catch (e) {
       // Invalid stored data, ignore
@@ -149,6 +173,15 @@ export function TeacherClassProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  const setBroadcastingPaused = useCallback((paused: boolean) => {
+    log('setBroadcastingPaused called', { paused })
+    setBroadcastingPausedState(paused)
+    if (typeof window === 'undefined') return
+    // Persist explicit values both ways so the default ('paused on') only
+    // applies for first-time visitors.
+    localStorage.setItem(BROADCAST_PAUSED_KEY, paused ? 'true' : 'false')
+  }, [])
+
   const setBroadcastToPage = useCallback((broadcast: boolean) => {
     log('setBroadcastToPage called', { broadcast })
     setBroadcastToPageState(broadcast)
@@ -169,15 +202,18 @@ export function TeacherClassProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  // Derive view mode from selections
+  // Derive view mode from selections. When paused, force 'my-view' regardless
+  // of any saved target — the master broadcast toggle is the override.
   const viewMode: ViewMode = useMemo(() => {
     let mode: ViewMode = 'my-view'
-    if (broadcastToPage) mode = 'page-broadcast'
-    else if (selectedStudent) mode = 'student-view'
-    else if (selectedClass) mode = 'class-broadcast'
-    log('viewMode computed', { mode, broadcastToPage, selectedClassId: selectedClass?.id, selectedStudentId: selectedStudent?.id })
+    if (!broadcastingPaused) {
+      if (broadcastToPage) mode = 'page-broadcast'
+      else if (selectedStudent) mode = 'student-view'
+      else if (selectedClass) mode = 'class-broadcast'
+    }
+    log('viewMode computed', { mode, broadcastingPaused, broadcastToPage, selectedClassId: selectedClass?.id, selectedStudentId: selectedStudent?.id })
     return mode
-  }, [broadcastToPage, selectedClass, selectedStudent])
+  }, [broadcastingPaused, broadcastToPage, selectedClass, selectedStudent])
 
   // Clear selection if user is not a teacher
   useEffect(() => {
@@ -199,6 +235,8 @@ export function TeacherClassProvider({ children }: { children: ReactNode }) {
         setBroadcastToPage,
         submittedOnly,
         setSubmittedOnly,
+        broadcastingPaused,
+        setBroadcastingPaused,
         viewMode,
         isTeacher,
         isLoading: isLoading || status === 'loading',
@@ -222,6 +260,8 @@ export function useTeacherClass() {
       setBroadcastToPage: () => {},
       submittedOnly: false,
       setSubmittedOnly: () => {},
+      broadcastingPaused: false,
+      setBroadcastingPaused: () => {},
       viewMode: 'my-view' as ViewMode,
       isTeacher: false,
       isLoading: false,

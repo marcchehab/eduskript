@@ -14,7 +14,7 @@ import { PublicPageBody } from '@/components/public/public-page-body'
 import { ExamLockedPage } from '@/components/exam/exam-locked-page'
 import { SEBRequiredPage } from '@/components/exam/seb-required-page'
 import { ExamSubmittedPage } from '@/components/exam/exam-submitted-page'
-import { TeacherPageToolbar } from '@/components/teacher/page-toolbar'
+import { ClassToolbar } from '@/components/teacher/class-toolbar'
 import { ExamDataSync } from '@/components/exam/exam-data-sync'
 import { StudentNavigator } from '@/components/exam/student-navigator'
 import { StudentSnapshotProvider } from '@/contexts/student-snapshot-context'
@@ -277,10 +277,11 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
   const body = (
     <>
       {isTeacherAuthor && (
-        <TeacherPageToolbar
+        <ClassToolbar
           pageId={page.id}
           pageType="exam"
           unlockedClasses={unlockedClassesForExam}
+          requireOwnerSlug={teacher.pageSlug}
         />
       )}
       <PublicPageBody
@@ -290,6 +291,7 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
         publicSnaps={publicSnaps}
         publicStickyNotes={publicStickyNotes}
         isExamStudent={isExamStudent}
+        teacherPageSlug={teacher.pageSlug}
       />
       {isTeacherAuthor && <StudentNavigator pageId={page.id} />}
     </>

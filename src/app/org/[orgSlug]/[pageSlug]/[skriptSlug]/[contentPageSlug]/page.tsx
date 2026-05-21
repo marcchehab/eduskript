@@ -9,7 +9,7 @@ import { SEBRequiredPage } from '@/components/exam/seb-required-page'
 import { ExamSubmittedPage } from '@/components/exam/exam-submitted-page'
 import { ExamLayout } from '@/components/exam/exam-layout'
 import { ExamWaitingRoom } from '@/components/exam/exam-waiting-room'
-import { TeacherPageToolbar } from '@/components/teacher/page-toolbar'
+import { ClassToolbar } from '@/components/teacher/class-toolbar'
 import { ExamDataSync } from '@/components/exam/exam-data-sync'
 import { isSEBRequest, type ExamSettings } from '@/lib/seb'
 import { validateExamToken, validateExamSession } from '@/lib/exam-tokens'
@@ -546,7 +546,7 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
           non-exam pages it's the submissions list alone. Suppressed when an
           exam student is actively in-session on this page. */}
       {(isTeacherViewingExam || (isPageAuthor && !isInExamSession)) && (
-        <TeacherPageToolbar
+        <ClassToolbar
           pageId={page.id}
           pageType={page.pageType ?? 'standard'}
           unlockedClasses={unlockedClassesForExam}
