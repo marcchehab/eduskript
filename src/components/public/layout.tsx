@@ -594,10 +594,12 @@ export function PublicSiteLayout({
 
           {/* Navigation. p-4 (16px right padding) gives the scrollbar
               breathing room from the content without insetting the
-              container itself. */}
+              container itself. The footer (class toolbar + sync + legal)
+              is a SIBLING of this div, not a child, so nav content can
+              scroll beneath a fixed footer when it overflows. */}
           <div
             ref={sidebarNavRef}
-            className="flex-1 p-4 flex flex-col overflow-y-scroll [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&:hover::-webkit-scrollbar-thumb]:bg-muted-foreground/30"
+            className="flex-1 min-h-0 p-4 overflow-y-scroll [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&:hover::-webkit-scrollbar-thumb]:bg-muted-foreground/30"
           >
             {isSidebarCollapsed ? (
               /* Collapsed navigation - empty, use header icon to go home */
@@ -785,44 +787,47 @@ export function PublicSiteLayout({
               })()}
               </nav>
             )}
+          </div>
 
-            {/* Footer: class toolbar (top row) + sync + legal/terms/built-with
-                (bottom row). The class-toolbar-slot is the portal target for
-                ClassToolbar (id="class-toolbar"); the page-level mount in
-                PublicPageBody / exam / org routes portals into here.
-                Slot exists only in the expanded sidebar so the floating
-                toolbar self-hides when the user collapses. */}
-            <div className={`mt-auto pt-4 ${isSidebarCollapsed ? 'flex flex-col items-center gap-2' : 'space-y-2'}`}>
+          {/* Footer: class toolbar (top row) + sync + legal/terms/built-with
+              (bottom row). Sibling of the scrollable nav (NOT a child) so the
+              footer stays pinned to the sidebar's bottom edge while overflowed
+              nav content scrolls beneath it. Top-edge gradient fades the
+              scrolling content into the footer's bg-card. */}
+          <div className={`relative shrink-0 ${isSidebarCollapsed ? 'p-2 pt-0 flex flex-col items-center gap-2' : 'p-4 pt-0 space-y-2'}`}>
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 -top-6 h-6 bg-gradient-to-b from-transparent to-card"
+            />
+            {!isSidebarCollapsed && (
+              <div id="class-toolbar-slot" />
+            )}
+            <div className={isSidebarCollapsed ? '' : 'flex items-start justify-between gap-2'}>
+              <SyncStatusButton />
               {!isSidebarCollapsed && (
-                <div id="class-toolbar-slot" />
-              )}
-              <div className={isSidebarCollapsed ? '' : 'flex items-start justify-between gap-2'}>
-                <SyncStatusButton />
-                {!isSidebarCollapsed && (
-                  <div className="text-right text-[11px] text-muted-foreground/40 space-y-0.5 leading-tight">
-                    {/* prefetch={false}: footer links are rarely clicked, but
-                        Next 16 emits 2-3 RSC prefetches per visible Link
-                        during idle time, which kept the public-page tab in
-                        "loading" state for 4-5 s on Slow 4G even after LCP. */}
-                    <div>
-                      <Link href="/impressum" className="hover:text-muted-foreground" prefetch={false}>Legal</Link>
-                      <span className="mx-1.5">·</span>
-                      <Link href="/terms" className="hover:text-muted-foreground" prefetch={false}>Terms (Mar 2026)</Link>
-                    </div>
-                    <div>
-                      Built with{' '}
-                      <a
-                        href="https://eduskript.org"
-                        target="_blank"
-                        rel="noopener"
-                        className="hover:text-muted-foreground"
-                      >
-                        Eduskript
-                      </a>
-                    </div>
+                <div className="text-right text-[11px] text-muted-foreground/40 space-y-0.5 leading-tight">
+                  {/* prefetch={false}: footer links are rarely clicked, but
+                      Next 16 emits 2-3 RSC prefetches per visible Link
+                      during idle time, which kept the public-page tab in
+                      "loading" state for 4-5 s on Slow 4G even after LCP. */}
+                  <div>
+                    <Link href="/impressum" className="hover:text-muted-foreground" prefetch={false}>Legal</Link>
+                    <span className="mx-1.5">·</span>
+                    <Link href="/terms" className="hover:text-muted-foreground" prefetch={false}>Terms (Mar 2026)</Link>
                   </div>
-                )}
-              </div>
+                  <div>
+                    Built with{' '}
+                    <a
+                      href="https://eduskript.org"
+                      target="_blank"
+                      rel="noopener"
+                      className="hover:text-muted-foreground"
+                    >
+                      Eduskript
+                    </a>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
