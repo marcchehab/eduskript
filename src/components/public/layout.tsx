@@ -799,9 +799,10 @@ export function PublicSiteLayout({
               aria-hidden
               className="pointer-events-none absolute inset-x-0 -top-6 h-6 bg-gradient-to-b from-transparent to-card"
             />
-            {!isSidebarCollapsed && (
-              <div id="class-toolbar-slot" />
-            )}
+            {/* Slot is rendered in both collapsed and expanded modes —
+                ClassToolbar reads `sidebarCollapsed` from useLayout and
+                renders only the broadcast toggle when collapsed. */}
+            <div id="class-toolbar-slot" />
             <div className={isSidebarCollapsed ? '' : 'flex items-start justify-between gap-2'}>
               <SyncStatusButton />
               {!isSidebarCollapsed && (

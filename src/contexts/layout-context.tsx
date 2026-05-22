@@ -5,6 +5,7 @@ import { LAYOUT } from '@/lib/constants/layout'
 
 interface LayoutContextValue {
   sidebarWidth: number
+  sidebarCollapsed: boolean
   viewportWidth: number
   viewportHeight: number
   setSidebarCollapsed: (collapsed: boolean) => void
@@ -63,6 +64,7 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
   return (
     <LayoutContext.Provider value={{
       sidebarWidth,
+      sidebarCollapsed,
       viewportWidth,
       viewportHeight,
       setSidebarCollapsed

@@ -60,6 +60,7 @@ import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { useSession } from 'next-auth/react'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
+import { useLayout } from '@/contexts/layout-context'
 import { useExamRoster, type ExamRosterStudent } from '@/hooks/use-exam-roster'
 import { usePageSubmissions, type PageSubmissionRow } from '@/hooks/use-page-submissions'
 import { useIsPaid } from '@/hooks/use-billing'
@@ -120,6 +121,7 @@ export function ClassToolbar({
   const isExam = pageType === 'exam'
   const { data: session, status: sessionStatus } = useSession()
   const isPaid = useIsPaid()
+  const { sidebarCollapsed } = useLayout()
   const isTeacherAccount = session?.user?.accountType === 'teacher'
   const viewerPageSlug = session?.user?.pageSlug ?? null
   // Own-site check: only relevant when caller pinned a specific owner slug
@@ -379,6 +381,23 @@ export function ClassToolbar({
             No classes have been unlocked for this exam yet.
           </p>
         </div>
+      </FixedToolbarFrame>
+    )
+  }
+
+  // Collapsed sidebar: show only the broadcast toggle. The selected
+  // audience (class / student / public) carries over from teacher-class
+  // context, so the toggle just flips on/off against whatever was last
+  // picked while the sidebar was expanded. Disabled when nothing has
+  // been selected yet — same as the expanded toggle.
+  if (sidebarCollapsed) {
+    return (
+      <FixedToolbarFrame>
+        <BroadcastToggle
+          active={!broadcastingPaused}
+          disabled={!selectedClass && !broadcastToPage && !selectedStudent}
+          onToggle={() => setBroadcastingPaused(!broadcastingPaused)}
+        />
       </FixedToolbarFrame>
     )
   }
