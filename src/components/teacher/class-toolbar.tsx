@@ -62,6 +62,12 @@ import { useSession } from 'next-auth/react'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
 import { useLayout } from '@/contexts/layout-context'
 import { useExamRoster, type ExamRosterStudent } from '@/hooks/use-exam-roster'
+import {
+  useExamAudit,
+  summariseAttempts,
+  formatDuration,
+  type ExamAuditRow,
+} from '@/hooks/use-exam-audit'
 import { usePageSubmissions, type PageSubmissionRow } from '@/hooks/use-page-submissions'
 import { useIsPaid } from '@/hooks/use-billing'
 import { getReverseMappingsForClass } from '@/lib/email-mapping-db'
@@ -194,6 +200,24 @@ export function ClassToolbar({
     yourAnonymousUserId,
     refresh: refreshSubmissions,
   } = usePageSubmissions({ pageId })
+
+  // Exam audit log drives the "took Nm" caption + per-student timeline
+  // tooltip. Only meaningful on exam pages, so dormant otherwise.
+  const { events: auditEvents } = useExamAudit({
+    pageId,
+    classId: selectedClass?.id ?? null,
+    enabled: isExam,
+  })
+
+  // Ticking clock so the in-progress "Nm so far" counter advances without
+  // refetching the audit log. 30s is granular enough to feel live and
+  // cheap compared with the 10s roster poll already in flight.
+  const [nowMs, setNowMs] = useState(() => Date.now())
+  useEffect(() => {
+    if (!isExam) return
+    const id = setInterval(() => setNowMs(Date.now()), 30_000)
+    return () => clearInterval(id)
+  }, [isExam])
 
   // Load resolved email mappings when class changes (exam case only).
   useEffect(() => {
@@ -442,14 +466,38 @@ export function ClassToolbar({
                   // table provided before the sidebar consolidation.
                   const secondaryEmail =
                     row.email && row.email !== row.displayName ? row.email : null
+                  // Per-attempt duration data — only used on exam pages.
+                  const auditRows = isExam ? auditEvents[row.userId] : undefined
+                  const summary = isExam ? summariseAttempts(auditRows, nowMs) : null
                   const captionParts: string[] = []
                   if (row.answerCount > 0) captionParts.push(`${row.answerCount} ans`)
                   if (isExam) {
                     const label = getStatusLabel(row.examStatus)
                     if (label && label !== '—') captionParts.push(label.toLowerCase())
                   }
-                  const activity = formatRelative(row.lastActivityAt)
-                  if (activity && activity !== '—') captionParts.push(activity)
+                  // Time caption: prefer audit-derived duration on exam
+                  // pages ("took 43m" or "12m so far"); fall back to the
+                  // last-activity relative time for legacy submissions
+                  // (no audit history) and for non-exam pages.
+                  const examTimeLabel = summary
+                    ? summary.inProgressSinceMs !== null
+                      ? `${formatDuration(summary.inProgressSinceMs)} so far`
+                      : summary.hasSubmitted && summary.completedMs > 0
+                        ? `took ${formatDuration(summary.completedMs)}`
+                        : null
+                    : null
+                  if (examTimeLabel) {
+                    captionParts.push(examTimeLabel)
+                  } else {
+                    const activity = formatRelative(row.lastActivityAt)
+                    if (activity && activity !== '—') captionParts.push(activity)
+                  }
+                  // Multi-line tooltip on the student name: timeline of
+                  // exam events. Falls back to row.email when there's no
+                  // audit history, preserving the prior pseudonym hint.
+                  const timelineTooltip = auditRows && auditRows.length > 0
+                    ? formatTimelineTooltip(auditRows, summary)
+                    : row.email ?? undefined
                   return (
                     <li
                       key={row.userId}
@@ -460,7 +508,7 @@ export function ClassToolbar({
                     >
                       <div className="flex items-center gap-1 min-w-0">
                         <User className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                        <span className="text-sm truncate flex-1 min-w-0" title={row.email ?? undefined}>
+                        <span className="text-sm truncate flex-1 min-w-0" title={timelineTooltip}>
                           {row.displayName}
                         </span>
                         {row.isAnonymous && (
@@ -873,6 +921,38 @@ function BroadcastToggle({
       <Radio className={cn('w-4 h-4', active && 'animate-pulse')} />
     </Button>
   )
+}
+
+/**
+ * Multi-line title attribute showing the student's exam event timeline
+ * (Started 13:02 · Reopened 13:45 · Submitted 14:10), with a trailing
+ * total/in-progress duration when known. Plain text — relies on the
+ * browser's native title rendering, so no Popover overhead.
+ */
+function formatTimelineTooltip(
+  rows: ExamAuditRow[],
+  summary: ReturnType<typeof summariseAttempts> | null,
+): string {
+  const fmt = new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  })
+  const labels: Record<ExamAuditRow['event'], string> = {
+    started: 'Started',
+    submitted: 'Submitted',
+    reopened: 'Reopened',
+  }
+  const lines = rows.map(
+    (r) => `${labels[r.event]} ${fmt.format(new Date(r.occurredAt))}`,
+  )
+  if (summary) {
+    if (summary.inProgressSinceMs !== null) {
+      lines.push(`In progress · ${formatDuration(summary.inProgressSinceMs)} so far`)
+    } else if (summary.hasSubmitted && summary.completedMs > 0) {
+      lines.push(`Total · ${formatDuration(summary.completedMs)}`)
+    }
+  }
+  return lines.join('\n')
 }
 
 function getRosterDisplayName(
