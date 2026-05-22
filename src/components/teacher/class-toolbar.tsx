@@ -179,7 +179,10 @@ export function ClassToolbar({
     refresh: refreshRoster,
   } = useExamRoster({
     pageId,
-    classId: isExam ? selectedClass?.id ?? null : null,
+    // Fire for any selected class, not just on exam pages — the underlying
+    // endpoint returns class membership + per-user submission state, which
+    // is exactly what the sidebar roster needs regardless of pageType.
+    classId: selectedClass?.id ?? null,
   })
 
   const {
@@ -211,10 +214,14 @@ export function ClassToolbar({
     refreshSubmissions()
   }
 
-  // Build the merged row set: union of class roster (when present) and
-  // anyone who has submission data on the page. Keyed by userId; roster
-  // fields take precedence for identity (they have resolved emails), and
-  // submission fields fill in counts/last-activity.
+  // Build the row set. Two modes:
+  //   • A class is selected → rows are exactly that class's members. Anyone
+  //     who submitted but isn't enrolled is intentionally excluded; the
+  //     roster is "who is in this class", not "who answered this page".
+  //     Submission data (answerCount / lastActivityAt / isAnonymous) is
+  //     merged INTO matching roster rows.
+  //   • No class selected → fall back to listing everyone who has
+  //     submission data on the page (e.g. anonymous survey shell users).
   const rows: MergedRow[] = useMemo(() => {
     const byId = new Map<string, MergedRow>()
 
@@ -246,7 +253,9 @@ export function ClassToolbar({
         // Anonymous flag stays whatever the submission side reports for
         // shell users; for class-resolved members it stays false.
         existing.isAnonymous = existing.isAnonymous || sub.isAnonymous
-      } else {
+      } else if (!selectedClass) {
+        // Only surface submission-only users when no class is selected —
+        // otherwise they'd dilute the "members of this class" view.
         byId.set(sub.userId, {
           userId: sub.userId,
           displayName: sub.displayName,
@@ -267,7 +276,7 @@ export function ClassToolbar({
     const out = Array.from(byId.values())
     out.sort(makeComparator(sortKey, sortDir))
     return out
-  }, [students, submissions, resolvedEmails, sortKey, sortDir])
+  }, [students, submissions, resolvedEmails, sortKey, sortDir, selectedClass])
 
   // Display name of the viewer's own anonymous row (when their browser has a
   // matching survey sessionId in localStorage). Lets the toolbar show a
@@ -388,7 +397,7 @@ export function ClassToolbar({
           <div className="max-h-96 overflow-y-auto -mx-1">
             {rows.length === 0 ? (
               <div className="px-1 py-3 text-center text-xs text-muted-foreground">
-                {isExam && selectedClass
+                {selectedClass
                   ? 'No students in this class yet.'
                   : 'No submissions on this page yet.'}
               </div>
@@ -396,6 +405,15 @@ export function ClassToolbar({
               <ul className="space-y-0.5">
                 {rows.map((row) => {
                   const isViewingThis = selectedStudent?.id === row.userId
+                  // Secondary line shows the DB email (typically a pseudonym
+                  // for OAuth students) when it differs from displayName.
+                  // displayName is already the locally-mapped real email when
+                  // a mapping exists, so showing row.email below gives the
+                  // teacher both the real identity and the pseudonym to
+                  // cross-reference — same affordance the old two-column
+                  // table provided before the sidebar consolidation.
+                  const secondaryEmail =
+                    row.email && row.email !== row.displayName ? row.email : null
                   const captionParts: string[] = []
                   if (row.answerCount > 0) captionParts.push(`${row.answerCount} ans`)
                   if (isExam) {
@@ -489,6 +507,14 @@ export function ClassToolbar({
                           )}
                         </Button>
                       </div>
+                      {secondaryEmail && (
+                        <div
+                          className="text-[10px] text-muted-foreground pl-[18px] truncate"
+                          title={secondaryEmail}
+                        >
+                          {secondaryEmail}
+                        </div>
+                      )}
                       {captionParts.length > 0 && (
                         <div className="text-[10px] text-muted-foreground pl-[18px] truncate">
                           {captionParts.join(' · ')}
