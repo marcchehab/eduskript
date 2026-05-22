@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { PublicSiteLayout } from '@/components/public/layout'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
+import { ClassToolbar } from '@/components/teacher/class-toolbar'
 import type { Metadata } from 'next'
 import { prisma } from '@/lib/prisma'
 import { getFullSiteStructure } from '@/lib/cached-queries'
@@ -236,6 +237,16 @@ export default async function OrgTeacherSkriptPage({ params }: PageProps) {
       typographyPreference={(teacherSite?.typographyPreference as 'modern' | 'classic') || 'modern'}
       routePrefix={`/org/${orgSlug}/${pageSlug}`}
     >
+      {/* Class toolbar (portals into the sidebar slot). Gated server-side on
+          isAuthor like the org content page; the toolbar still self-gates on
+          paid + has-classes. Needs the frontPage id as pageId. */}
+      {isAuthor && skript.frontPage?.id && (
+        <ClassToolbar
+          pageId={skript.frontPage.id}
+          pageType="standard"
+          unlockedClasses={[]}
+        />
+      )}
       <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border">
         {skript.frontPage?.content ? (
           <article className="prose-theme">

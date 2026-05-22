@@ -6,6 +6,7 @@ import { authOptions } from '@/lib/auth'
 import { PublicSiteLayout } from '@/components/public/layout'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
 import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
+import { ClassToolbar } from '@/components/teacher/class-toolbar'
 import { HtmlLangSetter } from '@/components/seo/html-lang-setter'
 import { getOrgMembership } from '@/lib/org-auth'
 import { getOrgWithLayout, getOrgHomepageContent, getOrgFullSiteStructure } from '@/lib/cached-queries'
@@ -202,6 +203,16 @@ export default async function OrgPage({ params }: OrgPageProps) {
       homeUrl={`/org/${orgSlug}`}
       pageId={frontPage?.id}
     >
+      {/* Class toolbar (portals into the sidebar slot). Gated server-side on
+          isAdmin like the org content page; the toolbar still self-gates on
+          paid + has-classes. Needs the frontPage id as pageId. */}
+      {isPageAuthor && frontPage?.id && (
+        <ClassToolbar
+          pageId={frontPage.id}
+          pageType="standard"
+          unlockedClasses={[]}
+        />
+      )}
       <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border">
         {/* Preview mode indicator for unpublished frontpage */}
         {isPreviewMode && (

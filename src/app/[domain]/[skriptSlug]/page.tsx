@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { SkriptRedirect } from '@/components/SkriptRedirect'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
 import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
+import { ClassToolbar } from '@/components/teacher/class-toolbar'
 import { getPublicLayers, EMPTY_PUBLIC_LAYERS } from '@/lib/public-page-data'
 import { headers } from 'next/headers'
 
@@ -168,6 +169,17 @@ export default async function SkriptPreviewPage({ params }: SkriptPreviewProps) 
 
     if (showFrontpage) {
       return (
+        <>
+        {/* Class toolbar (portals into the sidebar slot). Self-gates on
+            own-site + paid + has-classes; needs the frontPage id as pageId. */}
+        {frontPage?.id && (
+          <ClassToolbar
+            pageId={frontPage.id}
+            pageType="standard"
+            unlockedClasses={[]}
+            requireOwnerSlug={domain}
+          />
+        )}
         <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border">
           {frontPage?.content ? (
             <article className="prose-theme">
@@ -194,6 +206,7 @@ export default async function SkriptPreviewPage({ params }: SkriptPreviewProps) 
             </div>
           ) : null}
         </div>
+        </>
       )
     }
 

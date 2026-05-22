@@ -5,6 +5,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
 import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
+import { ClassToolbar } from '@/components/teacher/class-toolbar'
 import { getTeacherByUsernameDeduped } from '@/lib/cached-queries'
 import { prisma } from '@/lib/prisma'
 import { canonicalUrl, canonicalBase } from '@/lib/seo/canonical'
@@ -147,6 +148,19 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
       : null
 
   return (
+    <>
+      {/* Class toolbar (portals into the sidebar slot). Mounted on the teacher
+          frontpage so broadcast/class controls are reachable here too — same
+          ISR-friendly self-gate (own-site + paid + has-classes) used on content
+          pages. Needs a pageId; the frontPage record supplies one. */}
+      {frontPage?.id && (
+        <ClassToolbar
+          pageId={frontPage.id}
+          pageType="standard"
+          unlockedClasses={[]}
+          requireOwnerSlug={teacher.pageSlug}
+        />
+      )}
     <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border">
       <JsonLd
         schema={personSchema({
@@ -202,5 +216,6 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
         </div>
       )}
     </div>
+    </>
   )
 }
