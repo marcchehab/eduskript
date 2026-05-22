@@ -38,6 +38,7 @@ import { rehypeAllowPluginAttrs } from './rehype-plugins/plugin-attrs'
 import { rehypeColorClasses } from './rehype-plugins/color-classes'
 import { rehypeExternalLinks } from './rehype-plugins/external-links'
 import { rehypeStablePageLinks } from './rehype-plugins/stable-page-links'
+import { rehypeAlignTags } from './rehype-plugins/align-tags'
 import type { ResolvedPage } from './page-stable-link'
 
 // Re-export remarkPlugins for backward compatibility
@@ -286,6 +287,7 @@ export async function compileMarkdown(
     .use(remarkPlugins)
     .use(remarkRehype, { allowDangerousHtml: true })
     .use(rehypeRaw)
+    .use(rehypeAlignTags) // Rewrite <left>/<center>/<right> → <div class="es-align-*"> (before sanitize so it sees a plain div)
     .use(rehypeMarkdownChildren) // Re-parse markdown inside custom elements like <stickme>
     .use(rehypeAllowPluginAttrs, schema) // Add this document's <plugin> attrs to the sanitize allowlist
     .use(rehypeExternalLinks) // Auto target=_blank for external links + title="_blank" opt-in

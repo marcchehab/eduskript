@@ -271,17 +271,19 @@ Excalidraw diagrams: Reference \`.excalidraw\` files directly. The system auto-d
   // Text alignment
   sections.push(`## Text alignment
 
-Wrap content in a Pandoc-style fenced div directive to align it. Names: \`left\`, \`center\`, \`right\`.
+Wrap content in a \`<left>\`, \`<center>\`, or \`<right>\` block to align it. Blank lines INSIDE the wrapper are required so the inner content is parsed as markdown.
 
 \`\`\`markdown
-:::center
+<center>
+
 ## Centered heading
 
 A centered paragraph below.
-:::
+
+</center>
 \`\`\`
 
-The closing \`:::\` is required. Inner content is normal markdown — multi-block blocks need blank lines between them as usual.`)
+The closing tag is required. Inner content is normal markdown — multi-block content needs blank lines between blocks as usual.`)
 
   // Flex layouts
   sections.push(`## Flex Layouts (\`<flex>\` / \`<flex-item>\`)

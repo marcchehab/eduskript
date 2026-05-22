@@ -8,8 +8,6 @@
 import type { PluggableList } from 'unified'
 import remarkMath from 'remark-math'
 import remarkGfm from 'remark-gfm'
-import remarkDirective from 'remark-directive'
-import { remarkAlign } from './remark-plugins/align'
 import { remarkTabs } from './remark-plugins/tabs'
 import { remarkImageResolver } from './remark-plugins/image-resolver'
 import { remarkImageAttrs } from './remark-plugins/image-attrs'
@@ -33,8 +31,6 @@ export const remarkPlugins: PluggableList = [
   remarkQuiz,
   remarkGfm,
   remarkMath,
-  remarkDirective,
-  remarkAlign,
   remarkYoutubeImage,
   remarkImageAttrs,
   remarkImageResolver,
