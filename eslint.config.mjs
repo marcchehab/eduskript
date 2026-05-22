@@ -11,6 +11,10 @@ const eslintConfig = [
       'code-review/**',
       'oldstuff/**',
       'coverage/**',
+      // Playwright e2e artifacts (minified report bundles, traces, auth state).
+      'playwright-report/**',
+      'test-results/**',
+      'e2e/.auth/**',
       '**/*.config.js',
       '**/*.config.mjs',
       '.obsidian/**',

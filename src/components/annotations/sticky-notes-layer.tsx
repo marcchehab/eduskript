@@ -973,6 +973,7 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly, onPositio
   return (
     <div
       ref={cardRef}
+      data-sticky-note-id={note.id}
       className={cn(
         'absolute z-30 rounded-xl border shadow-md flex flex-col overflow-hidden',
         // isolate: own stacking context so the note never falls behind

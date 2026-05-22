@@ -2717,6 +2717,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     return () => setOnClearAnnotations(null)
   }, [handleClearAll, setOnClearAnnotations])
 
+
   // Handle removal of orphaned strokes
   const handleRemoveOrphans = useCallback(() => {
     if (!canvasData) return
@@ -2797,6 +2798,32 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     const currentSnaps = snapsData?.snaps || []
     updateSnapsData({ snaps: [...currentSnaps, newSnap] })
   }, [snapsData, updateSnapsData, headingPositions])
+
+  // Dev-only test hooks for the e2e suite (e2e/): read the app's own state,
+  // reset all annotations, and inject a snap through the REAL capture path
+  // (anchoring included) without driving the paste/crop UI. Stripped from
+  // production. Reads refs so values stay current. See e2e/helpers/input.ts.
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'production') return
+    const w = window as unknown as { __eduTest?: Record<string, unknown> }
+    w.__eduTest = {
+      ...(w.__eduTest ?? {}),
+      state: () => ({
+        pageId,
+        canvasData: canvasDataRef.current,
+        headingPositions: headingPositionsRef.current,
+        snaps: snapsData?.snaps ?? [],
+      }),
+      clear: handleClearAll,
+      addSnap: handleSnapCapture,
+    }
+    return () => {
+      if (!w.__eduTest) return
+      delete w.__eduTest.state
+      delete w.__eduTest.clear
+      delete w.__eduTest.addSnap
+    }
+  }, [handleClearAll, handleSnapCapture, snapsData, pageId])
 
   // Handle snap removal - just remove from synced data
   const handleRemoveSnap = useCallback((id: string) => {

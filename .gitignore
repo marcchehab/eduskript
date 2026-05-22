@@ -64,6 +64,12 @@ data/.env
 # Dev scripts
 dev-scripts/
 
+# Playwright e2e artifacts
+/playwright-report/
+/test-results/
+/e2e/.auth/
+/.playwright/
+
 # Import/Export temp files
 export-output/
 *.zip

@@ -992,6 +992,7 @@ const SnapItem = memo(function SnapItem({
   return (
     <div
       ref={elementRef}
+      data-snap-id={snap.id}
       className={`absolute ${cfg.bg} border ${cfg.border} shadow-md rounded-xl overflow-hidden group transition-shadow duration-150 hover:shadow-xl`}
       style={{
         top: snap.top - originY,
