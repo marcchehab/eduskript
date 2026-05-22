@@ -275,10 +275,17 @@ export function ClassToolbar({
       }
     }
 
-    const out = Array.from(byId.values())
+    // Honor the "Submitted only" checkbox on exam pages so the filter the
+    // teacher just toggled visibly affects the roster sitting right next to
+    // it. Without this the checkbox only filtered the gutter-arrow navigator
+    // and looked broken from the sidebar's perspective.
+    let out = Array.from(byId.values())
+    if (isExam && submittedOnly) {
+      out = out.filter((r) => r.examStatus === 'submitted')
+    }
     out.sort(makeComparator(sortKey, sortDir))
     return out
-  }, [students, submissions, resolvedEmails, sortKey, sortDir, selectedClass])
+  }, [students, submissions, resolvedEmails, sortKey, sortDir, selectedClass, isExam, submittedOnly])
 
   // Display name of the viewer's own anonymous row (when their browser has a
   // matching survey sessionId in localStorage). Lets the toolbar show a
@@ -417,7 +424,9 @@ export function ClassToolbar({
             {rows.length === 0 ? (
               <div className="px-1 py-3 text-center text-xs text-muted-foreground">
                 {selectedClass
-                  ? 'No students in this class yet.'
+                  ? (isExam && submittedOnly
+                    ? 'No students have submitted yet.'
+                    : 'No students in this class yet.')
                   : 'No submissions on this page yet.'}
               </div>
             ) : (
