@@ -64,7 +64,7 @@
 import { useRef, useEffect, useCallback, forwardRef, useImperativeHandle, useState } from 'react'
 import { getStroke } from 'perfect-freehand'
 import type { StrokeOptions } from 'perfect-freehand'
-import { determineSectionFromY, type HeadingPosition } from '@/lib/annotations/reposition-strokes'
+import { determineSectionFromY, liveSectionYShift, type HeadingPosition } from '@/lib/annotations/reposition-strokes'
 import { smoothPoints } from '@/lib/annotations/svg-path'
 import type { StrokeTelemetry } from '@/lib/userdata/types'
 
@@ -213,6 +213,14 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
     const telemetryStrokeCountRef = useRef(0) // Track stroke count for telemetry sampling
     // Viewport canvas: paper-space rect of the visible area (when svgHandlesDisplay + scrollContainer)
     const viewportRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null)
+    // Latest headingPositions, read by the eraser hit-test without re-binding
+    // the (large, hot) draw callback. The SVG layer repositions committed
+    // strokes through the browser's layout engine on reflow; pathsRef keeps the
+    // STORED coords (it's serialized on save), so the hit-test shifts the query
+    // point per stroke to match where the SVG actually painted it. See
+    // liveSectionYShift.
+    const headingPositionsRef = useRef<HeadingPosition[]>(headingPositions)
+    headingPositionsRef.current = headingPositions
 
     // Update eraser cursor state and apply styles directly (no React re-render)
     const updateEraserCursor = useCallback((isActive: boolean) => {
@@ -695,10 +703,16 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
           // Update eraser cursor position (direct DOM manipulation, no re-render)
           updateEraserCursorPosition(x, y)
 
-          // Check for stroke collisions and only redraw when marking NEW strokes
+          // Check for stroke collisions and only redraw when marking NEW strokes.
+          // pathsRef holds stored paper coords; the SVG layer may have carried the
+          // committed stroke to a new y after content reflow. Shift the eraser's
+          // query y by the same per-stroke amount so we hit the stroke where it's
+          // actually drawn, not where it was first committed.
+          const hp = headingPositionsRef.current
           let markedNewStroke = false
           pathsRef.current.forEach((stroke, strokeIndex) => {
-            if (stroke.mode !== 'erase' && isPointNearStroke(x, y, stroke)) {
+            const shift = liveSectionYShift(stroke.sectionId, stroke.sectionOffsetY, hp)
+            if (stroke.mode !== 'erase' && isPointNearStroke(x, y - shift, stroke)) {
               // Only mark as new if it wasn't already marked
               if (!strokesMarkedForDeletionRef.current.has(strokeIndex)) {
                 strokesMarkedForDeletionRef.current.add(strokeIndex)

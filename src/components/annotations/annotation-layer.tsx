@@ -98,7 +98,7 @@ import type { SnapsData, SpacersData } from '@/lib/userdata/adapters'
 import type { Spacer, SpacerPattern } from '@/types/spacer'
 import { generateContentHash, type HeadingPosition, type StrokeData } from '@/lib/indexeddb/annotations'
 import { getStrokeAvg } from '@/lib/annotations/stroke-grouping'
-import { determineSectionFromY } from '@/lib/annotations/reposition-strokes'
+import { determineSectionFromY, repositionCanvasDataToLive } from '@/lib/annotations/reposition-strokes'
 import { useLayout } from '@/contexts/layout-context'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
 import { useStickyNotesContext } from '@/contexts/sticky-notes-context'
@@ -1101,6 +1101,15 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     isLayerVisible
   ])
   const [headingPositions, setHeadingPositions] = useState<HeadingPosition[]>([])
+
+  // Stored strokes shifted to their current visual paper-y (the SVG layer
+  // repositions committed strokes through reflow; the active-layer badge groups
+  // off paper coords and would otherwise stick to the draw-time position). Only
+  // consumed by LayerBadges below; never persisted.
+  const liveBadgeCanvasData = useMemo(
+    () => repositionCanvasDataToLive(canvasData, headingPositions),
+    [canvasData, headingPositions],
+  )
 
   // Refs to track latest values for use in callbacks (avoids stale closure issues)
   const canvasDataRef = useRef<string>('')
@@ -3314,7 +3323,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
           {/* Badge for active layer - shown on toolbar hover only */}
           {showActiveLayerBadge && hasAnnotations && (
             <LayerBadges
-              canvasData={canvasData}
+              canvasData={liveBadgeCanvasData}
               layerId={activeLayerBadge.layerId}
               layerName={activeLayerBadge.layerName}
               layerColor={activeLayerBadge.layerColor}
