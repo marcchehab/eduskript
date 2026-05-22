@@ -29,7 +29,6 @@ import { useTeacherClass } from '@/contexts/teacher-class-context'
 import { useStudentSnapshot } from '@/contexts/student-snapshot-context'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
-import { useTeacherBroadcast } from '@/hooks/use-teacher-broadcast'
 import { useSession } from 'next-auth/react'
 import type { CodeEditorData, CodeHighlight, HighlightColor, HighlightComment, SqlVerificationData, GlobalImportsData, PythonCheckData, BinaryFile, BinaryFileData } from '@/lib/userdata/types'
 
@@ -320,7 +319,7 @@ export const CodeEditor = memo(function CodeEditor({
 }: CodeEditorProps) {
   const { resolvedTheme } = useTheme()
   const { data: session } = useSession()
-  const { selectedClass, selectedStudent, viewMode, isTeacher } = useTeacherClass()
+  const { selectedClass, isTeacher } = useTeacherClass()
   const dialog = useAlertDialog()
   const [mounted, setMounted] = useState(false)
   const [runState, setRunState] = useState<RunState>(RunState.STOPPED)
@@ -398,24 +397,14 @@ export const CodeEditor = memo(function CodeEditor({
     }
   }, [savedCheckData])
 
-  // Compute targeting options for broadcast highlights
-  // ARCHITECTURE: Mirrors annotation-layer.tsx pattern for consistency.
-  // When teacher switches modes, they edit different database records:
-  // - my-view: personal highlights (no targeting)
-  // - class-broadcast: highlights visible to all class members
-  // - student-view: individual feedback for one student
-  // See: src/components/annotations/annotation-layer.tsx:343
-  const syncOptions: SyncedUserDataOptions = useMemo(() => {
-    if (!isTeacher) return {}
-
-    if (viewMode === 'class-broadcast' && selectedClass) {
-      return { targetType: 'class' as const, targetId: selectedClass.id }
-    }
-    if (viewMode === 'student-view' && selectedStudent) {
-      return { targetType: 'student' as const, targetId: selectedStudent.id }
-    }
-    return {} // my-view: personal highlights (no targeting)
-  }, [isTeacher, viewMode, selectedClass, selectedStudent])
+  // Code-editor highlights are always personal — never broadcast.
+  // Why: teacher and student have different code in the same editor, so
+  // character-offset highlights (from/to) would land on the wrong text on
+  // the student's side. Page-level highlights/drawings are still broadcast
+  // by the annotation layer; only code-editor highlights are local.
+  // The broadcast plumbing below is intentionally left in place but inert
+  // (syncOptions = {} → isBroadcastMode = false everywhere downstream).
+  const syncOptions: SyncedUserDataOptions = useMemo(() => ({}), [])
 
   // Whether we're in broadcast mode (targeting is set)
   const isBroadcastMode = Boolean(syncOptions.targetType && syncOptions.targetId)
@@ -437,57 +426,11 @@ export const CodeEditor = memo(function CodeEditor({
   // Used to determine if user can delete a highlight or edit a comment
   const currentAuthorId: string | undefined = session?.user?.id
 
-  // For students: receive teacher broadcasts (code highlights)
-  // LIMITATION: This fetches ALL teacher broadcasts for the page, even if the page
-  // has multiple code editors. We filter by editorId below which is O(n) per editor.
-  const isStudent = session?.user?.accountType === 'student'
-
-  const broadcastPageId = isStudent && pageId ? pageId : ''
-
-  const {
-    classCodeHighlights: teacherClassHighlights,
-    individualCodeHighlights: teacherIndividualHighlights,
-  } = useTeacherBroadcast(broadcastPageId)
-
-  // Extract teacher highlights for THIS specific code editor
-  // PERFORMANCE: O(n) where n = total teacher highlights across all editors on page.
-  // Acceptable since pages typically have <5 editors and <50 highlights total.
-  // If this becomes a bottleneck, consider pre-grouping by editorId in the API response.
-  const teacherHighlightsForEditor = useMemo(() => {
-    if (!isStudent) return []
-
-    const highlights: CodeHighlight[] = []
-
-    // Class broadcasts (from enrolled classes)
-    // NOTE: A student could be in multiple classes that broadcast to the same page.
-    // Currently we show all of them - no deduplication by highlight ID.
-    for (const classHighlight of teacherClassHighlights) {
-      if (classHighlight.editorId === id) {
-        const data = classHighlight.data as BroadcastHighlightsData | null
-        if (data?.highlights) {
-          highlights.push(...data.highlights.map(h => ({
-            ...h,
-            isTeacherHighlight: true,
-          } as CodeHighlight & { isTeacherHighlight: boolean })))
-        }
-      }
-    }
-
-    // Individual feedback (from teacher to this student)
-    for (const individualHighlight of teacherIndividualHighlights) {
-      if (individualHighlight.editorId === id) {
-        const data = individualHighlight.data as BroadcastHighlightsData | null
-        if (data?.highlights) {
-          highlights.push(...data.highlights.map(h => ({
-            ...h,
-            isTeacherHighlight: true,
-          } as CodeHighlight & { isTeacherHighlight: boolean })))
-        }
-      }
-    }
-
-    return highlights
-  }, [isStudent, teacherClassHighlights, teacherIndividualHighlights, id])
+  // Students no longer receive teacher highlights inside code editors —
+  // see the syncOptions comment above. Any pre-existing class/individual
+  // code-highlight broadcast records in the DB are intentionally ignored
+  // here so old data doesn't ghost into the new behavior.
+  const teacherHighlightsForEditor = useMemo<CodeHighlight[]>(() => [], [])
 
   // Version history hooks
   const createVersion = useCreateVersion<CodeEditorData>(pageId || 'no-page', componentId)
