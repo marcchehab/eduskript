@@ -165,6 +165,10 @@ model User {
   examSubmissions       ExamSubmission[] @relation("StudentExamSubmissions")
   gradedExamSubmissions ExamSubmission[] @relation("GradedExamSubmissions")
 
+  // Append-only event log for exam attempts (started / submitted / reopened).
+  // Used by the teacher roster to surface "took 43m" + an event timeline.
+  examAuditLogs ExamAuditLog[] @relation("StudentExamAuditLogs")
+
   // Encryption keys used by students to encrypt offline exam backups.
   // Rotatable; old keys are kept so historical .examfile backups stay decryptable.
   examKeys TeacherExamKey[] @relation("TeacherExamKeys")
@@ -363,6 +367,7 @@ model Page {
   // Exam state and submissions
   examStates      ExamState[]      @relation("ExamStates")
   examSubmissions ExamSubmission[] @relation("ExamSubmissions")
+  examAuditLogs   ExamAuditLog[]   @relation("PageExamAuditLogs")
 
   // Server-side checkpoints captured at manual save / Check / hand-in
   userDataCheckpoints UserDataCheckpoint[] @relation("PageCheckpoints")
@@ -1050,6 +1055,26 @@ model ExamSubmission {
   @@index([pageId])
   @@index([studentId])
   @@map("exam_submissions")
+}
+
+// Append-only audit log of exam events per student per page. Sessions and
+// submissions are deleted when the teacher reopens an attempt, which loses
+// the history the roster needs to show "took 43m" across multiple attempts.
+// This table keeps every started/submitted/reopened event so the roster
+// can pair starts with submits and sum durations.
+model ExamAuditLog {
+  id         String   @id @default(cuid())
+  pageId     String   @map("page_id")
+  studentId  String   @map("student_id")
+  event      String // "started" | "submitted" | "reopened"
+  occurredAt DateTime @default(now()) @map("occurred_at")
+
+  page    Page @relation("PageExamAuditLogs", fields: [pageId], references: [id], onDelete: Cascade)
+  student User @relation("StudentExamAuditLogs", fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([pageId, studentId, occurredAt])
+  @@index([pageId])
+  @@map("exam_audit_logs")
 }
 
 // Per-teacher encryption keypair used to encrypt offline exam backups (.examfile).

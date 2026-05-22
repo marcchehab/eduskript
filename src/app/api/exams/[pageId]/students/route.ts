@@ -281,6 +281,13 @@ export async function POST(
       }
     })
 
+    // Append-only audit log: the roster pairs this "reopened" event with
+    // the previous "submitted" to draw the attempt boundary, and with the
+    // next "started" to begin the new attempt's duration.
+    await prisma.examAuditLog.create({
+      data: { pageId, studentId, event: 'reopened' }
+    })
+
     // Notify the student via SSE so their page can refresh
     await eventBus.publish(`user:${studentId}`, {
       type: 'exam-reopened',

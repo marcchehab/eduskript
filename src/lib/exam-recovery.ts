@@ -69,6 +69,11 @@ export async function applyHandinSnapshots(
     submission = await tx.examSubmission.create({
       data: { pageId, studentId },
     })
+    // Audit log lives inside the same tx so a rolled-back submission
+    // doesn't leave a spurious "submitted" event behind.
+    await tx.examAuditLog.create({
+      data: { pageId, studentId, event: 'submitted' },
+    })
   }
 
   let checkpointsInserted = 0

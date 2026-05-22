@@ -173,6 +173,13 @@ export async function createExamSession(
     },
   })
 
+  // Append-only audit log: pair with later "submitted" rows to compute
+  // total time-on-exam for the teacher roster. Fire-and-forget — never
+  // block exam entry on a log failure.
+  prisma.examAuditLog
+    .create({ data: { pageId, studentId: userId, event: 'started' } })
+    .catch((err) => console.error('[exam-audit] failed to log started:', err))
+
   // Probabilistic cleanup - 1% chance on each session creation
   if (Math.random() < 0.01) {
     cleanupExpiredSessions().catch(console.error)
