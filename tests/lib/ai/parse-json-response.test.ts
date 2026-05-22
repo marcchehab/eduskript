@@ -124,6 +124,43 @@ This should address your request.`
         expect(result.overflowAfter).toBeNull()
       }
     })
+
+    it('strips a fence with a trailing newline after the closing ``` (no overflow)', () => {
+      // The real-world bug: models emit a trailing newline after the closing
+      // fence, which used to defeat the end-anchored strip and surface the
+      // literal ```json / ``` markers as overflow.
+      const response = `\`\`\`json
+{"edits":[{"pageId":"abc123","pageTitle":"Basics","pageSlug":"basics","summary":"Fix typos","isNew":false}],"overallSummary":"Fixing typos"}
+\`\`\`
+`
+
+      const result = parseJsonResponse(response, isValidEditPlan)
+
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.data.edits).toHaveLength(1)
+        expect(result.overflowBefore).toBeNull()
+        expect(result.overflowAfter).toBeNull()
+      }
+    })
+
+    it('does not report fence markers as overflow when prose surrounds the fence', () => {
+      const response = `Here's the edit plan:
+
+\`\`\`json
+{"edits":[{"pageId":"abc123","pageTitle":"Basics","pageSlug":"basics","summary":"Fix typos","isNew":false}],"overallSummary":"Fixing typos"}
+\`\`\``
+
+      const result = parseJsonResponse(response, isValidEditPlan)
+
+      expect(result.success).toBe(true)
+      if (result.success) {
+        // Genuine prose is still reported; the ```json / ``` markers are not.
+        expect(result.overflowBefore).toBe("Here's the edit plan:")
+        expect(result.overflowBefore).not.toContain('```')
+        expect(result.overflowAfter).toBeNull()
+      }
+    })
   })
 
   describe('text-only responses (no JSON)', () => {

@@ -88,10 +88,16 @@ export function parseJsonResponse<T>(
 ): ParseJsonResponse<T> {
   const fullResponse = response
 
-  // Step 1: Strip markdown code fences if present
+  // Step 1: Strip a surrounding markdown code fence if present.
+  // Trim FIRST: models routinely emit a trailing newline after the closing
+  // ```, which left `/\s*```$/` (no `m` flag → `$` is end-of-input) unable to
+  // match the fence. The fast path then fell through to Step 3, which reports
+  // overflow from the *raw* response — surfacing the literal ```json / ```
+  // markers to the user. The leading `[a-z0-9]*` swallows the language tag
+  // (```json, ```JSON, bare ```) in one pass.
   let cleanedResponse = response
-    .replace(/^```json\s*/i, '')
-    .replace(/^```\s*/i, '')
+    .trim()
+    .replace(/^```[a-z0-9]*\s*/i, '')
     .replace(/\s*```$/i, '')
     .trim()
 
@@ -137,9 +143,12 @@ export function parseJsonResponse<T>(
         continue
       }
 
-      // Success! Extract overflow text
-      const overflowBefore = response.slice(0, found.start).trim() || null
-      const overflowAfter = response.slice(found.end).trim() || null
+      // Success! Extract overflow text. Code-fence markers are benign
+      // formatting, never genuine overflow, so strip any ``` / ```lang that
+      // sits next to the JSON before deciding whether to warn the user.
+      const stripFences = (s: string) => s.replace(/```[a-z0-9]*/gi, '').trim() || null
+      const overflowBefore = stripFences(response.slice(0, found.start))
+      const overflowAfter = stripFences(response.slice(found.end))
 
       return {
         success: true,
