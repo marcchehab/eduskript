@@ -58,6 +58,7 @@ import { SqlProgressBar } from './sql-progress-bar'
 import { PythonProgressBar } from './python-progress-bar'
 import { PythonTestResults } from './python-test-results'
 import { runPythonChecks } from './python-check-runner'
+import { useCoupledVideo, parseTimecode } from '@/components/markdown/coupled-video-context'
 import type { PythonCheckResult } from './types'
 import { deferUntilIdle } from '@/lib/defer-until-idle'
 
@@ -105,6 +106,11 @@ interface CodeEditorProps {
   solution?: string // Expected SQL solution for automatic pass/fail verification
   exam?: boolean // Exam mode: verification runs silently but no feedback or solution shown to student
   checkCode?: string // Hidden assert statements for Python checking
+  // Staged checks: multiple <python-check> blocks for one editor become an
+  // ordered sequence the student clears one at a time. When present (length
+  // ≥ 1) it supersedes checkCode. A single stage behaves exactly like the
+  // legacy single-check path.
+  checkStages?: CheckStage[]
   checkPoints?: number // Total points for this exercise
   maxChecks?: number // Max submission attempts (undefined = unlimited)
   // Teacher-attached binary files (Python only). Resolved from skript storage in
@@ -119,6 +125,17 @@ interface CodeEditorProps {
   // Overrides the line-count auto-height. The user's manual splitter drag still
   // wins over this. Output panel adds to the total below the splitter.
   height?: number
+}
+
+/** One stage of a staged Python check (see CodeEditorProps.checkStages). */
+export interface CheckStage {
+  code: string
+  points?: number
+  maxChecks?: number
+  /** Coupled-video mark this stage releases when cleared ("90" | "1:30"). */
+  gateAt?: string
+  /** Optional short label shown in the "Stage X of N" header. */
+  label?: string
 }
 
 // Custom annotation to mark programmatic changes (defined once outside component)
@@ -310,6 +327,7 @@ export const CodeEditor = memo(function CodeEditor({
   solution,
   exam = false,
   checkCode,
+  checkStages,
   checkPoints,
   maxChecks,
   attachedFiles,
@@ -338,6 +356,23 @@ export const CodeEditor = memo(function CodeEditor({
   // on reload or when the student re-clicks Test while already passing.
   const [celebrationToken, setCelebrationToken] = useState(0)
   const prevAllPassedRef = useRef(false)
+
+  // ── Staged checks ─────────────────────────────────────────────────────────
+  // Normalize to a stages array: explicit checkStages wins; otherwise wrap the
+  // legacy single checkCode as one stage; otherwise no checks.
+  const stages: CheckStage[] = useMemo(() => {
+    if (checkStages && checkStages.length > 0) return checkStages
+    if (checkCode) return [{ code: checkCode, points: checkPoints, maxChecks }]
+    return []
+  }, [checkStages, checkCode, checkPoints, maxChecks])
+  const hasChecks = stages.length > 0
+  const isStaged = stages.length > 1
+  const [currentStage, setCurrentStage] = useState(0)
+  const activeStage: CheckStage | undefined = stages[Math.min(currentStage, stages.length - 1)]
+  const effectiveCheckCode = activeStage?.code
+  const effectiveCheckPoints = activeStage?.points ?? checkPoints
+  const effectiveMaxChecks = activeStage?.maxChecks ?? maxChecks
+  const coupledVideo = useCoupledVideo()
 
   const debugTag = `[CodeEditor:${id}]`
   const dbName = db ? db.split('/').pop() || db : 'Database'
@@ -380,14 +415,18 @@ export const CodeEditor = memo(function CodeEditor({
   // Persist Python check results for teacher dashboard
   const pythonCheckComponentId = `python-check-${id}`
   const { data: savedCheckData, updateData: savePythonCheck } = useSyncedUserData<PythonCheckData>(
-    pageId && checkCode ? pageId : '',
+    pageId && hasChecks ? pageId : '',
     pythonCheckComponentId,
     null
   )
 
-  // Restore checksUsed from persisted data on mount
+  // Restore checksUsed + cleared stage from persisted data on mount
   useEffect(() => {
-    if (savedCheckData && savedCheckData.checksUsed > 0) {
+    if (!savedCheckData) return
+    if (typeof savedCheckData.currentStage === 'number') {
+      setCurrentStage(Math.min(savedCheckData.currentStage, Math.max(stages.length - 1, 0)))
+    }
+    if (savedCheckData.checksUsed > 0) {
       setChecksUsed(savedCheckData.checksUsed)
       setCheckResults(savedCheckData.lastResults)
       // Seed prev-allPassed so a restored passing state doesn't re-celebrate
@@ -395,7 +434,36 @@ export const CodeEditor = memo(function CodeEditor({
       const restored = savedCheckData.lastResults
       prevAllPassedRef.current = restored.length > 0 && restored.every(r => r.passed)
     }
-  }, [savedCheckData])
+  }, [savedCheckData, stages.length])
+
+  // Register each stage's gate with the coupled-video context so the video
+  // pauses at that mark. Cleared when the editor unmounts or stages change.
+  useEffect(() => {
+    if (!coupledVideo) return
+    const keys: string[] = []
+    stages.forEach((s, i) => {
+      const t = s.gateAt != null ? parseTimecode(s.gateAt) : NaN
+      if (!Number.isNaN(t)) {
+        const key = `${pythonCheckComponentId}-stage-${i}`
+        coupledVideo.registerGate(key, t)
+        keys.push(key)
+      }
+    })
+    return () => keys.forEach((k) => coupledVideo.unregisterGate(k))
+    // registerGate/unregisterGate are stable; re-run only when stages change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stages, pythonCheckComponentId, coupledVideo?.registerGate, coupledVideo?.unregisterGate])
+
+  // Mark gates for already-cleared stages as passed (e.g. on reload after the
+  // student advanced in a prior session) so a coupled video doesn't get stuck
+  // at a mark the student already earned. Gate state is per-mount.
+  useEffect(() => {
+    if (!coupledVideo) return
+    for (let i = 0; i < currentStage; i++) {
+      coupledVideo.markPassed(`${pythonCheckComponentId}-stage-${i}`)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStage, pythonCheckComponentId, coupledVideo?.markPassed])
 
   // Code-editor highlights are always personal — never broadcast.
   // Why: teacher and student have different code in the same editor, so
@@ -3797,12 +3865,12 @@ plots
       setRunState(RunState.STOPPED)
 
       // Exam mode: silently run checks after each execution (no UI feedback)
-      if (exam && checkCode && pyodide) {
+      if (exam && effectiveCheckCode && pyodide) {
         const localFiles = filesRef.current
         const importFiles = [...(skriptImportsRef.current?.files || []), ...(globalImportsRef.current?.files || [])]
         const allAuxFiles = [...(localFiles.length > 1 ? localFiles : []), ...importFiles]
         try {
-          const results = await runPythonChecks(pyodide, code, checkCode, allAuxFiles)
+          const results = await runPythonChecks(pyodide, code, effectiveCheckCode, allAuxFiles)
           // Restore stdout/stderr
           pyodide.setStdout({ batched: (text: string) => addOutput(text, OutputLevel.OUTPUT) })
           pyodide.setStderr({ batched: (text: string) => addOutput(text, OutputLevel.ERROR) })
@@ -3810,7 +3878,7 @@ plots
           setChecksUsed(newChecksUsed)
           const totalTests = results.length
           const passedTests = results.filter(r => r.passed).length
-          const totalPoints = checkPoints ?? totalTests
+          const totalPoints = effectiveCheckPoints ?? totalTests
           const earned = totalTests > 0 ? Math.round((passedTests / totalTests) * totalPoints) : 0
           if (pageId) {
             savePythonCheck({
@@ -3853,10 +3921,11 @@ plots
     addOutput('Program stopped', OutputLevel.WARNING)
   }
 
-  // Run Python checks (assert statements against student code)
+  // Run the CURRENT stage's checks (assert statements against student code).
+  // For a single-stage exercise this is the classic Check button.
   const runPythonCheck = async () => {
-    if (!checkCode || !editorViewRef.current) return
-    if (maxChecks !== undefined && checksUsed >= maxChecks) return
+    if (!effectiveCheckCode || !editorViewRef.current) return
+    if (effectiveMaxChecks !== undefined && checksUsed >= effectiveMaxChecks) return
 
     setIsChecking(true)
     saveCurrentFile()
@@ -3875,7 +3944,7 @@ plots
       const importFiles = [...(skriptImportsRef.current?.files || []), ...(globalImportsRef.current?.files || [])]
       const allAuxFiles = [...(localFiles.length > 1 ? localFiles : []), ...importFiles]
 
-      const results = await runPythonChecks(pyodide, code, checkCode, allAuxFiles)
+      const results = await runPythonChecks(pyodide, code, effectiveCheckCode, allAuxFiles)
 
       // Restore stdout/stderr for normal output
       pyodide.setStdout({ batched: (text: string) => addOutput(text, OutputLevel.OUTPUT) })
@@ -3888,7 +3957,7 @@ plots
       // Calculate points
       const totalTests = results.length
       const passedTests = results.filter(r => r.passed).length
-      const totalPoints = checkPoints ?? totalTests
+      const totalPoints = effectiveCheckPoints ?? totalTests
       const earned = totalTests > 0 ? Math.round((passedTests / totalTests) * totalPoints) : 0
 
       // Trigger celebration only on a not-passing → passing transition.
@@ -3899,17 +3968,40 @@ plots
       }
       prevAllPassedRef.current = allPassedNow
 
-      // Persist for teacher dashboard
+      const stageIndex = currentStage
+      const isLastStage = stageIndex >= stages.length - 1
+
+      // On clearing the stage: release its coupled-video gate and advance to
+      // the next stage (if any). Advancing is deferred briefly so the student
+      // sees the green result before the next stage's assertions appear.
+      if (allPassedNow) {
+        if (coupledVideo) {
+          coupledVideo.markPassed(`${pythonCheckComponentId}-stage-${stageIndex}`)
+        }
+        if (!isLastStage) {
+          setTimeout(() => {
+            setCurrentStage((i) => Math.min(i + 1, stages.length - 1))
+            setCheckResults(null)
+            setChecksUsed(0)
+            prevAllPassedRef.current = false
+          }, 1200)
+        }
+      }
+
+      // Persist for teacher dashboard (records the stage just acted on).
       if (pageId) {
+        const clearedStage = allPassedNow && !isLastStage ? stageIndex + 1 : stageIndex
         savePythonCheck({
           checksUsed: newChecksUsed,
-          maxChecks: maxChecks ?? null,
+          maxChecks: effectiveMaxChecks ?? null,
           points: totalPoints,
           earnedPoints: earned,
           lastResults: results,
           lastCheckedAt: Date.now(),
+          currentStage: clearedStage,
         }, { immediate: true })
-        void createCheckVersion(`check: ${passedTests}/${totalTests} (${earned}/${totalPoints} pts)`)
+        const stageTag = isStaged ? `stage ${stageIndex + 1}/${stages.length} ` : ''
+        void createCheckVersion(`${stageTag}check: ${passedTests}/${totalTests} (${earned}/${totalPoints} pts)`)
       }
     } catch (error: any) {
       addOutput(`Check error: ${error.message || String(error)}`, OutputLevel.ERROR)
@@ -5084,19 +5176,24 @@ plots
                     )}
                   </span>
                 )}
-                {checkCode && !exam && (
+                {hasChecks && !exam && (
                   <Button
                     onClick={runPythonCheck}
                     size="sm"
                     variant="outline"
                     className="h-7 px-2 shadow-lg"
-                    disabled={isChecking || (maxChecks !== undefined && checksUsed >= maxChecks)}
+                    disabled={isChecking || (effectiveMaxChecks !== undefined && checksUsed >= effectiveMaxChecks)}
                   >
                     <CheckCircle2 className="w-3 h-3 mr-1" />
                     {isChecking ? '...' : 'Check'}
-                    {maxChecks !== undefined && (
+                    {isStaged && (
                       <span className="ml-1 text-[10px] text-muted-foreground">
-                        {checksUsed}/{maxChecks}
+                        stage {Math.min(currentStage + 1, stages.length)}/{stages.length}
+                      </span>
+                    )}
+                    {effectiveMaxChecks !== undefined && (
+                      <span className="ml-1 text-[10px] text-muted-foreground">
+                        {checksUsed}/{effectiveMaxChecks}
                       </span>
                     )}
                   </Button>
@@ -5827,17 +5924,25 @@ plots
     </div>
 
     {/* Python check test results */}
-    {checkCode && checkResults && !exam && (
-      <PythonTestResults
-        results={checkResults}
-        points={checkPoints ?? checkResults.length}
-        earnedPoints={checkResults.length > 0
-          ? Math.round((checkResults.filter(r => r.passed).length / checkResults.length) * (checkPoints ?? checkResults.length))
-          : 0}
-        checksUsed={checksUsed}
-        maxChecks={maxChecks ?? null}
-        celebrationToken={celebrationToken}
-      />
+    {hasChecks && checkResults && !exam && (
+      <>
+        {isStaged && (
+          <div className="mt-2 text-xs font-medium text-muted-foreground">
+            Stage {Math.min(currentStage + 1, stages.length)} of {stages.length}
+            {activeStage?.label ? `: ${activeStage.label}` : ''}
+          </div>
+        )}
+        <PythonTestResults
+          results={checkResults}
+          points={effectiveCheckPoints ?? checkResults.length}
+          earnedPoints={checkResults.length > 0
+            ? Math.round((checkResults.filter(r => r.passed).length / checkResults.length) * (effectiveCheckPoints ?? checkResults.length))
+            : 0}
+          checksUsed={checksUsed}
+          maxChecks={effectiveMaxChecks ?? null}
+          celebrationToken={celebrationToken}
+        />
+      </>
     )}
 
     {/* Teacher class progress for SQL verification exercises */}
@@ -5851,7 +5956,7 @@ plots
     )}
 
     {/* Teacher class progress for Python check exercises */}
-    {checkCode && pageId && isTeacher && selectedClass && (
+    {hasChecks && pageId && isTeacher && selectedClass && (
       <PythonProgressBar
         classId={selectedClass.id}
         className={selectedClass.name}

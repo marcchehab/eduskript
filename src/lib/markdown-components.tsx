@@ -252,6 +252,7 @@ export function createMarkdownComponents(
     const solution = (props['dataSolution'] as string) || (props['data-solution'] as string)
     const exam = (props['dataExam'] as string) || (props['data-exam'] as string)
     const checkCode = (props['dataCheckCode'] as string) || (props['data-check-code'] as string)
+    const checkStagesJson = (props['dataCheckStages'] as string) || (props['data-check-stages'] as string)
     const checkPoints = (props['dataCheckPoints'] as string) || (props['data-check-points'] as string)
     const maxChecks = (props['dataMaxChecks'] as string) || (props['data-max-checks'] as string)
     const heightAttr = (props['dataHeight'] as string) || (props['data-height'] as string)
@@ -284,6 +285,24 @@ export function createMarkdownComponents(
 
     const id = providedId || `editor-${hashCode(code + (filesJson || '') + (solution || ''))}-${language}`
     const decodedSolution = solution ? decodeHtmlEntities(solution).replace(/\\n/g, '\n') : undefined
+
+    // Staged checks: one or more <python-check> blocks become ordered stages.
+    // Decoded + parsed like data-files (whole-array JSON, then per-field).
+    let checkStages: Array<{ code: string; points?: number; maxChecks?: number; gateAt?: string; label?: string }> | undefined
+    if (checkStagesJson) {
+      try {
+        const parsed = JSON.parse(decodeHtmlEntities(checkStagesJson)) as Array<{ code: string; points?: string; maxChecks?: string; gateAt?: string; label?: string }>
+        checkStages = parsed.map((s) => ({
+          code: s.code,
+          points: s.points ? parseInt(s.points, 10) : undefined,
+          maxChecks: s.maxChecks ? parseInt(s.maxChecks, 10) : undefined,
+          gateAt: s.gateAt,
+          label: s.label,
+        }))
+      } catch {
+        // Malformed stages JSON — fall back to the single checkCode path below.
+      }
+    }
 
     // Resolve database file URL
     let dbUrl: string | undefined
@@ -374,6 +393,7 @@ export function createMarkdownComponents(
           solution={decodedSolution}
           exam={exam === 'true'}
           checkCode={checkCode ? decodeHtmlEntities(checkCode) : undefined}
+          checkStages={checkStages}
           checkPoints={checkPoints ? parseInt(checkPoints, 10) : undefined}
           maxChecks={maxChecks ? parseInt(maxChecks, 10) : undefined}
           attachedFiles={attachedFiles}
@@ -393,6 +413,7 @@ export function createMarkdownComponents(
     // an absolute URL. When omitted, the MuxVideo component falls back to the
     // auto-generated Mux thumbnail (frame at time=0).
     const poster = (props['poster'] as string) || undefined
+    const pin = (props['pin'] as string) === 'true' || props['pin'] === ''
 
     return (
       <span className="block my-6">
@@ -401,6 +422,7 @@ export function createMarkdownComponents(
           alt={alt}
           poster={poster}
           files={files}
+          pin={pin}
           className="w-full rounded-lg overflow-hidden"
         />
         {alt && !alt.includes('autoplay') && !alt.includes('loop') && (
@@ -444,6 +466,7 @@ export function createMarkdownComponents(
     const startTimeStr = (props['data-start-time'] as string) || (props['dataStartTime'] as string) || ''
     const startTime = startTimeStr ? parseInt(startTimeStr, 10) : undefined
     const caption = (props['data-caption'] as string) || (props['dataCaption'] as string) || ''
+    const pin = (props['data-pin'] as string) === 'true' || (props['dataPin'] as string) === 'true'
 
     return (
       <Youtube
@@ -451,6 +474,7 @@ export function createMarkdownComponents(
         playlist={playlist || undefined}
         startTime={startTime}
         caption={caption || undefined}
+        pin={pin}
       />
     )
   }
@@ -499,6 +523,9 @@ export function createMarkdownComponents(
     // Optional labels for the two ends of a number-slider question.
     const minLabel = (props['minLabel'] as string) ?? (props['minlabel'] as string)
     const maxLabel = (props['maxLabel'] as string) ?? (props['maxlabel'] as string)
+    // Coupled-video gate: pause the video at this mark until the question is
+    // answered correctly. Accepts "90", "1:30", or "1:02:03".
+    const gateAt = (props['gate-at'] as string) ?? (props['gateAt'] as string) ?? (props['gateat'] as string) ?? (props['data-gate-at'] as string)
 
     // Don't render quiz if pageId is missing (e.g., in dashboard preview without context)
     if (!pageId) {
@@ -521,6 +548,7 @@ export function createMarkdownComponents(
         step={step}
         minLabel={minLabel}
         maxLabel={maxLabel}
+        gateAt={gateAt}
       >
         {children}
       </Question>

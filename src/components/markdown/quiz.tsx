@@ -9,6 +9,7 @@ import { useTeacherClass } from '@/contexts/teacher-class-context'
 import { QuizProgressBar } from './quiz-progress-bar'
 import { useSurvey, type SurveyContextValue, type SurveyAnswerType } from './survey-provider'
 import { useInSurveyRegion } from './survey'
+import { useCoupledVideo, useGate, parseTimecode } from './coupled-video-context'
 
 interface QuestionProps {
   children: ReactNode
@@ -24,6 +25,10 @@ interface QuestionProps {
   // the track, left = min end, right = max end.
   minLabel?: string
   maxLabel?: string
+  // Coupled-video gate timecode ("90" | "1:30" | "1:02:03"). When set and the
+  // page has a coupled video, a correct answer resumes the paused video.
+  // Only meaningful for single/multiple questions. Classroom mode only.
+  gateAt?: string
 }
 
 interface OptionProps {
@@ -600,6 +605,7 @@ function SyncedQuestion({
   id,
   pageId,
   type = 'multiple',
+  gateAt,
   ...rest
 }: QuestionProps) {
   const componentId = `quiz-${id}`
@@ -614,6 +620,35 @@ function SyncedQuestion({
 
   // Extract correct indices and option labels for the progress bar
   const { correctIndices, optionLabels } = extractOptionsInfo(children, type)
+
+  // Coupled-video gate: register this question's mark, and on a fully-correct
+  // submission resume the paused video. No-op when there's no coupled video.
+  const coupledVideo = useCoupledVideo()
+  useGate(componentId, gateAt != null ? parseTimecode(gateAt) : undefined)
+
+  const isAnswerCorrect = (qd: QuizData | null | undefined): boolean => {
+    if (!qd?.isSubmitted) return false
+    if (type !== 'single' && type !== 'multiple') return false
+    const sel = [...(qd.selected ?? [])].sort((a, b) => a - b)
+    const correct = [...correctIndices].sort((a, b) => a - b)
+    return correct.length > 0 && sel.length === correct.length && sel.every((v, i) => v === correct[i])
+  }
+
+  const updateDataAndGate = async (qd: QuizData, opts?: { immediate?: boolean }) => {
+    await updateData(qd, opts)
+    if (coupledVideo && isAnswerCorrect(qd)) coupledVideo.markPassed(componentId)
+  }
+
+  // Hydration: if the answer was already submitted correctly in a prior
+  // session, re-mark the gate once on load so a coupled video that pauses at
+  // this mark resumes (gate state is per-mount; persistence is per answer).
+  const gateHydratedRef = useRef(false)
+  useEffect(() => {
+    if (isLoading || gateHydratedRef.current) return
+    gateHydratedRef.current = true
+    if (coupledVideo && isAnswerCorrect(data)) coupledVideo.markPassed(componentId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading, data, coupledVideo])
 
   if (isLoading) {
     return (
@@ -633,7 +668,7 @@ function SyncedQuestion({
         {...rest}
         type={type}
         initialData={data}
-        updateData={updateData}
+        updateData={updateDataAndGate}
       >
         {children}
       </QuestionInner>

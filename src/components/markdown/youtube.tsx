@@ -3,15 +3,19 @@
 import Image from 'next/image'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { usePathname } from 'next/navigation'
+import { useVideoGate, CouplingToggle } from './coupled-video-context'
+import { PinnableMedia } from './pinnable-media'
 
 interface YoutubeProps {
   id?: string
   playlist?: string
   startTime?: number
   caption?: string
+  /** Stick the video to the top of the viewport while scrolling. */
+  pin?: boolean
 }
 
-export function Youtube({ id, playlist, startTime, caption }: YoutubeProps) {
+export function Youtube({ id, playlist, startTime, caption, pin }: YoutubeProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -109,6 +113,55 @@ export function Youtube({ id, playlist, startTime, caption }: YoutubeProps) {
     return () => window.removeEventListener('message', handleTimestampClick)
   }, [isOpen, uniqueId])
 
+  // ── Coupled-video gating ────────────────────────────────────────────────
+  const postCommand = useCallback((func: string, args: unknown[] = []) => {
+    iframeRef.current?.contentWindow?.postMessage(
+      JSON.stringify({ event: 'command', func, args }),
+      '*',
+    )
+  }, [])
+
+  const { onTimeUpdate, onManualPlay } = useVideoGate({
+    pause: () => postCommand('pauseVideo'),
+    play: () => postCommand('playVideo'),
+  })
+
+  // YouTube IFrame API over postMessage. The player only streams state once
+  // it receives an {event:'listening'} message; it then sends `infoDelivery`
+  // events carrying currentTime (coarse ~250ms ticks) and playerState.
+  useEffect(() => {
+    if (!isOpen) return
+    const iframe = iframeRef.current
+
+    const handle = (event: MessageEvent) => {
+      if (typeof event.data !== 'string') return
+      let data: { event?: string; info?: { currentTime?: number; playerState?: number } }
+      try {
+        data = JSON.parse(event.data)
+      } catch {
+        return
+      }
+      if (data?.event === 'infoDelivery' && data.info) {
+        if (typeof data.info.currentTime === 'number') onTimeUpdate(data.info.currentTime)
+        // playerState 1 = playing. Treat as a manual resume so a user override
+        // past an unsatisfied gate isn't immediately re-paused (soft gating).
+        if (data.info.playerState === 1) onManualPlay()
+      }
+    }
+
+    const startListening = () =>
+      iframe?.contentWindow?.postMessage(JSON.stringify({ event: 'listening' }), '*')
+
+    window.addEventListener('message', handle)
+    iframe?.addEventListener('load', startListening)
+    const kick = setTimeout(startListening, 500)
+    return () => {
+      window.removeEventListener('message', handle)
+      iframe?.removeEventListener('load', startListening)
+      clearTimeout(kick)
+    }
+  }, [isOpen, onTimeUpdate, onManualPlay])
+
   // Early return after all hooks
   if (!id && !playlist) return <div>No video id or playlist provided</div>
 
@@ -116,64 +169,59 @@ export function Youtube({ id, playlist, startTime, caption }: YoutubeProps) {
     ? <span className="block text-center text-sm text-muted-foreground mt-2">{caption}</span>
     : null
 
-  if (!isOpen) {
-    return (
-      <span className="block my-6">
-        <span
-          className="relative cursor-pointer aspect-video block rounded-lg overflow-hidden"
-          onClick={handleClick}
-        >
-          {isLoading ? (
-            <span className="absolute inset-0 bg-muted animate-pulse flex items-center justify-center">
-              <span className="text-muted-foreground">Loading thumbnail...</span>
-            </span>
-          ) : (
-            <span className="absolute inset-0 overflow-hidden">
-              <Image
-                src={thumbnailUrl || `https://img.youtube.com/vi/${id}/hqdefault.jpg`}
-                fill
-                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                alt="YouTube video thumbnail"
-                className="object-cover"
-                priority
-              />
-            </span>
-          )}
-          <span className="absolute inset-0 flex items-center justify-center">
-            <span className="bg-black/50 rounded-full p-4 transition-transform hover:scale-110">
-              <svg
-                className="w-16 h-16 text-white"
-                fill="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path d="M8 5v14l11-7z" />
-              </svg>
-            </span>
-            {playlist && (
-              <span className="absolute bottom-4 right-4 bg-black/70 text-white px-2 py-1 rounded-md text-sm flex items-center">
-                <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9h-4v4h-2v-4H9V9h4V5h2v4h4v2z" />
-                </svg>
-                Playlist
-              </span>
-            )}
-          </span>
+  // The player (thumbnail before open, iframe after) — this is what gets
+  // pinned into the corner overlay when `pin` and the user scrolls past it.
+  const player = !isOpen ? (
+    <span
+      className="relative cursor-pointer aspect-video block rounded-lg overflow-hidden"
+      onClick={handleClick}
+    >
+      {isLoading ? (
+        <span className="absolute inset-0 bg-muted animate-pulse flex items-center justify-center">
+          <span className="text-muted-foreground">Loading thumbnail...</span>
         </span>
-        {captionNode}
+      ) : (
+        <span className="absolute inset-0 overflow-hidden">
+          <Image
+            src={thumbnailUrl || `https://img.youtube.com/vi/${id}/hqdefault.jpg`}
+            fill
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+            alt="YouTube video thumbnail"
+            className="object-cover"
+            priority
+          />
+        </span>
+      )}
+      <span className="absolute inset-0 flex items-center justify-center">
+        <span className="bg-black/50 rounded-full p-4 transition-transform hover:scale-110">
+          <svg className="w-16 h-16 text-white" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M8 5v14l11-7z" />
+          </svg>
+        </span>
+        {playlist && (
+          <span className="absolute bottom-4 right-4 bg-black/70 text-white px-2 py-1 rounded-md text-sm flex items-center">
+            <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9h-4v4h-2v-4H9V9h4V5h2v4h4v2z" />
+            </svg>
+            Playlist
+          </span>
+        )}
       </span>
-    )
-  }
+    </span>
+  ) : (
+    <iframe
+      ref={iframeRef}
+      className="w-full aspect-video rounded-lg"
+      src={buildEmbedUrl()}
+      title="YouTube Video"
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+      allowFullScreen
+    />
+  )
 
   return (
     <span className="block my-6">
-      <iframe
-        ref={iframeRef}
-        className="w-full aspect-video rounded-lg"
-        src={buildEmbedUrl()}
-        title="YouTube Video"
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-        allowFullScreen
-      />
+      <PinnableMedia enabled={pin} footer={<CouplingToggle />}>{player}</PinnableMedia>
       {captionNode}
     </span>
   )

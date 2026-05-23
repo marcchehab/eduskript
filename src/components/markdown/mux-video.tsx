@@ -1,9 +1,11 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import type { ReactElement } from 'react'
+import { useRef, type ReactElement } from 'react'
 import type { SkriptFilesData } from '@/lib/skript-files'
 import { resolveUrl, resolveVideo } from '@/lib/skript-files'
+import { useVideoGate, CouplingToggle } from './coupled-video-context'
+import { PinnableMedia } from './pinnable-media'
 
 interface MuxVideoProps {
   src: string // Filename (e.g., "video.mp4")
@@ -17,6 +19,8 @@ interface MuxVideoProps {
    */
   poster?: string
   className?: string
+  /** Pin the player into a corner overlay once it scrolls off the top. */
+  pin?: boolean
   // Files data for resolving video metadata (serializable)
   files?: SkriptFilesData
 }
@@ -45,7 +49,20 @@ function resolvePoster(value: string | undefined, files: SkriptFilesData | undef
   return files ? resolveUrl(files, value) : undefined
 }
 
-export function MuxVideo({ src, alt = '', poster: posterOverride, className, files }: MuxVideoProps): ReactElement {
+export function MuxVideo({ src, alt = '', poster: posterOverride, className, pin, files }: MuxVideoProps): ReactElement {
+  // Coupled-video gating. next/dynamic doesn't reliably forward refs, so we
+  // capture the underlying <mux-player> element (which implements the media
+  // element API: currentTime, pause(), play()) from the media events instead.
+  // Declared before the early return below so hook order stays stable.
+  const playerElRef = useRef<HTMLMediaElement | null>(null)
+  const { onTimeUpdate, onManualPlay } = useVideoGate({
+    pause: () => playerElRef.current?.pause(),
+    play: () => {
+      const p = playerElRef.current?.play()
+      if (p && typeof p.catch === 'function') p.catch(() => {})
+    },
+  })
+
   // Resolve video metadata
   const videoInfo = files ? resolveVideo(files, src) : undefined
   const { playbackId, poster: defaultPoster, blurDataURL, aspectRatio } = videoInfo?.metadata ?? {}
@@ -74,17 +91,31 @@ export function MuxVideo({ src, alt = '', poster: posterOverride, className, fil
   const preloadStrategy = alt.includes('autoplay') ? 'auto' : 'none'
 
   return (
-    <MuxPlayer
-      playbackId={playbackId}
-      poster={poster}
-      placeholder={blurDataURL ?? ''}
-      accentColor="hsl(var(--primary))"
-      className={`rounded-lg overflow-hidden ${className ?? ''}`}
-      style={{ aspectRatio: aspectRatio ?? 16 / 9 }}
-      autoPlay={alt.includes('autoplay')}
-      loop={alt.includes('loop')}
-      preload={preloadStrategy}
-      disableTracking // Disable Mux analytics to avoid CORS issues
-    />
+    <span className="block">
+      <PinnableMedia enabled={pin} footer={<CouplingToggle />}>
+      <MuxPlayer
+        playbackId={playbackId}
+        poster={poster}
+        placeholder={blurDataURL ?? ''}
+        accentColor="hsl(var(--primary))"
+        className={`rounded-lg overflow-hidden ${className ?? ''}`}
+        style={{ aspectRatio: aspectRatio ?? 16 / 9 }}
+        autoPlay={alt.includes('autoplay')}
+        loop={alt.includes('loop')}
+        preload={preloadStrategy}
+        disableTracking // Disable Mux analytics to avoid CORS issues
+        onTimeUpdate={(e: Event) => {
+          const el = e.target as HTMLMediaElement | null
+          if (!el) return
+          playerElRef.current = el
+          onTimeUpdate(el.currentTime)
+        }}
+        onPlay={(e: Event) => {
+          playerElRef.current = (e.target as HTMLMediaElement | null) ?? playerElRef.current
+          onManualPlay()
+        }}
+      />
+      </PinnableMedia>
+    </span>
   )
 }

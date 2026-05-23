@@ -7,6 +7,7 @@ import { resolveStableLinks } from '@/lib/page-stable-link.server'
 import { EagerImageLoader } from './eager-image-loader'
 import { MarkdownErrorBoundary } from './markdown-error-boundary'
 import { SurveyProvider } from './survey-provider'
+import { CoupledVideoProvider } from './coupled-video-context'
 
 interface ServerMarkdownRendererProps {
   content: string
@@ -70,12 +71,28 @@ export async function ServerMarkdownRenderer({ content, skriptId, pageId, organi
   const hasSurvey = pageId && /<survey[\s>]/i.test(content)
   const body = <MarkdownErrorBoundary>{rendered}</MarkdownErrorBoundary>
 
+  // Mount the CoupledVideoProvider when the page wires a video to checks
+  // (a `coupled` attr or any `gate-at` mark). Author default is on unless
+  // explicitly `coupled="false"`. Mirrors markdown-renderer.client.tsx.
+  const hasCoupling = pageId && (/\bcoupled\s*=/i.test(content) || /\bgate-at\s*=/i.test(content))
+  const initialCoupled = !/\bcoupled\s*=\s*["']?false/i.test(content)
+
+  let wrapped: React.ReactNode = body
+  if (hasSurvey && pageId) {
+    wrapped = <SurveyProvider pageId={pageId}>{wrapped}</SurveyProvider>
+  }
+  if (hasCoupling && pageId) {
+    wrapped = (
+      <CoupledVideoProvider pageId={pageId} initialCoupled={initialCoupled}>
+        {wrapped}
+      </CoupledVideoProvider>
+    )
+  }
+
   return (
     <EagerImageLoader>
       <div className="markdown-content prose dark:prose-invert max-w-none">
-        {hasSurvey && pageId
-          ? <SurveyProvider pageId={pageId}>{body}</SurveyProvider>
-          : body}
+        {wrapped}
       </div>
     </EagerImageLoader>
   )

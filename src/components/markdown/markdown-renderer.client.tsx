@@ -8,6 +8,7 @@ import type { VideoInfo } from '@/lib/skript-files'
 import { EagerImageLoader } from './eager-image-loader'
 import { MarkdownErrorBoundary } from './markdown-error-boundary'
 import { SurveyProvider } from './survey-provider'
+import { CoupledVideoProvider } from './coupled-video-context'
 
 interface MarkdownRendererProps {
   content: string
@@ -208,6 +209,19 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
     [deferredContent]
   )
 
+  // Mount the CoupledVideoProvider when the page wires a video to checks: a
+  // video tag carrying a `coupled` attribute, or any `gate-at` mark. Cheap
+  // source-level regex like hasSurvey. The author default is `coupled="true"`
+  // unless explicitly `coupled="false"` (gate-at-only pages default to on —
+  // gating is clearly the intent). The user can flip it at runtime regardless.
+  const couplingConfig = useMemo(() => {
+    const hasCoupledAttr = /\bcoupled\s*=/i.test(deferredContent)
+    const hasGateAt = /\bgate-at\s*=/i.test(deferredContent)
+    if (!hasCoupledAttr && !hasGateAt) return null
+    const explicitlyOff = /\bcoupled\s*=\s*["']?false/i.test(deferredContent)
+    return { initialCoupled: !explicitlyOff }
+  }, [deferredContent])
+
   if (isInitialLoad && !renderedContent) {
     return (
       <div className="markdown-content prose dark:prose-invert max-w-none">
@@ -231,12 +245,23 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
 
   const inner = <MarkdownErrorBoundary>{renderedContent}</MarkdownErrorBoundary>
 
+  // Nest providers: survey (when present) then coupled-video (when present).
+  let wrapped: ReactNode = inner
+  if (hasSurvey && pageId) {
+    wrapped = <SurveyProvider pageId={pageId}>{wrapped}</SurveyProvider>
+  }
+  if (couplingConfig && pageId) {
+    wrapped = (
+      <CoupledVideoProvider pageId={pageId} initialCoupled={couplingConfig.initialCoupled}>
+        {wrapped}
+      </CoupledVideoProvider>
+    )
+  }
+
   return (
     <EagerImageLoader>
       <div className="markdown-content prose dark:prose-invert max-w-none">
-        {hasSurvey && pageId
-          ? <SurveyProvider pageId={pageId}>{inner}</SurveyProvider>
-          : inner}
+        {wrapped}
       </div>
     </EagerImageLoader>
   )

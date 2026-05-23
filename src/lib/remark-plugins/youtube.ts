@@ -97,11 +97,16 @@ function parseYoutubeAttrs(attrs: string): string {
   const captionMatch = attrs.match(/\bcaption=["']([^"']*)["']/)
   const caption = captionMatch ? captionMatch[1] : ''
 
+  // pin: keep the video stuck to the top of the viewport while scrolling
+  // (useful for the coupled-video format so checks stay reachable below).
+  const pin = /\bpin(=["']?true["']?)?(\s|$)/.test(attrs) && !/\bpin=["']?false/.test(attrs)
+
   let element = '<youtube-embed'
   if (id) element += ` data-id="${id}"`
   if (playlist) element += ` data-playlist="${playlist}"`
   if (startTime) element += ` data-start-time="${startTime}"`
   if (caption) element += ` data-caption="${caption}"`
+  if (pin) element += ` data-pin="true"`
   element += '></youtube-embed>'
 
   return element

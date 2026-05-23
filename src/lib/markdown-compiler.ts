@@ -113,11 +113,11 @@ export const sanitizeSchema = {
     // Allow className and style on all elements
     '*': [...(defaultSchema.attributes?.['*'] || []), 'className', 'style'],
     // Custom component attributes (camelCase for HAST, kebab-case for raw HTML)
-    'code-editor': ['dataLanguage', 'dataCode', 'dataFiles', 'dataId', 'dataDb', 'dataSchemaImage', 'dataSingle', 'dataShowCanvas', 'dataSolution', 'dataExam', 'dataCheckCode', 'dataCheckPoints', 'dataMaxChecks', 'dataAssets', 'dataAllowUpload', 'dataAccept', 'dataHeight', 'data-language', 'data-code', 'data-files', 'data-id', 'data-db', 'data-schema-image', 'data-single', 'data-show-canvas', 'data-solution', 'data-exam', 'data-check-code', 'data-check-points', 'data-max-checks', 'data-assets', 'data-allow-upload', 'data-accept', 'data-height'],
+    'code-editor': ['dataLanguage', 'dataCode', 'dataFiles', 'dataId', 'dataDb', 'dataSchemaImage', 'dataSingle', 'dataShowCanvas', 'dataSolution', 'dataExam', 'dataCheckCode', 'dataCheckStages', 'dataCheckPoints', 'dataMaxChecks', 'dataAssets', 'dataAllowUpload', 'dataAccept', 'dataHeight', 'data-language', 'data-code', 'data-files', 'data-id', 'data-db', 'data-schema-image', 'data-single', 'data-show-canvas', 'data-solution', 'data-exam', 'data-check-code', 'data-check-stages', 'data-check-points', 'data-max-checks', 'data-assets', 'data-allow-upload', 'data-accept', 'data-height'],
     'tabs-container': ['dataItems', 'data-items'],
-    'youtube-embed': ['dataId', 'dataPlaylist', 'dataStartTime', 'dataCaption', 'data-id', 'data-playlist', 'data-start-time', 'data-caption'],
+    'youtube-embed': ['dataId', 'dataPlaylist', 'dataStartTime', 'dataCaption', 'dataPin', 'data-id', 'data-playlist', 'data-start-time', 'data-caption', 'data-pin'],
     'mermaid-diagram': ['dataDefinition', 'data-definition'],
-    'muxvideo': ['src', 'alt', 'poster'],
+    'muxvideo': ['src', 'alt', 'poster', 'pin'],
     'excalidraw-image': ['src', 'alt', 'dataAlign', 'dataWrap', 'data-align', 'data-wrap'],
     // <excali> component - shorthand for excalidraw (src without .excalidraw extension)
     'excali': ['src', 'alt', 'width', 'align', 'wrap'],
@@ -128,7 +128,7 @@ export const sanitizeSchema = {
     // rehypeAllowPluginAttrs before sanitize — see rehype-plugins/plugin-attrs.ts.
     'plugin': ['src', 'id', 'height', 'width'],
     'pdf': ['src', 'height'],
-    'question': ['id', 'type', 'showfeedback', 'allowupdate', 'minvalue', 'maxvalue', 'step', 'minlabel', 'maxlabel'],
+    'question': ['id', 'type', 'showfeedback', 'allowupdate', 'minvalue', 'maxvalue', 'step', 'minlabel', 'maxlabel', 'gateat', 'gate-at', 'dataGateAt', 'data-gate-at'],
     'quiz-option': ['correct', 'is', 'feedback'],
     'answer': ['correct', 'is', 'feedback'],
     'yt': ['time', 'videoid', 'label'],

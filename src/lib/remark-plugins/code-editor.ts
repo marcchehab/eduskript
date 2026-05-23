@@ -188,9 +188,23 @@ function processParent(parent: ParentNode): void {
     }
 
     // Phase 3: Process python-check blocks.
-    // These blocks contain assert statements that test student code.
-    // They inject data-check-* attributes into their target code-editor
-    // and are removed from the output (never rendered).
+    // These blocks contain assert statements that test student code. They
+    // inject check attributes into their target code-editor and are removed
+    // from the output (never rendered).
+    //
+    // Multiple python-check blocks targeting the same editor become ordered
+    // *stages* (document order = stage order): the student clears one stage at
+    // a time. They're emitted as a single `data-check-stages` JSON attribute.
+    // `data-check-code`/`-points`/`-max-checks` are still emitted for the first
+    // stage so the single-check path stays byte-for-byte compatible.
+    interface StageMeta {
+      code: string
+      points?: string
+      maxChecks?: string
+      gateAt?: string
+      label?: string
+    }
+    const stagesByTarget = new Map<string, StageMeta[]>()
     const indicesToRemove: number[] = []
 
     for (let i = 0; i < parent.children.length; i++) {
@@ -199,30 +213,41 @@ function processParent(parent: ParentNode): void {
 
       const meta = node.meta || ''
       const forMatch = meta.match(/for="([^"]*)"/)
-      const pointsMatch = meta.match(/points="([^"]*)"/)
-      const maxChecksMatch = meta.match(/max-checks="([^"]*)"/)
-
       if (!forMatch) continue // No target editor — skip
 
       const forId = forMatch[1]
-      const checkCode = escapeHtml(node.value || '')
-      const checkPoints = pointsMatch ? pointsMatch[1] : ''
-      const maxChecks = maxChecksMatch ? maxChecksMatch[1] : ''
+      const stage: StageMeta = {
+        code: node.value || '',
+        points: meta.match(/points="([^"]*)"/)?.[1],
+        maxChecks: meta.match(/max-checks="([^"]*)"/)?.[1],
+        gateAt: meta.match(/gate-at="([^"]*)"/)?.[1],
+        label: meta.match(/label="([^"]*)"/)?.[1],
+      }
 
-      // Find the matching code-editor HTML node by looking for data-id="forId"
+      const existing = stagesByTarget.get(forId)
+      if (existing) existing.push(stage)
+      else stagesByTarget.set(forId, [stage])
+
+      indicesToRemove.push(i)
+    }
+
+    // Inject the collected stages into each target editor.
+    for (const [forId, stages] of stagesByTarget) {
       for (let j = 0; j < parent.children.length; j++) {
         const target = parent.children[j] as any
         if (target.type === 'html' && typeof target.value === 'string' && target.value.includes(`data-id="${forId}"`)) {
-          // Inject check attributes before the closing >
-          let extra = ` data-check-code="${checkCode}"`
-          if (checkPoints) extra += ` data-check-points="${checkPoints}"`
-          if (maxChecks) extra += ` data-max-checks="${maxChecks}"`
+          // Whole-array JSON, escaped like data-files. The component decodes
+          // entities then JSON.parses, so stage.code stays raw here.
+          const stagesJson = escapeHtml(JSON.stringify(stages))
+          const first = stages[0]
+          let extra = ` data-check-stages="${stagesJson}"`
+          extra += ` data-check-code="${escapeHtml(first.code)}"`
+          if (first.points) extra += ` data-check-points="${first.points}"`
+          if (first.maxChecks) extra += ` data-max-checks="${first.maxChecks}"`
           target.value = target.value.replace('></code-editor>', `${extra}></code-editor>`)
           break
         }
       }
-
-      indicesToRemove.push(i)
     }
 
     // Remove python-check nodes in reverse order

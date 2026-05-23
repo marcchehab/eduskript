@@ -83,6 +83,9 @@ export interface PythonCheckData {
   earnedPoints: number
   lastResults: PythonCheckResult[]
   lastCheckedAt: number
+  /** For staged checks: highest stage index the student has cleared so far.
+   *  Absent/0 for single-stage (legacy) exercises. */
+  currentStage?: number
 }
 
 export interface PythonCheckResult {
