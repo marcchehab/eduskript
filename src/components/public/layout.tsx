@@ -448,7 +448,7 @@ export function PublicSiteLayout({
         <ReadingProgress />
 
       {/* Top-right controls - always visible when sidebar is hidden, otherwise only on mobile */}
-      <div className={`${hideSidebar ? '' : 'min-[1344px]:hidden '}fixed top-8 right-4 z-50 flex items-center gap-2`}>
+      <div className={`floating-page-controls ${hideSidebar ? '' : 'min-[1344px]:hidden '}fixed top-8 right-4 z-50 flex items-center gap-2`}>
         <AdminToolbox pageId={pageId} />
         <FontSizeControls />
         <PublicThemeToggle />

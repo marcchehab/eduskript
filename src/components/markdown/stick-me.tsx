@@ -47,6 +47,20 @@ function clampFraction(f: number): number {
   return Math.min(MAX_WIDTH_FRACTION, Math.max(MIN_WIDTH_FRACTION, f))
 }
 
+// Page-wide count of currently-pinned StickMe instances. While > 0 we put
+// `stickme-pinned` on <body> so the floating top-right page controls (font
+// size / theme / login) fade out and yield the corner to the docked content.
+// The pinned element can't simply be lifted above those controls with z-index
+// — it lives inside the zoom-transformed, opaque <main>, which sits below them
+// — and portalling it out would reload pinned video iframes. So we hide the
+// controls while something is docked; they return when nothing is pinned.
+let pinnedInstanceCount = 0
+function adjustPinnedCount(delta: number) {
+  if (typeof document === 'undefined') return
+  pinnedInstanceCount = Math.max(0, pinnedInstanceCount + delta)
+  document.body.classList.toggle('stickme-pinned', pinnedInstanceCount > 0)
+}
+
 /**
  * Coordinates multiple StickMe instances on a page so only ONE is pinned at a
  * time: the lowest-on-page instance whose top has scrolled above the viewport.
@@ -127,6 +141,15 @@ export function StickMe({
     registry.register(myId, () => slotRef.current?.getBoundingClientRect().top ?? Infinity)
     return () => registry.unregister(myId)
   }, [registry, enabled, myId])
+
+  // While this instance is docked, count it toward the page-wide pinned total
+  // (fades the floating top-right controls — see adjustPinnedCount). Cleanup
+  // decrements on unpin and on unmount-while-pinned.
+  useEffect(() => {
+    if (!pinned) return
+    adjustPinnedCount(1)
+    return () => adjustPinnedCount(-1)
+  }, [pinned])
 
   useEffect(() => {
     if (!enabled) return

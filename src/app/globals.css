@@ -762,6 +762,21 @@ article.prose-theme > div > :first-child {
   z-index: 1;
 }
 
+/* Floating top-right page controls (font size / theme / login). While a
+ * <stickme>/pinned video is docked, it shares this corner. The pinned element
+ * can't be lifted above these controls with z-index (it lives inside the
+ * zoom-transformed, opaque <main>, which paints below them, and portalling it
+ * out would reload pinned video iframes), so we fade the controls out and let
+ * the docked content own the corner. `stickme-pinned` is toggled on <body> by
+ * stick-me.tsx while ≥1 instance is pinned; controls return when none are. */
+.floating-page-controls {
+  transition: opacity 0.2s ease;
+}
+body.stickme-pinned .floating-page-controls {
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* Foldable callouts clip the inline annotation SVG to their visible-
  * content height. The callout already animates its grid-template-rows
  * from `min-content 0fr` → `min-content 1fr` over 0.3s ease-in-out
