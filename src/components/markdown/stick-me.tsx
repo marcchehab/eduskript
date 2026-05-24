@@ -199,7 +199,11 @@ export function StickMe({
       // Anchor to the actual media element's rendered rect — wrappers around
       // an inline iframe/img leave a baseline gap below it, so the inner span
       // can be a touch taller than what's visible. Fall back to the wrapper.
-      const media = inner.querySelector('iframe, video, img, canvas, svg, mux-player')
+      // Find the content media to anchor to. NB: no 'svg' — the handle's own
+      // icon and decorative icons (e.g. a callout's) are SVGs and would be
+      // matched instead. Excalidraw/schemas render as <img>, so they're
+      // covered; arbitrary content with no media falls back to the wrapper.
+      const media = inner.querySelector('iframe, video, img, canvas, mux-player')
       const ir = (media ?? inner).getBoundingClientRect()
 
       // Handle lives *inside* inner, so it inherits inner's transform exactly.
