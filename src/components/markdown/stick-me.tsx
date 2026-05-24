@@ -31,7 +31,6 @@ const MIN_WIDTH_FRACTION = 0.15
 const MAX_WIDTH_FRACTION = 1
 const TOP_MARGIN = 8
 const FOOTER_GAP = 8
-const HANDLE_SIZE = 28 // px (matches the h-7 w-7 button)
 const DEFAULT_STORAGE_KEY = 'stickme:width-fraction'
 
 function clampFraction(f: number): number {
@@ -86,6 +85,10 @@ export function StickMe({
         footerRef.current.style.position = ''
         footerRef.current.style.zIndex = ''
       }
+      if (handleRef.current) {
+        handleRef.current.style.left = ''
+        handleRef.current.style.top = ''
+      }
     }
 
     const update = () => {
@@ -133,14 +136,20 @@ export function StickMe({
       const media = inner.querySelector('iframe, video, img, canvas, svg, mux-player')
       const ir = (media ?? inner).getBoundingClientRect()
 
-      // Handle: natural bottom-left of the slot → centre on the player's
-      // visual bottom-left corner.
+      // Handle lives *inside* inner, so it inherits inner's transform exactly.
+      // Position it at the media's bottom-left in inner-local coordinates
+      // (screen offset ÷ inner's total on-screen scale), centre it on that
+      // point, and counter-scale (1/scale) so it stays a fixed size.
       if (handleRef.current) {
-        const half = HANDLE_SIZE / 2
-        const naturalCx = a.left + half
-        const naturalCy = a.bottom - half
-        handleRef.current.style.transformOrigin = 'top left'
-        handleRef.current.style.transform = `translate(${(ir.left - naturalCx) / z}px, ${(ir.bottom - naturalCy) / z}px)`
+        const innerRect = inner.getBoundingClientRect()
+        const total = inner.offsetWidth > 0 ? innerRect.width / inner.offsetWidth : scale * z
+        const localX = (ir.left - innerRect.left) / total
+        const localY = (ir.bottom - innerRect.top) / total
+        const hs = handleRef.current.style
+        hs.left = `${localX}px`
+        hs.top = `${localY}px`
+        hs.transformOrigin = 'top left'
+        hs.transform = `scale(${1 / scale}) translate(-50%, -50%)`
       }
 
       const ftr = footerRef.current
@@ -165,6 +174,14 @@ export function StickMe({
     window.addEventListener('touchmove', schedule, { passive: true })
     window.addEventListener('resize', schedule)
     sc?.addEventListener('scroll', schedule, { passive: true })
+
+    // The wrapped media can settle a few px *after* the first layout (e.g. a
+    // YouTube thumbnail swapping to a higher-res image, or an iframe loading) —
+    // recompute when its size changes so the handle/footer don't end up offset.
+    const ro = new ResizeObserver(() => schedule())
+    if (innerRef.current) ro.observe(innerRef.current)
+    if (slotRef.current) ro.observe(slotRef.current)
+
     schedule()
     return () => {
       window.removeEventListener('scroll', schedule)
@@ -172,6 +189,7 @@ export function StickMe({
       window.removeEventListener('touchmove', schedule)
       window.removeEventListener('resize', schedule)
       sc?.removeEventListener('scroll', schedule)
+      ro.disconnect()
       if (raf !== null) cancelAnimationFrame(raf)
       clear()
     }
@@ -227,6 +245,23 @@ export function StickMe({
       <span ref={slotRef} className="relative block">
         <span ref={innerRef} className="block">
           {children}
+          {/* Handle lives inside the player so it inherits the pin transform;
+              its left/top are set imperatively to the media's bottom-left. */}
+          {pinned && (
+            <button
+              ref={handleRef}
+              type="button"
+              onPointerDown={onHandlePointerDown}
+              onPointerMove={onHandlePointerMove}
+              onPointerUp={onHandlePointerUp}
+              title="Drag to resize"
+              aria-label="Resize pinned element"
+              className="absolute z-[60] flex h-7 w-7 items-center justify-center rounded-full border border-background/60 bg-foreground/85 text-background shadow-md"
+              style={{ left: 0, top: 0, cursor: 'nesw-resize', touchAction: 'none' }}
+            >
+              <MoveDiagonal2 className="h-3.5 w-3.5 rotate-90" />
+            </button>
+          )}
         </span>
         {pinned && (
           <span
@@ -235,21 +270,6 @@ export function StickMe({
           >
             Pinned to the margin — click to jump back
           </span>
-        )}
-        {pinned && (
-          <button
-            ref={handleRef}
-            type="button"
-            onPointerDown={onHandlePointerDown}
-            onPointerMove={onHandlePointerMove}
-            onPointerUp={onHandlePointerUp}
-            title="Drag to resize"
-            aria-label="Resize pinned element"
-            className="absolute bottom-0 left-0 z-[60] flex h-7 w-7 items-center justify-center rounded-full border border-background/60 bg-foreground/85 text-background shadow-md"
-            style={{ cursor: 'nesw-resize', touchAction: 'none' }}
-          >
-            <MoveDiagonal2 className="h-3.5 w-3.5 rotate-90" />
-          </button>
         )}
       </span>
       {footer != null && (
