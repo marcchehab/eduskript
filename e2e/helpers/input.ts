@@ -436,6 +436,52 @@ export async function addSnapInSection(page: Page, sectionId: string): Promise<s
   return id
 }
 
+/** Resolve a section's data-section-id from its heading text. */
+export async function sectionIdByHeading(page: Page, headingText: string): Promise<string> {
+  const id = await page
+    .locator(`[data-heading-text="${headingText}"]`)
+    .first()
+    .getAttribute('data-section-id')
+  if (!id) throw new Error(`no section for heading "${headingText}"`)
+  return id
+}
+
+export interface ScrollHeightMetrics {
+  /** #scroll-container scrollable height (= the zoom spacer when zoomed). */
+  scrollHeight: number
+  /** <main> layout scrollHeight — UNSCALED, so zoom-independent. The section-
+   *  anchored stroke SVGs used to inflate this by spilling below #paper. */
+  mainScrollHeight: number
+  /** #paper layout height (unscaled). */
+  paperOffsetHeight: number
+  /** #paper rendered height (post-transform, i.e. scaled by zoom). */
+  scaledPaperHeight: number
+}
+
+/** Page-height metrics used to guard against section SVGs inflating scroll. */
+export async function scrollHeightMetrics(page: Page): Promise<ScrollHeightMetrics> {
+  return page.evaluate(() => {
+    const sc = document.getElementById('scroll-container')
+    const paper = document.getElementById('paper') as HTMLElement | null
+    const main = document.querySelector('main')
+    return {
+      scrollHeight: sc?.scrollHeight ?? 0,
+      mainScrollHeight: main?.scrollHeight ?? 0,
+      paperOffsetHeight: paper?.offsetHeight ?? 0,
+      scaledPaperHeight: paper?.getBoundingClientRect().height ?? 0,
+    }
+  })
+}
+
+/** Scroll the page's scroll container to an absolute offset, then settle a frame. */
+export async function scrollContainerTo(page: Page, top: number) {
+  await page.evaluate((t) => {
+    const sc = document.getElementById('scroll-container')
+    if (sc) sc.scrollTop = t
+  }, top)
+  await page.waitForTimeout(120)
+}
+
 // ── Zoom ───────────────────────────────────────────────────────────────────
 
 /** Current page zoom = the scale on <main> (parsed from its transform). */

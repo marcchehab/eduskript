@@ -56,6 +56,17 @@ print("hello from the e2e editor")
 Trailing content so Section Two is not the last element on the page.
 
 ${Array.from({ length: 8 }, (_, i) => `Trailing paragraph ${i + 1}.`).join('\n\n')}
+
+## Pinned reference
+
+Content above the pinned card so there's scroll room before it docks to the margin.
+
+<stickme id="e2e-pin">
+> [!info] E2E pinned card
+> Generic content pinned to the right margin — used by the stickme e2e test.
+</stickme>
+
+${Array.from({ length: 16 }, (_, i) => `Scroll filler ${i + 1} after the pinned card, so it stays docked while scrolling past it.`).join('\n\n')}
 `
 
 async function seed() {
