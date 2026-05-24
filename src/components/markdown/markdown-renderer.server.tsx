@@ -8,6 +8,7 @@ import { EagerImageLoader } from './eager-image-loader'
 import { MarkdownErrorBoundary } from './markdown-error-boundary'
 import { SurveyProvider } from './survey-provider'
 import { CoupledVideoProvider } from './coupled-video-context'
+import { StickMeProvider } from './stick-me'
 
 interface ServerMarkdownRendererProps {
   content: string
@@ -87,6 +88,10 @@ export async function ServerMarkdownRenderer({ content, skriptId, pageId, organi
         {wrapped}
       </CoupledVideoProvider>
     )
+  }
+  // Coordinates multiple pinned StickMe/videos so only one is pinned at a time.
+  if (/<stickme/i.test(content) || /\bpin\s*=/i.test(content)) {
+    wrapped = <StickMeProvider>{wrapped}</StickMeProvider>
   }
 
   return (

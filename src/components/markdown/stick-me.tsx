@@ -1,6 +1,16 @@
 'use client'
 
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import { MoveDiagonal2 } from 'lucide-react'
 import { useZoom } from '@/contexts/zoom-context'
 
@@ -37,6 +47,49 @@ function clampFraction(f: number): number {
   return Math.min(MAX_WIDTH_FRACTION, Math.max(MIN_WIDTH_FRACTION, f))
 }
 
+/**
+ * Coordinates multiple StickMe instances on a page so only ONE is pinned at a
+ * time: the lowest-on-page instance whose top has scrolled above the viewport.
+ * Scrolling down hands the pinned slot from one to the next; scrolling back up
+ * hands it back. Optional — without a provider each StickMe pins independently.
+ */
+interface StickMeRegistry {
+  register: (id: string, getTop: () => number) => void
+  unregister: (id: string) => void
+  /** The instance that should be pinned given the current viewport top, or null. */
+  activeId: (vpTop: number) => string | null
+}
+const StickMeContext = createContext<StickMeRegistry | null>(null)
+export function useStickMeRegistry(): StickMeRegistry | null {
+  return useContext(StickMeContext)
+}
+
+export function StickMeProvider({ children }: { children: ReactNode }) {
+  const reg = useRef(new Map<string, () => number>())
+  const register = useCallback((id: string, getTop: () => number) => {
+    reg.current.set(id, getTop)
+  }, [])
+  const unregister = useCallback((id: string) => {
+    reg.current.delete(id)
+  }, [])
+  const activeId = useCallback((vpTop: number) => {
+    let id: string | null = null
+    let best = -Infinity
+    for (const [key, getTop] of reg.current) {
+      const top = getTop()
+      // Eligible = scrolled to/above the viewport top. The active one is the
+      // lowest on the page among those (the greatest — least-negative — top).
+      if (top <= vpTop + TOP_MARGIN && top > best) {
+        best = top
+        id = key
+      }
+    }
+    return id
+  }, [])
+  const value = useMemo(() => ({ register, unregister, activeId }), [register, unregister, activeId])
+  return <StickMeContext.Provider value={value}>{children}</StickMeContext.Provider>
+}
+
 export function StickMe({
   children,
   footer,
@@ -53,6 +106,8 @@ export function StickMe({
   const footerRef = useRef<HTMLSpanElement>(null)
   const handleRef = useRef<HTMLButtonElement>(null)
   const getZoom = useZoom()
+  const registry = useStickMeRegistry()
+  const myId = useId()
   const [pinned, setPinned] = useState(false)
   const pinnedRef = useRef(false)
   const widthFractionRef = useRef(DEFAULT_WIDTH_FRACTION)
@@ -65,6 +120,13 @@ export function StickMe({
     const v = parseFloat(window.localStorage.getItem(storageKey) ?? '')
     widthFractionRef.current = Number.isNaN(v) ? DEFAULT_WIDTH_FRACTION : clampFraction(v)
   }, [storageKey])
+
+  // Join the page-level registry so only one StickMe is pinned at a time.
+  useEffect(() => {
+    if (!registry || !enabled) return
+    registry.register(myId, () => slotRef.current?.getBoundingClientRect().top ?? Infinity)
+    return () => registry.unregister(myId)
+  }, [registry, enabled, myId])
 
   useEffect(() => {
     if (!enabled) return
@@ -102,8 +164,12 @@ export function StickMe({
       const scRect = sc?.getBoundingClientRect()
       const vpTop = scRect?.top ?? 0
 
-      // Pin once the element's top edge reaches the viewport's top edge.
-      const shouldPin = a.height > 0 && a.top <= vpTop + TOP_MARGIN
+      // Pin once the element's top edge reaches the viewport's top edge. With
+      // a registry, only the lowest-on-page eligible instance pins (so a later
+      // StickMe takes over the slot from an earlier one).
+      const shouldPin =
+        a.height > 0 &&
+        (registry ? registry.activeId(vpTop) === myId : a.top <= vpTop + TOP_MARGIN)
       if (shouldPin !== pinnedRef.current) {
         pinnedRef.current = shouldPin
         setPinned(shouldPin)
@@ -193,7 +259,7 @@ export function StickMe({
       if (raf !== null) cancelAnimationFrame(raf)
       clear()
     }
-  }, [enabled, getZoom])
+  }, [enabled, getZoom, registry, myId])
 
   // The handle only mounts once `pinned` flips true, which is after the
   // update() that set it — re-run layout so the handle gets counter-scaled.

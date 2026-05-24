@@ -1,60 +1,63 @@
-# Coupled video demo
+# Pin test — multiple &lt;stickme&gt; + content types
 
-Press play. While **Coupled** (toggle beneath the video), the video pauses at
-each mark until you clear the check below it. Flip the toggle to **Unlinked**
-and it plays straight through like a normal video. The video stays pinned to the
-top as you scroll down to the checks.
+Scroll down slowly. Only **one** element should be pinned to the right margin at
+a time — each later one takes over the slot from the previous, and scrolling
+back up hands it back.
+
+## 1) YouTube — coupled + pinned
+
+The video pauses at 0:05 until you answer the question, and pins to the margin.
 
 <youtube id="dQw4w9WgXcQ" coupled="true" pin="true" />
-
-## Gate 1 — question (mark 0:05)
-
-The video pauses at 0:05 until you answer this correctly.
 
 <question id="q1" type="single" gate-at="0:05">
 <answer correct="true">HyperText Markup Language</answer>
 <answer correct="false">Hot Mango Tea Latte</answer>
-<answer correct="false">High Memory Transfer Layer</answer>
 </question>
 
-## Gate 2 — staged coding (marks 0:12 then 0:20)
+Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler.
+Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler.
+Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler.
 
-Two stages on one editor. First make `total` equal **10** and press **Check**
-(that clears stage 1 and releases the 0:12 mark). Then make it **20** and press
-**Check** again (stage 2, releases the 0:20 mark).
+## 2) Image in &lt;stickme&gt;
 
-```python editor id="stagedemo"
-total = 0
-print(total)
-```
+When this image's top reaches the viewport top it pins — and the YouTube video
+above should un-pin (hand-off).
 
-```python-check for="stagedemo" gate-at="0:12" label="reach 10"
-assert total == 10, "total should be 10|stage 1 cleared — nice"
-```
+<stickme id="image">
+![A thumbnail image](https://img.youtube.com/vi/dQw4w9WgXcQ/maxresdefault.jpg)
+</stickme>
 
-```python-check for="stagedemo" gate-at="0:20" label="reach 20"
-assert total == 20, "total should be 20|stage 2 cleared — done"
-```
+Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler.
+Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler.
+Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler.
 
-## General &lt;stickme&gt; test (followed by a question)
+## 3) Generic content (callout) in &lt;stickme&gt;
 
-The card below is wrapped in `<stickme>` and is immediately followed by a
-question — testing that the wrapper survives. It should pin to the margin.
+This generic callout takes over the pinned slot from the image.
 
 <stickme id="card">
 > [!info] Pinned reference card
-> Plain markdown wrapped in stickme — not a video. Dock to the margin, resizable.
+> Plain markdown — a callout — pinned to the margin and resizable.
 </stickme>
 
-<question id="q2" type="single">
-<answer correct="true">It renders and pins</answer>
-<answer correct="false">It vanished</answer>
-</question>
+Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler.
+Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler.
+Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler.
 
-Filler so there's room to scroll past the card and watch it dock.
-Filler line. Filler line. Filler line. Filler line. Filler line. Filler line.
-Filler line. Filler line. Filler line. Filler line. Filler line. Filler line.
-Filler line. Filler line. Filler line. Filler line. Filler line. Filler line.
-Filler line. Filler line. Filler line. Filler line. Filler line. Filler line.
-Filler line. Filler line. Filler line. Filler line. Filler line. Filler line.
-Filler line. Filler line. Filler line. Filler line. Filler line. Filler line.
+## 4) Mux video — non-16:9 (≈square)
+
+Tests that the pin handles a non-16:9 aspect (handle stays at the real corner).
+
+<muxvideo src="demo.mp4" alt="Mux (non-16:9)" pin="true" />
+
+Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler.
+Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler.
+
+## 5) Mux video — 16:9
+
+<muxvideo src="wide.mp4" alt="Mux (16:9)" pin="true" />
+
+Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler.
+Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler.
+Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler. Filler.
