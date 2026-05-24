@@ -182,12 +182,16 @@ export function StickMe({
       const z = getZoom() || 1
       const paper = document.getElementById('paper')
       const pRect = paper && paper.offsetWidth > 0 ? paper.getBoundingClientRect() : scRect
-      const paperRight = pRect?.right ?? window.innerWidth
       const paperWidth = pRect?.width ?? window.innerWidth
 
       const targetWidth = paperWidth * widthFractionRef.current // on-screen px
       const scale = targetWidth / a.width
-      const targetLeft = paperRight - targetWidth // right edge at the paper's right edge
+      // Always anchor the right edge to the viewport (scroll-container) right
+      // edge, not #paper's — under zoom the paper's right edge drifts off-screen.
+      // Width is still a fraction of the paper width; only the anchor is the
+      // viewport. The resize handler below uses this same anchor.
+      const anchorRight = (scRect?.right ?? window.innerWidth) - TOP_MARGIN
+      const targetLeft = anchorRight - targetWidth
       const targetTop = vpTop + TOP_MARGIN // top edge at the viewport top
 
       // Local translate is pre-ancestor-scale, so divide on-screen deltas by z.
@@ -283,8 +287,13 @@ export function StickMe({
     const paper = document.getElementById('paper')
     const pRect = paper?.getBoundingClientRect()
     if (!pRect || pRect.width <= 0) return
-    // Right edge is fixed at the paper's right edge; width grows leftward.
-    const onScreenWidth = pRect.right - e.clientX
+    // Match the pin anchor: right edge fixed at the viewport (scroll-container)
+    // right edge, width grows leftward toward the pointer. Both terms are
+    // on-screen px so the fraction is zoom-independent. Measuring from #paper's
+    // right edge (off-screen when zoomed) made the width jump away from the cursor.
+    const sc = document.getElementById('scroll-container')
+    const anchorRight = (sc?.getBoundingClientRect().right ?? window.innerWidth) - TOP_MARGIN
+    const onScreenWidth = anchorRight - e.clientX
     widthFractionRef.current = clampFraction(onScreenWidth / pRect.width)
     scheduleRef.current()
   }
