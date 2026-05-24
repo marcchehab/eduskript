@@ -31,7 +31,7 @@ const TAG_COMPLETIONS: TagDef[] = [
   { label: 'flex-item', info: 'Child of a <flex> container', apply: '<flex-item>\n\n</flex-item>' },
   { label: 'excali', info: 'Excalidraw drawing (auto light/dark)', apply: '<excali src="" />', cursorOffset: 13 },
   { label: 'img', info: 'Image with layout and invert support', apply: '<img src="" alt="" />', cursorOffset: 10 },
-  { label: 'stickme', info: 'Sticky element that pins to viewport top on scroll', apply: '<stickme>\n\n</stickme>' },
+  { label: 'stickme', info: 'Pins wrapped content (image, schema, video) to the margin as you scroll; resizable', apply: '<stickme>\n\n</stickme>' },
   { label: 'plugin', info: 'User-created plugin in a sandboxed iframe', apply: '<plugin src="" height="400"></plugin>', cursorOffset: 13 },
   { label: 'question', info: 'Quiz question with multiple-choice or text answer', apply: '<question type="multiple-choice">\n\n<answer correct>Answer</answer>\n<answer>Wrong</answer>\n</question>' },
   { label: 'answer', info: 'Answer option inside a <question>', apply: '<answer>Text</answer>' },

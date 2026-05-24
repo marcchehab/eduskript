@@ -5,7 +5,7 @@ import { useRef, type ReactElement } from 'react'
 import type { SkriptFilesData } from '@/lib/skript-files'
 import { resolveUrl, resolveVideo } from '@/lib/skript-files'
 import { useVideoGate, CouplingToggle } from './coupled-video-context'
-import { PinnableMedia } from './pinnable-media'
+import { StickMe } from './stick-me'
 
 interface MuxVideoProps {
   src: string // Filename (e.g., "video.mp4")
@@ -92,7 +92,7 @@ export function MuxVideo({ src, alt = '', poster: posterOverride, className, pin
 
   return (
     <span className="block">
-      <PinnableMedia enabled={pin} footer={<CouplingToggle />}>
+      <StickMe enabled={pin} footer={<CouplingToggle />} storageKey={`coupled-video:${src}`}>
       <MuxPlayer
         playbackId={playbackId}
         poster={poster}
@@ -115,7 +115,7 @@ export function MuxVideo({ src, alt = '', poster: posterOverride, className, pin
           onManualPlay()
         }}
       />
-      </PinnableMedia>
+      </StickMe>
     </span>
   )
 }

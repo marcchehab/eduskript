@@ -35,3 +35,26 @@ assert total == 10, "total should be 10|stage 1 cleared — nice"
 ```python-check for="stagedemo" gate-at="0:20" label="reach 20"
 assert total == 20, "total should be 20|stage 2 cleared — done"
 ```
+
+## General &lt;stickme&gt; test (followed by a question)
+
+The card below is wrapped in `<stickme>` and is immediately followed by a
+question — testing that the wrapper survives. It should pin to the margin.
+
+<stickme id="card">
+> [!info] Pinned reference card
+> Plain markdown wrapped in stickme — not a video. Dock to the margin, resizable.
+</stickme>
+
+<question id="q2" type="single">
+<answer correct="true">It renders and pins</answer>
+<answer correct="false">It vanished</answer>
+</question>
+
+Filler so there's room to scroll past the card and watch it dock.
+Filler line. Filler line. Filler line. Filler line. Filler line. Filler line.
+Filler line. Filler line. Filler line. Filler line. Filler line. Filler line.
+Filler line. Filler line. Filler line. Filler line. Filler line. Filler line.
+Filler line. Filler line. Filler line. Filler line. Filler line. Filler line.
+Filler line. Filler line. Filler line. Filler line. Filler line. Filler line.
+Filler line. Filler line. Filler line. Filler line. Filler line. Filler line.

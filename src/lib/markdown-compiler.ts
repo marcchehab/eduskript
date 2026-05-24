@@ -132,6 +132,7 @@ export const sanitizeSchema = {
     'quiz-option': ['correct', 'is', 'feedback'],
     'answer': ['correct', 'is', 'feedback'],
     'yt': ['time', 'videoid', 'label'],
+    'stickme': ['id'],
     'ourteachers': ['roles', 'limit', 'className'],
     'flex': ['gap', 'wrap', 'direction', 'justify', 'align', 'className'],
     'flex-item': ['width', 'grow', 'className'],

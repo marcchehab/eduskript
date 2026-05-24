@@ -629,7 +629,15 @@ export function createMarkdownComponents(
     'quiz-option': QuizOptionComponent,
     'answer': QuizOptionComponent,
     'survey': Survey,
-    'stickme': StickMe,
+    // <stickme> pins any wrapped content to the margin (general-purpose).
+    // An optional id gives the resize width its own persistence slot.
+    'stickme': function StickMeTag(props: { children?: ReactNode; id?: string }) {
+      return (
+        <StickMe storageKey={props.id ? `stickme:${props.id}` : undefined}>
+          {props.children}
+        </StickMe>
+      )
+    },
     // <excali> component - shorthand for excalidraw drawings
     // Usage: <excali src="my-drawing" /> (no .excalidraw extension needed)
     'excali': function ExcaliComponent(props: {

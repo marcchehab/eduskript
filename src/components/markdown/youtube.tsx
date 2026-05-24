@@ -4,7 +4,7 @@ import Image from 'next/image'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { usePathname } from 'next/navigation'
 import { useVideoGate, CouplingToggle } from './coupled-video-context'
-import { PinnableMedia } from './pinnable-media'
+import { StickMe } from './stick-me'
 
 interface YoutubeProps {
   id?: string
@@ -221,7 +221,7 @@ export function Youtube({ id, playlist, startTime, caption, pin }: YoutubeProps)
 
   return (
     <span className="block my-6">
-      <PinnableMedia enabled={pin} footer={<CouplingToggle />}>{player}</PinnableMedia>
+      <StickMe enabled={pin} footer={<CouplingToggle />} storageKey={`coupled-video:${id ?? 'yt'}`}>{player}</StickMe>
       {captionNode}
     </span>
   )
