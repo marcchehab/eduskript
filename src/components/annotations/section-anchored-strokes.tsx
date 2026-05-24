@@ -167,7 +167,7 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
   //    section that doesn't honour the assumption — strokes drawn over a
   //    fullwidth row would appear ~192 px to the left of where they were drawn.
   const [sectionGeom, setSectionGeom] = useState<
-    Map<string, { borderTop: number; borderLeft: number; leftFromPaper: number }>
+    Map<string, { borderTop: number; borderLeft: number; leftFromPaper: number; topFromPaper: number }>
   >(() => new Map())
   const getZoom = useZoom()
 
@@ -191,7 +191,7 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
   // is still missing → committed stroke flashes invisibly until the next frame.
   useLayoutEffect(() => {
     const next = new Map<string, HTMLElement>()
-    const nextGeom = new Map<string, { borderTop: number; borderLeft: number; leftFromPaper: number }>()
+    const nextGeom = new Map<string, { borderTop: number; borderLeft: number; leftFromPaper: number; topFromPaper: number }>()
     // Resolve the paper element once. Sections live inside #paper. The
     // canvas's coord origin (where stored stroke x=0 lives) is the paper's
     // PADDING-edge — that's what the old `-paperPaddingLeft` math implicitly
@@ -220,9 +220,9 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
     // right, and every stroke drifts horizontally as the viewport narrows.
     const paperEl = document.getElementById('paper')
     const paperRect = paperEl?.getBoundingClientRect()
-    const paperBorderLeft = paperEl
-      ? parseFloat(window.getComputedStyle(paperEl).borderLeftWidth) || 0
-      : 0
+    const paperCs = paperEl ? window.getComputedStyle(paperEl) : null
+    const paperBorderLeft = paperCs ? parseFloat(paperCs.borderLeftWidth) || 0 : 0
+    const paperBorderTop = paperCs ? parseFloat(paperCs.borderTopWidth) || 0 : 0
     const zoom = getZoom() || 1
     const paperScale = parseFloat(
       window.getComputedStyle(document.documentElement).getPropertyValue('--paper-scale'),
@@ -238,13 +238,23 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
       if (el instanceof HTMLElement) {
         next.set(sid, el)
         const cs = window.getComputedStyle(el)
-        const sectionLeft = el.getBoundingClientRect().left
+        const elRect = el.getBoundingClientRect()
         nextGeom.set(sid, {
           borderTop: parseFloat(cs.borderTopWidth) || 0,
           borderLeft: parseFloat(cs.borderLeftWidth) || 0,
           leftFromPaper: paperRect
-            ? (sectionLeft - paperRect.left) / combinedScale - paperBorderLeft
+            ? (elRect.left - paperRect.left) / combinedScale - paperBorderLeft
             : paperPaddingLeft,
+          // Section's top relative to the paper's padding-edge top (same
+          // scale-aware math as leftFromPaper). Used to clip the SVG height so
+          // it reaches the paper bottom but never spills below — an absolutely
+          // positioned full-paperHeight SVG anchored at a mid-page section
+          // would otherwise extend a whole page past the paper bottom and
+          // inflate #scroll-container.scrollHeight (phantom scroll + broken
+          // reading-progress total).
+          topFromPaper: paperRect
+            ? (elRect.top - paperRect.top) / combinedScale - paperBorderTop
+            : 0,
         })
       }
     }
@@ -262,7 +272,7 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
       if (prev.size !== nextGeom.size) return nextGeom
       for (const [k, v] of nextGeom) {
         const old = prev.get(k)
-        if (!old || old.borderTop !== v.borderTop || old.borderLeft !== v.borderLeft || old.leftFromPaper !== v.leftFromPaper) {
+        if (!old || old.borderTop !== v.borderTop || old.borderLeft !== v.borderLeft || old.leftFromPaper !== v.leftFromPaper || old.topFromPaper !== v.topFromPaper) {
           return nextGeom
         }
       }
@@ -309,7 +319,7 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
       {Array.from(grouped.entries()).map(([sid, { paths, bounds }]) => {
         const target = targets.get(sid)
         if (!target) return null
-        const geom = sectionGeom.get(sid) ?? { borderTop: 0, borderLeft: 0, leftFromPaper: paperPaddingLeft }
+        const geom = sectionGeom.get(sid) ?? { borderTop: 0, borderLeft: 0, leftFromPaper: paperPaddingLeft, topFromPaper: 0 }
         return createPortal(
           <>
             <SectionStrokeSvg
@@ -317,6 +327,7 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
               paperWidth={paperWidth}
               paperHeight={paperHeight}
               sectionLeftFromPaper={geom.leftFromPaper}
+              sectionTopFromPaper={geom.topFromPaper}
               sectionBorderTop={geom.borderTop}
               sectionBorderLeft={geom.borderLeft}
               markedForDeletion={markedForDeletion}
@@ -413,6 +424,7 @@ function SectionStrokeSvg({
   paperWidth,
   paperHeight,
   sectionLeftFromPaper,
+  sectionTopFromPaper,
   sectionBorderTop,
   sectionBorderLeft,
   markedForDeletion,
@@ -423,6 +435,10 @@ function SectionStrokeSvg({
   paperWidth: number
   paperHeight: number
   sectionLeftFromPaper: number
+  /** Section's top in paper coords. The SVG box+viewBox are clipped to
+   *  `paperHeight - sectionTopFromPaper` so the box reaches the paper bottom
+   *  without spilling below it (which inflated scroll height). */
+  sectionTopFromPaper: number
   sectionBorderTop: number
   sectionBorderLeft: number
   markedForDeletion?: Set<string>
@@ -442,10 +458,19 @@ function SectionStrokeSvg({
     return map
   }, [paths])
 
+  // Clip the box (and viewBox, to keep the 1:1 identity scale under
+  // preserveAspectRatio="none") so the SVG bottom lands at the paper bottom
+  // instead of a full paperHeight below this section's top. overflow:visible
+  // still paints any stroke beyond the box, so rendering is unchanged — but the
+  // box no longer spills past the paper to inflate scroll height. Floored well
+  // above zero: a zero-area SVG isn't painted at all (Chrome), and the box must
+  // stay tall enough to cover a foldable callout it may be portaled into.
+  const clippedHeight = Math.max(200, paperHeight - sectionTopFromPaper)
+
   return (
     <svg
       className="annotation-section-svg"
-      viewBox={`0 0 ${paperWidth} ${paperHeight}`}
+      viewBox={`0 0 ${paperWidth} ${clippedHeight}`}
       preserveAspectRatio="none"
       style={{
         // Place SVG-x=0 at the paper's border-left (canvas's coord origin),
@@ -463,7 +488,7 @@ function SectionStrokeSvg({
         top: -sectionBorderTop,
         left: -sectionLeftFromPaper - sectionBorderLeft,
         width: paperWidth,
-        height: paperHeight,
+        height: clippedHeight,
         pointerEvents: 'none',
         overflow: 'visible',
         opacity,
