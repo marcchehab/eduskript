@@ -14,10 +14,29 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { validateExamSession, ExamSessionData } from '@/lib/exam-tokens'
 import { eventBus } from '@/lib/events'
 import { applyHandinSnapshots, type HandinSnapshot } from '@/lib/exam-recovery'
+import type { ExamSettings } from '@/lib/seb'
+
+/**
+ * Non-SEB access gate: a logged-in student may hand in if the exam is unlocked
+ * for everyone, for them individually, or for a class they belong to.
+ */
+async function studentHasExamAccess(studentId: string, pageId: string): Promise<boolean> {
+  const page = await prisma.page.findUnique({ where: { id: pageId }, select: { examSettings: true } })
+  if ((page?.examSettings as ExamSettings | null)?.unlockForAll) return true
+  const direct = await prisma.pageUnlock.findFirst({ where: { pageId, studentId }, select: { id: true } })
+  if (direct) return true
+  const viaClass = await prisma.classMembership.findFirst({
+    where: { studentId, class: { pageUnlocks: { some: { pageId } } } },
+    select: { id: true },
+  })
+  return Boolean(viaClass)
+}
 
 /**
  * POST /api/exams/[pageId]/hand-in
@@ -31,33 +50,36 @@ export async function POST(
   try {
     const { pageId } = await params
 
-    // Get and validate the exam session
+    // Two ways to hand in:
+    // 1. SEB: a signed exam_session cookie. The submission uses the session's
+    //    original pageId (multi-page exams can hand in from any page).
+    // 2. Non-SEB: a logged-in NextAuth student posts directly (no cookie) — used
+    //    for mock exams and for local testing. The submission uses the route
+    //    pageId; we verify the student actually has access to this exam.
     const cookieStore = await cookies()
     const sessionCookie = cookieStore.get('exam_session')
 
-    if (!sessionCookie?.value) {
-      return NextResponse.json(
-        { error: 'No exam session found' },
-        { status: 401 }
-      )
+    let examPageId: string
+    let studentId: string
+
+    if (sessionCookie?.value) {
+      const sessionData = await validateExamSession(sessionCookie.value) as ExamSessionData | null
+      if (!sessionData) {
+        return NextResponse.json({ error: 'Invalid or expired exam session' }, { status: 401 })
+      }
+      examPageId = sessionData.pageId
+      studentId = sessionData.userId
+    } else {
+      const session = await getServerSession(authOptions)
+      if (!session?.user?.id) {
+        return NextResponse.json({ error: 'No exam session found' }, { status: 401 })
+      }
+      studentId = session.user.id
+      examPageId = pageId
+      if (!(await studentHasExamAccess(studentId, examPageId))) {
+        return NextResponse.json({ error: 'You do not have access to this exam' }, { status: 403 })
+      }
     }
-
-    // Validate the session and get user info (no skriptId = returns full session data)
-    const sessionData = await validateExamSession(sessionCookie.value) as ExamSessionData | null
-
-    if (!sessionData) {
-      return NextResponse.json(
-        { error: 'Invalid or expired exam session' },
-        { status: 401 }
-      )
-    }
-
-    // Note: We allow hand-in from any page in the skript, not just the original pageId
-    // This is intentional - multi-page exams should allow hand-in from any page
-
-    // Use the session's original pageId for the submission record
-    // This ensures consistency even if hand-in is triggered from a different page in the skript
-    const examPageId = sessionData.pageId
 
     // Optional snapshots: client gathers each on-page code editor's IndexedDB
     // state and posts them alongside the hand-in. Stored as `kind='handin'`
@@ -84,7 +106,7 @@ export async function POST(
     const handinResult = await prisma.$transaction(async (tx) => {
       return applyHandinSnapshots(tx, {
         pageId: examPageId,
-        studentId: sessionData.userId,
+        studentId,
         snapshots,
       })
     })
@@ -100,7 +122,7 @@ export async function POST(
     // The student should be a member of a class that has this page unlocked
     const membership = await prisma.classMembership.findFirst({
       where: {
-        studentId: sessionData.userId,
+        studentId,
         class: {
           pageUnlocks: {
             some: { pageId: examPageId }
@@ -116,7 +138,7 @@ export async function POST(
         type: 'exam-student-status',
         pageId: examPageId,
         classId: membership.classId,
-        studentId: sessionData.userId,
+        studentId,
         status: 'submitted',
         timestamp: Date.now()
       })

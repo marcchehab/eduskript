@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { cn } from '@/lib/utils'
-import { BookOpen, Settings, Users, ChevronLeft, ChevronRight, Shield, GraduationCap, User, Camera, CornerUpLeft, Globe, BarChart3, CreditCard, Lock, Tag, Puzzle } from 'lucide-react'
+import { BookOpen, Settings, Users, ChevronLeft, ChevronRight, Shield, GraduationCap, User, Camera, CornerUpLeft, Globe, BarChart3, CreditCard, Lock, Tag, Puzzle, ClipboardCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 // Personal navigation items for teachers
@@ -21,6 +21,7 @@ const personalNavigation = [
 // Student navigation items
 const studentNavigation = [
   { name: 'My Classes', href: '/dashboard/my-classes', icon: GraduationCap },
+  { name: 'My Exams', href: '/dashboard/my-exams', icon: ClipboardCheck },
   { name: 'My Snaps', href: '/dashboard/my-snaps', icon: Camera },
   { name: 'Profile', href: '/dashboard/profile', icon: User },
 ]

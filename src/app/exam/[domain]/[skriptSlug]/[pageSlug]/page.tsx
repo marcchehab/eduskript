@@ -18,6 +18,9 @@ import { ClassToolbar } from '@/components/teacher/class-toolbar'
 import { ExamDataSync } from '@/components/exam/exam-data-sync'
 import { StudentNavigator } from '@/components/exam/student-navigator'
 import { StudentSnapshotProvider } from '@/contexts/student-snapshot-context'
+import { TeacherExamGrading } from '@/components/exam/teacher-exam-grading'
+import { ExamReviewProvider } from '@/contexts/exam-review-context'
+import { ReturnedExamSummary } from '@/components/exam/returned-exam-summary'
 import { ExamPageContextProvider } from '@/contexts/exam-page-context'
 import { isSEBRequest, type ExamSettings } from '@/lib/seb'
 import { validateExamToken, validateExamSession } from '@/lib/exam-tokens'
@@ -199,32 +202,40 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
     examState = (stateRecord?.state as 'closed' | 'lobby' | 'open') || 'closed'
   }
 
-  // Gate 3: already submitted → show submitted page
+  // Gate 3: already submitted → locked submitted page, UNLESS the teacher has
+  // returned it — then fall through and render the exam read-only in review
+  // mode (the student's answers, per-question scores, and grade).
+  let isReturnedReview = false
   if (!isTeacherAuthor) {
     const existingSubmission = await prisma.examSubmission.findUnique({
       where: { pageId_studentId: { pageId: page.id, studentId } },
-      select: { submittedAt: true }
+      select: { submittedAt: true, returnedAt: true }
     })
     if (existingSubmission) {
-      return (
-        <ExamSubmittedPage
-          pageTitle={page.title}
-          pageId={page.id}
-          submittedAt={existingSubmission.submittedAt}
-        />
-      )
+      if (existingSubmission.returnedAt) {
+        isReturnedReview = true
+      } else {
+        return (
+          <ExamSubmittedPage
+            pageTitle={page.title}
+            pageId={page.id}
+            submittedAt={existingSubmission.submittedAt}
+          />
+        )
+      }
     }
   }
 
-  // Gate 4: SEB required but request is not from SEB
-  if (examSettings?.requireSEB && !isTeacherAuthor && !authenticatedViaToken && !authenticatedViaExamSession) {
+  // Gate 4: SEB required but request is not from SEB (skipped for a returned
+  // review — the student is just looking at their graded exam, not taking it).
+  if (examSettings?.requireSEB && !isTeacherAuthor && !isReturnedReview && !authenticatedViaToken && !authenticatedViaExamSession) {
     if (!isSEBRequest(headersList)) {
       return <SEBRequiredPage pageTitle={page.title} pageId={page.id} />
     }
   }
 
-  // Gate 5: closed state blocks students
-  if (!isTeacherAuthor && examState === 'closed') {
+  // Gate 5: closed state blocks students (but not a returned review)
+  if (!isTeacherAuthor && !isReturnedReview && examState === 'closed') {
     return (
       <ExamLockedPage
         pageTitle={page.title}
@@ -314,12 +325,20 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
         >
           {body}
         </ExamDataSync>
+      ) : isReturnedReview ? (
+        // Returned exam: student reviews their own graded answers read-only.
+        <ExamReviewProvider pageId={page.id} mode="review" studentId={studentId}>
+          <ReturnedExamSummary />
+          {body}
+        </ExamReviewProvider>
       ) : (
         // Snapshot provider gates on isTeacher + selectedStudent internally,
         // so it's inert for non-teacher non-author viewers and for the
         // teacher when no student is picked. Cheap to mount unconditionally.
         <StudentSnapshotProvider pageId={page.id} enabled={isTeacherAuthor}>
-          {body}
+          <TeacherExamGrading pageId={page.id} enabled={isTeacherAuthor}>
+            {body}
+          </TeacherExamGrading>
         </StudentSnapshotProvider>
       )}
       </ExamPageContextProvider>

@@ -168,6 +168,7 @@ model User {
   // Append-only event log for exam attempts (started / submitted / reopened).
   // Used by the teacher roster to surface "took 43m" + an event timeline.
   examAuditLogs ExamAuditLog[] @relation("StudentExamAuditLogs")
+  questionGrades ExamQuestionGrade[] @relation("StudentQuestionGrades")
 
   // Encryption keys used by students to encrypt offline exam backups.
   // Rotatable; old keys are kept so historical .examfile backups stay decryptable.
@@ -365,9 +366,11 @@ model Page {
   examSessions ExamSession[] @relation("ExamSessionPage")
 
   // Exam state and submissions
-  examStates      ExamState[]      @relation("ExamStates")
-  examSubmissions ExamSubmission[] @relation("ExamSubmissions")
-  examAuditLogs   ExamAuditLog[]   @relation("PageExamAuditLogs")
+  examStates         ExamState[]         @relation("ExamStates")
+  examSubmissions    ExamSubmission[]    @relation("ExamSubmissions")
+  examAuditLogs      ExamAuditLog[]      @relation("PageExamAuditLogs")
+  examGradeConfig    ExamGradeConfig?    @relation("ExamGradeConfigs")
+  examQuestionGrades ExamQuestionGrade[] @relation("ExamQuestionGrades")
 
   // Server-side checkpoints captured at manual save / Check / hand-in
   userDataCheckpoints UserDataCheckpoint[] @relation("PageCheckpoints")
@@ -1042,10 +1045,13 @@ model ExamSubmission {
   studentId   String   @map("student_id")
   submittedAt DateTime @default(now()) @map("submitted_at")
 
-  // Future: grading
-  score    Float?
-  gradedBy String?   @map("graded_by")
-  gradedAt DateTime? @map("graded_at")
+  // Grading. `score` is the aggregate points earned (not the 1-6 grade), written
+  // on return. Status is derived: submitted (returnedAt null) -> graded (score
+  // set, returnedAt null) -> returned (returnedAt set, visible to the student).
+  score      Float?
+  gradedBy   String?   @map("graded_by")
+  gradedAt   DateTime? @map("graded_at")
+  returnedAt DateTime? @map("returned_at")
 
   page    Page  @relation("ExamSubmissions", fields: [pageId], references: [id], onDelete: Cascade)
   student User  @relation("StudentExamSubmissions", fields: [studentId], references: [id], onDelete: Cascade)
@@ -1075,6 +1081,53 @@ model ExamAuditLog {
   @@index([pageId, studentId, occurredAt])
   @@index([pageId])
   @@map("exam_audit_logs")
+}
+
+// Grade key for an exam page (one row per page). The grade computation lives in
+// src/lib/grading; this only stores the teacher-chosen parameters.
+// formula="twoSegment": 4.0 lands exactly at passPercent (two linear segments).
+// formula="linear": grade = 1 + 5*(points/max), passPercent ignored.
+// maxPoints null = auto-sum of every gradable component's declared max.
+model ExamGradeConfig {
+  id           String   @id @default(cuid())
+  pageId       String   @unique @map("page_id")
+  maxPoints    Float?   @map("max_points")
+  passPercent  Float    @default(60) @map("pass_percent")
+  passGrade    Float    @default(4) @map("pass_grade")
+  topGrade     Float    @default(6) @map("top_grade")
+  bottomGrade  Float    @default(1) @map("bottom_grade")
+  roundingStep Float    @default(0.1) @map("rounding_step")
+  formula      String   @default("twoSegment") // "linear" | "twoSegment"
+  updatedBy    String?  @map("updated_by")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  page Page @relation("ExamGradeConfigs", fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@map("exam_grade_configs")
+}
+
+// Teacher override of a single question's awarded points for one student. When
+// present it WINS over the automatic score from UserData. componentId is the
+// runtime id ("quiz-<id>" or "code-editor-<id>"). maxPoints optionally snapshots
+// the declared max at grading time.
+model ExamQuestionGrade {
+  id            String   @id @default(cuid())
+  pageId        String   @map("page_id")
+  studentId     String   @map("student_id")
+  componentId   String   @map("component_id")
+  awardedPoints Float    @map("awarded_points")
+  maxPoints     Float?   @map("max_points")
+  gradedBy      String?  @map("graded_by")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  page    Page @relation("ExamQuestionGrades", fields: [pageId], references: [id], onDelete: Cascade)
+  student User @relation("StudentQuestionGrades", fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([pageId, studentId, componentId])
+  @@index([pageId, studentId])
+  @@map("exam_question_grades")
 }
 
 // Per-teacher encryption keypair used to encrypt offline exam backups (.examfile).

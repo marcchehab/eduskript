@@ -48,7 +48,9 @@ import {
   UserCircle,
   Radio,
   Globe,
+  ClipboardList,
 } from 'lucide-react'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -766,6 +768,12 @@ export function ClassToolbar({
               />
               <span>Submitted only</span>
             </label>
+            <Button variant="outline" size="sm" asChild className="gap-1.5">
+              <Link href={`/dashboard/exams/${pageId}/grading?classId=${selectedClass.id}`}>
+                <ClipboardList className="w-4 h-4" />
+                Grade
+              </Link>
+            </Button>
           </div>
         )}
       </div>

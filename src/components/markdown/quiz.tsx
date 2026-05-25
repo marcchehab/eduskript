@@ -13,6 +13,8 @@ import { useCoupledVideo, useGate, parseTimecode } from './coupled-video-context
 import { compareOutput, scoreFromRatio } from '@/lib/output-comparison'
 import { useIsExamPage } from '@/contexts/exam-page-context'
 import { useStageLocked } from './stage-flow'
+import { useComponentReview } from '@/contexts/exam-review-context'
+import { GradeBadge } from '@/components/exam/grade-badge'
 
 interface QuestionProps {
   children: ReactNode
@@ -76,10 +78,17 @@ function QuestionInner({
   initialData,
   updateData,
   surveyMode = false,
+  componentId,
+  reviewMode = false,
 }: Omit<QuestionProps, 'id' | 'pageId'> & {
   initialData: QuizData | null
   updateData: (data: QuizData, options?: { immediate?: boolean }) => Promise<void>
   surveyMode?: boolean
+  /** Runtime componentId, for the in-exam grade badge. */
+  componentId?: string
+  /** Read-only graded view (teacher grading or student reviewing a returned
+   *  exam): reveal correctness, disable inputs, show the grade badge. */
+  reviewMode?: boolean
 }) {
   // Feedback defaults ON, except on exam pages where it defaults OFF — students
   // shouldn't see correct/wrong (or the auto-check score/diff) mid-exam. Authors
@@ -88,11 +97,14 @@ function QuestionInner({
   // reach server components), but QuestionInner is client-only too (it mounts
   // after useSyncedUserData resolves), so this reads correctly.
   const isExamPage = useIsExamPage()
-  const showFeedback = surveyMode ? false : (showFeedbackProp ?? !isExamPage)
+  // Review mode always reveals correctness (the point is to show what's right).
+  const showFeedback = surveyMode ? false : reviewMode ? true : (showFeedbackProp ?? !isExamPage)
   const allowUpdate = surveyMode ? true : allowUpdateProp
   // A question in a handed-in (past) exam stage is fully read-only, regardless
   // of submit state — folded into the gates + disabled props below.
-  const stageLocked = useStageLocked()
+  // Review mode (graded read-only view) locks the widget just like a handed-in
+  // stage: no edits, no submit button.
+  const stageLocked = useStageLocked() || reviewMode
 
   // Free-text auto-check: grade the typed output against `expected`. Off in
   // survey mode (surveys have no right/wrong).
@@ -111,6 +123,20 @@ function QuestionInner({
   // grey-when-unchanged state — once you click Save, editing anything makes
   // Update active again. Compared by value (not reference).
   const [lastSaved, setLastSaved] = useState<QuizData | null>(initialData?.isSubmitted ? initialData : null)
+
+  // Review mode swaps initialData to the reviewed student's answer *after* mount
+  // (it arrives from an async fetch), so re-sync local state when it changes.
+  // useState only reads its initializer once. Gated to reviewMode (read-only),
+  // so it never fights live editing on a normal attempt.
+  useEffect(() => {
+    if (!reviewMode) return
+    setSelected(initialData?.selected ?? [])
+    setTextAnswer(initialData?.textAnswer ?? '')
+    setNumberAnswer(initialData?.numberAnswer ?? minValue)
+    setRangeAnswer(initialData?.rangeAnswer ?? { min: minValue, max: maxValue })
+    setIsSubmitted(initialData?.isSubmitted ?? false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialData, reviewMode])
 
 
   // Handle selection for choice questions
@@ -182,9 +208,26 @@ function QuestionInner({
       }
     }
 
+    // Choice auto-score: persist maxPoints on an exact match of the selected set
+    // vs the correct set, else 0. Only when correct answers are defined (i.e.
+    // not a survey). Computed here because correctIndices share the same sparse
+    // Children.toArray indexing as `selected` — the grading engine reads this
+    // rather than re-deriving correctness from raw indices server-side.
+    let choiceFields: Partial<QuizData> = {}
+    if ((type === 'single' || type === 'multiple') && !surveyMode) {
+      const { correctIndices } = extractOptionsInfo(children, type)
+      if (correctIndices.length > 0) {
+        const sel = [...selected].sort((a, b) => a - b)
+        const cor = [...correctIndices].sort((a, b) => a - b)
+        const exact = sel.length === cor.length && sel.every((v, i) => v === cor[i])
+        choiceFields.choiceScore = exact ? maxPoints : 0
+      }
+    }
+
     const quizData: QuizData = {
       isSubmitted: true,
       ...(type === 'single' || type === 'multiple' ? { selected } : {}),
+      ...choiceFields,
       ...textFields,
       ...(type === 'number' ? { numberAnswer } : {}),
       ...(type === 'range' ? { rangeAnswer } : {})
@@ -517,13 +560,16 @@ function QuestionInner({
           </button>
         )}
 
-        {isSubmitted && (
+        {isSubmitted && !reviewMode && (
           <div className="text-sm text-muted-foreground flex items-center gap-1.5">
             <Check className="w-4 h-4 text-green-500" />
             <span>Saved</span>
           </div>
         )}
       </div>
+
+      {/* In-exam grade badge (teacher grading / student returned review). */}
+      {componentId && <GradeBadge componentId={componentId} />}
     </div>
   )
 }
@@ -717,6 +763,11 @@ function SyncedQuestion({
   // Get teacher class context for progress bar
   const { selectedClass, isTeacher } = useTeacherClass()
 
+  // In-exam graded view: teacher grading this student (show their answer +
+  // editable score) or student reviewing their returned exam (read-only).
+  // Must run before the isLoading early return (rules of hooks).
+  const { active: reviewActive, mode: reviewModeType, review } = useComponentReview(componentId)
+
   // Extract correct indices and option labels for the progress bar
   const { correctIndices, optionLabels } = extractOptionsInfo(children, type)
 
@@ -764,19 +815,26 @@ function SyncedQuestion({
     )
   }
 
+  const effectiveData =
+    reviewActive && reviewModeType === 'grade' && review?.answerPayload
+      ? (review.answerPayload as QuizData)
+      : data
+
   return (
     <>
       <QuestionInner
         {...rest}
         type={type}
-        initialData={data}
+        initialData={effectiveData}
         updateData={updateDataAndGate}
+        componentId={componentId}
+        reviewMode={reviewActive}
       >
         {children}
       </QuestionInner>
 
       {/* Teacher progress bar - only visible when teacher has selected a class */}
-      {isTeacher && selectedClass && (
+      {isTeacher && selectedClass && !reviewActive && (
         <QuizProgressBar
           classId={selectedClass.id}
           className={selectedClass.name}

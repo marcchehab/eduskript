@@ -17,6 +17,7 @@ export type AppEvent =
   | ExamStateChangeEvent
   | ExamStudentStatusEvent
   | ExamReopenedEvent
+  | ExamReturnedEvent
   | StudentWorkUpdateEvent
 
 /**
@@ -105,6 +106,17 @@ export interface ExamStudentStatusEvent {
 export interface ExamReopenedEvent {
   type: 'exam-reopened'
   pageId: string
+  timestamp: number
+}
+
+/**
+ * Fired when a teacher returns a graded exam to a student.
+ * Sent to the student (user channel) so the My Exams list refreshes / toasts.
+ */
+export interface ExamReturnedEvent {
+  type: 'exam-returned'
+  pageId: string
+  studentId: string
   timestamp: number
 }
 

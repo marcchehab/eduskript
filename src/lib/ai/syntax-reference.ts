@@ -466,7 +466,7 @@ Interactive multiple choice using \`<question>\` and \`<answer>\` HTML tags:
 - \`id="unique-id"\` — Optional, auto-generated if omitted
 - \`type="single"\` — Single choice (default). Other types: \`multiple\`, \`text\` (free-text answer), \`number\` (slider)
 - \`showFeedback="false"\` — hide correct/wrong feedback. On **exam pages feedback is OFF by default**; set \`showFeedback="true"\` to reveal it during an exam.
-- \`points="2"\` — max points for an auto-checked text question (partial credit)
+- \`points="2"\` — max points for grading (default 1). Text questions get partial credit by similarity; single/multiple-choice score full points on an exact match of the correct set, else 0. Teachers can override any per-question score when grading an exam. For an explicit id (so the score is reliably attributed), set \`id="..."\`.
 
 **Number sliders** (\`type="number"\`) — set the range with \`minValue\` / \`maxValue\` / \`step\`. Use \`minLabel\` / \`maxLabel\` to caption the two ends; the captions render beneath the slider at either end, so don't bake them into the body text:
 
@@ -565,7 +565,7 @@ export function getCondensedSyntaxReference(): string {
 **Tabs:** HTML syntax only:
   \`<tabs-container data-items='["Tab1", "Tab2"]'><tab-item>Content1</tab-item><tab-item>Content2</tab-item></tabs-container>\`
 
-**Quiz:** \`<question id="q1" type="single"><answer correct="true">Right</answer><answer feedback="Nope">Wrong</answer></question>\`
+**Quiz:** \`<question id="q1" type="single" points="1"><answer correct="true">Right</answer><answer feedback="Nope">Wrong</answer></question>\` — \`points\` (default 1) is the gradable max; choice questions auto-score full points on an exact match, teacher-overridable when grading.
   - Use \`correct="true"\` to mark the correct answer
   - If you see \`<Option>\` or \`<quiz-option>\`, convert to \`<answer>\`
   - Do NOT use \`:::quiz\` syntax — it is not implemented

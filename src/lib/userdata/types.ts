@@ -107,6 +107,12 @@ export interface QuizData {
   // Auto-checked free-text (predict-the-output) results, set on submit:
   textRatio?: number     // Similarity to expected output, 0–1 (1 = exact)
   textScore?: number     // Earned partial-credit points (ratio × points, 0.1 step)
+  // Single/multiple-choice auto-score, set on submit when the question has
+  // correct answers defined: maxPoints if the selected set exactly matches the
+  // correct set, else 0. Computed client-side (correct indices use the same
+  // sparse Children.toArray indexing as `selected`), so the grading engine can
+  // read it without re-deriving correctness server-side. Absent in surveys.
+  choiceScore?: number
 }
 
 /**

@@ -27,6 +27,7 @@ import { postCheckpoint } from '@/lib/userdata/checkpoints'
 import { useSyncedUserData, type SyncedUserDataOptions } from '@/lib/userdata/provider'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
 import { useStudentSnapshot } from '@/contexts/student-snapshot-context'
+import { GradeBadge } from '@/components/exam/grade-badge'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useSession } from 'next-auth/react'
@@ -5944,6 +5945,10 @@ plots
         />
       </>
     )}
+
+    {/* In-exam grade badge for python-check exercises — teacher grading or
+        student reviewing a returned exam. Self-hides when no review is active. */}
+    {hasChecks && <GradeBadge componentId={pythonCheckComponentId} />}
 
     {/* Teacher class progress for SQL verification exercises */}
     {solution && pageId && isTeacher && selectedClass && (
