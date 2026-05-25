@@ -3280,7 +3280,11 @@ export const CodeEditor = memo(function CodeEditor({
 
     // Snapshot + checkpoint the Run press. Fire-and-forget; service-layer
     // dedup collapses identical consecutive runs into a single row/POST.
-    void createRunVersion()
+    // In an exam WITH a python-check, the silent check after execution makes
+    // its own checkpoint (same code + the score), so skip this redundant run
+    // snapshot to avoid double-storing per Run press. Editors without checks
+    // and practice mode still snapshot here (their only capture).
+    if (!(exam && hasChecks)) void createRunVersion()
 
     const code = editorViewRef.current.state.doc.toString()
 
