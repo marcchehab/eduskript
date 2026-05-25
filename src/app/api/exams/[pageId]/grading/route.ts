@@ -12,7 +12,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { computeExamGrades } from '@/lib/grading/aggregate'
-import { getAuthoredExamPage, isClassTeacher } from '@/lib/grading/auth'
+import { getAuthoredExamPage, getExamUrl, isClassTeacher } from '@/lib/grading/auth'
 
 export async function GET(
   request: NextRequest,
@@ -116,6 +116,7 @@ export async function GET(
 
     return NextResponse.json({
       pageTitle: page.title,
+      examUrl: await getExamUrl(pageId),
       classes: allClasses,
       selectedClassId: classId,
       config: {

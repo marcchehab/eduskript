@@ -15,6 +15,32 @@ export async function getAuthoredExamPage(userId: string, pageId: string) {
   })
 }
 
+/**
+ * The /exam/... URL for a page (resolving site + skript + page slugs), so the
+ * grading table can link a student to the in-exam view. null if unresolved.
+ */
+export async function getExamUrl(pageId: string): Promise<string | null> {
+  const page = await prisma.page.findUnique({
+    where: { id: pageId },
+    select: {
+      slug: true,
+      skript: {
+        select: {
+          slug: true,
+          collectionSkripts: {
+            take: 1,
+            select: { collection: { select: { site: { select: { slug: true } } } } },
+          },
+        },
+      },
+    },
+  })
+  const siteSlug = page?.skript?.collectionSkripts?.[0]?.collection?.site?.slug
+  const skriptSlug = page?.skript?.slug
+  if (!siteSlug || !skriptSlug || !page?.slug) return null
+  return `/exam/${siteSlug}/${skriptSlug}/${page.slug}`
+}
+
 /** True if `userId` is the teacher of `classId`. */
 export async function isClassTeacher(userId: string, classId: string): Promise<boolean> {
   const c = await prisma.class.findFirst({

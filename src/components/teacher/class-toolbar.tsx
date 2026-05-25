@@ -51,6 +51,7 @@ import {
   ClipboardList,
 } from 'lucide-react'
 import Link from 'next/link'
+import { compareRoster } from '@/lib/exam-roster-order'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -309,7 +310,14 @@ export function ClassToolbar({
     if (isExam && submittedOnly) {
       out = out.filter((r) => r.examStatus === 'submitted')
     }
-    out.sort(makeComparator(sortKey, sortDir))
+    // Exam roster uses the canonical order shared with the StudentNavigator
+    // arrows (so the arrows step through this exact list). Non-exam pages keep
+    // the activity sort.
+    if (isExam) {
+      out.sort((a, b) => compareRoster({ status: a.examStatus, name: a.displayName }, { status: b.examStatus, name: b.displayName }))
+    } else {
+      out.sort(makeComparator(sortKey, sortDir))
+    }
     return out
   }, [students, submissions, resolvedEmails, sortKey, sortDir, selectedClass, isExam, submittedOnly])
 
@@ -510,9 +518,24 @@ export function ClassToolbar({
                     >
                       <div className="flex items-center gap-1 min-w-0">
                         <User className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                        <span className="text-sm truncate flex-1 min-w-0" title={timelineTooltip}>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSelectedStudent({
+                              id: row.userId,
+                              displayName: row.displayName,
+                              pseudonym: row.studentPseudonym ?? undefined,
+                              revealedEmail: row.email,
+                            })
+                          }
+                          className={cn(
+                            'text-sm truncate flex-1 min-w-0 text-left hover:underline',
+                            isViewingThis && 'font-medium',
+                          )}
+                          title={timelineTooltip ?? 'View this student in the exam'}
+                        >
                           {row.displayName}
-                        </span>
+                        </button>
                         {row.isAnonymous && (
                           <span className="text-[10px] uppercase tracking-wide px-1 py-0.5 rounded bg-muted text-muted-foreground flex-shrink-0">
                             anon

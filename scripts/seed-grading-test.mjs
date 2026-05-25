@@ -15,7 +15,9 @@ const { PrismaClient } = await import('@prisma/client')
 const { PrismaPg } = await import('@prisma/adapter-pg')
 const pg = (await import('pg')).default
 
-const TEACHER_EMAIL = 'eduadmin@eduskript.org'
+// A real (paid) teacher — NOT the platform admin (eduadmin), which isn't meant
+// to do teacher work. Run scripts/seed-dev-teacher.mjs first.
+const TEACHER_EMAIL = 'teacher@eduskript.test'
 const STUDENT_EMAIL = 'student1@eduskript.test'
 const SKRIPT_SLUG = 'grading-test'
 const PAGE_SLUG = 'klassenarbeit'
@@ -93,10 +95,21 @@ try {
   let collection = await prisma.collection.findFirst({ where: { siteId: site.id, title: 'Grading Test' } })
   if (!collection) collection = await prisma.collection.create({ data: { siteId: site.id, title: 'Grading Test' } })
 
-  let skript = await prisma.skript.findFirst({ where: { slug: SKRIPT_SLUG } })
+  // Skript must live under THIS teacher's collection + be authored by them, or
+  // the exam route won't treat the teacher as author. Scope the lookup to the
+  // teacher's collection (a stale same-slug skript under another owner is left
+  // alone), and ensure SkriptAuthor either way.
+  const cs = await prisma.collectionSkript.findFirst({
+    where: { collectionId: collection.id, skript: { slug: SKRIPT_SLUG } },
+    select: { skript: { select: { id: true } } },
+  })
+  let skript = cs?.skript ?? null
   if (!skript) {
     skript = await prisma.skript.create({ data: { title: 'Grading Test', slug: SKRIPT_SLUG, isPublished: true } })
     await prisma.collectionSkript.create({ data: { collectionId: collection.id, skriptId: skript.id, order: 0 } })
+  }
+  const hasAuthor = await prisma.skriptAuthor.findFirst({ where: { skriptId: skript.id, userId: teacher.id } })
+  if (!hasAuthor) {
     await prisma.skriptAuthor.create({ data: { skriptId: skript.id, userId: teacher.id, permission: 'author' } })
   }
 
@@ -116,13 +129,14 @@ try {
     },
   })
 
-  // Class + membership (upsert by invite code)
-  let klass = await prisma.class.findUnique({ where: { inviteCode: INVITE } })
-  if (!klass) {
-    klass = await prisma.class.create({
-      data: { name: 'Test Class (Grading)', teacherId: teacher.id, inviteCode: INVITE },
-    })
-  }
+  // Class + membership (upsert by invite code). Always (re)assign to THIS
+  // teacher — a class reused from a prior run under another owner must move,
+  // or isClassTeacher / isTeacherOfStudentForPage fail.
+  const klass = await prisma.class.upsert({
+    where: { inviteCode: INVITE },
+    update: { teacherId: teacher.id },
+    create: { name: 'Test Class (Grading)', teacherId: teacher.id, inviteCode: INVITE },
+  })
   await prisma.classMembership.upsert({
     where: { classId_studentId: { classId: klass.id, studentId: student.id } },
     create: { classId: klass.id, studentId: student.id, identityConsent: true, consentedAt: new Date() },

@@ -66,6 +66,7 @@ interface ConfigState {
 }
 interface GradingData {
   pageTitle: string
+  examUrl: string | null
   classes: UnlockedClass[]
   selectedClassId: string
   config: ConfigState
@@ -312,12 +313,6 @@ export default function ExamGradingPage() {
     <div className="p-4 lg:p-6 space-y-5">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <Link
-            href="/dashboard/classes"
-            className="text-sm text-muted-foreground inline-flex items-center gap-1"
-          >
-            <ArrowLeft className="w-4 h-4" /> Classes
-          </Link>
           <h1 className="text-2xl font-bold">{data.pageTitle}</h1>
           <p className="text-sm text-muted-foreground">
             {submittedCount} handed in · max {data.config.maxPoints ?? data.autoMaxPoints} pts
@@ -439,7 +434,17 @@ export default function ExamGradingPage() {
             {data.students.map((s) => (
               <tr key={s.studentId} className="border-t hover:bg-accent/30">
                 <td className="px-3 py-2">
-                  <span className="font-medium">{s.email || s.name || s.pseudonym || '—'}</span>
+                  {/* Links to the in-exam view of this student's graded answers. */}
+                  {data.examUrl ? (
+                    <Link
+                      href={`${data.examUrl}?classId=${classId}&student=${s.studentId}`}
+                      className="font-medium text-primary hover:underline"
+                    >
+                      {s.email || s.name || s.pseudonym || '—'}
+                    </Link>
+                  ) : (
+                    <span className="font-medium">{s.email || s.name || s.pseudonym || '—'}</span>
+                  )}
                   {s.email && (s.name || s.pseudonym) && (
                     <span className="block text-xs text-muted-foreground">{s.name || s.pseudonym}</span>
                   )}

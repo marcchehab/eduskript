@@ -8,7 +8,8 @@
  * student) and Return all (the class). Inert until a class is selected.
  */
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Send, Loader2, Play } from 'lucide-react'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
 import { ExamReviewProvider, useExamReview } from '@/contexts/exam-review-context'
@@ -26,8 +27,21 @@ export function TeacherExamGrading({
   enabled: boolean
   children: React.ReactNode
 }) {
-  const { selectedStudent, selectedClass, isTeacher } = useTeacherClass()
+  const { selectedStudent, selectedClass, isTeacher, setSelectedStudent } = useTeacherClass()
   const studentId = enabled && isTeacher ? selectedStudent?.id ?? null : null
+
+  // Preselect a student from ?student= (the grading-table link), once. The
+  // roster/toolbar refines the display name; the grade view only needs the id.
+  const search = useSearchParams()
+  const appliedParamRef = useRef(false)
+  useEffect(() => {
+    if (appliedParamRef.current || !enabled || !isTeacher) return
+    const sid = search.get('student')
+    if (sid && !selectedStudent) {
+      appliedParamRef.current = true
+      setSelectedStudent({ id: sid, displayName: 'Student' })
+    }
+  }, [search, enabled, isTeacher, selectedStudent, setSelectedStudent])
 
   return (
     <ExamReviewProvider pageId={pageId} mode="grade" studentId={studentId}>

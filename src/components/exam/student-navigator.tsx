@@ -16,6 +16,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
 import { useExamRoster, type ExamRosterStudent } from '@/hooks/use-exam-roster'
 import { getReverseMappingsForClass } from '@/lib/email-mapping-db'
+import { compareRoster } from '@/lib/exam-roster-order'
 
 interface StudentNavigatorProps {
   pageId: string
@@ -58,17 +59,13 @@ export function StudentNavigator({ pageId }: StudentNavigatorProps) {
     return '—'
   }, [resolvedEmails])
 
-  // Filtered list the arrows cycle through. Sorted: submitted first (most
-  // common case during grading), then taking, then not-started.
+  // Filtered list the arrows cycle through, in the canonical roster order
+  // (shared with the ClassToolbar list so the arrows match the list).
   const ordered = useMemo(() => {
     const filtered = submittedOnly ? students.filter((s) => s.status === 'submitted') : students
-    const rank = (s: ExamRosterStudent) =>
-      s.status === 'submitted' ? 0 : s.status === 'taking' ? 1 : 2
-    return [...filtered].sort((a, b) => {
-      const r = rank(a) - rank(b)
-      if (r !== 0) return r
-      return displayName(a).localeCompare(displayName(b))
-    })
+    return [...filtered].sort((a, b) =>
+      compareRoster({ status: a.status, name: displayName(a) }, { status: b.status, name: displayName(b) }),
+    )
   }, [students, submittedOnly, displayName])
 
   const currentIndex = selectedStudent
@@ -109,7 +106,9 @@ export function StudentNavigator({ pageId }: StudentNavigatorProps) {
         type="button"
         onClick={() => go(-1)}
         aria-label="Previous student"
-        className="fixed left-2 top-1/2 -translate-y-1/2 z-40 h-16 w-10 rounded-r-lg bg-card/90 hover:bg-card border border-l-0 border-border shadow-lg flex items-center justify-center text-foreground/70 hover:text-foreground transition-colors backdrop-blur-sm"
+        // On wide screens the public sidebar occupies the left edge (≥1344px,
+        // ml-80); shift the arrow right of it so it isn't hidden behind it.
+        className="fixed left-2 min-[1344px]:left-[21rem] top-1/2 -translate-y-1/2 z-40 h-16 w-10 rounded-r-lg bg-card/90 hover:bg-card border border-l-0 border-border shadow-lg flex items-center justify-center text-foreground/70 hover:text-foreground transition-colors backdrop-blur-sm"
       >
         <ChevronLeft className="w-6 h-6" />
       </button>
