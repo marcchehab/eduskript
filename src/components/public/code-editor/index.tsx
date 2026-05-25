@@ -5982,7 +5982,7 @@ plots
         Nothing here mutates a snapshot. */}
     {isViewingSnapshot && (
       <div className="mt-1.5 rounded-md border bg-card px-1.5 py-1 text-[11px]">
-        <div className="flex items-center justify-between gap-2 px-0.5 text-muted-foreground">
+        <div className="flex items-center justify-between gap-2 px-0.5 min-h-[20px] text-muted-foreground">
           <span className="font-medium uppercase tracking-wide text-[10px]">
             Snapshots{editedSinceSnapshot && <span className="ml-1 normal-case tracking-normal text-amber-600 dark:text-amber-400">· edited (not saved)</span>}
           </span>
