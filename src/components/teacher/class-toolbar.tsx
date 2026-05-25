@@ -465,6 +465,23 @@ export function ClassToolbar({
               </div>
             ) : (
               <ul className="space-y-0.5">
+                {/* Class-overview mode: no individual student selected, so the
+                    per-component class dropdowns (quiz/python/SQL) show beneath
+                    each component. Selecting a student switches to grading them. */}
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedStudent(null)}
+                    className={cn(
+                      'w-full flex items-center gap-1.5 rounded-md px-1.5 py-1 text-sm text-left hover:bg-accent/50',
+                      !selectedStudent && 'bg-amber-50 dark:bg-amber-950/30 font-medium',
+                    )}
+                    title="Show the whole-class overview (no individual student)"
+                  >
+                    <Users className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                    Class overview
+                  </button>
+                </li>
                 {rows.map((row) => {
                   const isViewingThis = selectedStudent?.id === row.userId
                   // Secondary line shows the DB email (typically a pseudonym

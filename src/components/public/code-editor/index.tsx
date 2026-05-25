@@ -5950,8 +5950,10 @@ plots
         student reviewing a returned exam. Self-hides when no review is active. */}
     {hasChecks && <GradeBadge componentId={pythonCheckComponentId} />}
 
-    {/* Teacher class progress for SQL verification exercises */}
-    {solution && pageId && isTeacher && selectedClass && (
+    {/* Teacher class-overview progress — only in the "class overview" mode
+        (no student selected). When viewing/grading one student we show their
+        answer + grade badge instead, so hide the class dropdown. */}
+    {solution && pageId && isTeacher && selectedClass && !isViewingSnapshot && (
       <SqlProgressBar
         classId={selectedClass.id}
         className={selectedClass.name}
@@ -5961,7 +5963,7 @@ plots
     )}
 
     {/* Teacher class progress for Python check exercises */}
-    {hasChecks && pageId && isTeacher && selectedClass && (
+    {hasChecks && pageId && isTeacher && selectedClass && !isViewingSnapshot && (
       <PythonProgressBar
         classId={selectedClass.id}
         className={selectedClass.name}

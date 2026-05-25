@@ -155,7 +155,16 @@ try {
   // Reset any prior attempt by this student
   await prisma.examSubmission.deleteMany({ where: { pageId: page.id, studentId: student.id } })
   await prisma.examQuestionGrade.deleteMany({ where: { pageId: page.id, studentId: student.id } })
+  await prisma.examCheckRun.deleteMany({ where: { pageId: page.id, studentId: student.id } })
   await prisma.userData.deleteMany({ where: { userId: student.id, itemId: page.id } })
+  await prisma.userDataCheckpoint.deleteMany({ where: { userId: student.id, pageId: page.id } })
+
+  // The student's SUBMITTED code: a partially-correct solution (handles x>=0,
+  // wrong for negatives) → the teacher-side re-run scores 3/4 (fails doppelt(-3)).
+  const codeEditorData = {
+    files: [{ name: 'main.py', content: 'def doppelt(x):\n    return x * 2 if x >= 0 else 0\n' }],
+    activeFileIndex: 0,
+  }
 
   // Seed a sample, immediately-gradable attempt (handed in, not yet returned):
   // text correct (3/3), single correct (2/2), multiple wrong (0/2), python 3/4.
@@ -165,12 +174,7 @@ try {
     ['quiz-user-content-q1', { isSubmitted: true, textAnswer: '0\n2\n4', textRatio: 1, textScore: 3 }],
     ['quiz-user-content-q2', { isSubmitted: true, selected: [3], choiceScore: 2 }],
     ['quiz-user-content-q3', { isSubmitted: true, selected: [1], choiceScore: 0 }],
-    // The student's SUBMITTED code: a partially-correct solution (handles x>=0,
-    // wrong for negatives) → re-run should score 3/4 (fails doppelt(-3) == -6).
-    ['code-editor-p1code', {
-      files: [{ name: 'main.py', content: 'def doppelt(x):\n    return x * 2 if x >= 0 else 0\n' }],
-      activeFileIndex: 0,
-    }],
+    ['code-editor-p1code', codeEditorData],
     // A TAMPERED client check result claiming full marks — the grading engine
     // must IGNORE this and use the teacher-side re-run instead.
     ['python-check-p1code', {
@@ -183,6 +187,12 @@ try {
       data: { userId: student.id, adapter, itemId: page.id, data, version: 1 },
     })
   }
+  // Hand-in snapshot of the code editor, so the teacher's editor view shows the
+  // SUBMITTED code (not the default), matching what the re-run grades. Real
+  // hand-ins write this; the seed must too, or the display and grade diverge.
+  await prisma.userDataCheckpoint.create({
+    data: { userId: student.id, pageId: page.id, componentId: 'code-editor-p1code', kind: 'handin', payload: codeEditorData, label: 'exam hand-in' },
+  })
   await prisma.examSubmission.create({ data: { pageId: page.id, studentId: student.id } })
 
   console.log('\n✅ Grading-test scenario seeded\n')
