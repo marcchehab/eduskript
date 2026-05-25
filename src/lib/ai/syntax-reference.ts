@@ -465,6 +465,8 @@ Interactive multiple choice using \`<question>\` and \`<answer>\` HTML tags:
 **question attributes:**
 - \`id="unique-id"\` — Optional, auto-generated if omitted
 - \`type="single"\` — Single choice (default). Other types: \`multiple\`, \`text\` (free-text answer), \`number\` (slider)
+- \`showFeedback="false"\` — hide correct/wrong feedback. On **exam pages feedback is OFF by default**; set \`showFeedback="true"\` to reveal it during an exam.
+- \`points="2"\` — max points for an auto-checked text question (partial credit)
 
 **Number sliders** (\`type="number"\`) — set the range with \`minValue\` / \`maxValue\` / \`step\`. Use \`minLabel\` / \`maxLabel\` to caption the two ends; the captions render beneath the slider at either end, so don't bake them into the body text:
 
@@ -478,9 +480,42 @@ How relevant is Python for your work?
 - \`correct="true"\` — Marks the correct answer
 - \`feedback="..."\` — Shown when this wrong option is selected
 
+**Free-text auto-check (predict-the-output):** a \`type="text"\` question can be auto-graded against an expected output written as an \`\`\`expected fenced block inside the question (leave a blank line before it). The typed answer gets **partial credit** by text similarity (× \`points\`, default 1, rounded to 0.1 pts) with a diff; an exact match (after normalizing trailing whitespace / surrounding blank lines) is fully correct. Optional flags: \`ignore-case="true"\`, \`ignore-whitespace="true"\`. Example:
+
+<question id="predict1" type="text" points="2">
+Predict the output:
+
+\`\`\`expected
+0
+2
+4
+\`\`\`
+</question>
+
 **Migration:** If you encounter \`<Option>\`, \`<quiz-option>\`, or any PascalCase variant, convert them to \`<answer>\`.
 
 **Do NOT use** the \`:::quiz\` fence syntax — it is not implemented.`)
+
+  // Staged exam pages
+  sections.push(`## Staged pages (\`<next-stage>\`)
+
+Split a single document into sequential, hand-in-locked **stages** with a \`<next-stage>\` divider on its own line. Only stages up to the current one are shown; the student clicks a button (with a confirm modal) to advance, which **locks the previous stage read-only and cannot be undone** (it persists across reloads).
+
+Use it to gate later material on handing in earlier work — e.g. **predict-the-output questions in stage 1, runnable code editors in stage 2**, so a student can't run the shown program to obtain the prediction (they must lock their stage-1 answers first). Example:
+
+## Stage 1 — predict the output
+…questions + read-only code blocks…
+
+<next-stage label="Hand in & continue">
+
+## Stage 2 — write the program
+\`\`\`python editor id="task"
+\`\`\`
+
+- Put \`<next-stage>\` on its own line at the top level (not inside a code block).
+- All button/modal strings are optional and **overridable for localization**: \`label\` (advance + confirm button), \`title\` (modal heading), \`confirm\` (modal body), \`cancel\` (cancel button).
+- One-way: once advanced, the student cannot return to a handed-in stage.
+- Most useful on exam pages, but works on any page.`)
 
   return sections.join('\n\n')
 }
@@ -534,6 +569,12 @@ export function getCondensedSyntaxReference(): string {
   - Use \`correct="true"\` to mark the correct answer
   - If you see \`<Option>\` or \`<quiz-option>\`, convert to \`<answer>\`
   - Do NOT use \`:::quiz\` syntax — it is not implemented
+
+**Free-text auto-check (predict-output):** \`<question id="x" type="text" points="2">\` with an \`\`\`expected fenced block inside (blank line before it) → partial-credit grading of a predicted output, with a diff. Flags: \`ignore-case\`, \`ignore-whitespace\`. On exam pages question feedback is hidden by default — set \`showFeedback="true"\` to show it.
+
+**Staged pages:** \`<next-stage label="..." title="..." confirm="..." cancel="...">\` on its own line splits a document into one-way, hand-in-locked stages (only stages up to the current one render; advancing locks the previous one read-only). Ideal for exams: predict-output questions in stage 1, runnable editors in stage 2. All strings optional/localizable.
+
+**Code-block copy button:** plain \`\`\`lang code blocks show a copy button; add \`copy=false\` (or \`no-copy\`) to the info string to hide it, \`copy\`/\`copy=true\` to force it. Hidden by default on exam pages.
 
 **YouTube:** \`![caption](https://youtu.be/VIDEO_ID?t=120)\` is the simplest form (alt becomes caption). Or \`<youtube id="VIDEO_ID" startTime={120} caption="..." />\`, or the underlying \`<youtube-embed data-id="VIDEO_ID" data-start-time="120" data-caption="..."></youtube-embed>\`. Use \`playlist\`/\`data-playlist\` for playlists.
 
