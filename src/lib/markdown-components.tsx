@@ -676,10 +676,13 @@ export function createMarkdownComponents(
     // shows in previews / non-staged renders so authors see the stage break.
     'next-stage': function NextStageMarker(props: { label?: string }) {
       return (
-        <div className="my-8 flex items-center gap-3 text-xs font-medium uppercase tracking-wide text-muted-foreground" aria-hidden>
-          <span className="h-px flex-1 bg-border" />
-          <span>Stage break{props.label ? ` — ${props.label}` : ''}</span>
-          <span className="h-px flex-1 bg-border" />
+        <div className="my-8 flex flex-col items-center gap-1.5 border-t border-border pt-6" aria-hidden>
+          <span className="inline-flex items-center gap-2 rounded-lg border border-dashed border-primary/50 bg-primary/5 px-4 py-2 text-sm font-medium text-foreground">
+            {props.label || 'Next stage'} <span aria-hidden>→</span>
+          </span>
+          <span className="text-xs text-muted-foreground">
+            Stage break — in the exam, students get this button to hand in this section and continue.
+          </span>
         </div>
       )
     },

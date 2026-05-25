@@ -1,6 +1,6 @@
 'use client'
 
-import { Lock } from 'lucide-react'
+import { Lock, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { SEBQuitButton } from './seb-quit-button'
@@ -54,7 +54,11 @@ export function ExamLockedPage({
               Please wait for your teacher to unlock it, or contact them if you believe
               this is an error.
             </p>
-            <div className="flex justify-center gap-3">
+            <div className="flex flex-wrap justify-center gap-3">
+              <Button onClick={() => window.location.reload()}>
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Refresh
+              </Button>
               <Button variant="outline" asChild>
                 <Link href="/">Go to Homepage</Link>
               </Button>

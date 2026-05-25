@@ -135,13 +135,15 @@ export function ExamWaitingRoom({
           <p className="text-sm text-muted-foreground mb-3">
             Need to leave before the exam starts?
           </p>
-          <HandInButton
-            pageId={pageId}
-            publicKeyJwk={backupPublicKeyJwk}
-            keyId={backupKeyId}
-            studentId={studentId}
-            skriptId={skriptId}
-          />
+          <div className="flex flex-col items-center gap-2">
+            <HandInButton
+              pageId={pageId}
+              publicKeyJwk={backupPublicKeyJwk}
+              keyId={backupKeyId}
+              studentId={studentId}
+              skriptId={skriptId}
+            />
+          </div>
         </div>
       </div>
     </div>

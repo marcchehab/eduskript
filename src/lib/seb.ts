@@ -147,12 +147,15 @@ export function generateSEBConfig(
   <key>enablePrivateClipboard</key>
   <true/>
 
-  <!-- Allow pinch-to-zoom gestures on iOS/iPadOS -->
-  <!-- The app handles zoom via custom touch handlers on the #paper element -->
+  <!-- Disable SEB's own page/text zoom so it does NOT intercept the pinch
+       gesture as native WebView zoom. The app implements its own pinch-zoom +
+       pan via custom touch handlers (annotation-layer.tsx); with these set to
+       true, SEB swallowed the multi-touch gesture on iPad and the app's handler
+       never fired (and panning broke). Off = the gesture reaches the app. -->
   <key>enableZoomPage</key>
-  <true/>
+  <false/>
   <key>enableZoomText</key>
-  <true/>
+  <false/>
 
   <!-- Navigation -->
   <key>enableBrowserWindowToolbar</key>
