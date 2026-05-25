@@ -6001,11 +6001,11 @@ plots
             {snapshotLoading ? 'Loading…' : 'No saved snapshots for this student.'}
           </div>
         ) : (
-          <ul className="mt-0.5 max-h-[5.5rem] overflow-y-auto">
+          <ul className="!m-0 !mt-0.5 !p-0 !list-none max-h-[5.5rem] overflow-y-auto">
             {snapList.map((s) => {
               const active = (viewedSnapshotId ?? snapList[0].id) === s.id
               return (
-                <li key={s.id}>
+                <li key={s.id} className="!m-0 !p-0 !list-none marker:content-['']">
                   <button
                     type="button"
                     onClick={() => viewSnapshot(s)}
