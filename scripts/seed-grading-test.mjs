@@ -151,14 +151,17 @@ try {
     ['quiz-user-content-q1', { isSubmitted: true, textAnswer: '0\n2\n4', textRatio: 1, textScore: 3 }],
     ['quiz-user-content-q2', { isSubmitted: true, selected: [3], choiceScore: 2 }],
     ['quiz-user-content-q3', { isSubmitted: true, selected: [1], choiceScore: 0 }],
+    // The student's SUBMITTED code: a partially-correct solution (handles x>=0,
+    // wrong for negatives) → re-run should score 3/4 (fails doppelt(-3) == -6).
+    ['code-editor-p1code', {
+      files: [{ name: 'main.py', content: 'def doppelt(x):\n    return x * 2 if x >= 0 else 0\n' }],
+      activeFileIndex: 0,
+    }],
+    // A TAMPERED client check result claiming full marks — the grading engine
+    // must IGNORE this and use the teacher-side re-run instead.
     ['python-check-p1code', {
-      checksUsed: 1, maxChecks: null, points: 4, earnedPoints: 3, lastCheckedAt: Date.now(),
-      lastResults: [
-        { index: 0, passed: true, label: 'doppelt(2) == 4' },
-        { index: 1, passed: true, label: 'doppelt(0) == 0' },
-        { index: 2, passed: true, label: 'doppelt(5) == 10' },
-        { index: 3, passed: false, label: 'doppelt(-3) == -6', error: 'AssertionError' },
-      ],
+      checksUsed: 1, maxChecks: null, points: 4, earnedPoints: 4, lastCheckedAt: Date.now(),
+      lastResults: [],
     }],
   ]
   for (const [adapter, data] of answers) {

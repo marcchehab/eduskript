@@ -13,7 +13,8 @@
  * every exam page. Mirrors the batched approach of [[student-snapshot-context]].
  */
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { runChecksForStudents } from '@/lib/grading/run-checks.client'
 
 export interface ComponentReview {
   componentId: string
@@ -39,8 +40,12 @@ interface ReviewContextValue extends ReviewState {
   active: boolean
   mode: 'grade' | 'review'
   loading: boolean
+  /** Teacher only: re-running this student's python checks on this device. */
+  runningChecks: boolean
   /** Teacher only: set (number) or clear (null = revert to auto) an override. */
   setOverride: (componentId: string, awardedPoints: number | null) => Promise<void>
+  /** Teacher only: force a re-run of this student's python checks. */
+  rerunChecks: () => Promise<void>
 }
 
 const empty: ReviewState = { grade: null, totalEarned: null, totalMax: null, byComponent: {} }
@@ -50,7 +55,9 @@ const ExamReviewContext = createContext<ReviewContextValue>({
   active: false,
   mode: 'review',
   loading: false,
+  runningChecks: false,
   setOverride: async () => {},
+  rerunChecks: async () => {},
 })
 
 interface ProviderProps {
@@ -65,6 +72,10 @@ export function ExamReviewProvider({ pageId, mode, studentId, children }: Provid
   const active = !!studentId
   const [state, setState] = useState<ReviewState>(empty)
   const [loading, setLoading] = useState(false)
+  const [runningChecks, setRunningChecks] = useState(false)
+  // Which student's python checks we've already auto-run, so we don't loop
+  // (run → reload → run …). Reset only on a manual re-run.
+  const ranForRef = useRef<string | null>(null)
 
   const load = useCallback(() => {
     if (!studentId) {
@@ -87,7 +98,6 @@ export function ExamReviewProvider({ pageId, mode, studentId, children }: Provid
     // No reset when studentId clears: consumers gate on `active`, so stale
     // state isn't observable (mirrors student-snapshot-context).
     if (!studentId) return
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- load() flips a loading flag before its fetch; intentional
     load()
   }, [studentId, load])
 
@@ -104,9 +114,37 @@ export function ExamReviewProvider({ pageId, mode, studentId, children }: Provid
     [pageId, studentId, load],
   )
 
+  // Teacher grade mode: re-run this student's python checks on this device
+  // (authoritative), then refresh scores. Reuses the shared driver.
+  const runChecks = useCallback(async () => {
+    if (!studentId || mode !== 'grade') return
+    setRunningChecks(true)
+    try {
+      await runChecksForStudents(pageId, [studentId])
+      load()
+    } finally {
+      setRunningChecks(false)
+    }
+  }, [pageId, studentId, mode, load])
+
+  const rerunChecks = useCallback(async () => {
+    ranForRef.current = studentId // mark so the auto-effect doesn't double-fire
+    await runChecks()
+  }, [studentId, runChecks])
+
+  // Auto-run once per student when a grade-mode review has python components.
+  useEffect(() => {
+    if (mode !== 'grade' || !studentId) return
+    if (ranForRef.current === studentId) return
+    const hasPython = Object.values(state.byComponent).some((c) => c.kind === 'python')
+    if (!hasPython) return
+    ranForRef.current = studentId
+    runChecks()
+  }, [mode, studentId, state.byComponent, runChecks])
+
   const value = useMemo<ReviewContextValue>(
-    () => ({ ...state, active, mode, loading, setOverride }),
-    [state, active, mode, loading, setOverride],
+    () => ({ ...state, active, mode, loading, runningChecks, setOverride, rerunChecks }),
+    [state, active, mode, loading, runningChecks, setOverride, rerunChecks],
   )
 
   return <ExamReviewContext.Provider value={value}>{children}</ExamReviewContext.Provider>

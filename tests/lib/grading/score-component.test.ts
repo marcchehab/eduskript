@@ -1,18 +1,27 @@
 import { describe, it, expect } from 'vitest'
 import { scoreComponent } from '@/lib/grading/score-component'
 
-describe('scoreComponent — python', () => {
-  it('reads earnedPoints + points', () => {
-    const s = scoreComponent({ kind: 'python', declaredMax: 5, payload: { earnedPoints: 3, points: 5 } })
+describe('scoreComponent — python (authoritative re-run)', () => {
+  it('reads the re-run result, not the client payload', () => {
+    const s = scoreComponent({
+      kind: 'python',
+      declaredMax: 5,
+      payload: { earnedPoints: 99, points: 5 }, // client value — must be ignored
+      checkRun: { earned: 3, max: 5 },
+    })
     expect(s).toMatchObject({ earned: 3, max: 5, answered: true, overridden: false })
   })
-  it('declared max (markdown) wins over payload.points', () => {
-    const s = scoreComponent({ kind: 'python', declaredMax: 6, payload: { earnedPoints: 3, points: 5 } })
+  it('declared max (markdown) wins over the re-run max', () => {
+    const s = scoreComponent({ kind: 'python', declaredMax: 6, checkRun: { earned: 3, max: 5 } })
     expect(s.max).toBe(6)
   })
-  it('falls back to payload.points when no declared max', () => {
-    const s = scoreComponent({ kind: 'python', payload: { earnedPoints: 2, points: 4 } })
+  it('falls back to the re-run max when no declared max', () => {
+    const s = scoreComponent({ kind: 'python', checkRun: { earned: 2, max: 4 } })
     expect(s.max).toBe(4)
+  })
+  it('not run yet → earned 0, answered false (client payload never trusted)', () => {
+    const s = scoreComponent({ kind: 'python', declaredMax: 4, payload: { earnedPoints: 4, points: 4 }, checkRun: null })
+    expect(s).toMatchObject({ earned: 0, max: 4, answered: false })
   })
 })
 
@@ -56,7 +65,7 @@ describe('scoreComponent — teacher override wins', () => {
     const s = scoreComponent({
       kind: 'python',
       declaredMax: 5,
-      payload: { earnedPoints: 3, points: 5 },
+      checkRun: { earned: 3, max: 5 },
       override: { awardedPoints: 4, maxPoints: 8 },
     })
     expect(s).toMatchObject({ earned: 4, max: 8, overridden: true })

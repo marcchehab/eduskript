@@ -13,7 +13,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
-import { ArrowLeft, Send, Loader2 } from 'lucide-react'
+import { ArrowLeft, Send, Loader2, Play } from 'lucide-react'
+import { runChecksForStudents } from '@/lib/grading/run-checks.client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -137,6 +138,7 @@ export default function ExamGradingPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [returningAll, setReturningAll] = useState(false)
+  const [runAll, setRunAll] = useState<{ done: number; total: number } | null>(null)
 
   // Load the classes that have this exam unlocked (for the class picker).
   useEffect(() => {
@@ -182,9 +184,6 @@ export default function ExamGradingPage() {
 
   useEffect(() => {
     if (status !== 'authenticated') return
-    // loadGrading flips a loading flag before its fetch — the re-render is
-    // intentional (spinner, then data); not a render-time derivation.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadGrading()
   }, [status, loadGrading])
 
@@ -243,6 +242,25 @@ export default function ExamGradingPage() {
     () => data?.students.filter((s) => s.status !== 'not_started').length ?? 0,
     [data],
   )
+
+  // Re-run code checks for every submitted student on this device, then refresh.
+  const runAllChecks = async () => {
+    if (!data) return
+    const ids = data.students.filter((s) => s.status !== 'not_started').map((s) => s.studentId)
+    if (ids.length === 0) {
+      dialog.showInfo('No handed-in exams to check yet.')
+      return
+    }
+    setRunAll({ done: 0, total: ids.length })
+    try {
+      await runChecksForStudents(pageId, ids, (done, total) => setRunAll({ done, total }))
+      loadGrading()
+    } catch {
+      dialog.showError('Could not run all checks.')
+    } finally {
+      setRunAll(null)
+    }
+  }
 
   if (status === 'loading' || loading) {
     return <div className="p-8 text-muted-foreground">Loading…</div>
@@ -318,6 +336,13 @@ export default function ExamGradingPage() {
               ))}
             </select>
           )}
+          <Button variant="outline" onClick={runAllChecks} disabled={!!runAll || submittedCount === 0} title="Re-run every submitted student's code checks on this device">
+            {runAll ? (
+              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Checks {runAll.done}/{runAll.total}</>
+            ) : (
+              <><Play className="w-4 h-4 mr-2" />Run all checks</>
+            )}
+          </Button>
           <Button onClick={returnAll} disabled={returningAll || submittedCount === 0}>
             {returningAll ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
             Return all

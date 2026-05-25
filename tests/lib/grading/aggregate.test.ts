@@ -14,9 +14,9 @@ describe('aggregateStudent', () => {
     const payloads = new Map<string, unknown>([
       ['quiz-p1', { isSubmitted: true, textScore: 1.5 }],
       ['quiz-q2', { isSubmitted: true, choiceScore: 1 }],
-      ['python-check-a8', { earnedPoints: 3, points: 3 }],
     ])
-    const r = aggregateStudent(components, payloads, new Map(), DEFAULT_GRADE_CONFIG, null)
+    const checkRuns = new Map([['python-check-a8', { earned: 3, max: 3 }]])
+    const r = aggregateStudent(components, payloads, new Map(), DEFAULT_GRADE_CONFIG, null, checkRuns)
     expect(r.totalEarned).toBeCloseTo(5.5, 10)
     expect(r.totalMax).toBe(6)
     // 5.5/6 = 91.67% → twoSegment(60): 4 + 2*((91.67-60)/40) ≈ 5.58 → 5.6
@@ -41,9 +41,9 @@ describe('aggregateStudent', () => {
   })
 
   it('maxPoints override replaces the summed max for the grade', () => {
-    const payloads = new Map<string, unknown>([['python-check-a8', { earnedPoints: 3, points: 3 }]])
+    const checkRuns = new Map([['python-check-a8', { earned: 3, max: 3 }]])
     // Only 3 earned, but teacher caps max at 3 → 100% → 6.0
-    const r = aggregateStudent(components, payloads, new Map(), DEFAULT_GRADE_CONFIG, 3)
+    const r = aggregateStudent(components, new Map(), new Map(), DEFAULT_GRADE_CONFIG, 3, checkRuns)
     expect(r.totalMax).toBe(3)
     expect(r.totalEarned).toBe(3)
     expect(r.grade).toBe(6)

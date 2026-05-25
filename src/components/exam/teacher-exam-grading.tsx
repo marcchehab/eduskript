@@ -9,9 +9,10 @@
  */
 
 import { useState } from 'react'
-import { Send, Loader2 } from 'lucide-react'
+import { Send, Loader2, Play } from 'lucide-react'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
-import { ExamReviewProvider } from '@/contexts/exam-review-context'
+import { ExamReviewProvider, useExamReview } from '@/contexts/exam-review-context'
+import { runChecksForStudents } from '@/lib/grading/run-checks.client'
 import { Button } from '@/components/ui/button'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
@@ -55,7 +56,9 @@ function GradingBar({
   studentName: string | null
 }) {
   const dialog = useAlertDialog()
+  const { runningChecks, rerunChecks } = useExamReview()
   const [busy, setBusy] = useState(false)
+  const [runAll, setRunAll] = useState<{ done: number; total: number } | null>(null)
 
   const post = (body: object, label: string) => {
     setBusy(true)
@@ -70,10 +73,50 @@ function GradingBar({
       .finally(() => setBusy(false))
   }
 
+  // Re-run code checks for every submitted student in the class, on this device.
+  const runAllChecks = async () => {
+    try {
+      const res = await fetch(`/api/exams/${pageId}/grading?classId=${classId}`)
+      const j = await res.json()
+      const ids: string[] = (j.students ?? [])
+        .filter((s: { status: string }) => s.status !== 'not_started')
+        .map((s: { studentId: string }) => s.studentId)
+      if (ids.length === 0) {
+        dialog.showInfo('No handed-in exams to check yet.')
+        return
+      }
+      setRunAll({ done: 0, total: ids.length })
+      await runChecksForStudents(pageId, ids, (done, total) => setRunAll({ done, total }))
+      dialog.showSuccess(`Ran code checks for ${ids.length} student(s). Re-select a student to see updated scores.`, 'Checks complete')
+    } catch {
+      dialog.showError('Could not run all checks.')
+    } finally {
+      setRunAll(null)
+    }
+  }
+
   return (
     <>
       <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full border bg-card/95 px-3 py-2 shadow-lg backdrop-blur">
         <span className="px-1 text-xs text-muted-foreground">Grading</span>
+        {studentId && (
+          <Button size="sm" variant="ghost" disabled={runningChecks} onClick={() => rerunChecks()} title="Re-run this student's code checks on this device">
+            {runningChecks ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+          </Button>
+        )}
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={!!runAll}
+          onClick={runAllChecks}
+          title="Re-run every submitted student's code checks"
+        >
+          {runAll ? (
+            <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Checks {runAll.done}/{runAll.total}</>
+          ) : (
+            <><Play className="w-4 h-4 mr-1.5" />Run all checks</>
+          )}
+        </Button>
         {studentId && (
           <Button
             size="sm"

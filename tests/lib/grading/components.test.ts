@@ -48,7 +48,7 @@ describe('parseGradableComponents', () => {
     expect(comps).toEqual([
       { componentId: 'quiz-user-content-p1', kind: 'quiz', questionType: 'text', maxPoints: 1, label: 'Aufgabe 1 — Modulo (1 Punkt)' },
       { componentId: 'quiz-user-content-q3', kind: 'quiz', questionType: 'single', maxPoints: 2, label: 'Aufgabe 3 — Wahl (2 Punkte)' },
-      { componentId: 'python-check-a8', kind: 'python', maxPoints: 3, label: 'Aufgabe 8 — Fläche (3 Punkte)' },
+      { componentId: 'python-check-a8', kind: 'python', maxPoints: 3, label: 'Aufgabe 8 — Fläche (3 Punkte)', checkCode: 'assert f() == 1' },
     ])
   })
 

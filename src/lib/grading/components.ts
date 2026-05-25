@@ -32,6 +32,8 @@ export interface GradableComponent {
   maxPoints?: number
   /** Human label for the table — nearest preceding heading, else the id. */
   label?: string
+  /** python only: the assert block body (for re-running at grading time). */
+  checkCode?: string
 }
 
 // rehype-sanitize's defaultSchema clobbers `id`/`name` with this prefix to
@@ -62,6 +64,10 @@ export function parseGradableComponents(content: string): GradableComponent[] {
   let lastHeading: string | undefined
   let inFence = false
   let fenceInfo = '' // info string of the currently open ``` fence
+  // While inside a ```python-check``` fence, accumulate its body (the asserts)
+  // onto the component we just pushed, for re-running at grading time.
+  let pendingCheck: GradableComponent | null = null
+  let checkBody: string[] = []
 
   for (const line of lines) {
     const fenceMatch = line.match(/^\s*```+\s*(.*)$/)
@@ -72,21 +78,31 @@ export function parseGradableComponents(content: string): GradableComponent[] {
         if (/^python-check\b/i.test(fenceInfo)) {
           const forId = attr(fenceInfo, 'for') ?? attr(fenceInfo, 'id')
           if (forId) {
-            out.push({
+            pendingCheck = {
               componentId: `python-check-${forId}`,
               kind: 'python',
               maxPoints: num(attr(fenceInfo, 'points')),
               label: lastHeading,
-            })
+            }
+            checkBody = []
+            out.push(pendingCheck)
           }
         }
       } else {
+        // Closing fence — attach the accumulated check body, if any.
+        if (pendingCheck) {
+          pendingCheck.checkCode = checkBody.join('\n')
+          pendingCheck = null
+        }
         inFence = false
         fenceInfo = ''
       }
       continue
     }
-    if (inFence) continue // ignore content inside fences (incl. <question> in examples)
+    if (inFence) {
+      if (pendingCheck) checkBody.push(line)
+      continue // ignore other fence content (incl. <question> in examples)
+    }
 
     const headingMatch = line.match(/^#{1,6}\s+(.*)$/)
     if (headingMatch) {

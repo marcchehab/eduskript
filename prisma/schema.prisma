@@ -169,6 +169,7 @@ model User {
   // Used by the teacher roster to surface "took 43m" + an event timeline.
   examAuditLogs ExamAuditLog[] @relation("StudentExamAuditLogs")
   questionGrades ExamQuestionGrade[] @relation("StudentQuestionGrades")
+  checkRuns      ExamCheckRun[]      @relation("StudentCheckRuns")
 
   // Encryption keys used by students to encrypt offline exam backups.
   // Rotatable; old keys are kept so historical .examfile backups stay decryptable.
@@ -371,6 +372,7 @@ model Page {
   examAuditLogs      ExamAuditLog[]      @relation("PageExamAuditLogs")
   examGradeConfig    ExamGradeConfig?    @relation("ExamGradeConfigs")
   examQuestionGrades ExamQuestionGrade[] @relation("ExamQuestionGrades")
+  examCheckRuns      ExamCheckRun[]      @relation("ExamCheckRuns")
 
   // Server-side checkpoints captured at manual save / Check / hand-in
   userDataCheckpoints UserDataCheckpoint[] @relation("PageCheckpoints")
@@ -1128,6 +1130,31 @@ model ExamQuestionGrade {
   @@unique([pageId, studentId, componentId])
   @@index([pageId, studentId])
   @@map("exam_question_grades")
+}
+
+// Authoritative result of re-running a student's SUBMITTED code against a
+// python-check at grading time, on the teacher's device. This — not the
+// client-computed PythonCheckData.earnedPoints — is what the grading engine
+// reads for python components (a manual ExamQuestionGrade override still wins).
+// componentId is the python-check runtime id ("python-check-<id>").
+model ExamCheckRun {
+  id          String   @id @default(cuid())
+  pageId      String   @map("page_id")
+  studentId   String   @map("student_id")
+  componentId String   @map("component_id")
+  earned      Float
+  max         Float
+  passed      Int
+  total       Int
+  ranAt       DateTime @default(now()) @map("ran_at")
+  ranBy       String?  @map("ran_by")
+
+  page    Page @relation("ExamCheckRuns", fields: [pageId], references: [id], onDelete: Cascade)
+  student User @relation("StudentCheckRuns", fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([pageId, studentId, componentId])
+  @@index([pageId, studentId])
+  @@map("exam_check_runs")
 }
 
 // Per-teacher encryption keypair used to encrypt offline exam backups (.examfile).

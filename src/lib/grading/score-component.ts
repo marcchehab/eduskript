@@ -3,10 +3,13 @@
  * or PythonCheckData payload from UserData) plus its declared max and any
  * teacher override into `{earned, max}`. Pure — no DB.
  *
- * Auto scores come from values the client already persists on submit/check:
+ * Auto scores:
  * - text quiz   → QuizData.textScore   (partial credit, scoreFromRatio)
  * - choice quiz → QuizData.choiceScore (max on exact match, else 0)
- * - python      → PythonCheckData.earnedPoints (pass-ratio × max)
+ * - python      → `checkRun.earned` — the AUTHORITATIVE result of re-running the
+ *   student's submitted code on the teacher's device (ExamCheckRun). The client's
+ *   PythonCheckData.earnedPoints is NOT trusted for grading (tamper-able, and
+ *   absent in real exams where Check is hidden). null checkRun = not yet run → 0.
  * number/range/sql have no auto score — gradable only via a teacher override.
  *
  * A teacher override (ExamQuestionGrade) always WINS for earned (and for max,
@@ -25,8 +28,10 @@ export interface ComponentScoreInput {
   questionType?: string
   /** Max points declared in the page markdown (authoritative when present). */
   declaredMax?: number | null
-  /** Latest UserData payload for this component (null = unanswered). */
+  /** Latest UserData payload for this component (null = unanswered). Quiz only. */
   payload?: Partial<QuizData & PythonCheckData> | null
+  /** Authoritative re-run result for python components (null = not run). */
+  checkRun?: { earned: number; max: number } | null
   /** Teacher override, if any. */
   override?: { awardedPoints: number; maxPoints?: number | null } | null
 }
@@ -42,14 +47,14 @@ export interface ComponentScore {
   autoEarned: number
 }
 
-/** Auto-earned points from the stored payload, or null if nothing to score. */
+/** Auto-earned points, or null if nothing to score. */
 function autoEarnedPoints(input: ComponentScoreInput): number | null {
-  const { kind, questionType, payload } = input
-  if (!payload) return null
+  const { kind, questionType, payload, checkRun } = input
   if (kind === 'python') {
-    return typeof payload.earnedPoints === 'number' ? payload.earnedPoints : null
+    // Authoritative re-run only — never the client's PythonCheckData.
+    return checkRun ? checkRun.earned : null
   }
-  // quiz
+  if (!payload) return null
   if (questionType === 'text') {
     return typeof payload.textScore === 'number' ? payload.textScore : null
   }
@@ -60,11 +65,9 @@ function autoEarnedPoints(input: ComponentScoreInput): number | null {
   return null
 }
 
-/** Best-effort max from the stored payload when the markdown didn't declare one. */
+/** Best-effort max when the markdown didn't declare one (python: the re-run's max). */
 function payloadMax(input: ComponentScoreInput): number | null {
-  if (input.kind === 'python' && typeof input.payload?.points === 'number') {
-    return input.payload.points
-  }
+  if (input.kind === 'python' && input.checkRun) return input.checkRun.max
   return null
 }
 

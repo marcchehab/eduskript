@@ -73,6 +73,7 @@ export function aggregateStudent(
   overrides: Map<string, QuestionOverride>,
   params: GradeConfigParams,
   maxPointsOverride: number | null,
+  checkRuns: Map<string, { earned: number; max: number }> = new Map(),
 ): StudentGrade {
   const results: ComponentResult[] = components.map((c) => {
     const s = scoreComponent({
@@ -80,6 +81,7 @@ export function aggregateStudent(
       questionType: c.questionType,
       declaredMax: c.maxPoints ?? null,
       payload: (payloads.get(c.componentId) as Partial<QuizData & PythonCheckData> | undefined) ?? null,
+      checkRun: checkRuns.get(c.componentId) ?? null,
       override: overrides.get(c.componentId) ?? null,
     })
     return {
@@ -141,7 +143,7 @@ export async function computeExamGrades(
     return { components, params, maxPointsOverride, autoMaxPoints, byStudent }
   }
 
-  const [rows, overrideRows] = await Promise.all([
+  const [rows, overrideRows, checkRunRows] = await Promise.all([
     prisma.userData.findMany({
       where: {
         userId: { in: studentIds },
@@ -154,6 +156,10 @@ export async function computeExamGrades(
     prisma.examQuestionGrade.findMany({
       where: { pageId, studentId: { in: studentIds } },
       select: { studentId: true, componentId: true, awardedPoints: true, maxPoints: true },
+    }),
+    prisma.examCheckRun.findMany({
+      where: { pageId, studentId: { in: studentIds } },
+      select: { studentId: true, componentId: true, earned: true, max: true },
     }),
   ])
 
@@ -169,6 +175,12 @@ export async function computeExamGrades(
     if (!m) overridesByStudent.set(o.studentId, (m = new Map()))
     m.set(o.componentId, { awardedPoints: o.awardedPoints, maxPoints: o.maxPoints })
   }
+  const checkRunsByStudent = new Map<string, Map<string, { earned: number; max: number }>>()
+  for (const cr of checkRunRows) {
+    let m = checkRunsByStudent.get(cr.studentId)
+    if (!m) checkRunsByStudent.set(cr.studentId, (m = new Map()))
+    m.set(cr.componentId, { earned: cr.earned, max: cr.max })
+  }
 
   for (const sid of studentIds) {
     byStudent.set(
@@ -179,6 +191,7 @@ export async function computeExamGrades(
         overridesByStudent.get(sid) ?? new Map(),
         params,
         maxPointsOverride,
+        checkRunsByStudent.get(sid) ?? new Map(),
       ),
     )
   }
