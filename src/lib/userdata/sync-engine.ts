@@ -326,6 +326,16 @@ export class SyncEngine {
   }
 
   /**
+   * True once the server has refused cloud sync for this session (402, free
+   * plan). When gated, local data is the ONLY copy — callers that wipe local
+   * after a "saved remotely" assumption must check this first and skip the
+   * wipe, or they'd destroy data that never reached the server.
+   */
+  public isCloudGated(): boolean {
+    return this.gatedByPlan
+  }
+
+  /**
    * Subscribe to status changes
    */
   public subscribe(listener: SyncStatusListener): () => void {

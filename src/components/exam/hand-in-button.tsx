@@ -30,7 +30,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { userDataService } from '@/lib/userdata'
+import { userDataService, syncEngine } from '@/lib/userdata'
+import { clearPageAnnotations } from '@/lib/indexeddb/annotations'
 import {
   encryptSnapshotsForBackup,
   triggerBackupDownload,
@@ -38,6 +39,30 @@ import {
   type BackupMeta,
   type BackupSnapshot,
 } from '@/lib/exam-backup'
+
+/**
+ * After a confirmed hand-in, drop this exam's LOCAL copy so it no longer
+ * survives the SEB session into a re-sit. The server is then the single source
+ * of truth: on the next load `initialSync` re-hydrates whatever the server
+ * holds, so the teacher decides server-side whether a re-sitting student
+ * resumes their answers or starts fresh.
+ *
+ * Safety: only wipe what is confirmed remote. We flush pending saves and push
+ * the sync queue first; if cloud sync is gated (free plan → 402), the server
+ * has nothing, so we keep local untouched. Best-effort throughout — a wipe
+ * failure must never block the student leaving the exam.
+ */
+async function wipeLocalExamData(pageId: string): Promise<void> {
+  try {
+    await userDataService.flush()
+    await syncEngine.sync()
+    if (syncEngine.isCloudGated()) return // free plan: local is the only copy
+    await userDataService.deleteAllForPage(pageId)
+    await clearPageAnnotations(pageId)
+  } catch (error) {
+    console.error('[HandInButton] local wipe after hand-in failed:', error)
+  }
+}
 
 /**
  * Gather snapshots of every on-page code editor's IndexedDB state. The
@@ -162,6 +187,10 @@ export function HandInButton({
         const data = await response.json().catch(() => ({}))
         throw new Error(data?.error || 'Failed to submit exam')
       }
+
+      // Hand-in is recorded server-side — now drop the local copy so it can't
+      // leak into a re-sit. Best-effort; never blocks the redirect below.
+      await wipeLocalExamData(pageId)
 
       // Navigate to end-session which clears cookie and redirects
       // SEB will then navigate to quitURL, ending the session
