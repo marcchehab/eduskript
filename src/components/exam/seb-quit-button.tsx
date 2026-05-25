@@ -1,21 +1,15 @@
 'use client'
 
-import { useSyncExternalStore } from 'react'
 import { LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-
-const subscribe = () => () => {}
-const getIsInSEB = () =>
-  typeof navigator !== 'undefined' &&
-  (navigator.userAgent.includes('SEB/') || navigator.userAgent.includes('SafeExamBrowser'))
-const getServerSnapshot = () => false
+import { useIsInSEB } from '@/hooks/use-is-in-seb'
 
 /**
  * A "Quit Safe Exam Browser" button that only renders inside SEB.
  * Navigates to the quitURL which SEB recognizes and triggers its quit flow.
  */
 export function SEBQuitButton() {
-  const isInSEB = useSyncExternalStore(subscribe, getIsInSEB, getServerSnapshot)
+  const isInSEB = useIsInSEB()
 
   if (!isInSEB) return null
 

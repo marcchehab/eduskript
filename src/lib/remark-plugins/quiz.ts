@@ -9,6 +9,44 @@ import type { Root, RootContent, BlockContent, Paragraph, Text } from 'mdast'
  */
 export function remarkQuiz() {
   return function transformer(tree: Root) {
+    // Pass 0 — lowercase <question> free-text auto-check.
+    // The PascalCase collection below serializes a Question block and pulls out
+    // its ```expected fenced block (lib/markdown-components reads `expected`
+    // ONLY from the data-expected attribute). But lowercase <question> — the
+    // form the MCP/AI guidance and most authored content use — is NOT collected
+    // there; it passes straight through to rehype. So a ```expected block inside
+    // a lowercase <question> never gets hoisted: it renders as a visible code
+    // block (the solution leaks) AND data-expected is never set (auto-grading
+    // silently off). Hoist it here, surgically: encode a code(lang=expected)
+    // node that sits between a lowercase `<question ...>` open tag and its
+    // `</question>` close into data-expected on the open tag, then drop the
+    // node. Case-sensitive so PascalCase keeps its own path; choice questions
+    // (no expected block) are untouched.
+    const expectedToHoist: { parent: any; codeIndex: number; openNode: any }[] = []
+    visit(tree, (node: any, index, parent) => {
+      if (node.type !== 'code' || node.lang !== 'expected') return
+      if (!parent || index === undefined) return
+      let openNode: any = null
+      for (let i = index - 1; i >= 0; i--) {
+        const sib = parent.children[i]
+        const v = sib?.type === 'html' ? sib.value : ''
+        if (typeof v !== 'string') continue
+        if (/<\/question>/.test(v)) break // a prior question already closed
+        if (/<question\b/.test(v) && !/<\/question>/.test(v)) { openNode = sib; break }
+      }
+      if (openNode) expectedToHoist.push({ parent, codeIndex: index, openNode })
+    })
+    // Splice in reverse so earlier indices stay valid.
+    for (let i = expectedToHoist.length - 1; i >= 0; i--) {
+      const { parent, codeIndex, openNode } = expectedToHoist[i]
+      const codeNode = parent.children[codeIndex]
+      if (!/data-expected=/.test(openNode.value)) {
+        const encoded = encodeURIComponent(codeNode.value ?? '')
+        openNode.value = openNode.value.replace(/(<question\b[^>]*?)>/, `$1 data-expected="${encoded}">`)
+      }
+      parent.children.splice(codeIndex, 1)
+    }
+
     // Collect nodes that form Question blocks
     const nodesToProcess: { startIndex: number; endIndex: number; parent: any }[] = []
 
