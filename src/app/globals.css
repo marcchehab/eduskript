@@ -339,6 +339,10 @@ body {
   /* This prevents paper from capturing scroll events, letting parent handle all scrolling */
   overflow: clip;
   margin: 0 auto;
+  /* Scroll room below the paper so fixed bottom UI (annotation toolbar, exam
+     grading bar, etc.) never covers the last content. Margin is external to
+     #paper, so annotation paper-coordinates are unaffected. */
+  margin-bottom: 8rem;
 
   /* Fixed padding - same on all devices for consistent annotation coordinates */
   @apply px-48; /* 192px horizontal padding */

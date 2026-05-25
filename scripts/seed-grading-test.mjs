@@ -57,6 +57,23 @@ Welche Zahlen sind gerade?
 <answer>3</answer>
 <answer correct="true">4</answer>
 </question>
+
+## Aufgabe 4 — Funktion schreiben (4 Punkte)
+
+Schreiben Sie eine Funktion \`doppelt(x)\`, die das Doppelte von \`x\` zurückgibt.
+
+\`\`\`python editor exam id="p1code"
+def doppelt(x):
+    # Ihr Code
+    pass
+\`\`\`
+
+\`\`\`python-check for="p1code" points="4"
+assert doppelt(2) == 4
+assert doppelt(0) == 0
+assert doppelt(5) == 10
+assert doppelt(-3) == -6
+\`\`\`
 `
 
 const examSettings = { requireSEB: false }
@@ -125,6 +142,31 @@ try {
   await prisma.examSubmission.deleteMany({ where: { pageId: page.id, studentId: student.id } })
   await prisma.examQuestionGrade.deleteMany({ where: { pageId: page.id, studentId: student.id } })
   await prisma.userData.deleteMany({ where: { userId: student.id, itemId: page.id } })
+
+  // Seed a sample, immediately-gradable attempt (handed in, not yet returned):
+  // text correct (3/3), single correct (2/2), multiple wrong (0/2), python 3/4.
+  // componentIds: quiz `id` is clobbered by rehype-sanitize to user-content-*;
+  // python lives under python-check-<editor id> (data-* not clobbered).
+  const answers = [
+    ['quiz-user-content-q1', { isSubmitted: true, textAnswer: '0\n2\n4', textRatio: 1, textScore: 3 }],
+    ['quiz-user-content-q2', { isSubmitted: true, selected: [3], choiceScore: 2 }],
+    ['quiz-user-content-q3', { isSubmitted: true, selected: [1], choiceScore: 0 }],
+    ['python-check-p1code', {
+      checksUsed: 1, maxChecks: null, points: 4, earnedPoints: 3, lastCheckedAt: Date.now(),
+      lastResults: [
+        { index: 0, passed: true, label: 'doppelt(2) == 4' },
+        { index: 1, passed: true, label: 'doppelt(0) == 0' },
+        { index: 2, passed: true, label: 'doppelt(5) == 10' },
+        { index: 3, passed: false, label: 'doppelt(-3) == -6', error: 'AssertionError' },
+      ],
+    }],
+  ]
+  for (const [adapter, data] of answers) {
+    await prisma.userData.create({
+      data: { userId: student.id, adapter, itemId: page.id, data, version: 1 },
+    })
+  }
+  await prisma.examSubmission.create({ data: { pageId: page.id, studentId: student.id } })
 
   console.log('\n✅ Grading-test scenario seeded\n')
   console.log(`   pageId   : ${page.id}`)
