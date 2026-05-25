@@ -187,12 +187,30 @@ try {
       data: { userId: student.id, adapter, itemId: page.id, data, version: 1 },
     })
   }
-  // Hand-in snapshot of the code editor, so the teacher's editor view shows the
-  // SUBMITTED code (not the default), matching what the re-run grades. Real
-  // hand-ins write this; the seed must too, or the display and grade diverge.
-  await prisma.userDataCheckpoint.create({
-    data: { userId: student.id, pageId: page.id, componentId: 'code-editor-p1code', kind: 'handin', payload: codeEditorData, label: 'exam hand-in' },
-  })
+  // Snapshot history for the code editor, oldest → newest, so the teacher's
+  // snapshot list has several scrollable entries to step through. The LAST
+  // (handin) is the submitted code the re-run grades; real hand-ins write it,
+  // the seed must too, or the display and grade diverge. createdAt is staggered
+  // so the list orders sensibly (route sorts desc).
+  const code = (body) => ({ files: [{ name: 'main.py', content: body }], activeFileIndex: 0 })
+  const t0 = Date.now() - 18 * 60 * 1000 // 18 min ago
+  const min = 60 * 1000
+  const history = [
+    [0, 'run', 'ran code', code('def doppelt(x):\n    pass\n')],
+    [3, 'check', 'checked (1/4)', code('def doppelt(x):\n    return x\n')],
+    [6, 'run', 'ran code', code('def doppelt(x):\n    return x + x\n')],
+    [9, 'check', 'checked (3/4)', code('def doppelt(x):\n    return x * 2 if x >= 0 else 0\n')],
+    [12, 'autosave', null, code('def doppelt(x):\n    return x * 2 if x >= 0 else 0\n')],
+    [18, 'handin', 'exam hand-in', codeEditorData],
+  ]
+  for (const [offsetMin, kind, label, payload] of history) {
+    await prisma.userDataCheckpoint.create({
+      data: {
+        userId: student.id, pageId: page.id, componentId: 'code-editor-p1code',
+        kind, label, payload, createdAt: new Date(t0 + offsetMin * min),
+      },
+    })
+  }
   await prisma.examSubmission.create({ data: { pageId: page.id, studentId: student.id } })
 
   console.log('\n✅ Grading-test scenario seeded\n')

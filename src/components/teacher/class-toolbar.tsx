@@ -468,12 +468,12 @@ export function ClassToolbar({
                 {/* Class-overview mode: no individual student selected, so the
                     per-component class dropdowns (quiz/python/SQL) show beneath
                     each component. Selecting a student switches to grading them. */}
-                <li>
+                <li className="flex items-center gap-1">
                   <button
                     type="button"
                     onClick={() => setSelectedStudent(null)}
                     className={cn(
-                      'w-full flex items-center gap-1.5 rounded-md px-1.5 py-1 text-sm text-left hover:bg-accent/50',
+                      'flex-1 flex items-center gap-1.5 rounded-md px-1.5 py-1 text-sm text-left hover:bg-accent/50',
                       !selectedStudent && 'bg-amber-50 dark:bg-amber-950/30 font-medium',
                     )}
                     title="Show the whole-class overview (no individual student)"
@@ -481,6 +481,14 @@ export function ClassToolbar({
                     <Users className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
                     Class overview
                   </button>
+                  {isExam && selectedClass && (
+                    <Button variant="outline" size="sm" asChild className="h-7 gap-1 flex-shrink-0">
+                      <Link href={`/dashboard/exams/${pageId}/grading?classId=${selectedClass.id}`}>
+                        <ClipboardList className="w-3.5 h-3.5" />
+                        Grade
+                      </Link>
+                    </Button>
+                  )}
                 </li>
                 {rows.map((row) => {
                   const isViewingThis = selectedStudent?.id === row.userId
@@ -709,19 +717,9 @@ export function ClassToolbar({
           </button>
         </div>
 
-        {/* Secondary rows: selected-student label, "you are X" anon chip, and
-            exam-only controls (state + submitted-only). Each only renders
-            when its condition holds, so the chrome stays minimal in the
-            common case. */}
-        {selectedStudent && (
-          <div className="mt-1 text-xs text-muted-foreground truncate" title="Click this student's row in the roster to revert to class target">
-            → {selectedStudent.displayName}
-            {selectedStudent.revealedEmail && (
-              <span className="opacity-70"> ({selectedStudent.revealedEmail})</span>
-            )}
-          </div>
-        )}
-
+        {/* Secondary rows: "you are X" anon chip + exam-only controls (state +
+            submitted-only). The selected student is shown in the roster list
+            above, so no separate "→ student" line is needed. */}
         {yourAnonymousDisplayName && (
           <div
             className="mt-1 flex items-center gap-1 text-xs text-muted-foreground"
@@ -808,12 +806,6 @@ export function ClassToolbar({
               />
               <span>Submitted only</span>
             </label>
-            <Button variant="outline" size="sm" asChild className="gap-1.5">
-              <Link href={`/dashboard/exams/${pageId}/grading?classId=${selectedClass.id}`}>
-                <ClipboardList className="w-4 h-4" />
-                Grade
-              </Link>
-            </Button>
           </div>
         )}
       </div>

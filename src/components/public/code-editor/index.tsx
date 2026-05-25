@@ -28,6 +28,7 @@ import { useSyncedUserData, type SyncedUserDataOptions } from '@/lib/userdata/pr
 import { useTeacherClass } from '@/contexts/teacher-class-context'
 import { useStudentSnapshot } from '@/contexts/student-snapshot-context'
 import { GradeBadge } from '@/components/exam/grade-badge'
+import { cn } from '@/lib/utils'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useSession } from 'next-auth/react'
@@ -338,7 +339,7 @@ export const CodeEditor = memo(function CodeEditor({
 }: CodeEditorProps) {
   const { resolvedTheme } = useTheme()
   const { data: session } = useSession()
-  const { selectedClass, isTeacher } = useTeacherClass()
+  const { selectedClass, selectedStudent, isTeacher } = useTeacherClass()
   const dialog = useAlertDialog()
   const [mounted, setMounted] = useState(false)
   const [runState, setRunState] = useState<RunState>(RunState.STOPPED)
@@ -1414,6 +1415,7 @@ export const CodeEditor = memo(function CodeEditor({
   // synced badge appears when the POST succeeds.
   const createCheckVersion = useCallback(async (label?: string) => {
     if (!pageId) return
+    if (isViewingSnapshot) return // teacher scratch-checking a student's snapshot: never persist
     const liveFiles = editorViewRef.current
       ? filesRef.current.map((file, idx) =>
           idx === activeFileIndex
@@ -1446,7 +1448,7 @@ export const CodeEditor = memo(function CodeEditor({
     } catch (e) {
       console.error('createCheckVersion failed:', e)
     }
-  }, [pageId, componentId, activeFileIndex, fontSize, lineWrapping, editorWidth, canvasTransform, highlights, createVersion, refreshVersions])
+  }, [pageId, componentId, activeFileIndex, fontSize, lineWrapping, editorWidth, canvasTransform, highlights, createVersion, refreshVersions, isViewingSnapshot])
 
   // Create a "run" version row alongside the server checkpoint POST when
   // the student presses Run. Identical consecutive runs (no edits between
@@ -1455,6 +1457,7 @@ export const CodeEditor = memo(function CodeEditor({
   // so the teacher's timeline doesn't fill with redundant Run events.
   const createRunVersion = useCallback(async () => {
     if (!pageId) return
+    if (isViewingSnapshot) return // teacher scratch-running a student's snapshot: never persist
     const liveFiles = editorViewRef.current
       ? filesRef.current.map((file, idx) =>
           idx === activeFileIndex
@@ -1490,7 +1493,7 @@ export const CodeEditor = memo(function CodeEditor({
     } catch (e) {
       console.error('createRunVersion failed:', e)
     }
-  }, [pageId, componentId, activeFileIndex, fontSize, lineWrapping, editorWidth, canvasTransform, highlights, createVersion, refreshVersions])
+  }, [pageId, componentId, activeFileIndex, fontSize, lineWrapping, editorWidth, canvasTransform, highlights, createVersion, refreshVersions, isViewingSnapshot])
 
   // Promote a local autosave to a synced manual save. The original payload
   // is read from the version's blob, the row's `kind` flips to 'manual', and
@@ -2431,6 +2434,44 @@ export const CodeEditor = memo(function CodeEditor({
     }
   }, [isViewingSnapshot, studentSnapshot, applyDataToEditor])
 
+  // Full snapshot history for the viewed student + this component (the dropdown
+  // beneath the editor). Fetched on demand in snapshot-view mode. Picking an
+  // entry applies its payload via applyDataToEditor — scratch only, no save.
+  const [snapList, setSnapList] = useState<Array<{ id: number; kind: string; label: string | null; createdAt: string; payload: unknown }>>([])
+  const [viewedSnapshotId, setViewedSnapshotId] = useState<number | null>(null)
+  // True when the teacher has typed into the editor since loading a snapshot —
+  // drives the Revert button. Applying a snapshot is a programmatic change, so
+  // it doesn't trip this (only real keystrokes do; see the updateListener).
+  const [editedSinceSnapshot, setEditedSinceSnapshot] = useState(false)
+  // Ref so the (once-created) editor updateListener reads the live value.
+  const isViewingSnapshotRef = useRef(isViewingSnapshot)
+  useEffect(() => { isViewingSnapshotRef.current = isViewingSnapshot }, [isViewingSnapshot])
+  useEffect(() => {
+    if (!isViewingSnapshot || !pageId || !selectedStudent?.id) return
+    let cancelled = false
+    fetch(`/api/exams/${pageId}/component-snapshots?studentId=${encodeURIComponent(selectedStudent.id)}&componentId=${encodeURIComponent(componentId)}`)
+      .then((r) => (r.ok ? r.json() : { snapshots: [] }))
+      .then((j) => { if (!cancelled) { setSnapList(j.snapshots ?? []); setViewedSnapshotId(null); setEditedSinceSnapshot(false) } })
+      .catch(() => { if (!cancelled) setSnapList([]) })
+    return () => { cancelled = true }
+  }, [isViewingSnapshot, pageId, selectedStudent?.id, componentId])
+
+  // Load a snapshot into the editor (scratch view — never writes the snapshot).
+  const viewSnapshot = useCallback((snap: { id: number; payload: unknown }) => {
+    setViewedSnapshotId(snap.id)
+    setEditedSinceSnapshot(false)
+    if (snap.payload && typeof snap.payload === 'object') applyDataToEditor(snap.payload as CodeEditorData)
+  }, [applyDataToEditor])
+
+  // Revert the editor to the currently-viewed snapshot (or the latest), discarding
+  // the teacher's scratch edits. Reads only — nothing about the snapshot changes.
+  const revertSnapshot = useCallback(() => {
+    const chosen = snapList.find((s) => s.id === viewedSnapshotId)
+    const payload = (chosen?.payload ?? studentSnapshot?.payload) as CodeEditorData | null
+    if (payload && typeof payload === 'object') applyDataToEditor(payload)
+    setEditedSinceSnapshot(false)
+  }, [snapList, viewedSnapshotId, studentSnapshot, applyDataToEditor])
+
   // When the teacher exits view mode (clears selectedStudent), restore their
   // own IndexedDB-loaded state so the editor doesn't keep showing the last
   // student's code. Falls back to a no-op when savedData is empty (teacher
@@ -2559,14 +2600,11 @@ export const CodeEditor = memo(function CodeEditor({
       })),
       themeCompartment.current.of(isDark ? vsCodeDark : vsCodeLight),
       lineWrappingCompartment.current.of(lineWrapping ? EditorView.lineWrapping : []),
-      // Snapshot-view mode is read-only. `EditorState.readOnly` blocks all
-      // edit transactions; `EditorView.editable.of(false)` removes the
-      // contenteditable attribute so the cursor doesn't appear.
-      readOnlyCompartment.current.of(
-        isViewingSnapshot
-          ? [EditorState.readOnly.of(true), EditorView.editable.of(false)]
-          : []
-      ),
+      // Always editable. In snapshot-view mode the teacher MAY tweak + run the
+      // student's code to test something — those edits are scratch-only (all
+      // save/checkpoint paths are gated on isViewingSnapshot, and switching
+      // snapshot/student re-applies the stored payload, discarding the tweak).
+      readOnlyCompartment.current.of([]),
     ]
 
     // Add Python autocomplete for Python files
@@ -2644,6 +2682,9 @@ export const CodeEditor = memo(function CodeEditor({
 
           // Only trigger save and version creation on user input (not programmatic changes)
           if (!isProgrammatic) {
+            // Teacher editing a student's snapshot → mark dirty so Revert shows.
+            // (Persistence is gated elsewhere; this is display-only.)
+            if (isViewingSnapshotRef.current) setEditedSinceSnapshot(true)
             // Increment keystroke counter
             keystrokeCountRef.current++
 
@@ -2796,17 +2837,12 @@ export const CodeEditor = memo(function CodeEditor({
     })
   }, [lineWrapping])
 
-  // Toggle CodeMirror read-only when entering/leaving snapshot-view mode.
+  // Editor stays editable in all modes (incl. snapshot view — see the compartment
+  // init); kept as a no-op reconfigure point in case read-only returns later.
   useEffect(() => {
     const view = editorViewRef.current
     if (!view) return
-    view.dispatch({
-      effects: readOnlyCompartment.current.reconfigure(
-        isViewingSnapshot
-          ? [EditorState.readOnly.of(true), EditorView.editable.of(false)]
-          : []
-      )
-    })
+    view.dispatch({ effects: readOnlyCompartment.current.reconfigure([]) })
   }, [isViewingSnapshot])
 
   // Attach non-passive wheel event listener to prevent page scroll
@@ -3865,8 +3901,10 @@ plots
       setTimeout(() => setShowSuccessFlash(false), 1500)
       setRunState(RunState.STOPPED)
 
-      // Exam mode: silently run checks after each execution (no UI feedback)
-      if (exam && effectiveCheckCode && pyodide) {
+      // Exam mode: silently run checks after each execution (no UI feedback).
+      // Skipped in snapshot-view mode: a teacher's scratch run must not auto-run
+      // the graded checks or persist any check result.
+      if (exam && effectiveCheckCode && pyodide && !isViewingSnapshot) {
         const localFiles = filesRef.current
         const importFiles = [...(skriptImportsRef.current?.files || []), ...(globalImportsRef.current?.files || [])]
         const allAuxFiles = [...(localFiles.length > 1 ? localFiles : []), ...importFiles]
@@ -3990,7 +4028,8 @@ plots
       }
 
       // Persist for teacher dashboard (records the stage just acted on).
-      if (pageId) {
+      // Never in snapshot-view mode — a teacher's scratch check must not write.
+      if (pageId && !isViewingSnapshot) {
         const clearedStage = allPassedNow && !isLastStage ? stageIndex + 1 : stageIndex
         savePythonCheck({
           checksUsed: newChecksUsed,
@@ -5127,19 +5166,10 @@ plots
               {/* Snapshot-view banner: when a teacher is viewing a student's
                   submission, the floating action buttons are hidden so Run /
                   Check / Reset / Save can't fire against frozen student code. */}
-              {isViewingSnapshot && (
-                <div className="absolute bottom-2 left-2 right-2 z-10 flex items-center justify-between gap-2 px-2 py-1 rounded bg-amber-100/90 dark:bg-amber-900/40 text-xs text-amber-900 dark:text-amber-100 shadow-sm">
-                  <span className="truncate">
-                    {snapshotLoading
-                      ? 'Loading student snapshot…'
-                      : studentSnapshot
-                        ? `Viewing snapshot · ${studentSnapshot.kind}${studentSnapshot.label ? ` · ${studentSnapshot.label}` : ''} · ${new Date(studentSnapshot.createdAt).toLocaleTimeString()}`
-                        : 'No submission yet for this editor'}
-                  </span>
-                </div>
-              )}
-              {/* Floating Control Buttons - Bottom Left */}
-              {!isViewingSnapshot && (
+              {/* Floating Control Buttons - Bottom Left. Shown in snapshot-view
+                  mode too (teacher can Run the student's code to test); all
+                  persistence is gated, so a scratch run saves nothing. */}
+              {(
               <div className="absolute bottom-2 left-2 flex items-center gap-1 z-10">
                 {runState === RunState.STOPPED ? (
                   <Button
@@ -5944,6 +5974,56 @@ plots
           celebrationToken={celebrationToken}
         />
       </>
+    )}
+
+    {/* Snapshot history — teacher viewing a student. A compact read-only list of
+        the student's saved snapshots, sat between the editor and the points box;
+        click any to load it into the editor (above). Editing surfaces Revert.
+        Nothing here mutates a snapshot. */}
+    {isViewingSnapshot && (
+      <div className="mt-1.5 rounded-md border bg-card px-1.5 py-1 text-[11px]">
+        <div className="flex items-center justify-between gap-2 px-0.5 text-muted-foreground">
+          <span className="font-medium uppercase tracking-wide text-[10px]">
+            Snapshots{editedSinceSnapshot && <span className="ml-1 normal-case tracking-normal text-amber-600 dark:text-amber-400">· edited (not saved)</span>}
+          </span>
+          {editedSinceSnapshot && (
+            <button
+              type="button"
+              onClick={revertSnapshot}
+              className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-foreground hover:bg-accent/50"
+            >
+              <RotateCcw className="w-3 h-3" /> Revert
+            </button>
+          )}
+        </div>
+        {snapList.length === 0 ? (
+          <div className="px-1 py-0.5 text-muted-foreground">
+            {snapshotLoading ? 'Loading…' : 'No saved snapshots for this student.'}
+          </div>
+        ) : (
+          <ul className="mt-0.5 max-h-[5.5rem] overflow-y-auto">
+            {snapList.map((s) => {
+              const active = (viewedSnapshotId ?? snapList[0].id) === s.id
+              return (
+                <li key={s.id}>
+                  <button
+                    type="button"
+                    onClick={() => viewSnapshot(s)}
+                    className={cn(
+                      'w-full flex items-center gap-2 rounded px-1 py-0.5 text-left text-[11px] leading-tight hover:bg-accent/50',
+                      active && 'bg-amber-50 dark:bg-amber-950/30 font-medium',
+                    )}
+                  >
+                    <span className="uppercase text-[9px] tracking-wide text-muted-foreground w-14 flex-shrink-0 whitespace-nowrap">{s.kind}</span>
+                    <span className="truncate flex-1 text-[11px]">{s.label ?? ''}</span>
+                    <span className="text-[10px] text-muted-foreground flex-shrink-0 tabular-nums">{new Date(s.createdAt).toLocaleTimeString()}</span>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>
     )}
 
     {/* In-exam grade badge for python-check exercises — teacher grading or
