@@ -44,7 +44,7 @@ export function ExamLayout({
 }: ExamLayoutProps) {
   return (
     <div
-      className="min-h-screen bg-background"
+      className="h-screen overflow-hidden bg-background"
       data-typography={typographyPreference}
     >
       <ReadingProgress />
@@ -61,10 +61,18 @@ export function ExamLayout({
         skriptId={skriptId}
       />
 
-      {/* Main content - full width, no sidebar */}
-      <main className="pt-16 px-6 lg:px-8 pb-8 max-w-4xl mx-auto">
-        {children}
-      </main>
+      {/* Scroll container — AnnotationLayer's pinch-zoom + pan target, and what
+          ReadingProgress measures. Must mirror PublicSiteLayout's
+          #scroll-container (relative h-screen overflow-auto): without it,
+          AnnotationLayer's scrollContainerRef is null and the pinch handler
+          bails (pinch-zoom + pan were dead on exam pages in SEB on iPad).
+          relative: hosts the absolutely-positioned zoom-spacer.
+          Main keeps pt-16 to clear the fixed ExamHeader. */}
+      <div id="scroll-container" className="relative h-screen overflow-auto">
+        <main className="pt-16 px-6 lg:px-8 pb-8 max-w-4xl mx-auto">
+          {children}
+        </main>
+      </div>
     </div>
   )
 }
