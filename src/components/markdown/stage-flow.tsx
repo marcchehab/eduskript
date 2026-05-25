@@ -2,6 +2,7 @@
 
 import { createContext, useContext, type ReactNode } from 'react'
 import { useSyncedUserData } from '@/lib/userdata'
+import { useExamReview } from '@/contexts/exam-review-context'
 import { ConfirmationDialog } from '@/components/ui/confirmation-dialog'
 import { Button } from '@/components/ui/button'
 import { ArrowRight, Lock } from 'lucide-react'
@@ -47,6 +48,12 @@ export function StageFlow({
     { currentStage: 0 },
   )
 
+  // Teacher grading a student, or a student viewing their own returned exam.
+  // The stage gate is the student's own per-attempt state; in review it would
+  // read the *viewer's* state (a teacher sits at stage 0), wrongly hiding later
+  // sections. So when reviewing, reveal every stage at once, unlocked, no gate.
+  const { active: reviewing } = useExamReview()
+
   const advance = async () => {
     const prev = data?.currentStage ?? 0
     // One-way: never decrease, never exceed the last stage.
@@ -55,15 +62,22 @@ export function StageFlow({
 
   // Until the persisted stage loads, reveal only stage 0 — this matches SSR
   // (no client data yet) so there's no hydration mismatch and no later stage
-  // flashes before we know where the student is.
-  const reveal = isLoading ? 0 : Math.min(data?.currentStage ?? 0, stages.length - 1)
-  const hasNext = reveal < stages.length - 1
+  // flashes before we know where the student is. Reviewing shows all stages.
+  const reveal = reviewing
+    ? stages.length - 1
+    : isLoading
+      ? 0
+      : Math.min(data?.currentStage ?? 0, stages.length - 1)
+  const hasNext = !reviewing && reveal < stages.length - 1
   const marker = markers[reveal]
 
   return (
     <>
       {stages.slice(0, reveal + 1).map((node, i) => {
-        const locked = i < reveal
+        // When reviewing, every stage is fully interactive (teacher grades all
+        // sections; a returned-exam student just reads). Only the live exam
+        // locks handed-in stages.
+        const locked = !reviewing && i < reveal
         return (
           <StageLockContext.Provider key={i} value={locked}>
             {locked && (
