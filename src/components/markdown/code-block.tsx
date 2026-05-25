@@ -8,9 +8,11 @@ interface CodeBlockProps {
   code: string
   language?: string
   className?: string
+  /** Show the copy-to-clipboard button. Default true; callers hide it on exams. */
+  showCopy?: boolean
 }
 
-function CodeBlockInner({ code, language, className }: CodeBlockProps) {
+function CodeBlockInner({ code, language, className, showCopy = true }: CodeBlockProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const editorRef = useRef<unknown>(null)
   const [isMounted, setIsMounted] = useState(false)
@@ -116,13 +118,15 @@ function CodeBlockInner({ code, language, className }: CodeBlockProps) {
 
   return (
     <div className={`code-block relative rounded-lg overflow-hidden ${className || ''}`}>
-      <button
-        onClick={handleCopy}
-        className="absolute top-2 right-2 z-10 p-1.5 rounded bg-muted/80 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-        title="Copy code"
-      >
-        {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-      </button>
+      {showCopy && (
+        <button
+          onClick={handleCopy}
+          className="absolute top-2 right-2 z-10 p-1.5 rounded bg-muted/80 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+          title="Copy code"
+        >
+          {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+        </button>
+      )}
       <div ref={containerRef}>
         <pre className="p-3 bg-muted text-sm font-mono"><code>{code}</code></pre>
       </div>

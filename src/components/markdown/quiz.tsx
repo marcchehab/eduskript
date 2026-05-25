@@ -10,6 +10,9 @@ import { QuizProgressBar } from './quiz-progress-bar'
 import { useSurvey, type SurveyContextValue, type SurveyAnswerType } from './survey-provider'
 import { useInSurveyRegion } from './survey'
 import { useCoupledVideo, useGate, parseTimecode } from './coupled-video-context'
+import { compareOutput, scoreFromRatio } from '@/lib/output-comparison'
+import { useIsExamPage } from '@/contexts/exam-page-context'
+import { useStageLocked } from './stage-flow'
 
 interface QuestionProps {
   children: ReactNode
@@ -29,6 +32,15 @@ interface QuestionProps {
   // page has a coupled video, a correct answer resumes the paused video.
   // Only meaningful for single/multiple questions. Classroom mode only.
   gateAt?: string
+  // Free-text auto-check (predict-the-output). When `expected` is set on a
+  // `type="text"` question, the typed answer is graded against it: a similarity
+  // ratio gives partial credit (× `points`, default 1, rounded to 0.1) and an
+  // exact match counts as fully correct (green + gate). `ignoreCase` /
+  // `ignoreWhitespace` relax the comparison.
+  expected?: string
+  points?: number
+  ignoreCase?: boolean
+  ignoreWhitespace?: boolean
 }
 
 interface OptionProps {
@@ -50,13 +62,17 @@ const isCorrect = (value: 'true' | 'false' | undefined): boolean => value === 't
 function QuestionInner({
   children,
   type = 'multiple',
-  showFeedback: showFeedbackProp = true,
+  showFeedback: showFeedbackProp,
   allowUpdate: allowUpdateProp = false,
   minValue = 0,
   maxValue = 100,
   step = 1,
   minLabel,
   maxLabel,
+  expected,
+  points,
+  ignoreCase,
+  ignoreWhitespace,
   initialData,
   updateData,
   surveyMode = false,
@@ -65,11 +81,24 @@ function QuestionInner({
   updateData: (data: QuizData, options?: { immediate?: boolean }) => Promise<void>
   surveyMode?: boolean
 }) {
-  // In survey mode, surveys have no correct/wrong answers and respondents
-  // should be free to revise per-question before the overall Senden. The
-  // author's explicit attributes are overridden — survey semantics win.
-  const showFeedback = surveyMode ? false : showFeedbackProp
+  // Feedback defaults ON, except on exam pages where it defaults OFF — students
+  // shouldn't see correct/wrong (or the auto-check score/diff) mid-exam. Authors
+  // can still opt in per question with showFeedback="true". Survey mode always
+  // hides it. The exam context is client-only (a client provider that doesn't
+  // reach server components), but QuestionInner is client-only too (it mounts
+  // after useSyncedUserData resolves), so this reads correctly.
+  const isExamPage = useIsExamPage()
+  const showFeedback = surveyMode ? false : (showFeedbackProp ?? !isExamPage)
   const allowUpdate = surveyMode ? true : allowUpdateProp
+  // A question in a handed-in (past) exam stage is fully read-only, regardless
+  // of submit state — folded into the gates + disabled props below.
+  const stageLocked = useStageLocked()
+
+  // Free-text auto-check: grade the typed output against `expected`. Off in
+  // survey mode (surveys have no right/wrong).
+  const autoCheck = !surveyMode && type === 'text' && expected != null
+  const compareOpts = { ignoreCase, ignoreWhitespace }
+  const maxPoints = points ?? 1
   // Initialize state from saved data
   const [selected, setSelected] = useState<number[]>(initialData?.selected ?? [])
   const [textAnswer, setTextAnswer] = useState(initialData?.textAnswer ?? '')
@@ -86,7 +115,7 @@ function QuestionInner({
 
   // Handle selection for choice questions
   const handleSelect = (index: number) => {
-    if (!allowUpdate && isSubmitted) return
+    if (stageLocked || (!allowUpdate && isSubmitted)) return
 
     if (type === 'single') {
       setSelected([index])
@@ -101,19 +130,19 @@ function QuestionInner({
 
   // Handle text input
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    if (!allowUpdate && isSubmitted) return
+    if (stageLocked || (!allowUpdate && isSubmitted)) return
     setTextAnswer(e.target.value)
   }
 
   // Handle number input
   const handleNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!allowUpdate && isSubmitted) return
+    if (stageLocked || (!allowUpdate && isSubmitted)) return
     setNumberAnswer(Number(e.target.value))
   }
 
   // Handle range input
   const handleRangeMinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!allowUpdate && isSubmitted) return
+    if (stageLocked || (!allowUpdate && isSubmitted)) return
     const newMin = Number(e.target.value)
     setRangeAnswer(prev => ({
       min: Math.min(newMin, prev.max),
@@ -122,7 +151,7 @@ function QuestionInner({
   }
 
   const handleRangeMaxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!allowUpdate && isSubmitted) return
+    if (stageLocked || (!allowUpdate && isSubmitted)) return
     const newMax = Number(e.target.value)
     setRangeAnswer(prev => ({
       min: prev.min,
@@ -141,10 +170,22 @@ function QuestionInner({
 
     setIsSubmitted(true)
 
+    // Text auto-check: grade against expected and persist the ratio + earned
+    // points so the teacher view can show the grade without re-deriving it.
+    let textFields: Partial<QuizData> = {}
+    if (type === 'text') {
+      textFields = { textAnswer }
+      if (autoCheck) {
+        const r = compareOutput(textAnswer, expected as string, compareOpts)
+        textFields.textRatio = r.ratio
+        textFields.textScore = scoreFromRatio(r.ratio, maxPoints)
+      }
+    }
+
     const quizData: QuizData = {
       isSubmitted: true,
       ...(type === 'single' || type === 'multiple' ? { selected } : {}),
-      ...(type === 'text' ? { textAnswer } : {}),
+      ...textFields,
       ...(type === 'number' ? { numberAnswer } : {}),
       ...(type === 'range' ? { rangeAnswer } : {})
     }
@@ -180,6 +221,10 @@ function QuestionInner({
     (type === 'range' && rangeAnswer === undefined)
 
   const isButtonDisabled = isEmptyAnswer || isUnchangedSinceSave
+
+  // Live auto-check result for the text feedback panel (recomputed from the
+  // current answer; matches the persisted score when the answer is unedited).
+  const textResult = autoCheck ? compareOutput(textAnswer, expected as string, compareOpts) : null
 
   return (
     <div className="space-y-4 border rounded-lg p-4 shadow-sm bg-card my-4">
@@ -267,13 +312,67 @@ function QuestionInner({
           <textarea
             value={textAnswer}
             onChange={handleTextChange}
-            disabled={isSubmitted && !allowUpdate}
+            disabled={stageLocked || (isSubmitted && !allowUpdate)}
             className={cn(
               'w-full p-3 border rounded-lg min-h-[120px] bg-background resize-y',
               isSubmitted && !allowUpdate && 'opacity-70 cursor-not-allowed'
             )}
             placeholder="Enter your answer..."
           />
+
+          {/* Auto-check feedback: partial-credit score + a line diff showing
+              where the prediction differs from the expected output. */}
+          {autoCheck && isSubmitted && showFeedback && textResult && (
+            <div
+              className={cn(
+                'rounded-lg border p-3 text-sm',
+                textResult.exact
+                  ? 'border-green-500/40 bg-green-500/10'
+                  : 'border-amber-500/40 bg-amber-500/10'
+              )}
+            >
+              <div className="flex items-center gap-1.5 font-medium">
+                {textResult.exact ? (
+                  <>
+                    <Check className="w-4 h-4 text-green-500" />
+                    <span className="text-green-600 dark:text-green-400">Correct</span>
+                  </>
+                ) : (
+                  <>
+                    <X className="w-4 h-4 text-amber-500" />
+                    <span className="text-amber-600 dark:text-amber-400">Partially correct</span>
+                  </>
+                )}
+                <span className="ml-auto tabular-nums text-muted-foreground">
+                  {scoreFromRatio(textResult.ratio, maxPoints)} / {maxPoints} pts · {Math.round(textResult.ratio * 100)}%
+                </span>
+              </div>
+              {!textResult.exact && (
+                <div className="mt-2 overflow-x-auto rounded bg-background/60 p-2 font-mono text-xs leading-relaxed whitespace-pre">
+                  {textResult.diff.map((row, i) => (
+                    <div
+                      key={i}
+                      className={cn(
+                        row.type === 'expected' && 'bg-green-500/10 text-green-700 dark:text-green-400',
+                        row.type === 'student' && 'bg-red-500/10 text-red-700 line-through dark:text-red-400',
+                        row.type === 'equal' && 'text-muted-foreground'
+                      )}
+                    >
+                      <span className="select-none opacity-60">
+                        {row.type === 'expected' ? '+ ' : row.type === 'student' ? '− ' : '  '}
+                      </span>
+                      {row.value || ' '}
+                    </div>
+                  ))}
+                  <div className="mt-1.5 select-none text-[10px] text-muted-foreground">
+                    <span className="text-green-700 dark:text-green-400">+ expected</span>
+                    {'   '}
+                    <span className="text-red-700 dark:text-red-400">&minus; your answer</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -293,7 +392,7 @@ function QuestionInner({
               step={step}
               value={numberAnswer}
               onChange={handleNumberChange}
-              disabled={isSubmitted && !allowUpdate}
+              disabled={stageLocked || (isSubmitted && !allowUpdate)}
               className={cn(
                 'w-full',
                 isSubmitted && !allowUpdate && 'opacity-70 cursor-not-allowed'
@@ -345,7 +444,7 @@ function QuestionInner({
                 step={step}
                 value={rangeAnswer.min}
                 onChange={handleRangeMinChange}
-                disabled={isSubmitted && !allowUpdate}
+                disabled={stageLocked || (isSubmitted && !allowUpdate)}
                 className={cn(
                   'absolute inset-0 w-full h-full appearance-none bg-transparent cursor-pointer',
                   '[&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5',
@@ -371,7 +470,7 @@ function QuestionInner({
                 step={step}
                 value={rangeAnswer.max}
                 onChange={handleRangeMaxChange}
-                disabled={isSubmitted && !allowUpdate}
+                disabled={stageLocked || (isSubmitted && !allowUpdate)}
                 className={cn(
                   'absolute inset-0 w-full h-full appearance-none bg-transparent cursor-pointer',
                   '[&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5',
@@ -402,7 +501,7 @@ function QuestionInner({
           updateData call to capture the answer instead of syncing it to
           per-user storage. */}
       <div className="flex items-center justify-between pt-2">
-        {(!isSubmitted || allowUpdate) && (
+        {(!isSubmitted || allowUpdate) && !stageLocked && (
           <button
             onClick={handleSubmit}
             disabled={isButtonDisabled}
@@ -628,6 +727,9 @@ function SyncedQuestion({
 
   const isAnswerCorrect = (qd: QuizData | null | undefined): boolean => {
     if (!qd?.isSubmitted) return false
+    // Auto-checked text question: only a fully exact answer (ratio 1) counts as
+    // correct for green/gate; partial credit does not open a coupled-video gate.
+    if (type === 'text') return (qd.textRatio ?? -1) === 1
     if (type !== 'single' && type !== 'multiple') return false
     const sel = [...(qd.selected ?? [])].sort((a, b) => a - b)
     const correct = [...correctIndices].sort((a, b) => a - b)

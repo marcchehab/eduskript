@@ -74,6 +74,7 @@ export function PublicPageBody({ page, skriptId, publicAnnotations, publicSnaps,
               content={page.content}
               skriptId={skriptId}
               pageId={page.id}
+              isExam={page.pageType === 'exam'}
             />
           </AnnotationWrapper>
         </article>

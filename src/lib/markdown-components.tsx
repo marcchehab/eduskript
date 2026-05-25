@@ -69,8 +69,10 @@ function PreComponent({ children, ...props }: React.HTMLAttributes<HTMLPreElemen
   return <pre {...props}>{children}</pre>
 }
 
-// Code component - renders inline code or code blocks with CodeMirror
-function CodeComponent({ children, className, ...props }: React.HTMLAttributes<HTMLElement> & { className?: string }) {
+// Code component - renders inline code or code blocks with CodeMirror.
+// `isExam` flips the copy-button default OFF (threaded from the page, server-
+// side, to avoid a hydration mismatch — code blocks render during SSR).
+function CodeComponent({ children, className, isExam, ...props }: React.HTMLAttributes<HTMLElement> & { className?: string; isExam?: boolean }) {
   const match = /language-(\w+)/.exec(className || '')
   const language = match ? match[1] : undefined
 
@@ -99,8 +101,14 @@ function CodeComponent({ children, className, ...props }: React.HTMLAttributes<H
 
   const code = extractCode(children)
 
+  // Copy button: explicit `copy`/`no-copy` directive wins (carried as dataCopy
+  // by remarkCodeCopy); otherwise shown, except hidden by default on exams.
+  const dataProps = props as Record<string, unknown>
+  const copyAttr = (dataProps['dataCopy'] ?? dataProps['data-copy']) as string | undefined
+  const showCopy = copyAttr != null ? copyAttr !== 'false' : !isExam
+
   // Use CodeMirror-based CodeBlock for syntax highlighting
-  return <CodeBlock code={code} language={language} />
+  return <CodeBlock code={code} language={language} showCopy={showCopy} />
 }
 
 // Heading factory
@@ -162,6 +170,7 @@ interface CreateMarkdownComponentsOptions {
   organizationSlug?: string  // For organization pages (OurTeachers component)
   onExcalidrawEdit?: (filename: string, fileId: string) => void  // Callback to edit Excalidraw drawings
   optimizeImages?: boolean  // Enable Next.js Image optimization (only safe for public pages)
+  isExam?: boolean  // Exam page: hide code-block copy buttons by default
 }
 
 /**
@@ -174,7 +183,7 @@ export function createMarkdownComponents(
   files: SkriptFilesData,
   options?: CreateMarkdownComponentsOptions
 ): Record<string, ComponentType<any>> {
-  const { pageId, skriptId, onImageWidthChange, organizationSlug, onExcalidrawEdit, optimizeImages } = options ?? {}
+  const { pageId, skriptId, onImageWidthChange, organizationSlug, onExcalidrawEdit, optimizeImages, isExam } = options ?? {}
 
   // Img element handler - handles <img> elements from markdown with data-* attributes
   function ImgElementComponent({ src, alt, title, style, ...props }: React.ImgHTMLAttributes<HTMLImageElement>) {
@@ -515,7 +524,12 @@ export function createMarkdownComponents(
   function QuizQuestionComponent({ children, ...props }: React.HTMLAttributes<HTMLElement> & Record<string, unknown>) {
     const id = (props['id'] as string) || ''
     const type = ((props['type'] as string) || 'multiple') as 'single' | 'multiple' | 'text' | 'number' | 'range'
-    const showFeedback = props['showFeedback'] !== false && props['showfeedback'] !== 'false'
+    // Explicit author value if set; otherwise undefined so the Question can
+    // default it per context (exam pages default feedback OFF — see QuestionInner).
+    const showFeedbackSet = props['showFeedback'] !== undefined || props['showfeedback'] !== undefined
+    const showFeedback = showFeedbackSet
+      ? props['showFeedback'] !== false && props['showfeedback'] !== 'false'
+      : undefined
     const allowUpdate = props['allowUpdate'] === true || props['allowUpdate'] === 'true' || props['allowupdate'] === 'true'
     const minValue = props['minValue'] !== undefined ? Number(props['minValue']) : (props['minvalue'] !== undefined ? Number(props['minvalue']) : undefined)
     const maxValue = props['maxValue'] !== undefined ? Number(props['maxValue']) : (props['maxvalue'] !== undefined ? Number(props['maxvalue']) : undefined)
@@ -526,6 +540,20 @@ export function createMarkdownComponents(
     // Coupled-video gate: pause the video at this mark until the question is
     // answered correctly. Accepts "90", "1:30", or "1:02:03".
     const gateAt = (props['gate-at'] as string) ?? (props['gateAt'] as string) ?? (props['gateat'] as string) ?? (props['data-gate-at'] as string)
+    // Free-text auto-check (predict-the-output). `expected` is encodeURIComponent'd
+    // so multi-line output survives HTML + sanitize; decode it back here.
+    const expectedRaw = (props['data-expected'] ?? props['dataExpected']) as string | undefined
+    let expected: string | undefined
+    if (expectedRaw !== undefined) {
+      try {
+        expected = decodeURIComponent(expectedRaw)
+      } catch {
+        expected = expectedRaw
+      }
+    }
+    const points = props['points'] !== undefined ? Number(props['points']) : undefined
+    const ignoreCase = props['ignore-case'] === 'true' || props['ignorecase'] === 'true'
+    const ignoreWhitespace = props['ignore-whitespace'] === 'true' || props['ignorewhitespace'] === 'true'
 
     // Don't render quiz if pageId is missing (e.g., in dashboard preview without context)
     if (!pageId) {
@@ -549,6 +577,10 @@ export function createMarkdownComponents(
         minLabel={minLabel}
         maxLabel={maxLabel}
         gateAt={gateAt}
+        expected={expected}
+        points={points}
+        ignoreCase={ignoreCase}
+        ignoreWhitespace={ignoreWhitespace}
       >
         {children}
       </Question>
@@ -603,7 +635,7 @@ export function createMarkdownComponents(
     // HTML element overrides
     p: ParagraphComponent,
     pre: PreComponent,
-    code: CodeComponent,
+    code: (props: React.HTMLAttributes<HTMLElement>) => <CodeComponent {...props} isExam={isExam} />,
     img: ImgElementComponent,
     a: AnchorComponent,
     blockquote: BlockquoteComponent,
@@ -636,6 +668,19 @@ export function createMarkdownComponents(
         <StickMe storageKey={props.id ? `stickme:${props.id}` : undefined}>
           {props.children}
         </StickMe>
+      )
+    },
+    // <next-stage> divides a document into sequential hand-in stages. On a real
+    // (server-rendered, has-pageId) page it's split out before compile and
+    // StageFlow renders the advance button instead; this visible divider only
+    // shows in previews / non-staged renders so authors see the stage break.
+    'next-stage': function NextStageMarker(props: { label?: string }) {
+      return (
+        <div className="my-8 flex items-center gap-3 text-xs font-medium uppercase tracking-wide text-muted-foreground" aria-hidden>
+          <span className="h-px flex-1 bg-border" />
+          <span>Stage break{props.label ? ` — ${props.label}` : ''}</span>
+          <span className="h-px flex-1 bg-border" />
+        </div>
       )
     },
     // <excali> component - shorthand for excalidraw drawings

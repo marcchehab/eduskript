@@ -13,6 +13,7 @@ import { remarkImageResolver } from './remark-plugins/image-resolver'
 import { remarkImageAttrs } from './remark-plugins/image-attrs'
 import { remarkExcalidraw } from './remark-plugins/excalidraw'
 import { remarkCodeEditor } from './remark-plugins/code-editor'
+import { remarkCodeCopy } from './remark-plugins/code-copy'
 import { remarkCallouts } from './remark-plugins/callouts'
 import { remarkMuxVideo } from './remark-plugins/mux-video'
 import { remarkYoutube } from './remark-plugins/youtube'
@@ -38,6 +39,7 @@ export const remarkPlugins: PluggableList = [
   remarkMuxVideo,
   remarkMermaid,
   remarkCodeEditor,
+  remarkCodeCopy, // after remarkCodeEditor: only plain code blocks remain
   remarkCallouts,
   remarkYoutube,
   remarkFileLinkResolver,

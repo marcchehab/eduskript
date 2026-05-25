@@ -55,10 +55,17 @@ export function remarkQuiz() {
     for (let i = nodesToProcess.length - 1; i >= 0; i--) {
       const { startIndex, endIndex, parent } = nodesToProcess[i]
 
-      // Collect full content
+      // Collect full content. A ```expected fenced block (free-text auto-check)
+      // is pulled out here as a `code` node so its whitespace/blank lines
+      // survive verbatim, and excluded from the prompt text.
       let fullContent = ''
+      let expectedRaw: string | undefined
       for (let j = startIndex; j <= endIndex; j++) {
         const node = parent.children[j]
+        if (node.type === 'code' && node.lang === 'expected') {
+          expectedRaw = node.value ?? ''
+          continue
+        }
         fullContent += (fullContent ? '\n' : '') + serializeNode(node)
       }
 
@@ -66,6 +73,7 @@ export function remarkQuiz() {
       const result = parseQuestionBlock(fullContent)
       if (result) {
         const { attrs, options, prompt } = result
+        if (expectedRaw !== undefined) attrs.expected = expectedRaw
 
         // Create answer elements
         // Note: use "correct" instead of "is" because "is" is a reserved React attribute
@@ -84,6 +92,12 @@ export function remarkQuiz() {
         if (attrs.step) attrStr += ` step="${attrs.step}"`
         if (attrs.minLabel) attrStr += ` minLabel="${escapeAttr(attrs.minLabel)}"`
         if (attrs.maxLabel) attrStr += ` maxLabel="${escapeAttr(attrs.maxLabel)}"`
+        if (attrs.points) attrStr += ` points="${attrs.points}"`
+        // encodeURIComponent → only attribute-safe chars (no quotes/newlines),
+        // so multi-line expected output round-trips through HTML + sanitize.
+        if (attrs.expected !== undefined) attrStr += ` data-expected="${encodeURIComponent(attrs.expected)}"`
+        if (attrs.ignoreCase) attrStr += ` ignore-case="${attrs.ignoreCase}"`
+        if (attrs.ignoreWhitespace) attrStr += ` ignore-whitespace="${attrs.ignoreWhitespace}"`
 
         // For choice questions: inner content = <answer> children.
         // For text/number/range questions: inner content = the prompt text
@@ -150,6 +164,13 @@ interface QuestionAttributes {
   step?: string
   minLabel?: string
   maxLabel?: string
+  // Free-text auto-check (predict-the-output): max points for partial credit,
+  // and normalization flags. `expected` is the raw expected output, captured
+  // from a ```expected fenced block (not an attribute) so whitespace survives.
+  points?: string
+  expected?: string
+  ignoreCase?: string
+  ignoreWhitespace?: string
 }
 
 function parseQuestionBlock(content: string): { attrs: QuestionAttributes; options: ParsedOption[]; prompt?: string } | null {
@@ -167,6 +188,9 @@ function parseQuestionBlock(content: string): { attrs: QuestionAttributes; optio
   const stepMatch = attrString.match(/step=["']([^"']+)["']/)
   const minLabelMatch = attrString.match(/minLabel=["']([^"']+)["']/)
   const maxLabelMatch = attrString.match(/maxLabel=["']([^"']+)["']/)
+  const pointsMatch = attrString.match(/points=["']([^"']+)["']/)
+  const ignoreCaseMatch = attrString.match(/ignore-?case=["']([^"']+)["']/i)
+  const ignoreWhitespaceMatch = attrString.match(/ignore-?whitespace=["']([^"']+)["']/i)
 
   // Auto-generate ID from content hash when no explicit id provided
   const fallbackId = (() => {
@@ -189,6 +213,9 @@ function parseQuestionBlock(content: string): { attrs: QuestionAttributes; optio
     step: stepMatch?.[1],
     minLabel: minLabelMatch?.[1],
     maxLabel: maxLabelMatch?.[1],
+    points: pointsMatch?.[1],
+    ignoreCase: ignoreCaseMatch?.[1],
+    ignoreWhitespace: ignoreWhitespaceMatch?.[1],
   }
 
   // Extract options

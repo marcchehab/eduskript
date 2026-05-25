@@ -179,6 +179,8 @@ interface QuizResponseItem {
     numberAnswer?: number
     rangeAnswer?: { min: number; max: number }
     isSubmitted: boolean
+    textRatio?: number
+    textScore?: number
   } | null
   submittedAt: number | null
   isCorrect?: boolean
@@ -346,9 +348,16 @@ export function QuizProgressBar({
     }
 
     if (questionType === 'text') {
+      const ratio = response.data.textRatio
       return (
         <span className="text-sm break-words">
           &ldquo;{response.data.textAnswer}&rdquo;
+          {ratio !== undefined && (
+            <span className="ml-1.5 whitespace-nowrap tabular-nums text-xs text-muted-foreground">
+              ({Math.round(ratio * 100)}%
+              {response.data.textScore !== undefined && `, ${response.data.textScore} pts`})
+            </span>
+          )}
         </span>
       )
     }
@@ -381,6 +390,16 @@ export function QuizProgressBar({
   const getStatusIcon = (response: QuizResponseItem) => {
     if (!response.data?.isSubmitted) {
       return <Clock className="h-4 w-4 text-muted-foreground" />
+    }
+
+    // Auto-checked text question: grade by similarity (exact → green,
+    // partial → yellow, none → red). Falls back to the plain submitted check
+    // for plain text/number questions with no auto-check score.
+    if (questionType === 'text' && response.data.textRatio !== undefined) {
+      const ratio = response.data.textRatio
+      if (ratio === 1) return <Check className="h-4 w-4 text-green-500" />
+      if (ratio > 0) return <Minus className="h-4 w-4 text-yellow-500" />
+      return <X className="h-4 w-4 text-red-500" />
     }
 
     if (!isChoiceQuestion) {

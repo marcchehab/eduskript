@@ -9,12 +9,15 @@ import { MarkdownErrorBoundary } from './markdown-error-boundary'
 import { SurveyProvider } from './survey-provider'
 import { CoupledVideoProvider } from './coupled-video-context'
 import { StickMeProvider } from './stick-me'
+import { StageFlow } from './stage-flow'
+import { splitStages, hasStages } from '@/lib/markdown-stages'
 
 interface ServerMarkdownRendererProps {
   content: string
   skriptId?: string
   pageId?: string
   organizationSlug?: string
+  isExam?: boolean
 }
 
 /**
@@ -27,12 +30,12 @@ interface ServerMarkdownRendererProps {
  * 2. Compile markdown with remark/rehype plugins
  * 3. Create components with files prop bound
  */
-export async function ServerMarkdownRenderer({ content, skriptId, pageId, organizationSlug }: ServerMarkdownRendererProps) {
+export async function ServerMarkdownRenderer({ content, skriptId, pageId, organizationSlug, isExam }: ServerMarkdownRendererProps) {
   // 1. Get all files for this skript upfront
   const files = skriptId ? await getSkriptFiles(skriptId) : createEmptySkriptFiles()
 
   // 2. Create components with files prop bound
-  const components = createMarkdownComponents(files, { pageId, skriptId, organizationSlug, optimizeImages: true })
+  const components = createMarkdownComponents(files, { pageId, skriptId, organizationSlug, optimizeImages: true, isExam })
 
   // 3. Pre-resolve `/p/{id}` stable links to canonical URLs in one batched
   //    DB query so public HTML ships with real hrefs. Done here (server) so
@@ -43,12 +46,27 @@ export async function ServerMarkdownRenderer({ content, skriptId, pageId, organi
     ? await resolveStableLinks(stableIds)
     : undefined
 
-  // 4. Compile markdown (safe pipeline, no JS execution)
-  let rendered: React.ReactNode
+  // 4. Compile markdown (safe pipeline, no JS execution). When the document has
+  //    <next-stage> markers, compile each stage separately and hand them to
+  //    StageFlow for the sequential, hand-in-locked reveal (see splitStages).
+  //    Only the async compile (a function call) happens in the try; the JSX is
+  //    built afterward (lint forbids constructing JSX inside try/catch).
+  const staged = Boolean(pageId && hasStages(content))
+  let compiledStages: React.ReactNode[] = []
+  let stageMarkers: ReturnType<typeof splitStages>['markers'] = []
+  let rendered: React.ReactNode = null
   let error: unknown
 
   try {
-    rendered = await compileMarkdown(content, { components, resolvedStableLinks })
+    if (staged) {
+      const split = splitStages(content)
+      stageMarkers = split.markers
+      compiledStages = await Promise.all(
+        split.stages.map((s) => compileMarkdown(s, { components, resolvedStableLinks })),
+      )
+    } else {
+      rendered = await compileMarkdown(content, { components, resolvedStableLinks })
+    }
   } catch (e) {
     error = e
     console.error('Server markdown rendering error:', e)
@@ -70,7 +88,18 @@ export async function ServerMarkdownRenderer({ content, skriptId, pageId, organi
   // its useState/useSession/etc. run in the browser; server just declares
   // it in the tree.
   const hasSurvey = pageId && /<survey[\s>]/i.test(content)
-  const body = <MarkdownErrorBoundary>{rendered}</MarkdownErrorBoundary>
+
+  const body = staged && pageId ? (
+    <StageFlow
+      pageId={pageId}
+      stages={compiledStages.map((node, i) => (
+        <MarkdownErrorBoundary key={i}>{node}</MarkdownErrorBoundary>
+      ))}
+      markers={stageMarkers}
+    />
+  ) : (
+    <MarkdownErrorBoundary>{rendered}</MarkdownErrorBoundary>
+  )
 
   // Mount the CoupledVideoProvider when the page wires a video to checks
   // (a `coupled` attr or any `gate-at` mark). Author default is on unless

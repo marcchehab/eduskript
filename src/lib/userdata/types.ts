@@ -104,6 +104,9 @@ export interface QuizData {
   numberAnswer?: number  // Numeric answer (for slider/number input)
   rangeAnswer?: { min: number; max: number }  // Range answer (for range slider)
   isSubmitted: boolean   // Whether the question has been submitted
+  // Auto-checked free-text (predict-the-output) results, set on submit:
+  textRatio?: number     // Similarity to expected output, 0–1 (1 = exact)
+  textScore?: number     // Earned partial-credit points (ratio × points, 0.1 step)
 }
 
 /**

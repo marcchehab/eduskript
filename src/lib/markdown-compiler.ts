@@ -128,11 +128,12 @@ export const sanitizeSchema = {
     // rehypeAllowPluginAttrs before sanitize — see rehype-plugins/plugin-attrs.ts.
     'plugin': ['src', 'id', 'height', 'width'],
     'pdf': ['src', 'height'],
-    'question': ['id', 'type', 'showfeedback', 'allowupdate', 'minvalue', 'maxvalue', 'step', 'minlabel', 'maxlabel', 'gateat', 'gate-at', 'dataGateAt', 'data-gate-at'],
+    'question': ['id', 'type', 'showfeedback', 'allowupdate', 'minvalue', 'maxvalue', 'step', 'minlabel', 'maxlabel', 'gateat', 'gate-at', 'dataGateAt', 'data-gate-at', 'points', 'data-expected', 'dataExpected', 'ignore-case', 'ignorecase', 'ignore-whitespace', 'ignorewhitespace'],
     'quiz-option': ['correct', 'is', 'feedback'],
     'answer': ['correct', 'is', 'feedback'],
     'yt': ['time', 'videoid', 'label'],
     'stickme': ['id'],
+    'next-stage': ['label', 'title', 'confirm', 'cancel'],
     'ourteachers': ['roles', 'limit', 'className'],
     'flex': ['gap', 'wrap', 'direction', 'justify', 'align', 'className'],
     'flex-item': ['width', 'grow', 'className'],
@@ -164,7 +165,7 @@ export const sanitizeSchema = {
     // Mark attributes (text highlighting)
     'mark': ['className'],
     // Code attributes
-    'code': ['className'],
+    'code': ['className', 'dataCopy', 'data-copy'],
     'pre': ['className'],
     // Span for KaTeX
     'span': ['className', 'style'],
