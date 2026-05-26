@@ -34,6 +34,13 @@ interface ReviewState {
   totalEarned: number | null
   totalMax: number | null
   byComponent: Record<string, ComponentReview>
+  /** The studentId this state was loaded for. Lets consumers (the quiz
+   *  auto-grade recompute) confirm `byComponent`/answerPayload belongs to the
+   *  currently-selected student before acting — `studentId` changes the instant
+   *  a teacher switches students, but `byComponent` only catches up after the
+   *  async /review reload, and acting in that window cross-wires one student's
+   *  answers onto another's grade. */
+  loadedStudentId: string | null
 }
 
 interface ReviewContextValue extends ReviewState {
@@ -55,7 +62,7 @@ interface ReviewContextValue extends ReviewState {
   refreshGrades: () => void
 }
 
-const empty: ReviewState = { grade: null, totalEarned: null, totalMax: null, byComponent: {} }
+const empty: ReviewState = { grade: null, totalEarned: null, totalMax: null, byComponent: {}, loadedStudentId: null }
 
 const ExamReviewContext = createContext<ReviewContextValue>({
   ...empty,
@@ -98,7 +105,7 @@ export function ExamReviewProvider({ pageId, mode, studentId, children }: Provid
       .then((j) => {
         const byComponent: Record<string, ComponentReview> = {}
         for (const c of j.components as ComponentReview[]) byComponent[c.componentId] = c
-        setState({ grade: j.grade, totalEarned: j.totalEarned, totalMax: j.totalMax, byComponent })
+        setState({ grade: j.grade, totalEarned: j.totalEarned, totalMax: j.totalMax, byComponent, loadedStudentId: studentId })
       })
       .catch(() => setState(empty))
       .finally(() => setLoading(false))
@@ -175,6 +182,9 @@ export function useComponentReview(componentId: string): {
   mode: 'grade' | 'review'
   pageId: string
   studentId: string | null
+  /** studentId the current review data was loaded for; compare to studentId
+   *  before acting on answerPayload (see ReviewState.loadedStudentId). */
+  loadedStudentId: string | null
   review: ComponentReview | null
   setOverride: (awardedPoints: number | null) => Promise<void>
   refreshGrades: () => void
@@ -185,6 +195,7 @@ export function useComponentReview(componentId: string): {
     mode: ctx.mode,
     pageId: ctx.pageId,
     studentId: ctx.studentId,
+    loadedStudentId: ctx.loadedStudentId,
     review: ctx.active ? ctx.byComponent[componentId] ?? null : null,
     setOverride: (awardedPoints) => ctx.setOverride(componentId, awardedPoints),
     refreshGrades: ctx.refreshGrades,

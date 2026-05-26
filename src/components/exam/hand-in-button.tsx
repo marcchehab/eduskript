@@ -88,6 +88,30 @@ async function gatherEditorSnapshots(pageId: string): Promise<BackupSnapshot[]> 
   }
 }
 
+/**
+ * Gather EVERY component's IndexedDB state for the page — quiz answers
+ * (quiz-*) AND code editors (code-editor-*) — for the offline backup. Unlike
+ * gatherEditorSnapshots (code only, for the hand-in POST), the backup must be
+ * complete: it's the single offline copy, so a recovery can rebuild the whole
+ * attempt. On recovery, quiz-* snapshots are written back to live userData so
+ * they grade exactly like a synced answer (see exam-recovery.applyHandinSnapshots).
+ */
+async function gatherAllSnapshots(pageId: string): Promise<BackupSnapshot[]> {
+  try {
+    await userDataService.flush()
+    const componentIds = await userDataService.getComponentsForPage(pageId)
+    const snapshots: BackupSnapshot[] = []
+    for (const componentId of componentIds) {
+      const record = await userDataService.get(pageId, componentId)
+      if (record) snapshots.push({ componentId, payload: record.data })
+    }
+    return snapshots
+  } catch (error) {
+    console.error('[HandInButton] failed to gather full snapshots:', error)
+    return []
+  }
+}
+
 async function saveEncryptedBackup(args: {
   pageId: string
   studentId: string
@@ -96,7 +120,7 @@ async function saveEncryptedBackup(args: {
   keyId: string
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
-    const snapshots = await gatherEditorSnapshots(args.pageId)
+    const snapshots = await gatherAllSnapshots(args.pageId)
     const meta: BackupMeta = {
       pageId: args.pageId,
       studentId: args.studentId,
@@ -186,6 +210,21 @@ export function HandInButton({
       if (!response.ok) {
         const data = await response.json().catch(() => ({}))
         throw new Error(data?.error || 'Failed to submit exam')
+      }
+
+      // Auto-save an encrypted local backup of the COMPLETE attempt (quiz +
+      // code) before we wipe local data. Defence-in-depth: if the server copy
+      // is ever lost or disputed, the teacher can recover from this file. Must
+      // run before wipeLocalExamData (which clears the IndexedDB it reads).
+      // Best-effort — a backup failure never blocks completing the hand-in.
+      if (backupReady) {
+        await saveEncryptedBackup({
+          pageId,
+          studentId: studentId!,
+          skriptId: skriptId!,
+          publicKeyJwk: publicKeyJwk!,
+          keyId: keyId!,
+        }).catch((e) => console.error('[HandInButton] auto-backup failed:', e))
       }
 
       // Hand-in is recorded server-side — now drop the local copy so it can't

@@ -89,6 +89,29 @@ export async function applyHandinSnapshots(
       })),
     })
     checkpointsInserted = result.count
+
+    // Quiz answers are graded from LIVE userData (not handin checkpoints — those
+    // are read only for code editors). So when a backup carries quiz-* snapshots
+    // (offline recovery; the live hand-in only sends code editors), write them
+    // back into userData so a recovered attempt grades exactly like a synced one.
+    // Skipped for code-editor-*/other components, which grade off the checkpoint.
+    for (const s of snapshots) {
+      if (!s.componentId.startsWith('quiz-')) continue
+      const existing = await tx.userData.findFirst({
+        where: { userId: studentId, adapter: s.componentId, itemId: pageId, targetType: null, targetId: null },
+        select: { id: true, version: true },
+      })
+      if (existing) {
+        await tx.userData.update({
+          where: { id: existing.id },
+          data: { data: s.payload as Prisma.InputJsonValue, version: existing.version + 1 },
+        })
+      } else {
+        await tx.userData.create({
+          data: { userId: studentId, adapter: s.componentId, itemId: pageId, data: s.payload as Prisma.InputJsonValue },
+        })
+      }
+    }
   }
 
   return {

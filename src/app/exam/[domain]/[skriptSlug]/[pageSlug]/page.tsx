@@ -16,12 +16,14 @@ import { SEBRequiredPage } from '@/components/exam/seb-required-page'
 import { ExamSubmittedPage } from '@/components/exam/exam-submitted-page'
 import { ClassToolbar } from '@/components/teacher/class-toolbar'
 import { ExamDataSync } from '@/components/exam/exam-data-sync'
+import { HandInButton } from '@/components/exam/hand-in-button'
 import { StudentNavigator } from '@/components/exam/student-navigator'
 import { StudentSnapshotProvider } from '@/contexts/student-snapshot-context'
 import { TeacherExamGrading } from '@/components/exam/teacher-exam-grading'
 import { ExamReviewProvider } from '@/contexts/exam-review-context'
 import { ReturnedExamSummary } from '@/components/exam/returned-exam-summary'
 import { ExamPageContextProvider } from '@/contexts/exam-page-context'
+import { getOrCreateActiveExamKey } from '@/lib/exam-keys'
 import { isSEBRequest, type ExamSettings } from '@/lib/seb'
 import { validateExamToken, validateExamSession } from '@/lib/exam-tokens'
 import { getPublicLayers } from '@/lib/public-page-data'
@@ -268,6 +270,19 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
 
   const isExamStudent = !isTeacherAuthor && (authenticatedViaToken || authenticatedViaExamSession)
 
+  // Anyone taking the exam (SEB token/session OR a logged-in non-SEB student)
+  // gets an in-page "Hand in" button. The /exam route renders via
+  // PublicSiteLayout, not the SEB ExamLayout/ExamHeader, so without this a
+  // non-SEB student (e.g. a mock exam) had no way to submit — and crucially the
+  // hand-in is what snapshots code editors into 'handin' checkpoints for the
+  // grader. Teachers (authors) and returned-exam reviewers never see it.
+  const isExamTaker = !isTeacherAuthor && !isReturnedReview && !!studentId
+
+  // The exam author's RSA-OAEP public key — used to encrypt the offline backup
+  // the student's browser auto-saves on hand-in. Only the author can decrypt it
+  // (recovery endpoint). Fetched only when someone is actually taking the exam.
+  const backupKey = isExamTaker ? await getOrCreateActiveExamKey(teacher.id) : null
+
   // SEB-authenticated students have no NextAuth session, so without an
   // ExamSessionProvider in the tree useUserDataContext treats them as
   // unauthenticated and skips the cloud-sync queue. That keeps Check/Run
@@ -304,6 +319,17 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
         isExamStudent={isExamStudent}
         teacherPageSlug={teacher.pageSlug}
       />
+      {isExamTaker && (
+        <div className="mt-10 flex flex-col items-center gap-2 border-t border-border pt-6">
+          <HandInButton
+            pageId={page.id}
+            studentId={studentId}
+            skriptId={skript.id}
+            publicKeyJwk={backupKey?.publicKeyJwk}
+            keyId={backupKey?.keyId}
+          />
+        </div>
+      )}
       {isTeacherAuthor && <StudentNavigator pageId={page.id} />}
     </>
   )

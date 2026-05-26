@@ -55,12 +55,13 @@ interface OptionProps {
 // Parse correct prop to boolean
 const isCorrect = (value: 'true' | 'false' | undefined): boolean => value === 'true'
 
-// Idle delay before an edited answer is autosaved. Short enough that a fast
-// hand-in rarely outruns it; a textarea blur also flushes immediately. The
-// IndexedDB write inside updateData is synchronous-on-await — only the network
-// push is debounced by the sync engine — so this is a UI-spam control, not the
-// durability guarantee.
-const AUTOSAVE_DEBOUNCE_MS = 400
+// Idle delay before an edited answer is autosaved. Text gets a longer window
+// because it's typed continuously — for text the primary save is the textarea's
+// blur (focus loss), and this idle value is just a safety net for a long pause
+// without blurring. Choice/number/range are discrete (one click/drag), so a
+// short delay keeps the "Saved" chip + live teacher view snappy.
+const AUTOSAVE_TEXT_MS = 1500
+const AUTOSAVE_DISCRETE_MS = 400
 
 // Inner component that renders after data is loaded.
 //
@@ -265,7 +266,8 @@ function QuestionInner({
         reviewMode || stageLocked || isEmptyAnswer ? null : JSON.stringify(buildQuizData(true))
       return
     }
-    const t = setTimeout(commitAutosave, AUTOSAVE_DEBOUNCE_MS)
+    const delay = type === 'text' ? AUTOSAVE_TEXT_MS : AUTOSAVE_DISCRETE_MS
+    const t = setTimeout(commitAutosave, delay)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, textAnswer, numberAnswer, rangeAnswer, reviewMode, stageLocked])
@@ -755,7 +757,7 @@ function SyncedQuestion({
   // In-exam graded view: teacher grading this student (show their answer +
   // editable score) or student reviewing their returned exam (read-only).
   // Must run before the isLoading early return (rules of hooks).
-  const { active: reviewActive, mode: reviewModeType, review, studentId: reviewStudentId, refreshGrades } =
+  const { active: reviewActive, mode: reviewModeType, review, studentId: reviewStudentId, loadedStudentId: reviewLoadedStudentId, refreshGrades } =
     useComponentReview(componentId)
 
   // Extract correct indices and option labels for the progress bar
@@ -804,6 +806,11 @@ function SyncedQuestion({
   const autoGradedRef = useRef<string | null>(null)
   useEffect(() => {
     if (reviewModeType !== 'grade' || !reviewStudentId) return
+    // Only act when the loaded review data is for THIS student. On a student
+    // switch, reviewStudentId updates before the async /review reload lands, so
+    // answerPayload briefly belongs to the previous student — grading it here
+    // would write one student's correctness onto another's check-run.
+    if (reviewLoadedStudentId !== reviewStudentId) return
     const payload = review?.answerPayload as QuizData | undefined
     if (!payload) return
 
@@ -842,7 +849,7 @@ function SyncedQuestion({
       .then((r) => { if (r.ok) refreshGrades() })
       .catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reviewModeType, reviewStudentId, componentId, review?.answerPayload, pageId])
+  }, [reviewModeType, reviewStudentId, reviewLoadedStudentId, componentId, review?.answerPayload, pageId])
 
   if (isLoading) {
     return (
