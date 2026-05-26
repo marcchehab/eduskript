@@ -842,7 +842,7 @@ export default function ClassesPage() {
                                         onClick={() => handleSort(classItem.id, 'name')}
                                         className="flex items-center gap-2 hover:text-foreground"
                                       >
-                                        Nickname
+                                        Student
                                         {getSortIcon(classItem.id, 'name')}
                                       </button>
                                     </th>
@@ -851,7 +851,7 @@ export default function ClassesPage() {
                                         onClick={() => handleSort(classItem.id, 'email')}
                                         className="flex items-center gap-2 hover:text-foreground"
                                       >
-                                        Email / Pseudonym
+                                        Pseudonym
                                         {getSortIcon(classItem.id, 'email')}
                                       </button>
                                     </th>
@@ -884,24 +884,32 @@ export default function ClassesPage() {
                                           index % 2 === 0 ? 'bg-background' : 'bg-muted/30'
                                         }`}
                                       >
+                                        {/* Resolved email is the primary identity when the
+                                            teacher has it; the nickname is demoted to a tooltip.
+                                            Falls back to the nickname for anonymous students. */}
                                         <td className="p-3 w-1/3">
-                                          <div className="font-medium text-sm">{student.displayName}</div>
-                                        </td>
-                                        <td className="p-3">
                                           {isIdentified ? (
-                                            <div className="text-sm text-green-700 dark:text-green-400 font-medium">
+                                            <div
+                                              className="font-medium text-sm text-green-700 dark:text-green-400"
+                                              title={`Nickname: ${student.displayName}`}
+                                            >
                                               {realEmail}
                                             </div>
                                           ) : (
-                                            <div className="flex items-center gap-2">
-                                              <span className="text-xs text-muted-foreground font-mono">
-                                                {shortPseudonym}
-                                              </span>
+                                            <div className="font-medium text-sm">{student.displayName}</div>
+                                          )}
+                                        </td>
+                                        <td className="p-3">
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-xs text-muted-foreground font-mono">
+                                              {shortPseudonym}
+                                            </span>
+                                            {!isIdentified && (
                                               <span className="text-xs text-muted-foreground">
                                                 • anonymous
                                               </span>
-                                            </div>
-                                          )}
+                                            )}
+                                          </div>
                                         </td>
                                         <td className="p-3 text-sm text-muted-foreground">
                                           {new Date(student.joinedAt).toLocaleDateString()}
