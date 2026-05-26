@@ -1,23 +1,19 @@
 /**
- * Python Check Runner
+ * Python check assertions — parsing + the turtle-grading shim.
  *
- * Executes teacher-defined assert statements against student code using Pyodide.
- * Each assertion runs independently so partial results are reported.
+ * Provides two pieces used by the Pyodide worker
+ * (`src/lib/pyodide-worker.client.ts`):
+ *   • `parseAssertions(checkCode)` — splits the teacher's check code into
+ *     setup lines and individual assertions with pass/fail labels.
+ *   • `TURTLE_PRELUDE` — a Python shim that records every turtle move into a
+ *     `turtle_path` list so assertions can check the drawn figure
+ *     (modulo translation, rotation, and stroke order) without forcing
+ *     students to call a particular API.
  *
- * Approach: Write student code and check code to Pyodide's virtual filesystem,
- * then run a harness script that exec()'s them. This avoids fragile string escaping.
- *
- * Turtle auto-grading: when student code uses turtle, a small shim is exec'd
- * BEFORE the student code so every move records its end position into a
- * `turtle_path` list. Assertions can then check the list directly or via the
- * `turtle_matches(expected, …)` helper which tolerates rotation + translation.
- * This is what makes "many code paths produce the same figure" gradeable.
+ * The harness that orchestrates assertion exec lives inside the worker source
+ * (see `CHECK_HARNESS_TEMPLATE` in `pyodide-worker.client.ts`); this file
+ * stays Python-runtime-free so it can be imported on the main thread.
  */
-
-import type { PythonCheckResult, PythonFile } from './types'
-
-/** Same regex used at src/components/public/code-editor/index.tsx:886. */
-const TURTLE_USE_RE = /import\s+turtle|from\s+turtle/
 
 /**
  * Python shim that installs a minimal in-memory turtle stub into sys.modules
@@ -31,7 +27,7 @@ const TURTLE_USE_RE = /import\s+turtle|from\s+turtle/
  * Runs only inside the Pyodide check harness. Skulpt (the runtime that
  * actually renders the canvas the student sees on Run) is untouched.
  */
-const TURTLE_PRELUDE = `
+export const TURTLE_PRELUDE = `
 # Auto-injected by python-check-runner when student code imports turtle.
 # Path entries are 4-tuples: (x, y, pen_down, color). Color is the active pen
 # color at the time of the move (None if never set). Old (x, y, pen_down)
@@ -465,189 +461,3 @@ export function parseAssertions(checkCode: string): { setupLines: string[]; asse
   return { setupLines, assertions }
 }
 
-/**
- * Run python checks against student code.
- *
- * 1. Write auxiliary files to Pyodide FS
- * 2. Write student code and individual assertion files to Pyodide FS
- * 3. Run a harness that exec()'s student code, then each assertion
- * 4. Return per-assertion pass/fail results as JSON
- */
-export async function runPythonChecks(
-  pyodide: any,
-  studentCode: string,
-  checkCode: string,
-  auxiliaryFiles: PythonFile[]
-): Promise<PythonCheckResult[]> {
-  const { setupLines, assertions } = parseAssertions(checkCode)
-
-  if (assertions.length === 0) {
-    return []
-  }
-
-  // Write auxiliary files to Pyodide FS and invalidate module cache
-  for (const file of auxiliaryFiles) {
-    pyodide.FS.writeFile(file.name, file.content)
-    const moduleName = file.name.replace(/\.py$/i, '')
-    await pyodide.runPythonAsync(
-      `import sys\nif '${moduleName}' in sys.modules: del sys.modules['${moduleName}']`
-    )
-  }
-
-  // Write student code and setup+assertions to virtual files
-  // This avoids all string escaping issues
-  pyodide.FS.writeFile('__eduskript_student.py', studentCode)
-  pyodide.FS.writeFile('__eduskript_setup.py', setupLines.join('\n'))
-
-  // Inject turtle path-recording shim only when the student is using turtle —
-  // skip the import + monkey-patching cost otherwise. The prelude runs in
-  // __ns BEFORE the student code, so all moves are captured.
-  const usesTurtle = TURTLE_USE_RE.test(studentCode)
-  pyodide.FS.writeFile('__eduskript_prelude.py', usesTurtle ? TURTLE_PRELUDE : '')
-
-  // Write each assertion as a separate file
-  for (let i = 0; i < assertions.length; i++) {
-    pyodide.FS.writeFile(`__eduskript_assert_${i}.py`, assertions[i].line)
-  }
-
-  // Write assertion labels as JSON. Each entry carries both fail and pass
-  // labels; the harness picks the right one based on the result.
-  pyodide.FS.writeFile(
-    '__eduskript_labels.json',
-    JSON.stringify(assertions.map((a) => ({ fail: a.failLabel, pass: a.passLabel }))),
-  )
-
-  // The harness script reads files from FS and runs them
-  const harness = `
-import json
-import re as __re
-
-with open('__eduskript_labels.json') as f:
-    __labels = json.load(f)
-
-# Label design:
-#   label  = passLabel on pass, failLabel on fail
-#   detail = "Expected X, got Y" on failed ==, else None
-# Labels are wrapped as f-strings and eval'd against the student's namespace
-# so teachers can write \`f"got {x}"\` and have the variable's value rendered
-# at the moment the assertion runs. If evaluation fails (NameError, syntax,
-# anything else) the {…} regions are replaced with an ellipsis so the row
-# never shows broken braces to the student.
-
-def __interp(s, ns):
-    if not s or '{' not in s:
-        return s
-    try:
-        return eval('f' + repr(s), ns)
-    except Exception:
-        return __re.sub(r'\\{[^{}]*\\}', '…', s)
-
-__count = ${assertions.length}
-__results = []
-__ns = {}
-
-# Run student code in a fresh namespace.
-# Capture stdout into a buffer so assertions can check what the student
-# printed (exposed below as 'output'). Lets teachers test print-loop
-# exercises without forcing students to wrap their code in a function or
-# accumulate into a list.
-import io as __io, contextlib as __cl
-__stdout_buf = __io.StringIO()
-
-with open('__eduskript_student.py') as f:
-    __student_code = f.read()
-
-# Turtle prelude (empty unless student code uses turtle). Runs in __ns so
-# turtle_matches and turtle_path are visible to setup + assertions.
-with open('__eduskript_prelude.py') as f:
-    __prelude_code = f.read()
-if __prelude_code.strip():
-    try:
-        exec(compile(__prelude_code, '<turtle-prelude>', 'exec'), __ns)
-    except Exception:
-        pass
-
-try:
-    with __cl.redirect_stdout(__stdout_buf):
-        exec(compile(__student_code, '<student>', 'exec'), __ns)
-except Exception as __e:
-    # Student code failed — all tests fail with this error. Namespace may be
-    # partially populated; __interp falls back to … on NameError.
-    __err = str(__e)
-    for __i in range(__count):
-        __results.append({"index": __i, "passed": False, "label": __interp(__labels[__i]["fail"], __ns), "error": "Code error: " + __err})
-
-# Expose captured stdout to setup + asserts as 'output'.
-# Set even on student-error so assertions referencing 'output' get a
-# defined value (empty string) rather than NameError.
-__ns['output'] = __stdout_buf.getvalue()
-
-if not __results:
-    # Run setup code in the student namespace
-    with open('__eduskript_setup.py') as f:
-        __setup_code = f.read()
-    if __setup_code.strip():
-        try:
-            exec(compile(__setup_code, '<setup>', 'exec'), __ns)
-        except Exception:
-            pass
-
-    # Run each assertion independently
-    for __i in range(__count):
-        with open(f'__eduskript_assert_{__i}.py') as f:
-            __assert_code = f.read()
-        try:
-            exec(compile(__assert_code, '<check>', 'exec'), __ns)
-            __results.append({"index": __i, "passed": True, "label": __interp(__labels[__i]["pass"], __ns), "error": None})
-        except AssertionError:
-            # Default to no error detail — str(AssertionError) is just the
-            # assert's custom message, which we already show as the label.
-            # Only the == branch below produces genuinely new info.
-            __err_msg = None
-            # Try to extract actual value from failed == comparison
-            # Pattern: assert expr == expected  or  assert expr == expected, "msg"
-            __m = __re.match(r'assert\\s+(.+?)\\s*==\\s*(.+?)(?:\\s*,\\s*["\\']|$)', __assert_code.strip())
-            if __m:
-                try:
-                    __actual = eval(__m.group(1), __ns)
-                    __expected = eval(__m.group(2), __ns)
-                    __err_msg = f"Expected {__expected!r}, got {__actual!r}"
-                except Exception:
-                    pass
-            __results.append({"index": __i, "passed": False, "label": __interp(__labels[__i]["fail"], __ns), "error": __err_msg})
-        except Exception as __e:
-            __results.append({"index": __i, "passed": False, "label": __interp(__labels[__i]["fail"], __ns), "error": str(__e)})
-
-json.dumps(__results)
-`
-
-  // Suppress stdout/stderr during check execution
-  pyodide.setStdout({ batched: () => {} })
-  pyodide.setStderr({ batched: () => {} })
-
-  try {
-    const resultJson = await pyodide.runPythonAsync(harness)
-    const results: PythonCheckResult[] = JSON.parse(resultJson)
-    return results
-  } catch (error: any) {
-    // If the harness itself fails, all assertions fail
-    return assertions.map((a, i) => ({
-      index: i,
-      passed: false,
-      label: a.failLabel,
-      error: `Check runner error: ${error.message || String(error)}`
-    }))
-  } finally {
-    // Clean up temp files
-    const filesToRemove = [
-      '__eduskript_student.py',
-      '__eduskript_setup.py',
-      '__eduskript_prelude.py',
-      '__eduskript_labels.json',
-      ...assertions.map((_, i) => `__eduskript_assert_${i}.py`)
-    ]
-    for (const f of filesToRemove) {
-      try { pyodide.FS.unlink(f) } catch { /* ignore */ }
-    }
-  }
-}

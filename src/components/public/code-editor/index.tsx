@@ -59,22 +59,24 @@ import {
 import { SqlProgressBar } from './sql-progress-bar'
 import { PythonProgressBar } from './python-progress-bar'
 import { PythonTestResults } from './python-test-results'
-import { runPythonChecks } from './python-check-runner'
 import { useCoupledVideo, parseTimecode } from '@/components/markdown/coupled-video-context'
 import type { PythonCheckResult } from './types'
 import { deferUntilIdle } from '@/lib/defer-until-idle'
-import { installPyodideTimeout, clearPyodideTimeout } from '@/lib/pyodide-timeout-guard'
+import {
+  runPython,
+  runChecks,
+  terminatePyodideWorker,
+  warmPyodideWorker,
+} from '@/lib/pyodide-worker.client'
 
 /**
- * Wall-clock cap on a single Pyodide run from the student's Run / Check
- * buttons. Longer than the grader's 6 s because legitimate student code may
- * include matplotlib rendering + numpy work. Package loading itself happens
- * outside the guarded window, so this only covers actual user-code execution.
- * Until Phase B (Pyodide in a Worker), the page is briefly unresponsive
- * during this window — only Python-level loops are interruptible via the
- * settrace guard; see src/lib/pyodide-timeout-guard.ts.
+ * Hard wall-clock cap on a single Pyodide run from the Run / Check buttons.
+ * On expiry the worker is terminated (kills any C-call hangs) and respawns
+ * on the next call. 30 s is comfortable for legitimate matplotlib / numpy /
+ * sklearn workloads; runaway `while True:` loops surface as a friendly stop
+ * via the Stop button (which aborts immediately) or by hitting this cap.
  */
-const STUDENT_PYODIDE_TIMEOUT_S = 10
+const STUDENT_PYODIDE_TIMEOUT_MS = 30_000
 
 /**
  * Strip Pyodide/internal traceback frames from Python errors, keeping only
@@ -161,43 +163,14 @@ const highlightColorHex: Record<HighlightColor, string> = {
 }
 
 // Static preload functions (no component state, safe to call from IntersectionObserver)
-// These mirror ensurePyodideLoaded/ensureSkulptLoaded but without UI feedback
 
 /**
- * Preload Pyodide runtime in background. Safe to call multiple times.
- * Returns a promise that resolves when Pyodide is ready.
+ * Preload Pyodide in background by spawning the worker (the worker boot script
+ * starts loading Pyodide immediately). Safe to call multiple times.
  */
 function preloadPyodide(): Promise<unknown> {
-  if ((window as any).__pyodidePromise) {
-    return (window as any).__pyodidePromise
-  }
-
-  // Load script if not present
-  if (!document.querySelector('script[src*="pyodide.js"]')) {
-    const script = document.createElement('script')
-    script.src = 'https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pyodide.js'
-    document.body.appendChild(script)
-
-    return new Promise((resolve, reject) => {
-      script.onload = () => {
-        // Initialize Pyodide after script loads
-        ;(window as any).__pyodidePromise = (window as any).loadPyodide({
-          indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.29.0/full/'
-        })
-        ;(window as any).__pyodidePromise.then(resolve).catch(reject)
-      }
-      script.onerror = () => reject(new Error('Failed to load Pyodide'))
-    })
-  }
-
-  // Script exists but promise not set - initialize
-  if (!(window as any).__pyodidePromise && (window as any).loadPyodide) {
-    ;(window as any).__pyodidePromise = (window as any).loadPyodide({
-      indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.29.0/full/'
-    })
-  }
-
-  return (window as any).__pyodidePromise || Promise.resolve()
+  warmPyodideWorker()
+  return Promise.resolve()
 }
 
 /**
@@ -573,6 +546,8 @@ export const CodeEditor = memo(function CodeEditor({
   const pendingInputRef = useRef<typeof pendingInput>(null)
   // Aborts the in-flight JS Worker run (Stop button → worker.terminate()).
   const jsAbortControllerRef = useRef<AbortController | null>(null)
+  // Aborts the in-flight Pyodide Worker run / check (Stop button → terminatePyodideWorker()).
+  const pyodideAbortControllerRef = useRef<AbortController | null>(null)
 
   // Output/History panel state
   const [activePanel, setActivePanel] = useState<'output' | 'history' | 'orphans'>('output')
@@ -2313,46 +2288,14 @@ export const CodeEditor = memo(function CodeEditor({
     }
   }, [language, schemaImage, schemaImageDark, mounted])
 
-  // Lazy load Pyodide on first run
-  const ensurePyodideLoaded = async () => {
-    // Return existing promise if already loading/loaded
-    if ((window as any).__pyodidePromise) {
-      setActiveKernel('pyodide')
-      return (window as any).__pyodidePromise
-    }
-
-    // Start loading
-    setKernelLoading(true)
-
-    try {
-      // Load Pyodide script if not already present
-      if (!document.querySelector('script[src*="pyodide.js"]')) {
-        const script = document.createElement('script')
-        script.src = 'https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pyodide.js'
-
-        await new Promise<void>((resolve, reject) => {
-          script.onload = () => resolve()
-          script.onerror = () => reject(new Error('Failed to load Pyodide'))
-          document.body.appendChild(script)
-        })
-      }
-
-      // Initialize Pyodide
-      if (!(window as any).__pyodidePromise) {
-        ;(window as any).__pyodidePromise = (window as any).loadPyodide({
-          indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.29.0/full/'
-        })
-      }
-
-      const pyodide = await (window as any).__pyodidePromise
-      setActiveKernel('pyodide')
-      setKernelLoading(false)
-      return pyodide
-    } catch (error) {
-      setKernelLoading(false)
-      addOutput('Failed to load Python runtime', OutputLevel.ERROR)
-      throw error
-    }
+  /**
+   * Mark the pyodide kernel as active and spawn the worker if needed. The
+   * worker loads Pyodide lazily on its first message — the first run / check
+   * pays the cold-start cost (~3 s), subsequent calls are fast.
+   */
+  const ensurePyodideLoaded = () => {
+    setActiveKernel('pyodide')
+    warmPyodideWorker()
   }
 
   // Lazy load Skulpt on first run
@@ -3612,7 +3555,7 @@ export const CodeEditor = memo(function CodeEditor({
   // Run Python code with Pyodide (for matplotlib, numpy, etc.)
   const runPyodideCode = async (code: string) => {
     setRunState(RunState.RUNNING)
-    setOutput([]) // Clear previous output
+    setOutput([])
 
     // Fully clear the shared graphics canvas. Both turtle (Skulpt) and
     // matplotlib (Pyodide) render into this same div — only removing
@@ -3622,353 +3565,146 @@ export const CodeEditor = memo(function CodeEditor({
       canvasRef.current.innerHTML = ''
     }
 
-    try {
-      // Ensure Pyodide is loaded
-      const pyodide = await ensurePyodideLoaded()
+    ensurePyodideLoaded()
 
-      if (!pyodide) {
-        addOutput('Pyodide runtime not loaded yet', OutputLevel.ERROR)
+    // Detect required packages by parsing imports (cheap; same map as before).
+    const packageMap: Record<string, string> = {
+      'matplotlib': 'matplotlib',
+      'numpy': 'numpy',
+      'pandas': 'pandas',
+      'scipy': 'scipy',
+      'sympy': 'sympy',
+      'scikit-learn': 'scikit-learn',
+      'sklearn': 'scikit-learn',
+      'PIL': 'Pillow',
+      'pillow': 'Pillow',
+      'cv2': 'opencv-python',
+      'imageio': 'imageio',
+      'micropip': 'micropip',
+    }
+    const importRegex = /(?:^|\n)\s*(?:import|from)\s+([a-zA-Z_][a-zA-Z0-9_]*)/gm
+    const packagesToLoad: string[] = []
+    let match
+    while ((match = importRegex.exec(code)) !== null) {
+      const pkg = packageMap[match[1]]
+      if (pkg) packagesToLoad.push(pkg)
+    }
+    const uniquePackages = [...new Set(packagesToLoad)]
+
+    // Collect text aux files (local extras + skript + global imports).
+    const localFiles = filesRef.current
+    const importFiles = [...(skriptImportsRef.current?.files || []), ...(globalImportsRef.current?.files || [])]
+    const textFiles = [...(localFiles.length > 1 ? localFiles : []), ...importFiles]
+
+    // Collect binary aux files. Precedence: editor → skript → global → teacher.
+    // Same student-mental-model ordering as before; the worker writes them in
+    // the order received and the writes are gated by `seen` so the first wins.
+    const binaryFiles: { name: string; bytes: Uint8Array }[] = []
+    const seen = new Set<string>()
+    const studentBinaryScopes: BinaryFileData[] = [
+      editorBinariesRef.current,
+      skriptBinariesRef.current,
+      globalBinariesRef.current,
+    ]
+    for (const scope of studentBinaryScopes) {
+      for (const file of scope.files) {
+        if (seen.has(file.name)) continue
+        seen.add(file.name)
+        const buf = new Uint8Array(await file.bytes.arrayBuffer())
+        binaryFiles.push({ name: file.name, bytes: buf })
+      }
+    }
+    for (const att of attachedFilesRef.current || []) {
+      if (seen.has(att.name)) continue
+      let bytes = attachedFileBytesRef.current.get(att.url)
+      if (!bytes) {
+        try {
+          const resp = await fetch(att.url)
+          if (!resp.ok) {
+            addOutput(`Failed to load attached file '${att.name}': ${resp.status}`, OutputLevel.ERROR)
+            continue
+          }
+          bytes = new Uint8Array(await resp.arrayBuffer())
+          attachedFileBytesRef.current.set(att.url, bytes)
+        } catch (err) {
+          addOutput(`Failed to load attached file '${att.name}': ${err instanceof Error ? err.message : String(err)}`, OutputLevel.ERROR)
+          continue
+        }
+      }
+      seen.add(att.name)
+      binaryFiles.push({ name: att.name, bytes })
+    }
+
+    // Stop button + hard timeout both terminate the worker. Either path also
+    // kills any in-flight silent exam check below (it shares the worker).
+    const controller = new AbortController()
+    pyodideAbortControllerRef.current = controller
+
+    try {
+      const { result, plots, stopped, timedOut } = await runPython({
+        code,
+        packages: uniquePackages,
+        textFiles,
+        binaryFiles,
+        configMatplotlib: uniquePackages.includes('matplotlib'),
+        signal: controller.signal,
+        timeoutMs: STUDENT_PYODIDE_TIMEOUT_MS,
+        onStdout: (text) => addOutput(text, OutputLevel.OUTPUT),
+        onStderr: (text) => addOutput(text, OutputLevel.ERROR),
+      })
+
+      if (stopped) {
+        addOutput('Program stopped', OutputLevel.WARNING)
+        setRunState(RunState.STOPPED)
+        return
+      }
+      if (timedOut) {
+        addOutput('TimeoutError: Execution timed out', OutputLevel.ERROR)
         setRunState(RunState.STOPPED)
         return
       }
 
-      // Detect and load required packages
-      const packagesToLoad: string[] = []
-      const packageMap: Record<string, string> = {
-        'matplotlib': 'matplotlib',
-        'numpy': 'numpy',
-        'pandas': 'pandas',
-        'scipy': 'scipy',
-        'sympy': 'sympy',
-        'scikit-learn': 'scikit-learn',
-        'sklearn': 'scikit-learn',
-        'PIL': 'Pillow',
-        'pillow': 'Pillow',
-        'cv2': 'opencv-python',
-        'imageio': 'imageio',
-        'micropip': 'micropip',
+      // Render plots returned from the worker.
+      if (plots && plots.length > 0 && canvasRef.current) {
+        setCanvasVisible(true)
+        const canvas = canvasRef.current
+        const plotImgs: HTMLImageElement[] = []
+        for (let i = 0; i < plots.length; i++) {
+          const img = document.createElement('img')
+          img.src = plots[i]
+          img.alt = `Plot ${i + 1}`
+          img.className = 'matplotlib-plot'
+          img.draggable = false
+          img.style.cssText = 'max-width: 100%; height: auto; display: block; margin: 8px auto; border-radius: 4px; user-select: none;'
+          canvas.appendChild(img)
+          plotImgs.push(img)
+        }
+        // Wait for plots to decode so framing knows their size — otherwise a
+        // leftover turtle transform can leave them off-screen.
+        await Promise.all(plotImgs.map(img => img.decode().catch(() => {})))
+        fitToView()
       }
 
-      // Parse imports from code
-      const importRegex = /(?:^|\n)\s*(?:import|from)\s+([a-zA-Z_][a-zA-Z0-9_]*)/gm
-      let match
-      while ((match = importRegex.exec(code)) !== null) {
-        const moduleName = match[1]
-        if (packageMap[moduleName]) {
-          packagesToLoad.push(packageMap[moduleName])
-        }
+      if (result !== undefined && result !== null) {
+        addOutput(String(result), OutputLevel.OUTPUT)
       }
 
-      // Remove duplicates
-      const uniquePackages = [...new Set(packagesToLoad)]
+      setShowSuccessFlash(true)
+      setTimeout(() => setShowSuccessFlash(false), 1500)
+      setRunState(RunState.STOPPED)
 
-      // Bind stdout/stderr to THIS editor *before* anything that might emit output.
-      // The Pyodide instance is shared across editors via window.__pyodidePromise, so
-      // setStdout writes to a global slot — without this, stdout from a slow load on
-      // editor A can land in editor B's output panel after the user clicks Run on B.
-      let stdoutBuffer: string[] = []
-      pyodide.setStdout({
-        batched: (text: string) => {
-          stdoutBuffer.push(text)
-          addOutput(text, OutputLevel.OUTPUT)
-        }
-      })
-      pyodide.setStderr({
-        batched: (text: string) => {
-          addOutput(text, OutputLevel.ERROR)
-        }
-      })
-
-      // Load packages if needed. We pass a no-op messageCallback to suppress
-      // Pyodide's chatty "Loading…/Loaded…/already loaded from default channel"
-      // lines (which would otherwise surface in the student's output panel on
-      // every Run). errorCallback still routes real errors to *this* editor's
-      // output, regardless of which editor most recently called setStdout.
-      if (uniquePackages.length > 0) {
-        try {
-          await pyodide.loadPackage(uniquePackages, {
-            messageCallback: () => {},
-            errorCallback: (msg: string) => addOutput(msg, OutputLevel.ERROR),
-          })
-        } catch (err) {
-          addOutput(`Warning: Failed to load some packages: ${err}\n`, OutputLevel.WARNING)
-        }
-      }
-
-      // Configure matplotlib to use non-interactive backend
-      if (uniquePackages.includes('matplotlib')) {
-        // Prevent matplotlib from appending to DOM
-        ;(document as any).pyodideMplTarget = null
-
-        await pyodide.runPythonAsync(`
-import matplotlib
-matplotlib.use('Agg')  # Use non-interactive backend
-import matplotlib.pyplot as plt
-# Prevent matplotlib from creating interactive dialogs
-plt.ioff()
-# Make plt.show() a no-op (we capture figures directly)
-plt.show = lambda: None
-`)
-      }
-
-      // Collect all auxiliary files (local + imports) from refs for latest content
-      const localFiles = filesRef.current
-      const importFiles = [...(skriptImportsRef.current?.files || []), ...(globalImportsRef.current?.files || [])]
-      const allAuxFiles = [...(localFiles.length > 1 ? localFiles : []), ...importFiles]
-
-      // Write files to Pyodide's virtual filesystem and invalidate Python's module cache
-      // so re-imports pick up the latest content instead of the stale cached module.
-      for (const file of allAuxFiles) {
-        pyodide.FS.writeFile(file.name, file.content)
-        const moduleName = file.name.replace(/\.py$/i, '')
-        await pyodide.runPythonAsync(
-          `import sys\nif '${moduleName}' in sys.modules: del sys.modules['${moduleName}']`
-        )
-      }
-
-      // Write binary attachments to Pyodide's FS so user code can `open()` them.
-      // Order: teacher-attached first (lowest precedence), then global, skript,
-      // editor-scoped uploads (highest precedence). If two scopes provide the same
-      // filename, the higher-precedence one wins, matching the student's mental
-      // model of "the file I just uploaded should be the one Python sees".
-      const writtenBinaryNames = new Set<string>()
-      const writeBinary = (name: string, bytes: Uint8Array) => {
-        if (writtenBinaryNames.has(name)) return
-        pyodide.FS.writeFile(name, bytes)
-        writtenBinaryNames.add(name)
-      }
-
-      // Student-uploaded binaries (highest precedence first).
-      const studentBinaryScopes: BinaryFileData[] = [
-        editorBinariesRef.current,
-        skriptBinariesRef.current,
-        globalBinariesRef.current,
-      ]
-      for (const scope of studentBinaryScopes) {
-        for (const file of scope.files) {
-          if (writtenBinaryNames.has(file.name)) continue
-          const buf = new Uint8Array(await file.bytes.arrayBuffer())
-          writeBinary(file.name, buf)
-        }
-      }
-
-      // Teacher-attached binaries (fetched once, cached for subsequent runs).
-      const attached = attachedFilesRef.current || []
-      for (const att of attached) {
-        if (writtenBinaryNames.has(att.name)) continue
-        let bytes = attachedFileBytesRef.current.get(att.url)
-        if (!bytes) {
-          try {
-            const resp = await fetch(att.url)
-            if (!resp.ok) {
-              addOutput(`Failed to load attached file '${att.name}': ${resp.status}`, OutputLevel.ERROR)
-              continue
-            }
-            bytes = new Uint8Array(await resp.arrayBuffer())
-            attachedFileBytesRef.current.set(att.url, bytes)
-          } catch (err) {
-            addOutput(`Failed to load attached file '${att.name}': ${err instanceof Error ? err.message : String(err)}`, OutputLevel.ERROR)
-            continue
-          }
-        }
-        writeBinary(att.name, bytes)
-      }
-
-      // Inject a small helper *before* user code runs.
-      //
-      // The helper captures every "shown" image into a single ordered buffer so
-      // matplotlib plots and PIL displays render in the order they were called,
-      // not segregated by type. Three sources push into the same buffer:
-      //   - `display(pil_image)`            (Jupyter-style helper)
-      //   - `pil_image.show()`              (patched: would otherwise try to open
-      //                                      an OS viewer and silently no-op)
-      //   - `plt.show()`                    (patched: encodes all open figures and
-      //                                      closes them so the post-run sweep
-      //                                      doesn't double-render)
-      //
-      // Items are stored as already-encoded PNG bytes so the post-run capture is
-      // a trivial base64-encode. The buffer is reset every run.
-      // All patches are idempotent and skip silently when the relevant package
-      // isn't loaded.
-      await pyodide.runPythonAsync(`
-import builtins as _b
-import io as _io
-_b._eduskript_shown = []  # list of PNG byte blobs, in call order
-
-def _eduskript_png_from_pil(img):
-    save_img = img if img.mode in ('RGB', 'RGBA', 'L', 'LA', 'P') else img.convert('RGBA')
-    buf = _io.BytesIO()
-    save_img.save(buf, format='PNG')
-    return buf.getvalue()
-
-def _eduskript_png_from_fig(fig):
-    buf = _io.BytesIO()
-    fig.savefig(buf, format='png', bbox_inches='tight', dpi=100)
-    return buf.getvalue()
-
-def display(obj):
-    """Show a PIL image in the editor canvas (in call order with matplotlib)."""
-    try:
-        from PIL.Image import Image as _PILImage
-        if isinstance(obj, _PILImage):
-            _b._eduskript_shown.append(_eduskript_png_from_pil(obj))
-            return
-    except ImportError:
-        pass
-    print(repr(obj))
-
-_b.display = display
-
-try:
-    from PIL.Image import Image as _PILImage
-    def _eduskript_pil_show(self, title=None, command=None):
-        _b._eduskript_shown.append(_eduskript_png_from_pil(self))
-    _PILImage.show = _eduskript_pil_show
-except ImportError:
-    pass
-
-try:
-    import matplotlib.pyplot as _plt
-    def _eduskript_plt_show(*args, **kwargs):
-        for _num in _plt.get_fignums():
-            _fig = _plt.figure(_num)
-            _b._eduskript_shown.append(_eduskript_png_from_fig(_fig))
-            _plt.close(_fig)
-    _plt.show = _eduskript_plt_show
-except ImportError:
-    pass
-`)
-
-      // Wall-clock guard for student-typed code. The page is still briefly
-      // unresponsive during the run (Pyodide on the main thread until the
-      // Phase B Worker refactor), but Python-level infinite loops now raise
-      // TimeoutError instead of locking the tab forever. See
-      // src/lib/pyodide-timeout-guard.ts for limits (Python frames only).
-      await installPyodideTimeout(pyodide, STUDENT_PYODIDE_TIMEOUT_S)
-      let result: unknown
-      try {
-        // Run the code
-        result = await pyodide.runPythonAsync(code)
-
-        // Clean up any matplotlib UI elements that might have been created
-        const cleanupMatplotlibUI = () => {
-          // Target the outermost container that matplotlib creates
-          document.querySelectorAll('body > div[style*="display: inline-block"]').forEach(el => {
-            // Check if it contains matplotlib elements
-            if (el.querySelector('.mpl-canvas, .mpl-toolbar, .ui-dialog-titlebar')) {
-              el.remove()
-            }
-          })
-          // Also clean up any standalone elements
-          document.querySelectorAll('.ui-dialog, .mpl-message, .mpl-toolbar').forEach(el => el.remove())
-        }
-
-        cleanupMatplotlibUI()
-        // Run cleanup again after a short delay to catch async UI creation
-        setTimeout(cleanupMatplotlibUI, 100)
-        setTimeout(cleanupMatplotlibUI, 500)
-
-        // Capture every image the run produced, in call order. The patched
-        // display() / .show() / plt.show() in the pre-run helper appended PNG
-        // bytes to a single ordered buffer, so we just base64-encode in sequence.
-        // Then sweep any matplotlib figures the user created but forgot to
-        // plt.show() — those land at the end so they're never lost.
-        try {
-          const plotScript = `
-import sys
-import io
-import base64
-import builtins as _b
-
-plots = []
-
-# 1) Anything the user explicitly displayed, in call order
-shown = getattr(_b, '_eduskript_shown', [])
-for png_bytes in shown:
-    plots.append('data:image/png;base64,' + base64.b64encode(png_bytes).decode('UTF-8'))
-
-# 2) Trailing matplotlib figures the user forgot to plt.show()
-try:
-    import matplotlib.pyplot as plt
-    for _num in plt.get_fignums():
-        _fig = plt.figure(_num)
-        _buf = io.BytesIO()
-        _fig.savefig(_buf, format='png', bbox_inches='tight', dpi=100)
-        _buf.seek(0)
-        plots.append('data:image/png;base64,' + base64.b64encode(_buf.read()).decode('UTF-8'))
-        plt.close(_fig)
-except ImportError:
-    pass
-except Exception as e:
-    print(f"Error capturing trailing figures: {e}", file=sys.stderr)
-
-# Reset for next run
-_b._eduskript_shown = []
-
-plots
-`
-          const plotsData = await pyodide.runPythonAsync(plotScript)
-
-          // Display plots in the graphics pane
-          if (plotsData && plotsData.length > 0 && canvasRef.current) {
-            // Force the canvas open even if our static heuristic missed the import
-            // (e.g. the code uses display() with a PIL import we couldn't detect statically).
-            setCanvasVisible(true)
-            // canvasRef was already cleared at the start of this run; just
-            // append the fresh plots.
-            const canvas = canvasRef.current
-
-            // Add new plots
-            const plotImgs: HTMLImageElement[] = []
-            for (let i = 0; i < plotsData.length; i++) {
-              const imgData = plotsData[i]
-              const img = document.createElement('img')
-              img.src = imgData
-              img.alt = `Plot ${i + 1}`
-              img.className = 'matplotlib-plot'
-              img.draggable = false // Prevent browser image drag behavior
-              img.style.cssText = 'max-width: 100%; height: auto; display: block; margin: 8px auto; border-radius: 4px; user-select: none;'
-              canvas.appendChild(img)
-              plotImgs.push(img)
-            }
-
-            // Wait for the plot images to decode so their layout size is known,
-            // then frame them — otherwise a transform left over from a previous
-            // turtle run leaves the plot outside the visible area.
-            await Promise.all(plotImgs.map(img => img.decode().catch(() => {})))
-            fitToView()
-          }
-        } catch {
-          // Failed to capture plots - non-critical error
-        }
-
-        if (result !== undefined && result !== null) {
-          addOutput(String(result), OutputLevel.OUTPUT)
-        }
-
-        // Show success flash on Run button
-        setShowSuccessFlash(true)
-        setTimeout(() => setShowSuccessFlash(false), 1500)
-        setRunState(RunState.STOPPED)
-      } finally {
-        await clearPyodideTimeout(pyodide)
-      }
-
-      // Exam mode: silently run checks after each execution (no UI feedback).
-      // Skipped in snapshot-view mode: a teacher's scratch run must not auto-run
-      // the graded checks or persist any check result.
-      // Wrapped in its own wall-clock guard with a fresh deadline (the
-      // student-code guard above has already been cleared in its finally).
-      if (exam && effectiveCheckCode && pyodide && !isViewingSnapshot) {
-        const localFiles = filesRef.current
-        const importFiles = [...(skriptImportsRef.current?.files || []), ...(globalImportsRef.current?.files || [])]
+      // Exam mode: silently run checks after each execution. Skipped in
+      // snapshot-view mode — a teacher's scratch run must not auto-run the
+      // graded checks or persist any check result.
+      if (exam && effectiveCheckCode && !isViewingSnapshot) {
         const allAuxFiles = [...(localFiles.length > 1 ? localFiles : []), ...importFiles]
-        await installPyodideTimeout(pyodide, STUDENT_PYODIDE_TIMEOUT_S)
         try {
-          const results = await runPythonChecks(pyodide, code, effectiveCheckCode, allAuxFiles)
-          // Restore stdout/stderr
-          pyodide.setStdout({ batched: (text: string) => addOutput(text, OutputLevel.OUTPUT) })
-          pyodide.setStderr({ batched: (text: string) => addOutput(text, OutputLevel.ERROR) })
+          const results = await runChecks({
+            studentCode: code,
+            checkCode: effectiveCheckCode,
+            auxFiles: allAuxFiles,
+            timeoutMs: STUDENT_PYODIDE_TIMEOUT_MS,
+          })
           const newChecksUsed = checksUsed + 1
           setChecksUsed(newChecksUsed)
           const totalTests = results.length
@@ -3987,14 +3723,15 @@ plots
             void createCheckVersion(`exam check: ${passedTests}/${totalTests} (${earned}/${totalPoints} pts)`)
           }
         } catch { /* silent in exam mode */ }
-        finally {
-          await clearPyodideTimeout(pyodide)
-        }
       }
     } catch (error: any) {
       const errorMessage = cleanPythonError(error.message || String(error))
       addOutput(errorMessage, OutputLevel.ERROR)
       setRunState(RunState.STOPPED)
+    } finally {
+      if (pyodideAbortControllerRef.current === controller) {
+        pyodideAbortControllerRef.current = null
+      }
     }
   }
 
@@ -4015,6 +3752,13 @@ plots
       setRunState(RunState.STOPPED)
       return
     }
+    // Aborting terminates the Pyodide Worker. runPyodideCode handles the
+    // stopped branch itself (adds "Program stopped" once); don't double-log.
+    if (pyodideAbortControllerRef.current) {
+      pyodideAbortControllerRef.current.abort()
+      setRunState(RunState.STOPPED)
+      return
+    }
     setRunState(RunState.STOPPED)
     addOutput('Program stopped', OutputLevel.WARNING)
   }
@@ -4030,31 +3774,27 @@ plots
 
     const code = editorViewRef.current.state.doc.toString()
 
+    ensurePyodideLoaded()
+
+    // Collect auxiliary files
+    const localFiles = filesRef.current
+    const importFiles = [...(skriptImportsRef.current?.files || []), ...(globalImportsRef.current?.files || [])]
+    const allAuxFiles = [...(localFiles.length > 1 ? localFiles : []), ...importFiles]
+
+    // Stop button + hard timeout terminate the worker; the worker module
+    // returns all-failed results in either case, which the scoring logic
+    // below handles uniformly (earned=0, no celebration, no advance).
+    const controller = new AbortController()
+    pyodideAbortControllerRef.current = controller
+
     try {
-      const pyodide = await ensurePyodideLoaded()
-      if (!pyodide) {
-        addOutput('Pyodide runtime not loaded', OutputLevel.ERROR)
-        return
-      }
-
-      // Collect auxiliary files
-      const localFiles = filesRef.current
-      const importFiles = [...(skriptImportsRef.current?.files || []), ...(globalImportsRef.current?.files || [])]
-      const allAuxFiles = [...(localFiles.length > 1 ? localFiles : []), ...importFiles]
-
-      // Wall-clock guard so a `while True:` in the student's code doesn't lock
-      // the page when they press Check. See pyodide-timeout-guard.ts.
-      await installPyodideTimeout(pyodide, STUDENT_PYODIDE_TIMEOUT_S)
-      let results: PythonCheckResult[]
-      try {
-        results = await runPythonChecks(pyodide, code, effectiveCheckCode, allAuxFiles)
-      } finally {
-        await clearPyodideTimeout(pyodide)
-      }
-
-      // Restore stdout/stderr for normal output
-      pyodide.setStdout({ batched: (text: string) => addOutput(text, OutputLevel.OUTPUT) })
-      pyodide.setStderr({ batched: (text: string) => addOutput(text, OutputLevel.ERROR) })
+      const results = await runChecks({
+        studentCode: code,
+        checkCode: effectiveCheckCode,
+        auxFiles: allAuxFiles,
+        signal: controller.signal,
+        timeoutMs: STUDENT_PYODIDE_TIMEOUT_MS,
+      })
 
       const newChecksUsed = checksUsed + 1
       setCheckResults(results)
@@ -4113,6 +3853,9 @@ plots
     } catch (error: any) {
       addOutput(`Check error: ${error.message || String(error)}`, OutputLevel.ERROR)
     } finally {
+      if (pyodideAbortControllerRef.current === controller) {
+        pyodideAbortControllerRef.current = null
+      }
       setIsChecking(false)
     }
   }
@@ -4120,8 +3863,8 @@ plots
   // Restart Python kernel
   const restartKernel = () => {
     if (activeKernel === 'pyodide') {
-      // Clear Pyodide state
-      delete (window as any).__pyodidePromise
+      // Kill the Pyodide worker; next run respawns and reloads.
+      terminatePyodideWorker()
       setActiveKernel(null)
     } else if (activeKernel === 'skulpt') {
       // Clear Skulpt state - it will reload on next run
@@ -4133,14 +3876,13 @@ plots
   }
 
   // Force switch kernel
-  const switchKernel = (kernel: 'skulpt' | 'pyodide') => {
-    // Clear both kernels
-    delete (window as any).__pyodidePromise
+  const switchKernel = (_kernel: 'skulpt' | 'pyodide') => {
+    // Clear both kernels — next run auto-selects based on imports.
+    terminatePyodideWorker()
     delete (window as any).Sk
     delete (window as any).__skulptPromises
     setActiveKernel(null)
     setShowKernelMenu(false)
-    // The kernel will auto-select based on imports on next run
   }
 
   // Reset code to original markdown content and clear personal highlights

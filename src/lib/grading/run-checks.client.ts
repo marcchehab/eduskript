@@ -6,19 +6,16 @@
  * authoritative `{earned, max, passed, total}` — this, not the student's
  * client-computed score, is what gets persisted (ExamCheckRun) and graded.
  *
- * Reuses `runPythonChecks` + the same Pyodide CDN build as the editors.
- *
- * TIMEOUT — best-effort only (Phase 1): wall-clock guard from
- * `src/lib/pyodide-timeout-guard.ts` (settrace-based, see notes there). The
- * robust fix is to run this in a terminable Web Worker — deferred to Phase 2.
+ * Uses the shared Pyodide Worker (`src/lib/pyodide-worker.client.ts`). On
+ * timeout / abort the worker terminates and respawns on the next call; the
+ * worker module returns all-failed results so a pathological submission
+ * scores 0 (which a teacher can override) without freezing the grader's tab.
  */
 
-import { runPythonChecks } from '@/components/public/code-editor/python-check-runner'
 import type { PythonFile } from '@/components/public/code-editor/types'
-import { installPyodideTimeout, clearPyodideTimeout } from '@/lib/pyodide-timeout-guard'
+import { runChecks, warmPyodideWorker } from '@/lib/pyodide-worker.client'
 
-const PYODIDE_VERSION = 'v0.29.0'
-const TIMEOUT_S = 6
+const TIMEOUT_MS = 6_000
 
 export interface CheckInput {
   componentId: string
@@ -38,52 +35,36 @@ export interface CheckRunResult {
   notRun?: boolean
 }
 
-/** Load (or reuse) the shared Pyodide instance — mirrors the editor's loader. */
-export function loadGradingPyodide(): Promise<any> {
-  const w = window as any
-  if (w.__pyodidePromise) return w.__pyodidePromise
-
-  if (!document.querySelector('script[src*="pyodide.js"]')) {
-    const script = document.createElement('script')
-    script.src = `https://cdn.jsdelivr.net/pyodide/${PYODIDE_VERSION}/full/pyodide.js`
-    document.body.appendChild(script)
-    return new Promise((resolve, reject) => {
-      script.onload = () => {
-        w.__pyodidePromise = w.loadPyodide({
-          indexURL: `https://cdn.jsdelivr.net/pyodide/${PYODIDE_VERSION}/full/`,
-        })
-        w.__pyodidePromise.then(resolve).catch(reject)
-      }
-      script.onerror = () => reject(new Error('Failed to load Pyodide'))
-    })
-  }
-  if (!w.__pyodidePromise && w.loadPyodide) {
-    w.__pyodidePromise = w.loadPyodide({
-      indexURL: `https://cdn.jsdelivr.net/pyodide/${PYODIDE_VERSION}/full/`,
-    })
-  }
-  return w.__pyodidePromise || Promise.resolve(null)
+/**
+ * Spawn the Pyodide worker early. Kept as a separate function because the
+ * grading flow calls it once before iterating students so the cold-start
+ * cost is amortized over the batch instead of charged to student #1.
+ */
+export function loadGradingPyodide(): void {
+  warmPyodideWorker()
 }
 
 /** Re-run one python component for one student. Never throws. */
-export async function runCheck(pyodide: any, input: CheckInput): Promise<CheckRunResult> {
+export async function runCheck(input: CheckInput): Promise<CheckRunResult> {
   const max = input.points
   if (!input.studentCode || !input.studentCode.trim()) {
     return { componentId: input.componentId, earned: 0, max, passed: 0, total: 0, notRun: true }
   }
   try {
-    await installPyodideTimeout(pyodide, TIMEOUT_S)
-    try {
-      const results = await runPythonChecks(pyodide, input.studentCode, input.checkCode, input.auxFiles)
-      const total = results.length
-      const passed = results.filter((r) => r.passed).length
-      const earned = total > 0 ? Math.round((passed / total) * max) : 0
-      return { componentId: input.componentId, earned, max, passed, total }
-    } finally {
-      await clearPyodideTimeout(pyodide)
-    }
+    const results = await runChecks({
+      studentCode: input.studentCode,
+      checkCode: input.checkCode,
+      auxFiles: input.auxFiles,
+      timeoutMs: TIMEOUT_MS,
+    })
+    const total = results.length
+    const passed = results.filter((r) => r.passed).length
+    const earned = total > 0 ? Math.round((passed / total) * max) : 0
+    return { componentId: input.componentId, earned, max, passed, total }
   } catch {
-    // Timeout / runtime error in the harness → score 0, teacher can override.
+    // Worker module already converts timeout / abort / crash into all-failed
+    // results; reaching here means something unexpected. Score 0; teacher can
+    // override.
     return { componentId: input.componentId, earned: 0, max, passed: 0, total: 0 }
   }
 }
@@ -91,8 +72,8 @@ export async function runCheck(pyodide: any, input: CheckInput): Promise<CheckRu
 /**
  * The full grading-time driver, used by BOTH the individual (one student) and
  * "Run all" (whole class) flows: for each student, fetch their check inputs,
- * re-run on the teacher's Pyodide, and persist each result (ExamCheckRun).
- * `onProgress(done, total)` ticks per student. Loads Pyodide once.
+ * re-run on the teacher's Pyodide worker, and persist each result
+ * (ExamCheckRun). `onProgress(done, total)` ticks per student.
  */
 export async function runChecksForStudents(
   pageId: string,
@@ -100,14 +81,14 @@ export async function runChecksForStudents(
   onProgress?: (done: number, total: number) => void,
 ): Promise<void> {
   if (studentIds.length === 0) return
-  const pyodide = await loadGradingPyodide()
+  loadGradingPyodide()
   let done = 0
   for (const studentId of studentIds) {
     try {
       const res = await fetch(`/api/exams/${pageId}/check-inputs?studentId=${encodeURIComponent(studentId)}`)
       const { inputs } = (await res.json()) as { inputs: CheckInput[] }
       for (const input of inputs ?? []) {
-        const result = await runCheck(pyodide, input)
+        const result = await runCheck(input)
         if (result.notRun) continue // no submitted code → leave unscored
         await fetch(`/api/exams/${pageId}/check-run`, {
           method: 'PUT',
