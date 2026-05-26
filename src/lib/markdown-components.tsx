@@ -530,7 +530,6 @@ export function createMarkdownComponents(
     const showFeedback = showFeedbackSet
       ? props['showFeedback'] !== false && props['showfeedback'] !== 'false'
       : undefined
-    const allowUpdate = props['allowUpdate'] === true || props['allowUpdate'] === 'true' || props['allowupdate'] === 'true'
     const minValue = props['minValue'] !== undefined ? Number(props['minValue']) : (props['minvalue'] !== undefined ? Number(props['minvalue']) : undefined)
     const maxValue = props['maxValue'] !== undefined ? Number(props['maxValue']) : (props['maxvalue'] !== undefined ? Number(props['maxvalue']) : undefined)
     const step = props['step'] !== undefined ? Number(props['step']) : undefined
@@ -570,7 +569,6 @@ export function createMarkdownComponents(
         pageId={pageId}
         type={type}
         showFeedback={showFeedback}
-        allowUpdate={allowUpdate}
         minValue={minValue}
         maxValue={maxValue}
         step={step}

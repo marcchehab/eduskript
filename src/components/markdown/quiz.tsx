@@ -15,6 +15,8 @@ import { useIsExamPage } from '@/contexts/exam-page-context'
 import { useStageLocked } from './stage-flow'
 import { useComponentReview } from '@/contexts/exam-review-context'
 import { GradeBadge } from '@/components/exam/grade-badge'
+import { postCheckpoint } from '@/lib/userdata/checkpoints'
+import { TextAnswerHistory } from './text-answer-history'
 
 interface QuestionProps {
   children: ReactNode
@@ -22,7 +24,6 @@ interface QuestionProps {
   id: string
   pageId: string
   showFeedback?: boolean
-  allowUpdate?: boolean
   minValue?: number
   maxValue?: number
   step?: number
@@ -54,18 +55,24 @@ interface OptionProps {
 // Parse correct prop to boolean
 const isCorrect = (value: 'true' | 'false' | undefined): boolean => value === 'true'
 
+// Idle delay before an edited answer is autosaved. Short enough that a fast
+// hand-in rarely outruns it; a textarea blur also flushes immediately. The
+// IndexedDB write inside updateData is synchronous-on-await — only the network
+// push is debounced by the sync engine — so this is a UI-spam control, not the
+// durability guarantee.
+const AUTOSAVE_DEBOUNCE_MS = 400
+
 // Inner component that renders after data is loaded.
 //
-// surveyMode: when true, hides per-question submit button + saved indicator,
-// and auto-fires updateData on every state change instead of only on submit
-// click. The page-level SurveyProvider's "Senden" button is the only submit
-// path in survey mode. isSubmitted stays false throughout, which means
-// correct/wrong feedback never renders either.
+// There is no Submit button: every answer autosaves on change (debounced),
+// like the code editor. `isSubmitted` now means "a non-empty answer has been
+// saved" — it gates feedback and the "Saved" indicator and counts the question
+// as answered. surveyMode still hides feedback; the page-level SurveyProvider's
+// "Send" button remains the batch-submit path, fed by per-question autosaves.
 function QuestionInner({
   children,
   type = 'multiple',
   showFeedback: showFeedbackProp,
-  allowUpdate: allowUpdateProp = false,
   minValue = 0,
   maxValue = 100,
   step = 1,
@@ -80,6 +87,7 @@ function QuestionInner({
   surveyMode = false,
   componentId,
   reviewMode = false,
+  onAutosaveCheckpoint,
 }: Omit<QuestionProps, 'id' | 'pageId'> & {
   initialData: QuizData | null
   updateData: (data: QuizData, options?: { immediate?: boolean }) => Promise<void>
@@ -89,6 +97,9 @@ function QuestionInner({
   /** Read-only graded view (teacher grading or student reviewing a returned
    *  exam): reveal correctness, disable inputs, show the grade badge. */
   reviewMode?: boolean
+  /** Called after a text answer autosaves so the parent can snapshot it as a
+   *  checkpoint (exam answer-history timeline). Text questions only. */
+  onAutosaveCheckpoint?: (data: QuizData) => void
 }) {
   // Feedback defaults ON, except on exam pages where it defaults OFF — students
   // shouldn't see correct/wrong (or the auto-check score/diff) mid-exam. Authors
@@ -99,7 +110,6 @@ function QuestionInner({
   const isExamPage = useIsExamPage()
   // Review mode always reveals correctness (the point is to show what's right).
   const showFeedback = surveyMode ? false : reviewMode ? true : (showFeedbackProp ?? !isExamPage)
-  const allowUpdate = surveyMode ? true : allowUpdateProp
   // A question in a handed-in (past) exam stage is fully read-only, regardless
   // of submit state — folded into the gates + disabled props below.
   // Review mode (graded read-only view) locks the widget just like a handed-in
@@ -119,10 +129,6 @@ function QuestionInner({
     initialData?.rangeAnswer ?? { min: minValue, max: maxValue }
   )
   const [isSubmitted, setIsSubmitted] = useState(initialData?.isSubmitted ?? false)
-  // Snapshot of the data at the last Save click. Drives the "Update" button's
-  // grey-when-unchanged state — once you click Save, editing anything makes
-  // Update active again. Compared by value (not reference).
-  const [lastSaved, setLastSaved] = useState<QuizData | null>(initialData?.isSubmitted ? initialData : null)
 
   // Review mode swaps initialData to the reviewed student's answer *after* mount
   // (it arrives from an async fetch), so re-sync local state when it changes.
@@ -139,9 +145,11 @@ function QuestionInner({
   }, [initialData, reviewMode])
 
 
-  // Handle selection for choice questions
+  // Input handlers only mutate local state; persistence is the autosave effect
+  // below. Edits are allowed any time the widget isn't frozen (handed-in stage
+  // or graded review).
   const handleSelect = (index: number) => {
-    if (stageLocked || (!allowUpdate && isSubmitted)) return
+    if (stageLocked) return
 
     if (type === 'single') {
       setSelected([index])
@@ -154,21 +162,18 @@ function QuestionInner({
     }
   }
 
-  // Handle text input
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    if (stageLocked || (!allowUpdate && isSubmitted)) return
+    if (stageLocked) return
     setTextAnswer(e.target.value)
   }
 
-  // Handle number input
   const handleNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (stageLocked || (!allowUpdate && isSubmitted)) return
+    if (stageLocked) return
     setNumberAnswer(Number(e.target.value))
   }
 
-  // Handle range input
   const handleRangeMinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (stageLocked || (!allowUpdate && isSubmitted)) return
+    if (stageLocked) return
     const newMin = Number(e.target.value)
     setRangeAnswer(prev => ({
       min: Math.min(newMin, prev.max),
@@ -177,7 +182,7 @@ function QuestionInner({
   }
 
   const handleRangeMaxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (stageLocked || (!allowUpdate && isSubmitted)) return
+    if (stageLocked) return
     const newMax = Number(e.target.value)
     setRangeAnswer(prev => ({
       min: prev.min,
@@ -185,19 +190,19 @@ function QuestionInner({
     }))
   }
 
-  // Submit answer
-  const handleSubmit = async () => {
-    if (
-      ((type === 'single' || type === 'multiple') && selected.length === 0) ||
-      (type === 'text' && !textAnswer.trim()) ||
-      (type === 'number' && numberAnswer === undefined) ||
-      (type === 'range' && rangeAnswer === undefined)
-    ) return
+  const isEmptyAnswer =
+    ((type === 'single' || type === 'multiple') && selected.length === 0) ||
+    (type === 'text' && !textAnswer.trim()) ||
+    (type === 'number' && numberAnswer === undefined) ||
+    (type === 'range' && rangeAnswer === undefined)
 
-    setIsSubmitted(true)
-
-    // Text auto-check: grade against expected and persist the ratio + earned
-    // points so the teacher view can show the grade without re-deriving it.
+  // Assemble a QuizData record from current widget state. Lifted out of the old
+  // handleSubmit so autosave and the dedup baseline share one shape. The
+  // text/choice auto-scores computed here are for LIVE teacher preview only —
+  // authoritative grading re-derives them on the teacher's device (see
+  // score-component.ts / exam-review-context). Choice indices use the sparse
+  // Children.toArray positions (see extractOptionsInfo) — do not compact.
+  const buildQuizData = (submitted: boolean): QuizData => {
     let textFields: Partial<QuizData> = {}
     if (type === 'text') {
       textFields = { textAnswer }
@@ -208,11 +213,6 @@ function QuestionInner({
       }
     }
 
-    // Choice auto-score: persist maxPoints on an exact match of the selected set
-    // vs the correct set, else 0. Only when correct answers are defined (i.e.
-    // not a survey). Computed here because correctIndices share the same sparse
-    // Children.toArray indexing as `selected` — the grading engine reads this
-    // rather than re-deriving correctness from raw indices server-side.
     let choiceFields: Partial<QuizData> = {}
     if ((type === 'single' || type === 'multiple') && !surveyMode) {
       const { correctIndices } = extractOptionsInfo(children, type)
@@ -224,46 +224,51 @@ function QuestionInner({
       }
     }
 
-    const quizData: QuizData = {
-      isSubmitted: true,
+    return {
+      isSubmitted: submitted,
       ...(type === 'single' || type === 'multiple' ? { selected } : {}),
       ...choiceFields,
       ...textFields,
       ...(type === 'number' ? { numberAnswer } : {}),
       ...(type === 'range' ? { rangeAnswer } : {})
     }
-
-    setLastSaved(quizData)
-    await updateData(quizData, { immediate: true })
   }
 
-  // True when the current widget state matches the last Save — Update is
-  // pointless. Disables the Update button until the user actually edits.
-  const isUnchangedSinceSave = (() => {
-    if (!isSubmitted || !lastSaved) return false
-    if (type === 'single' || type === 'multiple') {
-      const a = selected, b = lastSaved.selected ?? []
-      if (a.length !== b.length) return false
-      const sortedA = [...a].sort()
-      const sortedB = [...b].sort()
-      return sortedA.every((v, i) => v === sortedB[i])
-    }
-    if (type === 'text') return textAnswer === (lastSaved.textAnswer ?? '')
-    if (type === 'number') return numberAnswer === lastSaved.numberAnswer
-    if (type === 'range') {
-      const r = lastSaved.rangeAnswer
-      return !!r && r.min === rangeAnswer.min && r.max === rangeAnswer.max
-    }
-    return false
-  })()
+  // Autosave-on-change. Commits the current answer (deduped by content) to
+  // IndexedDB and syncs it. The 400ms debounce below already coalesces typing
+  // and slider drags into one commit, so we sync `immediate: true` (like the
+  // old Submit did) — the sync engine's debounced path drops items when a sync
+  // is already in flight, which would silently strand answers until hand-in.
+  // Skipped while reviewing/locked or empty.
+  const lastSavedSigRef = useRef<string | null>(null)
+  const mountedRef = useRef(false)
 
-  const isEmptyAnswer =
-    ((type === 'single' || type === 'multiple') && selected.length === 0) ||
-    (type === 'text' && !textAnswer.trim()) ||
-    (type === 'number' && numberAnswer === undefined) ||
-    (type === 'range' && rangeAnswer === undefined)
+  const commitAutosave = () => {
+    if (reviewMode || stageLocked || isEmptyAnswer) return
+    const data = buildQuizData(true)
+    const sig = JSON.stringify(data)
+    if (sig === lastSavedSigRef.current) return
+    lastSavedSigRef.current = sig
+    if (!isSubmitted) setIsSubmitted(true)
+    void updateData(data, { immediate: true })
+    // Snapshot text answers (exam pages only) so the teacher gets an answer
+    // history. Deduped by the signature check above. Survey passes no callback.
+    if (type === 'text' && isExamPage) onAutosaveCheckpoint?.(data)
+  }
 
-  const isButtonDisabled = isEmptyAnswer || isUnchangedSinceSave
+  useEffect(() => {
+    // First run = mount: seed the dedup baseline from hydrated data (so an
+    // unchanged returning answer doesn't re-save) and never save on mount.
+    if (!mountedRef.current) {
+      mountedRef.current = true
+      lastSavedSigRef.current =
+        reviewMode || stageLocked || isEmptyAnswer ? null : JSON.stringify(buildQuizData(true))
+      return
+    }
+    const t = setTimeout(commitAutosave, AUTOSAVE_DEBOUNCE_MS)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected, textAnswer, numberAnswer, rangeAnswer, reviewMode, stageLocked])
 
   // Live auto-check result for the text feedback panel (recomputed from the
   // current answer; matches the persisted score when the answer is unedited).
@@ -290,7 +295,7 @@ function QuestionInner({
                 onClick={() => handleSelect(index)}
                 className={cn(
                   'p-4 border rounded-lg transition-colors',
-                  allowUpdate || !isSubmitted ? 'cursor-pointer hover:bg-accent/50' : 'cursor-default',
+                  stageLocked ? 'cursor-default' : 'cursor-pointer hover:bg-accent/50',
                   isSelected && !showResult && 'border-primary bg-primary/5',
                   showResult && isSelected && optionIsCorrect && 'border-green-600 dark:border-green-500 bg-green-500/10',
                   showResult && isSelected && !optionIsCorrect && 'border-red-600 dark:border-red-500 bg-red-500/10',
@@ -355,10 +360,11 @@ function QuestionInner({
           <textarea
             value={textAnswer}
             onChange={handleTextChange}
-            disabled={stageLocked || (isSubmitted && !allowUpdate)}
+            onBlur={commitAutosave}
+            disabled={stageLocked}
             className={cn(
               'w-full p-3 border rounded-lg min-h-[120px] bg-background resize-y',
-              isSubmitted && !allowUpdate && 'opacity-70 cursor-not-allowed'
+              stageLocked && 'opacity-70 cursor-not-allowed'
             )}
             placeholder="Enter your answer..."
           />
@@ -435,10 +441,10 @@ function QuestionInner({
               step={step}
               value={numberAnswer}
               onChange={handleNumberChange}
-              disabled={stageLocked || (isSubmitted && !allowUpdate)}
+              disabled={stageLocked}
               className={cn(
                 'w-full',
-                isSubmitted && !allowUpdate && 'opacity-70 cursor-not-allowed'
+                stageLocked && 'opacity-70 cursor-not-allowed'
               )}
             />
             {/* Optional end labels — sit directly under the track, one at
@@ -487,7 +493,7 @@ function QuestionInner({
                 step={step}
                 value={rangeAnswer.min}
                 onChange={handleRangeMinChange}
-                disabled={stageLocked || (isSubmitted && !allowUpdate)}
+                disabled={stageLocked}
                 className={cn(
                   'absolute inset-0 w-full h-full appearance-none bg-transparent cursor-pointer',
                   '[&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5',
@@ -499,7 +505,7 @@ function QuestionInner({
                   '[&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-background',
                   '[&::-moz-range-thumb]:shadow-md [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:border-0',
                   '[&::-moz-range-track]:bg-transparent',
-                  isSubmitted && !allowUpdate && 'opacity-70 cursor-not-allowed'
+                  stageLocked && 'opacity-70 cursor-not-allowed'
                 )}
                 style={{
                   clipPath: `inset(0 ${100 - ((rangeAnswer.min + rangeAnswer.max) / 2 - minValue) / (maxValue - minValue) * 100}% 0 0)`
@@ -513,7 +519,7 @@ function QuestionInner({
                 step={step}
                 value={rangeAnswer.max}
                 onChange={handleRangeMaxChange}
-                disabled={stageLocked || (isSubmitted && !allowUpdate)}
+                disabled={stageLocked}
                 className={cn(
                   'absolute inset-0 w-full h-full appearance-none bg-transparent cursor-pointer',
                   '[&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5',
@@ -525,7 +531,7 @@ function QuestionInner({
                   '[&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-background',
                   '[&::-moz-range-thumb]:shadow-md [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:border-0',
                   '[&::-moz-range-track]:bg-transparent',
-                  isSubmitted && !allowUpdate && 'opacity-70 cursor-not-allowed'
+                  stageLocked && 'opacity-70 cursor-not-allowed'
                 )}
                 style={{
                   clipPath: `inset(0 0 0 ${((rangeAnswer.min + rangeAnswer.max) / 2 - minValue) / (maxValue - minValue) * 100}%)`
@@ -539,34 +545,17 @@ function QuestionInner({
         </div>
       )}
 
-      {/* Submit Button + Saved indicator — survey mode reuses the same UX
-          (explicit per-question save). Survey provider intercepts the
-          updateData call to capture the answer instead of syncing it to
-          per-user storage. */}
-      <div className="flex items-center justify-between pt-2">
-        {(!isSubmitted || allowUpdate) && !stageLocked && (
-          <button
-            onClick={handleSubmit}
-            disabled={isButtonDisabled}
-            className={cn(
-              'px-4 py-2 rounded-lg font-medium transition-colors',
-              'bg-primary text-primary-foreground',
-              isButtonDisabled
-                ? 'opacity-50 cursor-not-allowed'
-                : 'hover:bg-primary/90'
-            )}
-          >
-            {isSubmitted && allowUpdate ? 'Update' : (surveyMode ? 'Save' : 'Submit')}
-          </button>
-        )}
-
-        {isSubmitted && !reviewMode && (
+      {/* Autosave indicator — answers persist on change; no explicit submit.
+          Hidden in review (read-only), in survey mode (the page-level Send is
+          the submit affordance there), and until the first non-empty answer. */}
+      {isSubmitted && !reviewMode && !stageLocked && !surveyMode && (
+        <div className="flex items-center justify-end pt-2">
           <div className="text-sm text-muted-foreground flex items-center gap-1.5">
             <Check className="w-4 h-4 text-green-500" />
             <span>Saved</span>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* In-exam grade badge (teacher grading / student returned review). */}
       {componentId && <GradeBadge componentId={componentId} />}
@@ -766,7 +755,8 @@ function SyncedQuestion({
   // In-exam graded view: teacher grading this student (show their answer +
   // editable score) or student reviewing their returned exam (read-only).
   // Must run before the isLoading early return (rules of hooks).
-  const { active: reviewActive, mode: reviewModeType, review } = useComponentReview(componentId)
+  const { active: reviewActive, mode: reviewModeType, review, studentId: reviewStudentId, refreshGrades } =
+    useComponentReview(componentId)
 
   // Extract correct indices and option labels for the progress bar
   const { correctIndices, optionLabels } = extractOptionsInfo(children, type)
@@ -803,6 +793,57 @@ function SyncedQuestion({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoading, data, coupledVideo])
 
+  // Authoritative auto-grade, computed on the TEACHER's device (grade mode).
+  // Re-derives this question's score from the student's RAW answer + this
+  // question's answer key (rendered here = trusted) and persists it as the
+  // component's ExamCheckRun — the same authoritative store python checks use.
+  // The client-stored choiceScore/textScore is never trusted for the grade.
+  // Free text without an `expected` key and number/range yield no auto score
+  // (teacher grades them manually via an override). Runs once per (student,
+  // component); refreshGrades reloads the totals after.
+  const autoGradedRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (reviewModeType !== 'grade' || !reviewStudentId) return
+    const payload = review?.answerPayload as QuizData | undefined
+    if (!payload) return
+
+    let earned: number | null = null
+    if (type === 'single' || type === 'multiple') {
+      if (correctIndices.length > 0) {
+        const sel = [...(payload.selected ?? [])].sort((a, b) => a - b)
+        const cor = [...correctIndices].sort((a, b) => a - b)
+        const exact = sel.length === cor.length && sel.every((v, i) => v === cor[i])
+        earned = exact ? (rest.points ?? 1) : 0
+      }
+    } else if (type === 'text' && rest.expected != null) {
+      const r = compareOutput(payload.textAnswer ?? '', rest.expected, {
+        ignoreCase: rest.ignoreCase,
+        ignoreWhitespace: rest.ignoreWhitespace,
+      })
+      earned = scoreFromRatio(r.ratio, rest.points ?? 1)
+    }
+    if (earned == null) return
+
+    const key = `${reviewStudentId}:${componentId}`
+    if (autoGradedRef.current === key) return
+    autoGradedRef.current = key
+    fetch(`/api/exams/${pageId}/check-run`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        studentId: reviewStudentId,
+        componentId,
+        earned,
+        max: rest.points ?? 1,
+        passed: 0,
+        total: 0,
+      }),
+    })
+      .then((r) => { if (r.ok) refreshGrades() })
+      .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reviewModeType, reviewStudentId, componentId, review?.answerPayload, pageId])
+
   if (isLoading) {
     return (
       <div className="border rounded-lg p-4 animate-pulse">
@@ -829,9 +870,18 @@ function SyncedQuestion({
         updateData={updateDataAndGate}
         componentId={componentId}
         reviewMode={reviewActive}
+        onAutosaveCheckpoint={(qd) => {
+          void postCheckpoint({ pageId, componentId, kind: 'autosave', payload: qd })
+        }}
       >
         {children}
       </QuestionInner>
+
+      {/* Teacher answer-history timeline — grade mode + text only (the
+          snapshots route is teacher-only, so never in student review mode). */}
+      {reviewActive && reviewModeType === 'grade' && type === 'text' && reviewStudentId && (
+        <TextAnswerHistory pageId={pageId} studentId={reviewStudentId} componentId={componentId} />
+      )}
 
       {/* Teacher progress bar - only visible when teacher has selected a class */}
       {isTeacher && selectedClass && !reviewActive && (

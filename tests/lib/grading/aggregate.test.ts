@@ -11,11 +11,17 @@ const components: GradableComponent[] = [
 
 describe('aggregateStudent', () => {
   it('sums auto scores and grades against summed max (two-segment default)', () => {
+    // All auto scores (quiz + python) are authoritative ExamCheckRun values
+    // written on the teacher's device — the client payloads are not trusted.
     const payloads = new Map<string, unknown>([
-      ['quiz-p1', { isSubmitted: true, textScore: 1.5 }],
-      ['quiz-q2', { isSubmitted: true, choiceScore: 1 }],
+      ['quiz-p1', { isSubmitted: true, textScore: 99 }],
+      ['quiz-q2', { isSubmitted: true, choiceScore: 99 }],
     ])
-    const checkRuns = new Map([['python-check-a8', { earned: 3, max: 3 }]])
+    const checkRuns = new Map([
+      ['quiz-p1', { earned: 1.5, max: 2 }],
+      ['quiz-q2', { earned: 1, max: 1 }],
+      ['python-check-a8', { earned: 3, max: 3 }],
+    ])
     const r = aggregateStudent(components, payloads, new Map(), DEFAULT_GRADE_CONFIG, null, checkRuns)
     expect(r.totalEarned).toBeCloseTo(5.5, 10)
     expect(r.totalMax).toBe(6)
@@ -32,9 +38,9 @@ describe('aggregateStudent', () => {
   })
 
   it('teacher override wins over the auto score', () => {
-    const payloads = new Map<string, unknown>([['quiz-p1', { isSubmitted: true, textScore: 0.5 }]])
+    const checkRuns = new Map([['quiz-p1', { earned: 0.5, max: 2 }]])
     const overrides = new Map<string, QuestionOverride>([['quiz-p1', { awardedPoints: 2 }]])
-    const r = aggregateStudent(components, payloads, overrides, DEFAULT_GRADE_CONFIG, null)
+    const r = aggregateStudent(components, new Map(), overrides, DEFAULT_GRADE_CONFIG, null, checkRuns)
     const p1 = r.components.find((c) => c.componentId === 'quiz-p1')!
     expect(p1).toMatchObject({ earned: 2, overridden: true, autoEarned: 0.5 })
     expect(r.totalEarned).toBe(2)

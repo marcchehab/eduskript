@@ -3,14 +3,16 @@
  * or PythonCheckData payload from UserData) plus its declared max and any
  * teacher override into `{earned, max}`. Pure — no DB.
  *
- * Auto scores:
- * - text quiz   → QuizData.textScore   (partial credit, scoreFromRatio)
- * - choice quiz → QuizData.choiceScore (max on exact match, else 0)
- * - python      → `checkRun.earned` — the AUTHORITATIVE result of re-running the
- *   student's submitted code on the teacher's device (ExamCheckRun). The client's
- *   PythonCheckData.earnedPoints is NOT trusted for grading (tamper-able, and
- *   absent in real exams where Check is hidden). null checkRun = not yet run → 0.
- * number/range/sql have no auto score — gradable only via a teacher override.
+ * Auto scores — all AUTHORITATIVE values come from `checkRun` (ExamCheckRun),
+ * the result computed on the TEACHER's device during grading. The client's
+ * stored scores (QuizData.textScore/choiceScore, PythonCheckData.earnedPoints)
+ * are live-preview only and NOT trusted here (tamper-able; and the student's
+ * device is never the grader). null checkRun = not yet graded → 0.
+ * - text quiz          → `checkRun.earned` (teacher re-ran the similarity check)
+ * - single/multiple    → `checkRun.earned` (teacher re-derived choice correctness)
+ * - python             → `checkRun.earned` (teacher re-ran the asserts)
+ * number/range/sql and free-text without an answer key have no auto score —
+ * gradable only via a teacher override.
  *
  * A teacher override (ExamQuestionGrade) always WINS for earned (and for max,
  * if it set one).
@@ -28,7 +30,8 @@ export interface ComponentScoreInput {
   questionType?: string
   /** Max points declared in the page markdown (authoritative when present). */
   declaredMax?: number | null
-  /** Latest UserData payload for this component (null = unanswered). Quiz only. */
+  /** Latest UserData payload for this component. No longer read for scoring
+   *  (authoritative scores come from `checkRun`); retained for callers/tests. */
   payload?: Partial<QuizData & PythonCheckData> | null
   /** Authoritative re-run result for python components (null = not run). */
   checkRun?: { earned: number; max: number } | null
@@ -47,28 +50,22 @@ export interface ComponentScore {
   autoEarned: number
 }
 
-/** Auto-earned points, or null if nothing to score. */
+/** Auto-earned points, or null if nothing to score (not yet graded). */
 function autoEarnedPoints(input: ComponentScoreInput): number | null {
-  const { kind, questionType, payload, checkRun } = input
-  if (kind === 'python') {
-    // Authoritative re-run only — never the client's PythonCheckData.
+  const { kind, questionType, checkRun } = input
+  // python + auto-gradable quiz (text/single/multiple) all read the
+  // teacher-device re-run. Never the client's stored scores.
+  if (kind === 'python') return checkRun ? checkRun.earned : null
+  if (questionType === 'text' || questionType === 'single' || questionType === 'multiple') {
     return checkRun ? checkRun.earned : null
-  }
-  if (!payload) return null
-  if (questionType === 'text') {
-    return typeof payload.textScore === 'number' ? payload.textScore : null
-  }
-  if (questionType === 'single' || questionType === 'multiple') {
-    return typeof payload.choiceScore === 'number' ? payload.choiceScore : null
   }
   // number / range / unknown: no auto score
   return null
 }
 
-/** Best-effort max when the markdown didn't declare one (python: the re-run's max). */
+/** Best-effort max when the markdown didn't declare one (the re-run's max). */
 function payloadMax(input: ComponentScoreInput): number | null {
-  if (input.kind === 'python' && input.checkRun) return input.checkRun.max
-  return null
+  return input.checkRun ? input.checkRun.max : null
 }
 
 export function scoreComponent(input: ComponentScoreInput): ComponentScore {

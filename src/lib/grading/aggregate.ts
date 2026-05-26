@@ -4,10 +4,13 @@
  * is the batched DB wrapper the grading API uses (one UserData query + one
  * override query for the whole class).
  *
- * Answers are read from UserData (adapter=componentId, itemId=pageId) — NOT from
- * handin checkpoints, which only capture code editors. Per-question auto scores
- * are values the client persisted on submit (textScore / choiceScore /
- * earnedPoints); a teacher ExamQuestionGrade override wins.
+ * Raw answers are read from UserData (adapter=componentId, itemId=pageId) — NOT
+ * from handin checkpoints, which only capture code editors. Per-question auto
+ * scores are AUTHORITATIVE ExamCheckRun values, computed on the teacher's device
+ * during grading (python asserts re-run; quiz choice/text re-derived from the
+ * raw answer) — the client's persisted textScore/choiceScore/earnedPoints is
+ * live-preview only and not trusted here. A teacher ExamQuestionGrade override
+ * wins over the auto score.
  *
  * Related: [[components]], [[score-component]], [[grade-formula]].
  */

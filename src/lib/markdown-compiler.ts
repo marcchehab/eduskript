@@ -128,7 +128,7 @@ export const sanitizeSchema = {
     // rehypeAllowPluginAttrs before sanitize — see rehype-plugins/plugin-attrs.ts.
     'plugin': ['src', 'id', 'height', 'width'],
     'pdf': ['src', 'height'],
-    'question': ['id', 'type', 'showfeedback', 'allowupdate', 'minvalue', 'maxvalue', 'step', 'minlabel', 'maxlabel', 'gateat', 'gate-at', 'dataGateAt', 'data-gate-at', 'points', 'data-expected', 'dataExpected', 'ignore-case', 'ignorecase', 'ignore-whitespace', 'ignorewhitespace'],
+    'question': ['id', 'type', 'showfeedback', 'minvalue', 'maxvalue', 'step', 'minlabel', 'maxlabel', 'gateat', 'gate-at', 'dataGateAt', 'data-gate-at', 'points', 'data-expected', 'dataExpected', 'ignore-case', 'ignorecase', 'ignore-whitespace', 'ignorewhitespace'],
     'quiz-option': ['correct', 'is', 'feedback'],
     'answer': ['correct', 'is', 'feedback'],
     'yt': ['time', 'videoid', 'label'],

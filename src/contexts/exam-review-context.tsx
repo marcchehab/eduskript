@@ -40,12 +40,19 @@ interface ReviewContextValue extends ReviewState {
   active: boolean
   mode: 'grade' | 'review'
   loading: boolean
+  /** The exam page id (for components writing their own auto-grade). */
+  pageId: string
+  /** The student being reviewed (null = inert). */
+  studentId: string | null
   /** Teacher only: re-running this student's python checks on this device. */
   runningChecks: boolean
   /** Teacher only: set (number) or clear (null = revert to auto) an override. */
   setOverride: (componentId: string, awardedPoints: number | null) => Promise<void>
   /** Teacher only: force a re-run of this student's python checks. */
   rerunChecks: () => Promise<void>
+  /** Reload grades (debounced). Components call this after writing their own
+   *  authoritative auto-grade (ExamCheckRun) so the totals/badges refresh. */
+  refreshGrades: () => void
 }
 
 const empty: ReviewState = { grade: null, totalEarned: null, totalMax: null, byComponent: {} }
@@ -55,9 +62,12 @@ const ExamReviewContext = createContext<ReviewContextValue>({
   active: false,
   mode: 'review',
   loading: false,
+  pageId: '',
+  studentId: null,
   runningChecks: false,
   setOverride: async () => {},
   rerunChecks: async () => {},
+  refreshGrades: () => {},
 })
 
 interface ProviderProps {
@@ -132,6 +142,15 @@ export function ExamReviewProvider({ pageId, mode, studentId, children }: Provid
     await runChecks()
   }, [studentId, runChecks])
 
+  // Debounced reload. Quiz components in grade mode each write their own
+  // authoritative auto-grade (ExamCheckRun) then call this; the debounce
+  // coalesces a page of them into a single /review refetch.
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const refreshGrades = useCallback(() => {
+    if (refreshTimer.current) clearTimeout(refreshTimer.current)
+    refreshTimer.current = setTimeout(() => load(), 400)
+  }, [load])
+
   // Auto-run once per student when a grade-mode review has python components.
   useEffect(() => {
     if (mode !== 'grade' || !studentId) return
@@ -143,8 +162,8 @@ export function ExamReviewProvider({ pageId, mode, studentId, children }: Provid
   }, [mode, studentId, state.byComponent, runChecks])
 
   const value = useMemo<ReviewContextValue>(
-    () => ({ ...state, active, mode, loading, runningChecks, setOverride, rerunChecks }),
-    [state, active, mode, loading, runningChecks, setOverride, rerunChecks],
+    () => ({ ...state, active, mode, loading, pageId, studentId, runningChecks, setOverride, rerunChecks, refreshGrades }),
+    [state, active, mode, loading, pageId, studentId, runningChecks, setOverride, rerunChecks, refreshGrades],
   )
 
   return <ExamReviewContext.Provider value={value}>{children}</ExamReviewContext.Provider>
@@ -154,15 +173,21 @@ export function ExamReviewProvider({ pageId, mode, studentId, children }: Provid
 export function useComponentReview(componentId: string): {
   active: boolean
   mode: 'grade' | 'review'
+  pageId: string
+  studentId: string | null
   review: ComponentReview | null
   setOverride: (awardedPoints: number | null) => Promise<void>
+  refreshGrades: () => void
 } {
   const ctx = useContext(ExamReviewContext)
   return {
     active: ctx.active,
     mode: ctx.mode,
+    pageId: ctx.pageId,
+    studentId: ctx.studentId,
     review: ctx.active ? ctx.byComponent[componentId] ?? null : null,
     setOverride: (awardedPoints) => ctx.setOverride(componentId, awardedPoints),
+    refreshGrades: ctx.refreshGrades,
   }
 }
 

@@ -25,14 +25,29 @@ describe('scoreComponent — python (authoritative re-run)', () => {
   })
 })
 
-describe('scoreComponent — quiz text & choice', () => {
-  it('text uses textScore', () => {
-    const s = scoreComponent({ kind: 'quiz', questionType: 'text', declaredMax: 2, payload: { textScore: 1.5, isSubmitted: true } })
+describe('scoreComponent — quiz text & choice (authoritative re-grade)', () => {
+  it('text reads the teacher re-grade (checkRun), not the client textScore', () => {
+    const s = scoreComponent({
+      kind: 'quiz', questionType: 'text', declaredMax: 2,
+      payload: { textScore: 99, isSubmitted: true }, // client value — must be ignored
+      checkRun: { earned: 1.5, max: 2 },
+    })
     expect(s).toMatchObject({ earned: 1.5, max: 2, answered: true })
   })
-  it('choice uses choiceScore', () => {
-    const s = scoreComponent({ kind: 'quiz', questionType: 'single', declaredMax: 1, payload: { choiceScore: 1, isSubmitted: true } })
+  it('choice reads the teacher re-grade (checkRun), not the client choiceScore', () => {
+    const s = scoreComponent({
+      kind: 'quiz', questionType: 'single', declaredMax: 1,
+      payload: { choiceScore: 99, isSubmitted: true }, // client value — must be ignored
+      checkRun: { earned: 1, max: 1 },
+    })
     expect(s).toMatchObject({ earned: 1, max: 1, answered: true })
+  })
+  it('not yet graded (no checkRun) → earned 0, answered false (client score never trusted)', () => {
+    const s = scoreComponent({
+      kind: 'quiz', questionType: 'text', declaredMax: 2,
+      payload: { textScore: 2, isSubmitted: true }, checkRun: null,
+    })
+    expect(s).toMatchObject({ earned: 0, max: 2, answered: false })
   })
   it('number/range have no auto score (answered=false, earned 0)', () => {
     const s = scoreComponent({ kind: 'quiz', questionType: 'number', declaredMax: 3, payload: { numberAnswer: 5, isSubmitted: true } })
@@ -51,12 +66,13 @@ describe('scoreComponent — unanswered', () => {
 })
 
 describe('scoreComponent — teacher override wins', () => {
-  it('replaces earned and marks overridden; keeps autoEarned for display', () => {
+  it('replaces earned and marks overridden; keeps autoEarned (re-grade) for display', () => {
     const s = scoreComponent({
       kind: 'quiz',
       questionType: 'text',
       declaredMax: 2,
-      payload: { textScore: 0.5, isSubmitted: true },
+      payload: { textScore: 99, isSubmitted: true },
+      checkRun: { earned: 0.5, max: 2 },
       override: { awardedPoints: 2 },
     })
     expect(s).toMatchObject({ earned: 2, max: 2, overridden: true, autoEarned: 0.5, answered: true })

@@ -7,9 +7,13 @@
  *   - kind='run'     — student clicked Run (deduped client-side: identical
  *                      consecutive runs collapse to a single checkpoint)
  *   - kind='handin'  — exam hand-in (also written via the hand-in route's batch path)
+ *   - kind='autosave'— text-quiz answer snapshot on change (exam pages only;
+ *                      deduped client-side by content). Does NOT emit a teacher
+ *                      live-feed SSE event — the teacher reads the history on
+ *                      demand via /component-snapshots.
  *
- * Bounded volume because all four events are user-initiated. This is NOT a
- * keystroke autosave log — that stays local in IndexedDB userData_history.
+ * Bounded volume because all kinds are debounced/deduped client-side. This is
+ * NOT a keystroke autosave log — that stays local in IndexedDB userData_history.
  *
  * Auth model:
  *   POST: NextAuth session OR exam_session cookie. Teachers must be on a paid
@@ -31,12 +35,12 @@ import { eventBus } from '@/lib/events'
 interface CheckpointInput {
   pageId: string
   componentId: string
-  kind: 'manual' | 'check' | 'handin' | 'run'
+  kind: 'manual' | 'check' | 'handin' | 'run' | 'autosave'
   payload: unknown
   label?: string
 }
 
-const VALID_KINDS = new Set(['manual', 'check', 'handin', 'run'])
+const VALID_KINDS = new Set(['manual', 'check', 'handin', 'run', 'autosave'])
 
 async function resolveAuthUserId(): Promise<{ userId: string; isTeacher: boolean } | null> {
   const session = await getServerSession(authOptions)
@@ -127,16 +131,18 @@ export async function POST(request: NextRequest) {
 
     // Student-initiated checkpoints (Run / Check / manual save) feed the
     // teacher's "view this student" snapshot UI. Emit per page touched so an
-    // open teacher viewer refetches in real time. Bounded by the user-action
-    // cadence — auto-saves never reach this endpoint.
-    if (!auth.isTeacher) {
+    // open teacher viewer refetches in real time. 'autosave' is excluded — it
+    // fires on every debounced keystroke and would flood the live feed; the
+    // teacher reads that history on demand instead.
+    const liveItems = items.filter((item) => item.kind !== 'autosave')
+    if (!auth.isTeacher && liveItems.length > 0) {
       try {
         const memberships = await prisma.classMembership.findMany({
           where: { studentId: auth.userId },
           select: { classId: true },
         })
         if (memberships.length > 0) {
-          const pageIds = [...new Set(items.map((item) => item.pageId))]
+          const pageIds = [...new Set(liveItems.map((item) => item.pageId))]
           await Promise.all(
             pageIds.flatMap((pageId) =>
               memberships.map((m) =>
