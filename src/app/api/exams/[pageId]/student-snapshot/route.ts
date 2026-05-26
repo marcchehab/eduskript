@@ -83,6 +83,31 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }
     }
 
+    // Fall back to the student's LIVE userData for any editor with no
+    // checkpoint. With exam-mode streaming, a student who typed code but never
+    // ran/checked/handed-in still has their work in userData (no checkpoint) —
+    // without this the teacher sees default content. Mirrors check-inputs
+    // (handin checkpoint preferred, else live userData).
+    const liveRows = await prisma.userData.findMany({
+      where: {
+        userId: studentId,
+        itemId: pageId,
+        adapter: { startsWith: 'code-editor-' },
+        targetType: null,
+      },
+      select: { adapter: true, data: true, updatedAt: true },
+    })
+    for (const row of liveRows) {
+      if (snapshots[row.adapter]) continue // a checkpoint (run/check/handin) wins
+      snapshots[row.adapter] = {
+        componentId: row.adapter,
+        kind: 'live',
+        label: null,
+        createdAt: row.updatedAt.toISOString(),
+        payload: row.data,
+      }
+    }
+
     return NextResponse.json({ snapshots })
   } catch (error) {
     console.error('[student-snapshot] GET failed:', error)

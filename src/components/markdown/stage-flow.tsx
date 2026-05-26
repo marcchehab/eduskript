@@ -3,6 +3,7 @@
 import { createContext, useContext, type ReactNode } from 'react'
 import { useSyncedUserData } from '@/lib/userdata'
 import { useExamReview } from '@/contexts/exam-review-context'
+import { useTeacherClass } from '@/contexts/teacher-class-context'
 import { ConfirmationDialog } from '@/components/ui/confirmation-dialog'
 import { Button } from '@/components/ui/button'
 import { ArrowRight, Lock } from 'lucide-react'
@@ -53,6 +54,11 @@ export function StageFlow({
   // read the *viewer's* state (a teacher sits at stage 0), wrongly hiding later
   // sections. So when reviewing, reveal every stage at once, unlocked, no gate.
   const { active: reviewing } = useExamReview()
+  // A teacher/author viewing the exam page (not taking it) must see ALL stages —
+  // the stage gate is only for students taking the exam. Without this, an author
+  // previewing their own exam sits at stage 0 and can't see later sections.
+  const { isTeacher } = useTeacherClass()
+  const showAll = reviewing || isTeacher
 
   const advance = async () => {
     const prev = data?.currentStage ?? 0
@@ -63,12 +69,12 @@ export function StageFlow({
   // Until the persisted stage loads, reveal only stage 0 — this matches SSR
   // (no client data yet) so there's no hydration mismatch and no later stage
   // flashes before we know where the student is. Reviewing shows all stages.
-  const reveal = reviewing
+  const reveal = showAll
     ? stages.length - 1
     : isLoading
       ? 0
       : Math.min(data?.currentStage ?? 0, stages.length - 1)
-  const hasNext = !reviewing && reveal < stages.length - 1
+  const hasNext = !showAll && reveal < stages.length - 1
   const marker = markers[reveal]
 
   return (
@@ -77,7 +83,7 @@ export function StageFlow({
         // When reviewing, every stage is fully interactive (teacher grades all
         // sections; a returned-exam student just reads). Only the live exam
         // locks handed-in stages.
-        const locked = !reviewing && i < reveal
+        const locked = !showAll && i < reveal
         return (
           <StageLockContext.Provider key={i} value={locked}>
             {locked && (
