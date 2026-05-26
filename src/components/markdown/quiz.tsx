@@ -102,15 +102,15 @@ function QuestionInner({
    *  checkpoint (exam answer-history timeline). Text questions only. */
   onAutosaveCheckpoint?: (data: QuizData) => void
 }) {
-  // Feedback defaults ON, except on exam pages where it defaults OFF — students
-  // shouldn't see correct/wrong (or the auto-check score/diff) mid-exam. Authors
-  // can still opt in per question with showFeedback="true". Survey mode always
-  // hides it. The exam context is client-only (a client provider that doesn't
-  // reach server components), but QuestionInner is client-only too (it mounts
-  // after useSyncedUserData resolves), so this reads correctly.
+  // Live attempts NEVER reveal correctness (correct/wrong highlight, auto-check
+  // score, expected-output diff) to the student — not in exams, not in practice.
+  // Since there's no Submit button, isSubmitted flips on the first autosave, so
+  // any default-on feedback would leak the answer the instant the student types.
+  // Authors can still opt in per question with showFeedback="true". Survey mode
+  // always hides it. Review/grade mode always shows it (teacher grading, or the
+  // student reviewing their RETURNED exam — revealing what's right is the point).
   const isExamPage = useIsExamPage()
-  // Review mode always reveals correctness (the point is to show what's right).
-  const showFeedback = surveyMode ? false : reviewMode ? true : (showFeedbackProp ?? !isExamPage)
+  const showFeedback = surveyMode ? false : reviewMode ? true : (showFeedbackProp ?? false)
   // A question in a handed-in (past) exam stage is fully read-only, regardless
   // of submit state — folded into the gates + disabled props below.
   // Review mode (graded read-only view) locks the widget just like a handed-in

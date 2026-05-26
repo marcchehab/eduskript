@@ -65,36 +65,14 @@ async function wipeLocalExamData(pageId: string): Promise<void> {
 }
 
 /**
- * Gather snapshots of every on-page code editor's IndexedDB state. The
- * hand-in route stores these atomically with the ExamSubmission as
- * `kind='handin'` checkpoints — that's the only durable copy of the
- * student's actual code, since the editor's main data is otherwise just
- * the live-synced userData record (which gets overwritten by future edits).
- */
-async function gatherEditorSnapshots(pageId: string): Promise<BackupSnapshot[]> {
-  try {
-    await userDataService.flush()
-    const componentIds = await userDataService.getComponentsForPage(pageId)
-    const editorIds = componentIds.filter((c) => c.startsWith('code-editor-'))
-    const snapshots: BackupSnapshot[] = []
-    for (const componentId of editorIds) {
-      const record = await userDataService.get(pageId, componentId)
-      if (record) snapshots.push({ componentId, payload: record.data })
-    }
-    return snapshots
-  } catch (error) {
-    console.error('[HandInButton] failed to gather snapshots:', error)
-    return []
-  }
-}
-
-/**
  * Gather EVERY component's IndexedDB state for the page — quiz answers
- * (quiz-*) AND code editors (code-editor-*) — for the offline backup. Unlike
- * gatherEditorSnapshots (code only, for the hand-in POST), the backup must be
- * complete: it's the single offline copy, so a recovery can rebuild the whole
- * attempt. On recovery, quiz-* snapshots are written back to live userData so
- * they grade exactly like a synced answer (see exam-recovery.applyHandinSnapshots).
+ * (quiz-*), code editors (code-editor-*), stage/check state — used for BOTH
+ * the hand-in POST and the offline backup. The hand-in route stores these as
+ * `kind='handin'` checkpoints atomically with the ExamSubmission AND routes
+ * quiz-* answers back into live userData so they grade. Gathering everything
+ * (not just code editors) makes hand-in the reliable capture even when live
+ * sync never ran during the attempt — e.g. SEB sessions, where quiz answers
+ * would otherwise be lost since they only live in local IndexedDB until then.
  */
 async function gatherAllSnapshots(pageId: string): Promise<BackupSnapshot[]> {
   try {
@@ -196,10 +174,14 @@ export function HandInButton({
     setError(null)
 
     try {
-      // Gather every code editor's current state from IndexedDB and POST
-      // alongside the submission. The server stores these as 'handin'
-      // checkpoints atomically with the ExamSubmission record.
-      const snapshots = await gatherEditorSnapshots(pageId)
+      // Gather EVERY component's current state from IndexedDB (quiz answers +
+      // code editors + stage/check state) and POST alongside the submission.
+      // The server writes these as 'handin' checkpoints atomically with the
+      // ExamSubmission, and routes quiz-* answers back into live userData so
+      // they grade. This makes hand-in the reliable capture even when live
+      // sync didn't run during the attempt (e.g. SEB sessions) — without it,
+      // quiz answers that never synced live would be lost on hand-in.
+      const snapshots = await gatherAllSnapshots(pageId)
 
       const response = await fetch(`/api/exams/${pageId}/hand-in`, {
         method: 'POST',

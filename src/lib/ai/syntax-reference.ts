@@ -465,7 +465,7 @@ Interactive multiple choice using \`<question>\` and \`<answer>\` HTML tags:
 **question attributes:**
 - \`id="unique-id"\` — Optional, auto-generated if omitted
 - \`type="single"\` — Single choice (default). Other types: \`multiple\`, \`text\` (free-text answer), \`number\` (slider)
-- \`showFeedback="false"\` — hide correct/wrong feedback. On **exam pages feedback is OFF by default**; set \`showFeedback="true"\` to reveal it during an exam.
+- \`showFeedback="true"\` — reveal correct/wrong feedback (and the auto-check score/diff) to the student during the attempt. **OFF by default for students** in both exams and practice (there's no Submit button, so default-on would leak the answer the moment they type). Teachers always see correctness when grading, and students see it on their returned/graded exam.
 - \`points="2"\` — max points for grading (default 1). Text questions get partial credit by similarity; single/multiple-choice score full points on an exact match of the correct set, else 0. Teachers can override any per-question score when grading an exam. For an explicit id (so the score is reliably attributed), set \`id="..."\`.
 
 **Number sliders** (\`type="number"\`) — set the range with \`minValue\` / \`maxValue\` / \`step\`. Use \`minLabel\` / \`maxLabel\` to caption the two ends; the captions render beneath the slider at either end, so don't bake them into the body text:
@@ -570,7 +570,7 @@ export function getCondensedSyntaxReference(): string {
   - If you see \`<Option>\` or \`<quiz-option>\`, convert to \`<answer>\`
   - Do NOT use \`:::quiz\` syntax — it is not implemented
 
-**Free-text auto-check (predict-output):** \`<question id="x" type="text" points="2">\` with an \`\`\`expected fenced block inside (blank line before it) → partial-credit grading of a predicted output, with a diff. Flags: \`ignore-case\`, \`ignore-whitespace\`. On exam pages question feedback is hidden by default — set \`showFeedback="true"\` to show it.
+**Free-text auto-check (predict-output):** \`<question id="x" type="text" points="2">\` with an \`\`\`expected fenced block inside (blank line before it) → partial-credit grading of a predicted output, with a diff. Flags: \`ignore-case\`, \`ignore-whitespace\`. Feedback is hidden from students by default (exams AND practice) — set \`showFeedback="true"\` to reveal it during the attempt; teachers see it when grading.
 
 **Staged pages:** \`<next-stage label="..." title="..." confirm="..." cancel="...">\` on its own line splits a document into one-way, hand-in-locked stages (only stages up to the current one render; advancing locks the previous one read-only). Ideal for exams: predict-output questions in stage 1, runnable editors in stage 2. All strings optional/localizable.
 
