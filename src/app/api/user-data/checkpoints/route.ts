@@ -59,7 +59,8 @@ async function resolveAuthUserId(): Promise<{ userId: string; isTeacher: boolean
 
   try {
     const examSession = await prisma.examSession.findUnique({
-      where: { id: examSessionCookie },
+      // Cookie holds `sessionId` (random hex), not the row PK `id`.
+      where: { sessionId: examSessionCookie },
       select: { userId: true, expiresAt: true },
     })
     if (examSession && new Date(examSession.expiresAt) > new Date()) {

@@ -132,7 +132,10 @@ export async function POST(request: NextRequest) {
       if (examSessionCookie) {
         try {
           const examSession = await prisma.examSession.findUnique({
-            where: { id: examSessionCookie },
+            // The cookie holds the random `sessionId`, NOT the row's primary
+            // key `id`. Looking up by `id` always missed → SEB students 401'd
+            // and live sync silently failed. Matches validateExamSession().
+            where: { sessionId: examSessionCookie },
             select: { userId: true, expiresAt: true }
           })
           if (examSession && new Date(examSession.expiresAt) > new Date()) {

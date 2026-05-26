@@ -46,7 +46,8 @@ export async function GET(request: NextRequest) {
       // Decode the exam session to get the skript ID
       try {
         const examSession = await prisma.examSession.findUnique({
-          where: { id: examSessionCookie },
+          // Cookie holds `sessionId` (random hex), not the row PK `id`.
+          where: { sessionId: examSessionCookie },
           select: { userId: true, skriptId: true, expiresAt: true }
         })
         if (examSession && new Date(examSession.expiresAt) > new Date()) {

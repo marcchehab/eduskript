@@ -16,7 +16,6 @@
 
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { useSession } from 'next-auth/react'
-import { useExamSession } from '@/contexts/exam-session-context'
 import { syncEngine, type SyncStatus } from './sync-engine'
 import { userDataService } from './userDataService'
 import { runOneTimeMigrationV2ToV3, migrateAnonymousIfNeeded } from './migrations'
@@ -45,6 +44,11 @@ interface UserDataContextValue {
   onClearAnnotations: (() => void) | null
   /** Set the clear annotations callback */
   setOnClearAnnotations: (callback: (() => void) | null) => void
+  /** Report the SEB exam-session user up to this root provider. ExamDataSync is
+   *  mounted below us (in the exam page), so we can't read the exam-session
+   *  React context — it calls this instead so we resolve a real userId, count
+   *  as authenticated, and set the sync engine (rather than clobbering null). */
+  setExamSessionUser: (userId: string | null) => void
 }
 
 const UserDataContext = createContext<UserDataContextValue | null>(null)
@@ -62,16 +66,20 @@ interface UserDataProviderProps {
  */
 export function UserDataProvider({ children }: UserDataProviderProps) {
   const { data: session, status } = useSession()
-  const examSession = useExamSession()
+  // SEB exam-session user, reported up from ExamDataSync (mounted below us in
+  // the exam page). We can't read the exam-session context from this root
+  // provider, so the child pushes it here.
+  const [examUserId, setExamUserId] = useState<string | null>(null)
+  const setExamSessionUser = useCallback((id: string | null) => setExamUserId(id), [])
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(syncEngine.getStatus())
   const [annotationVersionMismatch, setAnnotationVersionMismatch] = useState(false)
   const [onClearAnnotations, setOnClearAnnotationsState] = useState<(() => void) | null>(null)
   const [isDbReady, setIsDbReady] = useState(false)
   const userChangeHandledRef = useRef(false)
 
-  // Use NextAuth session first, fall back to exam session
-  const userId = session?.user?.id ?? examSession.user?.id ?? null
-  const isAuthenticated = (status === 'authenticated' && session?.user?.id !== null) || examSession.isInExamSession
+  // Use NextAuth session first, fall back to the reported SEB exam-session user.
+  const userId = session?.user?.id ?? examUserId ?? null
+  const isAuthenticated = (status === 'authenticated' && session?.user?.id != null) || examUserId != null
 
   // On userId change: run any pending DB migrations, then update the service's
   // active userId, then update the sync engine. No wiping — different users on
@@ -146,6 +154,7 @@ export function UserDataProvider({ children }: UserDataProviderProps) {
     setAnnotationVersionMismatch,
     onClearAnnotations,
     setOnClearAnnotations,
+    setExamSessionUser,
   }
 
   return (
