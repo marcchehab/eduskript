@@ -20,7 +20,7 @@ import { Button } from '@/components/ui/button'
 import { Play, Square, RotateCcw, Maximize2, Minimize2, Scan, X, Plus, FileText, ZoomIn, ZoomOut, Save, History, Highlighter, MessageSquare, WrapText, Circle, CheckCircle2, Package, Trash2, Paperclip, Upload, Pencil, Cloud, HardDrive } from 'lucide-react'
 import { useZoom } from '@/contexts/zoom-context'
 import { useUserData, useCreateVersion, useVersionHistory, useRestoreVersion, useDeleteVersion, useUpdateVersionLabel, useOrphanedComponentIds, useReassignVersionHistory } from '@/lib/userdata/hooks'
-import { userDataService } from '@/lib/userdata'
+import { userDataService, syncEngine } from '@/lib/userdata'
 import { registerEditor, getMountedIds, subscribeToMounted } from './mounted-registry'
 import { OrphanRow } from './orphan-row'
 import { postCheckpoint } from '@/lib/userdata/checkpoints'
@@ -1216,6 +1216,9 @@ export const CodeEditor = memo(function CodeEditor({
 
   // Debounced auto-save for code content changes
   const contentSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  // Exam-only: signature of the last code state pushed to the SERVER, so the
+  // crash-safety stream below skips no-op saves (avoids version churn).
+  const lastStreamedSigRef = useRef<string | null>(null)
 
   const debouncedSaveContent = useCallback(() => {
     if (!editorViewRef.current || !pageId) return
@@ -1253,10 +1256,11 @@ export const CodeEditor = memo(function CodeEditor({
     )
 
     // Persist directly to IndexedDB via the service singleton, bypassing the
-    // hook's updateData which calls setData and triggers a re-render. NOT
-    // synced to the server — the agreed model is checkpoint-only, so the
-    // server only sees explicit user actions (manual save / Check / hand-in).
-    userDataService.save(pageId, componentId, {
+    // hook's updateData which calls setData and triggers a re-render. Outside
+    // an exam the server only sees explicit user actions (manual save / Check /
+    // hand-in) — checkpoint-only. INSIDE an exam we ALSO stream the live record
+    // to the server (below) so a crash before hand-in doesn't lose code.
+    const data = {
       files: filesRef.current,
       activeFileIndex,
       fontSize,
@@ -1264,8 +1268,30 @@ export const CodeEditor = memo(function CodeEditor({
       editorWidth,
       canvasTransform,
       highlights,
-    })
-  }, [activeFileIndex, pageId, componentId, fontSize, lineWrapping, editorWidth, canvasTransform, highlights, skriptId, editorInstanceId, isViewingSnapshot])
+    }
+    const savePromise = userDataService.save(pageId, componentId, data)
+
+    // Exam crash-safety stream: push the just-saved record to the server via the
+    // sync engine (the same debounced path useSyncedUserData/quiz answers use —
+    // ~2s debounce + per-component coalescing, so this is one small POST per
+    // typing pause, not per keystroke). check-inputs prefers the handin
+    // checkpoint and falls back to this live userData, so a student who never
+    // hands in (crash) still grades off their last stream. Deduped; best-effort.
+    if (exam) {
+      const sig = JSON.stringify(data)
+      if (sig !== lastStreamedSigRef.current) {
+        lastStreamedSigRef.current = sig
+        void savePromise
+          .then(async () => {
+            const record = await userDataService.get(pageId, componentId)
+            if (record) {
+              syncEngine.queueSync(componentId, pageId, sig, record.version, { immediate: false })
+            }
+          })
+          .catch((e) => console.error('[code-editor] exam autosave stream failed:', e))
+      }
+    }
+  }, [activeFileIndex, pageId, componentId, fontSize, lineWrapping, editorWidth, canvasTransform, highlights, skriptId, editorInstanceId, isViewingSnapshot, exam])
 
   // Ref to avoid debouncedSaveContent as a dependency in the editor effect
   const debouncedSaveContentRef = useRef(debouncedSaveContent)

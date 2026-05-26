@@ -281,7 +281,17 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
   // The exam author's RSA-OAEP public key — used to encrypt the offline backup
   // the student's browser auto-saves on hand-in. Only the author can decrypt it
   // (recovery endpoint). Fetched only when someone is actually taking the exam.
-  const backupKey = isExamTaker ? await getOrCreateActiveExamKey(teacher.id) : null
+  // Best-effort: the backup is defensive and must NEVER block exam-taking — a
+  // key-service error degrades to "no backup" (HandInButton hides the affordance
+  // when the key is null) rather than failing the page render for students.
+  let backupKey: { publicKeyJwk: JsonWebKey; keyId: string } | null = null
+  if (isExamTaker) {
+    try {
+      backupKey = await getOrCreateActiveExamKey(teacher.id)
+    } catch (err) {
+      console.error('[exam] backup key unavailable, continuing without backup:', err)
+    }
+  }
 
   // SEB-authenticated students have no NextAuth session, so without an
   // ExamSessionProvider in the tree useUserDataContext treats them as
