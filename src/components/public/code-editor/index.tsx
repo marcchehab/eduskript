@@ -63,6 +63,18 @@ import { runPythonChecks } from './python-check-runner'
 import { useCoupledVideo, parseTimecode } from '@/components/markdown/coupled-video-context'
 import type { PythonCheckResult } from './types'
 import { deferUntilIdle } from '@/lib/defer-until-idle'
+import { installPyodideTimeout, clearPyodideTimeout } from '@/lib/pyodide-timeout-guard'
+
+/**
+ * Wall-clock cap on a single Pyodide run from the student's Run / Check
+ * buttons. Longer than the grader's 6 s because legitimate student code may
+ * include matplotlib rendering + numpy work. Package loading itself happens
+ * outside the guarded window, so this only covers actual user-code execution.
+ * Until Phase B (Pyodide in a Worker), the page is briefly unresponsive
+ * during this window — only Python-level loops are interruptible via the
+ * settrace guard; see src/lib/pyodide-timeout-guard.ts.
+ */
+const STUDENT_PYODIDE_TIMEOUT_S = 10
 
 /**
  * Strip Pyodide/internal traceback frames from Python errors, keeping only
@@ -3827,34 +3839,42 @@ except ImportError:
     pass
 `)
 
-      // Run the code
-      const result = await pyodide.runPythonAsync(code)
-
-      // Clean up any matplotlib UI elements that might have been created
-      const cleanupMatplotlibUI = () => {
-        // Target the outermost container that matplotlib creates
-        document.querySelectorAll('body > div[style*="display: inline-block"]').forEach(el => {
-          // Check if it contains matplotlib elements
-          if (el.querySelector('.mpl-canvas, .mpl-toolbar, .ui-dialog-titlebar')) {
-            el.remove()
-          }
-        })
-        // Also clean up any standalone elements
-        document.querySelectorAll('.ui-dialog, .mpl-message, .mpl-toolbar').forEach(el => el.remove())
-      }
-
-      cleanupMatplotlibUI()
-      // Run cleanup again after a short delay to catch async UI creation
-      setTimeout(cleanupMatplotlibUI, 100)
-      setTimeout(cleanupMatplotlibUI, 500)
-
-      // Capture every image the run produced, in call order. The patched
-      // display() / .show() / plt.show() in the pre-run helper appended PNG
-      // bytes to a single ordered buffer, so we just base64-encode in sequence.
-      // Then sweep any matplotlib figures the user created but forgot to
-      // plt.show() — those land at the end so they're never lost.
+      // Wall-clock guard for student-typed code. The page is still briefly
+      // unresponsive during the run (Pyodide on the main thread until the
+      // Phase B Worker refactor), but Python-level infinite loops now raise
+      // TimeoutError instead of locking the tab forever. See
+      // src/lib/pyodide-timeout-guard.ts for limits (Python frames only).
+      await installPyodideTimeout(pyodide, STUDENT_PYODIDE_TIMEOUT_S)
+      let result: unknown
       try {
-        const plotScript = `
+        // Run the code
+        result = await pyodide.runPythonAsync(code)
+
+        // Clean up any matplotlib UI elements that might have been created
+        const cleanupMatplotlibUI = () => {
+          // Target the outermost container that matplotlib creates
+          document.querySelectorAll('body > div[style*="display: inline-block"]').forEach(el => {
+            // Check if it contains matplotlib elements
+            if (el.querySelector('.mpl-canvas, .mpl-toolbar, .ui-dialog-titlebar')) {
+              el.remove()
+            }
+          })
+          // Also clean up any standalone elements
+          document.querySelectorAll('.ui-dialog, .mpl-message, .mpl-toolbar').forEach(el => el.remove())
+        }
+
+        cleanupMatplotlibUI()
+        // Run cleanup again after a short delay to catch async UI creation
+        setTimeout(cleanupMatplotlibUI, 100)
+        setTimeout(cleanupMatplotlibUI, 500)
+
+        // Capture every image the run produced, in call order. The patched
+        // display() / .show() / plt.show() in the pre-run helper appended PNG
+        // bytes to a single ordered buffer, so we just base64-encode in sequence.
+        // Then sweep any matplotlib figures the user created but forgot to
+        // plt.show() — those land at the end so they're never lost.
+        try {
+          const plotScript = `
 import sys
 import io
 import base64
@@ -3887,57 +3907,63 @@ _b._eduskript_shown = []
 
 plots
 `
-        const plotsData = await pyodide.runPythonAsync(plotScript)
+          const plotsData = await pyodide.runPythonAsync(plotScript)
 
-        // Display plots in the graphics pane
-        if (plotsData && plotsData.length > 0 && canvasRef.current) {
-          // Force the canvas open even if our static heuristic missed the import
-          // (e.g. the code uses display() with a PIL import we couldn't detect statically).
-          setCanvasVisible(true)
-          // canvasRef was already cleared at the start of this run; just
-          // append the fresh plots.
-          const canvas = canvasRef.current
+          // Display plots in the graphics pane
+          if (plotsData && plotsData.length > 0 && canvasRef.current) {
+            // Force the canvas open even if our static heuristic missed the import
+            // (e.g. the code uses display() with a PIL import we couldn't detect statically).
+            setCanvasVisible(true)
+            // canvasRef was already cleared at the start of this run; just
+            // append the fresh plots.
+            const canvas = canvasRef.current
 
-          // Add new plots
-          const plotImgs: HTMLImageElement[] = []
-          for (let i = 0; i < plotsData.length; i++) {
-            const imgData = plotsData[i]
-            const img = document.createElement('img')
-            img.src = imgData
-            img.alt = `Plot ${i + 1}`
-            img.className = 'matplotlib-plot'
-            img.draggable = false // Prevent browser image drag behavior
-            img.style.cssText = 'max-width: 100%; height: auto; display: block; margin: 8px auto; border-radius: 4px; user-select: none;'
-            canvas.appendChild(img)
-            plotImgs.push(img)
+            // Add new plots
+            const plotImgs: HTMLImageElement[] = []
+            for (let i = 0; i < plotsData.length; i++) {
+              const imgData = plotsData[i]
+              const img = document.createElement('img')
+              img.src = imgData
+              img.alt = `Plot ${i + 1}`
+              img.className = 'matplotlib-plot'
+              img.draggable = false // Prevent browser image drag behavior
+              img.style.cssText = 'max-width: 100%; height: auto; display: block; margin: 8px auto; border-radius: 4px; user-select: none;'
+              canvas.appendChild(img)
+              plotImgs.push(img)
+            }
+
+            // Wait for the plot images to decode so their layout size is known,
+            // then frame them — otherwise a transform left over from a previous
+            // turtle run leaves the plot outside the visible area.
+            await Promise.all(plotImgs.map(img => img.decode().catch(() => {})))
+            fitToView()
           }
-
-          // Wait for the plot images to decode so their layout size is known,
-          // then frame them — otherwise a transform left over from a previous
-          // turtle run leaves the plot outside the visible area.
-          await Promise.all(plotImgs.map(img => img.decode().catch(() => {})))
-          fitToView()
+        } catch {
+          // Failed to capture plots - non-critical error
         }
-      } catch {
-        // Failed to capture plots - non-critical error
-      }
 
-      if (result !== undefined && result !== null) {
-        addOutput(String(result), OutputLevel.OUTPUT)
-      }
+        if (result !== undefined && result !== null) {
+          addOutput(String(result), OutputLevel.OUTPUT)
+        }
 
-      // Show success flash on Run button
-      setShowSuccessFlash(true)
-      setTimeout(() => setShowSuccessFlash(false), 1500)
-      setRunState(RunState.STOPPED)
+        // Show success flash on Run button
+        setShowSuccessFlash(true)
+        setTimeout(() => setShowSuccessFlash(false), 1500)
+        setRunState(RunState.STOPPED)
+      } finally {
+        await clearPyodideTimeout(pyodide)
+      }
 
       // Exam mode: silently run checks after each execution (no UI feedback).
       // Skipped in snapshot-view mode: a teacher's scratch run must not auto-run
       // the graded checks or persist any check result.
+      // Wrapped in its own wall-clock guard with a fresh deadline (the
+      // student-code guard above has already been cleared in its finally).
       if (exam && effectiveCheckCode && pyodide && !isViewingSnapshot) {
         const localFiles = filesRef.current
         const importFiles = [...(skriptImportsRef.current?.files || []), ...(globalImportsRef.current?.files || [])]
         const allAuxFiles = [...(localFiles.length > 1 ? localFiles : []), ...importFiles]
+        await installPyodideTimeout(pyodide, STUDENT_PYODIDE_TIMEOUT_S)
         try {
           const results = await runPythonChecks(pyodide, code, effectiveCheckCode, allAuxFiles)
           // Restore stdout/stderr
@@ -3961,6 +3987,9 @@ plots
             void createCheckVersion(`exam check: ${passedTests}/${totalTests} (${earned}/${totalPoints} pts)`)
           }
         } catch { /* silent in exam mode */ }
+        finally {
+          await clearPyodideTimeout(pyodide)
+        }
       }
     } catch (error: any) {
       const errorMessage = cleanPythonError(error.message || String(error))
@@ -4013,7 +4042,15 @@ plots
       const importFiles = [...(skriptImportsRef.current?.files || []), ...(globalImportsRef.current?.files || [])]
       const allAuxFiles = [...(localFiles.length > 1 ? localFiles : []), ...importFiles]
 
-      const results = await runPythonChecks(pyodide, code, effectiveCheckCode, allAuxFiles)
+      // Wall-clock guard so a `while True:` in the student's code doesn't lock
+      // the page when they press Check. See pyodide-timeout-guard.ts.
+      await installPyodideTimeout(pyodide, STUDENT_PYODIDE_TIMEOUT_S)
+      let results: PythonCheckResult[]
+      try {
+        results = await runPythonChecks(pyodide, code, effectiveCheckCode, allAuxFiles)
+      } finally {
+        await clearPyodideTimeout(pyodide)
+      }
 
       // Restore stdout/stderr for normal output
       pyodide.setStdout({ batched: (text: string) => addOutput(text, OutputLevel.OUTPUT) })
