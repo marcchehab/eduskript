@@ -924,6 +924,7 @@ function SyncedQuestion({
           options={optionLabels}
           minValue={rest.minValue}
           maxValue={rest.maxValue}
+          autoCheck={type === 'text' && rest.expected != null}
         />
       )}
     </>

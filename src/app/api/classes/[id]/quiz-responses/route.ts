@@ -15,6 +15,7 @@ interface QuizData {
   textAnswer?: string
   numberAnswer?: number
   isSubmitted: boolean
+  textRatio?: number // Auto-check similarity (predict-output), 0–1
 }
 
 interface QuizResponseItem {
@@ -219,10 +220,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         } else {
           stats.wrong++
         }
+      } else if (typeof quizData?.textRatio === 'number') {
+        // Auto-checked text answer (predict-output): classify by similarity
+        // ratio, matching the per-student icon and the python-check bar.
+        const ratio = quizData.textRatio
+        if (ratio >= 1) { isCorrect = true; stats.correct++ }
+        else if (ratio > 0) { isPartiallyCorrect = true; stats.partial++ }
+        else { stats.wrong++ }
       } else {
-        // Text/number question or no correct indices - just count as answered
-        // For now, we can't determine correctness without manual grading
-        // Count as "answered" which we'll track as "correct" for simplicity
+        // Number/range, or text without an answer key — answered, ungradable
+        // here; counted toward "answered" (the bar shows it green).
         stats.correct++
       }
 

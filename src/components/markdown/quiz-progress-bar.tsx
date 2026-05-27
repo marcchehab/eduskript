@@ -197,6 +197,7 @@ interface QuizProgressBarProps {
   options?: string[] // Option labels for displaying what was selected
   minValue?: number  // For number/range visualization
   maxValue?: number  // For number/range visualization
+  autoCheck?: boolean // Text question has an expected answer → show correctness
 }
 
 export function QuizProgressBar({
@@ -208,7 +209,8 @@ export function QuizProgressBar({
   correctIndices,
   options = [],
   minValue = 0,
-  maxValue = 100
+  maxValue = 100,
+  autoCheck = false
 }: QuizProgressBarProps) {
   const [stats, setStats] = useState<QuizStats | null>(null)
   const [responses, setResponses] = useState<QuizResponseItem[]>([])
@@ -340,6 +342,10 @@ export function QuizProgressBar({
   const notAnsweredWidth = stats.total > 0 ? (stats.notAnswered / stats.total) * 100 : 0
 
   const isChoiceQuestion = questionType === 'single' || questionType === 'multiple'
+  // Correctness is meaningful for choice questions and for auto-checked text
+  // (predict-output). Number/range and free text have no answer key here, so
+  // the bar just shows "answered".
+  const showCorrectness = isChoiceQuestion || (questionType === 'text' && autoCheck)
 
   // Format answer for display
   const formatAnswer = (response: QuizResponseItem) => {
@@ -428,19 +434,19 @@ export function QuizProgressBar({
             <span className="font-medium text-foreground">{className}</span>
             <span>&bull;</span>
             <span>{answered}/{stats.total} answered</span>
-            {isChoiceQuestion && stats.correct > 0 && (
+            {showCorrectness && stats.correct > 0 && (
               <>
                 <span>&bull;</span>
                 <span className="text-green-600 dark:text-green-400">{stats.correct} correct</span>
               </>
             )}
-            {isChoiceQuestion && stats.partial > 0 && (
+            {showCorrectness && stats.partial > 0 && (
               <>
                 <span>&bull;</span>
                 <span className="text-yellow-600 dark:text-yellow-400">{stats.partial} partial</span>
               </>
             )}
-            {isChoiceQuestion && stats.wrong > 0 && (
+            {showCorrectness && stats.wrong > 0 && (
               <>
                 <span>&bull;</span>
                 <span className="text-red-600 dark:text-red-400">{stats.wrong} wrong</span>
