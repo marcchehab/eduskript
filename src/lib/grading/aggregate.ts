@@ -36,6 +36,7 @@ export interface ComponentResult {
   answered: boolean
   overridden: boolean
   autoEarned: number
+  feedback?: string | null
 }
 
 export interface StudentGrade {
@@ -46,8 +47,9 @@ export interface StudentGrade {
 }
 
 export interface QuestionOverride {
-  awardedPoints: number
+  awardedPoints: number | null
   maxPoints?: number | null
+  feedback?: string | null
 }
 
 /** Map a stored ExamGradeConfig row (or null) to formula params + max override. */
@@ -97,6 +99,7 @@ export function aggregateStudent(
       answered: s.answered,
       overridden: s.overridden,
       autoEarned: s.autoEarned,
+      feedback: s.feedback,
     }
   })
 
@@ -158,7 +161,7 @@ export async function computeExamGrades(
     }),
     prisma.examQuestionGrade.findMany({
       where: { pageId, studentId: { in: studentIds } },
-      select: { studentId: true, componentId: true, awardedPoints: true, maxPoints: true },
+      select: { studentId: true, componentId: true, awardedPoints: true, maxPoints: true, feedback: true },
     }),
     prisma.examCheckRun.findMany({
       where: { pageId, studentId: { in: studentIds } },
@@ -176,7 +179,7 @@ export async function computeExamGrades(
   for (const o of overrideRows) {
     let m = overridesByStudent.get(o.studentId)
     if (!m) overridesByStudent.set(o.studentId, (m = new Map()))
-    m.set(o.componentId, { awardedPoints: o.awardedPoints, maxPoints: o.maxPoints })
+    m.set(o.componentId, { awardedPoints: o.awardedPoints, maxPoints: o.maxPoints, feedback: o.feedback })
   }
   const checkRunsByStudent = new Map<string, Map<string, { earned: number; max: number }>>()
   for (const cr of checkRunRows) {

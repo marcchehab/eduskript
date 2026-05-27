@@ -87,3 +87,25 @@ describe('scoreComponent — teacher override wins', () => {
     expect(s).toMatchObject({ earned: 4, max: 8, overridden: true })
   })
 })
+
+describe('scoreComponent — per-question feedback', () => {
+  it('feedback-only override (awardedPoints null) keeps the auto score, not overridden', () => {
+    const s = scoreComponent({
+      kind: 'quiz', questionType: 'text', declaredMax: 2,
+      checkRun: { earned: 1.5, max: 2 },
+      override: { awardedPoints: null, feedback: 'Nice approach, watch the edge case.' },
+    })
+    expect(s).toMatchObject({ earned: 1.5, overridden: false, answered: true, feedback: 'Nice approach, watch the edge case.' })
+  })
+  it('points override + feedback together', () => {
+    const s = scoreComponent({
+      kind: 'python', declaredMax: 5, checkRun: { earned: 2, max: 5 },
+      override: { awardedPoints: 4, feedback: 'Bonus for the clean solution.' },
+    })
+    expect(s).toMatchObject({ earned: 4, overridden: true, feedback: 'Bonus for the clean solution.' })
+  })
+  it('no override → feedback null', () => {
+    const s = scoreComponent({ kind: 'python', checkRun: { earned: 1, max: 2 } })
+    expect(s.feedback).toBeNull()
+  })
+})

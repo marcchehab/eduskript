@@ -26,6 +26,8 @@ export interface ComponentReview {
   autoEarned: number
   answered: boolean
   overridden: boolean
+  /** Teacher's per-question written feedback (shown to the student on return). */
+  feedback: string | null
   answerPayload: unknown
 }
 
@@ -55,6 +57,8 @@ interface ReviewContextValue extends ReviewState {
   runningChecks: boolean
   /** Teacher only: set (number) or clear (null = revert to auto) an override. */
   setOverride: (componentId: string, awardedPoints: number | null) => Promise<void>
+  /** Teacher only: set/clear per-question feedback (null/'' clears it). */
+  setFeedback: (componentId: string, feedback: string | null) => Promise<void>
   /** Teacher only: force a re-run of this student's python checks. */
   rerunChecks: () => Promise<void>
   /** Reload grades (debounced). Components call this after writing their own
@@ -73,6 +77,7 @@ const ExamReviewContext = createContext<ReviewContextValue>({
   studentId: null,
   runningChecks: false,
   setOverride: async () => {},
+  setFeedback: async () => {},
   rerunChecks: async () => {},
   refreshGrades: () => {},
 })
@@ -131,6 +136,20 @@ export function ExamReviewProvider({ pageId, mode, studentId, children }: Provid
     [pageId, studentId, load],
   )
 
+  const setFeedback = useCallback(
+    async (componentId: string, feedback: string | null) => {
+      if (!studentId) return
+      await fetch(`/api/exams/${pageId}/grading/question`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        // Send only `feedback` so the points override is left untouched.
+        body: JSON.stringify({ studentId, componentId, feedback }),
+      }).catch(() => {})
+      load()
+    },
+    [pageId, studentId, load],
+  )
+
   // Teacher grade mode: re-run this student's python checks on this device
   // (authoritative), then refresh scores. Reuses the shared driver.
   const runChecks = useCallback(async () => {
@@ -169,8 +188,8 @@ export function ExamReviewProvider({ pageId, mode, studentId, children }: Provid
   }, [mode, studentId, state.byComponent, runChecks])
 
   const value = useMemo<ReviewContextValue>(
-    () => ({ ...state, active, mode, loading, pageId, studentId, runningChecks, setOverride, rerunChecks, refreshGrades }),
-    [state, active, mode, loading, pageId, studentId, runningChecks, setOverride, rerunChecks, refreshGrades],
+    () => ({ ...state, active, mode, loading, pageId, studentId, runningChecks, setOverride, setFeedback, rerunChecks, refreshGrades }),
+    [state, active, mode, loading, pageId, studentId, runningChecks, setOverride, setFeedback, rerunChecks, refreshGrades],
   )
 
   return <ExamReviewContext.Provider value={value}>{children}</ExamReviewContext.Provider>
@@ -187,6 +206,7 @@ export function useComponentReview(componentId: string): {
   loadedStudentId: string | null
   review: ComponentReview | null
   setOverride: (awardedPoints: number | null) => Promise<void>
+  setFeedback: (feedback: string | null) => Promise<void>
   refreshGrades: () => void
 } {
   const ctx = useContext(ExamReviewContext)
@@ -198,6 +218,7 @@ export function useComponentReview(componentId: string): {
     loadedStudentId: ctx.loadedStudentId,
     review: ctx.active ? ctx.byComponent[componentId] ?? null : null,
     setOverride: (awardedPoints) => ctx.setOverride(componentId, awardedPoints),
+    setFeedback: (feedback) => ctx.setFeedback(componentId, feedback),
     refreshGrades: ctx.refreshGrades,
   }
 }

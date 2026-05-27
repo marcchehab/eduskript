@@ -1118,8 +1118,14 @@ model ExamQuestionGrade {
   pageId        String   @map("page_id")
   studentId     String   @map("student_id")
   componentId   String   @map("component_id")
-  awardedPoints Float    @map("awarded_points")
+  // Nullable: a row can hold feedback without a points override (and vice
+  // versa). null awardedPoints = no override (use the auto score). The row is
+  // deleted when BOTH awardedPoints and feedback are empty.
+  awardedPoints Float?   @map("awarded_points")
   maxPoints     Float?   @map("max_points")
+  // Teacher's per-question written feedback, shown to the student on their
+  // returned exam. Independent of the points override.
+  feedback      String?  @map("feedback")
   gradedBy      String?  @map("graded_by")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")

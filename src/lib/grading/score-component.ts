@@ -35,8 +35,9 @@ export interface ComponentScoreInput {
   payload?: Partial<QuizData & PythonCheckData> | null
   /** Authoritative re-run result for python components (null = not run). */
   checkRun?: { earned: number; max: number } | null
-  /** Teacher override, if any. */
-  override?: { awardedPoints: number; maxPoints?: number | null } | null
+  /** Teacher override, if any. `awardedPoints: null` = no points override
+   *  (the row exists only to carry feedback). */
+  override?: { awardedPoints: number | null; maxPoints?: number | null; feedback?: string | null } | null
 }
 
 export interface ComponentScore {
@@ -48,6 +49,8 @@ export interface ComponentScore {
   overridden: boolean
   /** Auto score before any override (for showing "auto: 1.5" next to an edit). */
   autoEarned: number
+  /** Teacher's per-question written feedback, if any. */
+  feedback: string | null
 }
 
 /** Auto-earned points, or null if nothing to score (not yet graded). */
@@ -77,13 +80,19 @@ export function scoreComponent(input: ComponentScoreInput): ComponentScore {
     payloadMax(input) ??
     1
 
-  if (input.override) {
+  const feedback = input.override?.feedback ?? null
+  // A points override is in effect only when awardedPoints is non-null; a row
+  // with only feedback (awardedPoints null) leaves the auto score untouched.
+  const hasPointsOverride = !!input.override && input.override.awardedPoints != null
+
+  if (hasPointsOverride) {
     return {
-      earned: input.override.awardedPoints,
+      earned: input.override!.awardedPoints as number,
       max,
       answered: true,
       overridden: true,
       autoEarned: auto ?? 0,
+      feedback,
     }
   }
 
@@ -93,5 +102,6 @@ export function scoreComponent(input: ComponentScoreInput): ComponentScore {
     answered: auto !== null,
     overridden: false,
     autoEarned: auto ?? 0,
+    feedback,
   }
 }

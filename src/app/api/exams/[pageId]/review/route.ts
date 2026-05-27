@@ -73,6 +73,7 @@ export async function GET(
         autoEarned: c.autoEarned,
         answered: c.answered,
         overridden: c.overridden,
+        feedback: c.feedback ?? null,
         answerPayload: payloadByComponent.get(c.componentId) ?? null,
       })),
     })
