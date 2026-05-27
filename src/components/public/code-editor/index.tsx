@@ -28,6 +28,7 @@ import { useSyncedUserData, type SyncedUserDataOptions } from '@/lib/userdata/pr
 import { useTeacherClass } from '@/contexts/teacher-class-context'
 import { useStudentSnapshot } from '@/contexts/student-snapshot-context'
 import { GradeBadge } from '@/components/exam/grade-badge'
+import { useComponentReview } from '@/contexts/exam-review-context'
 import { cn } from '@/lib/utils'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
@@ -406,6 +407,15 @@ export const CodeEditor = memo(function CodeEditor({
     pythonCheckComponentId,
     null
   )
+
+  // Is a TEACHER grading this student right now? mode 'grade' only — never a
+  // student taking the exam (no review provider → active=false) and never a
+  // student reviewing a returned exam (mode 'review'). This single flag re-opens
+  // the Check button + results panel for the teacher on exam editors (where they
+  // are hidden from students) and suppresses the celebration. Checks stay
+  // hidden from students in every case.
+  const { active: reviewActive, mode: reviewMode } = useComponentReview(pythonCheckComponentId)
+  const isGradingCheck = hasChecks && reviewActive && reviewMode === 'grade'
 
   // Restore checksUsed + cleared stage from persisted data on mount
   useEffect(() => {
@@ -3767,7 +3777,9 @@ export const CodeEditor = memo(function CodeEditor({
   // For a single-stage exercise this is the classic Check button.
   const runPythonCheck = async () => {
     if (!effectiveCheckCode || !editorViewRef.current) return
-    if (effectiveMaxChecks !== undefined && checksUsed >= effectiveMaxChecks) return
+    // The attempt limit applies to students only — a teacher grading can re-run
+    // the student's checks freely.
+    if (!isGradingCheck && effectiveMaxChecks !== undefined && checksUsed >= effectiveMaxChecks) return
 
     setIsChecking(true)
     saveCurrentFile()
@@ -3807,9 +3819,10 @@ export const CodeEditor = memo(function CodeEditor({
       const earned = totalTests > 0 ? Math.round((passedTests / totalTests) * totalPoints) : 0
 
       // Trigger celebration only on a not-passing → passing transition.
-      // Skips: repeat clicks while already passing, and runs that don't pass.
+      // Skips: repeat clicks while already passing, runs that don't pass, and
+      // teacher grading (no confetti when reviewing a student's checks).
       const allPassedNow = totalTests > 0 && passedTests === totalTests
-      if (allPassedNow && !prevAllPassedRef.current) {
+      if (allPassedNow && !prevAllPassedRef.current && !isGradingCheck) {
         setCelebrationToken(t => t + 1)
       }
       prevAllPassedRef.current = allPassedNow
@@ -3820,7 +3833,9 @@ export const CodeEditor = memo(function CodeEditor({
       // On clearing the stage: release its coupled-video gate and advance to
       // the next stage (if any). Advancing is deferred briefly so the student
       // sees the green result before the next stage's assertions appear.
-      if (allPassedNow) {
+      // Skip entirely while a teacher is grading — auto-advancing would clear
+      // the results they're trying to read.
+      if (allPassedNow && !isGradingCheck) {
         if (coupledVideo) {
           coupledVideo.markPassed(`${pythonCheckComponentId}-stage-${stageIndex}`)
         }
@@ -5016,22 +5031,23 @@ export const CodeEditor = memo(function CodeEditor({
                     )}
                   </span>
                 )}
-                {hasChecks && !exam && (
+                {hasChecks && (!exam || isGradingCheck) && (
                   <Button
                     onClick={runPythonCheck}
                     size="sm"
                     variant="outline"
                     className="h-7 px-2 shadow-lg"
-                    disabled={isChecking || (effectiveMaxChecks !== undefined && checksUsed >= effectiveMaxChecks)}
+                    disabled={isChecking || (!isGradingCheck && effectiveMaxChecks !== undefined && checksUsed >= effectiveMaxChecks)}
                   >
                     <CheckCircle2 className="w-3 h-3 mr-1" />
-                    {isChecking ? '...' : 'Check'}
+                    {isChecking ? '...' : isGradingCheck ? 'Run checks' : 'Check'}
                     {isStaged && (
                       <span className="ml-1 text-[10px] text-muted-foreground">
                         stage {Math.min(currentStage + 1, stages.length)}/{stages.length}
                       </span>
                     )}
-                    {effectiveMaxChecks !== undefined && (
+                    {/* Attempt counter is a student affordance — hide it when grading. */}
+                    {!isGradingCheck && effectiveMaxChecks !== undefined && (
                       <span className="ml-1 text-[10px] text-muted-foreground">
                         {checksUsed}/{effectiveMaxChecks}
                       </span>
@@ -5763,8 +5779,9 @@ export const CodeEditor = memo(function CodeEditor({
       )}
     </div>
 
-    {/* Python check test results */}
-    {hasChecks && checkResults && !exam && (
+    {/* Python check test results. Hidden from students during exams; shown to
+        the teacher when grading (isGradingCheck) so they can see what passed. */}
+    {hasChecks && checkResults && (!exam || isGradingCheck) && (
       <>
         {isStaged && (
           <div className="mt-2 text-xs font-medium text-muted-foreground">
