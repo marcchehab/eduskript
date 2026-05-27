@@ -41,6 +41,15 @@ describe('source-line mapping survives preprocessing', () => {
     expect(q && [q[1], q[2]]).toEqual(['3', '8'])
   })
 
+  it('plain code block <pre> carries source-line at its original lines', async () => {
+    // 1:Beispiel: 2:blank 3:```python 4:x=2 5:``` (PreComponent forwards this to
+    // the CodeBlock wrapper for cursor-sync).
+    const md = 'Beispiel:\n\n```python\nx = 2\n```'
+    const html = renderToStaticMarkup((await compileMarkdown(md)) as ReactNode)
+    const m = html.match(/<pre[^>]*data-source-line-start="(\d+)"[^>]*data-source-line-end="(\d+)"/)
+    expect(m && [m[1], m[2]]).toEqual(['3', '5'])
+  })
+
   it('content after a question (blank lines collapsed) keeps original lines', async () => {
     // 1:intro 2:blank 3:<question...> 4:Prompt 5:blank 6:<answer...>A
     // 7:<answer>B 8:</question> 9:blank 10:## Next
