@@ -7,7 +7,14 @@
  *     <img src="wide-image.jpg" />
  *   </fullwidth>
  */
-export function Fullwidth({ children, className }: { children?: React.ReactNode; className?: string }) {
+export function Fullwidth({ children, className, ...dataAttrs }: {
+  children?: React.ReactNode
+  className?: string
+  // Editor preview cursor-sync + section attrs survive component substitution.
+  'data-source-line-start'?: string
+  'data-source-line-end'?: string
+  'data-section-id'?: string
+}) {
   return (
     <div
       className={className ? `fullwidth ${className}` : 'fullwidth'}
@@ -15,6 +22,7 @@ export function Fullwidth({ children, className }: { children?: React.ReactNode;
         marginLeft: '-192px',
         marginRight: '-192px',
       }}
+      {...dataAttrs}
     >
       {children}
     </div>

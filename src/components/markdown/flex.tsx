@@ -26,6 +26,11 @@ interface FlexItemProps {
   style?: CSSProperties
   width?: string
   grow?: boolean
+  // Editor preview cursor-sync + section attrs survive component substitution.
+  'data-source-line-start'?: string
+  'data-source-line-end'?: string
+  'data-section-id'?: string
+  'data-dynamic-height'?: string
 }
 
 /**
@@ -34,7 +39,7 @@ interface FlexItemProps {
  * space equally regardless of content length (otherwise flex-grow sizes from
  * intrinsic content width first and you get lopsided columns).
  */
-export function FlexItem({ children, className, style, width, grow = true }: FlexItemProps) {
+export function FlexItem({ children, className, style, width, grow = true, ...dataAttrs }: FlexItemProps) {
   return (
     <div
       className={cn(
@@ -44,6 +49,7 @@ export function FlexItem({ children, className, style, width, grow = true }: Fle
         className
       )}
       style={{ ...(width ? { width } : {}), ...style }}
+      {...dataAttrs}
     >
       {children}
     </div>

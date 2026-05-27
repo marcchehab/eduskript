@@ -516,7 +516,12 @@ export function createMarkdownComponents(
 
     // Use the Tabs component with pre-extracted content
     return (
-      <Tabs items={items} tabContents={tabContents} />
+      <Tabs
+        items={items}
+        tabContents={tabContents}
+        sourceLineStart={(props['data-source-line-start'] ?? props['dataSourceLineStart']) as string | undefined}
+        sourceLineEnd={(props['data-source-line-end'] ?? props['dataSourceLineEnd']) as string | undefined}
+      />
     )
   }
 
@@ -579,6 +584,8 @@ export function createMarkdownComponents(
         points={points}
         ignoreCase={ignoreCase}
         ignoreWhitespace={ignoreWhitespace}
+        sourceLineStart={(props['data-source-line-start'] ?? props['dataSourceLineStart']) as string | undefined}
+        sourceLineEnd={(props['data-source-line-end'] ?? props['dataSourceLineEnd']) as string | undefined}
       >
         {children}
       </Question>

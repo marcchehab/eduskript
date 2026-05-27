@@ -79,9 +79,23 @@ export function rehypeMarkdownChildren() {
     )) as Root
 
     if (hast.children && hast.children.length > 0) {
+      // Strip positions: these come from the nested parse's OWN coordinate
+      // space (the inner string), not the outer document. Left in place,
+      // rehypeSourceLine would map them through the outer lineMap to wrong
+      // editor lines. Dropping them makes source-line skip this content (clicks
+      // fall back to the nearest positioned ancestor) — acceptable for
+      // re-parsed inner content.
+      const parsed = hast.children as ElementContent[]
+      parsed.forEach(stripPositions)
       node.children = node.children.filter((c) => c.type !== 'text')
-      node.children.push(...(hast.children as ElementContent[]))
+      node.children.push(...parsed)
     }
+  }
+
+  function stripPositions(node: any): void {
+    if (!node || typeof node !== 'object') return
+    delete node.position
+    if (Array.isArray(node.children)) node.children.forEach(stripPositions)
   }
 
   // Walk the whole tree. `generation` only increments when we descend into

@@ -40,8 +40,9 @@ Pick the right one
 </question>`
     const out = renderToStaticMarkup((await compileMarkdown(md)) as ReactNode)
     // Three answers, in order, the 2nd flagged correct — i.e. dense index 1.
-    const answers = [...out.matchAll(/<answer(?:\s+correct="true")?>/g)].map((m) => m[0])
-    expect(answers).toEqual(['<answer>', '<answer correct="true">', '<answer>'])
+    // (answers also carry data-source-line-* attrs, so match tolerantly.)
+    const answers = [...out.matchAll(/<answer\b[^>]*>/g)].map((m) => m[0].includes('correct="true"'))
+    expect(answers).toEqual([false, true, false])
     // Not wrapped in a paragraph.
     expect(out).not.toMatch(/<p[^>]*>\s*<answer/)
   })

@@ -44,6 +44,11 @@ interface QuestionProps {
   points?: number
   ignoreCase?: boolean
   ignoreWhitespace?: boolean
+  // Editor preview cursor-sync: original source lines of the <question> block.
+  // Applied to the card root so clicking inside it maps to / highlights the
+  // markdown. Threaded down via {...rest} to QuestionInner.
+  sourceLineStart?: string
+  sourceLineEnd?: string
 }
 
 interface OptionProps {
@@ -89,6 +94,8 @@ function QuestionInner({
   componentId,
   reviewMode = false,
   onAutosaveCheckpoint,
+  sourceLineStart,
+  sourceLineEnd,
 }: Omit<QuestionProps, 'id' | 'pageId'> & {
   initialData: QuizData | null
   updateData: (data: QuizData, options?: { immediate?: boolean }) => Promise<void>
@@ -289,7 +296,7 @@ function QuestionInner({
       : ''
 
   return (
-    <div className="space-y-4 border rounded-lg p-4 shadow-sm bg-card my-4">
+    <div className="space-y-4 border rounded-lg p-4 shadow-sm bg-card my-4" data-source-line-start={sourceLineStart} data-source-line-end={sourceLineEnd}>
       {/* Single/Multiple Choice */}
       {(type === 'single' || type === 'multiple') && (
         <div className="space-y-2">

@@ -47,6 +47,9 @@ export { remarkPlugins }
 /**
  * Rehype plugins - transform HTML AST (applied after sanitization)
  */
+// NOTE: rehypeSourceLine is intentionally NOT in this shared array — it needs
+// the per-document lineMap from preprocessing, so compileMarkdown adds it
+// explicitly (with the map) after this list.
 export const rehypePlugins: PluggableList = [
   rehypeSlug,
   rehypeHeadingSectionIds,
@@ -55,7 +58,6 @@ export const rehypePlugins: PluggableList = [
   // Must run AFTER rehypeKatex so it can rewrite the spans KaTeX emits for
   // \textcolor{NAME}{…} into themed class names.
   rehypeColorClasses,
-  rehypeSourceLine,
 ]
 
 /**
@@ -321,6 +323,44 @@ const CONTAINER_TAGS = [
  * spaced things. Idempotent (won't stack blank lines). Lines inside fenced code
  * blocks are skipped so tag examples in docs survive verbatim.
  */
+/**
+ * Run all string preprocessing and return the processed markdown plus a
+ * `lineMap` translating processed (1-based) line numbers back to the editor's
+ * original line numbers. The blank-line transforms below add/remove lines, so
+ * AST positions would otherwise be shifted — breaking the editor↔preview
+ * cursor sync. rehypeSourceLine uses lineMap to undo the shift.
+ *
+ * Alignment trick: expandSelfClosingTags is line-count-preserving, and the
+ * other two transforms ONLY insert or delete BLANK lines (never alter non-blank
+ * content or order). So we anchor each processed line to its original by
+ * walking non-blank lines in lockstep.
+ */
+function preprocessMarkdown(content: string): { text: string; lineMap: number[] } {
+  const base = expandSelfClosingTags(content)
+  const text = delimitContainerTags(normalizeQuestionSpacing(base))
+
+  const baseLines = base.split('\n')
+  const procLines = text.split('\n')
+  const isBlank = (s: string | undefined) => s === undefined || s.trim() === ''
+  const lineMap = new Array<number>(procLines.length)
+
+  let bi = 0
+  for (let pi = 0; pi < procLines.length; pi++) {
+    if (!isBlank(procLines[pi])) {
+      while (bi < baseLines.length && isBlank(baseLines[bi])) bi++
+      lineMap[pi] = Math.min(bi + 1, baseLines.length) // 1-based original line
+      bi++
+    } else {
+      // Blank line (kept or inserted): point at the next content line's origin.
+      let nb = bi
+      while (nb < baseLines.length && isBlank(baseLines[nb])) nb++
+      lineMap[pi] = Math.min(nb + 1, baseLines.length)
+    }
+  }
+
+  return { text, lineMap }
+}
+
 function delimitContainerTags(markdown: string): string {
   const tags = CONTAINER_TAGS.join('|')
   const openRe = new RegExp(`^[ \\t]*<(?:${tags})\\b[^>]*>[ \\t]*$`, 'i')
@@ -355,7 +395,7 @@ export async function compileMarkdown(
 ): Promise<ReactNode> {
   const { components = {}, resolvedStableLinks = new Map<string, ResolvedPage>() } = options ?? {}
 
-  const processed = delimitContainerTags(normalizeQuestionSpacing(expandSelfClosingTags(content)))
+  const { text: processed, lineMap } = preprocessMarkdown(content)
 
   // Clone the schema per call: rehypeAllowPluginAttrs mutates the plugin
   // allowlist based on the attrs found in *this* document, so concurrent
@@ -379,6 +419,9 @@ export async function compileMarkdown(
     .use(rehypeStablePageLinks, resolvedStableLinks) // Rewrite /p/{id} → canonical URL
     .use(rehypeSanitize, schema)
     .use(rehypePlugins)
+    // Source-line attributes, with the lineMap so preview line numbers match
+    // the editor's original lines (preprocessing shifted them).
+    .use(rehypeSourceLine, lineMap)
     .use(rehypeReact, {
       ...production,
       components,

@@ -5,9 +5,19 @@ import { visit } from 'unist-util-visit'
  * Used for editor preview to highlight the paragraph corresponding to cursor position
  *
  * Adds data-source-line-start and data-source-line-end attributes based on
- * the markdown source position information preserved through the AST
+ * the markdown source position information preserved through the AST.
+ *
+ * `lineMap` (optional) translates PROCESSED line numbers (AST positions reflect
+ * the string AFTER compileMarkdown's preprocessing — expand-self-closing /
+ * question-spacing / container-delimiting add or remove blank lines) back to
+ * the editor's ORIGINAL line numbers, so the editor↔preview cursor sync lines
+ * up. `lineMap[processedLine - 1] = originalLine`. Without it, positions pass
+ * through unchanged.
  */
-export function rehypeSourceLine() {
+export function rehypeSourceLine(lineMap?: number[]) {
+  const toOriginal = (line: number) =>
+    lineMap && lineMap[line - 1] != null ? lineMap[line - 1] : line
+
   return function transformer(tree: any) {
     // Block-level HTML elements to track source lines for
     const blockElements = new Set([
@@ -18,7 +28,16 @@ export function rehypeSourceLine() {
       'excalidraw-image', // Excalidraw drawings
       'muxvideo', // Video embeds
       'image', // Custom Image component
-      'img' // Native images
+      'img', // Native images
+      // Custom container components — so clicking inside them in the preview
+      // highlights/maps to their source lines (their inner content may be
+      // re-parsed and position-stripped, so the container itself anchors it).
+      // Only tags whose React component forwards data-source-line-* to its DOM
+      // root are listed; clicks inside e.g. an <answer> bubble up to <question>.
+      'question',
+      'flex', 'flex-item',
+      'tabs-container',
+      'fullwidth',
     ])
 
     // Process HTML elements
@@ -41,10 +60,10 @@ export function rehypeSourceLine() {
       // Skip if we still don't have position info
       if (!startLine || !endLine) return
 
-      // Add source line attributes
+      // Add source line attributes, mapped back to original editor lines.
       node.properties = node.properties || {}
-      node.properties['data-source-line-start'] = startLine
-      node.properties['data-source-line-end'] = endLine
+      node.properties['data-source-line-start'] = toOriginal(startLine)
+      node.properties['data-source-line-end'] = toOriginal(endLine)
     })
   }
 }
