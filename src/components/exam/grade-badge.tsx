@@ -9,7 +9,7 @@
  * Renders nothing when no review is active for this component.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { RotateCcw } from 'lucide-react'
 import { useComponentReview } from '@/contexts/exam-review-context'
 
@@ -19,15 +19,20 @@ export function GradeBadge({ componentId }: { componentId: string }) {
   const { active, mode, review, setOverride, setFeedback } = useComponentReview(componentId)
   const [draft, setDraft] = useState('')
   const [fb, setFb] = useState('')
+  // While a field is focused, DON'T overwrite its draft from a server reload:
+  // the debounced save triggers a /review refetch, and syncing the (lagging)
+  // server value back into a field you're typing in dropped your last letters.
+  const ptsFocused = useRef(false)
+  const fbFocused = useRef(false)
 
   useEffect(() => {
-    if (!review) return
+    if (!review || ptsFocused.current) return
     // eslint-disable-next-line react-hooks/set-state-in-effect -- sync the editable draft to the loaded/overridden score
     setDraft(fmt(review.earned))
   }, [review?.earned, review?.componentId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!review) return
+    if (!review || fbFocused.current) return
     // eslint-disable-next-line react-hooks/set-state-in-effect -- sync feedback draft to loaded value
     setFb(review.feedback ?? '')
   }, [review?.feedback, review?.componentId]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -93,7 +98,8 @@ export function GradeBadge({ componentId }: { componentId: string }) {
           className="w-12 h-7 rounded border bg-background px-1 text-right tabular-nums"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          onBlur={commit}
+          onFocus={() => { ptsFocused.current = true }}
+          onBlur={() => { ptsFocused.current = false; commit() }}
         />
         <span className="text-muted-foreground tabular-nums">/ {fmt(review.max)}</span>
         {review.overridden ? (
@@ -111,6 +117,8 @@ export function GradeBadge({ componentId }: { componentId: string }) {
       <textarea
         value={fb}
         onChange={(e) => setFb(e.target.value)}
+        onFocus={() => { fbFocused.current = true }}
+        onBlur={() => { fbFocused.current = false }}
         placeholder="Feedback for this question (shown to the student)…"
         rows={2}
         className="flex-1 min-w-0 rounded border bg-background px-2 py-1 text-sm resize-y"
