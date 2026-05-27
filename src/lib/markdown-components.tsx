@@ -398,7 +398,12 @@ export function createMarkdownComponents(
     const editorHeight = Number.isFinite(parsedHeight) && parsedHeight > 0 ? parsedHeight : undefined
 
     return (
-      <div {...props}>
+      // data-interactive: the preview's click→cursor handler skips interactive
+      // elements, so clicking into the live editor keeps focus there instead of
+      // jumping the markdown cursor (which would steal focus instantly). The
+      // data-source-line-* spread from {...props} still lets the cursor→preview
+      // highlight find this block.
+      <div {...props} data-interactive="true">
         <CodeEditor
           key={id}
           id={id}
