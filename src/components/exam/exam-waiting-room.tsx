@@ -14,7 +14,8 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { Clock, Wifi, WifiOff } from 'lucide-react'
+import { Clock, Wifi, WifiOff, RefreshCw } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { HandInButton } from './hand-in-button'
 
 interface ExamWaitingRoomProps {
@@ -38,6 +39,7 @@ export function ExamWaitingRoom({
   skriptId,
 }: ExamWaitingRoomProps) {
   const [isConnected, setIsConnected] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const eventSourceRef = useRef<EventSource | null>(null)
 
   useEffect(() => {
@@ -112,6 +114,26 @@ export function ExamWaitingRoom({
           </p>
           <p className="text-sm text-muted-foreground">
             Please stay on this page. It will automatically update when the exam starts.
+          </p>
+        </div>
+
+        {/* Manual refresh — fallback when the auto-update event is missed (e.g.
+            a backgrounded tab or a dropped connection in Safe Exam Browser).
+            Reloads the page, which re-checks the exam state server-side. */}
+        <div className="space-y-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setIsRefreshing(true)
+              window.location.reload()
+            }}
+            disabled={isRefreshing}
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+            {isRefreshing ? 'Checking…' : 'Check if the exam is open'}
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            If the exam doesn&apos;t open on its own, tap to check again.
           </p>
         </div>
 
