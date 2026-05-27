@@ -584,8 +584,21 @@ export interface RunChecksOpts {
  * On abort / timeout / worker-crash the worker is terminated and the function
  * resolves with all-failed results — matching the grader's prior behavior
  * where a timeout yields a 0 the teacher can override.
+ *
+ * SERIALIZED: the worker runs in a SINGLE Pyodide interpreter and its message
+ * handler is async, so two checks posted together interleave in the same Python
+ * globals and cross-wire results (one exercise's panel showing another's tests —
+ * seen when grade-mode auto-runs every editor's check on student-select). The
+ * chain ensures only one check is in the worker at a time.
  */
+let runChecksChain: Promise<unknown> = Promise.resolve()
 export function runChecks(opts: RunChecksOpts): Promise<PythonCheckResult[]> {
+  const run = runChecksChain.then(() => runChecksInner(opts))
+  runChecksChain = run.then(() => {}, () => {}) // keep the chain alive past any outcome
+  return run
+}
+
+function runChecksInner(opts: RunChecksOpts): Promise<PythonCheckResult[]> {
   const { setupLines, assertions } = parseAssertions(opts.checkCode)
   if (assertions.length === 0) return Promise.resolve([])
 
