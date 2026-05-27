@@ -16,6 +16,8 @@
     "z-ai/glm-4.7": { "aa": "glm-4-7" },
     "moonshotai/kimi-k2-0905": { "aa": "kimi-k2-0905" },
     "moonshotai/kimi-k2.6": { "aa": "kimi-k2-6" },
+    "minimax/minimax-m2.7": { "aa": "minimax-m2-7" },
+    "minimax/minimax-m2.5": { "aa": "minimax-m2-5" },
     "google/gemini-2.5-flash-lite": { "aa": "gemini-2-5-flash-lite-reasoning" },
     "openai/gpt-oss-120b": { "aa": "gpt-oss-120b" },
     "openai/gpt-oss-20b": { "aa": "gpt-oss-20b" },
