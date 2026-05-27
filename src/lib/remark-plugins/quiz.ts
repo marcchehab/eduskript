@@ -136,19 +136,27 @@ export function remarkQuiz() {
         if (attrs.ignoreCase) attrStr += ` ignore-case="${attrs.ignoreCase}"`
         if (attrs.ignoreWhitespace) attrStr += ` ignore-whitespace="${attrs.ignoreWhitespace}"`
 
-        // For choice questions: inner content = <answer> children.
+        // For choice questions: inner content = <answer> children, emitted with
+        // NO whitespace between them. After rehype-raw, whitespace between
+        // sibling elements becomes text nodes, which would push the real
+        // <answer> elements to sparse/odd Children positions; joining tight
+        // keeps option indices dense (0,1,2,…) — see extractOptionsInfo in
+        // components/markdown/quiz.tsx.
         // For text/number/range questions: inner content = the prompt text
         // (which the Question component reads as `children` and renders below
         // the input). Required for surveys, which need free-text prompts.
         const isChoice = !attrs.type || attrs.type === 'single' || attrs.type === 'multiple'
         const innerContent = isChoice
-          ? optionElements.map(o => (o as any).value).join('\n')
+          ? optionElements.map(o => (o as any).value).join('')
           : (prompt ?? '').trim()
 
-        // Create the question wrapper
+        // Create the question wrapper. No newlines around inner content for
+        // choice questions so no stray whitespace text nodes are introduced.
         const questionHtml: RootContent = {
           type: 'html',
-          value: `<question ${attrStr}>\n${innerContent}\n</question>`
+          value: isChoice
+            ? `<question ${attrStr}>${innerContent}</question>`
+            : `<question ${attrStr}>\n${innerContent}\n</question>`
         }
 
         // Replace the nodes

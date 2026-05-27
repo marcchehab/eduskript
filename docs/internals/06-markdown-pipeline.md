@@ -169,6 +169,31 @@ interface MarkdownContext {
 
 5. **Plugin Composition** — single responsibility per plugin; order matters (file resolution before image processing).
 
+## Custom container tags (blank-line independence)
+
+Author-written container tags (`<flex>/<flex-item>`, `<tabs-container>/<tab-item>`,
+`<fullwidth>`, `<stickme>`, `<left>/<center>/<right>`, `<question>/<answer>`) are raw HTML,
+so CommonMark's blank-line HTML-block rules would otherwise make them fragile (inner markdown
+not rendered without blank lines; structure breaking). Two mechanisms make them robust:
+
+- **`rehype-plugins/markdown-children.ts`** (`rehypeMarkdownChildren`) runs after `rehype-raw`
+  (and **before** `rehypeAlignTags`) and re-parses the literal-text children of registered
+  containers as markdown. Registry: `stickme, tab-item, flex-item, fullwidth, left, center,
+  right`. It only touches `text` children, so content already parsed via blank lines is left
+  alone (blank / no-blank input converge). Nested containers are resolved by walking the
+  freshly-parsed subtree, capped by `MAX_REPARSE_GENERATIONS`. Pure wrappers (`flex`,
+  `tabs-container`, `survey`) are NOT registered — their content lives in the inner tags.
+
+- **`markdown-compiler.ts` → `normalizeQuestionSpacing`** (a pre-parse string pass alongside
+  `expandSelfClosingTags`) collapses blank lines adjacent to `<answer>`/`</question>` tags.
+  This keeps `<answer>` as **direct children** of `<question>` (a blank line before an answer
+  makes CommonMark wrap the run in a `<p>`, detaching the options and rendering an empty quiz).
+  It deliberately leaves prompt-text and ```` ```expected ```` fence spacing untouched.
+
+Quiz option indices are **dense element-only** positions (0,1,2,…): `extractOptionsInfo` and the
+render map in `components/markdown/quiz.tsx` count only `<answer>` elements, skipping the prompt
+text and inter-answer whitespace text nodes.
+
 ## Debugging Tips
 
 **Plugin not running:** check TypeScript types (especially `tree: Root` parameter). Add `console.log()` to verify execution.

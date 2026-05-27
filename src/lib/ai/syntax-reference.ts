@@ -271,19 +271,16 @@ Excalidraw diagrams: Reference \`.excalidraw\` files directly. The system auto-d
   // Text alignment
   sections.push(`## Text alignment
 
-Wrap content in a \`<left>\`, \`<center>\`, or \`<right>\` block to align it. Blank lines INSIDE the wrapper are required so the inner content is parsed as markdown.
+Wrap content in a \`<left>\`, \`<center>\`, or \`<right>\` block to align it. Inner content is parsed as markdown with or without surrounding blank lines.
 
 \`\`\`markdown
 <center>
-
 ## Centered heading
-
 A centered paragraph below.
-
 </center>
 \`\`\`
 
-The closing tag is required. Inner content is normal markdown — multi-block content needs blank lines between blocks as usual.`)
+The closing tag is required.`)
 
   // Flex layouts
   sections.push(`## Flex Layouts (\`<flex>\` / \`<flex-item>\`)
@@ -316,7 +313,7 @@ Side-by-side columns that stack on mobile (\`flex-col\` below md, \`flex-row\` a
 
 **Equal columns:** omit \`width\` entirely — items default to \`flex: 1\` with \`flex-basis: 0\`, so they divide space equally regardless of content. Only set \`width\` when you want a deliberately uneven split (e.g. \`width="30%"\` + an auto-growing sibling).
 
-Blank lines around markdown blocks inside \`<flex-item>\` are required (standard CommonMark).`)
+Markdown inside \`<flex-item>\` is parsed whether or not you leave blank lines around it.`)
 
   // Custom CSS
   sections.push(`## Custom CSS
@@ -447,15 +444,16 @@ console.log("Hello");
 </tabs-container>
 \`\`\`
 
-**IMPORTANT:** Each tab's content goes inside \`<tab-item>\` tags. The \`data-items\` array defines tab labels in order. Leave blank lines around markdown content inside tabs.`)
+**IMPORTANT:** Each tab's content goes inside \`<tab-item>\` tags. The \`data-items\` array defines tab labels in order. Markdown inside a tab is parsed with or without surrounding blank lines.`)
 
   // Quiz
   sections.push(`## Quizzes
 
-Interactive multiple choice using \`<question>\` and \`<answer>\` HTML tags:
+Interactive multiple choice using \`<question>\` and \`<answer>\` HTML tags. An optional prompt line inside the question (before the answers) renders above the options:
 
 \`\`\`markdown
 <question id="q1" type="single">
+What is 2 + 2?
 <answer correct="true">4</answer>
 <answer feedback="Too low">3</answer>
 <answer feedback="Too high">5</answer>
@@ -479,6 +477,8 @@ How relevant is Python for your work?
 **answer attributes:**
 - \`correct="true"\` — Marks the correct answer
 - \`feedback="..."\` — Shown when this wrong option is selected
+
+Spacing is forgiving: a prompt line and blank lines around the \`<answer>\` tags are optional — the question renders correctly either way.
 
 **Free-text auto-check (predict-the-output):** a \`type="text"\` question can be auto-graded against an expected output written as an \`\`\`expected fenced block inside the question (leave a blank line before it). The typed answer gets **partial credit** by text similarity (× \`points\`, default 1, rounded to 0.1 pts) with a diff; an exact match (after normalizing trailing whitespace / surrounding blank lines) is fully correct. Optional flags: \`ignore-case="true"\`, \`ignore-whitespace="true"\`. Example:
 

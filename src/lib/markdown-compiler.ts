@@ -271,13 +271,91 @@ function expandSelfClosingTags(markdown: string): string {
   })
 }
 
+/**
+ * Make `<question>`/`<answer>` blank-line-independent.
+ *
+ * `<answer>` elements must be DIRECT children of `<question>` for the quiz
+ * component to read them (Children.toArray). But a blank line before an
+ * `<answer>` (or before `</question>`) makes CommonMark treat the run of
+ * answers as a paragraph, wrapping them in a `<p>` — so the options detach from
+ * the question and the quiz renders empty. Authors hit this constantly (the
+ * "leave a blank line / don't leave a blank line" foot-gun).
+ *
+ * Fix: inside each `<question>…</question>`, collapse blank lines that sit
+ * immediately before an `<answer>`, `</answer>`, or `</question>` tag down to a
+ * single newline. This is deliberately narrow — it does NOT touch blank lines
+ * around the prompt text or a ```expected fenced block (free-text auto-check),
+ * so those keep working. Single newlines between answers are fine; the
+ * resulting whitespace text nodes are handled by dense element-only indexing in
+ * components/markdown/quiz.tsx.
+ *
+ * `<answer>` is deliberately NOT delimited by `delimitContainerTags` below
+ * (that would make the prompt its own paragraph and the answers separate
+ * blocks); questions rely on this collapse instead.
+ */
+function normalizeQuestionSpacing(markdown: string): string {
+  return markdown.replace(/<question\b[^>]*>[\s\S]*?<\/question>/gi, (block) =>
+    block.replace(/\n[ \t]*(?:\n[ \t]*)+(<\/?(?:answer|question)\b)/gi, '\n$1')
+  )
+}
+
+/**
+ * Custom container tags that wrap markdown content. Each must be delimited from
+ * surrounding content by blank lines, or CommonMark's HTML-block rules bite:
+ * a blank line INSIDE the block terminates it early (later content + the
+ * closing tag mis-nest), and missing a blank line AFTER the closing tag absorbs
+ * the following markdown into the block (e.g. a `## Heading` rendered as literal
+ * text). `<question>` is included so content after `</question>` isn't
+ * swallowed; `<answer>` is NOT (see normalizeQuestionSpacing).
+ */
+const CONTAINER_TAGS = [
+  'flex', 'flex-item', 'tabs-container', 'tab-item',
+  'fullwidth', 'stickme', 'left', 'center', 'right', 'question',
+]
+
+/**
+ * Guarantee a blank line before every opening container tag and after every
+ * closing container tag that sits on its own line. This makes CommonMark treat
+ * each tag as a standalone HTML block, so inner content parses as markdown and
+ * adjacent / following content can't be absorbed — regardless of how the author
+ * spaced things. Idempotent (won't stack blank lines). Lines inside fenced code
+ * blocks are skipped so tag examples in docs survive verbatim.
+ */
+function delimitContainerTags(markdown: string): string {
+  const tags = CONTAINER_TAGS.join('|')
+  const openRe = new RegExp(`^[ \\t]*<(?:${tags})\\b[^>]*>[ \\t]*$`, 'i')
+  const closeRe = new RegExp(`^[ \\t]*</(?:${tags})>[ \\t]*$`, 'i')
+  const fenceRe = /^[ \t]*(```|~~~)/
+
+  const lines = markdown.split('\n')
+  const out: string[] = []
+  let inFence = false
+  const blank = (s: string | undefined) => s === undefined || s.trim() === ''
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (fenceRe.test(line)) inFence = !inFence
+
+    if (!inFence && openRe.test(line)) {
+      if (out.length > 0 && !blank(out[out.length - 1])) out.push('')
+      out.push(line)
+    } else if (!inFence && closeRe.test(line)) {
+      out.push(line)
+      if (!blank(lines[i + 1])) out.push('')
+    } else {
+      out.push(line)
+    }
+  }
+  return out.join('\n')
+}
+
 export async function compileMarkdown(
   content: string,
   options?: CompileMarkdownOptions
 ): Promise<ReactNode> {
   const { components = {}, resolvedStableLinks = new Map<string, ResolvedPage>() } = options ?? {}
 
-  const processed = expandSelfClosingTags(content)
+  const processed = delimitContainerTags(normalizeQuestionSpacing(expandSelfClosingTags(content)))
 
   // Clone the schema per call: rehypeAllowPluginAttrs mutates the plugin
   // allowlist based on the attrs found in *this* document, so concurrent
@@ -289,8 +367,13 @@ export async function compileMarkdown(
     .use(remarkPlugins)
     .use(remarkRehype, { allowDangerousHtml: true })
     .use(rehypeRaw)
+    // Re-parse markdown inside custom container tags (flex-item, tab-item,
+    // question, left/center/right, …) so they work with OR without blank
+    // lines. MUST run before rehypeAlignTags: it re-parses <left>/<center>/
+    // <right> text children while they're still those tags, then align rewrites
+    // the (now markdown-populated) tag to <div>.
+    .use(rehypeMarkdownChildren)
     .use(rehypeAlignTags) // Rewrite <left>/<center>/<right> → <div class="es-align-*"> (before sanitize so it sees a plain div)
-    .use(rehypeMarkdownChildren) // Re-parse markdown inside custom elements like <stickme>
     .use(rehypeAllowPluginAttrs, schema) // Add this document's <plugin> attrs to the sanitize allowlist
     .use(rehypeExternalLinks) // Auto target=_blank for external links + title="_blank" opt-in
     .use(rehypeStablePageLinks, resolvedStableLinks) // Rewrite /p/{id} → canonical URL

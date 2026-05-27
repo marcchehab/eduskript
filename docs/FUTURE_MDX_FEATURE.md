@@ -91,3 +91,25 @@ Before implementing MDX, consider these safer alternatives:
 1. **More built-in components**: Add commonly-requested features as first-class components
 2. **Sandboxed plugins**: Per-org plugin choice via iframe sandboxing
 3. **Declarative templates**: Config-based component customization without code execution
+
+### "MDX grammar, never evaluate" (the safe way to get MDX's robustness)
+
+The MDX security hole is **evaluation** (`@mdx-js/mdx` `compile()` → `run()` → JS), not the JSX
+*syntax*. So a genuinely safe path to MDX-grade robustness exists: use the MDX **parser only**
+(`micromark-extension-mdxjs` + `mdast-util-mdx-jsx`, already present transitively via
+`rehype-react`) to parse `<Flex><FlexItem>**md**</FlexItem></Flex>` into `mdxJsxFlowElement`
+nodes — markdown children parse natively, so the blank-line problem and nesting are solved by
+the grammar — then **strip every `mdxFlowExpression`/`mdxTextExpression`/`mdxjsEsm` node** and
+render the JSX elements through the existing component allowlist + `rehype-sanitize`. No
+`compile`, no `run`, no `new Function`: the historical vector is never invoked.
+
+**Why we did NOT adopt this (2026):** MDX/JSX is *strict*. `a < b`, `5<10`, an unmatched `{`, a
+stray `<`, `<3`, or an unclosed tag is a hard parse error that fails the whole page — and
+teacher content is full of these. CommonMark treats them as literal text. We already learned
+this with `remark-directive` for alignment (see `rehype-plugins/align-tags.ts`: moved to plain
+HTML "so a stray `:` in body text doesn't collide"). Plus a large migration of existing
+loose-HTML content and the AI syntax reference. Instead we kept CommonMark's forgiving parsing
+and made container tags robust by re-parsing inner content ourselves (`rehypeMarkdownChildren` +
+`normalizeQuestionSpacing` — see `docs/internals/06-markdown-pipeline.md`). Revisit this option
+only if first-class nesting / markdown-everywhere becomes a hard requirement and stricter
+parsing is acceptable.

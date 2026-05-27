@@ -201,8 +201,8 @@ function QuestionInner({
   // handleSubmit so autosave and the dedup baseline share one shape. The
   // text/choice auto-scores computed here are for LIVE teacher preview only —
   // authoritative grading re-derives them on the teacher's device (see
-  // score-component.ts / exam-review-context). Choice indices use the sparse
-  // Children.toArray positions (see extractOptionsInfo) — do not compact.
+  // score-component.ts / exam-review-context). Choice indices are dense
+  // element-only positions (0,1,2,…) — see extractOptionsInfo.
   const buildQuizData = (submitted: boolean): QuizData => {
     let textFields: Partial<QuizData> = {}
     if (type === 'text') {
@@ -276,16 +276,34 @@ function QuestionInner({
   // current answer; matches the persisted score when the answer is unedited).
   const textResult = autoCheck ? compareOutput(textAnswer, expected as string, compareOpts) : null
 
+  // For single/multiple choice, the inline prompt is the question's text
+  // children (the answers are element children). Render it above the options in
+  // the same muted style as the text-question prompt. Empty when the author put
+  // the question text in surrounding markdown instead.
+  const choicePrompt =
+    type === 'single' || type === 'multiple'
+      ? Children.toArray(children)
+          .filter((c) => typeof c === 'string')
+          .join('')
+          .trim()
+      : ''
+
   return (
     <div className="space-y-4 border rounded-lg p-4 shadow-sm bg-card my-4">
       {/* Single/Multiple Choice */}
       {(type === 'single' || type === 'multiple') && (
         <div className="space-y-2">
-          {Children.toArray(children).map((child, index) => {
-            if (!child || typeof child !== 'object') return null
-            const element = child as ReactElement<OptionProps>
-            if (!element.props) return null
-
+          {choicePrompt && (
+            <div className="text-muted-foreground text-sm">{choicePrompt}</div>
+          )}
+          {/* Filter to element (answer) children first so `index` is the dense
+              0..N-1 option position that matches extractOptionsInfo / stored
+              `selected`. Skips the prompt text node and inter-answer whitespace. */}
+          {Children.toArray(children)
+            .filter((child): child is ReactElement<OptionProps> =>
+              !!child && typeof child === 'object' && 'props' in child && !!(child as ReactElement<OptionProps>).props
+            )
+            .map((element, index) => {
             const optionProps = element.props
             const isSelected = selected.includes(index)
             const optionIsCorrect = isCorrect(optionProps.correct)
@@ -581,30 +599,27 @@ function extractTextFromChildren(node: ReactNode): string {
 
 // Build the option-label and correct-index arrays the teacher view consumes.
 //
-// IMPORTANT: indexing matches what the rendering UI passes to handleSelect,
-// which is `Children.toArray(children).map((child, index)`. After rehype-raw,
-// the remark plugin's `<answer>…</answer>\n<answer>…</answer>` emission leaves
-// whitespace text nodes between each <answer>, so element-only positions are
-// odd numbers (1, 3, 5, …) — not 0, 1, 2.
-//
-// Storing labels at the raw index keeps stored `selected` indices, the URL-
-// param `correctIndices`, and `options[i]` lookups in `quiz-progress-bar`
-// all aligned without a data migration. The resulting array is sparse; gaps
-// are intentional (whitespace positions are unselectable).
+// Indices are DENSE element-only positions (0,1,2,…): we count only the
+// `<answer>` element children, skipping the prompt text and any whitespace text
+// nodes between answers. The rendering UI (the Children.toArray map below) and
+// `handleSelect` must filter to element children the same way so stored
+// `selected`, `correctIndices`, and `options[i]` in quiz-progress-bar all align.
 function extractOptionsInfo(children: ReactNode, type: 'single' | 'multiple' | 'text' | 'number' | 'range') {
   const correctIndices: number[] = []
   const optionLabels: string[] = []
 
   if (type === 'single' || type === 'multiple') {
-    Children.forEach(children, (child, index) => {
+    let i = 0
+    Children.forEach(children, (child) => {
       if (child && typeof child === 'object' && 'props' in child) {
         const element = child as ReactElement<OptionProps>
         if (element.props) {
           if (element.props.correct === 'true') {
-            correctIndices.push(index)
+            correctIndices.push(i)
           }
           const text = extractTextFromChildren(element.props.children).trim()
-          optionLabels[index] = text || `Option ${index + 1}`
+          optionLabels[i] = text || `Option ${i + 1}`
+          i++
         }
       }
     })
