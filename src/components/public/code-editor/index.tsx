@@ -414,7 +414,7 @@ export const CodeEditor = memo(function CodeEditor({
   // the Check button + results panel for the teacher on exam editors (where they
   // are hidden from students) and suppresses the celebration. Checks stay
   // hidden from students in every case.
-  const { active: reviewActive, mode: reviewMode } = useComponentReview(pythonCheckComponentId)
+  const { active: reviewActive, mode: reviewMode, loadedStudentId: gradeStudentId } = useComponentReview(pythonCheckComponentId)
   const isGradingCheck = hasChecks && reviewActive && reviewMode === 'grade'
 
   // Restore checksUsed + cleared stage from persisted data on mount
@@ -3874,6 +3874,25 @@ export const CodeEditor = memo(function CodeEditor({
       setIsChecking(false)
     }
   }
+
+  // Teacher grading: auto-run the check once per student so the per-check
+  // results panel is populated on student-select — without a manual "Run
+  // checks" click in each editor. The grading bar's "Run all / Run checks"
+  // re-computes the authoritative SCORE (ExamCheckRun, via the worker) but does
+  // not populate this in-editor display; this does. Keyed by the loaded student
+  // (re-runs when the teacher switches students); waits for the student's code
+  // snapshot to be applied to the editor first.
+  const autoCheckRanForRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!isGradingCheck || !isViewingSnapshot || !studentSnapshot || !gradeStudentId) return
+    if (autoCheckRanForRef.current === gradeStudentId) return
+    autoCheckRanForRef.current = gradeStudentId
+    const t = setTimeout(() => { void runPythonCheck() }, 450)
+    return () => clearTimeout(t)
+    // runPythonCheck is intentionally omitted (stable enough; re-running only on
+    // student change is the desired behaviour).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isGradingCheck, isViewingSnapshot, studentSnapshot, gradeStudentId])
 
   // Restart Python kernel
   const restartKernel = () => {

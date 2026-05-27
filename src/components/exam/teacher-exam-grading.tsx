@@ -9,14 +9,18 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useSearchParams } from 'next/navigation'
 import { Send, Loader2, Play } from 'lucide-react'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
+import { useLayout } from '@/contexts/layout-context'
 import { ExamReviewProvider, useExamReview } from '@/contexts/exam-review-context'
 import { runChecksForStudents } from '@/lib/grading/run-checks.client'
 import { Button } from '@/components/ui/button'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
+
+const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
 
 export function TeacherExamGrading({
   pageId,
@@ -70,7 +74,8 @@ function GradingBar({
   studentName: string | null
 }) {
   const dialog = useAlertDialog()
-  const { runningChecks, rerunChecks } = useExamReview()
+  const { runningChecks, rerunChecks, totalEarned, totalMax, grade } = useExamReview()
+  const { sidebarWidth } = useLayout()
   const [busy, setBusy] = useState(false)
   const [runAll, setRunAll] = useState<{ done: number; total: number } | null>(null)
 
@@ -111,8 +116,27 @@ function GradingBar({
 
   return (
     <>
-      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full border bg-card/95 px-3 py-2 shadow-lg backdrop-blur">
+      {/* Portal to <body> so `fixed` pins to the VIEWPORT — the exam page has
+          transformed ancestors (zoom/pan) that would otherwise capture `fixed`
+          and make the bar scroll with the page. Same trick as the annotation
+          toolbar. */}
+      {typeof window !== 'undefined' && createPortal(
+      <div
+        className="fixed top-8 z-50 flex items-center gap-2 rounded-lg border border-border bg-background/95 px-3 py-2 shadow-lg backdrop-blur"
+        // Center within the CONTENT area (viewport minus sidebar), like the
+        // annotation toolbar — not the raw viewport.
+        style={{ left: `calc(${sidebarWidth}px + (100% - ${sidebarWidth}px) / 2)`, transform: 'translateX(-50%)' }}
+      >
         <span className="px-1 text-xs text-muted-foreground">Grading</span>
+        {studentId && totalMax != null && (
+          <span className="flex items-center gap-1.5 rounded-md bg-muted/60 px-2.5 py-0.5 text-sm tabular-nums">
+            <span className="font-medium">{fmt(totalEarned ?? 0)} / {fmt(totalMax)}</span>
+            <span className="text-xs text-muted-foreground">pts</span>
+            {grade != null && (
+              <span className="ml-1 border-l border-border pl-2 font-semibold">{fmt(grade)}</span>
+            )}
+          </span>
+        )}
         {studentId && (
           <Button size="sm" variant="ghost" disabled={runningChecks} onClick={() => rerunChecks()} title="Re-run this student's code checks on this device">
             {runningChecks ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
@@ -161,7 +185,9 @@ function GradingBar({
           {busy ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Send className="w-4 h-4 mr-1.5" />}
           Return all
         </Button>
-      </div>
+      </div>,
+        document.body,
+      )}
       <AlertDialogModal
         open={dialog.open}
         onOpenChange={dialog.setOpen}

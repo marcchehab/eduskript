@@ -82,13 +82,15 @@ export function GradeBadge({ componentId }: { componentId: string }) {
     if (v !== review.earned) setOverride(v)
   }
   return (
-    <div className="mt-2 space-y-1.5">
-      <div className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-sm ${tone}`}>
+    <div className="mt-2 flex items-start gap-2">
+      {/* Fixed width so the feedback box doesn't shift as the points value /
+          auto-vs-revert affordance changes the badge's natural width. */}
+      <div className={`flex w-44 shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-sm ${tone}`}>
         <span className="text-xs text-muted-foreground">Points</span>
         <input
           type="number"
           step="0.1"
-          className="w-14 h-7 rounded border bg-background px-1 text-right tabular-nums"
+          className="w-12 h-7 rounded border bg-background px-1 text-right tabular-nums"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onBlur={commit}
@@ -97,13 +99,13 @@ export function GradeBadge({ componentId }: { componentId: string }) {
         {review.overridden ? (
           <button
             title={`Revert to auto (${fmt(review.autoEarned)})`}
-            className="text-muted-foreground hover:text-foreground"
+            className="ml-auto text-muted-foreground hover:text-foreground"
             onClick={() => setOverride(null)}
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </button>
         ) : (
-          <span className="text-xs text-muted-foreground">auto</span>
+          <span className="ml-auto text-xs text-muted-foreground">auto</span>
         )}
       </div>
       <textarea
@@ -111,7 +113,7 @@ export function GradeBadge({ componentId }: { componentId: string }) {
         onChange={(e) => setFb(e.target.value)}
         placeholder="Feedback for this question (shown to the student)…"
         rows={2}
-        className="w-full max-w-md rounded border bg-background px-2 py-1 text-sm resize-y"
+        className="flex-1 min-w-0 rounded border bg-background px-2 py-1 text-sm resize-y"
       />
     </div>
   )
