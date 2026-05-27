@@ -81,8 +81,19 @@ describe('output-comparison', () => {
     it('partial when one line differs', () => {
       const r = compareOutput('0\n5\n4', '0\n2\n4')
       expect(r.exact).toBe(false)
-      expect(r.ratio).toBeGreaterThan(0)
-      expect(r.ratio).toBeLessThan(1)
+      expect(r.ratio).toBeCloseTo(2 / 3, 5) // 2 of 3 lines exact
+    })
+    it('scores 0 when every line is wrong, even with shared characters', () => {
+      // Reported bug: char-level similarity gave 0.5 here. Both lines are wrong.
+      expect(compareOutput('0\n1', '10\n5').ratio).toBe(0)
+      expect(compareOutput('1', '30').ratio).toBe(0)
+    })
+    it('half credit for one of two lines right', () => {
+      expect(compareOutput('10\n1', '10\n5').ratio).toBe(0.5)
+    })
+    it('extra wrong lines lower the ratio (penalize padding)', () => {
+      // 2 expected lines, both produced, plus 2 bogus extra lines → 2/4.
+      expect(compareOutput('10\n5\nx\ny', '10\n5').ratio).toBe(0.5)
     })
     it('respects ignoreCase', () => {
       expect(compareOutput('TRUE', 'true', { ignoreCase: true }).exact).toBe(true)

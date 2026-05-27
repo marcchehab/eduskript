@@ -3,8 +3,10 @@
  * (predict-the-output exercises). Pure, dependency-free, unit-tested.
  *
  * Used by `quiz.tsx` to auto-check a `type="text"` answer against an expected
- * output: a normalized comparison yields a similarity ratio (0–1) for partial
- * credit and an exact flag for full-correct/gate, plus a line diff for feedback.
+ * output: a normalized comparison yields a LINE-match ratio (0–1) for partial
+ * credit (fraction of output lines exactly right — see CompareResult.ratio for
+ * why not character-level) and an exact flag for full-correct/gate, plus a line
+ * diff for feedback.
  *
  * We implement Levenshtein + an LCS line diff here rather than pulling in `diff`
  * / `fast-levenshtein` — both are only transitive deps with no types, and the
@@ -116,7 +118,17 @@ export function diffLines(expected: string, student: string): DiffRow[] {
 }
 
 export interface CompareResult {
-  /** Similarity ratio in [0, 1] over the normalized strings. */
+  /**
+   * Partial-credit ratio in [0, 1] = the fraction of output LINES the student
+   * reproduced exactly (order-aware, via the LCS line diff), over the larger of
+   * the expected / student line counts.
+   *
+   * Deliberately line-based, NOT character-level: predict-the-output answers are
+   * exact strings (usually numbers), so a wrong line is wrong. Character-level
+   * similarity gave spurious credit — e.g. expected `10\n5` vs `0\n1` shares
+   * enough characters to score ~0.5 even though every line is wrong; line-based
+   * scores it 0. A student who gets one of two lines right gets 0.5.
+   */
   ratio: number
   /** True when the normalized strings are identical (full credit / gate). */
   exact: boolean
@@ -127,6 +139,16 @@ export interface CompareResult {
   diff: DiffRow[]
 }
 
+/** Fraction of lines that match exactly (LCS), over the larger line count. */
+export function lineMatchRatio(expected: string, student: string, diff: DiffRow[]): number {
+  const eLines = expected === '' ? 0 : expected.split('\n').length
+  const sLines = student === '' ? 0 : student.split('\n').length
+  const denom = Math.max(eLines, sLines)
+  if (denom === 0) return 1 // both empty → identical
+  const equal = diff.reduce((n, d) => n + (d.type === 'equal' ? 1 : 0), 0)
+  return equal / denom
+}
+
 /** Compare a student's typed output against the expected output. */
 export function compareOutput(
   student: string | null | undefined,
@@ -135,12 +157,13 @@ export function compareOutput(
 ): CompareResult {
   const ne = normalizeOutput(expected, opts)
   const ns = normalizeOutput(student, opts)
+  const diff = diffLines(ne, ns)
   return {
-    ratio: similarityRatio(ns, ne),
+    ratio: lineMatchRatio(ne, ns, diff),
     exact: ns === ne,
     normalizedExpected: ne,
     normalizedStudent: ns,
-    diff: diffLines(ne, ns),
+    diff,
   }
 }
 
