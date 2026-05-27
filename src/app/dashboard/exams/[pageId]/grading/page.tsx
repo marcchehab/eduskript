@@ -15,6 +15,7 @@ import { useSession } from 'next-auth/react'
 import Link from 'next/link'
 import { ArrowLeft, Send, Loader2, Play } from 'lucide-react'
 import { runChecksForStudents } from '@/lib/grading/run-checks.client'
+import { getReverseMappingsForClass } from '@/lib/email-mapping-db'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -140,6 +141,10 @@ export default function ExamGradingPage() {
   const [error, setError] = useState<string | null>(null)
   const [returningAll, setReturningAll] = useState(false)
   const [runAll, setRunAll] = useState<{ done: number; total: number } | null>(null)
+  // Teacher's local pseudonym → real-email mapping (IndexedDB), so the roster
+  // shows people the teacher can identify — same source the StudentNavigator /
+  // ClassToolbar use. The mapping takes precedence over the stored name/pseudonym.
+  const [resolvedEmails, setResolvedEmails] = useState<Record<string, string>>({})
 
   // Load the classes that have this exam unlocked (for the class picker).
   useEffect(() => {
@@ -182,6 +187,30 @@ export default function ExamGradingPage() {
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
   }, [pageId, classId])
+
+  // Load the teacher's pseudonym→email mappings. For a single class, just that
+  // class; for "all", merge every unlocked class's map (pseudonyms are
+  // deterministic, so a merged lookup is safe).
+  useEffect(() => {
+    if (!classId) { setResolvedEmails({}); return }
+    const ids = classId === 'all' ? (classes ?? []).map((c) => c.id) : [classId]
+    if (ids.length === 0) { setResolvedEmails({}); return }
+    let cancelled = false
+    Promise.all(ids.map((id) => getReverseMappingsForClass(id).catch(() => ({}))))
+      .then((maps) => {
+        if (cancelled) return
+        setResolvedEmails(Object.assign({}, ...maps))
+      })
+    return () => { cancelled = true }
+  }, [classId, classes])
+
+  // Display name with the teacher's mapping first, then any revealed email,
+  // then the generated name / pseudonym.
+  const displayName = useCallback(
+    (s: StudentRow): string =>
+      (s.pseudonym ? resolvedEmails[s.pseudonym] : undefined) || s.email || s.name || s.pseudonym || '—',
+    [resolvedEmails],
+  )
 
   useEffect(() => {
     if (status !== 'authenticated') return
@@ -440,12 +469,14 @@ export default function ExamGradingPage() {
                       href={`${data.examUrl}?classId=${classId}&student=${s.studentId}`}
                       className="font-medium text-primary hover:underline"
                     >
-                      {s.email || s.name || s.pseudonym || '—'}
+                      {displayName(s)}
                     </Link>
                   ) : (
-                    <span className="font-medium">{s.email || s.name || s.pseudonym || '—'}</span>
+                    <span className="font-medium">{displayName(s)}</span>
                   )}
-                  {s.email && (s.name || s.pseudonym) && (
+                  {/* When the primary is an email (mapped or revealed), show the
+                      pseudonym/name underneath for cross-reference. */}
+                  {displayName(s).includes('@') && (s.name || s.pseudonym) && (
                     <span className="block text-xs text-muted-foreground">{s.name || s.pseudonym}</span>
                   )}
                 </td>
