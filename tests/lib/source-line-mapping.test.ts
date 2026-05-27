@@ -50,6 +50,14 @@ describe('source-line mapping survives preprocessing', () => {
     expect(m && [m[1], m[2]]).toEqual(['3', '5'])
   })
 
+  it('callout blockquote carries source-line at its original lines', async () => {
+    // 1:intro 2:blank 3:> [!tip] Title 4:> content
+    const md = 'intro\n\n> [!tip] Title\n> content'
+    const html = renderToStaticMarkup((await compileMarkdown(md)) as ReactNode)
+    const m = html.match(/<blockquote[^>]*data-source-line-start="(\d+)"[^>]*data-source-line-end="(\d+)"/)
+    expect(m && [m[1], m[2]]).toEqual(['3', '4'])
+  })
+
   it('content after a question (blank lines collapsed) keeps original lines', async () => {
     // 1:intro 2:blank 3:<question...> 4:Prompt 5:blank 6:<answer...>A
     // 7:<answer>B 8:</question> 9:blank 10:## Next

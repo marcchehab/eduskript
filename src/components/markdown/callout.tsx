@@ -44,9 +44,11 @@ interface CalloutProps {
   isFoldable?: boolean
   initiallyFolded?: boolean
   sectionId?: string  // For annotation alignment tracking
+  sourceLineStart?: string  // Editor preview cursor-sync
+  sourceLineEnd?: string
 }
 
-export function Callout({ children, className, type, isFoldable, initiallyFolded, sectionId }: CalloutProps) {
+export function Callout({ children, className, type, isFoldable, initiallyFolded, sectionId, sourceLineStart, sourceLineEnd }: CalloutProps) {
   const [isOpen, setIsOpen] = useState(!initiallyFolded)
 
   const Icon = type ? calloutIcons[type] : null
@@ -74,6 +76,8 @@ export function Callout({ children, className, type, isFoldable, initiallyFolded
       onClick={handleToggle}
       style={{ cursor: isFoldable ? 'pointer' : undefined }}
       data-section-id={sectionId}
+      data-source-line-start={sourceLineStart}
+      data-source-line-end={sourceLineEnd}
       data-dynamic-height={isFoldable ? 'true' : undefined}
     >
       {/* Process children to inject icon into callout-title */}

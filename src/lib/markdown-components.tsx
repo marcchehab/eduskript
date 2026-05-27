@@ -156,7 +156,10 @@ function BlockquoteComponent({ children, className, ...props }: React.HTMLAttrib
   const initiallyFolded = className?.includes('callout-folded')
 
   // Extract data-section-id from props (added by rehype plugin for annotation alignment)
-  const sectionId = (props as Record<string, unknown>)['data-section-id'] as string | undefined
+  const dataProps = props as Record<string, unknown>
+  const sectionId = dataProps['data-section-id'] as string | undefined
+  const sourceLineStart = (dataProps['data-source-line-start'] ?? dataProps['dataSourceLineStart']) as string | undefined
+  const sourceLineEnd = (dataProps['data-source-line-end'] ?? dataProps['dataSourceLineEnd']) as string | undefined
 
   return (
     <Callout
@@ -165,6 +168,8 @@ function BlockquoteComponent({ children, className, ...props }: React.HTMLAttrib
       isFoldable={isFoldable}
       initiallyFolded={initiallyFolded}
       sectionId={sectionId}
+      sourceLineStart={sourceLineStart}
+      sourceLineEnd={sourceLineEnd}
     >
       {children}
     </Callout>
