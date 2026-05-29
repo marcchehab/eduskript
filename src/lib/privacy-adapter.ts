@@ -413,6 +413,40 @@ export function PrivacyAdapter(options: PrivacyAdapterOptions): Adapter {
           await autoJoinOrgByEmailDomain(prisma, createdUser.id, user.email)
         }
 
+        // Auto-join the default eduskript org. Without this, OAuth teacher
+        // signups from /auth/signup (no orgSlug/teacherSlug context) get a
+        // Site row but no eduskript membership, and the proxy-rewritten
+        // /org/eduskript/<slug> route 404s because it gates on org
+        // membership. Email/password signup does the same in
+        // src/app/api/auth/register/route.ts.
+        try {
+          const defaultOrgSite = await prisma.site.findUnique({
+            where: { slug: 'eduskript' },
+            select: { organizationId: true },
+          })
+          if (defaultOrgSite?.organizationId) {
+            const existing = await prisma.organizationMember.findUnique({
+              where: {
+                organizationId_userId: {
+                  organizationId: defaultOrgSite.organizationId,
+                  userId: createdUser.id,
+                },
+              },
+            })
+            if (!existing) {
+              await prisma.organizationMember.create({
+                data: {
+                  organizationId: defaultOrgSite.organizationId,
+                  userId: createdUser.id,
+                  role: 'member',
+                },
+              })
+            }
+          }
+        } catch (error) {
+          log.error(`Default-org auto-join failed for ${maskedEmail}: ${(error as Error).message}`)
+        }
+
         return createdUser
       }
 
