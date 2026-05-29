@@ -72,9 +72,11 @@
 import type { Adapter, AdapterUser, AdapterAccount } from 'next-auth/adapters'
 import { PrismaAdapter } from '@auth/prisma-adapter'
 import { PrismaClient } from '@prisma/client'
+import { revalidateTag, revalidatePath } from 'next/cache'
 import { generatePseudonym, getStableStudentNickname } from './privacy/pseudonym'
 import { createLogger } from '@/lib/logger'
 import { createTrialSubscription } from '@/lib/trial'
+import { CACHE_TAGS } from './cached-queries'
 
 const log = createLogger('auth:create-user')
 
@@ -388,6 +390,14 @@ export function PrivacyAdapter(options: PrivacyAdapterOptions): Adapter {
           await prisma.site.create({
             data: { slug: pageSlug, userId: createdUser.id },
           })
+
+          // Bust any cached `null` for this pageSlug. If anything hit
+          // /<pageSlug> before signup, getTeacherByPageSlug /
+          // getTeacherWithLayout cached null indefinitely (revalidate: false)
+          // and the new user would 404 until restart.
+          revalidateTag(CACHE_TAGS.user(pageSlug), { expire: 0 })
+          revalidateTag(CACHE_TAGS.teacherContent(pageSlug), { expire: 0 })
+          revalidatePath(`/${pageSlug}`)
         }
 
         log.info(`Teacher account created: id=${createdUser.id}, pageSlug="${pageSlug}", email=${maskedEmail}`)

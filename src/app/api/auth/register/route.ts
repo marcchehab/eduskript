@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidateTag, revalidatePath } from 'next/cache'
 import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/prisma'
 import { generateSlug } from '@/lib/markdown'
@@ -7,6 +8,7 @@ import { randomBytes } from 'crypto'
 import { registrationRateLimiter, getClientIdentifier } from '@/lib/rate-limit'
 import { validatePassword } from '@/lib/password-validation'
 import { createTrialSubscription } from '@/lib/trial'
+import { CACHE_TAGS } from '@/lib/cached-queries'
 
 /**
  * Generates a page slug from an email address
@@ -164,6 +166,15 @@ export async function POST(request: NextRequest) {
       })
       return u
     })
+
+    // Bust any cached `null` for this pageSlug. If anything (a probe, a
+    // typo, a link preview) hit /<pageSlug> before signup, getTeacherByPageSlug
+    // / getTeacherWithLayout cached null indefinitely (revalidate: false) and
+    // the new user would 404 until restart. Mirrors the pattern in
+    // /api/user/profile when a pageSlug changes.
+    revalidateTag(CACHE_TAGS.user(pageSlug), { expire: 0 })
+    revalidateTag(CACHE_TAGS.teacherContent(pageSlug), { expire: 0 })
+    revalidatePath(`/${pageSlug}`)
 
     // Auto-assign teacher to the default "eduskript" organization
     const defaultOrgSite = await prisma.site.findUnique({

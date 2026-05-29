@@ -62,6 +62,11 @@ vi.mock('bcryptjs', () => ({
   },
 }))
 
+vi.mock('next/cache', () => ({
+  revalidateTag: vi.fn(),
+  revalidatePath: vi.fn(),
+}))
+
 import { POST } from '@/app/api/auth/register/route'
 import { prisma } from '@/lib/prisma'
 import { registrationRateLimiter } from '@/lib/rate-limit'

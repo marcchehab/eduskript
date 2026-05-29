@@ -69,6 +69,11 @@ vi.mock('@/lib/trial', () => ({
   createTrialSubscription: vi.fn(() => Promise.resolve(null)),
 }))
 
+vi.mock('next/cache', () => ({
+  revalidateTag: vi.fn(),
+  revalidatePath: vi.fn(),
+}))
+
 // Mock pseudonym generation
 vi.mock('@/lib/privacy/pseudonym', () => ({
   generatePseudonym: vi.fn((email: string) => `pseudonym_${email.split('@')[0]}`),
