@@ -776,7 +776,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         ctx.fillStyle = strokeColor
         ctx.fill(pathObj)
       }
-    }, [mode, strokeColor, strokeWidth, isPointNearStroke, scheduleEraserRedraw, updateEraserCursorPosition, updateEraserCursor, screenToPaper])
+    }, [mode, strokeColor, strokeWidth, isPointNearStroke, scheduleEraserRedraw, updateEraserCursorPosition, updateEraserCursor, screenToPaper, onEraserMarksChange, svgHandlesDisplay])
 
     const stopDrawing = useCallback((e?: React.PointerEvent<HTMLCanvasElement>) => {
       // Remove pointer from tracking
@@ -946,7 +946,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         const data = JSON.stringify(pathsRef.current)
         onUpdate?.(data)
       }
-    }, [mode, strokeColor, strokeWidth, onUpdate, onPenStateChange, onTelemetry, headingPositions, redrawCanvas, updateEraserCursor, hideEraserCursor])
+    }, [mode, strokeColor, strokeWidth, onUpdate, onPenStateChange, onTelemetry, headingPositions, redrawCanvas, updateEraserCursor, hideEraserCursor, onEraserMarksChange])
 
     const handlePointerCancel = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
       // Clean up when pointer is cancelled
@@ -993,13 +993,18 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       }
     }, [updateEraserCursor])
 
-    // Cleanup RAF on unmount
+    // Cleanup RAF on unmount. We intentionally read the *current* RAF id at
+    // cleanup time (not a captured one) — the ref holds whatever frame is
+    // outstanding when the component unmounts, which is what we want to
+    // cancel. ESLint's "ref may have changed" warning is meant for DOM-node
+    // refs, not transient handles like this.
     useEffect(() => {
       return () => {
         if (eraserRedrawRafRef.current !== null) {
           cancelAnimationFrame(eraserRedrawRafRef.current)
         }
         if (drawRafRef.current !== null) {
+          // eslint-disable-next-line react-hooks/exhaustive-deps -- Intentional: drawRafRef holds the live RAF id, not a DOM node; reading it at cleanup time is correct.
           cancelAnimationFrame(drawRafRef.current)
         }
       }

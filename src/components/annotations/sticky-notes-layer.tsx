@@ -421,7 +421,7 @@ export function StickyNotesLayer({ pageId, children, isExamStudent, publicSticky
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [placementMode])
+  }, [placementMode, setPlacementMode])
 
   // Heading positions from AnnotationLayer (parent context). Used to anchor
   // sticky notes to their nearest section so they follow content reflow.
@@ -1120,7 +1120,7 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly, onPositio
             onMouseDown={e => e.stopPropagation()}
             readOnly={readOnly}
             // autofocus only for brand-new empty notes
-            // eslint-disable-next-line jsx-a11y/no-autofocus
+             
             // eslint-disable-next-line react-hooks/purity
             autoFocus={!readOnly && note.content === '' && Date.now() - note.createdAt < 3000}
             spellCheck={!readOnly}

@@ -70,7 +70,7 @@ export default function BillingPage() {
     } else if (status === 'cancelled') {
       setError('Payment was cancelled.')
     }
-  }, [searchParams, fetchData])
+  }, [searchParams, fetchData, updateSession])
 
   async function handleSubscribe(planId: string) {
     setActionLoading(planId)

@@ -99,7 +99,7 @@ export function PluginContainer({
       })
 
     return () => { cancelled = true }
-  }, [validSrc, ownerSlug, pluginSlug, src])
+  }, [validSrc, ownerSlug, pluginSlug, src, heightProp])
 
   // Extract config from remaining props (filter out internal/React props and data-* attributes)
   const config = Object.fromEntries(
@@ -360,7 +360,7 @@ export function PluginContainer({
           sandbox="allow-scripts allow-same-origin"
           allowFullScreen
           srcDoc={srcdoc}
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+           
           {...{ allowtransparency: 'true' } as any}
           style={{
             border: 'none',

@@ -3,7 +3,7 @@ import { unified } from 'unified'
 import remarkParse from 'remark-parse'
 import { remarkQuiz } from '@/lib/remark-plugins/quiz'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 function findNode(tree: any, pred: (n: any) => boolean): any {
   let found: any
   const walk = (n: any) => {
@@ -19,7 +19,7 @@ function transform(markdown: string): string {
   const processor = unified().use(remarkParse).use(remarkQuiz)
   const tree = processor.parse(markdown)
   processor.runSync(tree)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const q = findNode(tree, (n: any) => n.type === 'html' && /<question\b/.test(n.value))
   return q?.value ?? ''
 }

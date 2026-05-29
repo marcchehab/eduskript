@@ -1,6 +1,13 @@
 echo "🔍 Running pre-push validation..."
 echo ""
 
+# Regenerate Prisma client so type-check sees the live schema (stale clients
+# after schema edits have blocked pushes before).
+echo "🗄️  Generating Prisma client..."
+pnpm db:generate || exit 1
+echo "✅ Prisma client up to date"
+echo ""
+
 # Run type checking
 echo "📘 Type checking..."
 pnpm type-check || exit 1

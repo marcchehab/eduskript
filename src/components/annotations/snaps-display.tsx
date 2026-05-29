@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback, memo, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { GripVertical, Trash2, Globe, Users, User, Image, Palette, Minus, Plus } from 'lucide-react'
+import { GripVertical, Trash2, Globe, Users, User, Image as ImageIcon, Palette, Minus, Plus } from 'lucide-react'
 import type { Snap, SnapColor } from '@/types/snap'
 import { SnapViewerOverlay } from './snap-viewer-overlay'
 import { useZoom } from '@/contexts/zoom-context'
@@ -352,7 +352,7 @@ const StudentWorkSnapItem = memo(function StudentWorkSnapItem({
         onPointerDown={handleDragStart}
       >
         <GripVertical className="w-3 h-3 opacity-30 shrink-0" />
-        <Image className="w-3 h-3 opacity-50 shrink-0" />
+        <ImageIcon className="w-3 h-3 opacity-50 shrink-0" />
         <span className="text-xs opacity-60 truncate flex-1 min-w-0">
           {snap.name}
         </span>
@@ -636,7 +636,7 @@ const TeacherSnapItem = memo(function TeacherSnapItem({
         onPointerDown={handleDragStart}
       >
         <GripVertical className="w-3 h-3 opacity-30 shrink-0" />
-        <Image className="w-3 h-3 opacity-50 shrink-0" />
+        <ImageIcon className="w-3 h-3 opacity-50 shrink-0" />
         <span className="text-xs opacity-60 truncate flex-1 min-w-0">
           {snap.name}
         </span>
@@ -1017,7 +1017,7 @@ const SnapItem = memo(function SnapItem({
         }}
       >
         <GripVertical className="w-3 h-3 opacity-30 shrink-0" />
-        <Image className="w-3 h-3 opacity-50 shrink-0" />
+        <ImageIcon className="w-3 h-3 opacity-50 shrink-0" />
 
         {isEditing ? (
           <input
@@ -1171,7 +1171,7 @@ export function SnapsDisplay({ snaps, onRemoveSnap, onRenameSnap, onUpdateSnap, 
       const el = document.querySelector(`[data-section-id="${CSS.escape(sid)}"]`)
       if (el instanceof HTMLElement) next.set(sid, el)
     }
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional: querying live DOM for portal targets after render. Same-value short-circuit prevents cascade.
+     
     setSectionTargets((prev) => {
       if (prev.size !== next.size) return next
       for (const [k, v] of next) if (prev.get(k) !== v) return next

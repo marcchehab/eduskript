@@ -259,7 +259,7 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
       }
     }
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional: querying live DOM for portal targets after render. Same-value short-circuit prevents cascade.
+     
     setTargets((prev) => {
       if (prev.size !== next.size) return next
       for (const [k, v] of next) {
@@ -267,7 +267,7 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
       }
       return prev
     })
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- See above.
+     
     setSectionGeom((prev) => {
       if (prev.size !== nextGeom.size) return nextGeom
       for (const [k, v] of nextGeom) {
@@ -307,7 +307,7 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
     // recomputation, which is the moment when section elements may have been
     // recreated by the spacer-injection effect. resizeTick has the same role
     // for viewport-width changes that update --paper-scale.
-  }, [grouped, strokes, onOrphansChange, headingPositions, resizeTick])
+  }, [grouped, strokes, onOrphansChange, headingPositions, resizeTick, getZoom, paperPaddingLeft])
 
   const zoom = getZoom() || 1
   // Counter-scale the badge against BOTH transforms in its ancestor chain

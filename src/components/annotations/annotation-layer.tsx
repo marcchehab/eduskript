@@ -1118,7 +1118,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
   const currentPaddingLeftRef = useRef<number>(0)
 
   // Assign the function now that refs are in scope
-  // eslint-disable-next-line react-hooks/immutability -- Intentional: sync ref with latest values each render
+   
   updatePageBroadcastDataRef.current = () => {
     const headingOffsets = Object.fromEntries(
       headingPositionsRef.current.map(h => [h.sectionId, h.offsetY])
@@ -1581,7 +1581,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
 
   // Keep refs in sync with state (for use in callbacks to avoid stale closures)
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/immutability -- Intentional: sync ref with prop for callbacks
+     
     canvasDataRef.current = canvasData
   }, [canvasData])
 
@@ -2212,7 +2212,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     // this the user has to manually toggle off; the click that deleted is
     // also a clear "I'm done with this spacer" signal.
     setMode('view')
-  }, [spacersData, updateSpacersData, spacerDeleteAnnotations, canvasData, headingPositions, currentPaddingLeft, updateAnnotationData, snapsData])
+  }, [spacersData, updateSpacersData, spacerDeleteAnnotations, canvasData, headingPositions, currentPaddingLeft, updateAnnotationData, snapsData, updateSnapsData])
 
   // Re-anchor items below a newly added spacer to the spacer's end-sentinel.
   // Without this, items stay tied to the parent section's heading (which
@@ -2513,7 +2513,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
   }, [updateAnnotationData, viewMode, syncOptions, targetingKey])
 
   // Keep ref in sync for use in effects that can't depend on the function directly
-  // eslint-disable-next-line react-hooks/immutability -- Intentional: sync ref with callback for effects
+   
   performSaveWithOptionsRef.current = performSaveWithOptions
 
   // performSave is just a wrapper that calls performSaveWithOptions without overrides

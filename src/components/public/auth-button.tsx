@@ -100,7 +100,7 @@ export function AuthButton({ pageId, teacherPageSlug, teacherBillingPlan, isOrgP
       // even though the path is /api/... (a reserved path)
       const crossDomainCallback = `https://eduskript.org/api/auth/cross-domain?returnDomain=${encodeURIComponent(hostname)}&returnPath=${encodeURIComponent(pathname)}&from=${encodeURIComponent(pageSlug)}`
       const baseSignIn = `https://eduskript.org/auth/signin?from=${encodeURIComponent(pageSlug)}&callbackUrl=${encodeURIComponent(crossDomainCallback)}`
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- Required: domain detection only possible after mount
+       
       setSignInUrl(baseSignIn)
     }
   }, [pathname, pageSlug])
