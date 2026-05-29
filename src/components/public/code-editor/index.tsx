@@ -1158,6 +1158,7 @@ export const CodeEditor = memo(function CodeEditor({
         setHighlights(savedData.highlights)
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Intentional: this is a one-shot restore gated by hasLoadedData.current. Re-running on language/defaultData.files changes (e.g. markdown edits) would no-op anyway, and dragging them in widens the dep surface for no behaviour change.
   }, [isLoading, savedData, isBroadcastMode, debugTag, isViewingSnapshot])
 
   // Track previous broadcast mode to detect mode switches
@@ -2403,27 +2404,32 @@ export const CodeEditor = memo(function CodeEditor({
   // Hydrate the editor from the student's checkpoint payload whenever the
   // viewed student or their latest snapshot changes. Track what we last
   // applied so reusing the snapshot reference (e.g. on re-render) doesn't
-  // re-dispatch a no-op transaction. Skip if there's no snapshot yet for
-  // this componentId — that just means this student hasn't touched this
-  // editor; we leave the previous content visible until they do.
-  const lastAppliedSnapshotRef = useRef<{ componentId: string; createdAt: string } | null>(null)
+  // re-dispatch a no-op transaction. When the viewed student has no snapshot
+  // for this componentId, reset to the starter code from the markdown — else
+  // the previously-viewed student's answer would leak across the switch.
+  const lastAppliedSnapshotRef = useRef<string | null>(null)
   useEffect(() => {
     if (!isViewingSnapshot) {
       lastAppliedSnapshotRef.current = null
       return
     }
-    if (!studentSnapshot) return
-    const fingerprint = { componentId: studentSnapshot.componentId, createdAt: studentSnapshot.createdAt }
-    const prev = lastAppliedSnapshotRef.current
-    if (prev && prev.componentId === fingerprint.componentId && prev.createdAt === fingerprint.createdAt) {
+    if (snapshotLoading) return // wait for the fetch to settle before deciding
+    const studentId = selectedStudent?.id ?? 'none'
+    if (studentSnapshot) {
+      const key = `snap:${studentId}:${studentSnapshot.componentId}:${studentSnapshot.createdAt}`
+      if (lastAppliedSnapshotRef.current === key) return
+      lastAppliedSnapshotRef.current = key
+      const payload = studentSnapshot.payload as CodeEditorData | null
+      if (payload && typeof payload === 'object') {
+        applyDataToEditor(payload)
+      }
       return
     }
-    lastAppliedSnapshotRef.current = fingerprint
-    const payload = studentSnapshot.payload as CodeEditorData | null
-    if (payload && typeof payload === 'object') {
-      applyDataToEditor(payload)
-    }
-  }, [isViewingSnapshot, studentSnapshot, applyDataToEditor])
+    const key = `default:${studentId}`
+    if (lastAppliedSnapshotRef.current === key) return
+    lastAppliedSnapshotRef.current = key
+    applyDataToEditor({ files: originalInitialFiles.current, activeFileIndex: 0 })
+  }, [isViewingSnapshot, snapshotLoading, studentSnapshot, selectedStudent?.id, applyDataToEditor])
 
   // Full snapshot history for the viewed student + this component (the dropdown
   // beneath the editor). Fetched on demand in snapshot-view mode. Picking an
