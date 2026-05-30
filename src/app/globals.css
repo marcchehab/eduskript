@@ -1043,6 +1043,37 @@ body.stickme-pinned .floating-page-controls {
   transition: background 0.2s, transform 0.2s;
 }
 
+/* Hue (rainbow) variant of the vertical slider — used by the pen/highlighter
+   colour picker. The rainbow is painted on the INPUT itself (reliable under
+   writing-mode:vertical), the track is transparent, and the thumb is a white
+   ring so it reads against any colour. */
+.hue-slider {
+  width: 12px;
+  border-radius: 6px;
+  background: linear-gradient(to top, hsl(0 85% 55%), hsl(60 85% 55%), hsl(120 85% 55%), hsl(180 85% 55%), hsl(240 85% 55%), hsl(300 85% 55%), hsl(360 85% 55%));
+}
+.hue-slider::-webkit-slider-runnable-track {
+  width: 12px;
+  background: transparent;
+}
+.hue-slider::-moz-range-track {
+  width: 12px;
+  background: transparent;
+}
+.hue-slider::-webkit-slider-thumb {
+  background: #fff;
+  border: 2px solid rgba(0, 0, 0, 0.5);
+  margin-left: -1px;
+}
+.hue-slider::-moz-range-thumb {
+  background: #fff;
+  border: 2px solid rgba(0, 0, 0, 0.5);
+}
+.hue-slider::-webkit-slider-thumb:hover,
+.hue-slider::-moz-range-thumb:hover {
+  background: #fff;
+}
+
 .slider-vertical::-moz-range-thumb:hover {
   background: hsl(var(--primary));
   transform: scale(1.1);
@@ -1971,6 +2002,9 @@ mark {
 
 mark.text-highlight {
   cursor: pointer;
+  /* No horizontal padding so wrapping text in a highlight doesn't widen the
+     inline box and shift following text — pixel-perfect overlay. */
+  padding: 0;
 }
 
 mark.text-highlight-yellow {

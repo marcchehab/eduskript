@@ -3,9 +3,8 @@
 import { useState, useRef, useEffect, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Pen, Eraser, Trash2, Eye, EyeOff, Radio, User, Users, UserPen, ChevronDown, Globe, Layers, Camera, Highlighter, Ellipsis, SeparatorHorizontal, StickyNote as StickyNoteIcon, Plus } from 'lucide-react'
-import { type PenConfig, PEN_PALETTE, MIN_PENS, MAX_PENS } from '@/lib/annotations/pens'
+import { type PenConfig, type PenType, hueToColor, colorToHue, MIN_PENS, MAX_PENS } from '@/lib/annotations/pens'
 import type { SpacerPattern } from '@/types/spacer'
-import { Circle } from '@uiw/react-color'
 import { cn } from '@/lib/utils'
 import { useLayout } from '@/contexts/layout-context'
 import { useIsExamPage } from '@/contexts/exam-page-context'
@@ -111,7 +110,7 @@ function ToolbarDivider() {
   return <div className="w-px h-6 bg-border mx-1" />
 }
 
-export type AnnotationMode = 'view' | 'draw' | 'erase' | 'spacer'
+export type AnnotationMode = 'view' | 'draw' | 'erase' | 'spacer' | 'highlight'
 
 export interface AnnotationLayer {
   id: string
@@ -133,7 +132,7 @@ interface AnnotationToolbarProps {
   onPenSelect: (id: string) => void
   onPenColorChange: (id: string, color: string) => void
   onPenSizeChange: (id: string, size: number) => void
-  onPenAdd: () => void
+  onPenAdd: (type: PenType) => void
   onPenRemove: (id: string) => void
   onPensReorder: (orderedIds: string[]) => void
   onResetZoom: () => void
@@ -282,12 +281,15 @@ export function AnnotationToolbar({
     }
   }
 
+  // A pen's active mode: highlighters use 'highlight', everything else 'draw'.
+  const penMode = (id: string): AnnotationMode =>
+    pens.find((p) => p.id === id)?.type === 'highlight' ? 'highlight' : 'draw'
+
   const handleColorChange = (id: string, color: string) => {
     onPenColorChange(id, color)
     onPenSelect(id)
-    if (mode !== 'draw') {
-      onModeChange('draw')
-    }
+    const m = penMode(id)
+    if (mode !== m) onModeChange(m)
   }
 
   const handleSizeChange = (id: string, size: number) => {
@@ -315,6 +317,7 @@ export function AnnotationToolbar({
   }
 
   const [showPenControls, setShowPenControls] = useState<string | null>(null)
+  const [showAddMenu, setShowAddMenu] = useState(false)
   const hoverTimerRef = useRef<NodeJS.Timeout | null>(null)
   const hideTimerRef = useRef<NodeJS.Timeout | null>(null)
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -414,15 +417,14 @@ export function AnnotationToolbar({
     }
     setShowPenControls(null)
 
-    // If clicking the currently active pen, deactivate it
-    if (mode === 'draw' && activePenId === id) {
+    // Clicking the active pen (draw or highlight) deactivates it.
+    const isActive = (mode === 'draw' || mode === 'highlight') && activePenId === id
+    if (isActive) {
       onModeChange('view')
     } else {
-      // Switch to this pen and enter draw mode
+      // Switch to this pen and enter its mode (highlighters → 'highlight').
       onPenSelect(id)
-      if (mode !== 'draw') {
-        onModeChange('draw')
-      }
+      onModeChange(penMode(id))
     }
   }
 
@@ -439,9 +441,8 @@ export function AnnotationToolbar({
       setShowPenControls(id)
       // Also select this pen when opening its config
       onPenSelect(id)
-      if (mode !== 'draw') {
-        onModeChange('draw')
-      }
+      const m = penMode(id)
+      if (mode !== m) onModeChange(m)
       longPressTimerRef.current = null
     }, 500)
   }
@@ -785,14 +786,14 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
                 onPointerCancel={handlePenPointerUp}
                 className={cn(
                   'p-2 rounded-md transition-colors relative',
-                  mode === 'draw' && activePenId === pen.id
+                  (mode === 'draw' || mode === 'highlight') && activePenId === pen.id
                     ? 'bg-primary text-primary-foreground'
                     : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                 )}
-                title={`Pen ${penIndex + 1}`}
-                aria-label={`Select pen ${penIndex + 1}`}
+                title={pen.type === 'highlight' ? `Highlighter ${penIndex + 1}` : `Pen ${penIndex + 1}`}
+                aria-label={pen.type === 'highlight' ? `Select highlighter ${penIndex + 1}` : `Select pen ${penIndex + 1}`}
               >
-                <Pen className="w-4 h-4" />
+                {pen.type === 'highlight' ? <Highlighter className="w-4 h-4" /> : <Pen className="w-4 h-4" />}
                 {/* Color indicator - uses annotation-color-indicator for dark mode filter */}
                 <div
                   className="annotation-color-indicator absolute bottom-0.5 right-0.5 w-2.5 h-2.5 rounded-full border border-white dark:border-gray-800"
@@ -800,7 +801,8 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
                 />
               </button>
 
-              {/* Pen controls popover (size slider + color picker + remove) */}
+              {/* Pen controls popover. Pens: size + hue sliders. Highlighters:
+                  hue slider only. Both: a remove bin. */}
               {showPenControls === pen.id && (
                 <div
                   ref={penPopoverRef}
@@ -816,23 +818,39 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
                   }}
                   onMouseLeave={() => setShowPenControls(null)}
                 >
-                  {/* Size slider */}
+                  {/* Size slider — pens only */}
+                  {pen.type !== 'highlight' && (
+                    <div className="bg-background border border-border rounded-lg shadow-lg p-3 flex flex-col items-center gap-3 min-h-[200px]">
+                      <BrushThickIcon className="w-6 h-6 flex-shrink-0 opacity-60" />
+                      <input
+                        type="range"
+                        min="0.1"
+                        max="5"
+                        step="0.1"
+                        value={pen.size}
+                        onChange={(e) => handleSizeChange(pen.id, parseFloat(e.target.value))}
+                        className="flex-grow cursor-pointer [writing-mode:vertical-lr] [direction:rtl] slider-vertical"
+                      />
+                      <BrushThinIcon className="w-6 h-6 flex-shrink-0 opacity-60" />
+                    </div>
+                  )}
+
+                  {/* Hue slider (rainbow) + remove */}
                   <div className="bg-background border border-border rounded-lg shadow-lg p-3 flex flex-col items-center gap-3 min-h-[200px]">
-                    <BrushThickIcon className="w-6 h-6 flex-shrink-0 opacity-60" />
                     <input
                       type="range"
-                      min="0.1"
-                      max="5"
-                      step="0.1"
-                      value={pen.size}
-                      onChange={(e) => handleSizeChange(pen.id, parseFloat(e.target.value))}
-                      className="flex-grow cursor-pointer [writing-mode:vertical-lr] [direction:rtl] slider-vertical"
+                      min="0"
+                      max="360"
+                      step="1"
+                      value={colorToHue(pen.color)}
+                      onChange={(e) => handleColorChange(pen.id, hueToColor(parseFloat(e.target.value)))}
+                      aria-label="Pen colour"
+                      className="flex-grow cursor-pointer [writing-mode:vertical-lr] [direction:rtl] slider-vertical hue-slider"
                     />
-                    <BrushThinIcon className="w-6 h-6 flex-shrink-0 opacity-60" />
                     {pens.length > MIN_PENS && (
                       <button
                         onClick={() => onPenRemove(pen.id)}
-                        title="Remove pen"
+                        title={pen.type === 'highlight' ? 'Remove highlighter' : 'Remove pen'}
                         aria-label="Remove pen"
                         className="text-muted-foreground hover:text-destructive transition-colors"
                       >
@@ -840,30 +858,47 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
                       </button>
                     )}
                   </div>
-
-                  {/* Color picker */}
-                  <div className="bg-background border border-border rounded-lg shadow-lg p-3 annotation-color-picker">
-                    <Circle
-                      colors={PEN_PALETTE}
-                      color={pen.color}
-                      onChange={(color) => handleColorChange(pen.id, color.hex)}
-                    />
-                  </div>
                 </div>
               )}
             </div>
           ))}
 
-          {/* Add pen */}
+          {/* Add pen / highlighter */}
           {pens.length < MAX_PENS && (
-            <button
-              onClick={onPenAdd}
-              title="Add pen"
-              aria-label="Add pen"
-              className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => setShowAddMenu((v) => !v)}
+                title="Add pen or highlighter"
+                aria-label="Add pen or highlighter"
+                className={cn(
+                  'p-2 rounded-md transition-colors',
+                  showAddMenu
+                    ? 'bg-accent text-foreground'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent',
+                )}
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+              {showAddMenu && (
+                <div
+                  className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 flex flex-col gap-1 rounded-lg border border-border bg-background p-1 shadow-lg"
+                  onMouseLeave={() => setShowAddMenu(false)}
+                >
+                  <button
+                    onClick={() => { onPenAdd('highlight'); setShowAddMenu(false) }}
+                    className="flex items-center gap-2 rounded px-2 py-1 text-sm text-foreground hover:bg-accent"
+                  >
+                    <Highlighter className="w-4 h-4" /> Highlighter
+                  </button>
+                  <button
+                    onClick={() => { onPenAdd('pen'); setShowAddMenu(false) }}
+                    className="flex items-center gap-2 rounded px-2 py-1 text-sm text-foreground hover:bg-accent"
+                  >
+                    <Pen className="w-4 h-4" /> Pen
+                  </button>
+                </div>
+              )}
+            </div>
           )}
 
           {/* Eraser Tool */}

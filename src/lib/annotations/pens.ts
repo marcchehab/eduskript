@@ -12,13 +12,42 @@
  * 'pen' exists today.
  */
 
-export type PenType = 'pen'
+export type PenType = 'pen' | 'highlight'
 
 export interface PenConfig {
   id: string
   color: string
   size: number
   type: PenType
+}
+
+/** Map a hue (0–360) to a vivid CSS colour. Used by the hue-slider colour
+ *  picker shared by pens and highlighters. Stored verbatim as the pen colour. */
+export function hueToColor(hue: number): string {
+  return `hsl(${Math.round(hue)} 85% 55%)`
+}
+
+/** Recover a hue (0–360) from a pen colour so the hue slider can position its
+ *  thumb. Handles `hsl(h …)` (what hueToColor emits) and hex; else 0. */
+export function colorToHue(color: string): number {
+  const hsl = color.match(/^hsl\(\s*([\d.]+)/i)
+  if (hsl) return Math.max(0, Math.min(360, Math.round(parseFloat(hsl[1]))))
+  const hex = color.replace(/^#/, '')
+  const full = hex.length === 3 ? hex.split('').map((c) => c + c).join('') : hex
+  if (!/^[0-9a-fA-F]{6}$/.test(full)) return 0
+  const r = parseInt(full.slice(0, 2), 16) / 255
+  const g = parseInt(full.slice(2, 4), 16) / 255
+  const b = parseInt(full.slice(4, 6), 16) / 255
+  const max = Math.max(r, g, b)
+  const min = Math.min(r, g, b)
+  const d = max - min
+  if (d === 0) return 0
+  let h: number
+  if (max === r) h = ((g - b) / d) % 6
+  else if (max === g) h = (b - r) / d + 2
+  else h = (r - g) / d + 4
+  h = Math.round(h * 60)
+  return h < 0 ? h + 360 : h
 }
 
 export const MIN_PENS = 1
@@ -53,9 +82,13 @@ export function nextPenColor(existing: string[]): string {
 
 // --- Pure transforms (used by the toolbar handlers + unit tests) ---
 
-export function addPen(pens: PenConfig[]): PenConfig[] {
+/** A highlighter's default colour — yellow, like a real highlighter. */
+export const DEFAULT_HIGHLIGHT_COLOR = hueToColor(50)
+
+export function addPen(pens: PenConfig[], type: PenType = 'pen'): PenConfig[] {
   if (pens.length >= MAX_PENS) return pens
-  return [...pens, { id: genId(), color: nextPenColor(pens.map((p) => p.color)), size: DEFAULT_SIZE, type: 'pen' }]
+  const color = type === 'highlight' ? DEFAULT_HIGHLIGHT_COLOR : nextPenColor(pens.map((p) => p.color))
+  return [...pens, { id: genId(), color, size: DEFAULT_SIZE, type }]
 }
 
 export function removePen(pens: PenConfig[], id: string): PenConfig[] {
@@ -101,10 +134,11 @@ export function sanitizePens(parsed: unknown): PenConfig[] {
     const color = typeof rec.color === 'string' ? rec.color : null
     if (!color) continue
     const size = typeof rec.size === 'number' && rec.size > 0 ? rec.size : DEFAULT_SIZE
+    const type: PenType = rec.type === 'highlight' ? 'highlight' : 'pen'
     let id = typeof rec.id === 'string' && rec.id ? rec.id : genId()
     while (seen.has(id)) id = genId()
     seen.add(id)
-    out.push({ id, color, size, type: 'pen' })
+    out.push({ id, color, size, type })
   }
   return out
 }

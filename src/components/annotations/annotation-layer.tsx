@@ -115,7 +115,8 @@ import { SnapsDisplay, type StudentWorkSnap, type SnapOverridesData, type SnapPo
 import { LayerBadges } from './layer-badges'
 import { SpacersDisplay } from './spacers-display'
 import { createLogger } from '@/lib/logger'
-import { DEFAULT_PENS, loadPens, savePens, addPen, removePen, reorderPens, setPenColor, setPenSize, type PenConfig } from '@/lib/annotations/pens'
+import { DEFAULT_PENS, loadPens, savePens, addPen, removePen, reorderPens, setPenColor, setPenSize, type PenConfig, type PenType } from '@/lib/annotations/pens'
+import { HighlightPenContext } from '@/components/text-highlights/highlight-pen-context'
 
 const log = createLogger('annotations:layer')
 
@@ -1424,7 +1425,8 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
   // Track annotating state in ref for event handlers (avoids stale closure issues)
   const isAnnotatingRef = useRef(false)
   useEffect(() => {
-    isAnnotatingRef.current = mode !== 'view' || stylusModeActive
+    // Highlight mode must allow text selection, so it does NOT count as annotating.
+    isAnnotatingRef.current = mode === 'highlight' ? false : (mode !== 'view' || stylusModeActive)
     // Finger draw mode: user explicitly activated draw/erase without a stylus
     // In this mode, ALL touch input should draw, not scroll
     fingerDrawModeRef.current = mode !== 'view' && !stylusModeActive
@@ -1435,7 +1437,9 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     const paper = document.getElementById('paper')
     if (!paper) return
 
-    const isAnnotating = mode !== 'view' || stylusModeActive
+    // Highlight mode keeps text selectable (you select to highlight), so it is
+    // not "annotating" for the no-select class.
+    const isAnnotating = mode === 'highlight' ? false : (mode !== 'view' || stylusModeActive)
 
     if (isAnnotating) {
       paper.classList.add('annotation-active')
@@ -2733,8 +2737,8 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     setPens((prev) => setPenSize(prev, id, size))
   }, [])
 
-  const handlePenAdd = useCallback(() => {
-    const next = addPen(pens)
+  const handlePenAdd = useCallback((type: PenType = 'pen') => {
+    const next = addPen(pens, type)
     if (next === pens) return // at MAX_PENS
     setPens(next)
     setActivePenId(next[next.length - 1].id) // select the new pen
@@ -3276,7 +3280,13 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
       <div ref={contentRef} style={{ position: 'relative' }}>
         <LayerVisibilityProvider value={layerVisibilityContextValue}>
           <HeadingPositionsProvider positions={headingPositions}>
-            {children}
+            {/* Broadcast the active highlighter colour to the HighlightLayer
+                (in children) so selecting text auto-highlights in that colour. */}
+            <HighlightPenContext.Provider
+              value={{ activeHighlightColor: mode === 'highlight' ? activePen.color : null }}
+            >
+              {children}
+            </HighlightPenContext.Provider>
           </HeadingPositionsProvider>
         </LayerVisibilityProvider>
       </div>
@@ -3313,7 +3323,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
             ref={canvasRef}
             width={paperWidth}
             height={pageHeight}
-            mode={(mode === 'view' || mode === 'spacer') ? 'view' : (mode as DrawMode)}
+            mode={(mode === 'view' || mode === 'spacer' || mode === 'highlight') ? 'view' : (mode as DrawMode)}
             onUpdate={handleCanvasUpdate}
             onTelemetry={handleTelemetry}
             onDrawStart={ensureActiveLayerVisible}

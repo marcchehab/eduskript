@@ -3,12 +3,38 @@ import { createLogger } from '@/lib/logger'
 
 const log = createLogger('text-highlights:render')
 
+const LEGACY_COLORS = new Set(['yellow', 'red', 'green', 'blue', 'purple'])
+
+/**
+ * Resolve a highlight's stored colour to a translucent CSS background.
+ * Legacy named colours keep their existing globals.css variable (identical
+ * look). Arbitrary colours (from a highlighter pen) render at reduced alpha so
+ * text stays readable — like a real highlighter.
+ */
+export function highlightBackground(color: string): string {
+  if (LEGACY_COLORS.has(color)) return `var(--text-highlight-${color})`
+  // hsl(h s l) → hsl(h s l / .35)
+  if (/^hsl\(/i.test(color) && !color.includes('/')) {
+    return color.replace(/\)\s*$/, ' / 0.35)')
+  }
+  // #rrggbb / #rgb → rgb(r g b / .35)
+  const hex = color.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i)
+  if (hex) {
+    const h = hex[1].length === 3 ? hex[1].split('').map((c) => c + c).join('') : hex[1]
+    const r = parseInt(h.slice(0, 2), 16)
+    const g = parseInt(h.slice(2, 4), 16)
+    const b = parseInt(h.slice(4, 6), 16)
+    return `rgb(${r} ${g} ${b} / 0.35)`
+  }
+  return color
+}
+
 /**
  * Wrap a DOM Range in <mark> elements with highlight styling.
  * Handles ranges spanning multiple text nodes by wrapping each segment.
  */
 export function applyHighlightMark(range: Range, highlight: TextHighlight): void {
-  const className = `text-highlight text-highlight-${highlight.color}`
+  const background = highlightBackground(highlight.color)
   const highlightId = highlight.id
 
   // If range is within a single text node, wrap directly
@@ -16,7 +42,7 @@ export function applyHighlightMark(range: Range, highlight: TextHighlight): void
     range.startContainer === range.endContainer &&
     range.startContainer.nodeType === Node.TEXT_NODE
   ) {
-    const mark = createMark(className, highlightId)
+    const mark = createMark(background, highlightId)
     range.surroundContents(mark)
     log('apply single-node', { id: highlightId, text: range.toString() })
     return
@@ -43,7 +69,7 @@ export function applyHighlightMark(range: Range, highlight: TextHighlight): void
       continue
     }
 
-    const mark = createMark(className, highlightId)
+    const mark = createMark(background, highlightId)
     const wrappedRange = document.createRange()
     wrappedRange.setStart(node, start)
     wrappedRange.setEnd(node, Math.min(end, text.length))
@@ -76,9 +102,10 @@ export function applyHighlightMark(range: Range, highlight: TextHighlight): void
   })
 }
 
-function createMark(className: string, highlightId: string): HTMLElement {
+function createMark(background: string, highlightId: string): HTMLElement {
   const mark = document.createElement('mark')
-  mark.className = className
+  mark.className = 'text-highlight'
+  mark.style.backgroundColor = background
   mark.dataset.highlightId = highlightId
   return mark
 }

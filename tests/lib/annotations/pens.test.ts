@@ -11,6 +11,8 @@ import {
   sanitizePens,
   pensFromLegacy,
   nextPenColor,
+  hueToColor,
+  colorToHue,
   PEN_PALETTE,
 } from '@/lib/annotations/pens'
 
@@ -120,5 +122,45 @@ describe('pens — legacy migration', () => {
   it('DEFAULT_PENS are the historical black/red/blue at size 2', () => {
     expect(DEFAULT_PENS.map((p) => p.color)).toEqual(['#000000', '#FF0000', '#0000FF'])
     expect(DEFAULT_PENS.every((p) => p.size === 2 && p.type === 'pen')).toBe(true)
+  })
+})
+
+describe('pens — highlighter type', () => {
+  it('addPen defaults to a pen but accepts a highlighter type', () => {
+    expect(addPen([])[0].type).toBe('pen')
+    const hl = addPen([], 'highlight')
+    expect(hl[0].type).toBe('highlight')
+  })
+
+  it('sanitizePens preserves a stored highlighter type', () => {
+    const out = sanitizePens([
+      { id: 'a', color: 'hsl(48 85% 55%)', size: 2, type: 'highlight' },
+      { id: 'b', color: '#000', size: 2, type: 'pen' },
+      { id: 'c', color: '#fff', size: 2, type: 'bogus' },
+    ])
+    expect(out.map((p) => p.type)).toEqual(['highlight', 'pen', 'pen']) // unknown → pen
+  })
+})
+
+describe('pens — hue colour helpers', () => {
+  it('hueToColor emits an hsl string', () => {
+    expect(hueToColor(120)).toBe('hsl(120 85% 55%)')
+    expect(hueToColor(0)).toBe('hsl(0 85% 55%)')
+  })
+
+  it('colorToHue parses hsl strings', () => {
+    expect(colorToHue('hsl(210 85% 55%)')).toBe(210)
+    expect(colorToHue(hueToColor(300))).toBe(300)
+  })
+
+  it('colorToHue derives hue from hex', () => {
+    expect(colorToHue('#ff0000')).toBe(0)
+    expect(colorToHue('#00ff00')).toBe(120)
+    expect(colorToHue('#0000ff')).toBe(240)
+    expect(colorToHue('#000000')).toBe(0) // greyscale → 0
+  })
+
+  it('colorToHue is robust to junk', () => {
+    expect(colorToHue('not-a-color')).toBe(0)
   })
 })
