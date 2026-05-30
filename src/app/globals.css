@@ -747,13 +747,6 @@ article.prose-theme > div > :first-child {
   -webkit-touch-callout: none;
 }
 
-/* Invert annotation canvas/SVG and color picker in dark mode */
-.dark .annotation-canvas,
-.dark .annotation-svg,
-.dark .annotation-section-svg {
-  filter: invert(1) hue-rotate(180deg);
-}
-
 /* Lift section-portaled stroke SVGs above sibling positioned content in
  * .markdown-content (callouts, h1, code-editors). Without this, an SVG
  * portaled into section A paints in tree order — earlier than a later sibling
@@ -966,20 +959,6 @@ body.stickme-pinned .floating-page-controls {
   pointer-events: none;
   z-index: 45;
   transition: opacity 0.1s ease, height 0.1s ease;
-}
-
-.dark .annotation-color-picker {
-  filter: invert(1) hue-rotate(180deg);
-  background-color: #ffffff !important;
-}
-
-/* Selected color indicator in circle picker */
-.dark .annotation-color-picker svg circle[r="5"] {
-  fill: #000000 !important;
-}
-
-.dark .annotation-color-indicator {
-  filter: invert(1) hue-rotate(180deg);
 }
 
 /* Material UI style vertical slider */
@@ -1977,21 +1956,6 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
   --text-highlight-swatch-green: rgb(74, 222, 128);
   --text-highlight-swatch-blue: rgb(96, 165, 250);
   --text-highlight-swatch-purple: rgb(168, 85, 247);
-}
-
-.dark {
-  --text-highlight-yellow: rgba(250, 204, 21, 0.65);
-  --text-highlight-red: rgba(239, 68, 68, 0.65);
-  --text-highlight-green: rgba(74, 222, 128, 0.65);
-  --text-highlight-blue: rgba(96, 165, 250, 0.65);
-  --text-highlight-purple: rgba(168, 85, 247, 0.65);
-  --text-highlight-pink: rgba(236, 72, 153, 0.65);
-  --text-highlight-orange: rgba(251, 146, 60, 0.65);
-  --text-highlight-swatch-yellow: rgb(202, 163, 17);
-  --text-highlight-swatch-red: rgb(200, 50, 50);
-  --text-highlight-swatch-green: rgb(52, 168, 96);
-  --text-highlight-swatch-blue: rgb(68, 130, 210);
-  --text-highlight-swatch-purple: rgb(140, 70, 210);
 }
 
 mark {
