@@ -119,9 +119,10 @@ describe('pens — legacy migration', () => {
     expect(pensFromLegacy(null, null)).toBeNull()
   })
 
-  it('DEFAULT_PENS are the historical black/red/blue at size 2', () => {
-    expect(DEFAULT_PENS.map((p) => p.color)).toEqual(['#000000', '#FF0000', '#0000FF'])
-    expect(DEFAULT_PENS.every((p) => p.size === 2 && p.type === 'pen')).toBe(true)
+  it('DEFAULT_PENS are two pens + two highlighters in cyan and orange at size 2', () => {
+    expect(DEFAULT_PENS.map((p) => p.color)).toEqual(['#2BB7EE', '#EE892B', '#2BB7EE', '#EE892B'])
+    expect(DEFAULT_PENS.map((p) => p.type)).toEqual(['pen', 'pen', 'highlight', 'highlight'])
+    expect(DEFAULT_PENS.every((p) => p.size === 2)).toBe(true)
   })
 })
 

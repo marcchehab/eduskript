@@ -8,8 +8,8 @@
  * pen *config* is purely a toolbar concern and never affects stored
  * annotations.
  *
- * `type` is forward-compatible for Phase 2 (a text highlighter pen); only
- * 'pen' exists today.
+ * `type` is 'pen' (freehand draw) or 'highlight' (text highlighter — selecting
+ * text marks it in the pen's colour, never broadcast, always personal).
  */
 
 export type PenType = 'pen' | 'highlight'
@@ -61,12 +61,14 @@ const LEGACY_SIZES_KEY = 'annotation-pen-sizes'
 /** Colours offered in the picker — also the source for a new pen's colour. */
 export const PEN_PALETTE = ['#000000', '#808080', '#DD5555', '#EE8844', '#44AA66', '#5577DD', '#9966DD']
 
-/** Today's defaults: black / red / blue at size 2. Fixed ids (deterministic
- *  across SSR/CSR; ids only need to be unique within the list). */
+/** Today's defaults: two pens + two highlighters, in cyan and orange. Fixed ids
+ *  (deterministic across SSR/CSR; ids only need to be unique within the list).
+ *  Highlighters render translucent via highlightBackground() (hex → /0.35). */
 export const DEFAULT_PENS: PenConfig[] = [
-  { id: 'pen-1', color: '#000000', size: DEFAULT_SIZE, type: 'pen' },
-  { id: 'pen-2', color: '#FF0000', size: DEFAULT_SIZE, type: 'pen' },
-  { id: 'pen-3', color: '#0000FF', size: DEFAULT_SIZE, type: 'pen' },
+  { id: 'pen-1', color: '#2BB7EE', size: DEFAULT_SIZE, type: 'pen' },
+  { id: 'pen-2', color: '#EE892B', size: DEFAULT_SIZE, type: 'pen' },
+  { id: 'highlight-1', color: '#2BB7EE', size: DEFAULT_SIZE, type: 'highlight' },
+  { id: 'highlight-2', color: '#EE892B', size: DEFAULT_SIZE, type: 'highlight' },
 ]
 
 function genId(): string {
