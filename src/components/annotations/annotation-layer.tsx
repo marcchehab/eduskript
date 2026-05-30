@@ -115,6 +115,7 @@ import { SnapsDisplay, type StudentWorkSnap, type SnapOverridesData, type SnapPo
 import { LayerBadges } from './layer-badges'
 import { SpacersDisplay } from './spacers-display'
 import { createLogger } from '@/lib/logger'
+import { DEFAULT_PENS, loadPens, savePens, addPen, removePen, reorderPens, setPenColor, setPenSize, type PenConfig } from '@/lib/annotations/pens'
 
 const log = createLogger('annotations:layer')
 
@@ -1134,7 +1135,6 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
   // Save state tracking
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [stylusModeActive, setStylusModeActive] = useState(false)
-  const [activePen, setActivePen] = useState(0)
   // Track if we're in "finger draw mode" (explicit draw mode without stylus)
   // In this mode, ALL touch events should be blocked for annotation, not just stylus
   const fingerDrawModeRef = useRef(false)
@@ -1159,38 +1159,18 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
   const scrollContainerRef = useRef<HTMLElement | null>(null)
   // Display-only zoom state (updated on gesture end, not during gesture)
   const [zoom, setZoom] = useState(1.0)
-  // Default values used for both SSR and initial client render
-  const defaultPenColors: [string, string, string] = ['#000000', '#FF0000', '#0000FF']
-  const defaultPenSizes: [number, number, number] = [2, 2, 2]
+  // Modular pens (add/remove/reorder), persisted to localStorage. DEFAULT_PENS
+  // for SSR + initial render; loadPens() hydrates the saved set after mount.
+  // See src/lib/annotations/pens.ts. Tracked by id so remove/reorder is stable.
+  const [pens, setPens] = useState<PenConfig[]>(DEFAULT_PENS)
+  const [activePenId, setActivePenId] = useState<string>(DEFAULT_PENS[0].id)
+  const activePen = pens.find((p) => p.id === activePenId) ?? pens[0] ?? DEFAULT_PENS[0]
 
-  const [penColors, setPenColors] = useState<[string, string, string]>(defaultPenColors)
-  const [penSizes, setPenSizes] = useState<[number, number, number]>(defaultPenSizes)
-
-  // Load pen settings from localStorage after mount to avoid hydration mismatch
+  // Load saved pens after mount to avoid hydration mismatch.
   useEffect(() => {
-    const savedColors = localStorage.getItem('annotation-pen-colors')
-    if (savedColors) {
-      try {
-        const parsed = JSON.parse(savedColors)
-        if (Array.isArray(parsed) && parsed.length === 3) {
-          setPenColors(parsed as [string, string, string])
-        }
-      } catch (e) {
-        console.error('Error loading pen colors:', e)
-      }
-    }
-
-    const savedSizes = localStorage.getItem('annotation-pen-sizes')
-    if (savedSizes) {
-      try {
-        const parsed = JSON.parse(savedSizes)
-        if (Array.isArray(parsed) && parsed.length === 3) {
-          setPenSizes(parsed as [number, number, number])
-        }
-      } catch (e) {
-        console.error('Error loading pen sizes:', e)
-      }
-    }
+    const loaded = loadPens()
+    setPens(loaded)
+    setActivePenId((prev) => (loaded.some((p) => p.id === prev) ? prev : loaded[0].id))
   }, [])
   const contentRef = useRef<HTMLDivElement>(null)
   const mainRef = useRef<HTMLElement | null>(null)
@@ -1556,19 +1536,15 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
   }, [])
 
 
-  // Save pen colors to localStorage whenever they change
+  // Persist the pen set whenever it changes. Skip while `pens` is still the
+  // module-constant default (initial render before loadPens swaps in a fresh
+  // array) so we never clobber the stored set with mount-time defaults — this
+  // is referential, so it's immune to the load/save effect ordering and
+  // StrictMode's double-mount.
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('annotation-pen-colors', JSON.stringify(penColors))
-    }
-  }, [penColors])
-
-  // Save pen sizes to localStorage whenever they change
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('annotation-pen-sizes', JSON.stringify(penSizes))
-    }
-  }, [penSizes])
+    if (pens === DEFAULT_PENS) return
+    savePens(pens)
+  }, [pens])
 
 
   // Generate page version hash
@@ -2745,27 +2721,34 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     }
   }, [canvasData, performSave])
 
-  // Handle pen change
-  const handlePenChange = useCallback((penIndex: number) => {
-    setActivePen(penIndex)
+  const handlePenSelect = useCallback((id: string) => {
+    setActivePenId(id)
   }, [])
 
-  // Handle pen color change
-  const handlePenColorChange = useCallback((penIndex: number, color: string) => {
-    setPenColors(prev => {
-      const newColors: [string, string, string] = [...prev] as [string, string, string]
-      newColors[penIndex] = color
-      return newColors
-    })
+  const handlePenColorChange = useCallback((id: string, color: string) => {
+    setPens((prev) => setPenColor(prev, id, color))
   }, [])
 
-  // Handle pen size change
-  const handlePenSizeChange = useCallback((penIndex: number, size: number) => {
-    setPenSizes(prev => {
-      const newSizes: [number, number, number] = [...prev] as [number, number, number]
-      newSizes[penIndex] = size
-      return newSizes
-    })
+  const handlePenSizeChange = useCallback((id: string, size: number) => {
+    setPens((prev) => setPenSize(prev, id, size))
+  }, [])
+
+  const handlePenAdd = useCallback(() => {
+    const next = addPen(pens)
+    if (next === pens) return // at MAX_PENS
+    setPens(next)
+    setActivePenId(next[next.length - 1].id) // select the new pen
+  }, [pens])
+
+  const handlePenRemove = useCallback((id: string) => {
+    const next = removePen(pens, id)
+    if (next === pens) return // at MIN_PENS
+    setPens(next)
+    if (activePenId === id) setActivePenId(next[0].id)
+  }, [pens, activePenId])
+
+  const handlePensReorder = useCallback((orderedIds: string[]) => {
+    setPens((prev) => reorderPens(prev, orderedIds))
   }, [])
 
   // Handle snap capture - save directly with base64 URL
@@ -3336,8 +3319,8 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
             onDrawStart={ensureActiveLayerVisible}
             onEraserMarksChange={setEraserMarkedIds}
             initialData={canvasData}
-            strokeColor={penColors[activePen]}
-            strokeWidth={penSizes[activePen]}
+            strokeColor={activePen.color}
+            strokeWidth={activePen.size}
             stylusModeActive={stylusModeActive}
             onStylusDetected={handleStylusDetected}
             onNonStylusInput={handleNonStylusInput}
@@ -3604,12 +3587,14 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
         onModeChange={setMode}
         onClear={handleClearAll}
         hasAnnotations={hasAnnotations || (spacersData?.spacers?.length ?? 0) > 0 || (snapsData?.snaps?.length ?? 0) > 0 || stickyNoteCount > 0}
-        activePen={activePen}
-        onPenChange={handlePenChange}
-        penColors={penColors}
+        pens={pens}
+        activePenId={activePenId}
+        onPenSelect={handlePenSelect}
         onPenColorChange={handlePenColorChange}
-        penSizes={penSizes}
         onPenSizeChange={handlePenSizeChange}
+        onPenAdd={handlePenAdd}
+        onPenRemove={handlePenRemove}
+        onPensReorder={handlePensReorder}
         onResetZoom={handleResetZoom}
         // Layer controls for students (broadcasted teacher annotations)
         layers={toolbarLayers}

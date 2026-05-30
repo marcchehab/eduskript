@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useSession } from 'next-auth/react'
 import { Presentation } from 'lucide-react'
@@ -45,78 +45,76 @@ function scrolledSlideIndex(slideStartLines: number[]): number {
 }
 
 /**
- * "Present" button — shown only to logged-in teachers. Docks just to the left
- * of the page annotation toolbar (a sibling teacher control) by measuring
- * `#annotation-toolbar`; falls back to bottom-right when that toolbar is absent.
+ * "Present" button — shown to logged-in teachers (or everyone when the page
+ * opted in). It is a one-button pill that **flows inline** with the page
+ * annotation toolbar: we portal it into the toolbar's sibling slot
+ * (`#annotation-toolbar-aside`), so the browser lays the two pills out together
+ * and reflows them natively — no `getBoundingClientRect`/interval positioning.
  *
- * Rendered through a portal to document.body: the public page scales the paper
- * with a CSS transform, which would otherwise become the containing block for
- * our `position: fixed` overlay (confining it to the paper box). The portal
- * escapes that transform; React context (Survey/CoupledVideo/StickMe providers
- * this is mounted under) still flows through, so slides keep their context.
+ * The slide overlay (SlidePresenter) is a separate portal to document.body so
+ * it escapes the public page's CSS paper transform (which would otherwise be
+ * the containing block for its `position: fixed`). React context
+ * (Survey/CoupledVideo/StickMe providers this is mounted under) flows through
+ * both portals, so slides keep their context.
  */
 export function PresentButton({ slides, slideStartLines, publiclyVisible = false }: PresentButtonProps) {
   const { data: session } = useSession()
   const isTeacher = session?.user?.accountType === 'teacher'
   const canPresent = isTeacher || publiclyVisible
   const [startIndex, setStartIndex] = useState<number | null>(null)
-  const [mounted, setMounted] = useState(false)
-  const [pos, setPos] = useState<CSSProperties>({ right: 24, bottom: 24 })
+  const [slot, setSlot] = useState<HTMLElement | null>(null)
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setMounted(true)
-  }, [])
-
-  // Dock next to the annotation toolbar. Re-measured on resize and on a slow
-  // interval (catches the toolbar mounting late / sidebar toggles).
+  // Locate the toolbar's sibling slot and portal into it. The toolbar mounts
+  // around the same time, so observe the DOM until the slot appears (no polling
+  // thereafter — layout is then the browser's job).
   useEffect(() => {
     if (!canPresent) return
-    const place = () => {
-      const tb = document.getElementById('annotation-toolbar')
-      if (tb) {
-        const r = tb.getBoundingClientRect()
-        // Dock just to the RIGHT of the annotation toolbar.
-        setPos({ left: r.right + 8, bottom: window.innerHeight - r.bottom })
-      } else {
-        setPos({ right: 24, bottom: 24 })
+    const existing = document.getElementById('annotation-toolbar-aside')
+    if (existing) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSlot(existing)
+      return
+    }
+    const obs = new MutationObserver(() => {
+      const el = document.getElementById('annotation-toolbar-aside')
+      if (el) {
+        setSlot(el)
+        obs.disconnect()
       }
-    }
-    place()
-    window.addEventListener('resize', place)
-    const id = setInterval(place, 1000)
-    return () => {
-      window.removeEventListener('resize', place)
-      clearInterval(id)
-    }
+    })
+    obs.observe(document.body, { childList: true, subtree: true })
+    return () => obs.disconnect()
   }, [canPresent])
 
-  if (slides.length === 0 || !mounted || !canPresent) return null
+  if (slides.length === 0 || !canPresent) return null
 
-  return createPortal(
+  return (
     <>
-      {/* A standalone one-button toolbar, styled like the annotation toolbar. */}
-      <div
-        style={pos}
-        className="fixed z-50 rounded-lg border border-border bg-background/95 p-2 shadow-lg backdrop-blur print:hidden"
-      >
-        <button
-          onClick={() => setStartIndex(scrolledSlideIndex(slideStartLines))}
-          title="Present this page as slides"
-          aria-label="Present this page as slides"
-          className="p-2 rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
-          <Presentation className="w-4 h-4" />
-        </button>
-      </div>
-      {startIndex !== null && (
-        <SlidePresenter
-          slides={slides}
-          initialIndex={startIndex}
-          onExit={() => setStartIndex(null)}
-        />
-      )}
-    </>,
-    document.body,
+      {slot &&
+        createPortal(
+          // Mirror the annotation toolbar's pill (p-2) wrapping a p-2 button so
+          // this one-button toolbar matches its height and width exactly.
+          <div className="ml-2 flex items-center rounded-lg border border-border bg-background/95 p-2 shadow-lg backdrop-blur print:hidden">
+            <button
+              onClick={() => setStartIndex(scrolledSlideIndex(slideStartLines))}
+              title="Present this page as slides"
+              aria-label="Present this page as slides"
+              className="p-2 rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <Presentation className="w-4 h-4" />
+            </button>
+          </div>,
+          slot,
+        )}
+      {startIndex !== null &&
+        createPortal(
+          <SlidePresenter
+            slides={slides}
+            initialIndex={startIndex}
+            onExit={() => setStartIndex(null)}
+          />,
+          document.body,
+        )}
+    </>
   )
 }

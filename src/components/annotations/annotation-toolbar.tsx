@@ -2,7 +2,8 @@
 
 import { useState, useRef, useEffect, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Pen, Eraser, Trash2, Eye, EyeOff, Radio, User, Users, UserPen, ChevronDown, Globe, Layers, Camera, Highlighter, Ellipsis, SeparatorHorizontal, StickyNote as StickyNoteIcon } from 'lucide-react'
+import { Pen, Eraser, Trash2, Eye, EyeOff, Radio, User, Users, UserPen, ChevronDown, Globe, Layers, Camera, Highlighter, Ellipsis, SeparatorHorizontal, StickyNote as StickyNoteIcon, Plus } from 'lucide-react'
+import { type PenConfig, PEN_PALETTE, MIN_PENS, MAX_PENS } from '@/lib/annotations/pens'
 import type { SpacerPattern } from '@/types/spacer'
 import { Circle } from '@uiw/react-color'
 import { cn } from '@/lib/utils'
@@ -127,12 +128,14 @@ interface AnnotationToolbarProps {
   onModeChange: (mode: AnnotationMode) => void
   onClear: () => void
   hasAnnotations: boolean
-  activePen: number
-  onPenChange: (penIndex: number) => void
-  penColors: [string, string, string]
-  onPenColorChange: (penIndex: number, color: string) => void
-  penSizes: [number, number, number]
-  onPenSizeChange: (penIndex: number, size: number) => void
+  pens: PenConfig[]
+  activePenId: string
+  onPenSelect: (id: string) => void
+  onPenColorChange: (id: string, color: string) => void
+  onPenSizeChange: (id: string, size: number) => void
+  onPenAdd: () => void
+  onPenRemove: (id: string) => void
+  onPensReorder: (orderedIds: string[]) => void
   onResetZoom: () => void
   // Layers (for students - broadcasted teacher annotations)
   layers?: AnnotationLayer[]
@@ -190,12 +193,14 @@ export function AnnotationToolbar({
   onModeChange,
   onClear,
   hasAnnotations,
-  activePen,
-  onPenChange,
-  penColors,
+  pens,
+  activePenId,
+  onPenSelect,
   onPenColorChange,
-  penSizes,
   onPenSizeChange,
+  onPenAdd,
+  onPenRemove,
+  onPensReorder,
   onResetZoom,
   layers = [],
   onLayerToggle,
@@ -277,23 +282,39 @@ export function AnnotationToolbar({
     }
   }
 
-  const handleColorChange = (penIndex: number, color: string) => {
-    onPenColorChange(penIndex, color)
-    onPenChange(penIndex)
+  const handleColorChange = (id: string, color: string) => {
+    onPenColorChange(id, color)
+    onPenSelect(id)
     if (mode !== 'draw') {
       onModeChange('draw')
     }
   }
 
-  const handleSizeChange = (penIndex: number, size: number) => {
-    onPenSizeChange(penIndex, size)
-    onPenChange(penIndex)
+  const handleSizeChange = (id: string, size: number) => {
+    onPenSizeChange(id, size)
+    onPenSelect(id)
     if (mode !== 'draw') {
       onModeChange('draw')
     }
   }
 
-  const [showPenControls, setShowPenControls] = useState<number | null>(null)
+  // Drag-to-reorder pens (HTML5 drag on the pen button; mouse only — touch
+  // keeps the long-press popover). Reorders by id and reports the new order.
+  const dragPenId = useRef<string | null>(null)
+  const handlePenDrop = (targetId: string) => {
+    const from = dragPenId.current
+    dragPenId.current = null
+    if (!from || from === targetId) return
+    const ids = pens.map((p) => p.id)
+    const fromIdx = ids.indexOf(from)
+    const toIdx = ids.indexOf(targetId)
+    if (fromIdx < 0 || toIdx < 0) return
+    ids.splice(fromIdx, 1)
+    ids.splice(toIdx, 0, from)
+    onPensReorder(ids)
+  }
+
+  const [showPenControls, setShowPenControls] = useState<string | null>(null)
   const hoverTimerRef = useRef<NodeJS.Timeout | null>(null)
   const hideTimerRef = useRef<NodeJS.Timeout | null>(null)
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -359,7 +380,7 @@ export function AnnotationToolbar({
     return () => document.removeEventListener('pointerdown', handlePointerDown, true)
   }, [showPenControls, showDeleteControls])
 
-  const handlePenMouseEnter = (penIndex: number) => {
+  const handlePenMouseEnter = (id: string) => {
     // Clear any pending hide timer
     if (hideTimerRef.current) {
       clearTimeout(hideTimerRef.current)
@@ -368,7 +389,7 @@ export function AnnotationToolbar({
 
     // Set timer to show pen controls
     hoverTimerRef.current = setTimeout(() => {
-      setShowPenControls(penIndex)
+      setShowPenControls(id)
     }, 300)
   }
 
@@ -386,7 +407,7 @@ export function AnnotationToolbar({
     }
   }
 
-  const handlePenClick = (penIndex: number) => {
+  const handlePenClick = (id: string) => {
     if (hoverTimerRef.current) {
       clearTimeout(hoverTimerRef.current)
       hoverTimerRef.current = null
@@ -394,11 +415,11 @@ export function AnnotationToolbar({
     setShowPenControls(null)
 
     // If clicking the currently active pen, deactivate it
-    if (mode === 'draw' && activePen === penIndex) {
+    if (mode === 'draw' && activePenId === id) {
       onModeChange('view')
     } else {
       // Switch to this pen and enter draw mode
-      onPenChange(penIndex)
+      onPenSelect(id)
       if (mode !== 'draw') {
         onModeChange('draw')
       }
@@ -406,7 +427,7 @@ export function AnnotationToolbar({
   }
 
   // Long-press handlers for pen tools (stylus/touch support)
-  const handlePenPointerDown = (e: React.PointerEvent, penIndex: number) => {
+  const handlePenPointerDown = (e: React.PointerEvent, id: string) => {
     // Only handle touch/pen, not mouse (mouse uses hover)
     if (e.pointerType === 'mouse') return
 
@@ -415,9 +436,9 @@ export function AnnotationToolbar({
 
     longPressStartPos.current = { x: e.clientX, y: e.clientY }
     longPressTimerRef.current = setTimeout(() => {
-      setShowPenControls(penIndex)
+      setShowPenControls(id)
       // Also select this pen when opening its config
-      onPenChange(penIndex)
+      onPenSelect(id)
       if (mode !== 'draw') {
         onModeChange('draw')
       }
@@ -602,7 +623,7 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
     <div
       id="annotation-toolbar"
       data-annotation-toolbar
-      className="fixed bottom-6 z-50 select-none"
+      className="fixed bottom-6 z-50 select-none flex items-end"
       style={{ left: `calc(${sidebarWidth}px + (100% - ${sidebarWidth}px) / 2)`, transform: 'translateX(-50%)', isolation: 'isolate', touchAction: 'manipulation' }}
       onMouseEnter={() => onShowLayerBadgesChange?.(true)}
       onMouseLeave={() => onShowLayerBadgesChange?.(false)}
@@ -746,21 +767,25 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
 
         {/* ============ SECTION 4: Drawing Tools ============ */}
         <ToolbarSection>
-          {/* Three Pen Tools */}
-          {[0, 1, 2].map((penIndex) => (
-            <div key={penIndex} className="relative">
+          {/* Modular pens — add/remove/reorder; persisted to localStorage. */}
+          {pens.map((pen, penIndex) => (
+            <div key={pen.id} className="relative">
               <button
                 data-pen-button
-                onClick={() => handlePenClick(penIndex)}
-                onMouseEnter={() => handlePenMouseEnter(penIndex)}
+                draggable
+                onDragStart={() => { dragPenId.current = pen.id }}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={() => handlePenDrop(pen.id)}
+                onClick={() => handlePenClick(pen.id)}
+                onMouseEnter={() => handlePenMouseEnter(pen.id)}
                 onMouseLeave={handlePenMouseLeave}
-                onPointerDown={(e) => handlePenPointerDown(e, penIndex)}
+                onPointerDown={(e) => handlePenPointerDown(e, pen.id)}
                 onPointerMove={handlePenPointerMove}
                 onPointerUp={handlePenPointerUp}
                 onPointerCancel={handlePenPointerUp}
                 className={cn(
                   'p-2 rounded-md transition-colors relative',
-                  mode === 'draw' && activePen === penIndex
+                  mode === 'draw' && activePenId === pen.id
                     ? 'bg-primary text-primary-foreground'
                     : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                 )}
@@ -771,12 +796,12 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
                 {/* Color indicator - uses annotation-color-indicator for dark mode filter */}
                 <div
                   className="annotation-color-indicator absolute bottom-0.5 right-0.5 w-2.5 h-2.5 rounded-full border border-white dark:border-gray-800"
-                  style={{ backgroundColor: penColors[penIndex] }}
+                  style={{ backgroundColor: pen.color }}
                 />
               </button>
 
-              {/* Pen controls popover (size slider + color picker) */}
-              {showPenControls === penIndex && (
+              {/* Pen controls popover (size slider + color picker + remove) */}
+              {showPenControls === pen.id && (
                 <div
                   ref={penPopoverRef}
                   className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 flex gap-2"
@@ -799,25 +824,47 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
                       min="0.1"
                       max="5"
                       step="0.1"
-                      value={penSizes[penIndex]}
-                      onChange={(e) => handleSizeChange(penIndex, parseFloat(e.target.value))}
+                      value={pen.size}
+                      onChange={(e) => handleSizeChange(pen.id, parseFloat(e.target.value))}
                       className="flex-grow cursor-pointer [writing-mode:vertical-lr] [direction:rtl] slider-vertical"
                     />
                     <BrushThinIcon className="w-6 h-6 flex-shrink-0 opacity-60" />
+                    {pens.length > MIN_PENS && (
+                      <button
+                        onClick={() => onPenRemove(pen.id)}
+                        title="Remove pen"
+                        aria-label="Remove pen"
+                        className="text-muted-foreground hover:text-destructive transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
 
                   {/* Color picker */}
                   <div className="bg-background border border-border rounded-lg shadow-lg p-3 annotation-color-picker">
                     <Circle
-                      colors={['#000000', '#808080', '#DD5555', '#EE8844', '#44AA66', '#5577DD', '#9966DD']}
-                      color={penColors[penIndex]}
-                      onChange={(color) => handleColorChange(penIndex, color.hex)}
+                      colors={PEN_PALETTE}
+                      color={pen.color}
+                      onChange={(color) => handleColorChange(pen.id, color.hex)}
                     />
                   </div>
                 </div>
               )}
             </div>
           ))}
+
+          {/* Add pen */}
+          {pens.length < MAX_PENS && (
+            <button
+              onClick={onPenAdd}
+              title="Add pen"
+              aria-label="Add pen"
+              className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          )}
 
           {/* Eraser Tool */}
           <button
@@ -920,6 +967,10 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
 
         </ToolbarSection>
       </div>
+      {/* Slot for sibling pills (e.g. the slide "Present" button) so they flow
+          inline with the toolbar and reflow with the browser — no JS positioning.
+          Empty (0-width) when unused, so the toolbar stays centred on its own. */}
+      <div id="annotation-toolbar-aside" className="flex items-end" />
     </div>
     <AlertDialogModal
       open={dialog.open} onOpenChange={dialog.setOpen}
