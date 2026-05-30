@@ -11,6 +11,8 @@ import { CoupledVideoProvider } from './coupled-video-context'
 import { StickMeProvider } from './stick-me'
 import { StageFlow } from './stage-flow'
 import { splitStages, hasStages } from '@/lib/markdown-stages'
+import { splitSlides } from '@/lib/markdown-slides'
+import { PresentButton } from './present-button'
 
 interface ServerMarkdownRendererProps {
   content: string
@@ -18,6 +20,8 @@ interface ServerMarkdownRendererProps {
   pageId?: string
   organizationSlug?: string
   isExam?: boolean
+  /** When true, the Present button is shown to everyone (not just teachers). */
+  presentationPublic?: boolean
 }
 
 /**
@@ -30,7 +34,7 @@ interface ServerMarkdownRendererProps {
  * 2. Compile markdown with remark/rehype plugins
  * 3. Create components with files prop bound
  */
-export async function ServerMarkdownRenderer({ content, skriptId, pageId, organizationSlug, isExam }: ServerMarkdownRendererProps) {
+export async function ServerMarkdownRenderer({ content, skriptId, pageId, organizationSlug, isExam, presentationPublic }: ServerMarkdownRendererProps) {
   // 1. Get all files for this skript upfront
   const files = skriptId ? await getSkriptFiles(skriptId) : createEmptySkriptFiles()
 
@@ -55,6 +59,11 @@ export async function ServerMarkdownRenderer({ content, skriptId, pageId, organi
   let compiledStages: React.ReactNode[] = []
   let stageMarkers: ReturnType<typeof splitStages>['markers'] = []
   let rendered: React.ReactNode = null
+  // Slides: split the same source on `---`/`---/`/heading markers and compile
+  // each chunk with the same components, so the page can be presented as slides.
+  // Skipped for exams. Reuses the staged pattern above.
+  let compiledSlides: React.ReactNode[] = []
+  let slideStartLines: number[] = []
   let error: unknown
 
   try {
@@ -66,6 +75,15 @@ export async function ServerMarkdownRenderer({ content, skriptId, pageId, organi
       )
     } else {
       rendered = await compileMarkdown(content, { components, resolvedStableLinks })
+    }
+    if (!isExam) {
+      const slideSplit = splitSlides(content)
+      slideStartLines = slideSplit.startLines
+      compiledSlides = await Promise.all(
+        // anchors:false — slides re-render the page's content; emitting the same
+        // heading ids / data-section-id again would collide in the DOM.
+        slideSplit.slides.map((s) => compileMarkdown(s, { components, resolvedStableLinks, anchors: false })),
+      )
     }
   } catch (e) {
     error = e
@@ -107,7 +125,27 @@ export async function ServerMarkdownRenderer({ content, skriptId, pageId, organi
   const hasCoupling = pageId && (/\bcoupled\s*=/i.test(content) || /\bgate-at\s*=/i.test(content))
   const initialCoupled = !/\bcoupled\s*=\s*["']?false/i.test(content)
 
-  let wrapped: React.ReactNode = body
+  // The Present button (and the slides it holds) lives alongside the scroll
+  // body INSIDE the providers below, so a slide containing a <survey>/coupled
+  // video/<stickme> gets the same context the scroll body does. The button is
+  // `fixed`, so it escapes this layout; slides render in a fullscreen overlay.
+  const presentButton =
+    !isExam && compiledSlides.length > 0 ? (
+      <PresentButton
+        slides={compiledSlides.map((node, i) => (
+          <MarkdownErrorBoundary key={i}>{node}</MarkdownErrorBoundary>
+        ))}
+        slideStartLines={slideStartLines}
+        publiclyVisible={presentationPublic ?? false}
+      />
+    ) : null
+
+  let wrapped: React.ReactNode = (
+    <>
+      {body}
+      {presentButton}
+    </>
+  )
   if (hasSurvey && pageId) {
     wrapped = <SurveyProvider pageId={pageId}>{wrapped}</SurveyProvider>
   }

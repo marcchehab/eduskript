@@ -334,6 +334,9 @@ model Page {
   isUnlisted   Boolean  @default(false)
   pageType     String   @default("normal") @map("page_type") // "normal", "exam"
   examSettings Json?    @map("exam_settings") // { requireSEB: boolean, timeLimitMinutes?: number }
+  // When true the "Present as slides" button is shown to everyone, not just
+  // logged-in teachers. Off by default — presenting is a teacher action.
+  presentationPublic Boolean @default(false) @map("presentation_public")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

@@ -9,6 +9,7 @@ interface PublicPageBodyProps {
     id: string
     content: string
     pageType?: string | null
+    presentationPublic?: boolean | null
     forkedFromPageId: string | null
     forkedFromAuthorId: string | null
   }
@@ -75,6 +76,7 @@ export function PublicPageBody({ page, skriptId, publicAnnotations, publicSnaps,
               skriptId={skriptId}
               pageId={page.id}
               isExam={page.pageType === 'exam'}
+              presentationPublic={page.presentationPublic ?? false}
             />
           </AnnotationWrapper>
         </article>

@@ -39,6 +39,7 @@ import { rehypeColorClasses } from './rehype-plugins/color-classes'
 import { rehypeExternalLinks } from './rehype-plugins/external-links'
 import { rehypeStablePageLinks } from './rehype-plugins/stable-page-links'
 import { rehypeAlignTags } from './rehype-plugins/align-tags'
+import { stripSlideDirectives } from './markdown-slides'
 import type { ResolvedPage } from './page-stable-link'
 
 // Re-export remarkPlugins for backward compatibility
@@ -237,6 +238,11 @@ export interface CompileMarkdownOptions {
    *  Kept as a parameter so this module stays free of `server-only` imports
    *  and can be safely bundled into client components. */
   resolvedStableLinks?: Map<string, ResolvedPage>
+  /** Emit heading `id` + `data-section-id`/`data-heading-text` anchors
+   *  (rehypeSlug + rehypeHeadingSectionIds). Default true. Set false when the
+   *  output is rendered alongside the same content (e.g. slide copies in the
+   *  presenter) to avoid duplicate ids colliding with the page in the DOM. */
+  anchors?: boolean
 }
 
 /**
@@ -336,7 +342,9 @@ const CONTAINER_TAGS = [
  * walking non-blank lines in lockstep.
  */
 function preprocessMarkdown(content: string): { text: string; lineMap: number[] } {
-  const base = expandSelfClosingTags(content)
+  // Blank the slide directive markers (`---/`, `---x`) first. Line-count-
+  // preserving, so the lineMap alignment below is unaffected.
+  const base = expandSelfClosingTags(stripSlideDirectives(content))
   const text = delimitContainerTags(normalizeQuestionSpacing(base))
 
   const baseLines = base.split('\n')
@@ -393,9 +401,15 @@ export async function compileMarkdown(
   content: string,
   options?: CompileMarkdownOptions
 ): Promise<ReactNode> {
-  const { components = {}, resolvedStableLinks = new Map<string, ResolvedPage>() } = options ?? {}
+  const { components = {}, resolvedStableLinks = new Map<string, ResolvedPage>(), anchors = true } = options ?? {}
 
   const { text: processed, lineMap } = preprocessMarkdown(content)
+
+  // Slides re-render the page's content, which would duplicate heading ids and
+  // data-section-id anchors in the DOM. Drop those plugins when anchors=false.
+  const rehypeList = anchors
+    ? rehypePlugins
+    : rehypePlugins.filter((p) => p !== rehypeSlug && p !== rehypeHeadingSectionIds)
 
   // Clone the schema per call: rehypeAllowPluginAttrs mutates the plugin
   // allowlist based on the attrs found in *this* document, so concurrent
@@ -418,7 +432,7 @@ export async function compileMarkdown(
     .use(rehypeExternalLinks) // Auto target=_blank for external links + title="_blank" opt-in
     .use(rehypeStablePageLinks, resolvedStableLinks) // Rewrite /p/{id} → canonical URL
     .use(rehypeSanitize, schema)
-    .use(rehypePlugins)
+    .use(rehypeList)
     // Source-line attributes, with the lineMap so preview line numbers match
     // the editor's original lines (preprocessing shifted them).
     .use(rehypeSourceLine, lineMap)

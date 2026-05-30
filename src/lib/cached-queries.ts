@@ -315,6 +315,7 @@ export const getPublishedPage = (
               isUnlisted: true,
               pageType: true,
               examSettings: true,
+              presentationPublic: true,
               forkedFromPageId: true,
               forkedFromAuthorId: true,
               forkedAt: true,

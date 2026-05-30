@@ -64,6 +64,7 @@ export interface UpdatePagePatch {
   isUnlisted?: boolean
   pageType?: string
   examSettings?: unknown
+  presentationPublic?: boolean
 }
 
 export interface CreatePageInput {
@@ -228,7 +229,7 @@ export async function updatePageForUser(
 ) {
   const isAdmin = !!ctx.isAdmin
   const rawPatch = patch
-  const { content, isPublished, isUnlisted, pageType, examSettings } = rawPatch
+  const { content, isPublished, isUnlisted, pageType, examSettings, presentationPublic } = rawPatch
 
   // Empty-string-as-no-change normalisation. Partial-update tools (REST
   // PATCH, MCP update_page_metadata, MCP update_page) often receive
@@ -321,6 +322,7 @@ export async function updatePageForUser(
   if (isUnlisted !== undefined) updateData.isUnlisted = isUnlisted
   if (pageType !== undefined) updateData.pageType = pageType
   if (examSettings !== undefined) updateData.examSettings = examSettings
+  if (presentationPublic !== undefined) updateData.presentationPublic = presentationPublic
 
   const updatedPage = await prisma.page.update({
     where: { id: pageId },

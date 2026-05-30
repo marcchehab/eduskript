@@ -14,7 +14,7 @@ import { EditModal } from '@/components/dashboard/edit-modal'
 import { CreatePageModal } from '@/components/dashboard/create-page-modal'
 import { SkriptAccessManager } from '@/components/permissions/SkriptAccessManager'
 import { EditorWithMedia, type ExtraManageTab } from '@/components/dashboard/editor-with-media'
-import { ArrowLeft, ArrowRightLeft, Save, History, Eye, EyeOff, ClipboardCopy, Check, Shield, Lock, Unlock, Globe, Maximize2, Minimize2, BookA, BookOpen, FileText, FilePenLine, GripVertical, Trash2, Users, Loader2, CircleCheckBig, CircleMinus } from 'lucide-react'
+import { ArrowLeft, ArrowRightLeft, Save, History, Eye, EyeOff, ClipboardCopy, Check, Shield, Lock, Unlock, Globe, Maximize2, Minimize2, BookA, BookOpen, FileText, FilePenLine, GripVertical, Trash2, Users, Loader2, CircleCheckBig, CircleMinus, Presentation } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -89,6 +89,7 @@ interface PageEditorProps {
     examSettings?: {
       requireSEB?: boolean
     } | null
+    presentationPublic?: boolean
   }
   canEdit: boolean
   userPermissions: UserPermissions
@@ -121,6 +122,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
   const [examSettings, setExamSettings] = useState<{ requireSEB?: boolean; unlockForAll?: boolean }>(
     (page.examSettings as { requireSEB?: boolean; unlockForAll?: boolean }) || { requireSEB: false }
   )
+  const [presentationPublic, setPresentationPublic] = useState(page.presentationPublic ?? false)
   const [teacherClasses, setTeacherClasses] = useState<Array<{ id: string; name: string }>>([])
   const [unlockedClassIds, setUnlockedClassIds] = useState<string[]>([])
   const [sebLinkCopied, setSebLinkCopied] = useState(false)
@@ -421,7 +423,8 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
           description: description.trim() || null,
           content: contentRef.current,
           pageType,
-          examSettings: pageType === 'exam' ? examSettings : null
+          examSettings: pageType === 'exam' ? examSettings : null,
+          presentationPublic
         })
       })
 
@@ -445,7 +448,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
       alert.showError('Failed to save page')
     }
     setIsSaving(false)
-  }, [title, slug, description, pageType, examSettings, page.id, page.slug, skript.slug, router, loadVersions, alert])
+  }, [title, slug, description, pageType, examSettings, presentationPublic, page.id, page.slug, skript.slug, router, loadVersions, alert])
 
   // Handle version restoration
   const handleRestoreVersion = async (versionId: string, versionContent: string) => {
@@ -957,6 +960,25 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                     No classes yet. Create a class to unlock exams for students.
                   </span>
                 )}
+              </div>
+            )}
+
+            {/* Slide presentation: the "Present" button is teacher-only by
+                default; this opts the page into a public Present button. */}
+            {pageType !== 'exam' && !isFullscreen && (
+              <div className="flex items-center gap-2 p-4 border rounded-lg bg-muted/30">
+                <Checkbox
+                  id="presentation-public"
+                  checked={presentationPublic}
+                  onCheckedChange={(checked) => {
+                    setPresentationPublic(!!checked)
+                    setHasUnsavedChanges(true)
+                  }}
+                />
+                <Label htmlFor="presentation-public" className="text-sm flex items-center gap-1.5 cursor-pointer">
+                  <Presentation className="w-4 h-4 text-muted-foreground" />
+                  Let anyone present this page as slides
+                </Label>
               </div>
             )}
           </div>

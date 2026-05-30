@@ -517,6 +517,41 @@ Use it to gate later material on handing in earlier work — e.g. **predict-the-
 - One-way: once advanced, the student cannot return to a handed-in stage.
 - Most useful on exam pages, but works on any page.`)
 
+  // Slide presentations
+  sections.push(`## Slide presentations (\`---\`, \`---/\`, \`---x\`)
+
+Any page can be presented full-screen as slides — the same source renders as a scrolling page OR as a deck, so there is **no special wrapper**. Slides are split from the markdown you already write.
+
+A new slide starts at:
+- a level-1 or level-2 heading (\`#\` / \`##\`) — the heading leads the new slide;
+- a \`---\` thematic break (this also renders as a horizontal rule on the page);
+- a \`---/\` divider on its own line — an **invisible** break that splits slides but renders nothing on the page.
+
+A \`---x\` line **excludes** the following content from the deck, up to the next break/heading — the text still shows on the scrolling page, just not on the slides. Use it for long background prose you don't want projected. Example:
+
+## Photosynthesis
+The headline reaction…
+
+---/
+
+## Two stages
+- Light reactions
+- Calvin cycle
+
+---x
+
+### Teacher notes
+Background reading kept on the page but off the slides.
+
+---
+
+## Recap
+
+- Put each marker on its own line at the top level (not inside a fenced code block).
+- Empty slides (adjacent breaks, a divider right before a heading) are dropped automatically.
+- Interactive components (code editors, quizzes, math) work inside slides.
+- Exam pages are not presentable.`)
+
   return sections.join('\n\n')
 }
 
@@ -573,6 +608,8 @@ export function getCondensedSyntaxReference(): string {
 **Free-text auto-check (predict-output):** \`<question id="x" type="text" points="2">\` with an \`\`\`expected fenced block inside (blank line before it) → partial-credit grading of a predicted output, with a diff. Flags: \`ignore-case\`, \`ignore-whitespace\`. Feedback is hidden from students by default (exams AND practice) — set \`showFeedback="true"\` to reveal it during the attempt; teachers see it when grading.
 
 **Staged pages:** \`<next-stage label="..." title="..." confirm="..." cancel="...">\` on its own line splits a document into one-way, hand-in-locked stages (only stages up to the current one render; advancing locks the previous one read-only). Ideal for exams: predict-output questions in stage 1, runnable editors in stage 2. All strings optional/localizable.
+
+**Slide presentations:** any page can be presented full-screen as slides, split from the markdown itself (same source reads as a page OR a deck). A new slide starts at each \`#\`/\`##\` heading, each \`---\` (also a horizontal rule on the page), or \`---/\` (invisible break — splits slides, draws no rule). A \`---x\` line drops the following content from the deck until the next break/heading (still shown on the page) — for background prose you don't want projected. Markers go on their own line outside code blocks; empty slides are dropped; exam pages aren't presentable.
 
 **Code-block copy button:** plain \`\`\`lang code blocks show a copy button; add \`copy=false\` (or \`no-copy\`) to the info string to hide it, \`copy\`/\`copy=true\` to force it. Hidden by default on exam pages.
 
