@@ -135,6 +135,8 @@ interface AnnotationToolbarProps {
   onPenAdd: (type: PenType) => void
   onPenRemove: (id: string) => void
   onPensReorder: (orderedIds: string[]) => void
+  /** When broadcasting, highlighter pens are greyed out (highlights are personal). */
+  isBroadcasting?: boolean
   onResetZoom: () => void
   // Layers (for students - broadcasted teacher annotations)
   layers?: AnnotationLayer[]
@@ -200,6 +202,7 @@ export function AnnotationToolbar({
   onPenAdd,
   onPenRemove,
   onPensReorder,
+  isBroadcasting = false,
   onResetZoom,
   layers = [],
   onLayerToggle,
@@ -416,6 +419,9 @@ export function AnnotationToolbar({
       hoverTimerRef.current = null
     }
     setShowPenControls(null)
+
+    // Highlights are personal — highlighter pens are inert while broadcasting.
+    if (isBroadcasting && pens.find((p) => p.id === id)?.type === 'highlight') return
 
     // Clicking the active pen (draw or highlight) deactivates it.
     const isActive = (mode === 'draw' || mode === 'highlight') && activePenId === id
@@ -788,9 +794,13 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
                   'p-2 rounded-md transition-colors relative',
                   (mode === 'draw' || mode === 'highlight') && activePenId === pen.id
                     ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent',
+                  // Highlights are personal — greyed out while broadcasting.
+                  isBroadcasting && pen.type === 'highlight' && 'opacity-40 cursor-not-allowed hover:bg-transparent hover:text-muted-foreground'
                 )}
-                title={pen.type === 'highlight' ? `Highlighter ${penIndex + 1}` : `Pen ${penIndex + 1}`}
+                title={pen.type === 'highlight'
+                  ? (isBroadcasting ? "Highlights are always personal — can't be broadcast" : `Highlighter ${penIndex + 1}`)
+                  : `Pen ${penIndex + 1}`}
                 aria-label={pen.type === 'highlight' ? `Select highlighter ${penIndex + 1}` : `Select pen ${penIndex + 1}`}
               >
                 {pen.type === 'highlight' ? <Highlighter className="w-4 h-4" /> : <Pen className="w-4 h-4" />}
@@ -863,6 +873,20 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
             </div>
           ))}
 
+          {/* Eraser Tool */}
+          <button
+            onClick={handleEraserClick}
+            className={cn(
+              'p-2 rounded-md transition-colors',
+              mode === 'erase'
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+            )}
+            title="Erase"
+          >
+            <Eraser className="w-4 h-4" />
+          </button>
+
           {/* Add pen / highlighter */}
           {pens.length < MAX_PENS && (
             <div className="relative">
@@ -901,19 +925,7 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
             </div>
           )}
 
-          {/* Eraser Tool */}
-          <button
-            onClick={handleEraserClick}
-            className={cn(
-              'p-2 rounded-md transition-colors',
-              mode === 'erase'
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-            )}
-            title="Erase"
-          >
-            <Eraser className="w-4 h-4" />
-          </button>
+          <ToolbarDivider />
 
           {/* Spacer tool - insert visual spacers between content blocks */}
           <button

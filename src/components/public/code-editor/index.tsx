@@ -17,7 +17,7 @@ import { basicSetup } from 'codemirror'
 import { autocompletion } from '@codemirror/autocomplete'
 import { createPythonCompletions } from './python-completions'
 import { Button } from '@/components/ui/button'
-import { Play, Square, RotateCcw, Maximize2, Minimize2, Scan, X, Plus, FileText, ZoomIn, ZoomOut, Save, History, Highlighter, MessageSquare, WrapText, Circle, CheckCircle2, Package, Trash2, Paperclip, Upload, Pencil, Cloud, HardDrive } from 'lucide-react'
+import { Play, Square, RotateCcw, Maximize2, Minimize2, Scan, X, Plus, FileText, ZoomIn, ZoomOut, Save, History, WrapText, Circle, CheckCircle2, Package, Trash2, Paperclip, Upload, Pencil, Cloud, HardDrive } from 'lucide-react'
 import { useZoom } from '@/contexts/zoom-context'
 import { useUserData, useCreateVersion, useVersionHistory, useRestoreVersion, useDeleteVersion, useUpdateVersionLabel, useOrphanedComponentIds, useReassignVersionHistory } from '@/lib/userdata/hooks'
 import { userDataService, syncEngine } from '@/lib/userdata'
@@ -33,21 +33,17 @@ import { cn } from '@/lib/utils'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useSession } from 'next-auth/react'
-import type { CodeEditorData, CodeHighlight, HighlightColor, HighlightComment, SqlVerificationData, GlobalImportsData, PythonCheckData, BinaryFile, BinaryFileData } from '@/lib/userdata/types'
-
-/** Data structure for broadcast highlights (separate from personal code data) */
-interface BroadcastHighlightsData {
-  highlights: CodeHighlight[]
-}
+import type { CodeEditorData, CodeHighlight, SqlVerificationData, GlobalImportsData, PythonCheckData, BinaryFile, BinaryFileData } from '@/lib/userdata/types'
 import {
   codeHighlighting,
   addHighlight,
   removeHighlight,
   setHighlights as setHighlightsEffect,
-  replaceTeacherHighlights,
   extractHighlights,
   highlightField,
 } from './highlight-extension'
+import { useHighlightPen } from '@/components/text-highlights/highlight-pen-context'
+import { highlighterCursor } from '@/lib/text-highlights/cursor'
 import {
   RunState,
   OutputLevel,
@@ -157,11 +153,6 @@ export interface CheckStage {
 
 // Custom annotation to mark programmatic changes (defined once outside component)
 const programmaticChange = Annotation.define<boolean>()
-
-// Highlight colors for cursor (URL-encoded hex values)
-const highlightColorHex: Record<HighlightColor, string> = {
-  red: '%23ef4444', yellow: '%23eab308', green: '%2322c55e', blue: '%233b82f6'
-}
 
 // Static preload functions (no component state, safe to call from IntersectionObserver)
 
@@ -367,7 +358,7 @@ export const CodeEditor = memo(function CodeEditor({
 
   // User data persistence - only if pageId is provided
   const componentId = `code-editor-${id}`
-  const highlightsComponentId = `code-highlights-${id}` // Separate adapter for broadcast highlights
+  const highlightsComponentId = `code-highlights-${id}` // Separate (server-synced) personal highlights record
   const verificationComponentId = `sql-verification-${id}`
 
   // Teacher's "view this student's submission" mode. When a snapshot exists
@@ -462,40 +453,16 @@ export const CodeEditor = memo(function CodeEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStage, pythonCheckComponentId, coupledVideo?.markPassed])
 
-  // Code-editor highlights are always personal — never broadcast.
-  // Why: teacher and student have different code in the same editor, so
-  // character-offset highlights (from/to) would land on the wrong text on
-  // the student's side. Page-level highlights/drawings are still broadcast
-  // by the annotation layer; only code-editor highlights are local.
-  // The broadcast plumbing below is intentionally left in place but inert
-  // (syncOptions = {} → isBroadcastMode = false everywhere downstream).
-  const syncOptions: SyncedUserDataOptions = useMemo(() => ({}), [])
-
-  // Whether we're in broadcast mode (targeting is set)
-  const isBroadcastMode = Boolean(syncOptions.targetType && syncOptions.targetId)
-
-  // Broadcast highlights hook - stores ONLY highlights for targeted audience
-  // DESIGN DECISION: Highlights are stored separately from CodeEditorData because:
-  // - Code/settings should stay personal (students write their own code)
-  // - Only highlights should be broadcastable
-  // LIMITATION: This means two separate IndexedDB records per editor when broadcasting.
-  // See: highlightsComponentId = `code-highlights-${id}` vs componentId = `code-editor-${id}`
-  const { data: broadcastHighlightsData, updateData: updateBroadcastHighlights, isLoading: broadcastIsLoading } = useSyncedUserData<BroadcastHighlightsData>(
-    isBroadcastMode && pageId ? pageId : '',
+  // Code-editor highlights are PERSONAL but server-synced (like other
+  // annotations), kept in their own record so the local-only code/settings
+  // store is untouched. Never broadcast: teacher and student have different
+  // code, so char-offset highlights would mismap. Created by the site toolbar
+  // highlighter pen (useHighlightPen), not an in-editor tool.
+  const { data: highlightsData, updateData: saveHighlights, isLoading: highlightsLoading } = useSyncedUserData<{ highlights: CodeHighlight[] }>(
+    pageId || '',
     highlightsComponentId,
-    null,
-    syncOptions
+    { highlights: [] },
   )
-
-  // Current user's author ID for highlights/comments ownership
-  // Used to determine if user can delete a highlight or edit a comment
-  const currentAuthorId: string | undefined = session?.user?.id
-
-  // Students no longer receive teacher highlights inside code editors —
-  // see the syncOptions comment above. Any pre-existing class/individual
-  // code-highlight broadcast records in the DB are intentionally ignored
-  // here so old data doesn't ghost into the new behavior.
-  const teacherHighlightsForEditor = useMemo<CodeHighlight[]>(() => [], [])
 
   // Version history hooks
   const createVersion = useCreateVersion<CodeEditorData>(pageId || 'no-page', componentId)
@@ -975,54 +942,18 @@ export const CodeEditor = memo(function CodeEditor({
     return () => document.removeEventListener('mousedown', handleClick)
   }, [tabContextMenu, importContextMenu])
 
-  // Highlighter state
-  const [highlighterMode, setHighlighterMode] = useState(false)
-  const [highlightColor, setHighlightColor] = useState<HighlightColor>('yellow')
+  // Highlighting is driven by the site toolbar highlighter pen: when a
+  // highlighter is active, useHighlightPen() returns its CSS colour (else null).
+  const activeHighlightColor = useHighlightPen()
+  const activeHighlightColorRef = useRef(activeHighlightColor)
+  useEffect(() => { activeHighlightColorRef.current = activeHighlightColor }, [activeHighlightColor])
 
-  // Generate cursor SVG data URI based on highlight color
-  const highlighterCursor = useMemo(() => {
-    const color = highlightColorHex[highlightColor]
-    return `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='${color}' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 11-6 6v3h9l3-3'/%3E%3Cpath d='m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4'/%3E%3C/svg%3E") 3 21, crosshair`
-  }, [highlightColor])
-  const [showColorPicker, setShowColorPicker] = useState(false)
-  // `highlights` contains ONLY the user's own highlights (for persistence)
-  // For teachers: either personal or broadcast highlights depending on mode
-  // For students: only their personal highlights (teacher highlights come from teacherHighlightsForEditor)
+  // Personal highlights for this editor (server-synced via highlightsData).
   const [highlights, setHighlights] = useState<CodeHighlight[]>([])
-
-  // Merge user's highlights with teacher highlights for rendering
-  // IMPORTANT: This is for DISPLAY only - don't use for persistence!
-  // - `highlights` state is persisted (user's own)
-  // - `teacherHighlightsForEditor` is read-only from API
-  // The isTeacher flag controls visual styling (dashed border) and interaction (no delete/comment buttons)
-  // See: highlight-extension.ts createHighlightMark() and cm-highlight-teacher CSS class
-  //
-  // LIMITATION: Students cannot comment on teacher highlights.
-  // Teacher highlights are stored in broadcast records that students can only read.
-  // To enable student comments on teacher highlights, we'd need a separate storage
-  // mechanism (e.g., student comments referencing teacher highlight IDs by foreign key).
-  const displayHighlights = useMemo(() => {
-    const studentHighlights = highlights.map(h => ({ ...h, isTeacher: false }))
-    const teacherHighlights = teacherHighlightsForEditor.map(h => ({
-      ...h,
-      isTeacher: true as const
-    }))
-    return [...studentHighlights, ...teacherHighlights]
-  }, [highlights, teacherHighlightsForEditor])
+  const displayHighlights = highlights
 
   const [hoveredHighlightId, setHoveredHighlightId] = useState<string | null>(null)
   const [deleteButtonPosition, setDeleteButtonPosition] = useState<{ x: number; y: number } | null>(null)
-
-  // Comment popover state
-  const [commentingHighlightId, setCommentingHighlightId] = useState<string | null>(null)
-  const [editingCommentId, setEditingCommentId] = useState<string | null>(null) // null = adding new comment
-  const [commentPopoverPosition, setCommentPopoverPosition] = useState<{ x: number; y: number } | null>(null)
-  const [commentDraft, setCommentDraft] = useState('')
-  const commentInputRef = useRef<HTMLTextAreaElement>(null)
-
-  // Comment indicator positions (for highlights with comments, shown even when not hovering)
-  const [commentIndicators, setCommentIndicators] = useState<Array<{ id: string; x: number; y: number }>>([])
-  const updateCommentIndicatorsRef = useRef<() => void>(() => {})
 
   // Calculate visibility based on width and detect graphics modules (turtle or matplotlib) or SQL schema
   const currentCode = activeTab.type === 'local'
@@ -1154,40 +1085,27 @@ export const CodeEditor = memo(function CodeEditor({
       if (savedData.lineWrapping !== undefined) setLineWrapping(savedData.lineWrapping)
       if (savedData.editorWidth !== undefined) setEditorWidth(savedData.editorWidth)
       if (savedData.canvasTransform) setCanvasTransform(savedData.canvasTransform)
-      if (savedData.highlights && !isBroadcastMode) {
-        setHighlights(savedData.highlights)
-      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- Intentional: this is a one-shot restore gated by hasLoadedData.current. Re-running on language/defaultData.files changes (e.g. markdown edits) would no-op anyway, and dragging them in widens the dep surface for no behaviour change.
-  }, [isLoading, savedData, isBroadcastMode, debugTag, isViewingSnapshot])
+  }, [isLoading, savedData, debugTag, isViewingSnapshot])
 
-  // Track previous broadcast mode to detect mode switches
-  // MODE SWITCHING BEHAVIOR:
-  // When teacher toggles between my-view/class-broadcast/student-view,
-  // we swap the entire highlights array rather than merging.
-  // This keeps the editing experience simple but means:
-  // - Unsaved changes in one mode are lost when switching
-  // - Teacher can't see their personal + broadcast highlights at once
-  // TRADE-OFF: Simplicity over feature richness. Could add "compare" mode later.
-  // Load highlights from appropriate source when data finishes loading
-  // Track which source we've loaded to avoid re-loading on every render,
-  // but reset when page/target changes
-  const loadedForKeyRef = useRef('')
-  const currentKey = `${pageId}-${syncOptions.targetType ?? ''}-${syncOptions.targetId ?? ''}`
-
+  // Load highlights from the synced store once it's ready. One-time legacy
+  // seed: if the synced store is empty but the old local CodeEditorData had
+  // highlights, migrate them across so existing highlights aren't lost.
+  const highlightsLoadedRef = useRef(false)
   useEffect(() => {
-    if (loadedForKeyRef.current === currentKey) return
-
-    // Wait for the appropriate hook to finish loading
-    const stillLoading = isBroadcastMode ? broadcastIsLoading : isLoading
-    if (stillLoading) return
-
-    loadedForKeyRef.current = currentKey
-    const sourceHighlights = isBroadcastMode
-      ? (broadcastHighlightsData?.highlights || [])
-      : (savedData?.highlights || [])
-    setHighlights(sourceHighlights)
-  }, [currentKey, isBroadcastMode, isLoading, broadcastIsLoading, broadcastHighlightsData, savedData])
+    if (highlightsLoadedRef.current || highlightsLoading) return
+    highlightsLoadedRef.current = true
+    const synced = highlightsData?.highlights ?? []
+    const legacy = savedData?.highlights ?? []
+    if (synced.length === 0 && legacy.length > 0) {
+      setHighlights(legacy)
+      saveHighlights({ highlights: legacy }, { immediate: true })
+    } else {
+      setHighlights(synced)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightsLoading, highlightsData])
   const [isDragging, setIsDragging] = useState(false)
   const dragStartRef = useRef({ x: 0, y: 0 })
 
@@ -1294,74 +1212,36 @@ export const CodeEditor = memo(function CodeEditor({
   // Ref to avoid debouncedSaveContent as a dependency in the editor effect
   const debouncedSaveContentRef = useRef(debouncedSaveContent)
 
-  // Save data to IndexedDB when anything changes
-  // Files changes are debounced via the update listener, settings changes are immediate
-  //
-  // DUAL-WRITE PATTERN (broadcast mode):
-  // When broadcasting, we write to TWO records simultaneously:
-  // 1. code-highlights-{id} (targetType=class|student) - contains only highlights
-  // 2. code-editor-{id} (no targeting) - contains code, settings, AND personal highlights
-  //
-  // This is intentional: personal code/settings shouldn't be overwritten when broadcasting.
-  // COMPLEXITY NOTE: This means savedData?.highlights must be preserved during broadcast saves.
-  // If this gets confusing, consider using a separate state variable for personal highlights.
-  // Track the highlights payload last sent to the broadcast endpoint so we can
-  // skip redundant network calls when this effect fires for unrelated reasons
-  // (e.g. canvasTransform pan, font size). Without this, dragging the canvas in
-  // broadcast mode floods /api/user-data/sync with an unchanged `{highlights:[]}`.
-  const lastSyncedBroadcastHighlightsRef = useRef<string | null>(null)
-
+  // Save code/settings (local) when anything changes. Highlights are saved
+  // separately to their server-synced record (see the highlights effect below).
   useEffect(() => {
-    // Only save if pageId is provided (not in fallback mode)
     if (!pageId) return
-
-    // Don't save during initial load - wait until data has been loaded/restored
-    if (isLoading) {
-      return
-    }
-
+    if (isLoading) return
     // Snapshot-view mode: the on-screen `files` are the student's checkpoint
-    // payload, not the teacher's own work. Persisting would overwrite the
-    // teacher's IndexedDB record with the student's code.
+    // payload, not the teacher's own work — don't overwrite the teacher's record.
     if (isViewingSnapshot) return
 
-    // In broadcast mode: save highlights to broadcast record, personal data keeps other settings
-    // In personal mode: save everything to personal record
-    if (isBroadcastMode) {
-      // Only push to broadcast if highlights actually changed since last push.
-      // Compared as JSON for a quick deep-equality check (highlights arrays are tiny).
-      const serialized = JSON.stringify(highlights)
-      if (serialized !== lastSyncedBroadcastHighlightsRef.current) {
-        lastSyncedBroadcastHighlightsRef.current = serialized
-        updateBroadcastHighlights({ highlights }, { immediate: true })
-      }
-
-      // Save personal data WITHOUT highlights (keep them separate).
-      // useUserData under the hood — IndexedDB only, no network.
-      const personalData: CodeEditorData = {
-        files,
-        activeFileIndex,
-        fontSize,
-        lineWrapping,
-        editorWidth,
-        canvasTransform,
-        highlights: savedData?.highlights || [], // Preserve personal highlights
-      }
-      savePersistentData(personalData, { immediate: true })
-    } else {
-      // Personal mode: save everything including highlights
-      const dataToSave: CodeEditorData = {
-        files,
-        activeFileIndex,
-        fontSize,
-        lineWrapping,
-        editorWidth,
-        canvasTransform,
-        highlights,
-      }
-      savePersistentData(dataToSave, { immediate: true })
+    const dataToSave: CodeEditorData = {
+      files,
+      activeFileIndex,
+      fontSize,
+      lineWrapping,
+      editorWidth,
+      canvasTransform,
     }
-  }, [activeFileIndex, fontSize, lineWrapping, editorWidth, canvasTransform, pageId, savePersistentData, files, componentId, isLoading, highlights, isBroadcastMode, updateBroadcastHighlights, savedData?.highlights, isViewingSnapshot])
+    savePersistentData(dataToSave, { immediate: true })
+  }, [activeFileIndex, fontSize, lineWrapping, editorWidth, canvasTransform, pageId, savePersistentData, files, componentId, isLoading, isViewingSnapshot])
+
+  // Persist highlights to their server-synced record whenever they change.
+  const lastSyncedHighlightsRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!pageId || highlightsLoading || isViewingSnapshot) return
+    if (!highlightsLoadedRef.current) return // don't write before the initial load/seed
+    const serialized = JSON.stringify(highlights)
+    if (serialized === lastSyncedHighlightsRef.current) return
+    lastSyncedHighlightsRef.current = serialized
+    saveHighlights({ highlights }, { immediate: true })
+  }, [highlights, pageId, highlightsLoading, isViewingSnapshot, saveHighlights])
 
   // Helper function to create a version snapshot
   const createVersionSnapshot = useCallback(async (isManualSave = false) => {
@@ -1564,261 +1444,48 @@ export const CodeEditor = memo(function CodeEditor({
     debouncedSaveContentRef.current = debouncedSaveContent
   }, [debouncedSaveContent])
 
-  // Highlight handlers
-  const handleApplyHighlight = useCallback((color?: HighlightColor) => {
-    const view = editorViewRef.current
-    if (!view) return
-
-    const { from, to } = view.state.selection.main
-    if (from === to) return // No selection
-
-    const colorToUse = color || highlightColor
-
-    // Generate ID upfront, add to both CodeMirror and state
-    const id = nanoid()
-    view.dispatch({
-      effects: addHighlight.of({ from, to, color: colorToUse, id }),
-      selection: { anchor: to }
-    })
-
-    setHighlights(prev => [...prev, {
-      id,
-      fileIndex: activeFileIndex,
-      from,
-      to,
-      color: colorToUse,
-      createdAt: Date.now(),
-      authorId: currentAuthorId
-    }])
-  }, [activeFileIndex, highlightColor, currentAuthorId])
-
-  // Handle highlight button click
-  const handleHighlightButtonClick = useCallback(() => {
-    const view = editorViewRef.current
-    if (!view) return
-
-    const { from, to } = view.state.selection.main
-    if (from !== to) {
-      // Text is selected - highlight it immediately
-      handleApplyHighlight()
-    } else {
-      // No selection - toggle highlighter mode
-      setHighlighterMode(prev => !prev)
-    }
-  }, [handleApplyHighlight])
-
-  // Refs for highlighter mode and highlights (so event handlers can access current state)
-  const highlighterModeRef = useRef(highlighterMode)
-  const highlightColorRef = useRef(highlightColor)
-  const highlightsRef = useRef(highlights)
+  // Ref so editor extensions read current highlights without re-binding.
   const displayHighlightsRef = useRef(displayHighlights)
-
-  // Keep refs in sync
-  useEffect(() => {
-    highlighterModeRef.current = highlighterMode
-  }, [highlighterMode])
-
-  useEffect(() => {
-    highlightColorRef.current = highlightColor
-  }, [highlightColor])
-
-  // Use layoutEffect to sync ref BEFORE other effects run
-  // This prevents race condition where editor effect reads stale ref
-  useLayoutEffect(() => {
-    highlightsRef.current = highlights
-  }, [highlights])
-
-  // Keep display highlights ref in sync
   useLayoutEffect(() => {
     displayHighlightsRef.current = displayHighlights
   }, [displayHighlights])
 
-  // Long press state for color picker
-  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const colorPickerRef = useRef<HTMLDivElement>(null)
-
-  const handleHighlightButtonMouseDown = useCallback(() => {
-    longPressTimerRef.current = setTimeout(() => {
-      setShowColorPicker(true)
-    }, 500) // 500ms for long press
-  }, [])
-
-  const handleHighlightButtonMouseUp = useCallback(() => {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current)
-      longPressTimerRef.current = null
-    }
-  }, [])
-
-  const handleHighlightButtonMouseLeave = useCallback(() => {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current)
-      longPressTimerRef.current = null
-    }
-  }, [])
-
-  // Close color picker when clicking outside
-  useEffect(() => {
-    if (!showColorPicker) return
-
-    const handleClickOutside = (e: MouseEvent) => {
-      if (colorPickerRef.current && !colorPickerRef.current.contains(e.target as Node)) {
-        setShowColorPicker(false)
-      }
-    }
-
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [showColorPicker])
-
-  // Auto-highlight on mouseup when in highlighter mode
+  // Auto-highlight on mouseup when a toolbar highlighter pen is active.
+  // Highlights the current CodeMirror selection in the pen's colour — no
+  // in-editor highlight tool, no popup. Inert when no highlighter is active.
   useEffect(() => {
     const editor = editorRef.current
     if (!editor) return
 
     const handleMouseUp = () => {
-      if (!highlighterModeRef.current) return
-
+      const color = activeHighlightColorRef.current
+      if (!color) return
       const view = editorViewRef.current
       if (!view) return
-
       const { from, to } = view.state.selection.main
-      if (from === to) return // No selection
+      if (from === to) return // no selection
 
-      // Generate ID upfront, add to both CodeMirror and state
       const id = nanoid()
       view.dispatch({
-        effects: addHighlight.of({ from, to, color: highlightColorRef.current, id }),
+        effects: addHighlight.of({ from, to, color, id }),
         selection: { anchor: to }
       })
-
-      setHighlights(prev => [...prev, {
-        id,
-        fileIndex: activeFileIndex,
-        from,
-        to,
-        color: highlightColorRef.current,
-        createdAt: Date.now(),
-        authorId: currentAuthorId
-      }])
+      setHighlights(prev => [...prev, { id, fileIndex: activeFileIndex, from, to, color, createdAt: Date.now() }])
     }
 
     editor.addEventListener('mouseup', handleMouseUp)
     return () => editor.removeEventListener('mouseup', handleMouseUp)
-  }, [activeFileIndex, currentAuthorId])
+  }, [activeFileIndex])
 
-  // Handle delete highlight - only delete your own highlights
+  // Remove a highlight (personal-only — every highlight is yours).
   const handleDeleteHighlight = useCallback((highlightId: string) => {
     const view = editorViewRef.current
     if (!view) return
-
-    // Check ownership before deleting
-    const highlight = highlights.find(h => h.id === highlightId)
-    if (highlight?.authorId !== currentAuthorId) return
-
-    view.dispatch({
-      effects: removeHighlight.of(highlightId)
-    })
-
-    // Update state - removes highlight and all its comments
+    view.dispatch({ effects: removeHighlight.of(highlightId) })
     setHighlights(prev => prev.filter(h => h.id !== highlightId))
     setHoveredHighlightId(null)
     setDeleteButtonPosition(null)
-  }, [highlights, currentAuthorId])
-
-  // Handle open comment popover
-  const handleOpenComment = useCallback((highlightId: string) => {
-    const highlight = highlights.find(h => h.id === highlightId)
-    // Find YOUR comment (matching authorId, or undefined in local mode)
-    const myComment = highlight?.comments?.find(c => c.authorId === currentAuthorId)
-    setCommentDraft(myComment?.text || '')
-    setEditingCommentId(myComment?.id || null)
-    setCommentingHighlightId(highlightId)
-    // Position popover below the action buttons
-    if (deleteButtonPosition) {
-      setCommentPopoverPosition({
-        x: deleteButtonPosition.x - 100,
-        y: deleteButtonPosition.y + 28
-      })
-    }
-    // Focus input after render
-    setTimeout(() => commentInputRef.current?.focus(), 50)
-  }, [highlights, deleteButtonPosition, currentAuthorId])
-
-  // Handle save comment
-  const handleSaveComment = useCallback(() => {
-    if (!commentingHighlightId) return
-    const trimmedText = commentDraft.trim()
-
-    setHighlights(prev => prev.map(h => {
-      if (h.id !== commentingHighlightId) return h
-
-      const existingComments = h.comments || []
-      const myCommentIndex = existingComments.findIndex(c => c.authorId === currentAuthorId)
-
-      if (!trimmedText) {
-        // Delete my comment if empty
-        if (myCommentIndex >= 0) {
-          return { ...h, comments: existingComments.filter((_, i) => i !== myCommentIndex) }
-        }
-        return h
-      }
-
-      if (myCommentIndex >= 0) {
-        // Update my existing comment
-        return {
-          ...h,
-          comments: existingComments.map((c, i) =>
-            i === myCommentIndex ? { ...c, text: trimmedText } : c
-          )
-        }
-      } else {
-        // Add new comment
-        const newComment: HighlightComment = {
-          id: nanoid(),
-          text: trimmedText,
-          authorId: currentAuthorId,
-          createdAt: Date.now()
-        }
-        return { ...h, comments: [...existingComments, newComment] }
-      }
-    }))
-
-    setCommentingHighlightId(null)
-    setEditingCommentId(null)
-    setCommentPopoverPosition(null)
-    setCommentDraft('')
-  }, [commentingHighlightId, commentDraft, currentAuthorId])
-
-  // Handle cancel comment
-  const handleCancelComment = useCallback(() => {
-    setCommentingHighlightId(null)
-    setEditingCommentId(null)
-    setCommentPopoverPosition(null)
-    setCommentDraft('')
   }, [])
-
-  // Close comment popover on click outside
-  useEffect(() => {
-    if (!commentingHighlightId) return
-
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement
-      // Check if click is inside the popover
-      if (target.closest('.fixed.z-\\[10000\\]')) return
-      handleCancelComment()
-    }
-
-    // Delay adding listener to avoid immediate trigger
-    const timer = setTimeout(() => {
-      document.addEventListener('mousedown', handleClickOutside)
-    }, 100)
-
-    return () => {
-      clearTimeout(timer)
-      document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [commentingHighlightId, handleCancelComment])
 
   // Track hover over highlight spans for delete button
   useEffect(() => {
@@ -1889,111 +1556,26 @@ export const CodeEditor = memo(function CodeEditor({
     }
   }, [hoveredHighlightId])
 
-  // Update comment indicator positions for highlights with comments
-  // Uses displayHighlights to include both student and teacher highlights
-  // TIMING: Runs after CodeMirror sync effect via requestAnimationFrame to ensure
-  // decorations are rendered in DOM before querying for highlight spans
-  // POSITIONING: Calculates positions relative to the editor container (not viewport)
-  // so indicators can be rendered inline and captured in snaps
-  useEffect(() => {
-    const editor = editorRef.current
-    if (!editor) return
-
-    const updateIndicatorPositions = () => {
-      // Include both student and teacher highlights with comments
-      const highlightsWithComments = displayHighlights.filter(h => h.comments && h.comments.length > 0)
-      const indicators: Array<{ id: string; x: number; y: number }> = []
-
-      // Get wrapper position - indicators are rendered inside wrapperRef, not editorRef
-      const wrapper = wrapperRef.current
-      if (!wrapper) return
-      const wrapperRect = wrapper.getBoundingClientRect()
-
-      for (const highlight of highlightsWithComments) {
-        // Find all spans for this highlight
-        const allSpans = editor.querySelectorAll(`[data-highlight-id="${highlight.id}"]`)
-        if (allSpans.length > 0) {
-          const rects = Array.from(allSpans).map(span => span.getBoundingClientRect())
-          const minTop = Math.min(...rects.map(r => r.top))
-          const firstLineRects = rects.filter(r => Math.abs(r.top - minTop) < 5)
-          const maxRight = Math.max(...firstLineRects.map(r => r.right))
-
-          // Position relative to wrapper (where indicators are rendered)
-          // Visual offset handled via CSS transform on the element
-          indicators.push({
-            id: highlight.id,
-            x: maxRight - wrapperRect.left,
-            y: minTop - wrapperRect.top
-          })
-        }
-      }
-
-      setCommentIndicators(indicators)
-    }
-
-    // Store update function in ref so it can be called from document change listener
-    updateCommentIndicatorsRef.current = updateIndicatorPositions
-
-    // Delay update to allow CodeMirror to render decorations first
-    // Double RAF ensures layout is complete after font size changes
-    let innerRafId: number
-    const rafId = requestAnimationFrame(() => {
-      innerRafId = requestAnimationFrame(() => {
-        updateIndicatorPositions()
-      })
-    })
-
-    const scrollContainer = editor.querySelector('.cm-scroller')
-    scrollContainer?.addEventListener('scroll', updateIndicatorPositions)
-
-    // Also update on window resize
-    window.addEventListener('resize', updateIndicatorPositions)
-
-    return () => {
-      cancelAnimationFrame(rafId)
-      cancelAnimationFrame(innerRafId)
-      scrollContainer?.removeEventListener('scroll', updateIndicatorPositions)
-      window.removeEventListener('resize', updateIndicatorPositions)
-    }
-  }, [displayHighlights, fontSize])
-
-  // Sync teacher highlights to CodeMirror - wholesale replacement when teacher broadcasts
-  // This is the authoritative source - just replace all teacher highlights with fresh data
+  // Sync highlights to CodeMirror on initial load or file switch.
+  // Track what we've synced to avoid redundant dispatches when positions update.
+  const highlightsSyncedRef = useRef<string>('')
   useEffect(() => {
     const view = editorViewRef.current
     if (!view) return
 
     const docLength = view.state.doc.length
-    const teacherFileHighlights = teacherHighlightsForEditor
+    const fileHighlights = highlights
       .filter(h => h.fileIndex === activeFileIndex)
       .filter(h => h.from >= 0 && h.to >= 0 && h.from < docLength && h.to <= docLength && h.to > h.from)
       .map(h => ({ from: h.from, to: h.to, color: h.color, id: h.id }))
 
-    view.dispatch({
-      effects: replaceTeacherHighlights.of(teacherFileHighlights)
-    })
-  }, [activeFileIndex, teacherHighlightsForEditor])
-
-  // Sync student highlights on initial load or file switch
-  // Track what we've synced to avoid redundant dispatches when positions update
-  const studentHighlightsSyncedRef = useRef<string>('')
-  useEffect(() => {
-    const view = editorViewRef.current
-    if (!view) return
-
-    const docLength = view.state.doc.length
-    const studentFileHighlights = highlights
-      .filter(h => h.fileIndex === activeFileIndex)
-      .filter(h => h.from >= 0 && h.to >= 0 && h.from < docLength && h.to <= docLength && h.to > h.from)
-      .map(h => ({ from: h.from, to: h.to, color: h.color, id: h.id, isTeacher: false }))
-
     // Only sync if IDs changed (not just positions) - positions are handled by CodeMirror
-    const syncKey = `${activeFileIndex}:${studentFileHighlights.map(h => h.id).sort().join(',')}`
-    if (studentHighlightsSyncedRef.current === syncKey) return
-    studentHighlightsSyncedRef.current = syncKey
+    const syncKey = `${activeFileIndex}:${fileHighlights.map(h => h.id).sort().join(',')}`
+    if (highlightsSyncedRef.current === syncKey) return
+    highlightsSyncedRef.current = syncKey
 
     view.dispatch({
-      effects: setHighlightsEffect.of(studentFileHighlights)
+      effects: setHighlightsEffect.of(fileHighlights)
     })
   }, [activeFileIndex, highlights])
 
@@ -2633,38 +2215,28 @@ export const CodeEditor = memo(function CodeEditor({
     // Add code highlighting extension
     extensions.push(...codeHighlighting())
 
-    // Sync highlight positions back to React state when document changes
-    // IMPORTANT: Only update positions for STUDENT highlights, not teacher highlights.
-    // Teacher highlights are in CodeMirror but managed separately via teacherHighlightsForEditor.
+    // Sync highlight positions back to React state when the document changes.
     extensions.push(
       EditorView.updateListener.of((update) => {
         if (update.docChanged && update.state.field(highlightField).size > 0) {
           // Extract current positions from CodeMirror decorations
           const extracted = extractHighlights(update.view, activeFileIndexRef.current)
-          // Only update positions for highlights that already exist in student state
-          // Don't add new ones - those are teacher highlights that should stay separate
           setHighlights(prev => {
             const extractedMap = new Map(extracted.map(h => [h.id, h]))
-            // Update positions for existing student highlights only
+            // Update positions for existing highlights; drop any removed in CodeMirror.
             const updated = prev.map(h => {
-              const extracted = extractedMap.get(h.id)
-              if (extracted) {
-                return { ...h, from: extracted.from, to: extracted.to }
+              const ex = extractedMap.get(h.id)
+              if (ex) {
+                return { ...h, from: ex.from, to: ex.to }
               }
-              // Highlight was deleted in CodeMirror, keep in state (will be filtered out)
               return h
-            }).filter(h => extractedMap.has(h.id)) // Remove deleted highlights
+            }).filter(h => extractedMap.has(h.id))
 
             // Check if anything actually changed to avoid unnecessary re-renders
             const hasChanges = updated.length !== prev.length || updated.some((h, i) => {
               return prev[i]?.from !== h.from || prev[i]?.to !== h.to
             })
             return hasChanges ? updated : prev
-          })
-
-          // Update comment indicator positions after DOM updates
-          requestAnimationFrame(() => {
-            updateCommentIndicatorsRef.current()
           })
         }
       })
@@ -2748,7 +2320,6 @@ export const CodeEditor = memo(function CodeEditor({
     console.debug(debugTag, 'CodeMirror created')
 
     // Re-apply highlights after editor creation
-    // Use displayHighlightsRef to include both student and teacher highlights
     const currentHighlights = displayHighlightsRef.current
     if (currentHighlights.length > 0) {
       const docLength = view.state.doc.length
@@ -2757,7 +2328,7 @@ export const CodeEditor = memo(function CodeEditor({
       const fileHighlights = currentHighlights
         .filter(h => h.fileIndex === activeFileIndex)
         .filter(h => h.from >= 0 && h.to >= 0 && h.from < docLength && h.to <= docLength && h.to > h.from)
-        .map(h => ({ from: h.from, to: h.to, color: h.color, id: h.id, isTeacher: h.isTeacher }))
+        .map(h => ({ from: h.from, to: h.to, color: h.color, id: h.id }))
 
       if (fileHighlights.length > 0) {
         // Defer dispatch to ensure view is fully initialized
@@ -3946,23 +3517,14 @@ export const CodeEditor = memo(function CodeEditor({
       })
     }
 
-    // Clear personal highlights and restore teacher highlights
+    // Clear personal highlights
     setHighlights([])
-    studentHighlightsSyncedRef.current = '' // Reset sync tracker
+    highlightsSyncedRef.current = '' // Reset sync tracker
 
-    // Clear all highlights from CodeMirror and re-apply teacher highlights
+    // Clear all highlights from CodeMirror
     if (editorViewRef.current) {
-      const docLength = editorViewRef.current.state.doc.length
-      const teacherFileHighlights = teacherHighlightsForEditor
-        .filter(h => h.fileIndex === 0) // Reset always goes to file 0
-        .filter(h => h.from >= 0 && h.to >= 0 && h.from < docLength && h.to <= docLength && h.to > h.from)
-        .map(h => ({ from: h.from, to: h.to, color: h.color, id: h.id }))
-
       editorViewRef.current.dispatch({
-        effects: [
-          setHighlightsEffect.of([]), // Clear all
-          replaceTeacherHighlights.of(teacherFileHighlights) // Re-add teacher highlights
-        ]
+        effects: setHighlightsEffect.of([])
       })
     }
 
@@ -4227,58 +3789,9 @@ export const CodeEditor = memo(function CodeEditor({
               display: showEditor ? 'flex' : 'none'
             }}
           >
-            {/* Floating Toolbar - Top Right (highlighter + zoom controls + kernel indicator) */}
+            {/* Floating Toolbar - Top Right (zoom controls + kernel indicator).
+                Highlighting is driven by the site-wide toolbar highlighter pen. */}
             <div ref={kernelMenuRef} className="absolute top-1 right-1 z-30 flex items-center gap-0.5 bg-background/80 backdrop-blur-sm rounded px-1">
-              {/* Highlighter Button */}
-              <div className="relative">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={handleHighlightButtonClick}
-                  onMouseDown={handleHighlightButtonMouseDown}
-                  onMouseUp={handleHighlightButtonMouseUp}
-                  onMouseLeave={handleHighlightButtonMouseLeave}
-                  className="h-6 w-6 p-0"
-                  title={highlighterMode ? 'Highlighter mode active (click to deactivate)' : 'Highlight selection (long press for colors)'}
-                  style={{
-                    color: `var(--highlight-${highlightColor})`,
-                    backgroundColor: highlighterMode ? `var(--highlight-${highlightColor}-bg)` : undefined
-                  }}
-                >
-                  <Highlighter className="w-3 h-3" />
-                </Button>
-
-                {/* Color Picker Dropdown */}
-                {showColorPicker && (
-                  <div
-                    ref={colorPickerRef}
-                    className="absolute top-full left-0 mt-1 p-1 bg-popover border border-border rounded-lg shadow-lg flex gap-1 z-50"
-                  >
-                    {(['red', 'yellow', 'green', 'blue'] as const).map((color) => (
-                      <button
-                        key={color}
-                        onClick={() => {
-                          setHighlightColor(color)
-                          setShowColorPicker(false)
-                        }}
-                        className={`w-6 h-6 rounded transition-all hover:scale-110 ${
-                          highlightColor === color ? 'ring-2 ring-primary ring-offset-1' : ''
-                        }`}
-                        style={{
-                          backgroundColor: color === 'red' ? 'rgba(239, 68, 68, 0.7)'
-                            : color === 'yellow' ? 'rgba(234, 179, 8, 0.7)'
-                            : color === 'green' ? 'rgba(34, 197, 94, 0.7)'
-                            : 'rgba(59, 130, 246, 0.7)'
-                        }}
-                        title={`${color.charAt(0).toUpperCase() + color.slice(1)} highlight`}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="w-px h-4 bg-border mx-1" />
-
               {/* Zoom Controls */}
               <Button
                 size="sm"
@@ -5005,7 +4518,7 @@ export const CodeEditor = memo(function CodeEditor({
             )}
 
             {/* CodeMirror Editor */}
-            <div ref={editorRef} className="flex-1 overflow-auto w-full h-full relative" style={{ cursor: highlighterMode ? highlighterCursor : undefined }}>
+            <div ref={editorRef} className="flex-1 overflow-auto w-full h-full relative" style={{ cursor: activeHighlightColor ? highlighterCursor(activeHighlightColor) : undefined }}>
               {/* Loading skeleton while editor initializes */}
               {!editorReady && (
                 <div className="absolute inset-0 flex items-center justify-center bg-white dark:bg-[#1e1e1e] z-[1]">
@@ -5664,30 +5177,13 @@ export const CodeEditor = memo(function CodeEditor({
         </div>
       )}
 
-      {/* Persistent Comment Indicators - shown for highlights with comments
-          Rendered inline (not portaled) so they get captured in snaps.
-          z-index 10 keeps them above code but below snaps (z-50) and other overlays */}
-      {commentIndicators.length > 0 && commentIndicators
-        .filter(ind => ind.id !== hoveredHighlightId) // Don't show if already showing hover actions
-        .map(indicator => (
-          <div
-            key={indicator.id}
-            className="absolute w-3 h-3 bg-primary rounded-full flex items-center justify-center z-10 -translate-x-1 -translate-y-2 pointer-events-none"
-            style={{
-              left: `${indicator.x}px`,
-              top: `${indicator.y}px`,
-            }}
-          >
-            <MessageSquare className="w-2 h-2 text-primary-foreground" />
-          </div>
-        ))}
-
-      {/* Highlight Action Buttons - Portal */}
-      {hoveredHighlightId && deleteButtonPosition && !commentingHighlightId && typeof document !== 'undefined' && createPortal(
+      {/* Hover-bin removal - Portal. Highlights are personal-only, so every one
+          is removable (no ownership gate). Bin = remove (our convention). */}
+      {hoveredHighlightId && deleteButtonPosition && typeof document !== 'undefined' && createPortal(
         <div
           className="highlight-actions fixed flex items-center gap-1 z-[9999]"
           style={{
-            left: `${deleteButtonPosition.x - 24}px`, // Offset for both buttons
+            left: `${deleteButtonPosition.x}px`,
             top: `${deleteButtonPosition.y}px`,
           }}
           onMouseLeave={() => {
@@ -5702,103 +5198,13 @@ export const CodeEditor = memo(function CodeEditor({
             }, 50)
           }}
         >
-          {/* Student's own highlights - show action buttons */}
-          {highlights.find(h => h.id === hoveredHighlightId) && (
-            <>
-              {/* Comment button */}
-              <button
-                className="relative w-5 h-5 bg-background border border-border text-muted-foreground rounded-full flex items-center justify-center shadow-md hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
-                onClick={() => handleOpenComment(hoveredHighlightId)}
-                title={highlights.find(h => h.id === hoveredHighlightId)?.comments?.length ? "Edit comment" : "Add comment"}
-              >
-                <MessageSquare className="w-3 h-3" />
-                {/* Indicator dot if has comments */}
-                {(highlights.find(h => h.id === hoveredHighlightId)?.comments?.length ?? 0) > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-primary rounded-full" />
-                )}
-              </button>
-              {/* Delete button - only show for your own highlights */}
-              {highlights.find(h => h.id === hoveredHighlightId)?.authorId === currentAuthorId && (
-                <button
-                  className="w-5 h-5 bg-background border border-border text-muted-foreground rounded-full flex items-center justify-center shadow-md hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
-                  onClick={() => handleDeleteHighlight(hoveredHighlightId)}
-                title="Remove highlight"
-              >
-                <X className="w-3 h-3" />
-              </button>
-              )}
-              {/* Comments preview tooltip */}
-              {(highlights.find(h => h.id === hoveredHighlightId)?.comments?.length ?? 0) > 0 && (
-                <div className="absolute top-6 right-0 w-48 p-2 bg-background border border-border rounded shadow-lg text-xs max-h-32 overflow-y-auto space-y-2">
-                  {highlights.find(h => h.id === hoveredHighlightId)?.comments?.map(comment => (
-                    <div key={comment.id} className="text-muted-foreground whitespace-pre-wrap">
-                      {comment.text}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-          {/* Teacher highlights - show comments read-only (no action buttons) */}
-          {!highlights.find(h => h.id === hoveredHighlightId) && (() => {
-            const teacherHighlight = teacherHighlightsForEditor.find(h => h.id === hoveredHighlightId)
-            if (!teacherHighlight?.comments?.length) return null
-            return (
-              <div className="w-48 p-2 bg-background border border-border rounded shadow-lg text-xs max-h-32 overflow-y-auto space-y-2">
-                <div className="text-muted-foreground/70 text-[10px] uppercase tracking-wide mb-1">Teacher comment</div>
-                {teacherHighlight.comments.map(comment => (
-                  <div key={comment.id} className="text-muted-foreground whitespace-pre-wrap">
-                    {comment.text}
-                  </div>
-                ))}
-              </div>
-            )
-          })()}
-        </div>,
-        document.body
-      )}
-
-      {/* Comment Popover - Portal */}
-      {commentingHighlightId && commentPopoverPosition && typeof document !== 'undefined' && createPortal(
-        <div
-          className="fixed z-[10000] bg-background border border-border rounded-lg shadow-lg p-2 w-64"
-          style={{
-            left: `${commentPopoverPosition.x}px`,
-            top: `${commentPopoverPosition.y}px`,
-          }}
-        >
-          <textarea
-            ref={commentInputRef}
-            className="w-full h-20 text-sm bg-muted/50 border border-border rounded p-2 resize-none focus:outline-none focus:ring-1 focus:ring-ring"
-            placeholder="Add a comment..."
-            value={commentDraft}
-            onChange={(e) => setCommentDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                e.preventDefault()
-                handleSaveComment()
-              } else if (e.key === 'Escape') {
-                handleCancelComment()
-              }
-            }}
-          />
-          <div className="flex justify-end gap-1 mt-2">
-            <button
-              className="px-2 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-              onClick={handleCancelComment}
-            >
-              Cancel
-            </button>
-            <button
-              className="px-2 py-1 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors"
-              onClick={handleSaveComment}
-            >
-              Save
-            </button>
-          </div>
-          <div className="text-[10px] text-muted-foreground mt-1">
-            {navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+Enter to save
-          </div>
+          <button
+            className="flex h-6 w-6 items-center justify-center rounded-full border border-border bg-popover text-muted-foreground shadow-md transition-colors hover:bg-red-100 hover:text-red-500 dark:hover:bg-red-950/40 cursor-pointer"
+            onClick={() => handleDeleteHighlight(hoveredHighlightId)}
+            title="Remove highlight"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
         </div>,
         document.body
       )}

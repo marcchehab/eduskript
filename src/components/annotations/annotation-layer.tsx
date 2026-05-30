@@ -321,6 +321,10 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
   // Create a stable key for targeting to detect changes
   const targetingKey = `${syncOptions.targetType ?? ''}-${syncOptions.targetId ?? ''}`
 
+  // Broadcasting (any non-personal target) — highlights are always personal,
+  // so the toolbar greys the highlighter and we force it off if it's active.
+  const isBroadcasting = Boolean(syncOptions.targetType)
+
   // Use synced user data service for annotations (with targeting for teachers)
   const { data: annotationData, updateData: updateAnnotationData, isLoading: annotationLoading } = useSyncedUserData<AnnotationData>(
     pageId,
@@ -1431,6 +1435,12 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     // In this mode, ALL touch input should draw, not scroll
     fingerDrawModeRef.current = mode !== 'view' && !stylusModeActive
   }, [mode, stylusModeActive])
+
+  // Highlights never broadcast — if a highlighter is active and the teacher
+  // switches to a broadcast audience, drop back to view.
+  useEffect(() => {
+    if (isBroadcasting && mode === 'highlight') setMode('view')
+  }, [isBroadcasting, mode])
 
   // Add annotation-active class to paper when in draw/erase mode (prevents text selection on iOS Safari)
   useEffect(() => {
@@ -3605,6 +3615,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
         onPenAdd={handlePenAdd}
         onPenRemove={handlePenRemove}
         onPensReorder={handlePensReorder}
+        isBroadcasting={isBroadcasting}
         onResetZoom={handleResetZoom}
         // Layer controls for students (broadcasted teacher annotations)
         layers={toolbarLayers}
