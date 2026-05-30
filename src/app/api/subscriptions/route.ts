@@ -80,12 +80,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'planId is required' }, { status: 400 })
     }
 
-    // Check for existing active subscription (trialing is allowed — we upgrade it)
+    // Check for an existing subscription. Trialing and past_due are reusable —
+    // we restart checkout on the same row (keeps referenceId stable, avoids
+    // orphan rows). Only a genuinely active subscription blocks re-checkout.
     const existing = await prisma.subscription.findFirst({
       where: {
         userId: session.user.id,
-        status: { in: ['active', 'trialing'] },
+        status: { in: ['active', 'trialing', 'past_due'] },
       },
+      orderBy: { createdAt: 'desc' },
     })
 
     if (existing && existing.status === 'active') {
@@ -101,9 +104,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Plan not found' }, { status: 404 })
     }
 
-    // Reuse trialing subscription or create a new incomplete one
+    // Reuse a trialing/past_due subscription or create a new incomplete one
     let subscription: { id: string }
-    if (existing && existing.status === 'trialing') {
+    if (existing && (existing.status === 'trialing' || existing.status === 'past_due')) {
       subscription = await prisma.subscription.update({
         where: { id: existing.id },
         data: { planId: plan.id, status: 'incomplete' },

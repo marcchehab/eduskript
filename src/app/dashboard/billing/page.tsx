@@ -221,9 +221,28 @@ export default function BillingPage() {
           )}
 
           {subscription.status === 'past_due' && (
-            <p className="text-sm text-amber-600 dark:text-amber-400">
-              Your last payment failed. Please update your payment method.
-            </p>
+            <div className="space-y-3">
+              <p className="text-sm text-amber-600 dark:text-amber-400">
+                Your last payment failed. Update your payment method to keep your subscription active.
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => handleSubscribe(subscription.plan.id)}
+                  disabled={actionLoading === subscription.plan.id}
+                >
+                  {actionLoading === subscription.plan.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Update payment method
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleCancel}
+                  disabled={actionLoading === 'cancel'}
+                >
+                  {actionLoading === 'cancel' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Cancel Subscription
+                </Button>
+              </div>
+            </div>
           )}
         </div>
       )}
