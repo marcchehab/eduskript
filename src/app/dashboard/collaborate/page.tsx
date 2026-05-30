@@ -368,9 +368,10 @@ export default function CollaboratePage() {
           </h2>
           <div className="space-y-3">
             {collaborations.map((collaboration) => {
-              // Determine which user is the other person in the collaboration
-              const otherUser = collaboration.requester.id === collaboration.receiver.id 
-                ? collaboration.receiver 
+              // Determine which user is the other person in the collaboration.
+              // Compare against the current user — requester/receiver are never equal.
+              const otherUser = collaboration.requester.id === session?.user?.id
+                ? collaboration.receiver
                 : collaboration.requester
               return (
                 <div key={collaboration.id} className="p-3 border rounded-lg">
