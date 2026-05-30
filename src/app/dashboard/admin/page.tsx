@@ -110,6 +110,7 @@ export default function AdminPanelPage() {
     studentPseudonym: '',
     grantTrial: false,
     trialDays: '30',
+    organizationId: '',
   })
 
   const [resetPasswordData, setResetPasswordData] = useState({
@@ -124,6 +125,21 @@ export default function AdminPanelPage() {
       router.push('/dashboard')
     }
   }, [session, router])
+
+  // Default org for create-user modal: prefer the "eduskript" slug if it
+  // exists, otherwise the first org. Empty string means "no membership".
+  const defaultOrgId = orgs.find(o => o.slug === 'eduskript')?.id || orgs[0]?.id || ''
+
+  // Seed organizationId once orgs load so the dropdown opens on a sensible
+  // default (it stays empty if the admin explicitly picks "None").
+  useEffect(() => {
+    if (defaultOrgId && !formData.organizationId) {
+      setFormData(prev => ({ ...prev, organizationId: defaultOrgId }))
+    }
+    // We intentionally don't depend on formData.organizationId — once the
+    // admin has touched the field we let their choice stand.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultOrgId])
 
   // Fetch users
   const fetchUsers = async () => {
@@ -278,7 +294,11 @@ export default function AdminPanelPage() {
       const response = await fetch('/api/admin/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          // Send organizationId only when set — empty string means "no org".
+          organizationId: formData.organizationId || undefined,
+        }),
       })
 
       const data = await response.json()
@@ -302,6 +322,7 @@ export default function AdminPanelPage() {
         studentPseudonym: '',
         grantTrial: false,
         trialDays: '30',
+        organizationId: defaultOrgId,
       })
       fetchUsers()
     } catch (err) {
@@ -526,6 +547,7 @@ export default function AdminPanelPage() {
       studentPseudonym: user.studentPseudonym || '',
       grantTrial: false,
       trialDays: '30',
+      organizationId: '',
     })
     setShowEditDialog(true)
   }
@@ -812,6 +834,16 @@ export default function AdminPanelPage() {
                     </div>
                   )}
                   <div className="flex gap-2">
+                    {user.email && (
+                      <Button
+                        onClick={() => openResetPasswordDialog(user)}
+                        variant="ghost"
+                        size="icon"
+                        title="Reset password"
+                      >
+                        <RotateCw className="h-4 w-4" />
+                      </Button>
+                    )}
                     <Button
                       onClick={() => handleDeleteUser(user.id)}
                       variant="ghost"
@@ -1075,6 +1107,26 @@ export default function AdminPanelPage() {
                   </p>
                 </div>
               )}
+
+              <div>
+                <Label htmlFor="create-organization">Organization</Label>
+                <select
+                  id="create-organization"
+                  value={formData.organizationId}
+                  onChange={(e) => setFormData({ ...formData, organizationId: e.target.value })}
+                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="">None</option>
+                  {orgs.map(org => (
+                    <option key={org.id} value={org.id}>
+                      {org.name} ({org.slug})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Teachers without an org membership will 404 on the org&apos;s page route. Defaults to the eduskript org.
+                </p>
+              </div>
 
               <div>
                 <Label htmlFor="create-password">Password</Label>

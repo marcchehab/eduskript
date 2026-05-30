@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
+import { revalidateTag, revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/admin-auth'
 import { prisma } from '@/lib/prisma'
+import { CACHE_TAGS } from '@/lib/cached-queries'
 import bcrypt from 'bcryptjs'
 
 // GET /api/admin/users - List all users
@@ -69,7 +71,7 @@ export async function POST(request: Request) {
   if (error) return error
 
   try {
-    const { email, name, pageSlug, title, password, isAdmin, requirePasswordReset, accountType, studentPseudonym } = await request.json()
+    const { email, name, pageSlug, title, password, isAdmin, requirePasswordReset, accountType, studentPseudonym, organizationId } = await request.json()
 
     const isStudent = accountType === 'student'
 
@@ -206,11 +208,40 @@ export async function POST(request: Request) {
         })
         siteSlug = site.slug
       }
+      if (organizationId && typeof organizationId === 'string') {
+        // Verify org exists before inserting to surface a clean 400.
+        const org = await tx.organization.findUnique({
+          where: { id: organizationId },
+          select: { id: true },
+        })
+        if (!org) {
+          throw new Error('INVALID_ORG_ID')
+        }
+        await tx.organizationMember.create({
+          data: { organizationId, userId: u.id, role: 'member' },
+        })
+      }
       return { ...u, pageSlug: siteSlug }
     })
 
+    // Bust any cached `null` for this pageSlug. If anything hit /<pageSlug>
+    // before this admin-created teacher existed, getTeacherByPageSlug /
+    // getTeacherWithLayout cached null indefinitely (revalidate: false);
+    // matches the pattern in /api/auth/register.
+    if (!isStudent && createdRaw.pageSlug) {
+      revalidateTag(CACHE_TAGS.user(createdRaw.pageSlug), { expire: 0 })
+      revalidateTag(CACHE_TAGS.teacherContent(createdRaw.pageSlug), { expire: 0 })
+      revalidatePath(`/${createdRaw.pageSlug}`)
+    }
+
     return NextResponse.json({ user: createdRaw }, { status: 201 })
   } catch (error) {
+    if (error instanceof Error && error.message === 'INVALID_ORG_ID') {
+      return NextResponse.json(
+        { error: 'Selected organization does not exist' },
+        { status: 400 }
+      )
+    }
     console.error('Error creating user:', error)
     return NextResponse.json(
       { error: 'Failed to create user' },
