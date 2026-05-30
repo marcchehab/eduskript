@@ -22,7 +22,7 @@ import { ExcalidrawEditor } from '@/components/dashboard/excalidraw-editor'
 import { AIEditModal } from '@/components/ai'
 import type { AIEditTarget } from '@/hooks/use-ai-edit'
 import { useIsFreeTeacher } from '@/hooks/use-billing'
-import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import type { VideoInfo } from '@/lib/skript-files'
 import { extractAndUploadPdfPages } from '@/lib/pdf-extract'
 import type { PasteMenuOption } from '@/lib/paste-rules'
@@ -35,7 +35,6 @@ import {
   Link2,
   Loader2,
   Maximize2,
-  Wand2,
   Youtube,
 } from 'lucide-react'
 
@@ -141,6 +140,7 @@ export function EditorWithMedia({
 }: EditorWithMediaProps) {
   const alert = useAlertDialog()
   const isFreePlan = useIsFreeTeacher()
+  const router = useRouter()
 
   const [fileList, setFileList] = useState<Array<{
     id: string
@@ -583,32 +583,10 @@ export function EditorWithMedia({
           within their own bounds. */}
       <Card className={fullscreen ? 'border-0 shadow-none flex-1 min-h-0 flex flex-col' : ''}>
         {!fullscreen && (description !== null) && (
-          <CardHeader className="pb-2 flex-row items-center justify-between gap-2">
-            <CardDescription className="flex-1">
+          <CardHeader className="pb-2">
+            <CardDescription>
               {description ?? 'Drag files or videos from the drawers to insert them. Ctrl+S to save.'}
             </CardDescription>
-            {aiEdit && !isFreePlan && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setAiEditModalOpen(true)}
-                title="AI Edit"
-                className="flex-shrink-0"
-              >
-                <Wand2 className="w-4 h-4" />
-              </Button>
-            )}
-            {aiEdit && isFreePlan && (
-              <Link
-                href="/dashboard/billing"
-                title="AI Edit is a paid feature — click to upgrade"
-                className="flex-shrink-0"
-              >
-                <Button variant="ghost" size="sm" className="opacity-50">
-                  <Wand2 className="w-4 h-4" />
-                </Button>
-              </Link>
-            )}
           </CardHeader>
         )}
         <CardContent className={fullscreen ? 'flex-1 overflow-hidden' : ''}>
@@ -633,7 +611,11 @@ export function EditorWithMedia({
               videoList={videoList}
               fileListLoading={fileListLoading}
               onFileUpload={refreshFileList}
-              onAIEdit={aiEdit && !isFreePlan ? () => setAiEditModalOpen(true) : undefined}
+              onAIEdit={aiEdit ? () => {
+                if (isFreePlan) router.push('/dashboard/billing')
+                else setAiEditModalOpen(true)
+              } : undefined}
+              aiEditLocked={Boolean(aiEdit) && isFreePlan}
               onExcalidrawEdit={(filename, fileId) => handleExcalidrawEdit({ id: fileId, name: filename })}
             />
           </div>

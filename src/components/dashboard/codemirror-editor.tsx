@@ -51,6 +51,10 @@ interface CodeMirrorEditorProps {
   onPasteImageUpload?: (file: File, position: number) => void
   onExcalidrawEdit?: (filename: string, fileId: string) => void
   onAIEdit?: () => void
+  /** When true, the AI Edit button is shown grayed with an upgrade tooltip
+   *  (free teachers). The click still fires onAIEdit — the parent routes it
+   *  to billing. */
+  aiEditLocked?: boolean
 }
 
 const CodeMirrorEditor = function CodeMirrorEditor({
@@ -66,7 +70,8 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   onPasteMenu,
   onPasteImageUpload,
   onExcalidrawEdit: onExcalidrawEditProp,
-  onAIEdit
+  onAIEdit,
+  aiEditLocked = false
 }: CodeMirrorEditorProps) {
   const { data: session } = useSession()
   const editorRef = useRef<HTMLDivElement>(null)
@@ -1747,14 +1752,15 @@ const CodeMirrorEditor = function CodeMirrorEditor({
       {/* Toolbar */}
       <div className="border-b border-border p-2">
         <div className="flex flex-wrap items-center gap-1 gap-y-2">
-          {/* AI Edit button - leftmost */}
+          {/* AI Edit button - leftmost. Grayed with an upgrade tooltip for
+              free teachers; the click routes to billing via onAIEdit. */}
           {onAIEdit && (
             <Button
               variant="ghost"
               size="sm"
               onClick={onAIEdit}
-              title="AI Edit"
-              className="w-8 h-8 p-0 border rounded-md"
+              title={aiEditLocked ? 'AI Edit is a paid feature — click to upgrade' : 'AI Edit'}
+              className={`w-8 h-8 p-0 border rounded-md${aiEditLocked ? ' opacity-50' : ''}`}
             >
               <Wand2 className="w-4 h-4" />
             </Button>
