@@ -10,6 +10,7 @@ import { anchorHighlight, extractContext, findSectionId } from '@/lib/text-highl
 import { applyHighlightMark, removeHighlightMark, clearAllHighlightMarks } from '@/lib/text-highlights/rendering'
 import { useHighlightPen } from './highlight-pen-context'
 import { highlighterCursor } from '@/lib/text-highlights/cursor'
+import { HIGHLIGHT_ERASE_EVENT, HIGHLIGHT_ERASE_END_EVENT, pointHitsRect, type HighlightEraseDetail } from '@/lib/text-highlights/erase-events'
 import { createLogger } from '@/lib/logger'
 
 const log = createLogger('text-highlights:layer')
@@ -182,6 +183,47 @@ export function HighlightLayer({ pageId, children }: HighlightLayerProps) {
     },
     [updateData],
   )
+
+  // Eraser support: the annotation eraser broadcasts each sample point along
+  // its path, then an end event on lift. Like the stroke eraser, we dim hit
+  // highlights during the swipe and commit the deletion on lift.
+  const erasingRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    const onErasePoint = (e: Event) => {
+      const { x, y, radius } = (e as CustomEvent<HighlightEraseDetail>).detail
+      const root = getArticleRoot()
+      if (!root) return
+      const marks = root.querySelectorAll<HTMLElement>('mark.text-highlight[data-highlight-id]')
+      // A highlight crossing inline elements (e.g. a bold word) renders as
+      // several fragments sharing one id. Note every newly-hit id...
+      marks.forEach((m) => {
+        if (!pointHitsRect(x, y, m.getBoundingClientRect(), radius)) return
+        const id = m.dataset.highlightId
+        if (id) erasingRef.current.add(id)
+      })
+      // ...then dim ALL fragments of every marked id, so the preview matches
+      // what the commit will delete.
+      marks.forEach((m) => {
+        if (m.dataset.highlightId && erasingRef.current.has(m.dataset.highlightId)) {
+          m.style.opacity = '0.3'
+        }
+      })
+    }
+    const onEraseEnd = () => {
+      const ids = erasingRef.current
+      if (ids.size === 0) return
+      ids.forEach((id) => removeHighlightMark(id))
+      const current = dataRef.current ?? { highlights: [] }
+      updateData({ highlights: current.highlights.filter((h) => !ids.has(h.id)) })
+      erasingRef.current = new Set()
+    }
+    window.addEventListener(HIGHLIGHT_ERASE_EVENT, onErasePoint)
+    window.addEventListener(HIGHLIGHT_ERASE_END_EVENT, onEraseEnd)
+    return () => {
+      window.removeEventListener(HIGHLIGHT_ERASE_EVENT, onErasePoint)
+      window.removeEventListener(HIGHLIGHT_ERASE_END_EVENT, onEraseEnd)
+    }
+  }, [getArticleRoot, updateData])
 
   // Hover-bin removal: hovering a highlight shows a bin at its top-right.
   const [hoverBin, setHoverBin] = useState<{ id: string; top: number; left: number } | null>(null)

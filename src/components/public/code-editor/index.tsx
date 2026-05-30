@@ -44,6 +44,7 @@ import {
 } from './highlight-extension'
 import { useHighlightPen } from '@/components/text-highlights/highlight-pen-context'
 import { highlighterCursor } from '@/lib/text-highlights/cursor'
+import { HIGHLIGHT_ERASE_EVENT, HIGHLIGHT_ERASE_END_EVENT, pointHitsRect, type HighlightEraseDetail } from '@/lib/text-highlights/erase-events'
 import {
   RunState,
   OutputLevel,
@@ -1486,6 +1487,44 @@ export const CodeEditor = memo(function CodeEditor({
     setHoveredHighlightId(null)
     setDeleteButtonPosition(null)
   }, [])
+
+  // Eraser support: the annotation eraser broadcasts each sample point along
+  // its path, then an end event on lift. Like the stroke eraser, we dim hit
+  // highlights during the swipe and commit the deletion on lift. Highlights can
+  // fragment into multiple decoration spans sharing one id. (Direct opacity is
+  // safe — CodeMirror doesn't re-render the decorations mid-gesture.)
+  const erasingHighlightsRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    const onErasePoint = (e: Event) => {
+      const editor = editorRef.current
+      if (!editor) return
+      const { x, y, radius } = (e as CustomEvent<HighlightEraseDetail>).detail
+      const spans = editor.querySelectorAll<HTMLElement>('[data-highlight-id]')
+      // Note every newly-hit id (one highlight can fragment into many spans)...
+      spans.forEach((s) => {
+        if (!pointHitsRect(x, y, s.getBoundingClientRect(), radius)) return
+        const id = s.getAttribute('data-highlight-id')
+        if (id) erasingHighlightsRef.current.add(id)
+      })
+      // ...then dim ALL spans of every marked id so the preview matches the commit.
+      spans.forEach((s) => {
+        const id = s.getAttribute('data-highlight-id')
+        if (id && erasingHighlightsRef.current.has(id)) s.style.opacity = '0.3'
+      })
+    }
+    const onEraseEnd = () => {
+      const ids = erasingHighlightsRef.current
+      if (ids.size === 0) return
+      ids.forEach((id) => handleDeleteHighlight(id))
+      erasingHighlightsRef.current = new Set()
+    }
+    window.addEventListener(HIGHLIGHT_ERASE_EVENT, onErasePoint)
+    window.addEventListener(HIGHLIGHT_ERASE_END_EVENT, onEraseEnd)
+    return () => {
+      window.removeEventListener(HIGHLIGHT_ERASE_EVENT, onErasePoint)
+      window.removeEventListener(HIGHLIGHT_ERASE_END_EVENT, onEraseEnd)
+    }
+  }, [handleDeleteHighlight])
 
   // Track hover over highlight spans for delete button
   useEffect(() => {

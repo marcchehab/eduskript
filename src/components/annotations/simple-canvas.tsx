@@ -67,6 +67,7 @@ import type { StrokeOptions } from 'perfect-freehand'
 import { determineSectionFromY, liveSectionYShift, type HeadingPosition } from '@/lib/annotations/reposition-strokes'
 import { smoothPoints } from '@/lib/annotations/svg-path'
 import type { StrokeTelemetry } from '@/lib/userdata/types'
+import { emitHighlightErase, emitHighlightEraseEnd } from '@/lib/text-highlights/erase-events'
 
 export type DrawMode = 'draw' | 'erase'
 
@@ -703,6 +704,13 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
           // Update eraser cursor position (direct DOM manipulation, no re-render)
           updateEraserCursorPosition(x, y)
 
+          // Also erase highlights the eraser touches. The eraser doesn't own the
+          // highlight layers (prose <mark>s, code-editor decorations live in
+          // sibling components), so we broadcast the client point and let them
+          // hit-test + remove. Sent in viewport coords (event.clientX/Y), not
+          // paper coords, since listeners hit-test against getBoundingClientRect.
+          emitHighlightErase(event.clientX, event.clientY)
+
           // Check for stroke collisions and only redraw when marking NEW strokes.
           // pathsRef holds stored paper coords; the SVG layer may have carried the
           // committed stroke to a new y after content reflow. Shift the eraser's
@@ -814,6 +822,9 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
 
       // If we just finished an eraser stroke, delete all marked strokes
       if (currentModeRef.current === 'erase') {
+        // Commit any highlights the swipe dimmed (their layers track the marks).
+        emitHighlightEraseEnd()
+
         if (strokesMarkedForDeletionRef.current.size > 0) {
           // Filter out strokes that were marked for deletion
           const indicesToDelete = new Set(strokesMarkedForDeletionRef.current)
