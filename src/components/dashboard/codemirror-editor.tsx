@@ -6,7 +6,7 @@ import { useSession } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
-import { Eye, EyeOff, Pencil, Code, Bold, Italic, Heading, Heading1, Heading2, Heading3, List, ListOrdered, Link, Palette, Highlighter, Circle, Wand2, ChevronDown, FilePen, Minus, Plus, CircleHelp, TextQuote, Puzzle, Sigma, AlignLeft, AlignCenter, AlignRight, MessageSquare } from 'lucide-react'
+import { Eye, EyeOff, Pencil, Code, Bold, Italic, Heading, Heading1, Heading2, Heading3, List, ListOrdered, Link, Palette, Highlighter, Circle, Wand2, ChevronDown, FilePen, Minus, Plus, CircleHelp, TextQuote, Puzzle, Sigma, AlignLeft, AlignCenter, AlignRight, MessageSquare, Compass } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,6 +18,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Sketch } from '@uiw/react-color'
 import { ExcalidrawEditor } from './excalidraw-editor'
 import { PluginPicker } from './plugin-picker'
+import { GeogebraDialog } from './geogebra-dialog'
 import { InteractivePreview } from './interactive-preview'
 import { autocompletion } from '@codemirror/autocomplete'
 import { createMarkdownCompletions, pageLinkCompletions } from './markdown-completions'
@@ -93,6 +94,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   const [dragOver, setDragOver] = useState<false | 'generic' | 'docx' | 'pdf'>(false)
   const [excalidrawOpen, setExcalidrawOpen] = useState(false)
   const [pluginPickerOpen, setPluginPickerOpen] = useState(false)
+  const [geogebraDialogOpen, setGeogebraDialogOpen] = useState(false)
   const [excalidrawInitialData, setExcalidrawInitialData] = useState<{
     name: string
     elements: readonly unknown[]
@@ -1143,6 +1145,32 @@ const CodeMirrorEditor = function CodeMirrorEditor({
     }
   }
 
+  const insertGeogebra = (materialId: string) => {
+    const tag = `<geogebra material-id="${materialId}" />\n`
+
+    if (editorViewRef.current && !useSimpleEditor) {
+      const view = editorViewRef.current
+      const insertPos = view.state.selection.main.head
+      view.dispatch(view.state.update({
+        changes: { from: insertPos, insert: tag },
+        selection: { anchor: insertPos + tag.length },
+      }))
+      onChange(view.state.doc.toString())
+    } else if (useSimpleEditor) {
+      const textarea = document.querySelector('textarea') as HTMLTextAreaElement
+      if (textarea) {
+        const start = textarea.selectionStart
+        const newContent = textareaContent.substring(0, start) + tag + textareaContent.substring(start)
+        setTextareaContent(newContent)
+        onChange(newContent)
+        setTimeout(() => {
+          textarea.selectionStart = textarea.selectionEnd = start + tag.length
+          textarea.focus()
+        }, 0)
+      }
+    }
+  }
+
   // Handle Excalidraw save
   const handleExcalidrawSave = async (
     name: string,
@@ -2120,6 +2148,15 @@ const CodeMirrorEditor = function CodeMirrorEditor({
             >
               <Puzzle className="w-4 h-4" />
             </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setGeogebraDialogOpen(true)}
+              className="w-8 h-8 p-0 border rounded-md"
+              title="Insert GeoGebra"
+            >
+              <Compass className="w-4 h-4" />
+            </Button>
             {/* Math (display by default; dropdown for inline) */}
             <DropdownMenu>
               <div className="flex items-center border rounded-md h-8">
@@ -2352,6 +2389,12 @@ const CodeMirrorEditor = function CodeMirrorEditor({
         onOpenChange={setPluginPickerOpen}
         onSelect={insertPlugin}
         userId={session?.user?.id}
+      />
+
+      <GeogebraDialog
+        open={geogebraDialogOpen}
+        onOpenChange={setGeogebraDialogOpen}
+        onInsert={insertGeogebra}
       />
 
       <AlertDialogModal

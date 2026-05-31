@@ -61,6 +61,28 @@ describe('classifyPaste', () => {
     })
   })
 
+  describe('GeoGebra URLs', () => {
+    it('classifies a /m/ share link as a geogebra tag insert', () => {
+      const intent = classifyPaste(source('https://www.geogebra.org/m/dNPHaqgb'))
+      expect(intent).toEqual({ kind: 'insert', text: '<geogebra material-id="dNPHaqgb" />' })
+    })
+
+    it('classifies an app share link', () => {
+      const intent = classifyPaste(source('https://www.geogebra.org/classic/RHYH3UQ8'))
+      expect(intent).toEqual({ kind: 'insert', text: '<geogebra material-id="RHYH3UQ8" />' })
+    })
+
+    it('classifies a full iframe embed snippet', () => {
+      const snippet = '<iframe src="https://www.geogebra.org/material/iframe/id/dNPHaqgb/width/800/height/600"></iframe>'
+      const intent = classifyPaste(source(snippet))
+      expect(intent).toEqual({ kind: 'insert', text: '<geogebra material-id="dNPHaqgb" />' })
+    })
+
+    it('does not match a non-geogebra URL', () => {
+      expect(classifyPaste(source('https://example.com/m/dNPHaqgb'))).toBeNull()
+    })
+  })
+
   describe('Image URLs', () => {
     it('opens a menu with embed + link options', () => {
       const intent = classifyPaste(source('https://example.com/foo.png'))

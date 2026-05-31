@@ -29,6 +29,7 @@ import { Flex, FlexItem } from '@/components/markdown/flex'
 import { PluginContainer } from '@/components/markdown/plugin-container'
 import { Fullwidth } from '@/components/markdown/fullwidth'
 import { PdfEmbed } from '@/components/markdown/pdf-embed'
+import { Geogebra } from '@/components/markdown/geogebra'
 import { MermaidDiagram } from '@/components/markdown/mermaid-diagram'
 
 // Simple hash function for generating stable IDs
@@ -766,6 +767,32 @@ export function createMarkdownComponents(
         <PdfEmbed
           src={props.src || ''}
           height={props.height}
+          files={files}
+        />
+      )
+    },
+
+    // GeoGebra applet — embeds an online material by id (from a share link).
+    // Attrs arrive kebab-case (raw HTML) or camelCase (HAST); accept both.
+    'geogebra': (props: Record<string, unknown>) => {
+      const str = (...keys: string[]): string | undefined => {
+        for (const k of keys) {
+          const v = props[k]
+          if (typeof v === 'string') return v
+        }
+        return undefined
+      }
+      const toBool = (v?: string) => v === 'true' || v === ''
+      return (
+        <Geogebra
+          materialId={str('material-id', 'materialId', 'data-material-id')}
+          src={str('src', 'data-src')}
+          height={str('height', 'data-height')}
+          width={str('width', 'data-width')}
+          showToolbar={toBool(str('show-toolbar', 'showToolbar'))}
+          showAlgebraInput={toBool(str('show-algebra-input', 'showAlgebraInput'))}
+          correctWhen={str('correct-when', 'correctWhen')}
+          pageId={pageId}
           files={files}
         />
       )

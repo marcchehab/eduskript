@@ -374,6 +374,18 @@ Three equivalent forms — all render the same player. Pick whichever reads best
 
 **Attributes:** \`id\`/\`data-id\` (video ID) OR \`playlist\`/\`data-playlist\` — one is required. \`startTime\`/\`data-start-time\` (seconds) and \`caption\`/\`data-caption\` are optional.`)
 
+  // GeoGebra
+  sections.push(`## GeoGebra Applets
+
+Embed an interactive GeoGebra applet by its online material id (the code at the end of a geogebra.org share link, e.g. \`geogebra.org/m/dNPHaqgb\`). Self-closing, lowercase tag, string attributes.
+
+\`\`\`html
+<geogebra material-id="dNPHaqgb" />
+<geogebra material-id="dNPHaqgb" height="500" show-toolbar="true" show-algebra-input="true" />
+\`\`\`
+
+**Attributes:** \`material-id\` (required), \`height\` (px — OPTIONAL; omit it and the applet auto-fits its content so nothing is clipped; set it only to pin a fixed height), \`width\` (px, default fits the page), \`show-toolbar\` and \`show-algebra-input\` (default off — a clean read-only embed), \`correct-when\` (name of a boolean object in the construction that is true when the answer is right — captures per-student correctness for the teacher's class tally). Students can use the applet without a GeoGebra account; on exam pages their construction is captured for grading automatically.`)
+
   // Mermaid
   sections.push(`## Mermaid Diagrams
 
@@ -614,6 +626,8 @@ export function getCondensedSyntaxReference(): string {
 **Code-block copy button:** plain \`\`\`lang code blocks show a copy button; add \`copy=false\` (or \`no-copy\`) to the info string to hide it, \`copy\`/\`copy=true\` to force it. Hidden by default on exam pages.
 
 **YouTube:** \`![caption](https://youtu.be/VIDEO_ID?t=120)\` is the simplest form (alt becomes caption). Or \`<youtube id="VIDEO_ID" startTime={120} caption="..." />\`, or the underlying \`<youtube-embed data-id="VIDEO_ID" data-start-time="120" data-caption="..."></youtube-embed>\`. Use \`playlist\`/\`data-playlist\` for playlists.
+
+**GeoGebra:** \`<geogebra material-id="dNPHaqgb" [show-toolbar="true"] [correct-when="correct"] />\` — embeds an interactive GeoGebra applet by material id (from a geogebra.org share link); auto-fits height by default (add \`height="450"\` to pin). \`correct-when\` captures per-student correctness for the teacher's class tally.
 
 **Mermaid:** \`\`\`mermaid fenced code block — renders natively, theme-aware.
 
