@@ -1,4 +1,7 @@
 import * as brevo from '@getbrevo/brevo'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('email')
 
 // Initialize Brevo API
 const apiInstance = new brevo.TransactionalEmailsApi()
@@ -42,8 +45,23 @@ export async function sendEmail({ to, subject, htmlContent, textContent }: Email
     const result = await apiInstance.sendTransacEmail(sendSmtpEmail)
     return result
   } catch (error) {
-    console.error('Failed to send email:', error)
-    throw new Error('Failed to send email')
+    // Surface Brevo's real response — the SDK wraps HTTP errors so the useful
+    // bits (status + body.message/code) live on error.response, not error.message.
+    // Without this, IP-authorization blocks, SPF/DKIM failures, and quota errors
+    // all collapse into an indistinguishable "Failed to send email".
+    const err = error as {
+      statusCode?: number
+      response?: { statusCode?: number; body?: unknown }
+      message?: string
+    }
+    const status = err.response?.statusCode ?? err.statusCode
+    const body = err.response?.body
+    const detail =
+      typeof body === 'object' && body !== null
+        ? JSON.stringify(body)
+        : (body ?? err.message ?? String(error))
+    log.error(`send failed (status ${status ?? 'unknown'}): ${detail}`)
+    throw new Error(`Failed to send email: ${status ?? 'error'} ${detail}`)
   }
 }
 
