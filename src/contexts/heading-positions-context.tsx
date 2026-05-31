@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, type ReactNode } from 'react'
+import { createContext, useContext, useMemo, type ReactNode } from 'react'
 import type { HeadingPosition } from '@/lib/annotations/reposition-strokes'
 
 /**
@@ -26,8 +26,14 @@ export function HeadingPositionsProvider({
   positions: HeadingPosition[]
   children: ReactNode
 }) {
+  // Memoized so the context value ref only changes when `positions` actually
+  // changes — not on every render of the parent (AnnotationLayer re-renders on
+  // every pointermove while drawing). Without this, the sole consumer
+  // (sticky-notes-layer) re-rendered on every pointer move. Same bug class as
+  // the HighlightPenContext fix in annotation-layer.tsx.
+  const value = useMemo(() => ({ positions }), [positions])
   return (
-    <HeadingPositionsContext.Provider value={{ positions }}>
+    <HeadingPositionsContext.Provider value={value}>
       {children}
     </HeadingPositionsContext.Provider>
   )
