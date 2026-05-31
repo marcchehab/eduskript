@@ -1,7 +1,17 @@
 'use client'
 
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { registerEditor } from './mounted-registry'
+
+// When true, descendant DeferredMounts skip lazy deferral and mount immediately.
+// Set by contexts where deferred mounting is unsafe because content is revealed
+// dynamically rather than scrolled to — specifically StageFlow (<exam-stage>):
+// a later stage isn't in the DOM at all until the student hands in the prior
+// one, so it must mount fully-formed the instant it appears (no placeholder
+// flash, no dependence on IntersectionObserver firing for just-inserted nodes
+// mid-exam). Cheaper and more robust than threading an isExam flag through every
+// renderer. Default false so normal pages still lazy-mount.
+export const EagerMountContext = createContext(false)
 
 // Defers mounting an expensive child (a full CodeEditor: CodeMirror view +
 // language modules + a stack of effects) until it scrolls near the viewport.
@@ -38,7 +48,11 @@ export function DeferredMount({
   eager?: boolean
   children: ReactNode
 }) {
-  const [mounted, setMounted] = useState(eager)
+  // Eager if explicitly requested (exam-tagged block) OR if an ancestor forces
+  // it (inside a StageFlow — see EagerMountContext). Read at first render so the
+  // editor mounts on the same commit its stage is revealed.
+  const forcedEager = useContext(EagerMountContext)
+  const [mounted, setMounted] = useState(eager || forcedEager)
   const ref = useRef<HTMLDivElement>(null)
 
   // Keep this editor id in the mounted-registry for the whole block lifetime so
