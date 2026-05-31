@@ -11,6 +11,8 @@ import type { SkriptFilesData } from './skript-files'
 import { resolveFile, resolveExcalidraw } from './skript-files'
 import { CodeEditor } from '@/components/public/code-editor'
 import { HtmlPreviewEditor } from '@/components/public/code-editor/html-preview-editor'
+import { DeferredMount } from '@/components/public/code-editor/deferred-mount'
+import { CodeEditorPlaceholder } from '@/components/public/code-editor/code-editor-placeholder'
 import { Tabs, TabItem } from '@/components/markdown/tabs'
 import { Youtube } from '@/components/markdown/youtube'
 import { MuxVideo } from '@/components/markdown/mux-video'
@@ -282,13 +284,6 @@ export function createMarkdownComponents(
     const allowUploadAttr = (props['dataAllowUpload'] as string) || (props['data-allow-upload'] as string)
     const acceptAttr = (props['dataAccept'] as string) || (props['data-accept'] as string)
 
-    // Debug: log all props to find attribute naming
-    if (typeof window !== 'undefined') {
-      const checkProps = Object.keys(props).filter(k => k.toLowerCase().includes('check'))
-      if (checkProps.length > 0) console.log('[CodeEditor] check props:', checkProps, checkProps.map(k => props[k as keyof typeof props]))
-      else console.log('[CodeEditor] no check props found. All keys:', Object.keys(props))
-    }
-
     // Parse multi-file data if present, otherwise fall back to single-file initialCode
     let initialFiles: { name: string; content: string }[] | undefined
     let decodedCode: string
@@ -378,18 +373,43 @@ export function createMarkdownComponents(
     // HTML editor renders a sandboxed-iframe live preview instead of the
     // Run-button + output panel that Python/JS/SQL share, so we route it to
     // its own component rather than threading another branch through CodeEditor.
+    // Lazy-mount gating: defer off-screen editors to spread mount cost across
+    // scroll (see DeferredMount). Exam editors mount eagerly — exam state
+    // restoration and snapshotting shouldn't depend on scroll position.
+    const isExam = exam === 'true'
+    const lineCount = decodedCode.split('\n').length
+    // Approximate the editor's eventual height so the placeholder reserves a
+    // sensible amount of space. Deliberately NOT pixel-perfect: real rendered
+    // height depends on font metrics / line-height / zoom that vary across
+    // OS+browser, so any hardcoded per-pixel formula would drift. Exactness
+    // isn't needed — DeferredMount uses an 800px rootMargin, so editors mount
+    // ~a screen before they're visible and the placeholder->editor height
+    // correction lands off-screen. Verified: visible-content CLS ≈ 0 under
+    // normal scrolling despite the reservation being only roughly right. Uses
+    // CodeEditor's own height constants (LINE_HEIGHT 20, MIN 200, MAX 600,
+    // +60 chrome). HTML editors with an explicit height bypass this.
+    const estimatedHeight = Math.max(200, Math.min(600, lineCount * 20 + 60))
+
     if (language === 'html') {
       const parsedHeight = heightAttr ? parseInt(heightAttr, 10) : NaN
       const height = Number.isFinite(parsedHeight) && parsedHeight > 0 ? parsedHeight : undefined
       return (
         <div {...props}>
-          <HtmlPreviewEditor
-            key={id}
-            id={id}
+          <DeferredMount
             pageId={pageId}
-            initialCode={decodedCode}
-            height={height}
-          />
+            componentId={`code-editor-${id}`}
+            estimatedHeight={height ?? estimatedHeight}
+            eager={isExam}
+            placeholder={<CodeEditorPlaceholder code={decodedCode} language="html" />}
+          >
+            <HtmlPreviewEditor
+              key={id}
+              id={id}
+              pageId={pageId}
+              initialCode={decodedCode}
+              height={height}
+            />
+          </DeferredMount>
         </div>
       )
     }
@@ -404,30 +424,38 @@ export function createMarkdownComponents(
       // data-source-line-* spread from {...props} still lets the cursor→preview
       // highlight find this block.
       <div {...props} data-interactive="true">
-        <CodeEditor
-          key={id}
-          id={id}
+        <DeferredMount
           pageId={pageId}
-          skriptId={skriptId}
-          language={language as 'python' | 'javascript' | 'sql'}
-          initialCode={decodedCode}
-          initialFiles={initialFiles}
-          showCanvas={showCanvas !== 'false'}
-          db={dbUrl}
-          schemaImage={schemaImageUrl}
-          schemaImageDark={schemaImageDarkUrl}
-          singleFile={initialFiles ? initialFiles.length <= 1 && single === 'true' : single === 'true'}
-          solution={decodedSolution}
-          exam={exam === 'true'}
-          checkCode={checkCode ? decodeHtmlEntities(checkCode) : undefined}
-          checkStages={checkStages}
-          checkPoints={checkPoints ? parseInt(checkPoints, 10) : undefined}
-          maxChecks={maxChecks ? parseInt(maxChecks, 10) : undefined}
-          attachedFiles={attachedFiles}
-          allowUpload={allowUploadAttr === 'true'}
-          acceptUploads={acceptAttr}
-          height={editorHeight}
-        />
+          componentId={`code-editor-${id}`}
+          estimatedHeight={editorHeight ?? estimatedHeight}
+          eager={isExam}
+          placeholder={<CodeEditorPlaceholder code={decodedCode} language={language} />}
+        >
+          <CodeEditor
+            key={id}
+            id={id}
+            pageId={pageId}
+            skriptId={skriptId}
+            language={language as 'python' | 'javascript' | 'sql'}
+            initialCode={decodedCode}
+            initialFiles={initialFiles}
+            showCanvas={showCanvas !== 'false'}
+            db={dbUrl}
+            schemaImage={schemaImageUrl}
+            schemaImageDark={schemaImageDarkUrl}
+            singleFile={initialFiles ? initialFiles.length <= 1 && single === 'true' : single === 'true'}
+            solution={decodedSolution}
+            exam={exam === 'true'}
+            checkCode={checkCode ? decodeHtmlEntities(checkCode) : undefined}
+            checkStages={checkStages}
+            checkPoints={checkPoints ? parseInt(checkPoints, 10) : undefined}
+            maxChecks={maxChecks ? parseInt(maxChecks, 10) : undefined}
+            attachedFiles={attachedFiles}
+            allowUpload={allowUploadAttr === 'true'}
+            acceptUploads={acceptAttr}
+            height={editorHeight}
+          />
+        </DeferredMount>
       </div>
     )
   }

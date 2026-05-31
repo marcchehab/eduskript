@@ -1171,6 +1171,17 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
   const [activePenId, setActivePenId] = useState<string>(DEFAULT_PENS[0].id)
   const activePen = pens.find((p) => p.id === activePenId) ?? pens[0] ?? DEFAULT_PENS[0]
 
+  // Memoized so HighlightPenContext's value only changes when the active
+  // highlighter colour actually changes — NOT on every AnnotationLayer render.
+  // AnnotationLayer re-renders on every pointermove while drawing; an inline
+  // object literal at the Provider made every consumer (every CodeEditor + the
+  // HighlightLayer) re-render on each pointer move even when the colour was
+  // unchanged. Keyed on the two primitives that determine the value.
+  const highlightPenValue = useMemo(
+    () => ({ activeHighlightColor: mode === 'highlight' ? activePen.color : null }),
+    [mode, activePen.color],
+  )
+
   // Load saved pens after mount to avoid hydration mismatch.
   useEffect(() => {
     const loaded = loadPens()
@@ -3292,9 +3303,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
           <HeadingPositionsProvider positions={headingPositions}>
             {/* Broadcast the active highlighter colour to the HighlightLayer
                 (in children) so selecting text auto-highlights in that colour. */}
-            <HighlightPenContext.Provider
-              value={{ activeHighlightColor: mode === 'highlight' ? activePen.color : null }}
-            >
+            <HighlightPenContext.Provider value={highlightPenValue}>
               {children}
             </HighlightPenContext.Provider>
           </HeadingPositionsProvider>

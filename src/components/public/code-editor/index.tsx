@@ -577,6 +577,12 @@ export const CodeEditor = memo(function CodeEditor({
   const [isDraggingSplitter, setIsDraggingSplitter] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const MIN_VISIBLE_WIDTH = 100 // pixels
+  // Measured container width, tracked via ResizeObserver below. Used to decide
+  // whether the editor/graphics split panels are wide enough to show. Kept in
+  // state (not read from the DOM in render) so render stays layout-read-free —
+  // reading offsetWidth in render forces a synchronous reflow on every render,
+  // which with many editors on a page is a severe layout-thrash bottleneck.
+  const [containerWidth, setContainerWidth] = useState(0)
 
   // Resizable output panel state (vertical splitter between main content and output)
   const [outputPanelHeight, setOutputPanelHeight] = useState(220) // default height in pixels
@@ -970,8 +976,10 @@ export const CodeEditor = memo(function CodeEditor({
   // SQL schema: provided via schemaImage/schemaImageDark props (auto-detected in markdown renderer)
   const hasSqlSchema = language === 'sql' && !!(schemaImage || schemaImageDark)
   const hasGraphics = hasTurtleModule || hasMatplotlib || hasPil || hasSqlSchema
-  const showEditor = containerRef.current ? (editorWidth / 100) * containerRef.current.offsetWidth >= MIN_VISIBLE_WIDTH : true
-  const showGraphics = containerRef.current ? ((100 - editorWidth) / 100) * containerRef.current.offsetWidth >= MIN_VISIBLE_WIDTH : true
+  // Computed from measured state, not a live DOM read — see containerWidth above.
+  // Before measurement (width 0) default to showing both, matching prior behavior.
+  const showEditor = containerWidth ? (editorWidth / 100) * containerWidth >= MIN_VISIBLE_WIDTH : true
+  const showGraphics = containerWidth ? ((100 - editorWidth) / 100) * containerWidth >= MIN_VISIBLE_WIDTH : true
   const [canvasVisible, setCanvasVisible] = useState(false) // Start hidden, show only when graphics detected
 
   // The floating toolbar (highlighter / zoom / kernel indicator) is absolutely
@@ -990,6 +998,24 @@ export const CodeEditor = memo(function CodeEditor({
     setToolbarWidth(el.offsetWidth)
     return () => ro.disconnect()
   }, [showEditor])
+
+  // Track the split container's width in state so showEditor/showGraphics can be
+  // computed without reading offsetWidth in render (which forces a reflow each
+  // render). ResizeObserver fires once on observe, seeding the initial width.
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el || typeof ResizeObserver === 'undefined') {
+      // No RO (SSR/old browsers): fall back to a one-shot measure.
+      if (el) setContainerWidth(el.offsetWidth)
+      return
+    }
+    const ro = new ResizeObserver(entries => {
+      const w = entries[0]?.contentRect.width ?? el.offsetWidth
+      setContainerWidth(prev => (Math.abs(prev - w) > 1 ? w : prev))
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   // Calculate auto-height based on number of lines in the code (editor area only, output adds separately)
   const lineCount = currentCode.split('\n').length
