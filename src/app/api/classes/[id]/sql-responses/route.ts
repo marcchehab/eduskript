@@ -14,6 +14,7 @@ interface SqlVerificationData {
 
 interface SqlResponseItem {
   studentId: string
+  pseudonym: string
   displayName: string
   isCorrect: boolean | null  // null = not attempted
   submittedAt: number | null
@@ -98,6 +99,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
       return {
         studentId: m.student.id,
+        pseudonym: m.student.studentPseudonym ?? '',
         displayName: m.student.name ?? '—',
         isCorrect,
         submittedAt: record?.updatedAt ? record.updatedAt.getTime() : null,

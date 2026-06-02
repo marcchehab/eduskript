@@ -4,12 +4,22 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { ChevronDown, ChevronUp, Check, X, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useRealtimeEvents } from '@/hooks/use-realtime-events'
+import { getReverseMappingsForClass } from '@/lib/email-mapping-db'
 
 interface SqlResponseItem {
   studentId: string
+  pseudonym: string
   displayName: string
   isCorrect: boolean | null  // null = not attempted
   submittedAt: number | null
+}
+
+function resolveDisplayName(
+  r: { pseudonym: string; displayName: string },
+  mappings: Record<string, string>
+): string {
+  const mapped = r.pseudonym ? mappings[r.pseudonym] : null
+  return mapped || r.displayName
 }
 
 interface SqlStats {
@@ -32,6 +42,13 @@ export function SqlProgressBar({ classId, className, pageId, componentId }: SqlP
   const [isExpanded, setIsExpanded] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [resolvedEmails, setResolvedEmails] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    getReverseMappingsForClass(classId)
+      .then(setResolvedEmails)
+      .catch(() => setResolvedEmails({}))
+  }, [classId])
 
   const fetchIdRef = useRef(0)
   const mountedRef = useRef(true)
@@ -174,7 +191,7 @@ export function SqlProgressBar({ classId, className, pageId, componentId }: SqlP
                         ? <Check className="h-4 w-4 text-green-500" />
                         : <X className="h-4 w-4 text-red-500" />}
                   </div>
-                  <div className="flex-shrink-0 w-32 truncate font-medium">{r.displayName}</div>
+                  <div className="flex-shrink-0 w-32 truncate font-medium">{resolveDisplayName(r, resolvedEmails)}</div>
                   <div className="flex-1 text-xs text-muted-foreground">
                     {r.isCorrect === null
                       ? 'Not attempted yet'

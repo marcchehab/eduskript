@@ -4,6 +4,15 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { ChevronDown, ChevronUp, Check, X, Minus, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useRealtimeEvents } from '@/hooks/use-realtime-events'
+import { getReverseMappingsForClass } from '@/lib/email-mapping-db'
+
+function resolveDisplayName(
+  r: { pseudonym: string; displayName: string },
+  mappings: Record<string, string>
+): string {
+  const mapped = r.pseudonym ? mappings[r.pseudonym] : null
+  return mapped || r.displayName
+}
 
 /**
  * Number Histogram Visualization
@@ -86,11 +95,13 @@ function NumberHistogram({
 function RangeStackVisualization({
   responses,
   minValue,
-  maxValue
+  maxValue,
+  resolvedEmails
 }: {
   responses: QuizResponseItem[]
   minValue: number
   maxValue: number
+  resolvedEmails: Record<string, string>
 }) {
   // Get all submitted range answers
   const ranges = responses
@@ -98,7 +109,7 @@ function RangeStackVisualization({
     .map(r => ({
       min: r.data!.rangeAnswer!.min,
       max: r.data!.rangeAnswer!.max,
-      displayName: r.displayName
+      displayName: resolveDisplayName(r, resolvedEmails)
     }))
 
   if (ranges.length === 0) {
@@ -217,6 +228,13 @@ export function QuizProgressBar({
   const [isExpanded, setIsExpanded] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [resolvedEmails, setResolvedEmails] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    getReverseMappingsForClass(classId)
+      .then(setResolvedEmails)
+      .catch(() => setResolvedEmails({}))
+  }, [classId])
 
   // Stable string for correctIndices to avoid recreating fetchResponses on each render
   const correctIndicesKey = JSON.stringify(correctIndices)
@@ -505,6 +523,7 @@ export function QuizProgressBar({
               responses={responses}
               minValue={minValue}
               maxValue={maxValue}
+              resolvedEmails={resolvedEmails}
             />
           )}
 
@@ -543,7 +562,7 @@ export function QuizProgressBar({
 
                     {/* Student name */}
                     <div className="flex-shrink-0 w-32 truncate font-medium">
-                      {response.displayName}
+                      {resolveDisplayName(response, resolvedEmails)}
                     </div>
 
                     {/* Answer */}

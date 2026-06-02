@@ -4,14 +4,24 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { ChevronDown, ChevronUp, Check, X, Clock, Minus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useRealtimeEvents } from '@/hooks/use-realtime-events'
+import { getReverseMappingsForClass } from '@/lib/email-mapping-db'
 
 interface PythonResponseItem {
   studentId: string
+  pseudonym: string
   displayName: string
   testsPassed: number | null
   totalTests: number | null
   earnedPoints: number | null
   submittedAt: number | null
+}
+
+function resolveDisplayName(
+  r: { pseudonym: string; displayName: string },
+  mappings: Record<string, string>
+): string {
+  const mapped = r.pseudonym ? mappings[r.pseudonym] : null
+  return mapped || r.displayName
 }
 
 interface PythonStats {
@@ -36,6 +46,13 @@ export function PythonProgressBar({ classId, className, pageId, componentId }: P
   const [isExpanded, setIsExpanded] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [resolvedEmails, setResolvedEmails] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    getReverseMappingsForClass(classId)
+      .then(setResolvedEmails)
+      .catch(() => setResolvedEmails({}))
+  }, [classId])
 
   const fetchIdRef = useRef(0)
   const mountedRef = useRef(true)
@@ -191,7 +208,7 @@ export function PythonProgressBar({ classId, className, pageId, componentId }: P
                             ? <Minus className="h-4 w-4 text-yellow-500" />
                             : <X className="h-4 w-4 text-red-500" />}
                     </div>
-                    <div className="flex-shrink-0 w-32 truncate font-medium">{r.displayName}</div>
+                    <div className="flex-shrink-0 w-32 truncate font-medium">{resolveDisplayName(r, resolvedEmails)}</div>
                     <div className="flex-1 text-xs text-muted-foreground">
                       {r.totalTests === null
                         ? 'Not attempted yet'

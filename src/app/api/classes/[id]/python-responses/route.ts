@@ -85,6 +85,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         notAttempted++
         return {
           studentId: m.student.id,
+          pseudonym: m.student.studentPseudonym ?? '',
           displayName: m.student.name ?? '—',
           testsPassed: null,
           totalTests: null,
@@ -106,6 +107,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
       return {
         studentId: m.student.id,
+        pseudonym: m.student.studentPseudonym ?? '',
         displayName: m.student.name ?? '—',
         testsPassed,
         totalTests,
