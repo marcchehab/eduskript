@@ -62,14 +62,16 @@ export function SlidePresenter({ slides, initialIndex = 0, onExit }: SlidePresen
   const setPenSize = (i: number, size: number) =>
     setPenSizes((prev) => prev.map((s, j) => (j === i ? size : s)) as [number, number, number])
 
-  // Keyboard navigation. Arrows/Space/PageDown advance; Escape exits. Typing in
-  // an embedded editor must not steal the keys. Arrows still navigate while
+  // Keyboard navigation. Arrows/Space/PageDown advance; Escape clears the
+  // draw/erase tool first, then exits the presenter on a second press. Typing
+  // in an embedded editor must not steal the keys. Arrows still navigate while
   // drawing (drawing is pointer-driven).
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault()
-        onExit()
+        if (mode !== 'view') setMode('view')
+        else onExit()
         return
       }
       if (isEditableTarget(e.target)) return
@@ -83,7 +85,29 @@ export function SlidePresenter({ slides, initialIndex = 0, onExit }: SlidePresen
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [next, prev, onExit])
+  }, [next, prev, onExit, mode])
+
+  // Stylus auto-activates the pen: any pen pointer (hover or touch) while idle
+  // promotes 'view' → 'draw', so a hover-capable pen flips the mode before the
+  // first stroke even begins. Mirrors annotation-layer.tsx's document-level
+  // stylus detection. Skips pen events over buttons or editable surfaces so
+  // toolbar / nav / code editors still behave normally.
+  useEffect(() => {
+    if (mode !== 'view') return
+    const onPenPointer = (e: PointerEvent) => {
+      if (e.pointerType !== 'pen') return
+      const target = e.target as HTMLElement | null
+      if (target?.closest('button')) return
+      if (isEditableTarget(target)) return
+      setMode('draw')
+    }
+    document.addEventListener('pointermove', onPenPointer)
+    document.addEventListener('pointerdown', onPenPointer)
+    return () => {
+      document.removeEventListener('pointermove', onPenPointer)
+      document.removeEventListener('pointerdown', onPenPointer)
+    }
+  }, [mode])
 
   // Lock background scroll while presenting; restore on exit. Move focus into
   // the overlay so keyboard nav works immediately, restore it on close.

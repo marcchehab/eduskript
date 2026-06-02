@@ -44,6 +44,9 @@ export function SlideDrawLayer({ slideIndex, mode, color, size, clearSignal }: S
   const strokesBySlide = useRef<Map<number, Stroke[]>>(new Map())
   const drawing = useRef<Stroke | null>(null)
   const erasing = useRef(false)
+  // Effective mode for the in-flight stroke. Lets a pen barrel-button press
+  // override the toolbar mode to 'erase' for one stroke without flipping the UI.
+  const liveModeRef = useRef<SlideDrawMode>('view')
 
   const redraw = useCallback(() => {
     const canvas = canvasRef.current
@@ -123,8 +126,14 @@ export function SlideDrawLayer({ slideIndex, mode, color, size, clearSignal }: S
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (mode === 'view') return
+    // Pen barrel button (bit 5 / value 32) momentarily forces eraser, matching
+    // simple-canvas.tsx's behavior on the normal page.
+    const isPen = e.pointerType === 'pen'
+    const isEraserButton = isPen && (e.buttons & 32) !== 0
+    const effective: SlideDrawMode = isEraserButton ? 'erase' : mode
+    liveModeRef.current = effective
     canvasRef.current?.setPointerCapture(e.pointerId)
-    if (mode === 'erase') {
+    if (effective === 'erase') {
       erasing.current = true
       eraseAt(toNorm(e))
       return
@@ -133,7 +142,7 @@ export function SlideDrawLayer({ slideIndex, mode, color, size, clearSignal }: S
     redraw()
   }
   const onPointerMove = (e: React.PointerEvent) => {
-    if (mode === 'erase') {
+    if (liveModeRef.current === 'erase') {
       if (erasing.current) eraseAt(toNorm(e))
       return
     }
