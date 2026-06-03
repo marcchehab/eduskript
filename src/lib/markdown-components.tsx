@@ -30,6 +30,7 @@ import { PluginContainer } from '@/components/markdown/plugin-container'
 import { Fullwidth } from '@/components/markdown/fullwidth'
 import { PdfEmbed } from '@/components/markdown/pdf-embed'
 import { Geogebra } from '@/components/markdown/geogebra'
+import { PingTerminal } from '@/components/markdown/ping-terminal'
 import { MermaidDiagram } from '@/components/markdown/mermaid-diagram'
 
 // Simple hash function for generating stable IDs
@@ -796,6 +797,18 @@ export function createMarkdownComponents(
           files={files}
         />
       )
+    },
+
+    // Server-side TCP-connect "ping" terminal (not ICMP). host is author-set.
+    'ping': (props: Record<string, unknown>) => {
+      const str = (...keys: string[]): string | undefined => {
+        for (const k of keys) {
+          const v = props[k]
+          if (typeof v === 'string') return v
+        }
+        return undefined
+      }
+      return <PingTerminal host={str('host')} count={str('count')} os={str('os')} />
     },
 
     // User-created plugins (sandboxed iframes)
