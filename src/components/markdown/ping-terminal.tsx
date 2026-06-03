@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { Info } from 'lucide-react'
 
 // Interactive terminal where students type the ping command themselves
 // (e.g. `ping wairualodge.co.nz` or `ping -c 6 8.8.8.8`). The measurement is a
@@ -310,8 +311,16 @@ export function PingTerminal({ host, count, os }: PingTerminalProps) {
         className="relative overflow-hidden rounded-lg border border-gray-800 bg-gray-950"
         onClick={() => inputRef.current?.focus()}
       >
-        {/* OS toggle, top-right */}
-        <div className="absolute top-2 right-2 z-10 flex gap-0.5 rounded border border-border/40 bg-background/90 p-0.5 backdrop-blur">
+        {/* OS toggle + info, top-right */}
+        <div className="absolute top-2 right-2 z-10 flex items-center gap-0.5 rounded border border-border/40 bg-background/90 p-0.5 backdrop-blur">
+          <span
+            className="flex cursor-help items-center px-1 text-muted-foreground"
+            title="TCP connect from the server (ports 443/80) · RTT is real, not ICMP"
+            aria-label="TCP connect from the server (ports 443/80) · RTT is real, not ICMP"
+          >
+            <Info className="h-3.5 w-3.5" />
+          </span>
+          <span className="mx-0.5 self-stretch w-px bg-border" />
           {OS_LABELS.map(({ key, label }) => (
             <button
               key={key}
@@ -359,9 +368,6 @@ export function PingTerminal({ host, count, os }: PingTerminalProps) {
           </div>
         </div>
       </div>
-      <p className="mt-1 px-1 text-[11px] text-muted-foreground">
-        TCP connect from the server (ports 443/80) · RTT is real, not ICMP · login required
-      </p>
     </div>
   )
 }
