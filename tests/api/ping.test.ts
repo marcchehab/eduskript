@@ -34,7 +34,8 @@ vi.mock('node:net', () => {
 })
 
 import { getServerSession } from 'next-auth'
-import { POST, isBlockedIp } from '@/app/api/tools/ping/route'
+import { POST } from '@/app/api/tools/ping/route'
+import { isBlockedIp } from '@/lib/ssrf-guard'
 import { clearAllRateLimits } from '@/lib/rate-limit'
 
 const mockedSession = vi.mocked(getServerSession)
