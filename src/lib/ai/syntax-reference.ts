@@ -374,6 +374,34 @@ Three equivalent forms — all render the same player. Pick whichever reads best
 
 **Attributes:** \`id\`/\`data-id\` (video ID) OR \`playlist\`/\`data-playlist\` — one is required. \`startTime\`/\`data-start-time\` (seconds) and \`caption\`/\`data-caption\` are optional.`)
 
+  // GeoGebra
+  sections.push(`## GeoGebra Applets
+
+Embed an interactive GeoGebra applet by its online material id (the code at the end of a geogebra.org share link, e.g. \`geogebra.org/m/dNPHaqgb\`). Self-closing, lowercase tag, string attributes.
+
+\`\`\`html
+<geogebra material-id="dNPHaqgb" />
+<geogebra material-id="dNPHaqgb" height="500" show-toolbar="true" show-algebra-input="true" />
+\`\`\`
+
+**Attributes:** \`material-id\` (required), \`height\` (px — OPTIONAL; omit it and the applet auto-fits its content so nothing is clipped; set it only to pin a fixed height), \`width\` (px, default fits the page), \`show-toolbar\` and \`show-algebra-input\` (default off — a clean read-only embed), \`correct-when\` (name of a boolean object in the construction that is true when the answer is right — captures per-student correctness for the teacher's class tally). Students can use the applet without a GeoGebra account; on exam pages their construction is captured for grading automatically.`)
+
+  // Ping terminal
+  sections.push(`## Ping Terminal
+
+An interactive terminal where students type the ping command themselves
+(\`ping wairualodge.co.nz\`, \`ping -c 6 8.8.8.8\`). Useful where a school network
+blocks ICMP, since the measurement runs from the server. Self-closing, lowercase tag.
+
+\`\`\`html
+<ping />
+<ping host="wairualodge.co.nz" count="4" os="windows" />
+\`\`\`
+
+**Attributes (all optional):** \`host\` — auto-runs \`ping <host>\` once on first view as a demo, then students keep typing; \`count\` — probe count for that demo run (1–8, default 4); \`os\` — initial output style (\`linux\` | \`macos\` | \`windows\`; defaults to auto-detecting the viewer's OS). A top-right button switches the OS style live across all output. Students type \`ping [-c N] <host>\`; \`clear\` clears the screen; up/down arrows recall history.
+
+**Honest note:** it is NOT ICMP — it times a TCP connect (port 443, then 80) from the server. RTT, resolved IP and packet loss are real; \`bytes\`/\`icmp_seq\` are cosmetic and TTL is omitted. Because it runs from the server, RTT reflects the server's location, not the student's connection. **Requires a logged-in user**; private/internal addresses are blocked and requests are rate-limited.`)
+
   // Mermaid
   sections.push(`## Mermaid Diagrams
 
@@ -614,6 +642,10 @@ export function getCondensedSyntaxReference(): string {
 **Code-block copy button:** plain \`\`\`lang code blocks show a copy button; add \`copy=false\` (or \`no-copy\`) to the info string to hide it, \`copy\`/\`copy=true\` to force it. Hidden by default on exam pages.
 
 **YouTube:** \`![caption](https://youtu.be/VIDEO_ID?t=120)\` is the simplest form (alt becomes caption). Or \`<youtube id="VIDEO_ID" startTime={120} caption="..." />\`, or the underlying \`<youtube-embed data-id="VIDEO_ID" data-start-time="120" data-caption="..."></youtube-embed>\`. Use \`playlist\`/\`data-playlist\` for playlists.
+
+**GeoGebra:** \`<geogebra material-id="dNPHaqgb" [show-toolbar="true"] [correct-when="correct"] />\` — embeds an interactive GeoGebra applet by material id (from a geogebra.org share link); auto-fits height by default (add \`height="450"\` to pin). \`correct-when\` captures per-student correctness for the teacher's class tally.
+
+**Ping:** \`<ping [host="wairualodge.co.nz"] [count="4"] [os="linux|macos|windows"] />\` — interactive terminal; students type \`ping [-c N] host\`. Server-side TCP connect (not ICMP; works where school wifi blocks ICMP). RTT/IP/loss are real; \`host\` auto-runs a demo; requires login; private addresses blocked; top-right button switches OS style.
 
 **Mermaid:** \`\`\`mermaid fenced code block — renders natively, theme-aware.
 

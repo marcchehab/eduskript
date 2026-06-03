@@ -12,6 +12,7 @@
  */
 
 import { parseYoutubeUrl } from '@/lib/youtube-url'
+import { parseGeogebraUrl } from '@/lib/geogebra'
 
 export interface PasteMenuOption {
   /** Display label, e.g. "Embed image" */
@@ -58,6 +59,14 @@ export function classifyPaste(source: PasteSource): PasteIntent | null {
   // embed; we only need ![](url) for it to fire.
   if (parseYoutubeUrl(text)) {
     return { kind: 'insert', text: `![](${text})` }
+  }
+
+  // GeoGebra share link (or embed-iframe snippet) — direct insert as a
+  // <geogebra> tag. Pasting the geogebra.org link a teacher copied from Share
+  // turns it into a live applet.
+  const ggbId = parseGeogebraUrl(text)
+  if (ggbId) {
+    return { kind: 'insert', text: `<geogebra material-id="${ggbId}" />` }
   }
 
   // Image URL — menu with two options.

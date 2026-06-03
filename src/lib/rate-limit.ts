@@ -194,6 +194,18 @@ export const mcpTokenRateLimiter = new RateLimiter('mcp-token', {
 })
 
 /**
+ * Ping tool rate limiter: 20 probes per minute per IP.
+ * The /api/tools/ping endpoint opens real TCP connections to author-specified
+ * hosts; this throttles per-IP to bound outbound-connection volume (a class
+ * hitting the same host at once still looks like a SYN burst from Koyeb's IP).
+ * Keyed by IP, not user, because the widget renders on public/anonymous pages.
+ */
+export const pingRateLimiter = new RateLimiter('ping', {
+  interval: 60 * 1000, // 1 minute
+  maxRequests: 20
+})
+
+/**
  * Extracts client identifier from request headers
  * Tries multiple headers to get the real IP address
  * @param request - The incoming request

@@ -326,6 +326,36 @@ function findInReact(node: any, predicate: (n: any) => boolean): boolean {
   return false
 }
 
+describe('GeoGebra tag sanitization', () => {
+  // Guards the sanitizeSchema allowlist edit: without `geogebra` in tagNames +
+  // attributes, rehype-sanitize silently strips the tag and the component never
+  // renders. Mirrors the compileMarkdown pipeline (raw HTML → sanitize).
+  function runSanitize(markdown: string) {
+    const schema = structuredClone(sanitizeSchema)
+    const processor = unified()
+      .use(remarkParse)
+      .use(remarkRehype, { allowDangerousHtml: true })
+      .use(rehypeRaw)
+      .use(rehypeSanitize, schema)
+    return processor.run(processor.parse(markdown))
+  }
+
+  it('keeps <geogebra> and its material-id + height', async () => {
+    const hast = await runSanitize('<geogebra material-id="dNPHaqgb" height="450" />')
+    const node = findNode(hast, (n: any) => n.tagName === 'geogebra')
+    expect(node).toBeTruthy()
+    expect(node?.properties?.['material-id'] ?? node?.properties?.materialId).toBe('dNPHaqgb')
+    expect(String(node?.properties?.height)).toBe('450')
+  })
+
+  it('keeps show-toolbar / show-algebra-input attributes', async () => {
+    const hast = await runSanitize('<geogebra material-id="abc12345" show-toolbar="true" show-algebra-input="true" />')
+    const node = findNode(hast, (n: any) => n.tagName === 'geogebra')
+    expect(node?.properties?.['show-toolbar']).toBe('true')
+    expect(node?.properties?.['show-algebra-input']).toBe('true')
+  })
+})
+
 /**
  * Helper function to find a node in the AST
  */
