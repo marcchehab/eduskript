@@ -39,6 +39,7 @@ import { rehypeColorClasses } from './rehype-plugins/color-classes'
 import { rehypeExternalLinks } from './rehype-plugins/external-links'
 import { rehypeStablePageLinks } from './rehype-plugins/stable-page-links'
 import { rehypeAlignTags } from './rehype-plugins/align-tags'
+import { rehypeSandboxIframes } from './rehype-plugins/sandbox-iframes'
 import { stripSlideDirectives } from './markdown-slides'
 import type { ResolvedPage } from './page-stable-link'
 
@@ -97,6 +98,7 @@ export const sanitizeSchema = {
     'geogebra', // Interactive GeoGebra applet (deployggb.js) by material id
     'ping', // Server-side TCP-connect "ping" terminal (not ICMP)
     'plugin', // User-created plugins rendered in sandboxed iframes
+    'iframe', // Raw embeds (geotraceroute, etc.) — sandbox forced post-sanitize by rehypeSandboxIframes
     'style', // <style> blocks for scoped CSS in markdown
     // SVG elements
     'svg', 'g', 'defs', 'symbol', 'use', 'title', 'desc',
@@ -132,6 +134,9 @@ export const sanitizeSchema = {
     // Per-document custom config attrs (font, mod, …) are added on the fly by
     // rehypeAllowPluginAttrs before sanitize — see rehype-plugins/plugin-attrs.ts.
     'plugin': ['src', 'id', 'height', 'width'],
+    // iframe: 'sandbox' is intentionally omitted — rehypeSandboxIframes forces
+    // a safe value after sanitize so authors can't weaken it.
+    'iframe': ['src', 'width', 'height', 'title', 'loading', 'allowfullscreen', 'frameborder', 'className', 'style'],
     'pdf': ['src', 'height'],
     // GeoGebra applet. material-id (online) is the primary source; src is
     // reserved for a future uploaded .ggb. Both kebab + camel for HAST/raw-HTML.
@@ -438,6 +443,7 @@ export async function compileMarkdown(
     .use(rehypeExternalLinks) // Auto target=_blank for external links + title="_blank" opt-in
     .use(rehypeStablePageLinks, resolvedStableLinks) // Rewrite /p/{id} → canonical URL
     .use(rehypeSanitize, schema)
+    .use(rehypeSandboxIframes) // Force a safe sandbox on iframes that survived sanitize
     .use(rehypeList)
     // Source-line attributes, with the lineMap so preview line numbers match
     // the editor's original lines (preprocessing shifted them).
