@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useContext, type ReactNode } from 'react'
+import { EagerMountContext } from '@/components/public/code-editor/deferred-mount'
 import { useSyncedUserData } from '@/lib/userdata'
 import { useExamReview } from '@/contexts/exam-review-context'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
@@ -78,7 +79,11 @@ export function StageFlow({
   const marker = markers[reveal]
 
   return (
-    <>
+    // Force-mount editors inside stages: a stage's content is only added to the
+    // DOM when reached (see slice below), so deferred/lazy mounting would show a
+    // placeholder + rely on IntersectionObserver for just-revealed content
+    // mid-exam. Eager mount makes a revealed stage fully interactive at once.
+    <EagerMountContext.Provider value={true}>
       {stages.slice(0, reveal + 1).map((node, i) => {
         // When reviewing, every stage is fully interactive (teacher grades all
         // sections; a returned-exam student just reads). Only the live exam
@@ -125,6 +130,6 @@ export function StageFlow({
           />
         </div>
       )}
-    </>
+    </EagerMountContext.Provider>
   )
 }
