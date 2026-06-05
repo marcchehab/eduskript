@@ -144,34 +144,55 @@ export function ExamReviewProvider({ pageId, mode, studentId, children }: Provid
   // overwrite the current one (the panel appears to "switch" to another student
   // ~1s later). We apply only the most-recent request's result.
   const reqSeq = useRef(0)
+  // The student selected RIGHT NOW. A deferred load() — the debounced
+  // refreshGrades, the reload after setOverride/setFeedback, or a retry — carries
+  // a closure pointing at the student that was selected when it was scheduled.
+  // If the teacher switched in the meantime, that stale load must NOT run:
+  // loading the previous student here would store their loadedStudentId and bump
+  // seq, discarding the current student's load and leaving the panel stuck blank.
+  const currentSidRef = useRef<string | null>(studentId)
 
-  const load = useCallback(() => {
+  const load = useCallback((attempt = 0) => {
     if (!studentId) {
       reqSeq.current++ // invalidate any in-flight load
       setState(empty)
       return
     }
+    // Drop a stale deferred load whose student is no longer selected.
+    if (studentId !== currentSidRef.current) return
     const seq = ++reqSeq.current
     const sid = studentId
     setLoading(true)
-    fetch(`/api/exams/${pageId}/review?studentId=${encodeURIComponent(studentId)}`, { cache: 'no-store' })
+    fetch(`/api/exams/${pageId}/review?studentId=${encodeURIComponent(sid)}`, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((j) => {
         if (seq !== reqSeq.current) return // superseded by a newer load — discard
-        // Extra guard: ignore a response whose student doesn't match the request.
-        if (j.studentId && j.studentId !== sid) return
+        if (j.studentId && j.studentId !== sid) return // response for a different student
         const byComponent: Record<string, ComponentReview> = {}
         for (const c of j.components as ComponentReview[]) byComponent[c.componentId] = c
         setState({ grade: j.grade, totalEarned: j.totalEarned, totalMax: j.totalMax, byComponent, loadedStudentId: sid })
+        setLoading(false)
       })
-      .catch(() => { if (seq === reqSeq.current) setState(empty) })
-      .finally(() => { if (seq === reqSeq.current) setLoading(false) })
+      .catch(() => {
+        if (seq !== reqSeq.current || sid !== currentSidRef.current) return // superseded/switched
+        // Transient failure for the current student: retry (bounded) so the
+        // panel self-heals instead of stranding on the loading skeleton.
+        if (attempt < 3) {
+          setTimeout(() => {
+            if (sid === currentSidRef.current && seq === reqSeq.current) load(attempt + 1)
+          }, 500 * (attempt + 1))
+        } else {
+          setState(empty)
+          setLoading(false)
+        }
+      })
   }, [pageId, studentId])
 
   useEffect(() => {
-    // No reset when studentId clears: consumers gate on `active`, so stale
-    // state isn't observable (mirrors student-snapshot-context).
-    if (!studentId) return
+    // Mark the current student BEFORE loading so a concurrently-firing stale
+    // deferred load (from the previous student) is dropped by the guard above.
+    if (!studentId) { currentSidRef.current = null; return }
+    currentSidRef.current = studentId
     load()
   }, [studentId, load])
 
