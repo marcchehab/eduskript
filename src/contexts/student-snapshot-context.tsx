@@ -13,12 +13,10 @@
  * teacher's own view see undefined and continue with their normal load path.
  */
 
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
 import { useRealtimeEvents } from '@/hooks/use-realtime-events'
-import { createLogger } from '@/lib/logger'
-
-const log = createLogger('student-snapshot')
+import { useStudentScopedFetch } from '@/hooks/use-student-scoped-fetch'
 
 export interface StudentSnapshot {
   componentId: string
@@ -59,9 +57,6 @@ export function StudentSnapshotProvider({ pageId, enabled = true, children }: Pr
   const studentId = enabled && isTeacher ? selectedStudent?.id ?? null : null
   const isViewing = studentId !== null
 
-  const [snapshots, setSnapshots] = useState<Record<string, StudentSnapshot> | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [refetchToken, setRefetchToken] = useState(0)
 
   // Refetch when the viewed student progresses. Two channels:
@@ -81,50 +76,21 @@ export function StudentSnapshotProvider({ pageId, enabled = true, children }: Pr
     { enabled: isViewing }
   )
 
-  useEffect(() => {
-    if (!studentId) return
+  // Identity-guarded fetch: `snapshots` is the CURRENT student's checkpoints or
+  // null (loading / mismatch). Out-of-order responses for a previously-selected
+  // student are discarded, so a slow earlier response can never overwrite the
+  // current student's view. See useStudentScopedFetch.
+  const { data: snapshots, isLoading, error } = useStudentScopedFetch<Record<string, StudentSnapshot>>(
+    studentId,
+    [pageId, refetchToken],
+    (sid, signal) =>
+      fetch(`/api/exams/${pageId}/student-snapshot?studentId=${encodeURIComponent(sid)}`, { signal, cache: 'no-store' })
+        .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
+        .then((j: { snapshots?: Record<string, StudentSnapshot> }) => j.snapshots ?? {}),
+  )
 
-    let cancelled = false
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional: fetch lifecycle markers (loading on, loading off in .finally).
-    setIsLoading(true)
-
-    fetch(`/api/exams/${pageId}/student-snapshot?studentId=${encodeURIComponent(studentId)}`, {
-      cache: 'no-store',
-    })
-      .then(async (res) => {
-        if (!res.ok) {
-          throw new Error(`${res.status}`)
-        }
-        return res.json()
-      })
-      .then((data: { snapshots: Record<string, StudentSnapshot> }) => {
-        if (cancelled) return
-        setSnapshots(data.snapshots ?? {})
-        setError(null)
-        log('loaded', { count: Object.keys(data.snapshots ?? {}).length, studentId })
-      })
-      .catch((err) => {
-        if (cancelled) return
-        setSnapshots({})
-        setError(String(err?.message ?? err))
-      })
-      .finally(() => {
-        if (cancelled) return
-        setIsLoading(false)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [pageId, studentId, refetchToken])
-
-  // No "clear on exit" effect — consumers only read `snapshots` when
-  // `isViewing` is true (gated by studentId), so stale entries sitting in
-  // memory after the teacher exits view mode aren't observable. Skipping
-  // the clear keeps this effect lint-clean (no synchronous setState in an
-  // effect body) and avoids a wasted re-render every time view mode toggles.
   const value = useMemo<StudentSnapshotContextValue>(
-    () => ({ isViewing, snapshots: isViewing ? snapshots : null, isLoading, error }),
+    () => ({ isViewing, snapshots, isLoading, error }),
     [isViewing, snapshots, isLoading, error]
   )
 

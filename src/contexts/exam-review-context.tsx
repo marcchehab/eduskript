@@ -296,7 +296,13 @@ export function useComponentReview(componentId: string): {
     pageId: ctx.pageId,
     studentId: ctx.studentId,
     loadedStudentId: ctx.loadedStudentId,
-    review: ctx.active ? ctx.byComponent[componentId] ?? null : null,
+    // Airtight gate: only surface review data that was loaded for the CURRENTLY
+    // selected student. During the switch gap (loadedStudentId still the previous
+    // student) this returns null → consumers render loading, never stale data.
+    review:
+      ctx.active && ctx.loadedStudentId === ctx.studentId
+        ? ctx.byComponent[componentId] ?? null
+        : null,
     setOverride: (awardedPoints) => ctx.setOverride(componentId, awardedPoints),
     setFeedback: (feedback) => ctx.setFeedback(componentId, feedback),
     clearOverride: () => ctx.clearOverride(componentId),

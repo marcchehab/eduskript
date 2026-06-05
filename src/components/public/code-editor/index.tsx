@@ -2079,6 +2079,21 @@ export const CodeEditor = memo(function CodeEditor({
     applyDataToEditor({ files: originalInitialFiles.current, activeFileIndex: 0 })
   }, [isViewingSnapshot, snapshotLoading, studentSnapshot, selectedStudent?.id, applyDataToEditor])
 
+  // Airtight: the instant the teacher switches students, blank the editor to the
+  // exercise default so the PREVIOUS student's code can never linger during the
+  // load gap (the effect above re-applies the new student's snapshot once it
+  // lands). A same-student realtime refetch doesn't change the id, so no flicker.
+  const appliedForStudentRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!isViewingSnapshot) { appliedForStudentRef.current = null; return }
+    const sid = selectedStudent?.id ?? 'none'
+    if (appliedForStudentRef.current !== null && appliedForStudentRef.current !== sid) {
+      lastAppliedSnapshotRef.current = null
+      applyDataToEditor({ files: originalInitialFiles.current, activeFileIndex: 0 })
+    }
+    appliedForStudentRef.current = sid
+  }, [isViewingSnapshot, selectedStudent?.id, applyDataToEditor])
+
   // Full snapshot history for the viewed student + this component (the dropdown
   // beneath the editor). Fetched on demand in snapshot-view mode. Picking an
   // entry applies its payload via applyDataToEditor — scratch only, no save.
@@ -2091,14 +2106,28 @@ export const CodeEditor = memo(function CodeEditor({
   // Ref so the (once-created) editor updateListener reads the live value.
   const isViewingSnapshotRef = useRef(isViewingSnapshot)
   useEffect(() => { isViewingSnapshotRef.current = isViewingSnapshot }, [isViewingSnapshot])
+  // Snapshot history list for the CURRENT student only. Monotonic request id +
+  // AbortController so an out-of-order response for a previously-selected student
+  // is discarded; the cleanup clears the list on switch so the dropdown never
+  // shows the prior student's versions during the load gap.
+  const snapListReqSeq = useRef(0)
   useEffect(() => {
     if (!isViewingSnapshot || !pageId || !selectedStudent?.id) return
-    let cancelled = false
-    fetch(`/api/exams/${pageId}/component-snapshots?studentId=${encodeURIComponent(selectedStudent.id)}&componentId=${encodeURIComponent(componentId)}`)
+    const sid = selectedStudent.id
+    const seq = ++snapListReqSeq.current
+    const ctrl = new AbortController()
+    fetch(`/api/exams/${pageId}/component-snapshots?studentId=${encodeURIComponent(sid)}&componentId=${encodeURIComponent(componentId)}`, { signal: ctrl.signal })
       .then((r) => (r.ok ? r.json() : { snapshots: [] }))
-      .then((j) => { if (!cancelled) { setSnapList(j.snapshots ?? []); setViewedSnapshotId(null); setEditedSinceSnapshot(false) } })
-      .catch(() => { if (!cancelled) setSnapList([]) })
-    return () => { cancelled = true }
+      .then((j) => { if (seq === snapListReqSeq.current) { setSnapList(j.snapshots ?? []); setViewedSnapshotId(null); setEditedSinceSnapshot(false) } })
+      .catch(() => { if (!ctrl.signal.aborted && seq === snapListReqSeq.current) setSnapList([]) })
+    // Abort the in-flight fetch and clear the list on switch/unmount so the prior
+    // student's versions never show during the load gap. (The next run bumps the
+    // seq, which also discards any late response from this one.)
+    return () => {
+      ctrl.abort()
+      setSnapList([])
+      setViewedSnapshotId(null)
+    }
   }, [isViewingSnapshot, pageId, selectedStudent?.id, componentId])
 
   // Load a snapshot into the editor (scratch view — never writes the snapshot).

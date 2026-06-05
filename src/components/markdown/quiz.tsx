@@ -885,6 +885,22 @@ function SyncedQuestion({
     )
   }
 
+  // Grade mode: the displayed answer MUST be the selected student's (from the
+  // review context). While `review` is null — loading, or a just-switched student
+  // whose data hasn't landed — show the skeleton; never fall back to `data` (the
+  // teacher's own IndexedDB answer) or a stale student's payload.
+  if (reviewActive && reviewModeType === 'grade' && !review) {
+    return (
+      <div className="border rounded-lg p-4 animate-pulse">
+        <div className="h-4 bg-muted rounded w-3/4 mb-4" />
+        <div className="space-y-2">
+          <div className="h-12 bg-muted rounded" />
+          <div className="h-12 bg-muted rounded" />
+        </div>
+      </div>
+    )
+  }
+
   const effectiveData =
     reviewActive && reviewModeType === 'grade' && review?.answerPayload
       ? (review.answerPayload as QuizData)

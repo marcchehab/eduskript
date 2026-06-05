@@ -83,7 +83,10 @@ function GradingBar({
   studentName: string | null
 }) {
   const dialog = useAlertDialog()
-  const { runningChecks, rerunChecks, refreshGrades, totalEarned, totalMax, grade } = useExamReview()
+  const { runningChecks, rerunChecks, refreshGrades, totalEarned, totalMax, grade, loadedStudentId } = useExamReview()
+  // Only trust the totals when they were loaded for the currently-selected student
+  // (during a switch the previous student's totals linger until the refetch lands).
+  const totalsForCurrent = loadedStudentId === studentId
   const { sidebarWidth } = useLayout()
   const [busy, setBusy] = useState(false)
   const [runAll, setRunAll] = useState<{ done: number; total: number } | null>(null)
@@ -156,7 +159,7 @@ function GradingBar({
         style={{ left: `calc(${sidebarWidth}px + (100% - ${sidebarWidth}px) / 2)`, transform: 'translateX(-50%)' }}
       >
         <span className="px-1 text-xs text-muted-foreground">Grading</span>
-        {studentId && totalMax != null && (
+        {studentId && totalsForCurrent && totalMax != null && (
           <span className="flex items-center gap-1.5 rounded-md bg-muted/60 px-2.5 py-0.5 text-sm tabular-nums">
             <span className="font-medium">{fmt(totalEarned ?? 0)} / {fmt(totalMax)}</span>
             <span className="text-xs text-muted-foreground">pts</span>
@@ -164,6 +167,9 @@ function GradingBar({
               <span className="ml-1 border-l border-border pl-2 font-semibold">{fmt(grade)}</span>
             )}
           </span>
+        )}
+        {studentId && !totalsForCurrent && (
+          <span className="rounded-md bg-muted/60 px-2.5 py-0.5 text-sm text-muted-foreground">…</span>
         )}
         {studentId && (
           <Button size="sm" variant="ghost" disabled={runningChecks} onClick={() => rerunChecks()} title="Re-run this student's code checks on this device">
