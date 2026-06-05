@@ -541,25 +541,50 @@ export function CodeScorePanel({
                 </div>
               </div>
             ) : (
-              /* No rubric → single absolute manual score (legacy behaviour). */
-              <div className="flex items-center gap-1.5 rounded-md border px-2 py-1 text-sm">
-                <span className="text-xs text-muted-foreground">Points</span>
-                <input
-                  type="number"
-                  step="0.1"
-                  className="h-7 w-12 rounded border bg-background px-1 text-right tabular-nums"
-                  value={abs}
-                  onFocus={() => { setAbsDraft(overrideEarned == null ? '' : fmt(overrideEarned)); setEditingAbs(true) }}
-                  onChange={(e) => setAbsDraft(e.target.value)}
-                  onBlur={() => { setEditingAbs(false); saveAbs(absDraft) }}
-                />
-                <span className="tabular-nums text-muted-foreground">/ {fmt(max)}</span>
-                {override != null && (
-                  <button type="button" title="Clear manual score" className="ml-auto text-muted-foreground hover:text-destructive" onClick={() => clearOverride()}>
-                    <Trash2 className="h-3.5 w-3.5" />
+              /* No rubric yet → offer to generate/start one, plus a single
+                 absolute manual score as a fallback. */
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <span>No rubric yet.</span>
+                  <button
+                    type="button"
+                    onClick={generateRubric}
+                    disabled={rubricBusy}
+                    className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 hover:bg-accent/50 disabled:opacity-50"
+                    title="Generate a rubric from the AI (samples the class)"
+                  >
+                    {rubricBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
+                    Generate rubric
                   </button>
-                )}
-                <span className="ml-2 text-xs text-muted-foreground">No rubric — generate one for per-criterion scoring.</span>
+                  <span>or</span>
+                  <button
+                    type="button"
+                    onClick={() => { setRubricDraft([{ id: 'c1', description: '', points: 0 }]); setRubricDirty(true) }}
+                    className="rounded border px-1.5 py-0.5 hover:bg-accent/50"
+                  >
+                    start one manually
+                  </button>
+                </div>
+                <div className="flex items-center gap-1.5 rounded-md border px-2 py-1 text-sm">
+                  <span className="text-xs text-muted-foreground">Points</span>
+                  <input
+                    type="number"
+                    step="0.1"
+                    className="h-7 w-12 rounded border bg-background px-1 text-right tabular-nums"
+                    value={abs}
+                    onFocus={() => { setAbsDraft(overrideEarned == null ? '' : fmt(overrideEarned)); setEditingAbs(true) }}
+                    onChange={(e) => setAbsDraft(e.target.value)}
+                    onBlur={() => { setEditingAbs(false); saveAbs(absDraft) }}
+                  />
+                  <span className="tabular-nums text-muted-foreground">/ {fmt(max)}</span>
+                  {override != null && (
+                    <button type="button" title="Clear manual score" className="ml-auto text-muted-foreground hover:text-destructive" onClick={() => clearOverride()}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  <span className="ml-2 text-xs text-muted-foreground">or score manually without a rubric.</span>
+                </div>
+                {aiErr && <p className="text-xs text-destructive">{aiErr}</p>}
               </div>
             )}
 

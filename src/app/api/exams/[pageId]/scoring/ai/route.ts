@@ -29,6 +29,22 @@ export const runtime = 'nodejs'
 
 const CONCURRENCY = 4
 
+/** Score one submission, retrying TRANSIENT failures (provider timeout / rate
+ *  limit) with backoff. Deterministic failures (unparseable output) are returned
+ *  immediately — retrying them with the fixed seed would just fail again. */
+async function scoreWithRetry(
+  input: Parameters<typeof scoreSubmission>[0],
+  attempts = 3,
+): Promise<Awaited<ReturnType<typeof scoreSubmission>>> {
+  let res = await scoreSubmission(input)
+  for (let i = 1; i < attempts && 'error' in res; i++) {
+    if (/parse|no usable criteria/i.test(res.error)) break // deterministic → don't retry
+    await new Promise((r) => setTimeout(r, 500 * 2 ** (i - 1))) // 0.5s, 1s backoff
+    res = await scoreSubmission(input)
+  }
+  return res
+}
+
 async function teacherStudentIds(userId: string, pageId: string): Promise<string[]> {
   const rows = await prisma.classMembership.findMany({
     where: { class: { teacherId: userId, pageUnlocks: { some: { pageId } } } },
@@ -110,7 +126,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     await pool(studentIds, CONCURRENCY, async (sid) => {
       const sub = subs.get(sid)
       if (!sub || sub.empty) return // nothing submitted → leave to the check source
-      const res = await scoreSubmission({
+      const res = await scoreWithRetry({
         pageContext: content,
         label: c.label,
         criteria,

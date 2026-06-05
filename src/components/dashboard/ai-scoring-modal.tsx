@@ -75,6 +75,7 @@ export function AiScoringModal({
   const [savingId, setSavingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [scoreErrors, setScoreErrors] = useState<{ componentId: string; studentId?: string; error: string }[]>([])
 
   const load = useCallback(() => {
     setLoading(true)
@@ -94,6 +95,7 @@ export function AiScoringModal({
     if (open) {
       setError(null)
       setNotice(null)
+      setScoreErrors([])
       setSelected(new Set(questions.filter(aiScorableByDefault).map((q) => q.componentId)))
       load()
     }
@@ -163,7 +165,7 @@ export function AiScoringModal({
   }
 
   const scoreAll = async () => {
-    setScoring(true); setError(null); setNotice(null)
+    setScoring(true); setError(null); setNotice(null); setScoreErrors([])
     try {
       const res = await fetch(`/api/exams/${pageId}/scoring/ai`, {
         method: 'POST',
@@ -172,8 +174,9 @@ export function AiScoringModal({
       })
       if (!res.ok) throw new Error(String(res.status))
       const j = await res.json()
-      const errs = Array.isArray(j.errors) ? j.errors.length : 0
-      setNotice(`AI-scored ${j.scored} submission${j.scored === 1 ? '' : 's'}${errs ? ` · ${errs} error(s)` : ''}.`)
+      const errs: typeof scoreErrors = Array.isArray(j.errors) ? j.errors : []
+      setScoreErrors(errs)
+      setNotice(`AI-scored ${j.scored} submission${j.scored === 1 ? '' : 's'}${errs.length ? ` · ${errs.length} error(s) — see below` : ''}.`)
       onScored()
     } catch {
       setError('AI scoring failed.')
@@ -181,6 +184,20 @@ export function AiScoringModal({
       setScoring(false)
     }
   }
+
+  // Group the failures by question + reason so the teacher sees what to fix /
+  // re-score, instead of an opaque "N errors" count.
+  const groupedErrors = (() => {
+    const labelOf = (id: string) => questions.find((q) => q.componentId === id)?.label ?? id
+    const map = new Map<string, { label: string; error: string; count: number }>()
+    for (const e of scoreErrors) {
+      const key = `${e.componentId}::${e.error}`
+      const g = map.get(key) ?? { label: labelOf(e.componentId), error: e.error, count: 0 }
+      g.count++
+      map.set(key, g)
+    }
+    return [...map.values()]
+  })()
 
   // A rubric is needed before scoring; count rubrics among the selected set.
   const selectedWithRubric = [...selected].filter((id) => rubrics[id]).length
@@ -213,6 +230,19 @@ export function AiScoringModal({
 
         {error && <p className="text-sm text-destructive">{error}</p>}
         {notice && <p className="text-sm text-green-600">{notice}</p>}
+        {groupedErrors.length > 0 && (
+          <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs">
+            <p className="mb-1 font-medium text-amber-700 dark:text-amber-400">Not scored — re-run to retry:</p>
+            <ul className="!m-0 space-y-0.5 !p-0 !list-none">
+              {groupedErrors.map((g, i) => (
+                <li key={i} className="!m-0 flex gap-2 !p-0 marker:content-['']">
+                  <span className="shrink-0 font-medium">{g.count}×</span>
+                  <span className="min-w-0"><span className="text-muted-foreground">{g.label}:</span> {g.error}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span>{selected.size} / {questions.length} selected</span>

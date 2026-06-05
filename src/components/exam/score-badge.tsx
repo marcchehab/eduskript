@@ -12,9 +12,12 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { RotateCcw } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { useComponentReview } from '@/contexts/exam-review-context'
 
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
+// Mirror the teacher panel's tints: your score (plain) | rubric (blue).
+const RUBRIC_BG = 'bg-sky-50 dark:bg-sky-950/30'
 
 export function ScoreBadge({ componentId }: { componentId: string }) {
   const { active, mode, review, setOverride, setFeedback } = useComponentReview(componentId)
@@ -65,15 +68,69 @@ export function ScoreBadge({ componentId }: { componentId: string }) {
   const tone = review.earned >= review.max ? 'border-green-500/40 bg-green-500/10' : 'border-amber-500/40 bg-amber-500/10'
 
   if (mode === 'review') {
+    // Read-only per-criterion breakdown — the same view the teacher edits, but the
+    // student can't change it. Effective value per criterion = override ?? AI.
+    const aiCrit = new Map(
+      (((review.sources?.find((s) => s.source === 'ai')?.meta as { criteria?: { id: string; points: number; comment?: string }[] } | null)?.criteria) ?? []).map((c) => [c.id, c]),
+    )
+    const ovCrit = new Map(
+      (((review.sources?.find((s) => s.source === 'override')?.meta as { criteria?: { id: string; points?: number; comment?: string }[] } | null)?.criteria) ?? []).map((c) => [c.id, c]),
+    )
+    const rubricCriteria = review.rubric?.criteria ?? []
+    const showBreakdown = rubricCriteria.length > 0 && (aiCrit.size > 0 || ovCrit.size > 0)
+    const rubricSum = Math.round(rubricCriteria.reduce((s, c) => s + (Number(c.points) || 0), 0) * 10) / 10
     return (
-      <div className="mt-2 space-y-1.5">
-        <div className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm font-medium ${tone}`}>
-          <span className="tabular-nums">{fmt(review.earned)} / {fmt(review.max)}</span>
-          <span className="text-muted-foreground font-normal">pts</span>
-        </div>
+      // not-prose: the exam content is rendered inside `.prose`, which would force
+      // a large font-size onto our <p>/<span> text — strip it so our sizing applies.
+      <div className="mt-2 space-y-1.5 not-prose">
+        {showBreakdown ? (
+          // Same two-column mask the teacher edits — read-only for the student.
+          <div className="overflow-hidden rounded-md border">
+            <div className="flex border-b text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <div className="flex-1 px-2 py-1">Your score</div>
+              <div className={cn('flex-1 px-2 py-1', RUBRIC_BG)}>Rubric</div>
+            </div>
+            {rubricCriteria.map((rc, i) => {
+              const ov = ovCrit.get(rc.id)
+              const ai = aiCrit.get(rc.id)
+              const points = ov?.points ?? ai?.points ?? null
+              const comment = ov?.comment ?? ai?.comment ?? null
+              return (
+                <div key={rc.id} className={cn('flex items-stretch', i > 0 && 'border-t')}>
+                  {/* LEFT — your comment + points */}
+                  <div className="flex flex-1 items-start gap-1.5 px-2 py-1 text-xs">
+                    <p className="!my-0 min-w-0 flex-1 whitespace-pre-wrap">
+                      {comment ?? <span className="text-muted-foreground">—</span>}
+                    </p>
+                    <span className="w-10 shrink-0 text-right font-medium tabular-nums">{points == null ? '–' : fmt(points)}</span>
+                  </div>
+                  {/* RIGHT — the rubric criterion */}
+                  <div className={cn('flex flex-1 items-start gap-1.5 px-2 py-1 text-xs', RUBRIC_BG)}>
+                    <span className="w-10 shrink-0 text-right tabular-nums text-muted-foreground">/ {fmt(rc.points)}</span>
+                    <p className="!my-0 min-w-0 flex-1">{rc.description}</p>
+                  </div>
+                </div>
+              )
+            })}
+            <div className="flex border-t text-xs">
+              <div className="flex flex-1 items-center justify-end gap-1.5 px-2 py-1">
+                <span className="w-10 text-right font-semibold tabular-nums">Σ {fmt(review.earned)}</span>
+              </div>
+              <div className={cn('flex flex-1 items-center gap-1.5 px-2 py-1', RUBRIC_BG)}>
+                <span className="w-10 text-right font-semibold tabular-nums">/ {fmt(rubricSum)}</span>
+                <span className="text-muted-foreground">pts</span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm font-medium ${tone}`}>
+            <span className="tabular-nums">{fmt(review.earned)} / {fmt(review.max)}</span>
+            <span className="text-muted-foreground font-normal">pts</span>
+          </div>
+        )}
         {review.feedback && (
-          <div className="rounded-md border border-border bg-muted/40 px-2.5 py-1.5 text-sm">
-            <span className="text-xs font-medium text-muted-foreground">Feedback</span>
+          <div className="rounded-md border border-border bg-muted/40 px-2 py-1 text-xs">
+            <span className="font-medium text-muted-foreground">Feedback</span>
             <p className="mt-0.5 whitespace-pre-wrap">{review.feedback}</p>
           </div>
         )}
