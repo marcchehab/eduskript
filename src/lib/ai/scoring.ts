@@ -102,14 +102,29 @@ function withGuidance(base: string, guidance?: string): string {
   return `${base}\n\nTEACHER / ORGANIZATION GUIDELINES — follow these for language, spelling, style, and terminology (they override defaults):\n${guidance}`
 }
 
-async function complete(system: string, user: string, maxTokens: number): Promise<string> {
+/** Fixed seed for SCORING so re-scoring the same submission is reproducible
+ *  (combined with temperature 0). Different submissions are different prompts, so
+ *  they still score independently; only an identical re-score is pinned. */
+const SCORING_SEED = 7
+
+async function complete(
+  system: string,
+  user: string,
+  maxTokens: number,
+  opts: { temperature?: number; seed?: number } = {},
+): Promise<string> {
   const res = await client().chat.completions.create({
     model: scoringModel(),
     max_tokens: maxTokens,
+    // Force well-formed JSON: the model occasionally emitted slightly malformed
+    // JSON (e.g. a dropped "{"), which the parser couldn't recover → a student
+    // silently went unscored. (Both prompts already say "Output STRICT JSON".)
+    response_format: { type: 'json_object' },
     messages: [
       { role: 'system', content: system },
       { role: 'user', content: user },
     ],
+    ...opts,
     ...(openrouterProviderRouting() as Record<string, unknown>),
   })
   return res.choices[0]?.message?.content ?? ''
@@ -274,7 +289,12 @@ export async function scoreSubmission(
 ): Promise<AiScoreResult | { error: string }> {
   let text: string
   try {
-    text = await complete(withGuidance(SCORE_SYSTEM, input.guidance), buildScoreUserPrompt(input), 3072)
+    // temperature 0 + a fixed seed → reproducible scoring (no more run-to-run
+    // "lottery"). Rubric generation keeps its default sampling for variety.
+    text = await complete(withGuidance(SCORE_SYSTEM, input.guidance), buildScoreUserPrompt(input), 3072, {
+      temperature: 0,
+      seed: SCORING_SEED,
+    })
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'LLM request failed' }
   }
