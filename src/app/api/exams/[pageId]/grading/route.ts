@@ -77,7 +77,7 @@ export async function GET(
       computeExamGrades(pageId, studentIds),
       prisma.examSubmission.findMany({
         where: { pageId, studentId: { in: studentIds } },
-        select: { studentId: true, submittedAt: true, returnedAt: true, score: true },
+        select: { studentId: true, submittedAt: true, returnedAt: true, score: true, source: true },
       }),
     ])
     const subByStudent = new Map(submissions.map((s) => [s.studentId, s]))
@@ -98,6 +98,7 @@ export async function GET(
         pseudonym: m.student.studentPseudonym,
         className: m.class?.name ?? null,
         status,
+        source: sub?.source ?? null,
         submittedAt: sub?.submittedAt ?? null,
         returnedAt: sub?.returnedAt ?? null,
         totalEarned: g.totalEarned,

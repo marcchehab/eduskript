@@ -136,6 +136,7 @@ export async function POST(request: NextRequest) {
         studentId: plaintext.meta.studentId,
         snapshots: plaintext.snapshots,
         label: 'recovered from offline backup',
+        source: 'recovery',
       })
     })
 

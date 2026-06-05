@@ -55,9 +55,11 @@ export async function applyHandinSnapshots(
     studentId: string
     snapshots: HandinSnapshot[]
     label?: string | null
+    /** How this submission was created — see ExamSubmission.source. Default "student". */
+    source?: string
   },
 ): Promise<ApplyHandinResult> {
-  const { pageId, studentId, snapshots, label } = args
+  const { pageId, studentId, snapshots, label, source } = args
 
   let alreadyExisted = false
   let submission = await tx.examSubmission.findUnique({
@@ -67,7 +69,7 @@ export async function applyHandinSnapshots(
     alreadyExisted = true
   } else {
     submission = await tx.examSubmission.create({
-      data: { pageId, studentId },
+      data: { pageId, studentId, source: source ?? 'student' },
     })
     // Audit log lives inside the same tx so a rolled-back submission
     // doesn't leave a spurious "submitted" event behind.

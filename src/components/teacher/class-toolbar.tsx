@@ -115,6 +115,8 @@ interface MergedRow {
   /** True when the user has any userData on this page. */
   hasSubmissionData: boolean
   examStatus: 'not_started' | 'taking' | 'submitted' | null
+  /** How the submission was created (ExamSubmission.source): student | teacher | recovery. */
+  examSource?: string | null
   startedAt?: string
   submittedAt?: string | null
   answerCount: number
@@ -266,6 +268,7 @@ export function ClassToolbar({
         inRoster: true,
         hasSubmissionData: false,
         examStatus: student.status,
+        examSource: student.source ?? null,
         startedAt: student.startedAt,
         submittedAt: student.submittedAt ?? null,
         answerCount: 0,
@@ -534,7 +537,7 @@ export function ClassToolbar({
                   const captionParts: string[] = []
                   if (row.answerCount > 0) captionParts.push(`${row.answerCount} ans`)
                   if (isExam) {
-                    const label = getStatusLabel(row.examStatus)
+                    const label = getStatusLabel(row.examStatus, row.examSource)
                     if (label && label !== '—') captionParts.push(label.toLowerCase())
                   }
                   // Time caption: prefer audit-derived duration on exam
@@ -1077,12 +1080,12 @@ function getStatusIcon(status: MergedRow['examStatus']) {
   }
 }
 
-function getStatusLabel(status: MergedRow['examStatus']) {
+function getStatusLabel(status: MergedRow['examStatus'], source?: string | null) {
   switch (status) {
     case 'taking':
       return 'Taking exam'
     case 'submitted':
-      return 'Submitted'
+      return source === 'teacher' ? 'Ended by teacher' : source === 'recovery' ? 'Recovered' : 'Submitted'
     case 'not_started':
       return 'Not started'
     default:

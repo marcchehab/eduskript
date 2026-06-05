@@ -50,6 +50,7 @@ interface StudentRow {
   pseudonym: string | null
   className: string | null
   status: 'not_started' | 'submitted' | 'returned'
+  source: string | null
   submittedAt: string | null
   returnedAt: string | null
   totalEarned: number
@@ -513,7 +514,7 @@ export default function ExamGradingPage() {
                   {s.status === 'not_started' ? '—' : fmt(s.grade)}
                 </td>
                 <td className="px-3 py-2">
-                  <StatusChip status={s.status} />
+                  <StatusChip status={s.status} source={s.source} />
                 </td>
                 <td className="px-3 py-2 text-right">
                   {s.status !== 'not_started' && (
@@ -648,10 +649,13 @@ function ExamOverview({ questions, students }: { questions: Question[]; students
   )
 }
 
-function StatusChip({ status }: { status: StudentRow['status'] }) {
+function StatusChip({ status, source }: { status: StudentRow['status']; source?: string | null }) {
+  // For a handed-in (not yet returned) exam, reflect HOW it was submitted.
+  const submittedLabel =
+    source === 'teacher' ? 'Ended by teacher' : source === 'recovery' ? 'Recovered' : 'Handed in'
   const map = {
     not_started: { label: 'Not started', cls: 'bg-muted text-muted-foreground' },
-    submitted: { label: 'Handed in', cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-400' },
+    submitted: { label: submittedLabel, cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-400' },
     returned: { label: 'Returned', cls: 'bg-green-500/15 text-green-700 dark:text-green-400' },
   }[status]
   return <span className={`inline-block rounded px-2 py-0.5 text-xs ${map.cls}`}>{map.label}</span>

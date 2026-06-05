@@ -23,6 +23,8 @@ export interface ExamRosterStudent {
   email: string | null
   studentPseudonym: string | null
   status: 'not_started' | 'taking' | 'submitted'
+  /** How the submission was created (ExamSubmission.source): student | teacher | recovery. */
+  source?: string
   startedAt?: string
   submittedAt?: string
 }

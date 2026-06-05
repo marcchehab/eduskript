@@ -24,6 +24,7 @@ interface StudentStatus {
   email: string | null
   studentPseudonym: string | null
   status: 'not_started' | 'taking' | 'submitted'
+  source?: string
   startedAt?: Date
   submittedAt?: Date
 }
@@ -132,7 +133,8 @@ export async function GET(
       },
       select: {
         studentId: true,
-        submittedAt: true
+        submittedAt: true,
+        source: true
       }
     })
 
@@ -160,6 +162,7 @@ export async function GET(
         email: m.student.email,
         studentPseudonym: m.student.studentPseudonym,
         status,
+        source: submission?.source,
         startedAt: activeSession?.createdAt,
         submittedAt: submission?.submittedAt
       }
@@ -270,8 +273,16 @@ export async function POST(
     // live UserData when there's no hand-in snapshot). Idempotent.
     if (action === 'force-submit') {
       const result = await prisma.$transaction((tx) =>
-        applyHandinSnapshots(tx, { pageId, studentId, snapshots: [], label: 'ended by teacher' }),
+        applyHandinSnapshots(tx, { pageId, studentId, snapshots: [], label: 'ended by teacher', source: 'teacher' }),
       )
+      // applyHandinSnapshots only sets source on CREATE; ensure an already-existing
+      // submission (e.g. a re-run, or one created before this field) is tagged too.
+      if (result.alreadyExisted) {
+        await prisma.examSubmission.update({
+          where: { pageId_studentId: { pageId, studentId } },
+          data: { source: 'teacher' },
+        })
+      }
       await eventBus.publish(`exam:${pageId}:${classId}`, {
         type: 'exam-student-status',
         pageId,

@@ -1049,6 +1049,13 @@ model ExamSubmission {
   pageId      String   @map("page_id")
   studentId   String   @map("student_id")
   submittedAt DateTime @default(now()) @map("submitted_at")
+  // How the submission was created. Open-ended (like ComponentScore.source) so a
+  // new origin doesn't need a schema change:
+  //   "student"  — the student handed in (default)
+  //   "teacher"  — the teacher ended it on the student's behalf (crashed machine)
+  //   "recovery" — imported via offline/crash recovery
+  //   <future>   — e.g. timeout / auto-submit
+  source String @default("student")
 
   // Scoring. `score` is the aggregate points earned (not the 1-6 grade), written
   // on return. Status is derived: submitted (returnedAt null) -> scored (score
