@@ -39,6 +39,7 @@ import {
   User,
   Circle,
   RotateCcw,
+  Send,
   DoorOpen,
   Lock,
   Unlock,
@@ -176,6 +177,7 @@ export function ClassToolbar({
   const [isUpdating, setIsUpdating] = useState(false)
   const [isExpanded, setIsExpanded] = useState(false)
   const [reopeningStudent, setReopeningStudent] = useState<string | null>(null)
+  const [endingStudent, setEndingStudent] = useState<string | null>(null)
   const [deletingUser, setDeletingUser] = useState<string | null>(null)
   // Roster sort is fixed to most-recently-active first; sortable headers
   // were dropped when the table was compacted into a vertical list for the
@@ -365,6 +367,31 @@ export function ClassToolbar({
       console.error('Error reopening exam for student:', error)
     } finally {
       setReopeningStudent(null)
+    }
+  }
+
+  // End (hand in) the exam ON BEHALF of a student who never handed in — e.g. their
+  // machine crashed. Creates the submission so they show up in grading with their
+  // autosaved answers. Reversible via Reopen.
+  const endForStudent = async (studentId: string) => {
+    if (!selectedClass) return
+    setEndingStudent(studentId)
+    try {
+      const response = await fetch(`/api/exams/${pageId}/students`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentId, classId: selectedClass.id, action: 'force-submit' }),
+      })
+      if (response.ok) {
+        refreshAll()
+      } else {
+        const data = await response.json().catch(() => ({}))
+        console.error('Error ending exam:', data?.error)
+      }
+    } catch (error) {
+      console.error('Error ending exam for student:', error)
+    } finally {
+      setEndingStudent(null)
     }
   }
 
@@ -612,6 +639,25 @@ export function ClassToolbar({
                               <Loader2 className="w-3 h-3 animate-spin" />
                             ) : (
                               <RotateCcw className="w-3 h-3" />
+                            )}
+                          </Button>
+                        )}
+                        {isExam && row.examStatus !== 'submitted' && row.inRoster && selectedClass && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              endForStudent(row.userId)
+                            }}
+                            disabled={endingStudent === row.userId}
+                            className="h-6 w-6 p-0 flex-shrink-0"
+                            title="End the exam for this student (e.g. their machine crashed) so you can grade their saved work"
+                          >
+                            {endingStudent === row.userId ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <Send className="w-3 h-3" />
                             )}
                           </Button>
                         )}

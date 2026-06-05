@@ -16,6 +16,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { eventBus } from '@/lib/events'
+import { applyHandinSnapshots } from '@/lib/exam-recovery'
 
 interface StudentStatus {
   id: string
@@ -205,9 +206,9 @@ export async function POST(
     const body = await request.json()
     const { studentId, classId, action } = body
 
-    if (!studentId || !classId || action !== 'reopen') {
+    if (!studentId || !classId || (action !== 'reopen' && action !== 'force-submit')) {
       return NextResponse.json(
-        { error: 'studentId, classId, and action="reopen" are required' },
+        { error: 'studentId, classId, and action ("reopen" | "force-submit") are required' },
         { status: 400 }
       )
     }
@@ -261,6 +262,29 @@ export async function POST(
         { error: 'Student not found in this class' },
         { status: 404 }
       )
+    }
+
+    // Force-submit: end the exam ON BEHALF of a student who never handed in (e.g.
+    // their machine crashed). Creates the ExamSubmission so the student appears in
+    // grading; their answers are whatever was autosaved to UserData (grading reads
+    // live UserData when there's no hand-in snapshot). Idempotent.
+    if (action === 'force-submit') {
+      const result = await prisma.$transaction((tx) =>
+        applyHandinSnapshots(tx, { pageId, studentId, snapshots: [], label: 'ended by teacher' }),
+      )
+      await eventBus.publish(`exam:${pageId}:${classId}`, {
+        type: 'exam-student-status',
+        pageId,
+        classId,
+        studentId,
+        status: 'submitted',
+        timestamp: Date.now(),
+      })
+      return NextResponse.json({
+        success: true,
+        message: result.alreadyExisted ? 'Already submitted' : 'Exam ended for student',
+        submittedAt: result.submittedAt,
+      })
     }
 
     // Delete the submission to allow re-entry

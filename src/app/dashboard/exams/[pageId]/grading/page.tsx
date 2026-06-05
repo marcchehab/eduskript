@@ -143,6 +143,7 @@ export default function ExamGradingPage() {
   const [returningAll, setReturningAll] = useState(false)
   const [runAll, setRunAll] = useState<{ done: number; total: number } | null>(null)
   const [aiOpen, setAiOpen] = useState(false)
+  const [tab, setTab] = useState<'class' | 'exam'>('class')
   // Teacher's local pseudonym → real-email mapping (IndexedDB), so the roster
   // shows people the teacher can identify — same source the StudentNavigator /
   // ClassToolbar use. The mapping takes precedence over the stored name/pseudonym.
@@ -448,11 +449,30 @@ export default function ExamGradingPage() {
         </div>
       </div>
 
+      {/* Tabs: the student roster (Class overview) vs a per-exercise breakdown
+          (Exam overview) — the latter helps gauge difficulty + set max points. */}
+      <div className="flex items-center gap-1 border-b">
+        {(['class', 'exam'] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setTab(t)}
+            className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium ${
+              tab === t ? 'border-foreground text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {t === 'class' ? 'Class overview' : 'Exam overview'}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'exam' && <ExamOverview questions={data.questions} students={data.students} />}
+
       {/* Grading table — overview only: identity, total, grade, status, return.
           Per-question scores are auto-computed (override API exists for a future
           per-student detail view) but omitted here: too many exercises to be
           meaningful per row. */}
-      <div className="overflow-x-auto rounded-lg border">
+      <div className={`overflow-x-auto rounded-lg border ${tab === 'class' ? '' : 'hidden'}`}>
         <table className="w-full text-sm border-collapse">
           <thead>
             <tr className="bg-muted/50 text-left">
@@ -553,6 +573,77 @@ function NumField({
         onChange={(e) => onChange(e.target.value)}
         onBlur={onCommit}
       />
+    </div>
+  )
+}
+
+/**
+ * Per-exercise breakdown across the class: max points + how students did
+ * (full / partial / zero / not answered), as a stacked bar. Helps the teacher
+ * see which exercises were hard and sanity-check the max points. Computed from
+ * the already-loaded grading data — no extra fetch.
+ */
+function ExamOverview({ questions, students }: { questions: Question[]; students: StudentRow[] }) {
+  const handed = students.filter((s) => s.status !== 'not_started')
+  const totalMax = questions.reduce((s, q) => s + (q.maxPoints ?? 0), 0)
+
+  if (questions.length === 0) {
+    return <p className="text-sm text-muted-foreground">No gradable exercises on this exam.</p>
+  }
+
+  const rows = questions.map((q) => {
+    const cells = handed.map((s) => s.components.find((c) => c.componentId === q.componentId)).filter(Boolean) as ComponentCell[]
+    const max = q.maxPoints ?? cells[0]?.max ?? 0
+    let full = 0, partial = 0, zero = 0, none = 0, sum = 0
+    for (const c of cells) {
+      if (!c.answered) { none++; continue }
+      sum += c.earned
+      if (c.max > 0 && c.earned >= c.max) full++
+      else if (c.earned > 0) partial++
+      else zero++
+    }
+    return { q, max, full, partial, zero, none, n: cells.length, avg: cells.length ? sum / cells.length : 0 }
+  })
+
+  const seg = (count: number, n: number, cls: string, label: string) =>
+    count > 0 ? <div className={cls} style={{ width: `${(count / n) * 100}%` }} title={`${label}: ${count}`} /> : null
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between text-sm text-muted-foreground">
+        <span>{questions.length} exercises · {handed.length} handed in</span>
+        <span className="tabular-nums">Σ max {fmt(totalMax)} pts</span>
+      </div>
+      <div className="rounded-lg border divide-y">
+        {rows.map(({ q, max, full, partial, zero, none, n, avg }) => (
+          <div key={q.componentId} className="p-3 space-y-1.5">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="font-medium truncate">{q.label ?? q.componentId}</span>
+              <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                ⌀ {fmt(Math.round(avg * 10) / 10)} / {fmt(max)} pts
+              </span>
+            </div>
+            {n > 0 ? (
+              <>
+                <div className="flex h-3 w-full overflow-hidden rounded bg-muted">
+                  {seg(full, n, 'bg-green-500', 'Full marks')}
+                  {seg(partial, n, 'bg-amber-500', 'Partial')}
+                  {seg(zero, n, 'bg-red-500', 'Zero')}
+                  {seg(none, n, 'bg-muted-foreground/25', 'Not answered')}
+                </div>
+                <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground tabular-nums">
+                  <span><span className="inline-block h-2 w-2 rounded-sm bg-green-500 align-middle" /> {full} full</span>
+                  <span><span className="inline-block h-2 w-2 rounded-sm bg-amber-500 align-middle" /> {partial} partial</span>
+                  <span><span className="inline-block h-2 w-2 rounded-sm bg-red-500 align-middle" /> {zero} zero</span>
+                  <span><span className="inline-block h-2 w-2 rounded-sm bg-muted-foreground/25 align-middle" /> {none} blank</span>
+                </div>
+              </>
+            ) : (
+              <p className="text-xs text-muted-foreground">No submissions yet.</p>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
