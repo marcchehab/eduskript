@@ -20,6 +20,7 @@ import { getAuthoredExamPage } from '@/lib/scoring/auth'
 import { parseGradableComponents } from '@/lib/scoring/components'
 import { readComponentSubmissions } from '@/lib/scoring/submissions'
 import { generateRubric, scoringModel, type RubricCriterion } from '@/lib/ai/scoring'
+import { loadAiGuidance } from '@/lib/ai/guidance'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -84,6 +85,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   const studentIds = await teacherStudentIds(session.user.id, pageId)
+  const guidance = await loadAiGuidance(session.user.id)
   const model = scoringModel()
   const saved: unknown[] = []
   const errors: { componentId: string; error: string }[] = []
@@ -98,6 +100,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       maxPoints,
       reference: c.kind === 'python' ? c.checkCode ?? null : null,
       samples,
+      guidance,
     })
     if ('error' in res) {
       errors.push({ componentId: c.componentId, error: res.error })

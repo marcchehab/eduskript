@@ -95,6 +95,13 @@ export function scoringModel(): string {
   return process.env.OPENROUTER_MODEL ?? 'z-ai/glm-5'
 }
 
+/** Append the teacher/org custom guidance (language, style, terminology) so the
+ *  scoring + rubric models honour it — e.g. "Swiss German, never ß". */
+function withGuidance(base: string, guidance?: string): string {
+  if (!guidance) return base
+  return `${base}\n\nTEACHER / ORGANIZATION GUIDELINES — follow these for language, spelling, style, and terminology (they override defaults):\n${guidance}`
+}
+
 async function complete(system: string, user: string, maxTokens: number): Promise<string> {
   const res = await client().chat.completions.create({
     model: scoringModel(),
@@ -133,6 +140,8 @@ export interface RubricPromptInput {
   reference?: string | null
   /** A handful of student submissions to ground the criteria. */
   samples: string[]
+  /** Teacher/org custom AI guidance (language, style) — see loadAiGuidance. */
+  guidance?: string
 }
 
 export function buildRubricUserPrompt(input: RubricPromptInput): string {
@@ -156,7 +165,7 @@ export async function generateRubric(
 ): Promise<{ criteria: RubricCriterion[] } | { error: string }> {
   let text: string
   try {
-    text = await complete(RUBRIC_SYSTEM, buildRubricUserPrompt(input), 4096)
+    text = await complete(withGuidance(RUBRIC_SYSTEM, input.guidance), buildRubricUserPrompt(input), 4096)
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'LLM request failed' }
   }
@@ -206,6 +215,8 @@ export interface ScorePromptInput {
   label?: string
   criteria: RubricCriterion[]
   submission: string
+  /** Teacher/org custom AI guidance (language, style) — see loadAiGuidance. */
+  guidance?: string
 }
 
 export function buildScoreUserPrompt(input: ScorePromptInput): string {
@@ -263,7 +274,7 @@ export async function scoreSubmission(
 ): Promise<AiScoreResult | { error: string }> {
   let text: string
   try {
-    text = await complete(SCORE_SYSTEM, buildScoreUserPrompt(input), 3072)
+    text = await complete(withGuidance(SCORE_SYSTEM, input.guidance), buildScoreUserPrompt(input), 3072)
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'LLM request failed' }
   }

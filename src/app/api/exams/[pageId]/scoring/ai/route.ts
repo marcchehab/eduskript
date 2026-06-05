@@ -21,6 +21,7 @@ import { parseGradableComponents } from '@/lib/scoring/components'
 import { readComponentSubmissions } from '@/lib/scoring/submissions'
 import { SCORE_PRIORITY } from '@/lib/scoring/score-component'
 import { scoreSubmission, scoringModel, type RubricCriterion } from '@/lib/ai/scoring'
+import { loadAiGuidance } from '@/lib/ai/guidance'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -89,6 +90,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     where: { pageId, componentId: { in: targets.map((t) => t.componentId) } },
   })
   const rubricByComponent = new Map(rubrics.map((r) => [r.componentId, r]))
+  const guidance = await loadAiGuidance(session.user.id)
   const model = scoringModel()
 
   const results: { componentId: string; studentId: string; earned: number }[] = []
@@ -112,6 +114,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         label: c.label,
         criteria,
         submission: sub.text,
+        guidance,
       })
       if ('error' in res) {
         errors.push({ componentId: c.componentId, studentId: sid, error: res.error })
