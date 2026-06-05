@@ -221,6 +221,10 @@ Rules:
   criterion that is essentially not addressed; give full points when the criterion as
   worded is met.
 - Write a short overall feedback for the student (1-3 sentences), in the SAME LANGUAGE as the submission/exercise.
+- This is a SUBMITTED, already-graded exam — the student CANNOT revise it. So do NOT give
+  corrective instructions ("Korrigieren Sie…", "Verwenden Sie…", "Bauen Sie … ein", "you
+  should…"). Describe what is wrong and, where useful, what WOULD have been correct
+  ("Korrekt wäre …", "Richtig gewesen wäre …"). Explain, don't instruct.
 - Use PRECISE, CORRECT programming terminology. An "if"/"elif"/"else" is a CONDITIONAL / selection (German: Bedingung / Verzweigung / Fallunterscheidung), NOT a loop — only "for"/"while" are loops (German: Schleife). Never call an if a loop/Schleife, or vice versa. Name each construct correctly.
 - Output STRICT JSON only, no prose, no code fences:
   {"criteria":[{"id":"c1","points":1.5,"comment":"..."}],"feedback":"..."}`
