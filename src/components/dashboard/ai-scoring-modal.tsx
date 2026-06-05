@@ -214,6 +214,27 @@ export function AiScoringModal({
         {error && <p className="text-sm text-destructive">{error}</p>}
         {notice && <p className="text-sm text-green-600">{notice}</p>}
 
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span>{selected.size} / {questions.length} selected</span>
+          <span aria-hidden>·</span>
+          <button
+            type="button"
+            className="underline hover:text-foreground disabled:opacity-50"
+            onClick={() => setSelected(new Set(questions.map((q) => q.componentId)))}
+            disabled={busy}
+          >
+            Select all
+          </button>
+          <button
+            type="button"
+            className="underline hover:text-foreground disabled:opacity-50"
+            onClick={() => setSelected(new Set())}
+            disabled={busy}
+          >
+            Select none
+          </button>
+        </div>
+
         <div className="space-y-4">
           {questions.map((q) => {
             const r = rubrics[q.componentId]
