@@ -21,17 +21,22 @@ export interface CompareOptions {
 }
 
 /**
- * Normalize output for comparison: unify line endings, strip trailing
- * whitespace per line, and drop leading/trailing blank lines — so a stray
- * trailing newline or platform line ending never costs the student credit.
- * Internal blank lines are preserved (they're meaningful in output).
+ * Normalize output for comparison: unify line endings, treat commas as line
+ * separators (so `6,30` is equivalent to `6\n30`), trim each line (leading AND
+ * trailing whitespace), and drop leading/trailing blank lines — so a stray
+ * comma, indentation, trailing newline, or platform line ending never costs the
+ * student credit. Internal blank lines are preserved (they're meaningful in
+ * output).
+ *
+ * Note: commas ALWAYS split, so an exercise whose expected output contains a
+ * literal comma on a line isn't supported by the text auto-check.
  */
 export function normalizeOutput(text: string | null | undefined, opts: CompareOptions = {}): string {
   let lines = (text ?? '')
     .replace(/\r\n?/g, '\n')
-    .split('\n')
+    .split(/[\n,]/) // newlines and commas both separate lines
     .map((line) => {
-      let l = line.replace(/[ \t]+$/, '') // trailing whitespace
+      let l = line.trim() // strip leading + trailing whitespace per line
       if (opts.ignoreWhitespace) l = l.replace(/[ \t]+/g, ' ').trim()
       return l
     })

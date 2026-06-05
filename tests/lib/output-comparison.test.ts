@@ -25,6 +25,15 @@ describe('output-comparison', () => {
     it('ignoreWhitespace collapses internal runs', () => {
       expect(normalizeOutput('a   b\tc', { ignoreWhitespace: true })).toBe('a b c')
     })
+    it('treats commas as line separators (6,30 == 6\\n30)', () => {
+      expect(normalizeOutput('6,30')).toBe('6\n30')
+      expect(normalizeOutput('6, 30')).toBe('6\n30') // comma + space
+      expect(normalizeOutput('1,2,3')).toBe('1\n2\n3')
+    })
+    it('trims leading AND trailing whitespace per line', () => {
+      expect(normalizeOutput(' 6\n30 ')).toBe('6\n30')
+      expect(normalizeOutput('  hello  ')).toBe('hello')
+    })
     it('handles null/undefined', () => {
       expect(normalizeOutput(null)).toBe('')
       expect(normalizeOutput(undefined)).toBe('')
@@ -98,6 +107,12 @@ describe('output-comparison', () => {
     it('respects ignoreCase', () => {
       expect(compareOutput('TRUE', 'true', { ignoreCase: true }).exact).toBe(true)
       expect(compareOutput('TRUE', 'true').exact).toBe(false)
+    })
+    it('comma-separated student answer matches line-separated expected', () => {
+      expect(compareOutput('6,30', '6\n30').exact).toBe(true)
+    })
+    it('per-line whitespace is ignored on both sides', () => {
+      expect(compareOutput(' 6\n30 ', '6\n30').exact).toBe(true)
     })
   })
 
