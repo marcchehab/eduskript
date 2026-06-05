@@ -138,21 +138,34 @@ export function ExamReviewProvider({ pageId, mode, studentId, children }: Provid
   // (run → reload → run …). Reset only on a manual re-run.
   const ranForRef = useRef<string | null>(null)
 
+  // Monotonic request id. A single action (score, switch, realtime) can fire
+  // several overlapping load()s; under real network latency they can resolve
+  // OUT OF ORDER, so a slower response for the PREVIOUS student would otherwise
+  // overwrite the current one (the panel appears to "switch" to another student
+  // ~1s later). We apply only the most-recent request's result.
+  const reqSeq = useRef(0)
+
   const load = useCallback(() => {
     if (!studentId) {
+      reqSeq.current++ // invalidate any in-flight load
       setState(empty)
       return
     }
+    const seq = ++reqSeq.current
+    const sid = studentId
     setLoading(true)
     fetch(`/api/exams/${pageId}/review?studentId=${encodeURIComponent(studentId)}`, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((j) => {
+        if (seq !== reqSeq.current) return // superseded by a newer load — discard
+        // Extra guard: ignore a response whose student doesn't match the request.
+        if (j.studentId && j.studentId !== sid) return
         const byComponent: Record<string, ComponentReview> = {}
         for (const c of j.components as ComponentReview[]) byComponent[c.componentId] = c
-        setState({ grade: j.grade, totalEarned: j.totalEarned, totalMax: j.totalMax, byComponent, loadedStudentId: studentId })
+        setState({ grade: j.grade, totalEarned: j.totalEarned, totalMax: j.totalMax, byComponent, loadedStudentId: sid })
       })
-      .catch(() => setState(empty))
-      .finally(() => setLoading(false))
+      .catch(() => { if (seq === reqSeq.current) setState(empty) })
+      .finally(() => { if (seq === reqSeq.current) setLoading(false) })
   }, [pageId, studentId])
 
   useEffect(() => {
