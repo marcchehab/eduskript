@@ -89,6 +89,16 @@ interface ReviewContextValue extends ReviewState {
   setOverride: (componentId: string, awardedPoints: number | null) => Promise<void>
   /** Teacher only: set/clear per-question feedback (null/'' clears it). */
   setFeedback: (componentId: string, feedback: string | null) => Promise<void>
+  /** Teacher only: override one rubric criterion's points and/or comment for this
+   *  student (points:null clears that criterion's points override). The override
+   *  total is recomputed server-side by merging over the AI score. */
+  setCriterion: (
+    componentId: string,
+    criterionId: string,
+    value: { points?: number | null; comment?: string | null },
+  ) => Promise<void>
+  /** Teacher only: reset one criterion (points + comment) back to the AI value. */
+  resetCriterion: (componentId: string, criterionId: string) => Promise<void>
   /** Teacher only: clear the manual override (points AND feedback) in ONE request,
    *  so the row is deleted atomically — avoids the read-merge race of firing
    *  setOverride(null) + setFeedback(null) concurrently. */
@@ -115,6 +125,8 @@ const ExamReviewContext = createContext<ReviewContextValue>({
   runningChecks: false,
   setOverride: async () => {},
   setFeedback: async () => {},
+  setCriterion: async () => {},
+  resetCriterion: async () => {},
   clearOverride: async () => {},
   clearAiScore: async () => {},
   rerunChecks: async () => {},
@@ -223,6 +235,39 @@ export function ExamReviewProvider({ pageId, mode, studentId, children }: Provid
     [pageId, studentId, load],
   )
 
+  const setCriterion = useCallback(
+    async (
+      componentId: string,
+      criterionId: string,
+      value: { points?: number | null; comment?: string | null },
+    ) => {
+      if (!studentId) return
+      const criterion: { id: string; points?: number | null; comment?: string | null } = { id: criterionId }
+      if (value.points !== undefined) criterion.points = value.points
+      if (value.comment !== undefined) criterion.comment = value.comment
+      await fetch(`/api/exams/${pageId}/grading/question`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentId, componentId, criterion }),
+      }).catch(() => {})
+      load()
+    },
+    [pageId, studentId, load],
+  )
+
+  const resetCriterion = useCallback(
+    async (componentId: string, criterionId: string) => {
+      if (!studentId) return
+      await fetch(`/api/exams/${pageId}/grading/question`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentId, componentId, resetCriterion: criterionId }),
+      }).catch(() => {})
+      load()
+    },
+    [pageId, studentId, load],
+  )
+
   const clearOverride = useCallback(
     async (componentId: string) => {
       if (!studentId) return
@@ -287,8 +332,8 @@ export function ExamReviewProvider({ pageId, mode, studentId, children }: Provid
   }, [mode, studentId, state.byComponent, runChecks])
 
   const value = useMemo<ReviewContextValue>(
-    () => ({ ...state, active, mode, loading, pageId, studentId, runningChecks, setOverride, setFeedback, clearOverride, clearAiScore, rerunChecks, refreshGrades }),
-    [state, active, mode, loading, pageId, studentId, runningChecks, setOverride, setFeedback, clearOverride, clearAiScore, rerunChecks, refreshGrades],
+    () => ({ ...state, active, mode, loading, pageId, studentId, runningChecks, setOverride, setFeedback, setCriterion, resetCriterion, clearOverride, clearAiScore, rerunChecks, refreshGrades }),
+    [state, active, mode, loading, pageId, studentId, runningChecks, setOverride, setFeedback, setCriterion, resetCriterion, clearOverride, clearAiScore, rerunChecks, refreshGrades],
   )
 
   return <ExamReviewContext.Provider value={value}>{children}</ExamReviewContext.Provider>
@@ -306,6 +351,8 @@ export function useComponentReview(componentId: string): {
   review: ComponentReview | null
   setOverride: (awardedPoints: number | null) => Promise<void>
   setFeedback: (feedback: string | null) => Promise<void>
+  setCriterion: (criterionId: string, value: { points?: number | null; comment?: string | null }) => Promise<void>
+  resetCriterion: (criterionId: string) => Promise<void>
   clearOverride: () => Promise<void>
   clearAiScore: () => Promise<void>
   refreshGrades: () => void
@@ -326,6 +373,8 @@ export function useComponentReview(componentId: string): {
         : null,
     setOverride: (awardedPoints) => ctx.setOverride(componentId, awardedPoints),
     setFeedback: (feedback) => ctx.setFeedback(componentId, feedback),
+    setCriterion: (criterionId, value) => ctx.setCriterion(componentId, criterionId, value),
+    resetCriterion: (criterionId) => ctx.resetCriterion(componentId, criterionId),
     clearOverride: () => ctx.clearOverride(componentId),
     clearAiScore: () => ctx.clearAiScore(componentId),
     refreshGrades: ctx.refreshGrades,

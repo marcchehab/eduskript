@@ -3,21 +3,24 @@
 /**
  * Teacher grade-mode scoring panel for ONE python-check coding exercise.
  *
- * Reflects the score-source precedence as tabs — Unit tests (check) is beaten by
- * AI score is beaten by Manual (override). The effective source (highest present)
- * is auto-selected; sources with no score are greyed. A clock toggles the
- * student's version history (snapshots). Shows points (Punkte), never a grade.
+ * Two tabs reflecting source precedence: Unit tests (check) and Score. The Score
+ * tab is rubric-driven and unifies AI + manual. Each rubric criterion is ONE row:
+ *   [ student comment ] [ student pts ] / [ max ] [ criterion description ] [bin]
+ * i.e. the LEFT side is THIS student's scoring (AI-filled, manually overridable
+ * per criterion with a reset), the RIGHT side is the rubric (all students). A
+ * "Re-score" action sits in the student-side header, "Regenerate" in the rubric-
+ * side header. A general feedback field spans the full width below. With no
+ * rubric the tab falls back to a single absolute manual score.
  *
- * Editor-owned data (live test results, snapshots) comes in via props; the score
- * sources + edit actions come from the exam-review context. Python only — quizzes
- * keep the simpler ScoreBadge.
+ * Shows points (Punkte), never a grade. Editor-owned data (live test results,
+ * snapshots) comes in via props; score sources + edit actions from the exam-
+ * review context. Python only — quizzes keep the simpler ScoreBadge.
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { Check, X, Clock, RotateCcw, Trash2, Wand2, Loader2, AlertTriangle } from 'lucide-react'
+import { Check, X, Clock, RotateCcw, Trash2, Wand2, Loader2, AlertTriangle, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useComponentReview, type ComponentScoreSource } from '@/contexts/exam-review-context'
-import { RubricCriteriaEditor, type RubricCriterion } from '@/components/exam/rubric-criteria-editor'
 
 export interface CodeSnapshot {
   id: number
@@ -32,16 +35,145 @@ interface TestResult {
   label: string
   error?: string
 }
+interface RubricCriterion {
+  id: string
+  description: string
+  points: number
+}
 interface AiCriterion {
   id: string
   points: number
+  comment?: string
+}
+interface OverrideCriterion {
+  id: string
+  points?: number
   comment?: string
 }
 
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
 const pt = (n: number | null | undefined) => (n == null ? '–' : `${fmt(n)}P`)
 
-type Tab = 'tests' | 'ai' | 'manual'
+// Side tints: the LEFT side scores THIS student (plain background); the RIGHT side
+// is the rubric shared by ALL students (blue) — the tint flags the shared scope.
+const STUDENT_BG = '' // plain (inherits the card) — only the rubric side is tinted
+const RUBRIC_BG = 'bg-sky-50 dark:bg-sky-950/30'
+
+type Tab = 'tests' | 'score'
+
+/**
+ * One criterion row: LEFT = this student (comment + points, editable, AI-filled,
+ * resettable); RIGHT = the rubric (max + description + remove, all students).
+ * Student fields use a focus-gated draft so async reloads don't fight typing,
+ * with no ref reads during render (react-hooks/refs) and no setState-in-effect.
+ */
+function CriterionRow({
+  rc,
+  aiC,
+  ovC,
+  onRubricChange,
+  onRubricRemove,
+  onSet,
+  onReset,
+}: {
+  rc: RubricCriterion
+  aiC?: AiCriterion
+  ovC?: OverrideCriterion
+  onRubricChange: (patch: Partial<RubricCriterion>) => void
+  onRubricRemove: () => void
+  onSet: (value: { points?: number | null; comment?: string | null }) => void
+  onReset: () => void
+}) {
+  const max = Number(rc.points) || 0
+  const effPoints = ovC?.points ?? aiC?.points ?? null
+  const effComment = ovC?.comment ?? aiC?.comment ?? ''
+  const overridden = !!(ovC && (ovC.points != null || ovC.comment != null))
+
+  const [editingPts, setEditingPts] = useState(false)
+  const [editingCmt, setEditingCmt] = useState(false)
+  const [ptsDraft, setPtsDraft] = useState('')
+  const [cmtDraft, setCmtDraft] = useState('')
+  const pts = editingPts ? ptsDraft : effPoints == null ? '' : fmt(effPoints)
+  const cmt = editingCmt ? cmtDraft : effComment
+
+  const savePts = (raw: string) => {
+    const norm = raw.trim()
+    if (norm === (effPoints == null ? '' : fmt(effPoints))) return
+    if (norm === '') onSet({ points: null })
+    else { const v = Number(norm); if (Number.isFinite(v)) onSet({ points: v }) }
+  }
+  const saveCmt = (raw: string) => {
+    if (raw === effComment) return
+    onSet({ comment: raw.trim() === '' ? null : raw })
+  }
+  useEffect(() => {
+    if (!editingPts) return
+    const t = setTimeout(() => savePts(ptsDraft), 400)
+    return () => clearTimeout(t)
+  }, [ptsDraft, editingPts]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!editingCmt) return
+    const t = setTimeout(() => saveCmt(cmtDraft), 600)
+    return () => clearTimeout(t)
+  }, [cmtDraft, editingCmt]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <div className="flex items-stretch">
+      {/* LEFT — this student */}
+      <div className={cn('flex flex-1 items-start gap-1.5 px-2 py-1.5', STUDENT_BG)}>
+        <textarea
+          value={cmt}
+          onFocus={() => { setCmtDraft(effComment); setEditingCmt(true) }}
+          onChange={(e) => setCmtDraft(e.target.value)}
+          onBlur={() => { setEditingCmt(false); saveCmt(cmtDraft) }}
+          placeholder="Comment for this student…"
+          rows={2}
+          className={cn('min-w-0 flex-1 resize-y rounded border bg-background px-2 py-1 text-sm', overridden && 'border-foreground/40')}
+        />
+        <input
+          type="number"
+          step="0.5"
+          className={cn('mt-1 h-7 w-12 rounded border bg-background px-1 text-right text-sm tabular-nums', overridden && 'border-foreground/40')}
+          value={pts}
+          placeholder="–"
+          title="Points this student gets"
+          onFocus={() => { setPtsDraft(effPoints == null ? '' : fmt(effPoints)); setEditingPts(true) }}
+          onChange={(e) => setPtsDraft(e.target.value)}
+          onBlur={() => { setEditingPts(false); savePts(ptsDraft) }}
+        />
+        {overridden ? (
+          <button type="button" title="Reset this criterion to the AI score" className="mt-2 text-muted-foreground hover:text-foreground" onClick={onReset}>
+            <RotateCcw className="h-3.5 w-3.5" />
+          </button>
+        ) : (
+          <span className="mt-2 w-3.5" />
+        )}
+      </div>
+
+      {/* RIGHT — rubric (all students) */}
+      <div className={cn('flex flex-1 items-start gap-1.5 px-2 py-1.5', RUBRIC_BG)}>
+        <input
+          type="number"
+          step="0.5"
+          className="mt-1 h-7 w-12 rounded border bg-background px-1 text-right text-sm tabular-nums"
+          value={rc.points}
+          title="Max points for this criterion (rubric, all students)"
+          onChange={(e) => onRubricChange({ points: Number(e.target.value) })}
+        />
+        <textarea
+          value={rc.description}
+          onChange={(e) => onRubricChange({ description: e.target.value })}
+          placeholder="Criterion…"
+          rows={2}
+          className="min-w-0 flex-1 resize-y rounded border bg-background px-2 py-1 text-sm"
+        />
+        <button type="button" className="mt-1.5 text-muted-foreground hover:text-destructive" title="Remove criterion (all students)" onClick={onRubricRemove}>
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  )
+}
 
 export function CodeScorePanel({
   componentId,
@@ -64,8 +196,10 @@ export function CodeScorePanel({
   onViewSnapshot: (s: CodeSnapshot) => void
   onRevertSnapshot: () => void
 }) {
-  const { active, mode, pageId, studentId, review, setOverride, setFeedback, clearOverride, clearAiScore, refreshGrades } =
-    useComponentReview(componentId)
+  const {
+    active, mode, pageId, studentId, review,
+    setOverride, setFeedback, setCriterion, resetCriterion, clearOverride, clearAiScore, refreshGrades,
+  } = useComponentReview(componentId)
   const [rubricBusy, setRubricBusy] = useState(false)
   const [scoreBusy, setScoreBusy] = useState(false)
   const [aiErr, setAiErr] = useState<string | null>(null)
@@ -146,7 +280,7 @@ export function CodeScorePanel({
   }, [rubricUpdatedAt, componentId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // An AI score is stale if the rubric was saved after the score was computed.
-  const aiMeta = ai?.meta as { rubricUpdatedAt?: string } | null
+  const aiMeta = ai?.meta as { rubricUpdatedAt?: string; criteria?: AiCriterion[] } | null
   const aiStale = !!(
     ai &&
     rubric &&
@@ -155,56 +289,69 @@ export function CodeScorePanel({
   )
 
   const hasCheck = !!check || (testResults != null && testResults.length > 0)
-  const hasAi = !!ai
   const effective = review?.effectiveSource ?? null
-  const effectiveTab: Tab = effective === 'override' ? 'manual' : effective === 'ai' ? 'ai' : 'tests'
+  const effectiveTab: Tab = effective === 'check' ? 'tests' : 'score'
 
   const [tab, setTab] = useState<Tab>(effectiveTab)
   const [showVersions, setShowVersions] = useState(false)
-  // Re-select the effective tab whenever precedence changes (e.g. after AI
-  // scoring or an override), so the active source is always front-and-centre.
-  useEffect(() => {
-    setTab(effectiveTab)
-  }, [effective]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setTab(effectiveTab) }, [effective]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Manual (override) editing — debounced, mirrors the old ScoreBadge.
-  const [draft, setDraft] = useState('')
-  const [fb, setFb] = useState('')
-  const ptsFocused = useRef(false)
-  const fbFocused = useRef(false)
-  const overrideEarned = override?.earned ?? null
+  // General feedback (full width): effective = override ?? AI; editable.
   const overrideFeedback = override?.feedback ?? null
+  const effFeedback = overrideFeedback ?? ai?.feedback ?? ''
+  const [editingFb, setEditingFb] = useState(false)
+  const [fbDraft, setFbDraft] = useState('')
+  const fb = editingFb ? fbDraft : effFeedback
+  const saveFb = (raw: string) => { if (raw !== effFeedback) setFeedback(raw.trim() === '' ? null : raw) }
   useEffect(() => {
-    if (!ptsFocused.current) setDraft(overrideEarned == null ? '' : fmt(overrideEarned))
-  }, [overrideEarned, componentId])
-  useEffect(() => {
-    if (!fbFocused.current) setFb(overrideFeedback ?? '')
-  }, [overrideFeedback, componentId])
-  useEffect(() => {
-    if (draft === '') return
-    const v = Number(draft)
-    if (!Number.isFinite(v) || v === overrideEarned) return
-    const t = setTimeout(() => setOverride(v), 400)
+    if (!editingFb) return
+    const t = setTimeout(() => saveFb(fbDraft), 600)
     return () => clearTimeout(t)
-  }, [draft]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fbDraft, editingFb]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Absolute manual score — fallback for components with NO rubric.
+  const overrideEarned = override?.earned ?? null
+  const hasRubric = rubricDraft.length > 0 || !!rubric
+  const [editingAbs, setEditingAbs] = useState(false)
+  const [absDraft, setAbsDraft] = useState('')
+  const abs = editingAbs ? absDraft : overrideEarned == null ? '' : fmt(overrideEarned)
+  const saveAbs = (raw: string) => {
+    const v = raw.trim() === '' ? null : Number(raw)
+    if ((v === null || Number.isFinite(v)) && v !== overrideEarned) setOverride(v)
+  }
   useEffect(() => {
-    if (fb === (overrideFeedback ?? '')) return
-    const t = setTimeout(() => setFeedback(fb.trim() === '' ? null : fb), 600)
+    if (!editingAbs) return
+    const t = setTimeout(() => saveAbs(absDraft), 400)
     return () => clearTimeout(t)
-  }, [fb]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [absDraft, editingAbs]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Grade mode only; quizzes/student review keep the ScoreBadge.
   if (!active || !review || mode !== 'grade') return null
 
   const max = review.max
-  const aiCriteria = (ai?.meta as { criteria?: AiCriterion[] } | null)?.criteria ?? []
+  const aiById = new Map((aiMeta?.criteria ?? []).map((c) => [c.id, c]))
+  const ovById = new Map((((override?.meta as { criteria?: OverrideCriterion[] } | null)?.criteria) ?? []).map((c) => [c.id, c]))
   const passedCount = testResults?.filter((r) => r.passed).length ?? 0
   const testTotal = testResults?.length ?? 0
+  const rubricSum = Math.round(rubricDraft.reduce((s, c) => s + (Number(c.points) || 0), 0) * 10) / 10
 
-  // A render helper (NOT a nested component, which would remount each render).
+  const updateRubric = (i: number, patch: Partial<RubricCriterion>) => {
+    setRubricDraft((d) => d.map((c, idx) => (idx === i ? { ...c, ...patch } : c)))
+    setRubricDirty(true)
+  }
+  const removeRubric = (i: number) => { setRubricDraft((d) => d.filter((_, idx) => idx !== i)); setRubricDirty(true) }
+  const addRubric = () => {
+    setRubricDraft((d) => {
+      const nums = d.map((c) => Number(c.id.replace(/^c/, ''))).filter(Number.isFinite)
+      const next = (nums.length ? Math.max(...nums) : 0) + 1
+      return [...d, { id: `c${next}`, description: '', points: 0 }]
+    })
+    setRubricDirty(true)
+  }
+
   const tabButton = (id: Tab, label: string, points: number | null, enabled: boolean) => {
     const activeTab = tab === id
-    const isEffective = effectiveTab === id && (id !== 'manual' || override != null)
+    const isEffective = effectiveTab === id && (id !== 'score' || ai != null || override != null)
     return (
       <button
         type="button"
@@ -228,12 +375,10 @@ export function CodeScorePanel({
 
   return (
     <div className="mt-2 rounded-lg border bg-card">
-      {/* Tab bar: precedence left→right; effective source highlighted. */}
+      {/* Tab bar: precedence; effective source highlighted. */}
       <div className="flex items-center gap-1.5 border-b px-2 py-1.5">
         {tabButton('tests', 'Unit tests', hasCheck ? review.autoEarned : null, hasCheck)}
-        {/* AI tab stays clickable even with no score, so the teacher can generate one. */}
-        {tabButton('ai', 'AI score', ai?.earned ?? null, true)}
-        {tabButton('manual', 'Manual', overrideEarned, true)}
+        {tabButton('score', 'Score', review.earned, true)}
         <button
           type="button"
           onClick={() => setShowVersions((v) => !v)}
@@ -317,152 +462,129 @@ export function CodeScorePanel({
             <p className="text-sm text-muted-foreground">No check has been run for this student yet.</p>
           ))}
 
-        {tab === 'ai' && (
+        {tab === 'score' && (
           <div className="space-y-3">
-            {/* Rubric — per exercise, applies to ALL students. Editable here so
-                you can adapt it when a student does something unanticipated. */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Rubric · this exercise, all students
-                  {rubric && <span className="ml-1 normal-case tracking-normal">({rubric.source}{rubric.model ? `, ${rubric.model}` : ''})</span>}
-                </span>
-                <button
-                  type="button"
-                  onClick={generateRubric}
-                  disabled={rubricBusy}
-                  className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs hover:bg-accent/50 disabled:opacity-50"
-                  title={rubric ? 'Regenerate the rubric from the AI' : 'Generate a rubric from the AI'}
-                >
-                  {rubricBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
-                  {rubric ? 'Regenerate' : 'Generate rubric'}
-                </button>
+            {aiStale && (
+              <div className="flex items-center gap-1.5 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-400">
+                <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+                Rubric changed since this score was computed — re-score to update.
               </div>
-              {rubricDraft.length > 0 || rubric ? (
-                <>
-                  <RubricCriteriaEditor
-                    criteria={rubricDraft}
-                    onChange={(c) => { setRubricDraft(c); setRubricDirty(true) }}
-                  />
-                  <button
-                    type="button"
-                    onClick={saveRubric}
-                    disabled={rubricBusy || !rubricDirty}
-                    className="rounded-md border px-2 py-1 text-xs hover:bg-accent/50 disabled:opacity-50"
-                  >
-                    {rubricDirty ? 'Save rubric' : 'Saved'}
-                  </button>
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  No rubric yet. Generate one, or{' '}
-                  <button type="button" className="underline" onClick={() => { setRubricDraft([{ id: 'c1', description: '', points: 0 }]); setRubricDirty(true) }}>
-                    start one manually
-                  </button>.
-                </p>
-              )}
-            </div>
+            )}
 
-            <div className="border-t pt-3">
-              {ai ? (
-                <div className="space-y-2">
-                  {aiStale && (
-                    <div className="flex items-center gap-1.5 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-400">
-                      <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
-                      Rubric changed since this score was computed — re-score to update.
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm tabular-nums">
-                      <span className="font-medium">{fmt(ai.earned ?? 0)}</span> / {fmt(max)} pts
+            {hasRubric ? (
+              <div className="overflow-hidden rounded-md border">
+                {/* Title row (tinted): LEFT = this student + scoring actions,
+                    RIGHT = rubric (all students) + regenerate. */}
+                <div className="flex border-b text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <div className={cn('flex flex-1 items-center justify-between gap-2 px-2 py-1', STUDENT_BG)}>
+                    <span>This student</span>
+                    <span className="flex items-center gap-1">
+                      {hasRubric && (
+                        <button type="button" onClick={scoreThisStudent} disabled={scoreBusy} className="inline-flex items-center gap-1 rounded px-1 py-0.5 normal-case hover:bg-background/60 disabled:opacity-50" title="AI-score this student against the rubric">
+                          {scoreBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
+                          {ai ? 'Re-score' : 'AI-score'}
+                        </button>
+                      )}
+                      {ai && (
+                        <button type="button" onClick={() => clearAiScore()} className="inline-flex items-center gap-1 rounded px-1 py-0.5 normal-case hover:bg-background/60 hover:text-destructive" title="Clear this AI score">
+                          <Trash2 className="h-3.5 w-3.5" /> Clear AI
+                        </button>
+                      )}
                     </span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={scoreThisStudent}
-                        disabled={scoreBusy}
-                        className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs hover:bg-accent/50 disabled:opacity-50"
-                        title="Re-score this student against the current rubric"
-                      >
-                        {scoreBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />} Re-score
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => clearAiScore()}
-                        className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent/50 hover:text-destructive"
-                        title="Clear this AI score (reverts to the unit-test score)"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" /> Clear
-                      </button>
-                    </div>
                   </div>
-                  {ai.feedback && <p className="whitespace-pre-wrap rounded border bg-muted/40 px-2 py-1.5 text-sm">{ai.feedback}</p>}
-                  {aiCriteria.length > 0 && (
-                    <ul className="!m-0 space-y-0.5 !p-0 !list-none text-xs text-muted-foreground">
-                      {aiCriteria.map((c) => (
-                        <li key={c.id} className="!m-0 flex gap-1.5 !p-0 marker:content-['']">
-                          <span className="tabular-nums">+{fmt(c.points)}</span>
-                          {c.comment && <span className="min-w-0">{c.comment}</span>}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                  <div className={cn('flex flex-1 items-center justify-between gap-2 px-2 py-1', RUBRIC_BG)}>
+                    <span>Rubric for all students</span>
+                    <button type="button" onClick={generateRubric} disabled={rubricBusy} className="inline-flex items-center gap-1 rounded px-1 py-0.5 normal-case hover:bg-background/60 disabled:opacity-50" title={rubric ? 'Regenerate the rubric from the AI' : 'Generate a rubric from the AI'}>
+                      {rubricBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
+                      {rubric ? 'Regenerate' : 'Generate'}
+                    </button>
+                  </div>
                 </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={scoreThisStudent}
-                  disabled={scoreBusy || !rubric}
-                  className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm hover:bg-accent/50 disabled:opacity-50"
-                  title={rubric ? 'AI-score this student against the rubric' : 'Generate or save a rubric first'}
-                >
-                  {scoreBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
-                  AI-score this student
-                </button>
-              )}
-            </div>
-            {aiErr && <p className="text-xs text-destructive">{aiErr}</p>}
-          </div>
-        )}
+                {rubricDraft.map((rc, i) => (
+                  <div key={rc.id} className={cn(i > 0 && 'border-t')}>
+                    <CriterionRow
+                      rc={rc}
+                      aiC={aiById.get(rc.id)}
+                      ovC={ovById.get(rc.id)}
+                      onRubricChange={(patch) => updateRubric(i, patch)}
+                      onRubricRemove={() => removeRubric(i)}
+                      onSet={(value) => setCriterion(rc.id, value)}
+                      onReset={() => resetCriterion(rc.id)}
+                    />
+                  </div>
+                ))}
+                {/* Footer totals, aligned beneath their respective points columns. */}
+                <div className="flex border-t text-xs">
+                  {/* student total, under the student points column (+ reset spacer) */}
+                  <div className={cn('flex flex-1 items-center justify-end gap-1.5 px-2 py-1.5', STUDENT_BG)}>
+                    <span className="font-semibold tabular-nums">Σ {fmt(review.earned)} pts</span>
+                    <span className="w-3.5" />
+                  </div>
+                  {/* rubric total under the max column; Add + Save grouped at the right */}
+                  <div className={cn('flex flex-1 items-center gap-1.5 px-2 py-1.5', RUBRIC_BG)}>
+                    <span className="w-12 text-right font-semibold tabular-nums">Σ {fmt(rubricSum)}</span>
+                    <span className="text-muted-foreground">pts</span>
+                    <span className="ml-auto flex items-center gap-2">
+                      <button type="button" onClick={addRubric} className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-muted-foreground hover:bg-background/60">
+                        <Plus className="h-3.5 w-3.5" /> Add
+                      </button>
+                      <button
+                        type="button"
+                        onClick={saveRubric}
+                        disabled={rubricBusy || !rubricDirty}
+                        className="rounded border bg-background px-2 py-0.5 hover:bg-accent/50 disabled:opacity-50"
+                      >
+                        {rubricDirty ? 'Save' : 'Saved'}
+                      </button>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* No rubric → single absolute manual score (legacy behaviour). */
+              <div className="flex items-center gap-1.5 rounded-md border px-2 py-1 text-sm">
+                <span className="text-xs text-muted-foreground">Points</span>
+                <input
+                  type="number"
+                  step="0.1"
+                  className="h-7 w-12 rounded border bg-background px-1 text-right tabular-nums"
+                  value={abs}
+                  onFocus={() => { setAbsDraft(overrideEarned == null ? '' : fmt(overrideEarned)); setEditingAbs(true) }}
+                  onChange={(e) => setAbsDraft(e.target.value)}
+                  onBlur={() => { setEditingAbs(false); saveAbs(absDraft) }}
+                />
+                <span className="tabular-nums text-muted-foreground">/ {fmt(max)}</span>
+                {override != null && (
+                  <button type="button" title="Clear manual score" className="ml-auto text-muted-foreground hover:text-destructive" onClick={() => clearOverride()}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                )}
+                <span className="ml-2 text-xs text-muted-foreground">No rubric — generate one for per-criterion scoring.</span>
+              </div>
+            )}
 
-        {tab === 'manual' && (
-          <div className="flex items-start gap-2">
-            <div className="flex w-40 shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-sm">
-              <span className="text-xs text-muted-foreground">Points</span>
-              <input
-                type="number"
-                step="0.1"
-                className="h-7 w-12 rounded border bg-background px-1 text-right tabular-nums"
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onFocus={() => { ptsFocused.current = true }}
-                onBlur={() => {
-                  ptsFocused.current = false
-                  const v = draft === '' ? null : Number(draft)
-                  if (v === null || Number.isFinite(v)) if (v !== overrideEarned) setOverride(v)
-                }}
+            {/* General feedback — full width; AI-filled, overridable. */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Feedback (shown to the student)</span>
+                {overrideFeedback != null && (
+                  <button type="button" onClick={() => setFeedback(null)} className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent/50" title="Reset feedback to the AI text">
+                    <RotateCcw className="h-3.5 w-3.5" /> Reset
+                  </button>
+                )}
+              </div>
+              <textarea
+                value={fb}
+                onFocus={() => { setFbDraft(effFeedback); setEditingFb(true) }}
+                onChange={(e) => setFbDraft(e.target.value)}
+                onBlur={() => { setEditingFb(false); saveFb(fbDraft) }}
+                placeholder="General feedback for this answer…"
+                rows={2}
+                className="w-full resize-y rounded border bg-background px-2 py-1 text-sm"
               />
-              <span className="tabular-nums text-muted-foreground">/ {fmt(max)}</span>
-              {override != null && (
-                <button
-                  type="button"
-                  title="Clear manual score"
-                  className="ml-auto text-muted-foreground hover:text-destructive"
-                  onClick={() => clearOverride()}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              )}
             </div>
-            <textarea
-              value={fb}
-              onChange={(e) => setFb(e.target.value)}
-              onFocus={() => { fbFocused.current = true }}
-              onBlur={() => { fbFocused.current = false }}
-              placeholder="Feedback for this question (shown to the student)…"
-              rows={2}
-              className="min-w-0 flex-1 resize-y rounded border bg-background px-2 py-1 text-sm"
-            />
+
+            {aiErr && <p className="text-xs text-destructive">{aiErr}</p>}
           </div>
         )}
       </div>

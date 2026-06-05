@@ -22,6 +22,7 @@ import { readComponentSubmissions } from '@/lib/scoring/submissions'
 import { SCORE_PRIORITY } from '@/lib/scoring/score-component'
 import { scoreSubmission, scoringModel, type RubricCriterion } from '@/lib/ai/scoring'
 import { loadAiGuidance } from '@/lib/ai/guidance'
+import { mergedCriterionTotal, type OverrideCriterion } from '@/lib/scoring/merge-criteria'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -151,6 +152,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         },
       })
       results.push({ componentId: c.componentId, studentId: sid, earned: res.earned })
+
+      // If the teacher has per-criterion overrides on this student, re-materialise
+      // the override total against the NEW AI score: their edited criteria stay,
+      // the rest follow the fresh AI points. (Resolver still reads override.earned.)
+      const ov = await prisma.componentScore.findUnique({
+        where: { pageId_studentId_componentId_source: { pageId, studentId: sid, componentId: c.componentId, source: 'override' } },
+        select: { meta: true },
+      })
+      const ovCriteria = (ov?.meta as { criteria?: OverrideCriterion[] } | null)?.criteria
+      if (Array.isArray(ovCriteria) && ovCriteria.length) {
+        await prisma.componentScore.update({
+          where: { pageId_studentId_componentId_source: { pageId, studentId: sid, componentId: c.componentId, source: 'override' } },
+          data: { earned: mergedCriterionTotal(criteria.map((rc) => rc.id), res.criteria, ovCriteria) },
+        })
+      }
     })
   }
 
