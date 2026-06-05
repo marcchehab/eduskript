@@ -10,7 +10,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { getAuthoredExamPage } from '@/lib/grading/auth'
+import { getAuthoredExamPage } from '@/lib/scoring/auth'
 
 function numOr(value: unknown, fallback: number): number {
   const n = Number(value)

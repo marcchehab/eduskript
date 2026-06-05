@@ -13,8 +13,14 @@ interface PythonResponseItem {
   testsPassed: number | null
   totalTests: number | null
   earnedPoints: number | null
+  pointsMax: number | null
+  /** Effective score source: 'check' | 'ai' | 'override' | 'preview' | null. */
+  source: string | null
   submittedAt: number | null
 }
+
+const fmtPts = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
+const SOURCE_LABEL: Record<string, string> = { check: 'tests', ai: 'AI', override: 'manual', preview: 'preview' }
 
 function resolveDisplayName(
   r: { pseudonym: string; displayName: string },
@@ -184,35 +190,44 @@ export function PythonProgressBar({ classId, className, pageId, componentId }: P
           ) : (
             responses
               .sort((a, b) => {
-                // Sort by score descending, unattempted last
+                // Sort by effective score ratio descending, unattempted last.
                 const score = (r: PythonResponseItem) =>
-                  r.totalTests === null ? -1 : (r.testsPassed ?? 0) / (r.totalTests || 1)
+                  r.source === null ? -1 : (r.earnedPoints ?? 0) / (r.pointsMax || 1)
                 return score(b) - score(a)
               })
               .map(r => {
-                const percentage = r.totalTests ? Math.round(((r.testsPassed ?? 0) / r.totalTests) * 100) : null
+                const attempted = r.source !== null
+                const ratio = attempted && r.pointsMax ? (r.earnedPoints ?? 0) / r.pointsMax : 0
                 return (
                   <div
                     key={r.studentId}
                     className={cn(
                       'flex items-center gap-3 px-4 py-2 text-sm',
-                      r.totalTests === null && 'opacity-60'
+                      !attempted && 'opacity-60'
                     )}
                   >
                     <div className="flex-shrink-0">
-                      {r.totalTests === null
+                      {!attempted
                         ? <Clock className="h-4 w-4 text-muted-foreground" />
-                        : r.testsPassed === r.totalTests
+                        : ratio >= 1
                           ? <Check className="h-4 w-4 text-green-500" />
-                          : (r.testsPassed ?? 0) > 0
+                          : (r.earnedPoints ?? 0) > 0
                             ? <Minus className="h-4 w-4 text-yellow-500" />
                             : <X className="h-4 w-4 text-red-500" />}
                     </div>
                     <div className="flex-shrink-0 w-32 truncate font-medium">{resolveDisplayName(r, resolvedEmails)}</div>
                     <div className="flex-1 text-xs text-muted-foreground">
-                      {r.totalTests === null
-                        ? 'Not attempted yet'
-                        : `${r.testsPassed}/${r.totalTests} Tests (${percentage}%)`}
+                      {!attempted ? (
+                        'Not attempted yet'
+                      ) : (
+                        <>
+                          <span className="tabular-nums text-foreground">
+                            {fmtPts(r.earnedPoints ?? 0)}/{fmtPts(r.pointsMax ?? 0)} pts
+                          </span>
+                          {r.source && <span className="ml-1">({SOURCE_LABEL[r.source] ?? r.source})</span>}
+                          {r.totalTests !== null && <span className="ml-1.5">· {r.testsPassed}/{r.totalTests} tests</span>}
+                        </>
+                      )}
                     </div>
                   </div>
                 )

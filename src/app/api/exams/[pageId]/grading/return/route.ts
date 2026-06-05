@@ -1,5 +1,5 @@
 /**
- * Return graded exams to students. Writes the aggregate score + gradedBy/At +
+ * Return scored exams to students. Writes the aggregate score + scoredBy/At +
  * returnedAt on each ExamSubmission and notifies the student via SSE so their
  * My Exams view updates. Teacher-only.
  *
@@ -16,8 +16,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { eventBus } from '@/lib/events'
-import { computeExamGrades } from '@/lib/grading/aggregate'
-import { getAuthoredExamPage, isClassTeacher, isTeacherOfStudentForPage } from '@/lib/grading/auth'
+import { computeExamGrades } from '@/lib/scoring/aggregate'
+import { getAuthoredExamPage, isClassTeacher, isTeacherOfStudentForPage } from '@/lib/scoring/auth'
 
 export async function POST(
   request: NextRequest,
@@ -88,8 +88,8 @@ export async function POST(
           where: { pageId_studentId: { pageId, studentId } },
           data: {
             score: grading.byStudent.get(studentId)?.totalEarned ?? 0,
-            gradedBy: session.user.id,
-            gradedAt: now,
+            scoredBy: session.user.id,
+            scoredAt: now,
             returnedAt: now,
           },
         }),

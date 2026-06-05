@@ -11,7 +11,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { computeExamGrades } from '@/lib/grading/aggregate'
+import { computeExamGrades } from '@/lib/scoring/aggregate'
 
 export async function GET(
   _request: NextRequest,

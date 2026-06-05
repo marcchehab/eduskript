@@ -1,6 +1,8 @@
 /**
- * Persist an authoritative python re-run result (ExamCheckRun) computed on the
- * teacher's device. This is what the grading engine reads for the component.
+ * Persist an authoritative python re-run result computed on the teacher's
+ * device, as a ComponentScore(source="check"). This is the "check score" the
+ * scoring engine reads for the component (the highest-priority source with
+ * points still wins overall — an override or AI score can outrank it).
  *
  * PUT /api/exams/[pageId]/check-run   (teacher-of-student only)
  * body: { studentId, componentId, earned, max, passed, total }
@@ -10,7 +12,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { isTeacherOfStudentForPage } from '@/lib/grading/auth'
+import { isTeacherOfStudentForPage } from '@/lib/scoring/auth'
+import { SCORE_PRIORITY } from '@/lib/scoring/score-component'
 
 export async function PUT(
   request: NextRequest,
@@ -39,10 +42,18 @@ export async function PUT(
       return NextResponse.json({ error: 'earned/max/passed/total must be numbers' }, { status: 400 })
     }
 
-    const data = { earned, max, passed, total, ranBy: session.user.id, ranAt: new Date() }
-    const run = await prisma.examCheckRun.upsert({
-      where: { pageId_studentId_componentId: { pageId, studentId, componentId } },
-      create: { pageId, studentId, componentId, ...data },
+    const data = {
+      priority: SCORE_PRIORITY.check,
+      earned,
+      max,
+      meta: { passed, total },
+      createdBy: session.user.id,
+    }
+    const run = await prisma.componentScore.upsert({
+      where: {
+        pageId_studentId_componentId_source: { pageId, studentId, componentId, source: 'check' },
+      },
+      create: { pageId, studentId, componentId, source: 'check', ...data },
       update: data,
     })
     return NextResponse.json({ run })

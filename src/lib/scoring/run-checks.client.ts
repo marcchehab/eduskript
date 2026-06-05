@@ -4,7 +4,7 @@
  * Grading-time python re-runner (teacher's device). Re-runs a student's
  * SUBMITTED code against the page's python-check asserts and returns the
  * authoritative `{earned, max, passed, total}` — this, not the student's
- * client-computed score, is what gets persisted (ExamCheckRun) and graded.
+ * client-computed score, is what gets persisted (ComponentScore source="check") and graded.
  *
  * Uses the shared Pyodide Worker (`src/lib/pyodide-worker.client.ts`). On
  * timeout / abort the worker terminates and respawns on the next call; the
@@ -73,7 +73,7 @@ export async function runCheck(input: CheckInput): Promise<CheckRunResult> {
  * The full grading-time driver, used by BOTH the individual (one student) and
  * "Run all" (whole class) flows: for each student, fetch their check inputs,
  * re-run on the teacher's Pyodide worker, and persist each result
- * (ExamCheckRun). `onProgress(done, total)` ticks per student.
+ * (ComponentScore source="check"). `onProgress(done, total)` ticks per student.
  */
 export async function runChecksForStudents(
   pageId: string,

@@ -11,14 +11,23 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useSearchParams } from 'next/navigation'
-import { Send, Loader2, Play } from 'lucide-react'
+import { Send, Loader2, Play, Wand2 } from 'lucide-react'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
 import { useLayout } from '@/contexts/layout-context'
 import { ExamReviewProvider, useExamReview } from '@/contexts/exam-review-context'
-import { runChecksForStudents } from '@/lib/grading/run-checks.client'
+import { runChecksForStudents } from '@/lib/scoring/run-checks.client'
 import { Button } from '@/components/ui/button'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
+import { AiScoringModal } from '@/components/dashboard/ai-scoring-modal'
+
+interface AiQuestion {
+  componentId: string
+  kind: 'quiz' | 'python'
+  questionType: string | null
+  label: string | null
+  maxPoints: number | null
+}
 
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
 
@@ -74,10 +83,29 @@ function GradingBar({
   studentName: string | null
 }) {
   const dialog = useAlertDialog()
-  const { runningChecks, rerunChecks, totalEarned, totalMax, grade } = useExamReview()
+  const { runningChecks, rerunChecks, refreshGrades, totalEarned, totalMax, grade } = useExamReview()
   const { sidebarWidth } = useLayout()
   const [busy, setBusy] = useState(false)
   const [runAll, setRunAll] = useState<{ done: number; total: number } | null>(null)
+  const [aiOpen, setAiOpen] = useState(false)
+  const [aiData, setAiData] = useState<{ questions: AiQuestion[]; studentIds: string[] } | null>(null)
+
+  // Load the class roster + question list, then open the AI scoring modal. The
+  // rubric is per-exam; scoring runs for the whole class regardless of which
+  // student is currently selected.
+  const openAiScoring = async () => {
+    try {
+      const res = await fetch(`/api/exams/${pageId}/grading?classId=${classId}`)
+      const j = await res.json()
+      const studentIds: string[] = (j.students ?? [])
+        .filter((s: { status: string }) => s.status !== 'not_started')
+        .map((s: { studentId: string }) => s.studentId)
+      setAiData({ questions: j.questions ?? [], studentIds })
+      setAiOpen(true)
+    } catch {
+      dialog.showError('Could not load exam data for AI scoring.')
+    }
+  }
 
   const post = (body: object, label: string) => {
     setBusy(true)
@@ -155,6 +183,9 @@ function GradingBar({
             <><Play className="w-4 h-4 mr-1.5" />Run all checks</>
           )}
         </Button>
+        <Button size="sm" variant="outline" onClick={openAiScoring} title="Generate scoring rubrics and AI-score the class">
+          <Wand2 className="w-4 h-4 mr-1.5" />AI scoring
+        </Button>
         {studentId && (
           <Button
             size="sm"
@@ -200,6 +231,16 @@ function GradingBar({
         cancelText={dialog.cancelText}
         destructive={dialog.destructive}
       />
+      {aiData && (
+        <AiScoringModal
+          open={aiOpen}
+          onOpenChange={setAiOpen}
+          pageId={pageId}
+          questions={aiData.questions}
+          studentIds={aiData.studentIds}
+          onScored={refreshGrades}
+        />
+      )}
     </>
   )
 }

@@ -161,15 +161,15 @@ model User {
   oauthAccessTokens       OAuthAccessToken[]       @relation("OAuthAccessTokens")
   oauthRefreshTokens      OAuthRefreshToken[]      @relation("OAuthRefreshTokens")
 
-  // Exam submissions (student) and grading (teacher)
+  // Exam submissions (student) and scoring (teacher)
   examSubmissions       ExamSubmission[] @relation("StudentExamSubmissions")
-  gradedExamSubmissions ExamSubmission[] @relation("GradedExamSubmissions")
+  scoredExamSubmissions ExamSubmission[] @relation("ScoredExamSubmissions")
 
   // Append-only event log for exam attempts (started / submitted / reopened).
   // Used by the teacher roster to surface "took 43m" + an event timeline.
   examAuditLogs ExamAuditLog[] @relation("StudentExamAuditLogs")
-  questionGrades ExamQuestionGrade[] @relation("StudentQuestionGrades")
-  checkRuns      ExamCheckRun[]      @relation("StudentCheckRuns")
+  // Per-question score sources (check / ai / override), priority-resolved.
+  componentScores ComponentScore[] @relation("StudentComponentScores")
 
   // Encryption keys used by students to encrypt offline exam backups.
   // Rotatable; old keys are kept so historical .examfile backups stay decryptable.
@@ -374,8 +374,8 @@ model Page {
   examSubmissions    ExamSubmission[]    @relation("ExamSubmissions")
   examAuditLogs      ExamAuditLog[]      @relation("PageExamAuditLogs")
   examGradeConfig    ExamGradeConfig?    @relation("ExamGradeConfigs")
-  examQuestionGrades ExamQuestionGrade[] @relation("ExamQuestionGrades")
-  examCheckRuns      ExamCheckRun[]      @relation("ExamCheckRuns")
+  componentScores    ComponentScore[]    @relation("ComponentScores")
+  scoringRubrics     ScoringRubric[]     @relation("ScoringRubrics")
 
   // Server-side checkpoints captured at manual save / Check / hand-in
   userDataCheckpoints UserDataCheckpoint[] @relation("PageCheckpoints")
@@ -1050,17 +1050,17 @@ model ExamSubmission {
   studentId   String   @map("student_id")
   submittedAt DateTime @default(now()) @map("submitted_at")
 
-  // Grading. `score` is the aggregate points earned (not the 1-6 grade), written
-  // on return. Status is derived: submitted (returnedAt null) -> graded (score
+  // Scoring. `score` is the aggregate points earned (not the 1-6 grade), written
+  // on return. Status is derived: submitted (returnedAt null) -> scored (score
   // set, returnedAt null) -> returned (returnedAt set, visible to the student).
   score      Float?
-  gradedBy   String?   @map("graded_by")
-  gradedAt   DateTime? @map("graded_at")
+  scoredBy   String?   @map("scored_by")
+  scoredAt   DateTime? @map("scored_at")
   returnedAt DateTime? @map("returned_at")
 
   page    Page  @relation("ExamSubmissions", fields: [pageId], references: [id], onDelete: Cascade)
   student User  @relation("StudentExamSubmissions", fields: [studentId], references: [id], onDelete: Cascade)
-  grader  User? @relation("GradedExamSubmissions", fields: [gradedBy], references: [id])
+  scorer  User? @relation("ScoredExamSubmissions", fields: [scoredBy], references: [id])
 
   @@unique([pageId, studentId])
   @@index([pageId])
@@ -1112,58 +1112,71 @@ model ExamGradeConfig {
   @@map("exam_grade_configs")
 }
 
-// Teacher override of a single question's awarded points for one student. When
-// present it WINS over the automatic score from UserData. componentId is the
-// runtime id ("quiz-<id>" or "code-editor-<id>"). maxPoints optionally snapshots
-// the declared max at grading time.
-model ExamQuestionGrade {
-  id            String   @id @default(cuid())
-  pageId        String   @map("page_id")
-  studentId     String   @map("student_id")
-  componentId   String   @map("component_id")
-  // Nullable: a row can hold feedback without a points override (and vice
-  // versa). null awardedPoints = no override (use the auto score). The row is
-  // deleted when BOTH awardedPoints and feedback are empty.
-  awardedPoints Float?   @map("awarded_points")
-  maxPoints     Float?   @map("max_points")
-  // Teacher's per-question written feedback, shown to the student on their
-  // returned exam. Independent of the points override.
-  feedback      String?  @map("feedback")
-  gradedBy      String?  @map("graded_by")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+// NOTE: ExamQuestionGrade (override) and ExamCheckRun (check score) were
+// collapsed into ComponentScore (below) — one priority-based score record per
+// source. The backfill copied their rows in; the drop_legacy_score_tables
+// migration removes the two old tables. See scripts/backfill-component-scores.mjs.
 
-  page    Page @relation("ExamQuestionGrades", fields: [pageId], references: [id], onDelete: Cascade)
-  student User @relation("StudentQuestionGrades", fields: [studentId], references: [id], onDelete: Cascade)
+// One scoring verdict for one gradable component, from one source. Multiple
+// sources can coexist per (page, student, component); the effective score is the
+// highest-`priority` row with a non-null `earned` (feedback is resolved
+// independently, also by highest priority; ties broken by most recent updatedAt).
+// Generalizes the old `override ?? check` resolver to N sources. Replaces
+// ExamCheckRun (source="check") and ExamQuestionGrade (source="override"); the
+// backfill migration copies those in. A new scoring feature just inserts rows
+// with a new `source` + chosen `priority` — no schema change.
+// Seeded priorities: check=10, ai=20, override=100.
+// `score`/`scoring` = points (Punkte); the 1-6 grade is computed only by the
+// grade key (ExamGradeConfig), never stored here. See src/lib/scoring.
+model ComponentScore {
+  id          String @id @default(cuid())
+  pageId      String @map("page_id")
+  studentId   String @map("student_id")
+  componentId String @map("component_id") // "quiz-<id>" | "python-check-<id>"
 
-  @@unique([pageId, studentId, componentId])
+  source   String // "check" | "ai" | "override" | <future>
+  priority Int // higher wins; seeded per source, stored per row so it is re-rankable
+  // Nullable: a row may carry only feedback (e.g. an override row with a note but
+  // no points change). The row is deleted when both `earned` and `feedback` are null.
+  earned   Float?
+  max      Float? // declared/snapshot max for this component
+  feedback String? // per-source written note (AI rationale / teacher feedback)
+
+  // Source-specific provenance. check: { passed, total }. ai: { model, rubricId,
+  // criteria: [{ id, points, comment }] }. override: usually empty.
+  meta      Json?
+  createdBy String?  @map("created_by") // teacher userId; null = machine (check/ai)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  page    Page @relation("ComponentScores", fields: [pageId], references: [id], onDelete: Cascade)
+  student User @relation("StudentComponentScores", fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([pageId, studentId, componentId, source])
   @@index([pageId, studentId])
-  @@map("exam_question_grades")
+  @@map("component_scores")
 }
 
-// Authoritative result of re-running a student's SUBMITTED code against a
-// python-check at grading time, on the teacher's device. This — not the
-// client-computed PythonCheckData.earnedPoints — is what the grading engine
-// reads for python components (a manual ExamQuestionGrade override still wins).
-// componentId is the python-check runtime id ("python-check-<id>").
-model ExamCheckRun {
+// Step-1 artifact of AI scoring: the point allocation for one gradable component.
+// The AI proposes criteria from (question + reference solution + all submissions);
+// the teacher edits or authors them. AI scoring (step 2) reads this + a student's
+// submission and writes a ComponentScore(source="ai"). One rubric per component.
+model ScoringRubric {
   id          String   @id @default(cuid())
   pageId      String   @map("page_id")
-  studentId   String   @map("student_id")
   componentId String   @map("component_id")
-  earned      Float
-  max         Float
-  passed      Int
-  total       Int
-  ranAt       DateTime @default(now()) @map("ran_at")
-  ranBy       String?  @map("ran_by")
+  criteria    Json // [{ id, description, points }]
+  maxPoints   Float?   @map("max_points") // usually sum(criteria.points)
+  source      String   @default("ai") // "ai" | "teacher"
+  model       String? // model id when AI-generated
+  createdBy   String?  @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
-  page    Page @relation("ExamCheckRuns", fields: [pageId], references: [id], onDelete: Cascade)
-  student User @relation("StudentCheckRuns", fields: [studentId], references: [id], onDelete: Cascade)
+  page Page @relation("ScoringRubrics", fields: [pageId], references: [id], onDelete: Cascade)
 
-  @@unique([pageId, studentId, componentId])
-  @@index([pageId, studentId])
-  @@map("exam_check_runs")
+  @@unique([pageId, componentId])
+  @@map("scoring_rubrics")
 }
 
 // Per-teacher encryption keypair used to encrypt offline exam backups (.examfile).

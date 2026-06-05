@@ -14,7 +14,7 @@
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { runChecksForStudents } from '@/lib/grading/run-checks.client'
+import { runChecksForStudents } from '@/lib/scoring/run-checks.client'
 
 export interface ComponentReview {
   componentId: string
@@ -24,11 +24,41 @@ export interface ComponentReview {
   earned: number
   max: number
   autoEarned: number
+  /** The ai-source points, if an AI score exists (null otherwise). */
+  aiEarned: number | null
+  /** Which source won the effective points: 'check' | 'ai' | 'override' | null. */
+  effectiveSource: string | null
   answered: boolean
   overridden: boolean
-  /** Teacher's per-question written feedback (shown to the student on return). */
+  /** Effective per-question feedback (AI rationale or teacher note; shown to the
+   *  student on return). */
   feedback: string | null
+  /** Raw per-source score rows (check / ai / override) for this component, so the
+   *  grading UI can show each source's points + feedback + provenance. */
+  sources: ComponentScoreSource[]
+  /** The scoring rubric for this exercise (per page, all students), if any. Lets
+   *  the grade UI edit it in place and detect AI scores made against an older one. */
+  rubric: ComponentRubric | null
   answerPayload: unknown
+}
+
+export interface ComponentRubric {
+  criteria: { id: string; description: string; points: number }[]
+  maxPoints: number | null
+  source: string // 'ai' | 'teacher'
+  model: string | null
+  /** When the rubric was last saved (ISO). Compared to an AI score's
+   *  meta.rubricUpdatedAt to flag a stale score. */
+  updatedAt: string
+}
+
+export interface ComponentScoreSource {
+  source: string // 'check' | 'ai' | 'override'
+  earned: number | null
+  max: number | null
+  feedback: string | null
+  /** check: { passed, total }; ai: { model, rubricId, criteria: [...] }. */
+  meta: unknown
 }
 
 interface ReviewState {
@@ -59,10 +89,17 @@ interface ReviewContextValue extends ReviewState {
   setOverride: (componentId: string, awardedPoints: number | null) => Promise<void>
   /** Teacher only: set/clear per-question feedback (null/'' clears it). */
   setFeedback: (componentId: string, feedback: string | null) => Promise<void>
+  /** Teacher only: clear the manual override (points AND feedback) in ONE request,
+   *  so the row is deleted atomically — avoids the read-merge race of firing
+   *  setOverride(null) + setFeedback(null) concurrently. */
+  clearOverride: (componentId: string) => Promise<void>
+  /** Teacher only: clear this student's AI score for a component (reverts the
+   *  effective score to the check/override below it). */
+  clearAiScore: (componentId: string) => Promise<void>
   /** Teacher only: force a re-run of this student's python checks. */
   rerunChecks: () => Promise<void>
   /** Reload grades (debounced). Components call this after writing their own
-   *  authoritative auto-grade (ExamCheckRun) so the totals/badges refresh. */
+   *  authoritative check score (ComponentScore source="check") so the totals/badges refresh. */
   refreshGrades: () => void
 }
 
@@ -78,6 +115,8 @@ const ExamReviewContext = createContext<ReviewContextValue>({
   runningChecks: false,
   setOverride: async () => {},
   setFeedback: async () => {},
+  clearOverride: async () => {},
+  clearAiScore: async () => {},
   rerunChecks: async () => {},
   refreshGrades: () => {},
 })
@@ -150,6 +189,32 @@ export function ExamReviewProvider({ pageId, mode, studentId, children }: Provid
     [pageId, studentId, load],
   )
 
+  const clearOverride = useCallback(
+    async (componentId: string) => {
+      if (!studentId) return
+      // One request that nulls both fields → the route deletes the row.
+      await fetch(`/api/exams/${pageId}/grading/question`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentId, componentId, awardedPoints: null, feedback: null }),
+      }).catch(() => {})
+      load()
+    },
+    [pageId, studentId, load],
+  )
+
+  const clearAiScore = useCallback(
+    async (componentId: string) => {
+      if (!studentId) return
+      await fetch(
+        `/api/exams/${pageId}/scoring/ai?studentId=${encodeURIComponent(studentId)}&componentId=${encodeURIComponent(componentId)}`,
+        { method: 'DELETE' },
+      ).catch(() => {})
+      load()
+    },
+    [pageId, studentId, load],
+  )
+
   // Teacher grade mode: re-run this student's python checks on this device
   // (authoritative), then refresh scores. Reuses the shared driver.
   const runChecks = useCallback(async () => {
@@ -169,8 +234,8 @@ export function ExamReviewProvider({ pageId, mode, studentId, children }: Provid
   }, [studentId, runChecks])
 
   // Debounced reload. Quiz components in grade mode each write their own
-  // authoritative auto-grade (ExamCheckRun) then call this; the debounce
-  // coalesces a page of them into a single /review refetch.
+  // authoritative check score (ComponentScore source="check") then call this; the
+  // debounce coalesces a page of them into a single /review refetch.
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const refreshGrades = useCallback(() => {
     if (refreshTimer.current) clearTimeout(refreshTimer.current)
@@ -188,8 +253,8 @@ export function ExamReviewProvider({ pageId, mode, studentId, children }: Provid
   }, [mode, studentId, state.byComponent, runChecks])
 
   const value = useMemo<ReviewContextValue>(
-    () => ({ ...state, active, mode, loading, pageId, studentId, runningChecks, setOverride, setFeedback, rerunChecks, refreshGrades }),
-    [state, active, mode, loading, pageId, studentId, runningChecks, setOverride, setFeedback, rerunChecks, refreshGrades],
+    () => ({ ...state, active, mode, loading, pageId, studentId, runningChecks, setOverride, setFeedback, clearOverride, clearAiScore, rerunChecks, refreshGrades }),
+    [state, active, mode, loading, pageId, studentId, runningChecks, setOverride, setFeedback, clearOverride, clearAiScore, rerunChecks, refreshGrades],
   )
 
   return <ExamReviewContext.Provider value={value}>{children}</ExamReviewContext.Provider>
@@ -207,6 +272,8 @@ export function useComponentReview(componentId: string): {
   review: ComponentReview | null
   setOverride: (awardedPoints: number | null) => Promise<void>
   setFeedback: (feedback: string | null) => Promise<void>
+  clearOverride: () => Promise<void>
+  clearAiScore: () => Promise<void>
   refreshGrades: () => void
 } {
   const ctx = useContext(ExamReviewContext)
@@ -219,6 +286,8 @@ export function useComponentReview(componentId: string): {
     review: ctx.active ? ctx.byComponent[componentId] ?? null : null,
     setOverride: (awardedPoints) => ctx.setOverride(componentId, awardedPoints),
     setFeedback: (feedback) => ctx.setFeedback(componentId, feedback),
+    clearOverride: () => ctx.clearOverride(componentId),
+    clearAiScore: () => ctx.clearAiScore(componentId),
     refreshGrades: ctx.refreshGrades,
   }
 }

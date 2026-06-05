@@ -154,8 +154,7 @@ try {
 
   // Reset any prior attempt by this student
   await prisma.examSubmission.deleteMany({ where: { pageId: page.id, studentId: student.id } })
-  await prisma.examQuestionGrade.deleteMany({ where: { pageId: page.id, studentId: student.id } })
-  await prisma.examCheckRun.deleteMany({ where: { pageId: page.id, studentId: student.id } })
+  await prisma.componentScore.deleteMany({ where: { pageId: page.id, studentId: student.id } })
   await prisma.userData.deleteMany({ where: { userId: student.id, itemId: page.id } })
   await prisma.userDataCheckpoint.deleteMany({ where: { userId: student.id, pageId: page.id } })
 
@@ -175,11 +174,18 @@ try {
     ['quiz-user-content-q2', { isSubmitted: true, selected: [3], choiceScore: 2 }],
     ['quiz-user-content-q3', { isSubmitted: true, selected: [1], choiceScore: 0 }],
     ['code-editor-p1code', codeEditorData],
-    // A TAMPERED client check result claiming full marks — the grading engine
-    // must IGNORE this and use the teacher-side re-run instead.
+    // The student ran the check once: real result is 3/4 (doppelt(-3) fails), so
+    // the live class overview shows them as attempted/partial. `earnedPoints` is
+    // a TAMPERED claim of full marks (4) — authoritative grading ignores this
+    // client value and re-runs the asserts teacher-side (→ check score 3).
     ['python-check-p1code', {
       checksUsed: 1, maxChecks: null, points: 4, earnedPoints: 4, lastCheckedAt: Date.now(),
-      lastResults: [],
+      lastResults: [
+        { index: 0, passed: true, label: 'assert doppelt(2) == 4' },
+        { index: 1, passed: true, label: 'assert doppelt(0) == 0' },
+        { index: 2, passed: true, label: 'assert doppelt(5) == 10' },
+        { index: 3, passed: false, label: 'assert doppelt(-3) == -6', error: 'Expected -6, got 0' },
+      ],
     }],
   ]
   for (const [adapter, data] of answers) {

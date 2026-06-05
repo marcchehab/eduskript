@@ -17,7 +17,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { getAuthoredExamPage, isTeacherOfStudentForPage } from '@/lib/grading/auth'
+import { getAuthoredExamPage, isTeacherOfStudentForPage } from '@/lib/scoring/auth'
+import { SCORE_PRIORITY } from '@/lib/scoring/score-component'
 
 export async function PUT(
   request: NextRequest,
@@ -42,9 +43,11 @@ export async function PUT(
       return NextResponse.json({ error: 'Not the teacher of this student' }, { status: 403 })
     }
 
-    const existing = await prisma.examQuestionGrade.findUnique({
-      where: { pageId_studentId_componentId: { pageId, studentId, componentId } },
-      select: { awardedPoints: true, maxPoints: true, feedback: true },
+    const existing = await prisma.componentScore.findUnique({
+      where: {
+        pageId_studentId_componentId_source: { pageId, studentId, componentId, source: 'override' },
+      },
+      select: { earned: true, max: true, feedback: true },
     })
 
     // Partial merge: only fields whose key is present in the body change.
@@ -52,7 +55,7 @@ export async function PUT(
     const hasFeedback = 'feedback' in body
     const hasMax = 'maxPoints' in body
 
-    let awardedPoints: number | null = existing?.awardedPoints ?? null
+    let awardedPoints: number | null = existing?.earned ?? null
     if (hasPoints) {
       if (body.awardedPoints === null) {
         awardedPoints = null
@@ -71,22 +74,31 @@ export async function PUT(
       feedback = f === '' ? null : f
     }
 
-    let maxPoints: number | null = existing?.maxPoints ?? null
+    let maxPoints: number | null = existing?.max ?? null
     if (hasMax) {
       maxPoints = body.maxPoints === null ? null : Number(body.maxPoints)
       if (maxPoints !== null && !Number.isFinite(maxPoints)) maxPoints = null
     }
 
-    // Nothing left to store → drop the row (reverts to the auto score).
+    // Nothing left to store → drop the override row (reverts to the next source).
     if (awardedPoints === null && feedback === null) {
-      await prisma.examQuestionGrade.deleteMany({ where: { pageId, studentId, componentId } })
+      await prisma.componentScore.deleteMany({ where: { pageId, studentId, componentId, source: 'override' } })
       return NextResponse.json({ cleared: true })
     }
 
-    const grade = await prisma.examQuestionGrade.upsert({
-      where: { pageId_studentId_componentId: { pageId, studentId, componentId } },
-      create: { pageId, studentId, componentId, awardedPoints, maxPoints, feedback, gradedBy: session.user.id },
-      update: { awardedPoints, maxPoints, feedback, gradedBy: session.user.id },
+    const data = {
+      priority: SCORE_PRIORITY.override,
+      earned: awardedPoints,
+      max: maxPoints,
+      feedback,
+      createdBy: session.user.id,
+    }
+    const grade = await prisma.componentScore.upsert({
+      where: {
+        pageId_studentId_componentId_source: { pageId, studentId, componentId, source: 'override' },
+      },
+      create: { pageId, studentId, componentId, source: 'override', ...data },
+      update: data,
     })
 
     return NextResponse.json({ grade })

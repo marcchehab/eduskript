@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { scoreComponent, type ScoreSource } from '@/lib/scoring/score-component'
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -60,15 +61,31 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const studentIds = memberships.map(m => m.student.id)
 
-    // Fetch stored check results
-    const records = await prisma.userData.findMany({
-      where: { userId: { in: studentIds }, adapter: componentId, itemId: pageId },
-      select: { userId: true, data: true, updatedAt: true }
-    })
+    // Client-stored check results (live preview; tamperable) + the authoritative
+    // ComponentScore rows (check / ai / override). The headline points respect the
+    // scoring precedence: the effective ComponentScore wins when one exists;
+    // otherwise we fall back to the client check data (e.g. before the teacher has
+    // run checks). The X/Y tests detail always comes from the client run.
+    const [records, scoreRows] = await Promise.all([
+      prisma.userData.findMany({
+        where: { userId: { in: studentIds }, adapter: componentId, itemId: pageId },
+        select: { userId: true, data: true, updatedAt: true },
+      }),
+      prisma.componentScore.findMany({
+        where: { pageId, componentId, studentId: { in: studentIds } },
+        select: { studentId: true, source: true, priority: true, earned: true, max: true, feedback: true, updatedAt: true },
+      }),
+    ])
 
     const recordMap = new Map(
       records.map(r => [r.userId, { data: r.data as unknown as PythonCheckData, updatedAt: r.updatedAt }])
     )
+    const sourcesByStudent = new Map<string, ScoreSource[]>()
+    for (const s of scoreRows) {
+      const list = sourcesByStudent.get(s.studentId) ?? []
+      list.push({ source: s.source, priority: s.priority, earned: s.earned, max: s.max, feedback: s.feedback, updatedAt: s.updatedAt })
+      sourcesByStudent.set(s.studentId, list)
+    }
 
     let fullPass = 0
     let partialPass = 0
@@ -80,30 +97,38 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const responseItems = memberships.map(m => {
       const record = recordMap.get(m.student.id)
       const data = record?.data
+      const sources = sourcesByStudent.get(m.student.id) ?? []
+      const ranClient = !!data && Array.isArray(data.lastResults) && data.lastResults.length > 0
+      const testsPassed = ranClient ? data!.lastResults.filter(r => r.passed).length : null
+      const totalTests = ranClient ? data!.lastResults.length : null
 
-      if (!data || !data.lastResults || data.lastResults.length === 0) {
-        notAttempted++
-        return {
-          studentId: m.student.id,
-          pseudonym: m.student.studentPseudonym ?? '',
-          displayName: m.student.name ?? '—',
-          testsPassed: null,
-          totalTests: null,
-          earnedPoints: null,
-          submittedAt: record?.updatedAt ? record.updatedAt.getTime() : null,
-        }
+      // Effective points: ComponentScore precedence if any source exists, else the
+      // client check result. declaredMax falls back to the client check's points.
+      let earned: number | null = null
+      let pointsMax: number | null = null
+      let source: string | null = null
+      if (sources.length > 0) {
+        const resolved = scoreComponent({ declaredMax: data?.points ?? null, sources })
+        earned = resolved.earned
+        pointsMax = resolved.max
+        source = resolved.effectiveSource
+      } else if (ranClient) {
+        earned = data!.earnedPoints
+        pointsMax = data!.points
+        source = 'preview' // client-reported, not yet graded server-side
       }
 
-      const testsPassed = data.lastResults.filter(r => r.passed).length
-      const totalTests = data.lastResults.length
-      const percentage = totalTests > 0 ? (testsPassed / totalTests) * 100 : 0
-
-      attemptedCount++
-      totalScore += percentage
-
-      if (testsPassed === totalTests) fullPass++
-      else if (testsPassed > 0) partialPass++
-      else failed++
+      const attempted = source != null
+      if (!attempted) {
+        notAttempted++
+      } else {
+        const ratio = pointsMax && pointsMax > 0 ? (earned ?? 0) / pointsMax : 0
+        attemptedCount++
+        totalScore += ratio * 100
+        if (ratio >= 1) fullPass++
+        else if ((earned ?? 0) > 0) partialPass++
+        else failed++
+      }
 
       return {
         studentId: m.student.id,
@@ -111,7 +136,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         displayName: m.student.name ?? '—',
         testsPassed,
         totalTests,
-        earnedPoints: data.earnedPoints,
+        earnedPoints: earned,
+        pointsMax,
+        source,
         submittedAt: record?.updatedAt ? record.updatedAt.getTime() : null,
       }
     })

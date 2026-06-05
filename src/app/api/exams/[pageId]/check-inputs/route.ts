@@ -11,8 +11,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { parseGradableComponents } from '@/lib/grading/components'
-import { isTeacherOfStudentForPage } from '@/lib/grading/auth'
+import { parseGradableComponents } from '@/lib/scoring/components'
+import { isTeacherOfStudentForPage } from '@/lib/scoring/auth'
 
 interface CodeFile { name?: string; content?: string }
 interface CodeEditorPayload { files?: CodeFile[]; activeFileIndex?: number }

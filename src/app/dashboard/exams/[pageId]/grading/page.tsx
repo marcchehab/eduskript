@@ -13,8 +13,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
-import { ArrowLeft, Send, Loader2, Play } from 'lucide-react'
-import { runChecksForStudents } from '@/lib/grading/run-checks.client'
+import { ArrowLeft, Send, Loader2, Play, Wand2 } from 'lucide-react'
+import { runChecksForStudents } from '@/lib/scoring/run-checks.client'
+import { AiScoringModal } from '@/components/dashboard/ai-scoring-modal'
 import { getReverseMappingsForClass } from '@/lib/email-mapping-db'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -25,7 +26,7 @@ import {
   gradeFromPoints,
   type GradeConfigParams,
   type GradeFormula,
-} from '@/lib/grading/grade-formula'
+} from '@/lib/scoring/grade-formula'
 
 interface Question {
   componentId: string
@@ -141,6 +142,7 @@ export default function ExamGradingPage() {
   const [error, setError] = useState<string | null>(null)
   const [returningAll, setReturningAll] = useState(false)
   const [runAll, setRunAll] = useState<{ done: number; total: number } | null>(null)
+  const [aiOpen, setAiOpen] = useState(false)
   // Teacher's local pseudonym → real-email mapping (IndexedDB), so the roster
   // shows people the teacher can identify — same source the StudentNavigator /
   // ClassToolbar use. The mapping takes precedence over the stored name/pseudonym.
@@ -367,6 +369,9 @@ export default function ExamGradingPage() {
               <><Play className="w-4 h-4 mr-2" />Run all checks</>
             )}
           </Button>
+          <Button variant="outline" onClick={() => setAiOpen(true)} disabled={submittedCount === 0} title="Generate scoring rubrics and AI-score all students">
+            <Wand2 className="w-4 h-4 mr-2" />AI scoring
+          </Button>
           <Button onClick={returnAll} disabled={returningAll || submittedCount === 0}>
             {returningAll ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
             Return all
@@ -514,6 +519,15 @@ export default function ExamGradingPage() {
         confirmText={dialog.confirmText}
         cancelText={dialog.cancelText}
         destructive={dialog.destructive}
+      />
+
+      <AiScoringModal
+        open={aiOpen}
+        onOpenChange={setAiOpen}
+        pageId={pageId}
+        questions={data.questions}
+        studentIds={data.students.filter((s) => s.status !== 'not_started').map((s) => s.studentId)}
+        onScored={loadGrading}
       />
     </div>
   )

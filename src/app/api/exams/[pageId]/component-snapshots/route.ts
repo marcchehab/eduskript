@@ -10,7 +10,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { isTeacherOfStudentForPage } from '@/lib/grading/auth'
+import { isTeacherOfStudentForPage } from '@/lib/scoring/auth'
 
 export async function GET(
   request: NextRequest,

@@ -1,25 +1,23 @@
 /**
- * Exam grade aggregation. Pure `aggregateStudent` (components + stored payloads
- * + overrides + config → total + grade) is unit-tested; `computeExamGrades`
- * is the batched DB wrapper the grading API uses (one UserData query + one
- * override query for the whole class).
+ * Exam scoring + grade aggregation. Pure `aggregateStudent` (components + score
+ * sources + config → total score + grade) is unit-tested; `computeExamGrades`
+ * is the batched DB wrapper the grading API uses (one ComponentScore query for
+ * the whole class).
  *
- * Raw answers are read from UserData (adapter=componentId, itemId=pageId) — NOT
- * from handin checkpoints, which only capture code editors. Per-question auto
- * scores are AUTHORITATIVE ExamCheckRun values, computed on the teacher's device
- * during grading (python asserts re-run; quiz choice/text re-derived from the
- * raw answer) — the client's persisted textScore/choiceScore/earnedPoints is
- * live-preview only and not trusted here. A teacher ExamQuestionGrade override
- * wins over the auto score.
+ * All per-question points come from ComponentScore rows (check / ai / override
+ * sources) — the trusted, server-side scores. The client's persisted
+ * textScore/choiceScore/earnedPoints is live-preview only and not read here. The
+ * effective points per component are resolved by `scoreComponent` (highest
+ * priority wins; feedback resolved independently). The 1-6 grade is then computed
+ * by the grade key from the total score.
  *
  * Related: [[components]], [[score-component]], [[grade-formula]].
  */
 
 import { prisma } from '@/lib/prisma'
 import type { ExamGradeConfig } from '@prisma/client'
-import type { QuizData, PythonCheckData } from '@/lib/userdata/types'
 import { parseGradableComponents, type GradableComponent } from './components'
-import { scoreComponent } from './score-component'
+import { scoreComponent, type ScoreSource } from './score-component'
 import {
   gradeFromPoints,
   DEFAULT_GRADE_CONFIG,
@@ -36,6 +34,10 @@ export interface ComponentResult {
   answered: boolean
   overridden: boolean
   autoEarned: number
+  /** The ai-source points, if any (for an "AI: 1.5" display). */
+  aiEarned: number | null
+  /** Which source won the points (null = nothing scored yet). */
+  effectiveSource: string | null
   feedback?: string | null
 }
 
@@ -44,12 +46,6 @@ export interface StudentGrade {
   totalEarned: number
   totalMax: number
   grade: number
-}
-
-export interface QuestionOverride {
-  awardedPoints: number | null
-  maxPoints?: number | null
-  feedback?: string | null
 }
 
 /** Map a stored ExamGradeConfig row (or null) to formula params + max override. */
@@ -71,23 +67,17 @@ export function resolveConfig(row: ExamGradeConfig | null | undefined): {
   }
 }
 
-/** Pure: aggregate one student's grade from already-loaded inputs. */
+/** Pure: aggregate one student's grade from already-loaded score sources. */
 export function aggregateStudent(
   components: GradableComponent[],
-  payloads: Map<string, unknown>,
-  overrides: Map<string, QuestionOverride>,
+  sourcesByComponent: Map<string, ScoreSource[]>,
   params: GradeConfigParams,
   maxPointsOverride: number | null,
-  checkRuns: Map<string, { earned: number; max: number }> = new Map(),
 ): StudentGrade {
   const results: ComponentResult[] = components.map((c) => {
     const s = scoreComponent({
-      kind: c.kind,
-      questionType: c.questionType,
       declaredMax: c.maxPoints ?? null,
-      payload: (payloads.get(c.componentId) as Partial<QuizData & PythonCheckData> | undefined) ?? null,
-      checkRun: checkRuns.get(c.componentId) ?? null,
-      override: overrides.get(c.componentId) ?? null,
+      sources: sourcesByComponent.get(c.componentId) ?? [],
     })
     return {
       componentId: c.componentId,
@@ -99,6 +89,8 @@ export function aggregateStudent(
       answered: s.answered,
       overridden: s.overridden,
       autoEarned: s.autoEarned,
+      aiEarned: s.aiEarned,
+      effectiveSource: s.effectiveSource,
       feedback: s.feedback,
     }
   })
@@ -125,8 +117,8 @@ export interface ExamGrading {
 }
 
 /**
- * Batched: compute grades for many students of one exam page. One content
- * parse, one config read, one UserData query, one overrides query.
+ * Batched: compute grades for many students of one exam page. One content parse,
+ * one config read, one ComponentScore query for the whole class.
  */
 export async function computeExamGrades(
   pageId: string,
@@ -144,48 +136,40 @@ export async function computeExamGrades(
   const byStudent = new Map<string, StudentGrade>()
   if (studentIds.length === 0 || componentIds.length === 0) {
     for (const sid of studentIds) {
-      byStudent.set(sid, aggregateStudent(components, new Map(), new Map(), params, maxPointsOverride))
+      byStudent.set(sid, aggregateStudent(components, new Map(), params, maxPointsOverride))
     }
     return { components, params, maxPointsOverride, autoMaxPoints, byStudent }
   }
 
-  const [rows, overrideRows, checkRunRows] = await Promise.all([
-    prisma.userData.findMany({
-      where: {
-        userId: { in: studentIds },
-        itemId: pageId,
-        adapter: { in: componentIds },
-        targetType: null,
-      },
-      select: { userId: true, adapter: true, data: true },
-    }),
-    prisma.examQuestionGrade.findMany({
-      where: { pageId, studentId: { in: studentIds } },
-      select: { studentId: true, componentId: true, awardedPoints: true, maxPoints: true, feedback: true },
-    }),
-    prisma.examCheckRun.findMany({
-      where: { pageId, studentId: { in: studentIds } },
-      select: { studentId: true, componentId: true, earned: true, max: true },
-    }),
-  ])
+  const scoreRows = await prisma.componentScore.findMany({
+    where: { pageId, studentId: { in: studentIds }, componentId: { in: componentIds } },
+    select: {
+      studentId: true,
+      componentId: true,
+      source: true,
+      priority: true,
+      earned: true,
+      max: true,
+      feedback: true,
+      updatedAt: true,
+    },
+  })
 
-  const payloadsByStudent = new Map<string, Map<string, unknown>>()
-  for (const r of rows) {
-    let m = payloadsByStudent.get(r.userId)
-    if (!m) payloadsByStudent.set(r.userId, (m = new Map()))
-    m.set(r.adapter, r.data)
-  }
-  const overridesByStudent = new Map<string, Map<string, QuestionOverride>>()
-  for (const o of overrideRows) {
-    let m = overridesByStudent.get(o.studentId)
-    if (!m) overridesByStudent.set(o.studentId, (m = new Map()))
-    m.set(o.componentId, { awardedPoints: o.awardedPoints, maxPoints: o.maxPoints, feedback: o.feedback })
-  }
-  const checkRunsByStudent = new Map<string, Map<string, { earned: number; max: number }>>()
-  for (const cr of checkRunRows) {
-    let m = checkRunsByStudent.get(cr.studentId)
-    if (!m) checkRunsByStudent.set(cr.studentId, (m = new Map()))
-    m.set(cr.componentId, { earned: cr.earned, max: cr.max })
+  // student -> componentId -> ScoreSource[]
+  const byStudentComponent = new Map<string, Map<string, ScoreSource[]>>()
+  for (const r of scoreRows) {
+    let perComponent = byStudentComponent.get(r.studentId)
+    if (!perComponent) byStudentComponent.set(r.studentId, (perComponent = new Map()))
+    let list = perComponent.get(r.componentId)
+    if (!list) perComponent.set(r.componentId, (list = []))
+    list.push({
+      source: r.source,
+      priority: r.priority,
+      earned: r.earned,
+      max: r.max,
+      feedback: r.feedback,
+      updatedAt: r.updatedAt,
+    })
   }
 
   for (const sid of studentIds) {
@@ -193,11 +177,9 @@ export async function computeExamGrades(
       sid,
       aggregateStudent(
         components,
-        payloadsByStudent.get(sid) ?? new Map(),
-        overridesByStudent.get(sid) ?? new Map(),
+        byStudentComponent.get(sid) ?? new Map(),
         params,
         maxPointsOverride,
-        checkRunsByStudent.get(sid) ?? new Map(),
       ),
     )
   }

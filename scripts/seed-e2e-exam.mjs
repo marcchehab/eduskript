@@ -171,8 +171,7 @@ try {
   // Fresh slate for every student.
   for (const s of students) {
     await prisma.examSubmission.deleteMany({ where: { pageId: page.id, studentId: s.id } })
-    await prisma.examQuestionGrade.deleteMany({ where: { pageId: page.id, studentId: s.id } })
-    await prisma.examCheckRun.deleteMany({ where: { pageId: page.id, studentId: s.id } })
+    await prisma.componentScore.deleteMany({ where: { pageId: page.id, studentId: s.id } })
     await prisma.userData.deleteMany({ where: { userId: s.id, itemId: page.id } })
     await prisma.userDataCheckpoint.deleteMany({ where: { userId: s.id, pageId: page.id } })
   }

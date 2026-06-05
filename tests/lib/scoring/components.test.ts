@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseGradableComponents } from '@/lib/grading/components'
+import { parseGradableComponents } from '@/lib/scoring/components'
 
 const fence = '```'
 

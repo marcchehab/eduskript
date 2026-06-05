@@ -27,7 +27,8 @@ import { postCheckpoint } from '@/lib/userdata/checkpoints'
 import { useSyncedUserData, type SyncedUserDataOptions } from '@/lib/userdata/provider'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
 import { useStudentSnapshot } from '@/contexts/student-snapshot-context'
-import { GradeBadge } from '@/components/exam/grade-badge'
+import { ScoreBadge } from '@/components/exam/score-badge'
+import { CodeScorePanel } from '@/components/exam/code-score-panel'
 import { useComponentReview } from '@/contexts/exam-review-context'
 import { cn } from '@/lib/utils'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
@@ -3520,7 +3521,7 @@ export const CodeEditor = memo(function CodeEditor({
   // Teacher grading: auto-run the check once per student so the per-check
   // results panel is populated on student-select — without a manual "Run
   // checks" click in each editor. The grading bar's "Run all / Run checks"
-  // re-computes the authoritative SCORE (ExamCheckRun, via the worker) but does
+  // re-computes the authoritative SCORE (ComponentScore source="check", via the worker) but does
   // not populate this in-editor display; this does. Keyed by the loaded student
   // (re-runs when the teacher switches students); waits for the student's code
   // snapshot to be applied to the editor first.
@@ -5275,9 +5276,10 @@ export const CodeEditor = memo(function CodeEditor({
       )}
     </div>
 
-    {/* Python check test results. Hidden from students during exams; shown to
-        the teacher when grading (isGradingCheck) so they can see what passed. */}
-    {hasChecks && checkResults && (!exam || isGradingCheck) && (
+    {/* Python check test results. Students see this in non-exam practice. In the
+        teacher's exam grade view the CodeScorePanel (below) renders the test
+        breakdown inside its "Unit tests" tab instead. */}
+    {hasChecks && checkResults && !exam && !isGradingCheck && (
       <>
         {isStaged && (
           <div className="mt-2 text-xs font-medium text-muted-foreground">
@@ -5298,11 +5300,28 @@ export const CodeEditor = memo(function CodeEditor({
       </>
     )}
 
+    {/* Teacher exam grade view: the precedence-tabbed scoring panel (Unit tests →
+        AI → Manual) + version history. Replaces the standalone test-results,
+        snapshots panel and ScoreBadge below for python-check exercises. */}
+    {hasChecks && isGradingCheck && (
+      <CodeScorePanel
+        componentId={pythonCheckComponentId}
+        testResults={checkResults}
+        checkPoints={effectiveCheckPoints ?? checkResults?.length ?? 0}
+        snapshots={snapList}
+        snapshotsLoading={snapshotLoading}
+        viewedSnapshotId={viewedSnapshotId}
+        editedSinceSnapshot={editedSinceSnapshot}
+        onViewSnapshot={viewSnapshot}
+        onRevertSnapshot={revertSnapshot}
+      />
+    )}
+
     {/* Snapshot history — teacher viewing a student. A compact read-only list of
         the student's saved snapshots, sat between the editor and the points box;
         click any to load it into the editor (above). Editing surfaces Revert.
         Nothing here mutates a snapshot. */}
-    {isViewingSnapshot && (
+    {isViewingSnapshot && !isGradingCheck && (
       <div className="mt-1.5 rounded-md border bg-card px-1.5 py-1 text-[11px]">
         <div className="flex items-center justify-between gap-2 px-0.5 min-h-[20px] text-muted-foreground">
           <span className="font-medium uppercase tracking-wide text-[10px]">
@@ -5348,9 +5367,9 @@ export const CodeEditor = memo(function CodeEditor({
       </div>
     )}
 
-    {/* In-exam grade badge for python-check exercises — teacher grading or
-        student reviewing a returned exam. Self-hides when no review is active. */}
-    {hasChecks && <GradeBadge componentId={pythonCheckComponentId} />}
+    {/* Student reviewing a returned exam: read-only score + feedback. The teacher
+        grade view uses CodeScorePanel above instead. */}
+    {hasChecks && !isGradingCheck && <ScoreBadge componentId={pythonCheckComponentId} />}
 
     {/* Teacher class-overview progress — only in the "class overview" mode
         (no student selected). When viewing/grading one student we show their

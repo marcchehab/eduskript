@@ -5,7 +5,7 @@ import {
   roundToStep,
   DEFAULT_GRADE_CONFIG,
   type GradeConfigParams,
-} from '@/lib/grading/grade-formula'
+} from '@/lib/scoring/grade-formula'
 
 const twoSeg = (passPercent: number, roundingStep = 0.1): GradeConfigParams => ({
   formula: 'twoSegment',

@@ -14,7 +14,7 @@ import { compareOutput, scoreFromRatio } from '@/lib/output-comparison'
 import { useIsExamPage } from '@/contexts/exam-page-context'
 import { useStageLocked } from './stage-flow'
 import { useComponentReview } from '@/contexts/exam-review-context'
-import { GradeBadge } from '@/components/exam/grade-badge'
+import { ScoreBadge } from '@/components/exam/score-badge'
 import { postCheckpoint } from '@/lib/userdata/checkpoints'
 import { TextAnswerHistory } from './text-answer-history'
 
@@ -585,7 +585,7 @@ function QuestionInner({
       )}
 
       {/* In-exam grade badge (teacher grading / student returned review). */}
-      {componentId && <GradeBadge componentId={componentId} />}
+      {componentId && <ScoreBadge componentId={componentId} />}
     </div>
   )
 }
@@ -820,7 +820,7 @@ function SyncedQuestion({
   // Authoritative auto-grade, computed on the TEACHER's device (grade mode).
   // Re-derives this question's score from the student's RAW answer + this
   // question's answer key (rendered here = trusted) and persists it as the
-  // component's ExamCheckRun — the same authoritative store python checks use.
+  // component's check score (ComponentScore source="check") — the same authoritative store python checks use.
   // The client-stored choiceScore/textScore is never trusted for the grade.
   // Free text without an `expected` key and number/range yield no auto score
   // (teacher grades them manually via an override). Runs once per (student,
