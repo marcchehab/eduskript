@@ -364,6 +364,21 @@ body {
   }
 }
 
+/*
+ * Exam / no-sidebar: with no sidebar to occupy the left space, the centered
+ * `margin: 0 auto` paper leaves a left gap that a student CANNOT pan away —
+ * pinch-zoom+pan is native scroll, and scrollLeft can't go below 0, so the
+ * paper's left auto-margin stays pinned on screen (the right side scrolls
+ * freely). Seen on wide macOS/SEB viewports as a phantom sidebar-width margin.
+ * Pin the paper to the left edge so its left edge is always reachable; the
+ * right side keeps its current scroll/zoom behaviour. Annotations re-project
+ * from the paper's live rect, so this horizontal shift doesn't misalign them.
+ */
+#scroll-container.no-sidebar .paper-responsive {
+  margin-left: 0;
+  margin-right: 0;
+}
+
 /* Custom prose styles that respect our theme */
 .prose-theme {
   @apply max-w-none;

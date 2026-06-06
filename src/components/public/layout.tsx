@@ -850,7 +850,7 @@ export function PublicSiteLayout({
         <div
           id="scroll-container"
           className={`relative transition-all duration-300 h-screen overflow-auto ${
-            hideSidebar ? '' : isSidebarCollapsed ? 'min-[1344px]:ml-16' : 'min-[1344px]:ml-80'
+            hideSidebar ? 'no-sidebar' : isSidebarCollapsed ? 'min-[1344px]:ml-16' : 'min-[1344px]:ml-80'
           }`}
         >
           <main className="bg-background min-h-screen">
