@@ -57,6 +57,7 @@ export function AiScoringModal({
   pageId,
   questions,
   studentIds,
+  studentLabels,
   onScored,
 }: {
   open: boolean
@@ -64,6 +65,8 @@ export function AiScoringModal({
   pageId: string
   questions: Question[]
   studentIds: string[]
+  /** studentId → display name/email, so per-student scoring errors name the student. */
+  studentLabels?: Record<string, string>
   onScored: () => void
 }) {
   const [rubrics, setRubrics] = useState<Record<string, Rubric>>({})
@@ -185,15 +188,17 @@ export function AiScoringModal({
     }
   }
 
-  // Group the failures by question + reason so the teacher sees what to fix /
-  // re-score, instead of an opaque "N errors" count.
+  // Group failures by question + reason so the teacher sees what to fix / re-score,
+  // and name WHICH students hit each (the student is often what matters most).
   const groupedErrors = (() => {
     const labelOf = (id: string) => questions.find((q) => q.componentId === id)?.label ?? id
-    const map = new Map<string, { label: string; error: string; count: number }>()
+    const studentOf = (id?: string) => (id ? (studentLabels?.[id] ?? id) : null)
+    const map = new Map<string, { label: string; error: string; students: string[] }>()
     for (const e of scoreErrors) {
       const key = `${e.componentId}::${e.error}`
-      const g = map.get(key) ?? { label: labelOf(e.componentId), error: e.error, count: 0 }
-      g.count++
+      const g = map.get(key) ?? { label: labelOf(e.componentId), error: e.error, students: [] }
+      const s = studentOf(e.studentId)
+      if (s && !g.students.includes(s)) g.students.push(s)
       map.set(key, g)
     }
     return [...map.values()]
@@ -236,8 +241,13 @@ export function AiScoringModal({
             <ul className="!m-0 space-y-0.5 !p-0 !list-none">
               {groupedErrors.map((g, i) => (
                 <li key={i} className="!m-0 flex gap-2 !p-0 marker:content-['']">
-                  <span className="shrink-0 font-medium">{g.count}×</span>
-                  <span className="min-w-0"><span className="text-muted-foreground">{g.label}:</span> {g.error}</span>
+                  <span className="shrink-0 font-medium">{g.students.length || 1}×</span>
+                  <span className="min-w-0">
+                    <span className="text-muted-foreground">{g.label}:</span> {g.error}
+                    {g.students.length > 0 && (
+                      <span className="block text-muted-foreground">{g.students.join(', ')}</span>
+                    )}
+                  </span>
                 </li>
               ))}
             </ul>

@@ -91,7 +91,7 @@ function GradingBar({
   const [busy, setBusy] = useState(false)
   const [runAll, setRunAll] = useState<{ done: number; total: number } | null>(null)
   const [aiOpen, setAiOpen] = useState(false)
-  const [aiData, setAiData] = useState<{ questions: AiQuestion[]; studentIds: string[] } | null>(null)
+  const [aiData, setAiData] = useState<{ questions: AiQuestion[]; studentIds: string[]; studentLabels: Record<string, string> } | null>(null)
 
   // Load the class roster + question list, then open the AI scoring modal. The
   // rubric is per-exam; scoring runs for the whole class regardless of which
@@ -100,10 +100,15 @@ function GradingBar({
     try {
       const res = await fetch(`/api/exams/${pageId}/grading?classId=${classId}`)
       const j = await res.json()
-      const studentIds: string[] = (j.students ?? [])
-        .filter((s: { status: string }) => s.status !== 'not_started')
-        .map((s: { studentId: string }) => s.studentId)
-      setAiData({ questions: j.questions ?? [], studentIds })
+      const handedIn = (j.students ?? []).filter((s: { status: string }) => s.status !== 'not_started')
+      const studentIds: string[] = handedIn.map((s: { studentId: string }) => s.studentId)
+      const studentLabels: Record<string, string> = Object.fromEntries(
+        handedIn.map((s: { studentId: string; email?: string | null; name?: string | null; pseudonym?: string | null }) => [
+          s.studentId,
+          s.email || s.name || s.pseudonym || s.studentId,
+        ]),
+      )
+      setAiData({ questions: j.questions ?? [], studentIds, studentLabels })
       setAiOpen(true)
     } catch {
       dialog.showError('Could not load exam data for AI scoring.')
@@ -244,6 +249,7 @@ function GradingBar({
           pageId={pageId}
           questions={aiData.questions}
           studentIds={aiData.studentIds}
+          studentLabels={aiData.studentLabels}
           onScored={refreshGrades}
         />
       )}

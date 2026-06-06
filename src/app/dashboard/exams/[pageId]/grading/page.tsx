@@ -548,6 +548,7 @@ export default function ExamGradingPage() {
         pageId={pageId}
         questions={data.questions}
         studentIds={data.students.filter((s) => s.status !== 'not_started').map((s) => s.studentId)}
+        studentLabels={Object.fromEntries(data.students.map((s) => [s.studentId, displayName(s)]))}
         onScored={loadGrading}
       />
     </div>
