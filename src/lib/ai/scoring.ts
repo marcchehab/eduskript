@@ -150,22 +150,10 @@ Rules:
 - Criteria must be concrete and checkable against a student's answer (e.g. "Handles the empty-list case", "Correct loop bound", "Uses a base case").
 - The sum of criterion points MUST equal the given maximum points.
 - Use partial-credit granularity that matches the max (e.g. 0.5-point steps are fine).
-- INLINE REGEX CHECKS: a criterion is scored DETERMINISTICALLY by a regex (not by judgement) when,
-  and only when, its description ends with an inline annotation of the exact form
-  " (using Regex: /pattern/flags)". Add this ONLY for things a regex can literally verify — the mere
-  PRESENCE or SYNTACTIC FORM of a construct (e.g. "Verwendet .append(), um zu sammeln (using Regex:
-  /\\.append\\s*\\(/)", "Enthält eine for-Schleife mit range() (using Regex: /for\\s+\\w+\\s+in\\s+range\\s*\\(/)").
-  Be LENIENT (\\s* between tokens, \\w+ for names, escape parens) and accept ALL valid forms (a list
-  comprehension also "collects into a list"; a "returns a value" check is /return\\s+\\S/, matching
-  return of ANY expression including a variable). Do NOT add a regex to any criterion that judges
-  CORRECTNESS or MEANING (the right variable, the right logic/result) — a regex sees text, not meaning
-  (it can't tell "i % 2" from "n % 2"), so those stay plain prose, AI-judged. When in doubt, omit the
-  regex. NEVER make a check that the provided starter code already satisfies. Keep the prose before
-  the annotation NATURAL and human-readable; the regex is just the trailing parenthetical. Prefer
-  ATOMIC criteria so each maps cleanly.
+- Prefer ATOMIC criteria — one independently-awardable thing each.
 - Reply in the SAME LANGUAGE as the exercise.
-- Output STRICT JSON only, no prose, no code fences. The regex (when any) is INLINE in the description:
-  {"criteria":[{"description":"Verwendet .append(), um Zahlen zu sammeln (using Regex: /\\\\.append\\\\s*\\\\(/)","points":1},{"description":"Filtert die richtige Variable","points":1}]}`
+- Output STRICT JSON only, no prose, no code fences:
+  {"criteria":[{"description":"...","points":2},{"description":"...","points":1}]}`
 
 export interface RubricPromptInput {
   pageContext: string
@@ -207,8 +195,8 @@ export async function generateRubric(
 ): Promise<{ criteria: RubricCriterion[] } | { error: string }> {
   let text: string
   try {
-    // 8k tokens: the reasoning model needs headroom to emit criteria + regexes
-    // (lower budgets truncate mid-reasoning and return empty content).
+    // 8k tokens: the reasoning model (minimax) needs headroom or it truncates
+    // mid-reasoning and returns empty content.
     text = await complete(withGuidance(RUBRIC_SYSTEM, input.guidance), buildRubricUserPrompt(input), 8192)
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'LLM request failed' }
@@ -249,6 +237,17 @@ Rules:
   partially correct, or a correct structure with a wrong detail. Reserve 0 only for a
   criterion that is essentially not addressed; give full points when the criterion as
   worded is met.
+- SYNTAX/PRESENCE criteria — judge them like a REGEX, not holistically. When a criterion
+  asks only whether a construct is syntactically PRESENT or well-formed (a loop/if header,
+  an operator, a call, a return statement) — NOT whether the logic, variable, or result is
+  correct — do NOT weigh it against the whole (possibly broken) program. Instead think:
+  "what regular expression would detect this construct in the source text, and would it
+  match THIS submission?" Award FULL points if such a regex would match, 0 only if it would
+  not. A regex matches text patterns and ignores indentation, surrounding errors, or whether
+  the program even runs (e.g. a well-formed \`for i in range(…):\` header earns a
+  "for-loop header is syntactically correct" criterion even if the loop body is mis-indented).
+  Criteria about CORRECT logic, the RIGHT variable, or the RIGHT result are NOT regex-style —
+  judge those normally.
 - Write a short overall feedback for the student (1-3 sentences), in the SAME LANGUAGE as the submission/exercise.
 - This is a SUBMITTED, already-graded exam — the student CANNOT revise it. So do NOT give
   corrective instructions ("Korrigieren Sie…", "Verwenden Sie…", "Bauen Sie … ein", "you
