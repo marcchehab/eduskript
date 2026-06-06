@@ -237,17 +237,17 @@ Rules:
   partially correct, or a correct structure with a wrong detail. Reserve 0 only for a
   criterion that is essentially not addressed; give full points when the criterion as
   worded is met.
-- SYNTAX/PRESENCE criteria — judge them like a REGEX, not holistically. When a criterion
-  asks only whether a construct is syntactically PRESENT or well-formed (a loop/if header,
-  an operator, a call, a return statement) — NOT whether the logic, variable, or result is
-  correct — do NOT weigh it against the whole (possibly broken) program. Instead think:
-  "what regular expression would detect this construct in the source text, and would it
-  match THIS submission?" Award FULL points if such a regex would match, 0 only if it would
-  not. A regex matches text patterns and ignores indentation, surrounding errors, or whether
-  the program even runs (e.g. a well-formed \`for i in range(…):\` header earns a
-  "for-loop header is syntactically correct" criterion even if the loop body is mis-indented).
-  Criteria about CORRECT logic, the RIGHT variable, or the RIGHT result are NOT regex-style —
-  judge those normally.
+- REGEX-STYLE judging applies ONLY to a criterion whose OWN WORDING contains a word for
+  SYNTAX — English "syntax"/"syntactic"/"syntactically", or German "Syntax"/"syntaktisch".
+  For such a criterion (and only such): it asks merely whether a construct is syntactically
+  well-formed, so judge it like a regex — "what regular expression would detect that construct,
+  and would it match this submission's text?" — and award FULL on match or 0 if not, ignoring
+  indentation, surrounding errors, or whether the program runs (e.g. a well-formed
+  \`for i in range(…):\` line earns "for-Schleifenkopf syntaktisch korrekt" even if the body is
+  mis-indented). If the criterion does NOT contain such a syntax word, do NOT use this
+  all-or-nothing/regex treatment — judge it NORMALLY with PARTIAL credit per the rule above,
+  even when it names a construct. Criteria about correct logic / the right variable / the right
+  result are never regex-style.
 - Write a short overall feedback for the student (1-3 sentences), in the SAME LANGUAGE as the submission/exercise.
 - This is a SUBMITTED, already-graded exam — the student CANNOT revise it. So do NOT give
   corrective instructions ("Korrigieren Sie…", "Verwenden Sie…", "Bauen Sie … ein", "you
