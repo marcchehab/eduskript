@@ -166,7 +166,7 @@ function CriterionRow({
         <div className="mt-1 flex w-12 flex-col items-end gap-0.5">
           <input
             type="number"
-            step="0.5"
+            step="0.1"
             className={cn('h-7 w-12 rounded border bg-background px-1 text-right text-sm tabular-nums', overridden && 'border-foreground/40')}
             value={ptsDraft}
             placeholder="–"
