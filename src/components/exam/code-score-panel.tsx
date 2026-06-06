@@ -390,6 +390,16 @@ export function CodeScorePanel({
   const passedCount = testResults?.filter((r) => r.passed).length ?? 0
   const testTotal = testResults?.length ?? 0
   const rubricSum = Math.round(rubricDraft.reduce((s, c) => s + (Number(c.points) || 0), 0) * 10) / 10
+  // Student total from the SAME per-criterion values the rows show (override ?? AI),
+  // so the footer Σ + Score tab always match the visible rows. review.earned (the
+  // server aggregate) can lag a per-criterion edit until the /review refetch lands.
+  // Falls back to review.earned with no rubric (absolute-override path).
+  const studentTotal = hasRubric
+    ? Math.round(rubricDraft.reduce((s, rc) => {
+        const p = ovById.get(rc.id)?.points ?? aiById.get(rc.id)?.points
+        return s + (typeof p === 'number' ? p : 0)
+      }, 0) * 10) / 10
+    : review.earned
 
   const updateRubric = (i: number, patch: Partial<RubricCriterion>) => {
     setRubricDraft((d) => d.map((c, idx) => (idx === i ? { ...c, ...patch } : c)))
@@ -434,7 +444,7 @@ export function CodeScorePanel({
       {/* Tab bar: precedence; effective source highlighted. */}
       <div className="flex items-center gap-1.5 border-b px-2 py-1.5">
         {tabButton('tests', 'Unit tests', hasCheck ? review.autoEarned : null, hasCheck)}
-        {tabButton('score', 'Score', review.earned, true)}
+        {tabButton('score', 'Score', studentTotal, true)}
         <button
           type="button"
           onClick={() => setShowVersions((v) => !v)}
@@ -577,7 +587,7 @@ export function CodeScorePanel({
                   <div className="w-9 shrink-0 border-r" />
                   {/* student total, under the student points column (+ reset spacer) */}
                   <div className={cn('flex flex-1 items-center justify-end gap-1.5 px-2 py-1.5', STUDENT_BG)}>
-                    <span className="font-semibold tabular-nums">Σ {fmt(review.earned)} pts</span>
+                    <span className="font-semibold tabular-nums">Σ {fmt(studentTotal)} pts</span>
                     <span className="w-3.5" />
                   </div>
                   {/* rubric total under the max column; Add + Save grouped at the right */}
