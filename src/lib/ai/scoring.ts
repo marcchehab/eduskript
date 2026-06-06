@@ -14,6 +14,7 @@
 
 import OpenAI from 'openai'
 import { openrouterProviderRouting } from './openrouter'
+import { extractCriterionRegex, runCriterionCheck, stripInlineRegex } from '@/lib/scoring/regex-check'
 
 /**
  * Tolerant JSON extraction for model output. Reasoning models (e.g. minimax)
@@ -65,7 +66,9 @@ export interface RubricCriterion {
   points: number
 }
 
-/** What the LLM returns for one rubric criterion (ids are assigned server-side). */
+/** What the LLM returns for one rubric criterion (ids are assigned server-side).
+ *  A deterministic regex check, when present, is embedded INLINE in `description`
+ *  as "(using Regex: /…/)" — there is no separate field (see regex-check). */
 interface RawCriterion {
   description?: unknown
   points?: unknown
@@ -147,9 +150,22 @@ Rules:
 - Criteria must be concrete and checkable against a student's answer (e.g. "Handles the empty-list case", "Correct loop bound", "Uses a base case").
 - The sum of criterion points MUST equal the given maximum points.
 - Use partial-credit granularity that matches the max (e.g. 0.5-point steps are fine).
+- INLINE REGEX CHECKS: a criterion is scored DETERMINISTICALLY by a regex (not by judgement) when,
+  and only when, its description ends with an inline annotation of the exact form
+  " (using Regex: /pattern/flags)". Add this ONLY for things a regex can literally verify — the mere
+  PRESENCE or SYNTACTIC FORM of a construct (e.g. "Verwendet .append(), um zu sammeln (using Regex:
+  /\\.append\\s*\\(/)", "Enthält eine for-Schleife mit range() (using Regex: /for\\s+\\w+\\s+in\\s+range\\s*\\(/)").
+  Be LENIENT (\\s* between tokens, \\w+ for names, escape parens) and accept ALL valid forms (a list
+  comprehension also "collects into a list"; a "returns a value" check is /return\\s+\\S/, matching
+  return of ANY expression including a variable). Do NOT add a regex to any criterion that judges
+  CORRECTNESS or MEANING (the right variable, the right logic/result) — a regex sees text, not meaning
+  (it can't tell "i % 2" from "n % 2"), so those stay plain prose, AI-judged. When in doubt, omit the
+  regex. NEVER make a check that the provided starter code already satisfies. Keep the prose before
+  the annotation NATURAL and human-readable; the regex is just the trailing parenthetical. Prefer
+  ATOMIC criteria so each maps cleanly.
 - Reply in the SAME LANGUAGE as the exercise.
-- Output STRICT JSON only, no prose, no code fences:
-  {"criteria":[{"description":"...","points":2},{"description":"...","points":1}]}`
+- Output STRICT JSON only, no prose, no code fences. The regex (when any) is INLINE in the description:
+  {"criteria":[{"description":"Verwendet .append(), um Zahlen zu sammeln (using Regex: /\\\\.append\\\\s*\\\\(/)","points":1},{"description":"Filtert die richtige Variable","points":1}]}`
 
 export interface RubricPromptInput {
   pageContext: string
@@ -191,7 +207,9 @@ export async function generateRubric(
 ): Promise<{ criteria: RubricCriterion[] } | { error: string }> {
   let text: string
   try {
-    text = await complete(withGuidance(RUBRIC_SYSTEM, input.guidance), buildRubricUserPrompt(input), 4096)
+    // 8k tokens: the reasoning model needs headroom to emit criteria + regexes
+    // (lower budgets truncate mid-reasoning and return empty content).
+    text = await complete(withGuidance(RUBRIC_SYSTEM, input.guidance), buildRubricUserPrompt(input), 8192)
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'LLM request failed' }
   }
@@ -302,16 +320,54 @@ export function parseAiScore(
 export async function scoreSubmission(
   input: ScorePromptInput,
 ): Promise<AiScoreResult | { error: string }> {
-  let text: string
-  try {
-    // temperature 0 + a fixed seed → reproducible scoring (no more run-to-run
-    // "lottery"). Rubric generation keeps its default sampling for variety.
-    text = await complete(withGuidance(SCORE_SYSTEM, input.guidance), buildScoreUserPrompt(input), 3072, {
-      temperature: 0,
-      seed: SCORING_SEED,
+  // Split: a criterion with an INLINE regex in its description is scored
+  // DETERMINISTICALLY (full points on match, else 0 — no LLM, so no multi-criterion
+  // context bleed); the rest are judged by the model. The regex is re-extracted from
+  // the (possibly teacher-edited) description on every score, so editing it and
+  // re-scoring always reflects the current pattern.
+  const checkScores = new Map<string, AiCriterionScore>()
+  const aiCriteria: RubricCriterion[] = []
+  for (const c of input.criteria) {
+    const rx = extractCriterionRegex(c.description)
+    if (!rx) {
+      // AI-judged: hand the model the human prose only (regex annotation stripped,
+      // though a non-check criterion normally has none).
+      aiCriteria.push({ ...c, description: stripInlineRegex(c.description) })
+      continue
+    }
+    const r = runCriterionCheck(rx.pattern, rx.flags, input.submission)
+    checkScores.set(c.id, {
+      id: c.id,
+      points: r.matched ? c.points : 0,
+      comment: r.matched
+        ? 'Automatische Prüfung: Muster gefunden.'
+        : 'Automatische Prüfung: Muster nicht gefunden.',
     })
-  } catch (e) {
-    return { error: e instanceof Error ? e.message : 'LLM request failed' }
   }
-  return parseAiScore(text, input.criteria)
+
+  let aiResult: AiScoreResult = { earned: 0, feedback: null, criteria: [] }
+  if (aiCriteria.length > 0) {
+    let text: string
+    try {
+      // temperature 0 + fixed seed → reproducible. Only the AI criteria are sent
+      // (smaller, cheaper, and free of the syntax-check noise).
+      text = await complete(withGuidance(SCORE_SYSTEM, input.guidance), buildScoreUserPrompt({ ...input, criteria: aiCriteria }), 3072, {
+        temperature: 0,
+        seed: SCORING_SEED,
+      })
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : 'LLM request failed' }
+    }
+    const parsed = parseAiScore(text, aiCriteria)
+    if ('error' in parsed) return parsed
+    aiResult = parsed
+  }
+
+  // Merge in the rubric's original order.
+  const aiById = new Map(aiResult.criteria.map((c) => [c.id, c]))
+  const criteria: AiCriterionScore[] = input.criteria
+    .map((c) => checkScores.get(c.id) ?? aiById.get(c.id))
+    .filter((c): c is AiCriterionScore => !!c)
+  const earned = Math.round(criteria.reduce((s, c) => s + c.points, 0) * 10) / 10
+  return { earned, feedback: aiResult.feedback, criteria }
 }

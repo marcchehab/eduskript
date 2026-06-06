@@ -147,6 +147,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   if (!componentId || !Array.isArray(criteria)) {
     return NextResponse.json({ error: 'componentId and criteria are required' }, { status: 400 })
   }
+  // The inline regex (if any) lives in `description`, so it's preserved verbatim.
   const clean: RubricCriterion[] = criteria
     .map((c, i) => ({
       id: c.id || `c${i + 1}`,

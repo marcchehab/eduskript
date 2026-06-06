@@ -11,8 +11,9 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { RotateCcw } from 'lucide-react'
+import { RotateCcw, Regex } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { extractCriterionRegex, stripInlineRegex } from '@/lib/scoring/regex-check'
 import { useComponentReview } from '@/contexts/exam-review-context'
 
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
@@ -87,6 +88,7 @@ export function ScoreBadge({ componentId }: { componentId: string }) {
           // Same two-column mask the teacher edits — read-only for the student.
           <div className="overflow-hidden rounded-md border">
             <div className="flex border-b text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <div className="w-9 shrink-0 border-r" />
               <div className="flex-1 px-2 py-1">Your score</div>
               <div className={cn('flex-1 px-2 py-1', RUBRIC_BG)}>Rubric</div>
             </div>
@@ -97,25 +99,42 @@ export function ScoreBadge({ componentId }: { componentId: string }) {
               const comment = ov?.comment ?? ai?.comment ?? null
               return (
                 <div key={rc.id} className={cn('flex items-stretch', i > 0 && 'border-t')}>
-                  {/* LEFT — your comment + points */}
+                  {/* ID gutter — vertically-centred criterion id down the left edge. */}
+                  <div className="flex w-9 shrink-0 items-center justify-center border-r font-mono text-sm font-bold text-muted-foreground">
+                    {rc.id}
+                  </div>
+                  {/* LEFT — your comment + points (small "regex" tag under the score) */}
                   <div className="flex flex-1 items-start gap-1.5 px-2 py-1 text-xs">
                     <p className="!my-0 min-w-0 flex-1 whitespace-pre-wrap">
                       {comment ?? <span className="text-muted-foreground">—</span>}
                     </p>
-                    <span className="w-10 shrink-0 text-right font-medium tabular-nums">{points == null ? '–' : fmt(points)}</span>
+                    <span className="flex w-10 shrink-0 flex-col items-end gap-0.5">
+                      <span className="font-medium tabular-nums">{points == null ? '–' : fmt(points)}</span>
+                      {extractCriterionRegex(rc.description) && (
+                        <span
+                          className={cn(
+                            'inline-flex items-center gap-0.5 text-[9px] font-medium leading-none',
+                            (points ?? 0) > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400',
+                          )}
+                        >
+                          <Regex className="h-2.5 w-2.5" /> regex
+                        </span>
+                      )}
+                    </span>
                   </div>
-                  {/* RIGHT — the rubric criterion */}
+                  {/* RIGHT — the rubric criterion (regex annotation stripped for the student) */}
                   <div className={cn('flex flex-1 items-start gap-1.5 px-2 py-1 text-xs', RUBRIC_BG)}>
                     <span className="w-10 shrink-0 text-right tabular-nums text-muted-foreground">/ {fmt(rc.points)}</span>
                     <p className="!my-0 min-w-0 flex-1">
                       <span className="mr-1 font-mono text-[10px] text-muted-foreground">{rc.id}</span>
-                      {rc.description}
+                      {stripInlineRegex(rc.description)}
                     </p>
                   </div>
                 </div>
               )
             })}
             <div className="flex border-t text-xs">
+              <div className="w-9 shrink-0 border-r" />
               <div className="flex flex-1 items-center justify-end gap-1.5 px-2 py-1">
                 <span className="w-10 text-right font-semibold tabular-nums">Σ {fmt(review.earned)}</span>
               </div>

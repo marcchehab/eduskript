@@ -18,8 +18,9 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { Check, X, Clock, RotateCcw, Trash2, Wand2, Loader2, AlertTriangle, Plus } from 'lucide-react'
+import { Check, X, Clock, RotateCcw, Trash2, Wand2, Loader2, AlertTriangle, Plus, Regex } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { extractCriterionRegex, runCriterionCheck } from '@/lib/scoring/regex-check'
 import { useComponentReview, type ComponentScoreSource } from '@/contexts/exam-review-context'
 
 export interface CodeSnapshot {
@@ -71,6 +72,8 @@ function CriterionRow({
   rc,
   aiC,
   ovC,
+  submission,
+  dirty,
   onRubricChange,
   onRubricRemove,
   onSet,
@@ -79,6 +82,8 @@ function CriterionRow({
   rc: RubricCriterion
   aiC?: AiCriterion
   ovC?: OverrideCriterion
+  submission: string
+  dirty: boolean
   onRubricChange: (patch: Partial<RubricCriterion>) => void
   onRubricRemove: () => void
   onSet: (value: { points?: number | null; comment?: string | null }) => void
@@ -88,6 +93,16 @@ function CriterionRow({
   const effPoints = ovC?.points ?? aiC?.points ?? null
   const effComment = ovC?.comment ?? aiC?.comment ?? ''
   const overridden = !!(ovC && (ovC.points != null || ovC.comment != null))
+
+  // Inline regex (from the live-edited description) → this criterion is auto-checked.
+  // Re-run it against the loaded submission to preview the points it WOULD award; if
+  // that disagrees with the applied score, the regex edit isn't live until save+re-score.
+  const rx = extractCriterionRegex(rc.description)
+  const matched = rx ? runCriterionCheck(rx.pattern, rx.flags, submission).matched : null
+  const wouldPoints = rx ? (matched ? max : 0) : null
+  // Only nudge "(save rubric to use)" for UNSAVED edits; once saved, the global
+  // "Rubric changed — re-score" banner is the right prompt.
+  const outOfSync = dirty && !overridden && rx != null && effPoints != null && wouldPoints !== effPoints
 
   const [editingPts, setEditingPts] = useState(false)
   const [editingCmt, setEditingCmt] = useState(false)
@@ -119,6 +134,11 @@ function CriterionRow({
 
   return (
     <div className="flex items-stretch">
+      {/* ID gutter — the criterion id (c1, c2…) the AI's comments reference, as a
+          vertically-centred row label down the left edge. */}
+      <div className="flex w-9 shrink-0 items-center justify-center border-r font-mono text-sm font-bold text-muted-foreground">
+        {rc.id}
+      </div>
       {/* LEFT — this student */}
       <div className={cn('flex flex-1 items-start gap-1.5 px-2 py-1.5', STUDENT_BG)}>
         <textarea
@@ -130,17 +150,33 @@ function CriterionRow({
           rows={2}
           className={cn('min-w-0 flex-1 resize-y rounded border bg-background px-2 py-1 text-sm', overridden && 'border-foreground/40')}
         />
-        <input
-          type="number"
-          step="0.5"
-          className={cn('mt-1 h-7 w-12 rounded border bg-background px-1 text-right text-sm tabular-nums', overridden && 'border-foreground/40')}
-          value={pts}
-          placeholder="–"
-          title="Points this student gets"
-          onFocus={() => { setPtsDraft(effPoints == null ? '' : fmt(effPoints)); setEditingPts(true) }}
-          onChange={(e) => setPtsDraft(e.target.value)}
-          onBlur={() => { setEditingPts(false); savePts(ptsDraft) }}
-        />
+        {/* points + the small "regex" tag directly beneath the score (this criterion
+            is scored by its inline regex, not the AI) + a live out-of-sync hint. */}
+        <div className="mt-1 flex w-12 flex-col items-end gap-0.5">
+          <input
+            type="number"
+            step="0.5"
+            className={cn('h-7 w-12 rounded border bg-background px-1 text-right text-sm tabular-nums', overridden && 'border-foreground/40')}
+            value={pts}
+            placeholder="–"
+            title="Points this student gets"
+            onFocus={() => { setPtsDraft(effPoints == null ? '' : fmt(effPoints)); setEditingPts(true) }}
+            onChange={(e) => setPtsDraft(e.target.value)}
+            onBlur={() => { setEditingPts(false); savePts(ptsDraft) }}
+          />
+          {rx && (
+            <span
+              className={cn(
+                'inline-flex items-center gap-0.5 text-[9px] font-medium leading-none',
+                matched ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400',
+              )}
+              title={`Scored by regex /${rx.pattern}/${rx.flags ?? ''} — ${matched ? 'matches → full points' : 'no match → 0'}`}
+            >
+              <Regex className="h-2.5 w-2.5" /> regex
+            </span>
+          )}
+          {outOfSync && <span className="text-right text-[8px] leading-tight text-muted-foreground">save rubric to update</span>}
+        </div>
         {overridden ? (
           <button type="button" title="Reset this criterion to the AI score" className="mt-2 text-muted-foreground hover:text-foreground" onClick={onReset}>
             <RotateCcw className="h-3.5 w-3.5" />
@@ -152,8 +188,6 @@ function CriterionRow({
 
       {/* RIGHT — rubric (all students) */}
       <div className={cn('flex flex-1 items-start gap-1.5 px-2 py-1.5', RUBRIC_BG)}>
-        {/* criterion id — the AI's comments reference it (e.g. "c2") */}
-        <span className="mt-2 shrink-0 font-mono text-[10px] text-muted-foreground">{rc.id}</span>
         <input
           type="number"
           step="0.5"
@@ -181,6 +215,7 @@ export function CodeScorePanel({
   componentId,
   testResults,
   checkPoints,
+  submission,
   snapshots,
   snapshotsLoading,
   viewedSnapshotId,
@@ -191,6 +226,9 @@ export function CodeScorePanel({
   componentId: string
   testResults: TestResult[] | null
   checkPoints: number
+  /** The student's submission currently shown in the editor — used to live-preview
+   *  inline-regex criteria (the auto-check badge / out-of-sync hint). */
+  submission: string
   snapshots: CodeSnapshot[]
   snapshotsLoading: boolean
   viewedSnapshotId: number | null
@@ -478,6 +516,7 @@ export function CodeScorePanel({
                 {/* Title row (tinted): LEFT = this student + scoring actions,
                     RIGHT = rubric (all students) + regenerate. */}
                 <div className="flex border-b text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <div className="w-9 shrink-0 border-r" />
                   <div className={cn('flex flex-1 items-center justify-between gap-2 px-2 py-1', STUDENT_BG)}>
                     <span>This student</span>
                     <span className="flex items-center gap-1">
@@ -508,6 +547,8 @@ export function CodeScorePanel({
                       rc={rc}
                       aiC={aiById.get(rc.id)}
                       ovC={ovById.get(rc.id)}
+                      submission={submission}
+                      dirty={rubricDirty}
                       onRubricChange={(patch) => updateRubric(i, patch)}
                       onRubricRemove={() => removeRubric(i)}
                       onSet={(value) => setCriterion(rc.id, value)}
@@ -517,6 +558,7 @@ export function CodeScorePanel({
                 ))}
                 {/* Footer totals, aligned beneath their respective points columns. */}
                 <div className="flex border-t text-xs">
+                  <div className="w-9 shrink-0 border-r" />
                   {/* student total, under the student points column (+ reset spacer) */}
                   <div className={cn('flex flex-1 items-center justify-end gap-1.5 px-2 py-1.5', STUDENT_BG)}>
                     <span className="font-semibold tabular-nums">Σ {fmt(review.earned)} pts</span>

@@ -5337,6 +5337,7 @@ export const CodeEditor = memo(function CodeEditor({
         componentId={pythonCheckComponentId}
         testResults={checkResults}
         checkPoints={effectiveCheckPoints ?? checkResults?.length ?? 0}
+        submission={currentCode}
         snapshots={snapList}
         snapshotsLoading={snapshotLoading}
         viewedSnapshotId={viewedSnapshotId}
