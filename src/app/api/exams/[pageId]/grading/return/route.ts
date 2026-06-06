@@ -16,7 +16,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { eventBus } from '@/lib/events'
-import { computeExamGrades } from '@/lib/scoring/aggregate'
+import { Prisma } from '@prisma/client'
+import { buildReviewScores } from '@/lib/scoring/review-payload'
 import { getAuthoredExamPage, isClassTeacher, isTeacherOfStudentForPage } from '@/lib/scoring/auth'
 
 export async function POST(
@@ -79,21 +80,28 @@ export async function POST(
       return NextResponse.json({ returned: 0, students: [] })
     }
 
-    const grading = await computeExamGrades(pageId, submittedIds)
+    // Freeze each student's full review score-payload so the returned exam is an
+    // IMMUTABLE record — later re-scores / rubric edits only reach the student on a
+    // re-return (which overwrites this). See review-payload.ts + ExamSubmission.gradeSnapshot.
+    const snapshots = new Map(
+      await Promise.all(submittedIds.map(async (sid) => [sid, await buildReviewScores(pageId, sid)] as const)),
+    )
     const now = new Date()
 
     await prisma.$transaction(
-      submittedIds.map((studentId) =>
-        prisma.examSubmission.update({
+      submittedIds.map((studentId) => {
+        const snap = snapshots.get(studentId)!
+        return prisma.examSubmission.update({
           where: { pageId_studentId: { pageId, studentId } },
           data: {
-            score: grading.byStudent.get(studentId)?.totalEarned ?? 0,
+            score: snap.totalEarned,
+            gradeSnapshot: snap as unknown as Prisma.InputJsonValue,
             scoredBy: session.user.id,
             scoredAt: now,
             returnedAt: now,
           },
-        }),
-      ),
+        })
+      }),
     )
 
     // Notify each student (fire-and-forget on the user channel).

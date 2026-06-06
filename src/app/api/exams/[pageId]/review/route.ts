@@ -14,7 +14,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { computeExamGrades } from '@/lib/scoring/aggregate'
+import { buildReviewScores, type ReviewScores } from '@/lib/scoring/review-payload'
 import { isTeacherOfStudentForPage } from '@/lib/scoring/auth'
 
 export async function GET(
@@ -34,7 +34,7 @@ export async function GET(
     // Authorize + (for self) require the exam to be returned.
     const submission = await prisma.examSubmission.findUnique({
       where: { pageId_studentId: { pageId, studentId } },
-      select: { submittedAt: true, returnedAt: true },
+      select: { returnedAt: true, gradeSnapshot: true },
     })
     if (isSelf) {
       if (!submission?.returnedAt) {
@@ -44,69 +44,32 @@ export async function GET(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const grading = await computeExamGrades(pageId, [studentId])
-    const g = grading.byStudent.get(studentId)!
-    const componentIds = grading.components.map((c) => c.componentId)
+    // A returned exam viewed by the STUDENT serves the FROZEN snapshot taken at
+    // return time (immutable record — re-scores/rubric edits don't leak in). The
+    // teacher (live grading) and any legacy return without a snapshot use the live
+    // scores. Answers are immutable post-submission, so they're always live.
+    const scores: ReviewScores =
+      isSelf && submission?.returnedAt && submission.gradeSnapshot
+        ? (submission.gradeSnapshot as unknown as ReviewScores)
+        : await buildReviewScores(pageId, studentId)
+    const componentIds = scores.components.map((c) => c.componentId)
 
-    // Stored answer payloads (the same UserData rows the engine scored from) +
-    // the raw per-source score rows (check / ai / override) so the grading UI can
-    // show each source's points + feedback + provenance per component.
-    const [rows, scoreRows] = await Promise.all([
-      componentIds.length
-        ? prisma.userData.findMany({
-            where: { userId: studentId, itemId: pageId, adapter: { in: componentIds }, targetType: null },
-            select: { adapter: true, data: true },
-          })
-        : Promise.resolve([]),
-      prisma.componentScore.findMany({
-        where: { pageId, studentId, componentId: { in: componentIds } },
-        select: { componentId: true, source: true, earned: true, max: true, feedback: true, meta: true },
-      }),
-    ])
-    // Rubrics are per exam page (all students); attach so the grade UI can edit
-    // them in place and flag AI scores whose rubric has since changed.
-    const rubricRows = componentIds.length
-      ? await prisma.scoringRubric.findMany({
-          where: { pageId, componentId: { in: componentIds } },
-          select: { componentId: true, criteria: true, maxPoints: true, source: true, model: true, updatedAt: true },
+    const rows = componentIds.length
+      ? await prisma.userData.findMany({
+          where: { userId: studentId, itemId: pageId, adapter: { in: componentIds }, targetType: null },
+          select: { adapter: true, data: true },
         })
       : []
-    const rubricByComponent = new Map(rubricRows.map((r) => [r.componentId, r]))
     const payloadByComponent = new Map(rows.map((r) => [r.adapter, r.data]))
-    const sourcesByComponent = new Map<string, typeof scoreRows>()
-    for (const r of scoreRows) {
-      const list = sourcesByComponent.get(r.componentId) ?? []
-      list.push(r)
-      sourcesByComponent.set(r.componentId, list)
-    }
 
     return NextResponse.json({
       studentId,
-      grade: g.grade,
-      totalEarned: g.totalEarned,
-      totalMax: g.totalMax,
+      grade: scores.grade,
+      totalEarned: scores.totalEarned,
+      totalMax: scores.totalMax,
       returnedAt: submission?.returnedAt ?? null,
-      components: g.components.map((c) => ({
-        componentId: c.componentId,
-        kind: c.kind,
-        questionType: c.questionType ?? null,
-        label: c.label ?? null,
-        earned: c.earned,
-        max: c.max,
-        autoEarned: c.autoEarned,
-        aiEarned: c.aiEarned,
-        effectiveSource: c.effectiveSource,
-        answered: c.answered,
-        overridden: c.overridden,
-        feedback: c.feedback ?? null,
-        sources: (sourcesByComponent.get(c.componentId) ?? []).map((s) => ({
-          source: s.source,
-          earned: s.earned,
-          max: s.max,
-          feedback: s.feedback,
-          meta: s.meta,
-        })),
-        rubric: rubricByComponent.get(c.componentId) ?? null,
+      components: scores.components.map((c) => ({
+        ...c,
         answerPayload: payloadByComponent.get(c.componentId) ?? null,
       })),
     })

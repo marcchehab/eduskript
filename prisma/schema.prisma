@@ -1064,6 +1064,12 @@ model ExamSubmission {
   scoredBy   String?   @map("scored_by")
   scoredAt   DateTime? @map("scored_at")
   returnedAt DateTime? @map("returned_at")
+  // Frozen review score-payload written at return time so a returned exam is an
+  // IMMUTABLE record: the student always sees exactly what was returned, even if the
+  // teacher later re-scores or edits a rubric (those reach the student only on a
+  // re-return, which overwrites this). Shape = buildReviewScores() (see review-payload.ts).
+  // Null on legacy/never-returned rows → the review falls back to live scores.
+  gradeSnapshot Json? @map("grade_snapshot")
 
   page    Page  @relation("ExamSubmissions", fields: [pageId], references: [id], onDelete: Cascade)
   student User  @relation("StudentExamSubmissions", fields: [studentId], references: [id], onDelete: Cascade)
