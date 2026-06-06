@@ -34,6 +34,9 @@ export interface GradableComponent {
   label?: string
   /** python only: the assert block body (for re-running at grading time). */
   checkCode?: string
+  /** python only: the editor's starter/default code (already given to the
+   *  student) — so rubric generation doesn't credit pre-provided scaffolding. */
+  starterCode?: string
 }
 
 // rehype-sanitize's defaultSchema clobbers `id`/`name` with this prefix to
@@ -68,6 +71,12 @@ export function parseGradableComponents(content: string): GradableComponent[] {
   // onto the component we just pushed, for re-running at grading time.
   let pendingCheck: GradableComponent | null = null
   let checkBody: string[] = []
+  // The student editors' starter code, keyed by editor id (= the check's `for`),
+  // captured so rubric generation can exclude pre-provided scaffolding. The
+  // editor block precedes its python-check block, so the map is ready in time.
+  const starterById = new Map<string, string>()
+  let pendingEditorId: string | null = null
+  let editorBody: string[] = []
 
   for (const line of lines) {
     const fenceMatch = line.match(/^\s*```+\s*(.*)$/)
@@ -83,16 +92,25 @@ export function parseGradableComponents(content: string): GradableComponent[] {
               kind: 'python',
               maxPoints: num(attr(fenceInfo, 'points')),
               label: lastHeading,
+              starterCode: starterById.get(forId),
             }
             checkBody = []
             out.push(pendingCheck)
           }
+        } else if (/^python\b/i.test(fenceInfo) && /\beditor\b/i.test(fenceInfo)) {
+          // Student code editor — accumulate its default body as starter code.
+          pendingEditorId = attr(fenceInfo, 'id') ?? null
+          editorBody = []
         }
       } else {
-        // Closing fence — attach the accumulated check body, if any.
+        // Closing fence — attach the accumulated check body / starter code.
         if (pendingCheck) {
           pendingCheck.checkCode = checkBody.join('\n')
           pendingCheck = null
+        }
+        if (pendingEditorId !== null) {
+          starterById.set(pendingEditorId, editorBody.join('\n'))
+          pendingEditorId = null
         }
         inFence = false
         fenceInfo = ''
@@ -101,6 +119,7 @@ export function parseGradableComponents(content: string): GradableComponent[] {
     }
     if (inFence) {
       if (pendingCheck) checkBody.push(line)
+      else if (pendingEditorId !== null) editorBody.push(line)
       continue // ignore other fence content (incl. <question> in examples)
     }
 

@@ -99,6 +99,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       label: c.label,
       maxPoints,
       reference: c.kind === 'python' ? c.checkCode ?? null : null,
+      starterCode: c.kind === 'python' ? c.starterCode ?? null : null,
       samples,
       guidance,
     })

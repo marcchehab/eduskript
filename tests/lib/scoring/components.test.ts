@@ -48,7 +48,7 @@ describe('parseGradableComponents', () => {
     expect(comps).toEqual([
       { componentId: 'quiz-user-content-p1', kind: 'quiz', questionType: 'text', maxPoints: 1, label: 'Aufgabe 1 — Modulo (1 Punkt)' },
       { componentId: 'quiz-user-content-q3', kind: 'quiz', questionType: 'single', maxPoints: 2, label: 'Aufgabe 3 — Wahl (2 Punkte)' },
-      { componentId: 'python-check-a8', kind: 'python', maxPoints: 3, label: 'Aufgabe 8 — Fläche (3 Punkte)', checkCode: 'assert f() == 1' },
+      { componentId: 'python-check-a8', kind: 'python', maxPoints: 3, label: 'Aufgabe 8 — Fläche (3 Punkte)', checkCode: 'assert f() == 1', starterCode: 'def f():\n    pass' },
     ])
   })
 
@@ -65,5 +65,20 @@ describe('parseGradableComponents', () => {
   it('defaults question type to multiple when unset', () => {
     const comps = parseGradableComponents(`<question id="x" points="1">\n<answer correct="true">A</answer>\n</question>`)
     expect(comps[0]).toMatchObject({ componentId: 'quiz-user-content-x', questionType: 'multiple' })
+  })
+
+  it('captures the python editor stub as the matching component starterCode', () => {
+    const withStub = `### Aufgabe — doppelt
+${fence}python editor id="e1code" points="4"
+def doppelt(x):
+    pass
+${fence}
+${fence}python-check for="e1code" points="4"
+assert doppelt(2) == 4
+${fence}`
+    const py = parseGradableComponents(withStub).find((c) => c.componentId === 'python-check-e1code')
+    expect(py?.starterCode).toContain('def doppelt(x):')
+    expect(py?.starterCode).toContain('pass')
+    expect(py?.checkCode).toContain('assert doppelt(2) == 4')
   })
 })

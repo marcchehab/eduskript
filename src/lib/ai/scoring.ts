@@ -140,7 +140,10 @@ Rules:
 - Award points ONLY for what the STUDENT has to produce. Do NOT create criteria for
   anything the exercise already gives the student — provided function signatures/stubs,
   starter code, imports, scaffolding, or restating the task. Credit the behaviour and
-  logic the student must implement, not what was handed to them.
+  logic the student must implement, not what was handed to them. If a "Starter code
+  already given to the student" section is present, treat EVERYTHING in it as provided:
+  never make a criterion that is already satisfied by that starter code (e.g. "defines
+  the function with the correct signature" when the signature is in the starter).
 - Criteria must be concrete and checkable against a student's answer (e.g. "Handles the empty-list case", "Correct loop bound", "Uses a base case").
 - The sum of criterion points MUST equal the given maximum points.
 - Use partial-credit granularity that matches the max (e.g. 0.5-point steps are fine).
@@ -153,6 +156,9 @@ export interface RubricPromptInput {
   label?: string
   maxPoints: number
   reference?: string | null
+  /** The editor's starter/default code (already given to the student). Shown so
+   *  the model never makes a criterion for pre-provided scaffolding. */
+  starterCode?: string | null
   /** A handful of student submissions to ground the criteria. */
   samples: string[]
   /** Teacher/org custom AI guidance (language, style) — see loadAiGuidance. */
@@ -164,6 +170,11 @@ export function buildRubricUserPrompt(input: RubricPromptInput): string {
   parts.push(`# Exercise: ${input.label ?? 'Untitled'}`)
   parts.push(`Maximum points: ${input.maxPoints}`)
   parts.push(`\n## Exam page context (the exercise lives here)\n${input.pageContext}`)
+  if (input.starterCode && input.starterCode.trim()) {
+    parts.push(
+      `\n## Starter code already given to the student (DO NOT make a criterion for any of this — it was provided, not produced by the student)\n${input.starterCode}`,
+    )
+  }
   if (input.reference && input.reference.trim()) {
     parts.push(`\n## Reference / checks (the teacher's solution or asserts)\n${input.reference}`)
   }
