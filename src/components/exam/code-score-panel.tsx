@@ -104,16 +104,20 @@ function CriterionRow({
   // "Rubric changed — re-score" banner is the right prompt.
   const outOfSync = dirty && !overridden && rx != null && effPoints != null && wouldPoints !== effPoints
 
-  const [editingPts, setEditingPts] = useState(false)
+  const ptsStr = effPoints == null ? '' : fmt(effPoints)
   const [editingCmt, setEditingCmt] = useState(false)
-  const [ptsDraft, setPtsDraft] = useState('')
+  const [ptsDraft, setPtsDraft] = useState(ptsStr)
   const [cmtDraft, setCmtDraft] = useState('')
-  const pts = editingPts ? ptsDraft : effPoints == null ? '' : fmt(effPoints)
+  // Points use a ref-gated draft (not an editing-boolean): the number input's
+  // spinner arrows change the value WITHOUT firing focus, so a focus-gated value
+  // reverted the increment and a focus-gated save dropped it. Drive `value` from
+  // the draft always and debounce-save on the draft itself.
+  const ptsFocused = useRef(false)
   const cmt = editingCmt ? cmtDraft : effComment
 
   const savePts = (raw: string) => {
     const norm = raw.trim()
-    if (norm === (effPoints == null ? '' : fmt(effPoints))) return
+    if (norm === ptsStr) return
     if (norm === '') onSet({ points: null })
     else { const v = Number(norm); if (Number.isFinite(v)) onSet({ points: v }) }
   }
@@ -121,11 +125,18 @@ function CriterionRow({
     if (raw === effComment) return
     onSet({ comment: raw.trim() === '' ? null : raw })
   }
+  // Sync the draft to the effective score when not focused (e.g. after a re-score).
   useEffect(() => {
-    if (!editingPts) return
+    if (ptsFocused.current) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- mirror the loaded score into the editable draft
+    setPtsDraft(ptsStr)
+  }, [ptsStr])
+  // Debounce-save any draft change (typing OR spinner arrows); no-op when unchanged.
+  useEffect(() => {
+    if (ptsDraft.trim() === ptsStr) return
     const t = setTimeout(() => savePts(ptsDraft), 400)
     return () => clearTimeout(t)
-  }, [ptsDraft, editingPts]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ptsDraft]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!editingCmt) return
     const t = setTimeout(() => saveCmt(cmtDraft), 600)
@@ -157,12 +168,12 @@ function CriterionRow({
             type="number"
             step="0.5"
             className={cn('h-7 w-12 rounded border bg-background px-1 text-right text-sm tabular-nums', overridden && 'border-foreground/40')}
-            value={pts}
+            value={ptsDraft}
             placeholder="–"
             title="Points this student gets"
-            onFocus={() => { setPtsDraft(effPoints == null ? '' : fmt(effPoints)); setEditingPts(true) }}
+            onFocus={() => { ptsFocused.current = true }}
             onChange={(e) => setPtsDraft(e.target.value)}
-            onBlur={() => { setEditingPts(false); savePts(ptsDraft) }}
+            onBlur={() => { ptsFocused.current = false; savePts(ptsDraft) }}
           />
           {rx && (
             <span
@@ -349,21 +360,26 @@ export function CodeScorePanel({
     return () => clearTimeout(t)
   }, [fbDraft, editingFb]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Absolute manual score — fallback for components with NO rubric.
+  // Absolute manual score — fallback for components with NO rubric. Same ref-gated
+  // draft as the per-criterion points so the spinner arrows work (see CriterionRow).
   const overrideEarned = override?.earned ?? null
   const hasRubric = rubricDraft.length > 0 || !!rubric
-  const [editingAbs, setEditingAbs] = useState(false)
-  const [absDraft, setAbsDraft] = useState('')
-  const abs = editingAbs ? absDraft : overrideEarned == null ? '' : fmt(overrideEarned)
+  const absStr = overrideEarned == null ? '' : fmt(overrideEarned)
+  const [absDraft, setAbsDraft] = useState(absStr)
+  const absFocused = useRef(false)
   const saveAbs = (raw: string) => {
     const v = raw.trim() === '' ? null : Number(raw)
     if ((v === null || Number.isFinite(v)) && v !== overrideEarned) setOverride(v)
   }
   useEffect(() => {
-    if (!editingAbs) return
+    if (absFocused.current) return
+    setAbsDraft(absStr)
+  }, [absStr])
+  useEffect(() => {
+    if (absDraft.trim() === absStr) return
     const t = setTimeout(() => saveAbs(absDraft), 400)
     return () => clearTimeout(t)
-  }, [absDraft, editingAbs]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [absDraft]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Grade mode only; quizzes/student review keep the ScoreBadge.
   if (!active || !review || mode !== 'grade') return null
@@ -615,10 +631,10 @@ export function CodeScorePanel({
                     type="number"
                     step="0.1"
                     className="h-7 w-12 rounded border bg-background px-1 text-right tabular-nums"
-                    value={abs}
-                    onFocus={() => { setAbsDraft(overrideEarned == null ? '' : fmt(overrideEarned)); setEditingAbs(true) }}
+                    value={absDraft}
+                    onFocus={() => { absFocused.current = true }}
                     onChange={(e) => setAbsDraft(e.target.value)}
-                    onBlur={() => { setEditingAbs(false); saveAbs(absDraft) }}
+                    onBlur={() => { absFocused.current = false; saveAbs(absDraft) }}
                   />
                   <span className="tabular-nums text-muted-foreground">/ {fmt(max)}</span>
                   {override != null && (
