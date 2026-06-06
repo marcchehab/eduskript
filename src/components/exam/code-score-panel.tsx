@@ -152,6 +152,8 @@ function CriterionRow({
 
       {/* RIGHT — rubric (all students) */}
       <div className={cn('flex flex-1 items-start gap-1.5 px-2 py-1.5', RUBRIC_BG)}>
+        {/* criterion id — the AI's comments reference it (e.g. "c2") */}
+        <span className="mt-2 shrink-0 font-mono text-[10px] text-muted-foreground">{rc.id}</span>
         <input
           type="number"
           step="0.5"

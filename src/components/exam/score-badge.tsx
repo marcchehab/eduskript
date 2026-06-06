@@ -107,7 +107,10 @@ export function ScoreBadge({ componentId }: { componentId: string }) {
                   {/* RIGHT — the rubric criterion */}
                   <div className={cn('flex flex-1 items-start gap-1.5 px-2 py-1 text-xs', RUBRIC_BG)}>
                     <span className="w-10 shrink-0 text-right tabular-nums text-muted-foreground">/ {fmt(rc.points)}</span>
-                    <p className="!my-0 min-w-0 flex-1">{rc.description}</p>
+                    <p className="!my-0 min-w-0 flex-1">
+                      <span className="mr-1 font-mono text-[10px] text-muted-foreground">{rc.id}</span>
+                      {rc.description}
+                    </p>
                   </div>
                 </div>
               )
