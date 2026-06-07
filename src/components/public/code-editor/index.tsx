@@ -15,6 +15,7 @@ import { vsCodeDark } from '@fsegurai/codemirror-theme-vscode-dark'
 import { vsCodeLight } from '@fsegurai/codemirror-theme-vscode-light'
 import { basicSetup } from 'codemirror'
 import { autocompletion } from '@codemirror/autocomplete'
+import { indentationMarkers } from '@replit/codemirror-indentation-markers'
 import { createPythonCompletions } from './python-completions'
 import { Button } from '@/components/ui/button'
 import { Play, Square, RotateCcw, Maximize2, Minimize2, Scan, X, Plus, FileText, ZoomIn, ZoomOut, Save, History, WrapText, Circle, CheckCircle2, Package, Trash2, Paperclip, Upload, Pencil, Cloud, HardDrive } from 'lucide-react'
@@ -2252,6 +2253,21 @@ export const CodeEditor = memo(function CodeEditor({
       // Python convention: 4-space indentation; 2 spaces for JS/SQL
       indentUnit.of(language === 'python' ? '    ' : '  '),
       EditorState.tabSize.of(language === 'python' ? 4 : 2),
+      // Vertical indent guides (VSCode/Monaco-style). The active block's guide
+      // is highlighted as the cursor moves — makes "which line belongs to which
+      // block" obvious, the main indentation pain point for students.
+      indentationMarkers({
+        highlightActiveBlock: true,
+        hideFirstIndent: true,
+        // Defaults are too faint in light mode for students. Darker light-mode
+        // guides; brighter active-block guide in both themes.
+        colors: {
+          light: '#c2c8d0',
+          dark: '#3b4048',
+          activeLight: '#8a93a0',
+          activeDark: '#5c6470',
+        },
+      }),
       EditorView.theme({
         '&': {
           height: '100%',

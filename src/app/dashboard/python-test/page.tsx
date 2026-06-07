@@ -95,7 +95,36 @@ print("Done!")
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold mb-3">Example 3: Matplotlib Plots</h2>
+          <h2 className="text-xl font-semibold mb-3">Example 3: Nested blocks (indent guides)</h2>
+          <CodeEditor
+            id="nesting-example"
+            language="python"
+            initialCode={`def classify(numbers):
+    results = []
+    for n in numbers:
+        if n > 0:
+            if n % 2 == 0:
+                results.append("positive even")
+            else:
+                results.append("positive odd")
+        elif n < 0:
+            results.append("negative")
+        else:
+            while True:
+                results.append("zero")
+                break
+    return results
+
+
+for label in classify([4, 7, -2, 0]):
+    print(label)
+`}
+            showCanvas={false}
+          />
+        </section>
+
+        <section>
+          <h2 className="text-xl font-semibold mb-3">Example 4: Matplotlib Plots</h2>
           <CodeEditor
             id="matplotlib-example"
             language="python"

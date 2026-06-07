@@ -90,6 +90,7 @@
     "@radix-ui/react-slot": "^1.2.3",
     "@radix-ui/react-switch": "^1.2.5",
     "@radix-ui/react-tabs": "^1.1.13",
+    "@replit/codemirror-indentation-markers": "^6.5.3",
     "@uiw/react-color": "^2.9.2",
     "autoprefixer": "^10.4.21",
     "bcryptjs": "^3.0.2",
