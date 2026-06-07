@@ -901,9 +901,14 @@ function SyncedQuestion({
     )
   }
 
+  // Grade mode: ALWAYS the selected student's submitted answer — never the
+  // teacher's own `data`. `review` is non-null here (the skeleton above guards the
+  // loading gap). A null answerPayload means this student left the question blank,
+  // so render EMPTY; previously it fell back to `data`, leaking the teacher's own
+  // (or a stale) answer under a student who submitted nothing.
   const effectiveData =
-    reviewActive && reviewModeType === 'grade' && review?.answerPayload
-      ? (review.answerPayload as QuizData)
+    reviewActive && reviewModeType === 'grade'
+      ? ((review?.answerPayload as QuizData | null) ?? null)
       : data
 
   return (
