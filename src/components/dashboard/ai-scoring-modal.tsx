@@ -18,8 +18,8 @@ import { RubricCriteriaEditor } from '@/components/exam/rubric-criteria-editor'
 import { createLogger } from '@/lib/logger'
 
 // Server-side scoring/rubric failures carry an `AiDebug` payload (raw model output +
-// finishReason). Inspect in the browser console with: localStorage.debug = 'scoring'.
-const log = createLogger('scoring')
+// finishReason). Inspect in the browser console with: localStorage.debug = 'ai:*'.
+const log = createLogger('ai:scoring')
 import {
   Dialog,
   DialogContent,

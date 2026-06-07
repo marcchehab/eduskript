@@ -26,9 +26,9 @@ import { createLogger } from '@/lib/logger'
 
 // AI scoring/rubric runs server-side; the routes attach an `AiDebug` payload (raw
 // model output + finishReason) to each failed entry. See WHY a failure happened in
-// the browser console with: localStorage.debug = 'scoring' (then re-run the action).
+// the browser console with: localStorage.debug = 'ai:*' (then re-run the action).
 // finishReason 'length' = truncated output (raise max_tokens); 'stop' = malformed JSON.
-const log = createLogger('scoring')
+const log = createLogger('ai:scoring')
 
 export interface CodeSnapshot {
   id: number
