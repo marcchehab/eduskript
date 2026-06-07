@@ -208,31 +208,69 @@ export function ExamReviewProvider({ pageId, mode, studentId, children }: Provid
     load()
   }, [studentId, load])
 
+  // Debounced reload. Quiz components in grade mode each write their own
+  // authoritative check score (ComponentScore source="check") then call this; the
+  // debounce coalesces a page of them — and a burst of teacher edits — into a
+  // single /review refetch (no refetch storm, no read mid-write).
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const refreshGrades = useCallback(() => {
+    if (refreshTimer.current) clearTimeout(refreshTimer.current)
+    refreshTimer.current = setTimeout(() => load(), 400)
+  }, [load])
+
+  // Serialize the teacher's grading writes PER (student, component). Each override
+  // PUT is a read-modify-write on the shared override row (meta.criteria), so two
+  // quick edits — a criterion's points then its comment, or a criterion then the
+  // general feedback — would otherwise issue overlapping PUTs whose later read
+  // misses the earlier write (lost update; the value appears to revert). Chaining
+  // each write onto the previous one for that key forces them to apply in order;
+  // the debounced refreshGrades after each settles collapses the burst into one
+  // refetch. The input fields are already debounced (400/600ms) — this fixes the
+  // cross-field overlap that debouncing alone can't.
+  const writeChains = useRef(new Map<string, Promise<unknown>>())
+  const enqueueWrite = useCallback(
+    (componentId: string, run: () => Promise<unknown>): Promise<void> => {
+      const key = `${studentId ?? ''}:${componentId}`
+      const prev = writeChains.current.get(key) ?? Promise.resolve()
+      const next = prev.catch(() => {}).then(run)
+      writeChains.current.set(key, next)
+      next.finally(() => {
+        // Drop the chain once it's the tail (a newer write may have replaced it).
+        if (writeChains.current.get(key) === next) writeChains.current.delete(key)
+        refreshGrades()
+      })
+      return next.then(() => {})
+    },
+    [studentId, refreshGrades],
+  )
+
   const setOverride = useCallback(
     async (componentId: string, awardedPoints: number | null) => {
       if (!studentId) return
-      await fetch(`/api/exams/${pageId}/grading/question`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ studentId, componentId, awardedPoints }),
-      }).catch(() => {})
-      load() // refetch for fresh per-component + total + grade
+      await enqueueWrite(componentId, () =>
+        fetch(`/api/exams/${pageId}/grading/question`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ studentId, componentId, awardedPoints }),
+        }).catch(() => {}),
+      )
     },
-    [pageId, studentId, load],
+    [pageId, studentId, enqueueWrite],
   )
 
   const setFeedback = useCallback(
     async (componentId: string, feedback: string | null) => {
       if (!studentId) return
-      await fetch(`/api/exams/${pageId}/grading/question`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        // Send only `feedback` so the points override is left untouched.
-        body: JSON.stringify({ studentId, componentId, feedback }),
-      }).catch(() => {})
-      load()
+      await enqueueWrite(componentId, () =>
+        fetch(`/api/exams/${pageId}/grading/question`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          // Send only `feedback` so the points override is left untouched.
+          body: JSON.stringify({ studentId, componentId, feedback }),
+        }).catch(() => {}),
+      )
     },
-    [pageId, studentId, load],
+    [pageId, studentId, enqueueWrite],
   )
 
   const setCriterion = useCallback(
@@ -245,53 +283,57 @@ export function ExamReviewProvider({ pageId, mode, studentId, children }: Provid
       const criterion: { id: string; points?: number | null; comment?: string | null } = { id: criterionId }
       if (value.points !== undefined) criterion.points = value.points
       if (value.comment !== undefined) criterion.comment = value.comment
-      await fetch(`/api/exams/${pageId}/grading/question`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ studentId, componentId, criterion }),
-      }).catch(() => {})
-      load()
+      await enqueueWrite(componentId, () =>
+        fetch(`/api/exams/${pageId}/grading/question`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ studentId, componentId, criterion }),
+        }).catch(() => {}),
+      )
     },
-    [pageId, studentId, load],
+    [pageId, studentId, enqueueWrite],
   )
 
   const resetCriterion = useCallback(
     async (componentId: string, criterionId: string) => {
       if (!studentId) return
-      await fetch(`/api/exams/${pageId}/grading/question`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ studentId, componentId, resetCriterion: criterionId }),
-      }).catch(() => {})
-      load()
+      await enqueueWrite(componentId, () =>
+        fetch(`/api/exams/${pageId}/grading/question`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ studentId, componentId, resetCriterion: criterionId }),
+        }).catch(() => {}),
+      )
     },
-    [pageId, studentId, load],
+    [pageId, studentId, enqueueWrite],
   )
 
   const clearOverride = useCallback(
     async (componentId: string) => {
       if (!studentId) return
       // One request that nulls both fields → the route deletes the row.
-      await fetch(`/api/exams/${pageId}/grading/question`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ studentId, componentId, awardedPoints: null, feedback: null }),
-      }).catch(() => {})
-      load()
+      await enqueueWrite(componentId, () =>
+        fetch(`/api/exams/${pageId}/grading/question`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ studentId, componentId, awardedPoints: null, feedback: null }),
+        }).catch(() => {}),
+      )
     },
-    [pageId, studentId, load],
+    [pageId, studentId, enqueueWrite],
   )
 
   const clearAiScore = useCallback(
     async (componentId: string) => {
       if (!studentId) return
-      await fetch(
-        `/api/exams/${pageId}/scoring/ai?studentId=${encodeURIComponent(studentId)}&componentId=${encodeURIComponent(componentId)}`,
-        { method: 'DELETE' },
-      ).catch(() => {})
-      load()
+      await enqueueWrite(componentId, () =>
+        fetch(
+          `/api/exams/${pageId}/scoring/ai?studentId=${encodeURIComponent(studentId)}&componentId=${encodeURIComponent(componentId)}`,
+          { method: 'DELETE' },
+        ).catch(() => {}),
+      )
     },
-    [pageId, studentId, load],
+    [pageId, studentId, enqueueWrite],
   )
 
   // Teacher grade mode: re-run this student's python checks on this device
@@ -311,15 +353,6 @@ export function ExamReviewProvider({ pageId, mode, studentId, children }: Provid
     ranForRef.current = studentId // mark so the auto-effect doesn't double-fire
     await runChecks()
   }, [studentId, runChecks])
-
-  // Debounced reload. Quiz components in grade mode each write their own
-  // authoritative check score (ComponentScore source="check") then call this; the
-  // debounce coalesces a page of them into a single /review refetch.
-  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const refreshGrades = useCallback(() => {
-    if (refreshTimer.current) clearTimeout(refreshTimer.current)
-    refreshTimer.current = setTimeout(() => load(), 400)
-  }, [load])
 
   // Auto-run once per student when a grade-mode review has python components.
   useEffect(() => {

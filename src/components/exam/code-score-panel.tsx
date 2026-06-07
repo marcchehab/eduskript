@@ -105,15 +105,17 @@ function CriterionRow({
   const outOfSync = dirty && !overridden && rx != null && effPoints != null && wouldPoints !== effPoints
 
   const ptsStr = effPoints == null ? '' : fmt(effPoints)
-  const [editingCmt, setEditingCmt] = useState(false)
   const [ptsDraft, setPtsDraft] = useState(ptsStr)
-  const [cmtDraft, setCmtDraft] = useState('')
-  // Points use a ref-gated draft (not an editing-boolean): the number input's
-  // spinner arrows change the value WITHOUT firing focus, so a focus-gated value
-  // reverted the increment and a focus-gated save dropped it. Drive `value` from
-  // the draft always and debounce-save on the draft itself.
+  const [cmtDraft, setCmtDraft] = useState(effComment)
+  // Both fields use a ref-gated draft (not an editing-boolean). For points: the
+  // number input's spinner arrows change the value WITHOUT firing focus, so a
+  // focus-gated value reverted the increment. For the comment: an editing-boolean
+  // flips the displayed value back to the (lagging) server value the instant you
+  // blur, so the text vanished until the save→refetch round-trip landed and it
+  // reappeared. Driving `value` from the draft always — synced from the server
+  // only while unfocused — keeps the field stable across that round-trip.
   const ptsFocused = useRef(false)
-  const cmt = editingCmt ? cmtDraft : effComment
+  const cmtFocused = useRef(false)
 
   const savePts = (raw: string) => {
     const norm = raw.trim()
@@ -125,12 +127,18 @@ function CriterionRow({
     if (raw === effComment) return
     onSet({ comment: raw.trim() === '' ? null : raw })
   }
-  // Sync the draft to the effective score when not focused (e.g. after a re-score).
+  // Sync each draft to the effective value when not focused (e.g. after a re-score
+  // or the post-save refetch). Skipped while focused so it never fights typing.
   useEffect(() => {
     if (ptsFocused.current) return
     // eslint-disable-next-line react-hooks/set-state-in-effect -- mirror the loaded score into the editable draft
     setPtsDraft(ptsStr)
   }, [ptsStr])
+  useEffect(() => {
+    if (cmtFocused.current) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- mirror the loaded comment into the editable draft
+    setCmtDraft(effComment)
+  }, [effComment])
   // Debounce-save any draft change (typing OR spinner arrows); no-op when unchanged.
   useEffect(() => {
     if (ptsDraft.trim() === ptsStr) return
@@ -138,10 +146,10 @@ function CriterionRow({
     return () => clearTimeout(t)
   }, [ptsDraft]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (!editingCmt) return
+    if (cmtDraft === effComment) return
     const t = setTimeout(() => saveCmt(cmtDraft), 600)
     return () => clearTimeout(t)
-  }, [cmtDraft, editingCmt]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cmtDraft]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="flex items-stretch">
@@ -153,10 +161,10 @@ function CriterionRow({
       {/* LEFT — this student */}
       <div className={cn('flex flex-1 items-start gap-1.5 px-2 py-1.5', STUDENT_BG)}>
         <textarea
-          value={cmt}
-          onFocus={() => { setCmtDraft(effComment); setEditingCmt(true) }}
+          value={cmtDraft}
+          onFocus={() => { cmtFocused.current = true }}
           onChange={(e) => setCmtDraft(e.target.value)}
-          onBlur={() => { setEditingCmt(false); saveCmt(cmtDraft) }}
+          onBlur={() => { cmtFocused.current = false; saveCmt(cmtDraft) }}
           placeholder="Comment for this student…"
           rows={2}
           className={cn('min-w-0 flex-1 resize-y rounded border bg-background px-2 py-1 text-sm', overridden && 'border-foreground/40')}
@@ -350,15 +358,22 @@ export function CodeScorePanel({
   // General feedback (full width): effective = override ?? AI; editable.
   const overrideFeedback = override?.feedback ?? null
   const effFeedback = overrideFeedback ?? ai?.feedback ?? ''
-  const [editingFb, setEditingFb] = useState(false)
-  const [fbDraft, setFbDraft] = useState('')
-  const fb = editingFb ? fbDraft : effFeedback
+  // Ref-gated draft (same as the criterion comment): an editing-boolean dropped
+  // the field back to the lagging server value on blur, so the text vanished
+  // until the save→refetch landed. Drive `value` from the draft, sync only while
+  // unfocused.
+  const [fbDraft, setFbDraft] = useState(effFeedback)
+  const fbFocused = useRef(false)
   const saveFb = (raw: string) => { if (raw !== effFeedback) setFeedback(raw.trim() === '' ? null : raw) }
   useEffect(() => {
-    if (!editingFb) return
+    if (fbFocused.current) return
+    setFbDraft(effFeedback)
+  }, [effFeedback])
+  useEffect(() => {
+    if (fbDraft === effFeedback) return
     const t = setTimeout(() => saveFb(fbDraft), 600)
     return () => clearTimeout(t)
-  }, [fbDraft, editingFb]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fbDraft]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Absolute manual score — fallback for components with NO rubric. Same ref-gated
   // draft as the per-criterion points so the spinner arrows work (see CriterionRow).
@@ -669,10 +684,10 @@ export function CodeScorePanel({
                 )}
               </div>
               <textarea
-                value={fb}
-                onFocus={() => { setFbDraft(effFeedback); setEditingFb(true) }}
+                value={fbDraft}
+                onFocus={() => { fbFocused.current = true }}
                 onChange={(e) => setFbDraft(e.target.value)}
-                onBlur={() => { setEditingFb(false); saveFb(fbDraft) }}
+                onBlur={() => { fbFocused.current = false; saveFb(fbDraft) }}
                 placeholder="General feedback for this answer…"
                 rows={2}
                 className="w-full resize-y rounded border bg-background px-2 py-1 text-sm"
