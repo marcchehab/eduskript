@@ -20,7 +20,7 @@ import { getAuthoredExamPage, isTeacherOfStudentForPage } from '@/lib/scoring/au
 import { parseGradableComponents } from '@/lib/scoring/components'
 import { readComponentSubmissions } from '@/lib/scoring/submissions'
 import { SCORE_PRIORITY } from '@/lib/scoring/score-component'
-import { scoreSubmission, scoringModel, type RubricCriterion } from '@/lib/ai/scoring'
+import { scoreSubmission, scoringModel, type RubricCriterion, type AiDebug } from '@/lib/ai/scoring'
 import { loadAiGuidance } from '@/lib/ai/guidance'
 import { mergedCriterionTotal, type OverrideCriterion } from '@/lib/scoring/merge-criteria'
 
@@ -111,7 +111,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const model = scoringModel()
 
   const results: { componentId: string; studentId: string; earned: number }[] = []
-  const errors: { componentId: string; studentId?: string; error: string }[] = []
+  // `debug` carries the raw model output / finishReason on a parse failure so the
+  // teacher can see WHY in the browser console (gated behind the `scoring:*` debug
+  // namespace client-side). It's their own page's data, so always returning it is fine.
+  const errors: { componentId: string; studentId?: string; error: string; debug?: AiDebug }[] = []
 
   for (const c of targets) {
     const rubric = rubricByComponent.get(c.componentId)
@@ -134,7 +137,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         guidance,
       })
       if ('error' in res) {
-        errors.push({ componentId: c.componentId, studentId: sid, error: res.error })
+        errors.push({ componentId: c.componentId, studentId: sid, error: res.error, debug: 'debug' in res ? res.debug : undefined })
         return
       }
       await prisma.componentScore.upsert({

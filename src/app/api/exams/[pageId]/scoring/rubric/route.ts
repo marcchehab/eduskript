@@ -19,7 +19,7 @@ import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import { getAuthoredExamPage } from '@/lib/scoring/auth'
 import { parseGradableComponents } from '@/lib/scoring/components'
 import { readComponentSubmissions } from '@/lib/scoring/submissions'
-import { generateRubric, scoringModel, type RubricCriterion } from '@/lib/ai/scoring'
+import { generateRubric, scoringModel, type RubricCriterion, type AiDebug } from '@/lib/ai/scoring'
 import { loadAiGuidance } from '@/lib/ai/guidance'
 
 export const dynamic = 'force-dynamic'
@@ -88,7 +88,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const guidance = await loadAiGuidance(session.user.id)
   const model = scoringModel()
   const saved: unknown[] = []
-  const errors: { componentId: string; error: string }[] = []
+  // `debug` carries raw model output / finishReason on a parse failure → browser
+  // console when the teacher enables the `scoring:*` debug namespace (see panel).
+  const errors: { componentId: string; error: string; debug?: AiDebug }[] = []
 
   for (const c of targets) {
     const subs = await readComponentSubmissions(pageId, c, studentIds)
@@ -104,7 +106,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       guidance,
     })
     if ('error' in res) {
-      errors.push({ componentId: c.componentId, error: res.error })
+      errors.push({ componentId: c.componentId, error: res.error, debug: 'debug' in res ? res.debug : undefined })
       continue
     }
     const row = await prisma.scoringRubric.upsert({

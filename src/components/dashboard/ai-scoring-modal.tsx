@@ -15,6 +15,11 @@ import { useCallback, useEffect, useState } from 'react'
 import { Loader2, Wand2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { RubricCriteriaEditor } from '@/components/exam/rubric-criteria-editor'
+import { createLogger } from '@/lib/logger'
+
+// Server-side scoring/rubric failures carry an `AiDebug` payload (raw model output +
+// finishReason). Inspect in the browser console with: localStorage.debug = 'scoring'.
+const log = createLogger('scoring')
 import {
   Dialog,
   DialogContent,
@@ -122,6 +127,7 @@ export function AiScoringModal({
       })
       if (!res.ok) throw new Error(String(res.status))
       const j = await res.json()
+      for (const e of (Array.isArray(j.errors) ? j.errors : [])) log('Rubric generation failed', e)
       if (Array.isArray(j.errors) && j.errors.length) {
         setError(`Some rubrics failed: ${j.errors.map((e: { error: string }) => e.error).join('; ')}`)
       }
@@ -178,6 +184,7 @@ export function AiScoringModal({
       if (!res.ok) throw new Error(String(res.status))
       const j = await res.json()
       const errs: typeof scoreErrors = Array.isArray(j.errors) ? j.errors : []
+      for (const e of errs) log('AI score failed', e)
       setScoreErrors(errs)
       setNotice(`AI-scored ${j.scored} submission${j.scored === 1 ? '' : 's'}${errs.length ? ` · ${errs.length} error(s) — see below` : ''}.`)
       onScored()

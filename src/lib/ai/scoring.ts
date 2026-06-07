@@ -115,7 +115,7 @@ async function complete(
   user: string,
   maxTokens: number,
   opts: { temperature?: number; seed?: number } = {},
-): Promise<string> {
+): Promise<{ content: string; finishReason: string | null }> {
   const res = await client().chat.completions.create({
     model: scoringModel(),
     max_tokens: maxTokens,
@@ -130,8 +130,27 @@ async function complete(
     ...opts,
     ...(openrouterProviderRouting() as Record<string, unknown>),
   })
-  return res.choices[0]?.message?.content ?? ''
+  const choice = res.choices[0]
+  // finishReason 'length' = ran out of max_tokens (truncation, often empty content
+  // on a reasoning model); 'stop' = model finished → a parse failure is malformed
+  // JSON, not truncation. Surfaced in AiDebug so the teacher can tell them apart.
+  return { content: choice?.message?.content ?? '', finishReason: choice?.finish_reason ?? null }
 }
+
+/** Diagnostic detail attached to an AI parse/usability failure, so a teacher can
+ *  see in the browser console WHY scoring failed (truncation vs malformed output)
+ *  — gated client-side behind the `scoring:*` debug namespace (see createLogger). */
+export interface AiDebug {
+  stage: 'score' | 'rubric'
+  /** 'length' = truncated (raise max_tokens); 'stop' = malformed JSON; etc. */
+  finishReason: string | null
+  /** Length of the raw model content (0 = the model returned nothing). */
+  rawLength: number
+  /** Raw model content, capped — the actual text the parser choked on. */
+  raw: string
+  model: string
+}
+const DEBUG_RAW_CAP = 4000
 
 // ---------------------------------------------------------------------------
 // Step 1: rubric generation
@@ -192,17 +211,19 @@ export function buildRubricUserPrompt(input: RubricPromptInput): string {
 
 export async function generateRubric(
   input: RubricPromptInput,
-): Promise<{ criteria: RubricCriterion[] } | { error: string }> {
+): Promise<{ criteria: RubricCriterion[] } | { error: string; debug?: AiDebug }> {
   let text: string
+  let finishReason: string | null
   try {
     // 8k tokens: the reasoning model (minimax) needs headroom or it truncates
     // mid-reasoning and returns empty content.
-    text = await complete(withGuidance(RUBRIC_SYSTEM, input.guidance), buildRubricUserPrompt(input), 8192)
+    ;({ content: text, finishReason } = await complete(withGuidance(RUBRIC_SYSTEM, input.guidance), buildRubricUserPrompt(input), 8192))
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'LLM request failed' }
   }
+  const debug = (): AiDebug => ({ stage: 'rubric', finishReason, rawLength: text.length, raw: text.slice(0, DEBUG_RAW_CAP), model: scoringModel() })
   const rawCriteria = asCriteriaArray(extractJson(text))
-  if (!rawCriteria) return { error: 'Could not parse rubric from the model output.' }
+  if (!rawCriteria) return { error: 'Could not parse rubric from the model output.', debug: debug() }
   const criteria: RubricCriterion[] = rawCriteria
     .map((raw, i) => {
       const c = (raw ?? {}) as RawCriterion
@@ -213,7 +234,7 @@ export async function generateRubric(
       }
     })
     .filter((c) => c.description && Number.isFinite(c.points))
-  if (criteria.length === 0) return { error: 'The model returned no usable criteria.' }
+  if (criteria.length === 0) return { error: 'The model returned no usable criteria.', debug: debug() }
   return { criteria }
 }
 
@@ -322,7 +343,7 @@ export function parseAiScore(
 
 export async function scoreSubmission(
   input: ScorePromptInput,
-): Promise<AiScoreResult | { error: string }> {
+): Promise<AiScoreResult | { error: string; debug?: AiDebug }> {
   // Split: a criterion with an INLINE regex in its description is scored
   // DETERMINISTICALLY (full points on match, else 0 — no LLM, so no multi-criterion
   // context bleed); the rest are judged by the model. The regex is re-extracted from
@@ -351,18 +372,29 @@ export async function scoreSubmission(
   let aiResult: AiScoreResult = { earned: 0, feedback: null, criteria: [] }
   if (aiCriteria.length > 0) {
     let text: string
+    let finishReason: string | null
     try {
       // temperature 0 + fixed seed → reproducible. Only the AI criteria are sent
-      // (smaller, cheaper, and free of the syntax-check noise).
-      text = await complete(withGuidance(SCORE_SYSTEM, input.guidance), buildScoreUserPrompt({ ...input, criteria: aiCriteria }), 3072, {
+      // (smaller, cheaper, and free of the syntax-check noise). 8k tokens: the
+      // reasoning model (minimax) spends tokens on reasoning, so a tight cap
+      // truncates mid-reasoning and returns empty/partial content → unparseable.
+      // Deterministic (temp 0 + seed), so a too-low cap fails the SAME student
+      // every retry. Matches generateRubric's headroom.
+      ;({ content: text, finishReason } = await complete(withGuidance(SCORE_SYSTEM, input.guidance), buildScoreUserPrompt({ ...input, criteria: aiCriteria }), 8192, {
         temperature: 0,
         seed: SCORING_SEED,
-      })
+      }))
     } catch (e) {
       return { error: e instanceof Error ? e.message : 'LLM request failed' }
     }
     const parsed = parseAiScore(text, aiCriteria)
-    if ('error' in parsed) return parsed
+    if ('error' in parsed) {
+      const debug: AiDebug = { stage: 'score', finishReason, rawLength: text.length, raw: text.slice(0, DEBUG_RAW_CAP), model: scoringModel() }
+      // Server log (Koyeb). The same detail rides back to the browser console when
+      // the teacher enables the `scoring:*` debug namespace (see the route + panel).
+      console.error('[scoring] parse failed', { finishReason, rawLength: text.length, raw: debug.raw })
+      return { ...parsed, debug }
+    }
     aiResult = parsed
   }
 

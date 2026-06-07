@@ -22,6 +22,13 @@ import { Check, X, Clock, RotateCcw, Trash2, Wand2, Loader2, AlertTriangle, Plus
 import { cn } from '@/lib/utils'
 import { extractCriterionRegex, runCriterionCheck } from '@/lib/scoring/regex-check'
 import { useComponentReview, type ComponentScoreSource } from '@/contexts/exam-review-context'
+import { createLogger } from '@/lib/logger'
+
+// AI scoring/rubric runs server-side; the routes attach an `AiDebug` payload (raw
+// model output + finishReason) to each failed entry. See WHY a failure happened in
+// the browser console with: localStorage.debug = 'scoring' (then re-run the action).
+// finishReason 'length' = truncated output (raise max_tokens); 'stop' = malformed JSON.
+const log = createLogger('scoring')
 
 export interface CodeSnapshot {
   id: number
@@ -278,6 +285,7 @@ export function CodeScorePanel({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ componentIds: [componentId] }),
       }).then((res) => res.json())
+      for (const e of r.errors ?? []) log('Rubric generation failed', e)
       if (r.errors?.length && !r.rubrics?.length) throw new Error(r.errors[0].error)
       setRubricDirty(false)
       refreshGrades()
@@ -319,6 +327,7 @@ export function CodeScorePanel({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ componentIds: [componentId], studentIds: [studentId] }),
       }).then((r) => r.json())
+      for (const e of res.errors ?? []) log('AI score failed', e)
       if (res.scored === 0 && res.errors?.length) throw new Error(res.errors[0].error)
       refreshGrades()
     } catch (e) {
