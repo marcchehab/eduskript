@@ -238,6 +238,17 @@ export default function ExamGradingPage() {
     }).catch(() => dialog.showError('Could not save the grade key.'))
   }
 
+  // Flip the given students to "returned" in place. The frozen snapshot equals
+  // the current live grade at return time, so totals/grade are unchanged — only
+  // the status + returnedAt. Updating state directly avoids loadGrading(), which
+  // sets loading=true and blanks the whole table to "Loading…" on every return.
+  const markReturned = (ids: Set<string>, at: string) =>
+    setData((d) =>
+      d
+        ? { ...d, students: d.students.map((s) => (ids.has(s.studentId) ? { ...s, status: 'returned', returnedAt: at } : s)) }
+        : d,
+    )
+
   const returnStudent = (studentId: string) => {
     fetch(`/api/exams/${pageId}/grading/return`, {
       method: 'POST',
@@ -246,7 +257,7 @@ export default function ExamGradingPage() {
     })
       .then((r) => {
         if (!r.ok) throw new Error()
-        loadGrading()
+        markReturned(new Set([studentId]), new Date().toISOString())
       })
       .catch(() => dialog.showError('Could not return the exam.'))
   }
@@ -261,10 +272,8 @@ export default function ExamGradingPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ all: true, classId }),
         })
-          .then((r) => {
-            if (!r.ok) throw new Error()
-            loadGrading()
-          })
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error())))
+          .then((j: { students?: string[] }) => markReturned(new Set(j.students ?? []), new Date().toISOString()))
           .catch(() => dialog.showError('Could not return the exams.'))
           .finally(() => setReturningAll(false))
       },
