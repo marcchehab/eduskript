@@ -115,15 +115,24 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
               itemId: d.itemId,
               data: d.data as Prisma.InputJsonValue,
               version: d.version,
+              createdAt: d.createdAt, // preserve original timestamps, not the transfer time
             },
           })
           counts.userData++
         }
 
-        // --- user_data_checkpoints (no unique key — append) ---
+        // --- user_data_checkpoints (no unique key) ---
+        // Replace the target's checkpoints for this page so the transfer is a clean
+        // full-replace and IDEMPOTENT: re-transferring (e.g. to fix something) won't
+        // pile up duplicate hand-ins. Safe here because the transfer already replaces
+        // the target's submission + live answers for this page.
+        await tx.userDataCheckpoint.deleteMany({ where: { userId: targetUserId, pageId } })
         const srcCps = await tx.userDataCheckpoint.findMany({ where: { userId: sourceId, pageId } })
         if (srcCps.length) {
           await tx.userDataCheckpoint.createMany({
+            // Preserve each checkpoint's ORIGINAL createdAt: the grading version
+            // history sorts by it, so collapsing them to the transfer time would
+            // hide which snapshot is the hand-in vs an earlier run/check.
             data: srcCps.map((c) => ({
               userId: targetUserId,
               pageId,
@@ -131,6 +140,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
               kind: c.kind,
               payload: c.payload as Prisma.InputJsonValue,
               label: c.label ?? 'transferred from temporary account',
+              createdAt: c.createdAt,
             })),
           })
           counts.checkpoints += srcCps.length

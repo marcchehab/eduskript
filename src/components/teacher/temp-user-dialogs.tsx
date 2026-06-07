@@ -12,7 +12,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
-import { Loader2, Copy, Check, ArrowLeftRight, Search } from 'lucide-react'
+import { Loader2, Copy, Check, ArrowLeftRight, Search, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -218,6 +218,15 @@ export function TransferAnswersDialog({
             temporary account is kept as a backup.
           </DialogDescription>
         </DialogHeader>
+
+        <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
+          <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+          <span>
+            This <strong>overwrites</strong> the selected student&apos;s current answers, hand-in
+            snapshots and submission for the affected exam(s). Any existing work of theirs on those
+            exams is replaced. (Scores aren&apos;t touched — you grade fresh.)
+          </span>
+        </div>
 
         <div className="relative">
           <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
