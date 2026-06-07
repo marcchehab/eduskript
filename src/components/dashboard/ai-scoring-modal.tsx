@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Loader2, Wand2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Progress } from '@/components/ui/progress'
 import { RubricCriteriaEditor } from '@/components/exam/rubric-criteria-editor'
 import { createLogger } from '@/lib/logger'
 
@@ -84,6 +85,8 @@ export function AiScoringModal({
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [scoreErrors, setScoreErrors] = useState<{ componentId: string; studentId?: string; error: string }[]>([])
+  // Live bulk-scoring progress (batched, like AI editing). null = not running.
+  const [scoreProgress, setScoreProgress] = useState<{ done: number; total: number; scored: number } | null>(null)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -174,24 +177,61 @@ export function AiScoringModal({
   }
 
   const scoreAll = async () => {
-    setScoring(true); setError(null); setNotice(null); setScoreErrors([])
+    setScoring(true); setError(null); setNotice(null); setScoreErrors([]); setScoreProgress(null)
+    // Score in SMALL batches (one exercise × a handful of students per request)
+    // rather than one giant request. A whole-class × 6-exercise run is ~150 slow
+    // reasoning-model calls; doing it in a single multi-minute request exhausted
+    // the DB connection pool (every other request then timed out connecting) and
+    // tripped the gateway timeout → "AI scoring failed". Small sequential requests
+    // keep each one short and release DB connections between batches.
+    const STUDENT_CHUNK = 6
+    const comps = [...selected]
+    const chunks: string[][] = []
+    for (let i = 0; i < studentIds.length; i += STUDENT_CHUNK) {
+      chunks.push(studentIds.slice(i, i + STUDENT_CHUNK))
+    }
+    const totalBatches = comps.length * chunks.length
+    let done = 0
+    let totalScored = 0
+    const allErrors: typeof scoreErrors = []
+    setScoreProgress({ done: 0, total: totalBatches, scored: 0 })
     try {
-      const res = await fetch(`/api/exams/${pageId}/scoring/ai`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ componentIds: [...selected], studentIds }),
-      })
-      if (!res.ok) throw new Error(String(res.status))
-      const j = await res.json()
-      const errs: typeof scoreErrors = Array.isArray(j.errors) ? j.errors : []
-      for (const e of errs) log('AI score failed', e)
-      setScoreErrors(errs)
-      setNotice(`AI-scored ${j.scored} submission${j.scored === 1 ? '' : 's'}${errs.length ? ` · ${errs.length} error(s) — see below` : ''}.`)
+      for (const componentId of comps) {
+        for (const chunk of chunks) {
+          try {
+            const res = await fetch(`/api/exams/${pageId}/scoring/ai`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ componentIds: [componentId], studentIds: chunk }),
+            })
+            if (!res.ok) throw new Error(`HTTP ${res.status}`)
+            const j = await res.json()
+            totalScored += j.scored ?? 0
+            if (Array.isArray(j.errors) && j.errors.length) {
+              for (const e of j.errors) log('AI score failed', e)
+              allErrors.push(...j.errors)
+            }
+          } catch (e) {
+            // A whole batch failing (e.g. timeout) → record it per student so the
+            // teacher sees exactly who to re-run, instead of one opaque failure.
+            const msg = e instanceof Error ? e.message : 'request failed'
+            for (const sid of chunk) allErrors.push({ componentId, studentId: sid, error: msg })
+          }
+          done++
+          setScoreProgress({ done, total: totalBatches, scored: totalScored })
+        }
+      }
+      setScoreErrors(allErrors)
+      setNotice(
+        `AI-scored ${totalScored} submission${totalScored === 1 ? '' : 's'}` +
+          (allErrors.length ? ` · ${allErrors.length} error(s) — see below` : '.'),
+      )
       onScored()
     } catch {
       setError('AI scoring failed.')
     } finally {
       setScoring(false)
+      setScoreProgress(null)
     }
   }
 
@@ -240,6 +280,20 @@ export function AiScoringModal({
           </Button>
         </div>
 
+        {scoreProgress && (
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>
+                Scoring… {scoreProgress.done}/{scoreProgress.total} batches
+                {scoreProgress.scored > 0 && ` · ${scoreProgress.scored} scored`}
+              </span>
+              <span className="tabular-nums">
+                {Math.round((scoreProgress.done / Math.max(1, scoreProgress.total)) * 100)}%
+              </span>
+            </div>
+            <Progress value={(scoreProgress.done / Math.max(1, scoreProgress.total)) * 100} />
+          </div>
+        )}
         {error && <p className="text-sm text-destructive">{error}</p>}
         {notice && <p className="text-sm text-green-600">{notice}</p>}
         {groupedErrors.length > 0 && (

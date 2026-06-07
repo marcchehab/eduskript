@@ -20,6 +20,11 @@ const pool = globalForPrisma.pool ?? new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: isLocal ? false : { rejectUnauthorized: false },
   connectionTimeoutMillis: 10000, // 10 seconds for Neon cold starts
+  // pg defaults to max 10. A burst (e.g. bulk AI scoring) saturated 10 and made
+  // every other request fail to acquire a connection → cascading "timeout
+  // exceeded when trying to connect". 20 gives headroom while staying well under
+  // the managed-Postgres connection cap.
+  max: 20,
 })
 if (process.env.NODE_ENV !== 'production') globalForPrisma.pool = pool
 
