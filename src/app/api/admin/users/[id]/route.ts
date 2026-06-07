@@ -26,6 +26,10 @@ export async function GET(
         isAdmin: true,
         requirePasswordReset: true,
         emailVerified: true,
+        accountType: true,
+        oauthProvider: true,
+        isTemporary: true,
+        hashedPassword: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -38,8 +42,10 @@ export async function GET(
       )
     }
 
-    const { site, ...rest } = userRaw
-    const user = { ...rest, pageSlug: site?.slug ?? null }
+    // Expose only whether a password is set (an email user can have it changed),
+    // never the hash itself.
+    const { site, hashedPassword, ...rest } = userRaw
+    const user = { ...rest, pageSlug: site?.slug ?? null, hasPassword: !!hashedPassword }
 
     return NextResponse.json({ user })
   } catch (error) {
@@ -62,7 +68,7 @@ export async function PATCH(
   const { id } = await params
 
   try {
-    const { email, name, pageSlug, title, isAdmin, requirePasswordReset, billingPlan, grantTrial, trialPlanId, trialDays } = await request.json()
+    const { email, name, pageSlug, title, isAdmin, requirePasswordReset, billingPlan, grantTrial, trialPlanId, trialDays, isTemporary, newPassword } = await request.json()
 
     // Check if user exists
     const existingUser = await prisma.user.findUnique({
@@ -74,6 +80,25 @@ export async function PATCH(
         { error: 'User not found' },
         { status: 404 }
       )
+    }
+
+    // Password change: only for email/password users (no OAuth identity). Hashed
+    // here; clears the must-reset flag and verifies the email so login works.
+    let hashedPassword: string | undefined
+    if (typeof newPassword === 'string' && newPassword.length > 0) {
+      if (existingUser.oauthProvider) {
+        return NextResponse.json(
+          { error: 'Cannot set a password for an OAuth user' },
+          { status: 400 }
+        )
+      }
+      if (newPassword.length < 8) {
+        return NextResponse.json(
+          { error: 'Password must be at least 8 characters' },
+          { status: 400 }
+        )
+      }
+      hashedPassword = await bcrypt.hash(newPassword, 12)
     }
 
     // Validate email format if provided
@@ -127,6 +152,8 @@ export async function PATCH(
           ...(isAdmin !== undefined && { isAdmin }),
           ...(requirePasswordReset !== undefined && { requirePasswordReset }),
           ...(billingPlan !== undefined && { billingPlan }),
+          ...(isTemporary !== undefined && { isTemporary }),
+          ...(hashedPassword && { hashedPassword, requirePasswordReset: false, emailVerified: existingUser.emailVerified ?? new Date() }),
         },
         select: {
           id: true,

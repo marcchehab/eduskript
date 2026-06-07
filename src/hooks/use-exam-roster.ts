@@ -27,6 +27,8 @@ export interface ExamRosterStudent {
   source?: string
   startedAt?: string
   submittedAt?: string
+  /** Throwaway emergency-laptop account → enables the "Transfer answers" action. */
+  isTemporary?: boolean
 }
 
 export interface ExamRosterCounts {

@@ -24,6 +24,7 @@ export async function GET() {
         accountType: true,
         billingPlan: true,
         studentPseudonym: true,
+        isTemporary: true,
         createdAt: true,
         updatedAt: true,
         lastLoginAt: true,

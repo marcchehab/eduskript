@@ -50,6 +50,8 @@ import {
   Radio,
   Globe,
   ClipboardList,
+  ArrowLeftRight,
+  UserPlus,
 } from 'lucide-react'
 import Link from 'next/link'
 import { compareRoster } from '@/lib/exam-roster-order'
@@ -75,6 +77,7 @@ import {
 import { usePageSubmissions, type PageSubmissionRow } from '@/hooks/use-page-submissions'
 import { useIsPaid } from '@/hooks/use-billing'
 import { getReverseMappingsForClass } from '@/lib/email-mapping-db'
+import { CredentialsDialog, TransferAnswersDialog, type TempCredentials } from './temp-user-dialogs'
 import { cn } from '@/lib/utils'
 
 interface PageClass {
@@ -122,6 +125,8 @@ interface MergedRow {
   answerCount: number
   /** ISO timestamp, or null if unknown. */
   lastActivityAt: string | null
+  /** Throwaway emergency-laptop account → enables the "Transfer answers" action. */
+  isTemporary?: boolean
 }
 
 export function ClassToolbar({
@@ -181,6 +186,10 @@ export function ClassToolbar({
   const [reopeningStudent, setReopeningStudent] = useState<string | null>(null)
   const [endingStudent, setEndingStudent] = useState<string | null>(null)
   const [deletingUser, setDeletingUser] = useState<string | null>(null)
+  // Temporary-user flow (spare-laptop accounts): create, flag, and transfer answers.
+  const [creatingTempUser, setCreatingTempUser] = useState(false)
+  const [tempCreds, setTempCreds] = useState<TempCredentials | null>(null)
+  const [transferSource, setTransferSource] = useState<{ id: string; label: string } | null>(null)
   // Roster sort is fixed to most-recently-active first; sortable headers
   // were dropped when the table was compacted into a vertical list for the
   // sidebar mount. Re-introduce per-column controls if/when there's room.
@@ -247,6 +256,24 @@ export function ClassToolbar({
     refreshSubmissions()
   }
 
+  // Create a throwaway email+password student in the selected class (spare-laptop
+  // login). The returned credentials are shown ONCE in CredentialsDialog.
+  const createTempUser = async () => {
+    if (!selectedClass) return
+    setCreatingTempUser(true)
+    try {
+      const res = await fetch(`/api/classes/${selectedClass.id}/temp-user`, { method: 'POST' })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j.error || 'Failed to create temporary user')
+      setTempCreds({ email: j.email, password: j.password, displayName: j.displayName })
+      refreshRoster()
+    } catch (e) {
+      dialog.showError(e instanceof Error ? e.message : 'Failed to create temporary user')
+    } finally {
+      setCreatingTempUser(false)
+    }
+  }
+
   // Build the row set. Two modes:
   //   • A class is selected → rows are exactly that class's members. Anyone
   //     who submitted but isn't enrolled is intentionally excluded; the
@@ -269,6 +296,7 @@ export function ClassToolbar({
         hasSubmissionData: false,
         examStatus: student.status,
         examSource: student.source ?? null,
+        isTemporary: student.isTemporary,
         startedAt: student.startedAt,
         submittedAt: student.submittedAt ?? null,
         answerCount: 0,
@@ -511,6 +539,23 @@ export function ClassToolbar({
                     <Users className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
                     Class overview
                   </button>
+                  {selectedClass && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={createTempUser}
+                      disabled={creatingTempUser}
+                      className="h-7 gap-1 flex-shrink-0"
+                      title="Create a temporary email+password student in this class (e.g. for a spare laptop)"
+                    >
+                      {creatingTempUser ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <UserPlus className="w-3.5 h-3.5" />
+                      )}
+                      Temporary user
+                    </Button>
+                  )}
                   {isExam && selectedClass && (
                     <Button variant="outline" size="sm" asChild className="h-7 gap-1 flex-shrink-0">
                       <Link href={`/dashboard/exams/${pageId}/grading?classId=${selectedClass.id}`}>
@@ -601,6 +646,14 @@ export function ClassToolbar({
                             you
                           </span>
                         )}
+                        {row.isTemporary && (
+                          <span
+                            className="text-[10px] uppercase tracking-wide px-1 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-400 flex-shrink-0"
+                            title="Temporary spare-laptop account"
+                          >
+                            temp
+                          </span>
+                        )}
                         <Button
                           variant={isViewingThis ? 'default' : 'ghost'}
                           size="sm"
@@ -626,6 +679,22 @@ export function ClassToolbar({
                         >
                           <Radio className={cn('w-3 h-3', isViewingThis && 'animate-pulse')} />
                         </Button>
+                        {/* Transfer a temporary user's answers to a real student (the temp
+                            flag itself is set in the dashboard's edit-user modal). */}
+                        {row.isTemporary && (row.examStatus === 'submitted' || row.hasSubmissionData) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setTransferSource({ id: row.userId, label: row.displayName })
+                            }}
+                            className="h-6 w-6 p-0 flex-shrink-0"
+                            title="Transfer this temporary user's answers to a real student"
+                          >
+                            <ArrowLeftRight className="w-3 h-3" />
+                          </Button>
+                        )}
                         {isExam && row.examStatus === 'submitted' && row.inRoster && selectedClass && (
                           <Button
                             variant="ghost"
@@ -871,6 +940,15 @@ export function ClassToolbar({
         confirmText={dialog.confirmText}
         cancelText={dialog.cancelText}
         destructive={dialog.destructive}
+      />
+      <CredentialsDialog creds={tempCreds} onClose={() => setTempCreds(null)} />
+      <TransferAnswersDialog
+        source={transferSource}
+        onClose={() => setTransferSource(null)}
+        onTransferred={(msg) => {
+          refreshAll()
+          dialog.showSuccess(msg, 'Answers transferred')
+        }}
       />
     </FixedToolbarFrame>
   )

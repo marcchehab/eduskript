@@ -27,6 +27,8 @@ interface StudentStatus {
   source?: string
   startedAt?: Date
   submittedAt?: Date
+  /** Throwaway emergency-laptop account → enables the "Transfer answers" action. */
+  isTemporary?: boolean
 }
 
 /**
@@ -100,7 +102,8 @@ export async function GET(
             id: true,
             name: true,
             email: true,
-            studentPseudonym: true
+            studentPseudonym: true,
+            isTemporary: true
           }
         }
       }
@@ -161,6 +164,7 @@ export async function GET(
         name: m.student.name,
         email: m.student.email,
         studentPseudonym: m.student.studentPseudonym,
+        isTemporary: m.student.isTemporary,
         status,
         source: submission?.source,
         startedAt: activeSession?.createdAt,

@@ -82,6 +82,10 @@ model User {
   // Privacy and account type
   accountType      String    @default("teacher") // "teacher" or "student"
   studentPseudonym String?   @unique // For student privacy: hash(oauthProvider:oauthProviderId) for OAuth, hash(email) for legacy
+  // Throwaway email+password student account a teacher creates for a spare laptop
+  // during an exam (device crash). Flagged so the toolbar can offer "Transfer
+  // answers" to the student's real account afterwards. See exam-recovery / transfer route.
+  isTemporary      Boolean   @default(false) @map("is_temporary")
   gdprConsentAt    DateTime? // Timestamp of GDPR consent acceptance
   lastSeenAt       DateTime? // For inactive account cleanup
 

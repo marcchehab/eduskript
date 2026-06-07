@@ -61,6 +61,7 @@ interface User {
   emailVerified: Date | null
   accountType: string
   studentPseudonym: string | null
+  isTemporary: boolean
   createdAt: Date
   updatedAt: Date
   lastLoginAt: string | null
@@ -111,6 +112,10 @@ export default function AdminPanelPage() {
     grantTrial: false,
     trialDays: '30',
     organizationId: '',
+    isTemporary: false,
+    // Optional password change from the edit modal (email/non-OAuth users only).
+    newPassword: '',
+    confirmNewPassword: '',
   })
 
   const [resetPasswordData, setResetPasswordData] = useState({
@@ -323,6 +328,9 @@ export default function AdminPanelPage() {
         grantTrial: false,
         trialDays: '30',
         organizationId: defaultOrgId,
+        isTemporary: false,
+        newPassword: '',
+        confirmNewPassword: '',
       })
       fetchUsers()
     } catch (err) {
@@ -338,6 +346,18 @@ export default function AdminPanelPage() {
     setError('')
     setSuccess('')
 
+    // Optional password change (edit modal, email/non-OAuth users).
+    if (formData.newPassword || formData.confirmNewPassword) {
+      if (formData.newPassword !== formData.confirmNewPassword) {
+        setError('Passwords do not match')
+        return
+      }
+      if (formData.newPassword.length < 8) {
+        setError('Password must be at least 8 characters long')
+        return
+      }
+    }
+
     try {
       const response = await fetch(`/api/admin/users/${selectedUser.id}`, {
         method: 'PATCH',
@@ -351,6 +371,8 @@ export default function AdminPanelPage() {
           ...(formData.billingPlan && { billingPlan: formData.billingPlan }),
           requirePasswordReset: formData.requirePasswordReset,
           ...(formData.grantTrial && { grantTrial: true, trialDays: Number(formData.trialDays) || 30 }),
+          ...(selectedUser.accountType === 'student' && { isTemporary: formData.isTemporary }),
+          ...(formData.newPassword && { newPassword: formData.newPassword }),
         }),
       })
 
@@ -548,6 +570,9 @@ export default function AdminPanelPage() {
       grantTrial: false,
       trialDays: '30',
       organizationId: '',
+      isTemporary: user.isTemporary ?? false,
+      newPassword: '',
+      confirmNewPassword: '',
     })
     setShowEditDialog(true)
   }
@@ -834,16 +859,14 @@ export default function AdminPanelPage() {
                     </div>
                   )}
                   <div className="flex gap-2">
-                    {user.email && (
-                      <Button
-                        onClick={() => openResetPasswordDialog(user)}
-                        variant="ghost"
-                        size="icon"
-                        title="Reset password"
-                      >
-                        <RotateCw className="h-4 w-4" />
-                      </Button>
-                    )}
+                    <Button
+                      onClick={() => openEditDialog(user)}
+                      variant="ghost"
+                      size="icon"
+                      title="Edit student (temporary flag, password)"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
                     <Button
                       onClick={() => handleDeleteUser(user.id)}
                       variant="ghost"
@@ -1197,15 +1220,17 @@ export default function AdminPanelPage() {
                   required
                 />
               </div>
-              <div>
-                <Label htmlFor="edit-pageSlug">Page Slug</Label>
-                <Input
-                  id="edit-pageSlug"
-                  value={formData.pageSlug}
-                  onChange={(e) => setFormData({ ...formData, pageSlug: e.target.value })}
-                  required
-                />
-              </div>
+              {selectedUser?.accountType !== 'student' && (
+                <div>
+                  <Label htmlFor="edit-pageSlug">Page Slug</Label>
+                  <Input
+                    id="edit-pageSlug"
+                    value={formData.pageSlug}
+                    onChange={(e) => setFormData({ ...formData, pageSlug: e.target.value })}
+                    required
+                  />
+                </div>
+              )}
               <div>
                 <Label htmlFor="edit-title">Title (optional)</Label>
                 <Input
@@ -1274,6 +1299,63 @@ export default function AdminPanelPage() {
                 />
                 <Label htmlFor="edit-requirePasswordReset">Require password reset on next login</Label>
               </div>
+
+              {/* Student-only: temporary-account flag + password change for email
+                  (non-OAuth) students. A temporary student's answers can be
+                  transferred to a real student from the exam-page class toolbar. */}
+              {selectedUser?.accountType === 'student' && (
+                <div className="rounded-md border p-3 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="edit-isTemporary"
+                      checked={formData.isTemporary}
+                      onCheckedChange={(checked) =>
+                        setFormData({ ...formData, isTemporary: checked as boolean })
+                      }
+                    />
+                    <Label htmlFor="edit-isTemporary">
+                      Temporary account (spare-laptop login; enables &quot;Transfer answers&quot;)
+                    </Label>
+                  </div>
+
+                  {(selectedUser?.accounts?.length ?? 0) === 0 && selectedUser?.email ? (
+                    <div className="space-y-2">
+                      <div>
+                        <Label htmlFor="edit-newPassword">Change password (optional)</Label>
+                        <Input
+                          id="edit-newPassword"
+                          type="password"
+                          autoComplete="new-password"
+                          value={formData.newPassword}
+                          onChange={(e) => setFormData({ ...formData, newPassword: e.target.value })}
+                          placeholder="Leave blank to keep current"
+                          minLength={8}
+                        />
+                      </div>
+                      {formData.newPassword && (
+                        <div>
+                          <Label htmlFor="edit-confirmNewPassword">Confirm new password</Label>
+                          <Input
+                            id="edit-confirmNewPassword"
+                            type="password"
+                            autoComplete="new-password"
+                            value={formData.confirmNewPassword}
+                            onChange={(e) =>
+                              setFormData({ ...formData, confirmNewPassword: e.target.value })
+                            }
+                            minLength={8}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Password change isn&apos;t available for OAuth students (they sign in via their provider).
+                    </p>
+                  )}
+                </div>
+              )}
+
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="outline" onClick={() => setShowEditDialog(false)}>
                   Cancel
