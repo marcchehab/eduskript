@@ -508,7 +508,7 @@ How relevant is Python for your work?
 
 Spacing is forgiving: a prompt line and blank lines around the \`<answer>\` tags are optional — the question renders correctly either way.
 
-**Free-text auto-check (predict-the-output):** a \`type="text"\` question can be auto-graded against an expected output written as an \`\`\`expected fenced block inside the question (leave a blank line before it). The typed answer gets **partial credit** by text similarity (× \`points\`, default 1, rounded to 0.1 pts) with a diff; an exact match (after normalizing: each line trimmed, commas treated as line separators so \`6,30\` == \`6\\n30\`, surrounding blank lines dropped) is fully correct. Optional flags: \`ignore-case="true"\`, \`ignore-whitespace="true"\`. Example:
+**Free-text auto-check (predict-the-output):** a \`type="text"\` question can be auto-graded against an expected output written as an \`\`\`expected fenced block inside the question (leave a blank line before it). The typed answer gets **partial credit** by text similarity (× \`points\`, default 1, rounded to 0.1 pts) with a diff; an exact match (after normalizing: each line trimmed, surrounding blank lines dropped; comparison is strictly line-by-line) is fully correct. Optional flags: \`ignore-case="true"\`, \`ignore-whitespace="true"\`. Example:
 
 <question id="predict1" type="text" points="2">
 Predict the output:

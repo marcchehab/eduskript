@@ -25,10 +25,10 @@ describe('output-comparison', () => {
     it('ignoreWhitespace collapses internal runs', () => {
       expect(normalizeOutput('a   b\tc', { ignoreWhitespace: true })).toBe('a b c')
     })
-    it('treats commas as line separators (6,30 == 6\\n30)', () => {
-      expect(normalizeOutput('6,30')).toBe('6\n30')
-      expect(normalizeOutput('6, 30')).toBe('6\n30') // comma + space
-      expect(normalizeOutput('1,2,3')).toBe('1\n2\n3')
+    it('treats commas as ordinary characters (no line splitting)', () => {
+      expect(normalizeOutput('6,30')).toBe('6,30')
+      expect(normalizeOutput('13, einer')).toBe('13, einer')
+      expect(normalizeOutput('1,2,3')).toBe('1,2,3')
     })
     it('trims leading AND trailing whitespace per line', () => {
       expect(normalizeOutput(' 6\n30 ')).toBe('6\n30')
@@ -108,8 +108,9 @@ describe('output-comparison', () => {
       expect(compareOutput('TRUE', 'true', { ignoreCase: true }).exact).toBe(true)
       expect(compareOutput('TRUE', 'true').exact).toBe(false)
     })
-    it('comma-separated student answer matches line-separated expected', () => {
-      expect(compareOutput('6,30', '6\n30').exact).toBe(true)
+    it('a comma is literal, not a line separator', () => {
+      expect(compareOutput('6,30', '6\n30').exact).toBe(false)
+      expect(compareOutput('13, einer', '13 einer').exact).toBe(false)
     })
     it('per-line whitespace is ignored on both sides', () => {
       expect(compareOutput(' 6\n30 ', '6\n30').exact).toBe(true)
