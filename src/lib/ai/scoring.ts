@@ -115,7 +115,7 @@ async function complete(
   user: string,
   maxTokens: number,
   opts: { temperature?: number; seed?: number } = {},
-): Promise<{ content: string; finishReason: string | null }> {
+): Promise<{ content: string; finishReason: string | null; diag: ResponseDiag }> {
   const res = await client().chat.completions.create({
     model: scoringModel(),
     max_tokens: maxTokens,
@@ -130,27 +130,85 @@ async function complete(
     ...opts,
     ...(openrouterProviderRouting() as Record<string, unknown>),
   })
-  const choice = res.choices[0]
-  // finishReason 'length' = ran out of max_tokens (truncation, often empty content
-  // on a reasoning model); 'stop' = model finished → a parse failure is malformed
-  // JSON, not truncation. Surfaced in AiDebug so the teacher can tell them apart.
-  return { content: choice?.message?.content ?? '', finishReason: choice?.finish_reason ?? null }
+  // Reasoning models (minimax) put their chain-of-thought in message.reasoning and
+  // the answer in message.content; OpenRouter may add native_finish_reason + a
+  // top-level error. Capture all of it so an EMPTY content (rawLength 0) is
+  // explainable: reasoning ate the budget, the provider refused, or returned no
+  // choices. finishReason 'length' = truncated; 'stop' = finished (so a parse
+  // failure is malformed JSON, not truncation).
+  const choice = res.choices?.[0] as
+    | {
+        finish_reason?: string | null
+        native_finish_reason?: string | null
+        message?: { content?: string | null; reasoning?: string | null; refusal?: string | null }
+      }
+    | undefined
+  const msg = choice?.message
+  const diag: ResponseDiag = {
+    choices: res.choices?.length ?? 0,
+    finishReason: choice?.finish_reason ?? null,
+    nativeFinishReason: choice?.native_finish_reason ?? null,
+    reasoningLen: typeof msg?.reasoning === 'string' ? msg.reasoning.length : 0,
+    refusal: typeof msg?.refusal === 'string' && msg.refusal ? msg.refusal : null,
+    usage: res.usage
+      ? { prompt: res.usage.prompt_tokens, completion: res.usage.completion_tokens, total: res.usage.total_tokens }
+      : null,
+    error: (res as { error?: unknown }).error ?? null,
+  }
+  return { content: msg?.content ?? '', finishReason: diag.finishReason, diag }
+}
+
+/** Raw response diagnostics, captured on every completion (logged on failure). */
+interface ResponseDiag {
+  choices: number
+  finishReason: string | null
+  nativeFinishReason: string | null
+  /** Length of message.reasoning — large + empty content = reasoning ate the budget. */
+  reasoningLen: number
+  refusal: string | null
+  usage: { prompt?: number; completion?: number; total?: number } | null
+  error: unknown
 }
 
 /** Diagnostic detail attached to an AI parse/usability failure, so a teacher can
- *  see in the browser console WHY scoring failed (truncation vs malformed output)
- *  — gated client-side behind the `scoring:*` debug namespace (see createLogger). */
+ *  see in the browser console WHY scoring failed — gated client-side behind the
+ *  `ai:*` debug namespace (see createLogger). */
 export interface AiDebug {
   stage: 'score' | 'rubric'
-  /** 'length' = truncated (raise max_tokens); 'stop' = malformed JSON; etc. */
+  /** 'length' = truncated (raise max_tokens); 'stop' = malformed JSON; null = no
+   *  finish reported (often empty content — see reasoningLen / refusal / error). */
   finishReason: string | null
+  nativeFinishReason?: string | null
   /** Length of the raw model content (0 = the model returned nothing). */
   rawLength: number
   /** Raw model content, capped — the actual text the parser choked on. */
   raw: string
+  /** message.reasoning length; large with rawLength 0 = reasoning consumed the budget. */
+  reasoningLen?: number
+  choices?: number
+  refusal?: string | null
+  usage?: { prompt?: number; completion?: number; total?: number } | null
+  error?: unknown
   model: string
 }
 const DEBUG_RAW_CAP = 4000
+
+/** Build an AiDebug from a stage + the raw text + response diagnostics. */
+function aiDebug(stage: AiDebug['stage'], text: string, diag: ResponseDiag): AiDebug {
+  return {
+    stage,
+    finishReason: diag.finishReason,
+    nativeFinishReason: diag.nativeFinishReason,
+    rawLength: text.length,
+    raw: text.slice(0, DEBUG_RAW_CAP),
+    reasoningLen: diag.reasoningLen,
+    choices: diag.choices,
+    refusal: diag.refusal,
+    usage: diag.usage,
+    error: diag.error,
+    model: scoringModel(),
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Step 1: rubric generation
@@ -213,17 +271,23 @@ export async function generateRubric(
   input: RubricPromptInput,
 ): Promise<{ criteria: RubricCriterion[] } | { error: string; debug?: AiDebug }> {
   let text: string
-  let finishReason: string | null
+  let diag: ResponseDiag
   try {
     // 8k tokens: the reasoning model (minimax) needs headroom or it truncates
     // mid-reasoning and returns empty content.
-    ;({ content: text, finishReason } = await complete(withGuidance(RUBRIC_SYSTEM, input.guidance), buildRubricUserPrompt(input), 8192))
+    ;({ content: text, diag } = await complete(withGuidance(RUBRIC_SYSTEM, input.guidance), buildRubricUserPrompt(input), 8192))
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'LLM request failed' }
   }
-  const debug = (): AiDebug => ({ stage: 'rubric', finishReason, rawLength: text.length, raw: text.slice(0, DEBUG_RAW_CAP), model: scoringModel() })
+  if (text.trim() === '') {
+    // Empty response (no content) — often a transient provider hiccup, so the
+    // caller may retry. Distinct message so it ISN'T treated as a deterministic
+    // parse failure. See ResponseDiag for why (reasoningLen / refusal / error).
+    console.error('[rubric] empty model response', { ...aiDebug('rubric', text, diag), raw: undefined })
+    return { error: 'Empty response from the model (no content).', debug: aiDebug('rubric', text, diag) }
+  }
   const rawCriteria = asCriteriaArray(extractJson(text))
-  if (!rawCriteria) return { error: 'Could not parse rubric from the model output.', debug: debug() }
+  if (!rawCriteria) return { error: 'Could not parse rubric from the model output.', debug: aiDebug('rubric', text, diag) }
   const criteria: RubricCriterion[] = rawCriteria
     .map((raw, i) => {
       const c = (raw ?? {}) as RawCriterion
@@ -234,7 +298,7 @@ export async function generateRubric(
       }
     })
     .filter((c) => c.description && Number.isFinite(c.points))
-  if (criteria.length === 0) return { error: 'The model returned no usable criteria.', debug: debug() }
+  if (criteria.length === 0) return { error: 'The model returned no usable criteria.', debug: aiDebug('rubric', text, diag) }
   return { criteria }
 }
 
@@ -372,27 +436,35 @@ export async function scoreSubmission(
   let aiResult: AiScoreResult = { earned: 0, feedback: null, criteria: [] }
   if (aiCriteria.length > 0) {
     let text: string
-    let finishReason: string | null
+    let diag: ResponseDiag
     try {
       // temperature 0 + fixed seed → reproducible. Only the AI criteria are sent
       // (smaller, cheaper, and free of the syntax-check noise). 8k tokens: the
       // reasoning model (minimax) spends tokens on reasoning, so a tight cap
       // truncates mid-reasoning and returns empty/partial content → unparseable.
-      // Deterministic (temp 0 + seed), so a too-low cap fails the SAME student
-      // every retry. Matches generateRubric's headroom.
-      ;({ content: text, finishReason } = await complete(withGuidance(SCORE_SYSTEM, input.guidance), buildScoreUserPrompt({ ...input, criteria: aiCriteria }), 8192, {
+      // Matches generateRubric's headroom.
+      ;({ content: text, diag } = await complete(withGuidance(SCORE_SYSTEM, input.guidance), buildScoreUserPrompt({ ...input, criteria: aiCriteria }), 8192, {
         temperature: 0,
         seed: SCORING_SEED,
       }))
     } catch (e) {
       return { error: e instanceof Error ? e.message : 'LLM request failed' }
     }
+    if (text.trim() === '') {
+      // Empty response (no content). Distinct message so the route RETRIES it
+      // (likely a transient provider hiccup) instead of treating it as a
+      // deterministic parse failure. The diag explains it: a large reasoningLen
+      // with rawLength 0 = reasoning ate the budget; refusal/error = provider-side.
+      const debug = aiDebug('score', text, diag)
+      console.error('[scoring] empty model response', { ...debug, raw: undefined })
+      return { error: 'Empty response from the model (no content).', debug }
+    }
     const parsed = parseAiScore(text, aiCriteria)
     if ('error' in parsed) {
-      const debug: AiDebug = { stage: 'score', finishReason, rawLength: text.length, raw: text.slice(0, DEBUG_RAW_CAP), model: scoringModel() }
+      const debug = aiDebug('score', text, diag)
       // Server log (Koyeb). The same detail rides back to the browser console when
-      // the teacher enables the `scoring:*` debug namespace (see the route + panel).
-      console.error('[scoring] parse failed', { finishReason, rawLength: text.length, raw: debug.raw })
+      // the teacher enables the `ai:*` debug namespace (see the route + panel).
+      console.error('[scoring] parse failed', debug)
       return { ...parsed, debug }
     }
     aiResult = parsed
