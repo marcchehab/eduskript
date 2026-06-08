@@ -457,6 +457,27 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
         return next
       })
     }
+    // Auto-show student feedback when ENTERING student-view (symmetric to the
+    // auto-hide above). The auto-hide persists 'student-feedback': false to the
+    // shared `annotation-layer-visibility` localStorage key on the way out to
+    // class-broadcast. That key is global (not per-student / per-page), so
+    // without this re-show the next student-view session — a different student,
+    // another page, a later sitting — hydrates with the active feedback layer
+    // stuck hidden: filteredSnaps returns [] and the active-stroke layer is
+    // gated off, so the teacher's snaps/strokes appear only after a draw
+    // re-triggers ensureActiveLayerVisible(). Fires on the mode transition
+    // only (student→student keeps viewMode === 'student-view'), so a manual
+    // hide within a grading session is preserved.
+    if (isTeacher && prevViewModeRef.current !== 'student-view' && viewMode === 'student-view') {
+      setLayerVisibility(prev => {
+        if (prev['student-feedback'] === true) return prev
+        const next = { ...prev, 'student-feedback': true }
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('annotation-layer-visibility', JSON.stringify(next))
+        }
+        return next
+      })
+    }
     // Save class broadcast canvas data when switching from class-broadcast to student-view
     // This provides a fallback for the reference layer until classBroadcastData hook loads
     if (isTeacher && prevViewModeRef.current === 'class-broadcast' && viewMode === 'student-view') {
