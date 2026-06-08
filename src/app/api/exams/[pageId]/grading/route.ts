@@ -5,6 +5,7 @@
  * class teacher).
  *
  * GET /api/exams/[pageId]/grading?classId=xxx
+ * GET /api/exams/[pageId]/grading?classesOnly=1 — just the class picker list.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -12,7 +13,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { computeExamGrades } from '@/lib/scoring/aggregate'
-import { getAuthoredExamPage, getExamUrl, isClassTeacher } from '@/lib/scoring/auth'
+import { getAuthoredExamPage, getExamClassesForTeacher, getExamUrl, isClassTeacher } from '@/lib/scoring/auth'
 
 export async function GET(
   request: NextRequest,
@@ -24,8 +25,10 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     const { pageId } = await params
-    const classId = new URL(request.url).searchParams.get('classId')
-    if (!classId) {
+    const searchParams = new URL(request.url).searchParams
+    const classId = searchParams.get('classId')
+    const classesOnly = searchParams.get('classesOnly') !== null
+    if (!classId && !classesOnly) {
       return NextResponse.json({ error: 'classId query parameter is required' }, { status: 400 })
     }
 
@@ -34,14 +37,21 @@ export async function GET(
       return NextResponse.json({ error: 'Page not found or access denied' }, { status: 404 })
     }
 
-    // Every class this teacher owns that has the exam unlocked — the picker
-    // options, and the target set when classId === 'all'. The same exam is
-    // often given to several classes under one grade key (per-page config).
-    const unlocks = await prisma.pageUnlock.findMany({
-      where: { pageId, classId: { not: null }, class: { teacherId: session.user.id } },
-      select: { class: { select: { id: true, name: true } } },
-    })
-    const allClasses = [...new Map(unlocks.flatMap((u) => (u.class ? [[u.class.id, u.class]] : [])) as [string, { id: string; name: string }][]).values()]
+    // Every class this teacher owns with the exam unlocked OR holding a submitted
+    // answer — the picker options, and the target set when classId === 'all'. The
+    // same exam is often given to several classes under one grade key, and a class
+    // whose unlock was revoked still needs grading. See getExamClassesForTeacher.
+    const allClasses = await getExamClassesForTeacher(pageId, session.user.id)
+
+    // Picker-only mode: skip the per-student grade computation below.
+    if (classesOnly) {
+      return NextResponse.json({ classes: allClasses })
+    }
+    // Past this point classId is required (the guard above only allows a missing
+    // classId in classesOnly mode); narrow it for TS.
+    if (!classId) {
+      return NextResponse.json({ error: 'classId query parameter is required' }, { status: 400 })
+    }
 
     // Resolve target classes: a specific one (must be the teacher's) or all.
     let targetClassIds: string[]

@@ -16,6 +16,34 @@ export async function getAuthoredExamPage(userId: string, pageId: string) {
 }
 
 /**
+ * The teacher's classes for an exam page: those with the page unlocked OR with a
+ * member who has submitted this exam. The unlock branch keeps a freshly-unlocked
+ * class visible before anyone submits; the submission branch keeps a class
+ * visible after its unlock is revoked while answers still need grading. Shape is
+ * `{ id, name }[]`, deduped by the query, name-ordered.
+ *
+ * `ExamSubmission.submittedAt` is non-null, so a row existing == submitted.
+ * Limitation: a class only surfaces while a submitting member is still enrolled —
+ * if both the unlock and the membership are gone, the ExamSubmission persists but
+ * nothing links it back to a class. The submission branch can also over-include a
+ * student's *other* classes (ExamSubmission carries no classId to disambiguate);
+ * all are the same teacher's, so the teacher just picks the right one.
+ */
+export async function getExamClassesForTeacher(pageId: string, teacherId: string) {
+  return prisma.class.findMany({
+    where: {
+      teacherId,
+      OR: [
+        { pageUnlocks: { some: { pageId } } },
+        { memberships: { some: { student: { examSubmissions: { some: { pageId } } } } } },
+      ],
+    },
+    select: { id: true, name: true },
+    orderBy: { name: 'asc' },
+  })
+}
+
+/**
  * The /exam/... URL for a page (resolving site + skript + page slugs), so the
  * grading table can link a student to the in-exam view. null if unresolved.
  */

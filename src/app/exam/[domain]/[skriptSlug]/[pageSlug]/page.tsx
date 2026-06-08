@@ -24,6 +24,7 @@ import { ExamReviewProvider } from '@/contexts/exam-review-context'
 import { ReturnedExamSummary } from '@/components/exam/returned-exam-summary'
 import { ExamPageContextProvider } from '@/contexts/exam-page-context'
 import { getOrCreateActiveExamKey } from '@/lib/exam-keys'
+import { getExamClassesForTeacher } from '@/lib/scoring/auth'
 import { isSEBRequest, type ExamSettings } from '@/lib/seb'
 import { validateExamToken, validateExamSession } from '@/lib/exam-tokens'
 import { getPublicLayers } from '@/lib/public-page-data'
@@ -184,15 +185,13 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
     )
   }
 
+  // Classes shown in the teacher's class toolbar: unlocked for this page OR
+  // having a submitted answer (so a class whose unlock was revoked but still has
+  // work to grade stays selectable). See getExamClassesForTeacher. `studentId`
+  // here is the current (teacher) user id.
   let unlockedClassesForExam: { id: string; name: string }[] = []
   if (isTeacherAuthor) {
-    const unlocks = await prisma.pageUnlock.findMany({
-      where: { pageId: page.id, classId: { not: null } },
-      include: { class: { select: { id: true, name: true, teacherId: true } } }
-    })
-    unlockedClassesForExam = unlocks
-      .filter(u => u.class?.teacherId === studentId)
-      .map(u => ({ id: u.class!.id, name: u.class!.name }))
+    unlockedClassesForExam = await getExamClassesForTeacher(page.id, studentId)
   }
 
   let examState: 'closed' | 'lobby' | 'open' | null = null

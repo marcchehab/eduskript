@@ -150,17 +150,18 @@ export default function ExamGradingPage() {
   // ClassToolbar use. The mapping takes precedence over the stored name/pseudonym.
   const [resolvedEmails, setResolvedEmails] = useState<Record<string, string>>({})
 
-  // Load the classes that have this exam unlocked (for the class picker).
+  // Load the classes for the picker: those with the exam unlocked OR holding a
+  // submitted answer (so a class whose unlock was revoked but still has work to
+  // grade stays selectable). Same source as the grading targets — see
+  // getExamClassesForTeacher.
   useEffect(() => {
     if (status !== 'authenticated') return
-    fetch(`/api/pages/${pageId}/unlock`)
-      .then((r) => (r.ok ? r.json() : { unlocks: [] }))
+    fetch(`/api/exams/${pageId}/grading?classesOnly=1`)
+      .then((r) => (r.ok ? r.json() : { classes: [] }))
       .then((j) => {
-        const cls: UnlockedClass[] = (j.unlocks ?? [])
-          .filter((u: { class?: UnlockedClass }) => u.class)
-          .map((u: { class: UnlockedClass }) => u.class)
+        const cls: UnlockedClass[] = j.classes ?? []
         // de-dup
-        const seen = new Map(cls.map((c) => [c.id, c]))
+        const seen = new Map(cls.map((c: UnlockedClass) => [c.id, c]))
         setClasses([...seen.values()])
       })
       .catch(() => setClasses([]))
