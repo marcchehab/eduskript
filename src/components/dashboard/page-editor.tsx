@@ -19,6 +19,7 @@ import { ExamStateStepper } from '@/components/exam/exam-state-stepper'
 import type { ExamLifecycleState } from '@/lib/exam-state'
 import {
   Dialog,
+  DialogTrigger,
   DialogContent,
   DialogHeader,
   DialogTitle,
@@ -911,20 +912,45 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                     Unlock for all
                   </Label>
                 </div>
-                {teacherClasses.length > 0 && (
-                  <div className="flex flex-col gap-2">
-                    <span className="text-sm text-muted-foreground">Assign to classes:</span>
-                    {teacherClasses.map((cls) => (
-                      <div key={cls.id} className="flex items-center justify-between gap-3">
-                        <span className="text-sm">{cls.name}</span>
-                        <ExamStateStepper
-                          value={examStates[cls.id] ?? 'hidden'}
-                          onChange={(state) => handleExamStateChange(cls.id, state)}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
+                {teacherClasses.length > 0 && (() => {
+                  const assignedCount = teacherClasses.filter(
+                    (cls) => (examStates[cls.id] ?? 'hidden') !== 'hidden',
+                  ).length
+                  return (
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button variant="outline" size="sm" className="gap-1.5 self-start">
+                          <Users className="w-4 h-4" />
+                          Assign to classes
+                          {assignedCount > 0 && (
+                            <span className="ml-0.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary tabular-nums">
+                              {assignedCount}
+                            </span>
+                          )}
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-md">
+                        <DialogHeader>
+                          <DialogTitle>Assign to classes</DialogTitle>
+                          <DialogDescription>
+                            Hidden = not assigned · Closed = visible, no entry yet · Lobby = waiting room · Open = students can take it.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="flex flex-col gap-2">
+                          {teacherClasses.map((cls) => (
+                            <div key={cls.id} className="flex items-center justify-between gap-3">
+                              <span className="text-sm">{cls.name}</span>
+                              <ExamStateStepper
+                                value={examStates[cls.id] ?? 'hidden'}
+                                onChange={(state) => handleExamStateChange(cls.id, state)}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  )
+                })()}
                 {examSettings.requireSEB && sessionStatus === 'authenticated' && (session?.user as { pageSlug?: string })?.pageSlug && (
                   <div className="flex items-center gap-2">
                     <code className="text-xs bg-background px-2 py-1 rounded border font-mono">
