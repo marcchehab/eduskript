@@ -32,8 +32,9 @@ const CONCURRENCY = 4
 /** Score one submission, retrying TRANSIENT failures (provider timeout / rate
  *  limit) with backoff. Deterministic PARSE failures are returned immediately.
  *  An EMPTY response (reasoning ate the token budget) IS retried, but with the
- *  attempt index passed through so scoreSubmission escalates the cap + perturbs
- *  the seed — an identical retry at temperature 0 would reproduce the stall. */
+ *  attempt index passed through so scoreSubmission appends a decisiveness nudge to
+ *  the system prompt — an identical temp-0 retry would reproduce the stall
+ *  byte-for-byte (seed perturbation is inert at temperature 0). */
 async function scoreWithRetry(
   input: Parameters<typeof scoreSubmission>[0],
   attempts = 3,

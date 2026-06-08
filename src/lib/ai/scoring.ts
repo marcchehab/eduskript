@@ -346,6 +346,17 @@ Rules:
 - Output STRICT JSON only, no prose, no code fences:
   {"criteria":[{"id":"c1","points":1.5,"comment":"..."}],"feedback":"..."}`
 
+/** Appended to SCORE_SYSTEM on RETRY ONLY (attempt > 0). The first attempt uses
+ *  the frozen SCORE_SYSTEM verbatim so the calibration baseline is untouched;
+ *  this nudge only ever sees submissions the first pass already failed on (empty
+ *  content = minimax spiralling on its own chain-of-thought). It tells the model
+ *  to stop deliberating and commit. Appending it changes the input, so the
+ *  greedy temp-0 decode diverges from the first attempt without raising
+ *  temperature — whether it actually shortens minimax's reasoning is unverified. */
+const SCORE_RETRY_NUDGE = `
+
+DECISIVENESS (retry): do NOT over-deliberate. Reason briefly, then output the JSON. If you are uncertain, commit to your best judgment and emit the result immediately — never keep reasoning instead of answering.`
+
 export interface ScorePromptInput {
   pageContext: string
   label?: string
@@ -407,14 +418,22 @@ export function parseAiScore(
 
 export async function scoreSubmission(
   input: ScorePromptInput,
-  // Retry attempt index (0 = first try). On retries we perturb the seed so an
-  // empty response (no content) isn't reproduced byte-for-byte at temperature 0.
+  // Retry attempt index (0 = first try). On retries we APPEND A DECISIVENESS
+  // NUDGE to the system prompt so the decode actually diverges while staying at
+  // temperature 0. The old seed-only perturbation (SCORING_SEED + attempt) was a
+  // no-op: greedy temp-0 decoding is deterministic and ignores the seed, so all
+  // attempts came back byte-for-byte identical (Koyeb logs, 2026-06-08: 3 retries,
+  // same reasoningLen/usage every time). Changing the PROMPT is the only lever
+  // that diverges the output without raising temperature — so the class is still
+  // graded by one model at temp 0, reproducibly. (We deliberately do NOT raise
+  // temperature: a class must be gradeable deterministically.)
   // NOTE: do NOT raise max_tokens on retry — for a reasoning model (minimax) a
   // genuine spiral just reasons LONGER with more headroom (measured: 8k cap →
   // 34k reasoning chars, 16k cap → 69k), making the timeout worse, never
-  // emitting content. The real fix for the spiral is scoping the context to the
-  // exercise's section (see the scoring route + extractComponentContext); the
-  // seed perturbation only covers a transient deterministic empty.
+  // emitting content. The first fix for the spiral is scoping the context to the
+  // exercise's section (see the scoring route + extractComponentContext); this
+  // temperature+nudge retry is the fallback for exercises that spiral on their
+  // OWN content, where scoping has nothing to strip.
   attempt = 0,
 ): Promise<AiScoreResult | { error: string; debug?: AiDebug }> {
   // Split: a criterion with an INLINE regex in its description is scored
@@ -447,16 +466,22 @@ export async function scoreSubmission(
     let text: string
     let diag: ResponseDiag
     try {
-      // temperature 0 + fixed seed → reproducible. Only the AI criteria are sent
-      // (smaller, cheaper, and free of the syntax-check noise). 8k tokens: the
-      // reasoning model (minimax) spends tokens on reasoning, so a tight cap
-      // truncates mid-reasoning and returns empty/partial content → unparseable.
-      // Matches generateRubric's headroom. On a retry (attempt > 0) we perturb the
-      // seed so an empty response isn't reproduced identically — but keep the cap
-      // fixed (see the `attempt` param note: more headroom worsens a spiral).
-      ;({ content: text, diag } = await complete(withGuidance(SCORE_SYSTEM, input.guidance), buildScoreUserPrompt({ ...input, criteria: aiCriteria }), 8192, {
+      // Always temperature 0 + fixed seed → fully reproducible, one model for the
+      // whole class. Only the AI criteria are sent (smaller, cheaper, and free of
+      // the syntax-check noise). 8k tokens: the reasoning model (minimax) spends
+      // tokens on reasoning, so a tight cap truncates mid-reasoning and returns
+      // empty/partial content → unparseable. Matches generateRubric's headroom.
+      // On a RETRY (attempt > 0) the ONLY thing that changes is the system prompt:
+      // we append the decisiveness nudge. That alters the input, so even greedy
+      // temp-0 decoding produces a DIFFERENT (deterministic) output — which is the
+      // point, since seed perturbation alone is inert at temp 0. The first attempt
+      // uses the frozen SCORE_SYSTEM verbatim, so the calibration baseline is
+      // untouched. Cap stays fixed (see the `attempt` note: more headroom worsens
+      // a spiral).
+      const system = attempt === 0 ? SCORE_SYSTEM : SCORE_SYSTEM + SCORE_RETRY_NUDGE
+      ;({ content: text, diag } = await complete(withGuidance(system, input.guidance), buildScoreUserPrompt({ ...input, criteria: aiCriteria }), 8192, {
         temperature: 0,
-        seed: SCORING_SEED + attempt,
+        seed: SCORING_SEED,
       }))
     } catch (e) {
       return { error: e instanceof Error ? e.message : 'LLM request failed' }
