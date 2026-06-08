@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
 import { AnnotationWrapper, type PublicAnnotation, type PublicSnap } from '@/components/public/annotation-wrapper'
 import { ForkAttribution } from '@/components/public/fork-attribution'
@@ -46,12 +47,18 @@ export function PublicPageBody({ page, skriptId, publicAnnotations, publicSnaps,
   return (
     <>
       {showToolbar && (
-        <ClassToolbar
-          pageId={page.id}
-          pageType={page.pageType ?? 'standard'}
-          unlockedClasses={[]}
-          requireOwnerSlug={teacherPageSlug}
-        />
+        // ClassToolbar calls useSearchParams() (deep-link ?classId=&student=);
+        // without a Suspense boundary it forces this ISR-prerendered page to
+        // bail out to full client-side rendering. Suspense lets the static
+        // shell prerender while the toolbar resolves search params on the client.
+        <Suspense fallback={null}>
+          <ClassToolbar
+            pageId={page.id}
+            pageType={page.pageType ?? 'standard'}
+            unlockedClasses={[]}
+            requireOwnerSlug={teacherPageSlug}
+          />
+        </Suspense>
       )}
       <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border relative">
         {(page.forkedFromPageId || page.forkedFromAuthorId) && (
