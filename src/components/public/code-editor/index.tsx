@@ -1050,6 +1050,16 @@ export const CodeEditor = memo(function CodeEditor({
       : [{ name: `main${getFileExtension(language)}`, content: initialCode }]
   )
   const hasLoadedData = useRef(false)
+  // Persistence gating to prevent a remount from overwriting the student's saved
+  // answer with the editor's starter code (see the restore effect below and the
+  // two persist paths). `restoreSettled` = the one-shot load has run (with saved
+  // data OR having confirmed there is none). `skipNextPersist` = skip exactly the
+  // stale metadata save on the restore-settle commit (setFiles is async).
+  // `restoredNonStarter` = a real answer was restored, so the bare starter must
+  // never be auto-persisted over it.
+  const restoreSettled = useRef(false)
+  const skipNextPersist = useRef(false)
+  const restoredNonStarter = useRef(false)
 
   // Update original files when props change (markdown was edited)
   useEffect(() => {
@@ -1070,12 +1080,21 @@ export const CodeEditor = memo(function CodeEditor({
     // over the snapshot. The snapshot-hydration effect further below applies
     // the student's payload via applyDataToEditor.
     if (isViewingSnapshot) {
+      // Restore is "settled" for persistence purposes; every persist path still
+      // guards on isViewingSnapshot, so this only avoids permanently blocking
+      // saves if the teacher later leaves snapshot view on this same instance.
+      restoreSettled.current = true
       return
     }
-    if (!isLoading && savedData && !hasLoadedData.current) {
+    if (!isLoading && !hasLoadedData.current) {
       hasLoadedData.current = true
+      // The one-shot load has settled — with saved data, or having confirmed
+      // there is none. Persistence is now allowed. This also covers the
+      // no-saved-data case (brand-new editor): without it `restoreSettled` would
+      // never flip and the student's first input could never persist.
+      restoreSettled.current = true
 
-      if (savedData.files) {
+      if (savedData?.files) {
         // LEGACY REPAIR: a past bug emitted file names like "mainundefined"
         // when getFileExtension fell off the switch. Rename them to the
         // correct extension so the student's content surfaces in the right
@@ -1108,12 +1127,21 @@ export const CodeEditor = memo(function CodeEditor({
           if (!merged.some(m => m.name === f.name)) merged.push(f)
         }
         setFiles(merged)
+        // setFiles is async: the metadata-save effect runs again in THIS same
+        // commit still seeing `files`=starter and would persist the starter over
+        // the just-restored answer. Skip exactly that one stale persist.
+        skipNextPersist.current = true
+        // Remember we restored a real (non-starter) answer, so the starter can
+        // never be auto-persisted over it later (the remount-wipe signature).
+        if (JSON.stringify(merged) !== JSON.stringify(originalInitialFiles.current)) {
+          restoredNonStarter.current = true
+        }
       }
-      if (savedData.activeFileIndex !== undefined) setActiveFileIndex(savedData.activeFileIndex)
-      if (savedData.fontSize !== undefined) setFontSize(savedData.fontSize)
-      if (savedData.lineWrapping !== undefined) setLineWrapping(savedData.lineWrapping)
-      if (savedData.editorWidth !== undefined) setEditorWidth(savedData.editorWidth)
-      if (savedData.canvasTransform) setCanvasTransform(savedData.canvasTransform)
+      if (savedData?.activeFileIndex !== undefined) setActiveFileIndex(savedData.activeFileIndex)
+      if (savedData?.fontSize !== undefined) setFontSize(savedData.fontSize)
+      if (savedData?.lineWrapping !== undefined) setLineWrapping(savedData.lineWrapping)
+      if (savedData?.editorWidth !== undefined) setEditorWidth(savedData.editorWidth)
+      if (savedData?.canvasTransform) setCanvasTransform(savedData.canvasTransform)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- Intentional: this is a one-shot restore gated by hasLoadedData.current. Re-running on language/defaultData.files changes (e.g. markdown edits) would no-op anyway, and dragging them in widens the dep surface for no behaviour change.
   }, [isLoading, savedData, debugTag, isViewingSnapshot])
@@ -1172,6 +1200,9 @@ export const CodeEditor = memo(function CodeEditor({
     // user-driven calls in the first place, but keep this guard for any
     // programmatic path that might still reach in.
     if (isViewingSnapshot) return
+    // Don't stream/persist before the one-shot restore has applied — a remount
+    // would otherwise push the starter over the saved answer (live + server).
+    if (!restoreSettled.current) return
 
     const content = editorViewRef.current.state.doc.toString()
     const currentTab = activeTabRef.current
@@ -1214,6 +1245,9 @@ export const CodeEditor = memo(function CodeEditor({
       canvasTransform,
       highlights,
     }
+    // Mirror the metadata-effect guard: never let a starter state overwrite a
+    // restored real answer (both the local record and the exam server stream).
+    if (restoredNonStarter.current && JSON.stringify(filesRef.current) === JSON.stringify(originalInitialFiles.current)) return
     const savePromise = userDataService.save(pageId, componentId, data)
 
     // Exam crash-safety stream: push the just-saved record to the server via the
@@ -1249,6 +1283,18 @@ export const CodeEditor = memo(function CodeEditor({
     // Snapshot-view mode: the on-screen `files` are the student's checkpoint
     // payload, not the teacher's own work — don't overwrite the teacher's record.
     if (isViewingSnapshot) return
+    // Don't persist until the one-shot restore has applied — otherwise a remount
+    // writes the starter before the saved answer is restored (see restore effect).
+    if (!restoreSettled.current) return
+    // Skip the single stale persist on the restore-settle commit (setFiles async).
+    if (skipNextPersist.current) {
+      skipNextPersist.current = false
+      return
+    }
+    // Defense in depth: never auto-overwrite a restored real answer with the bare
+    // starter (the wipe signature). Deliberate clears come via keystroke →
+    // debouncedSaveContent (and resetCode clears the flag), so they still persist.
+    if (restoredNonStarter.current && JSON.stringify(files) === JSON.stringify(originalInitialFiles.current)) return
 
     const dataToSave: CodeEditorData = {
       files,
@@ -3611,6 +3657,10 @@ export const CodeEditor = memo(function CodeEditor({
   const resetCode = () => {
     // Reset to the original markdown files
     const originalFiles = originalInitialFiles.current
+
+    // Deliberate reset: allow the starter to persist (clear the wipe guard that
+    // otherwise blocks auto-overwriting a restored answer with the starter).
+    restoredNonStarter.current = false
 
     // Update files state
     setFiles(originalFiles)
