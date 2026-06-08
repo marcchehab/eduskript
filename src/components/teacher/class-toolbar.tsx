@@ -562,7 +562,7 @@ export function ClassToolbar({
                     title="Show the whole-class overview (no individual student)"
                   >
                     <Users className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                    Class overview
+                    Overview
                   </button>
                   {selectedClass && (
                     <Button
@@ -570,15 +570,15 @@ export function ClassToolbar({
                       size="sm"
                       onClick={createTempUser}
                       disabled={creatingTempUser}
-                      className="h-7 gap-1 flex-shrink-0"
-                      title="Create a temporary email+password student in this class (e.g. for a spare laptop)"
+                      className="h-7 w-7 p-0 flex-shrink-0"
+                      title="Add a temporary user to this class (e.g. to give a student another device during an exam)"
+                      aria-label="Add a temporary user to this class"
                     >
                       {creatingTempUser ? (
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
                       ) : (
                         <UserPlus className="w-3.5 h-3.5" />
                       )}
-                      Temporary user
                     </Button>
                   )}
                   {isExam && selectedClass && (
