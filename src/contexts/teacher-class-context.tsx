@@ -85,8 +85,20 @@ export function TeacherClassProvider({ children }: { children: ReactNode }) {
     if (typeof window === 'undefined') return
 
     try {
+      // A grading-dashboard deep link (?classId=&student=) must win over the
+      // previous session's localStorage selection. ClassToolbar / TeacherExamGrading
+      // apply those params (they carry the class roster to resolve names), and
+      // their child effects run BEFORE this provider effect — so restoring from
+      // localStorage here would clobber the URL-driven selection. Skip the restore
+      // for whichever param the URL carries. Read window.location directly rather
+      // than useSearchParams() to avoid forcing a Suspense boundary around this
+      // top-level provider.
+      const urlParams = new URLSearchParams(window.location.search)
+      const urlHasClass = urlParams.has('classId')
+      const urlHasStudent = urlParams.has('student')
+
       const storedClass = localStorage.getItem(STORAGE_KEY)
-      if (storedClass) {
+      if (!urlHasClass && storedClass) {
         const parsed = JSON.parse(storedClass) as SelectedClass
         if (parsed.id && parsed.name) {
           // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -95,7 +107,7 @@ export function TeacherClassProvider({ children }: { children: ReactNode }) {
       }
 
       const storedStudent = localStorage.getItem(STUDENT_STORAGE_KEY)
-      if (storedStudent) {
+      if (!urlHasStudent && storedStudent) {
         const parsed = JSON.parse(storedStudent) as SelectedStudent
         if (parsed.id && parsed.displayName) {
           setSelectedStudentState(parsed)

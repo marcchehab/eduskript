@@ -27,8 +27,9 @@
  */
 'use client'
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { useSearchParams } from 'next/navigation'
 import {
   Users,
   CheckCircle2,
@@ -243,13 +244,37 @@ export function ClassToolbar({
       .catch(() => setResolvedEmails({}))
   }, [selectedClass])
 
-  // Auto-select first unlocked class on exam pages.
+  // Class/student selection on exam pages. A grading-dashboard deep link
+  // (?classId=&student=) wins over the localStorage-restored class and the
+  // first-unlocked fallback. unlockedClasses is a server-passed prop (no async
+  // load) so this resolves in one pass. Applied once per mount — each dashboard
+  // click is a fresh navigation → fresh mount → ref resets — so a manual class
+  // switch afterward isn't clobbered.
+  //
+  // Class and student MUST be set here together, class first: setSelectedClass()
+  // clears the selected student, so a separate student-param consumer would race
+  // and lose its selection. The student is (re)applied right after the class.
+  const searchParams = useSearchParams()
+  const appliedUrlSelectionRef = useRef(false)
   useEffect(() => {
-    if (!isExam) return
+    if (!isExam || appliedUrlSelectionRef.current) return
+    appliedUrlSelectionRef.current = true
+
+    const urlClassId = searchParams.get('classId')
+    const match = urlClassId ? unlockedClasses.find(c => c.id === urlClassId) : undefined
+    if (match) {
+      if (selectedClass?.id !== match.id) setSelectedClass({ id: match.id, name: match.name })
+      const urlStudent = searchParams.get('student')
+      // Placeholder display name; the roster/toolbar refines it once loaded.
+      if (urlStudent) setSelectedStudent({ id: urlStudent, displayName: 'Student' })
+      return
+    }
+
+    // No usable ?classId= → keep the original first-unlocked fallback.
     if (!selectedClass && unlockedClasses.length > 0) {
       setSelectedClass({ id: unlockedClasses[0].id, name: unlockedClasses[0].name })
     }
-  }, [isExam, selectedClass, unlockedClasses, setSelectedClass])
+  }, [isExam, selectedClass, unlockedClasses, setSelectedClass, setSelectedStudent, searchParams])
 
   const refreshAll = () => {
     refreshRoster()
