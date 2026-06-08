@@ -30,6 +30,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useSearchParams } from 'next/navigation'
+import { ExamStateStepper } from '@/components/exam/exam-state-stepper'
+import type { ExamLifecycleState } from '@/lib/exam-state'
 import {
   Users,
   CheckCircle2,
@@ -387,7 +389,7 @@ export function ClassToolbar({
     return submissions.find(s => s.userId === yourAnonymousUserId)?.displayName ?? null
   }, [submissions, yourAnonymousUserId])
 
-  const setExamStateTo = async (newState: 'closed' | 'lobby' | 'open') => {
+  const setExamStateTo = async (newState: ExamLifecycleState) => {
     if (!selectedClass) return
     setIsUpdating(true)
     try {
@@ -525,8 +527,6 @@ export function ClassToolbar({
       </FixedToolbarFrame>
     )
   }
-
-  const stateConfig = getStateConfig(examState)
 
   return (
     <FixedToolbarFrame>
@@ -877,66 +877,13 @@ export function ClassToolbar({
 
         {isExam && selectedClass && (
           <div className="mt-2 flex items-center gap-2 flex-wrap">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={isUpdating}
-                  className={cn(
-                    'gap-2',
-                    examState === 'closed' && 'border-red-500/50',
-                    examState === 'lobby' && 'border-yellow-500/50',
-                    examState === 'open' && 'border-green-500/50'
-                  )}
-                >
-                  {isUpdating ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <>
-                      <div className={cn('w-2 h-2 rounded-full', stateConfig.color)} />
-                      <span>{stateConfig.label}</span>
-                    </>
-                  )}
-                  <ChevronDown className="w-4 h-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent side="top" align="start">
-                <DropdownMenuItem
-                  onClick={() => setExamStateTo('closed')}
-                  disabled={examState === 'closed'}
-                  className="gap-2"
-                >
-                  <Lock className="w-4 h-4 text-red-500" />
-                  <div>
-                    <div className="font-medium">Closed</div>
-                    <div className="text-xs text-muted-foreground">Students cannot enter</div>
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => setExamStateTo('lobby')}
-                  disabled={examState === 'lobby'}
-                  className="gap-2"
-                >
-                  <DoorOpen className="w-4 h-4 text-yellow-500" />
-                  <div>
-                    <div className="font-medium">Lobby</div>
-                    <div className="text-xs text-muted-foreground">Students wait for you to open</div>
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => setExamStateTo('open')}
-                  disabled={examState === 'open'}
-                  className="gap-2"
-                >
-                  <Unlock className="w-4 h-4 text-green-500" />
-                  <div>
-                    <div className="font-medium">Open</div>
-                    <div className="text-xs text-muted-foreground">Students can take the exam</div>
-                  </div>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {/* One control for the whole lifecycle. Hidden = not assigned (not in
+                the class's sidebar); Closed/Lobby/Open control entry. */}
+            <ExamStateStepper
+              value={examState ?? 'hidden'}
+              onChange={setExamStateTo}
+              disabled={isUpdating}
+            />
             <label
               className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none"
               title="Cycle only through students who have handed in"
@@ -1157,17 +1104,6 @@ function getRosterDisplayName(
   if (resolved) return resolved
   if (student.name) return student.name
   return '—'
-}
-
-function getStateConfig(examState: 'closed' | 'lobby' | 'open' | null) {
-  switch (examState) {
-    case 'open':
-      return { color: 'bg-green-500', label: 'Open' }
-    case 'lobby':
-      return { color: 'bg-yellow-500', label: 'Lobby' }
-    default:
-      return { color: 'bg-red-500', label: 'Closed' }
-  }
 }
 
 function getStatusIcon(status: MergedRow['examStatus']) {

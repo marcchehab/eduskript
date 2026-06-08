@@ -75,14 +75,16 @@ export interface CollaborationRequestEvent {
 }
 
 /**
- * Fired when exam state changes (closed/lobby/open)
- * Used for waiting room real-time updates
+ * Fired when exam state changes (hidden/closed/lobby/open).
+ * Used for waiting room real-time updates. `studentId` is set when the change is
+ * a per-student override (else null = class-level change).
  */
 export interface ExamStateChangeEvent {
   type: 'exam-state-change'
   pageId: string
   classId: string
-  state: 'closed' | 'lobby' | 'open'
+  studentId?: string | null
+  state: 'hidden' | 'closed' | 'lobby' | 'open'
   timestamp: number
 }
 

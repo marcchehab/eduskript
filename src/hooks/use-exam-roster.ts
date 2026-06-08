@@ -38,7 +38,9 @@ export interface ExamRosterCounts {
   submitted: number
 }
 
-export type ExamState = 'closed' | 'lobby' | 'open' | null
+import type { ExamLifecycleState } from '@/lib/exam-state'
+
+export type ExamState = ExamLifecycleState | null
 
 interface UseExamRosterArgs {
   pageId: string
@@ -86,7 +88,7 @@ export function useExamRoster({ pageId, classId, enabled = true }: UseExamRoster
         if (cancelled) return
         if (stateRes.ok) {
           const data = await stateRes.json()
-          setExamState((data?.state as ExamState) ?? 'closed')
+          setExamState((data?.state as ExamState) ?? 'hidden')
         }
         if (studentsRes.ok) {
           const data = await studentsRes.json()

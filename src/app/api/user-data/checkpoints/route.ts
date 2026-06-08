@@ -29,6 +29,7 @@ import { getServerSession } from 'next-auth'
 import { cookies } from 'next/headers'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { examClassActivityWhere } from '@/lib/exam-state'
 import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import { eventBus } from '@/lib/events'
 
@@ -248,7 +249,7 @@ async function isTeacherOfStudentForPage(
       studentId,
       class: {
         teacherId: viewerId,
-        pageUnlocks: { some: { pageId } },
+        ...examClassActivityWhere(pageId),
       },
     },
     select: { id: true },

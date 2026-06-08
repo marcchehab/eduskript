@@ -87,9 +87,9 @@ export async function GET(
     }
   })
 
-  // Send initial state
-  const currentState = await prisma.examState.findUnique({
-    where: { pageId_classId: { pageId, classId } },
+  // Send initial state (class-level row; null studentId). No row == hidden.
+  const currentState = await prisma.examState.findFirst({
+    where: { pageId, classId, studentId: null },
     select: { state: true }
   })
 
@@ -97,7 +97,7 @@ export async function GET(
     type: 'exam-state-change',
     pageId,
     classId,
-    state: currentState?.state || 'closed',
+    state: currentState?.state || 'hidden',
     timestamp: Date.now()
   })}\n\n`)).catch(() => { /* ignore */ })
 

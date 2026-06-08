@@ -16,25 +16,25 @@ export async function getAuthoredExamPage(userId: string, pageId: string) {
 }
 
 /**
- * The teacher's classes for an exam page: those with the page unlocked OR with a
- * member who has submitted this exam. The unlock branch keeps a freshly-unlocked
- * class visible before anyone submits; the submission branch keeps a class
- * visible after its unlock is revoked while answers still need grading. Shape is
- * `{ id, name }[]`, deduped by the query, name-ordered.
+ * The teacher's classes for an exam page: those assigned (a class-level ExamState
+ * row exists — see lib/exam-state) OR with a member who has submitted this exam.
+ * The assigned branch keeps a class visible before anyone submits; the submission
+ * branch keeps a class visible after it's set back to hidden while answers still
+ * need grading. Shape is `{ id, name }[]`, deduped by the query, name-ordered.
  *
  * `ExamSubmission.submittedAt` is non-null, so a row existing == submitted.
  * Limitation: a class only surfaces while a submitting member is still enrolled —
- * if both the unlock and the membership are gone, the ExamSubmission persists but
- * nothing links it back to a class. The submission branch can also over-include a
- * student's *other* classes (ExamSubmission carries no classId to disambiguate);
- * all are the same teacher's, so the teacher just picks the right one.
+ * if both the assignment and the membership are gone, the ExamSubmission persists
+ * but nothing links it back to a class. The submission branch can also
+ * over-include a student's *other* classes (ExamSubmission carries no classId to
+ * disambiguate); all are the same teacher's, so the teacher just picks the right one.
  */
 export async function getExamClassesForTeacher(pageId: string, teacherId: string) {
   return prisma.class.findMany({
     where: {
       teacherId,
       OR: [
-        { pageUnlocks: { some: { pageId } } },
+        { examStates: { some: { pageId, studentId: null } } },
         { memberships: { some: { student: { examSubmissions: { some: { pageId } } } } } },
       ],
     },
@@ -78,7 +78,12 @@ export async function isClassTeacher(userId: string, classId: string): Promise<b
   return Boolean(c)
 }
 
-/** True if `userId` teaches a class containing `studentId` with `pageId` unlocked. */
+/**
+ * True if `userId` teaches a class containing `studentId` that is associated with
+ * `pageId` — i.e. the class (or student) has an ExamState row for the page, OR the
+ * student has already submitted it. The submission branch keeps teacher access
+ * working after the exam is set back to hidden (so grading isn't locked out).
+ */
 export async function isTeacherOfStudentForPage(
   userId: string,
   studentId: string,
@@ -87,7 +92,11 @@ export async function isTeacherOfStudentForPage(
   const membership = await prisma.classMembership.findFirst({
     where: {
       studentId,
-      class: { teacherId: userId, pageUnlocks: { some: { pageId } } },
+      class: { teacherId: userId },
+      OR: [
+        { class: { examStates: { some: { pageId } } } },
+        { student: { examSubmissions: { some: { pageId } } } },
+      ],
     },
     select: { id: true },
   })

@@ -168,6 +168,8 @@ model User {
   // Exam submissions (student) and scoring (teacher)
   examSubmissions       ExamSubmission[] @relation("StudentExamSubmissions")
   scoredExamSubmissions ExamSubmission[] @relation("ScoredExamSubmissions")
+  // Per-student exam-state overrides (makeups / accommodations)
+  examStates            ExamState[]      @relation("StudentExamStates")
 
   // Append-only event log for exam attempts (started / submitted / reopened).
   // Used by the teacher roster to surface "took 43m" + an event timeline.
@@ -1022,28 +1024,42 @@ model ExamSession {
   @@map("exam_sessions")
 }
 
-// Exam state per class - controls when students can access/submit
+// Per-class (and optionally per-student) exam lifecycle — the SINGLE source of
+// truth for exam assignment + timing. A row's existence == "assigned" (visible);
+// `state` controls entry. No row for a (page, class[, student]) == hidden.
+//   class row:   studentId = null  → applies to the whole class
+//   student row: studentId set     → overrides the class row for that one student
+// Effective state for a student = student row ?? class row ?? hidden.
+// Replaces the old PageUnlock(class) + separate ExamState split.
 // States:
-//   "closed" - Students cannot enter at all
-//   "lobby"  - Students can enter but see waiting room until teacher opens
-//   "open"   - Students can take the exam
-// Teachers can freely switch between any state at any time
+//   "hidden" - Not assigned: not in the class sidebar, cannot enter
+//   "closed" - Assigned/visible, but cannot enter yet
+//   "lobby"  - Can enter, sees waiting room until teacher opens
+//   "open"   - Can take the exam
+// Teachers can freely switch between any state at any time.
 model ExamState {
   id        String    @id @default(cuid())
   pageId    String    @map("page_id")
   classId   String    @map("class_id")
-  state     String    @default("closed") // "closed" | "lobby" | "open"
+  studentId String?   @map("student_id") // null = class-level row; set = per-student override
+  state     String    @default("closed") // "hidden" | "closed" | "lobby" | "open"
   openedAt  DateTime? @map("opened_at")
   closedAt  DateTime? @map("closed_at")
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
 
-  page  Page  @relation("ExamStates", fields: [pageId], references: [id], onDelete: Cascade)
-  class Class @relation("ClassExamStates", fields: [classId], references: [id], onDelete: Cascade)
+  page    Page  @relation("ExamStates", fields: [pageId], references: [id], onDelete: Cascade)
+  class   Class @relation("ClassExamStates", fields: [classId], references: [id], onDelete: Cascade)
+  student User? @relation("StudentExamStates", fields: [studentId], references: [id], onDelete: Cascade)
 
-  @@unique([pageId, classId])
+  // Uniqueness with a nullable studentId needs NULLS NOT DISTINCT so the
+  // class-level row (studentId = null) stays unique per (page, class). Prisma
+  // can't express that in-schema, so the generated migration is hand-edited to
+  // add `NULLS NOT DISTINCT` to this unique index (see the migration SQL).
+  @@unique([pageId, classId, studentId])
   @@index([pageId])
   @@index([classId])
+  @@index([studentId])
   @@map("exam_states")
 }
 

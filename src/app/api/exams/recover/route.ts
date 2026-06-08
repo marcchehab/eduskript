@@ -145,7 +145,7 @@ export async function POST(request: NextRequest) {
     const membership = await prisma.classMembership.findFirst({
       where: {
         studentId: plaintext.meta.studentId,
-        class: { pageUnlocks: { some: { pageId: plaintext.meta.pageId } } },
+        class: { examStates: { some: { pageId: plaintext.meta.pageId } } },
       },
       select: { classId: true },
     })

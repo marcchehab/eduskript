@@ -18,7 +18,7 @@ import { prisma } from '@/lib/prisma'
 import { eventBus } from '@/lib/events'
 import { Prisma } from '@prisma/client'
 import { buildReviewScores } from '@/lib/scoring/review-payload'
-import { getAuthoredExamPage, isClassTeacher, isTeacherOfStudentForPage } from '@/lib/scoring/auth'
+import { getAuthoredExamPage, getExamClassesForTeacher, isClassTeacher, isTeacherOfStudentForPage } from '@/lib/scoring/auth'
 
 export async function POST(
   request: NextRequest,
@@ -47,12 +47,10 @@ export async function POST(
         }
         classIds = [classId]
       } else {
-        // Every class this teacher owns that has the exam unlocked.
-        const unlocks = await prisma.pageUnlock.findMany({
-          where: { pageId, classId: { not: null }, class: { teacherId: session.user.id } },
-          select: { classId: true },
-        })
-        classIds = [...new Set(unlocks.map((u) => u.classId!).filter(Boolean))]
+        // Every class this teacher owns that's assigned this exam OR has a
+        // submitted answer (matches the grading table). See getExamClassesForTeacher.
+        const classes = await getExamClassesForTeacher(pageId, session.user.id)
+        classIds = classes.map((c) => c.id)
       }
       const members = await prisma.classMembership.findMany({
         where: { classId: { in: classIds } },

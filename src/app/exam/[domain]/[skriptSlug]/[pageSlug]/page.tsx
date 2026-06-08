@@ -25,6 +25,7 @@ import { ReturnedExamSummary } from '@/components/exam/returned-exam-summary'
 import { ExamPageContextProvider } from '@/contexts/exam-page-context'
 import { getOrCreateActiveExamKey } from '@/lib/exam-keys'
 import { getExamClassesForTeacher } from '@/lib/scoring/auth'
+import { resolveExamState, type ExamLifecycleState } from '@/lib/exam-state'
 import { isSEBRequest, type ExamSettings } from '@/lib/seb'
 import { validateExamToken, validateExamSession } from '@/lib/exam-tokens'
 import { getPublicLayers } from '@/lib/public-page-data'
@@ -130,20 +131,6 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
   const studentId = authenticatedUserId
   const hasUnlockForAll = examSettings?.unlockForAll === true
 
-  const studentUnlock = !hasUnlockForAll ? await prisma.pageUnlock.findFirst({
-    where: { pageId: page.id, studentId }
-  }) : null
-
-  const classUnlock = !hasUnlockForAll ? await prisma.pageUnlock.findFirst({
-    where: {
-      pageId: page.id,
-      classId: { not: null },
-      class: { memberships: { some: { studentId } } }
-    }
-  }) : null
-
-  const hasUnlock = hasUnlockForAll || studentUnlock || classUnlock
-
   // Teacher-author detection: SkriptAuthor, or owning the site the collection
   // sits on (org-admin membership for org-owned sites).
   const skriptAuthorRecord = await prisma.skriptAuthor.findFirst({
@@ -173,70 +160,55 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
   }
   const isTeacherAuthor = !!skriptAuthorRecord || isSiteOwner
 
-  // Gate 2: must have unlock OR be the teacher
-  if (!hasUnlock && !isTeacherAuthor) {
-    return (
-      <ExamLockedPage
-        pageTitle={page.title}
-        teacherName={teacher.name || teacher.pageSlug || 'Unknown'}
-        isLoggedIn={true}
-        loginUrl={loginUrl}
-      />
-    )
-  }
-
-  // Classes shown in the teacher's class toolbar: unlocked for this page OR
-  // having a submitted answer (so a class whose unlock was revoked but still has
-  // work to grade stays selectable). See getExamClassesForTeacher. `studentId`
-  // here is the current (teacher) user id.
-  let unlockedClassesForExam: { id: string; name: string }[] = []
-  if (isTeacherAuthor) {
-    unlockedClassesForExam = await getExamClassesForTeacher(page.id, studentId)
-  }
-
-  let examState: 'closed' | 'lobby' | 'open' | null = null
-  if (!isTeacherAuthor && classUnlock?.classId) {
-    const stateRecord = await prisma.examState.findUnique({
-      where: { pageId_classId: { pageId: page.id, classId: classUnlock.classId } },
-      select: { state: true }
-    })
-    examState = (stateRecord?.state as 'closed' | 'lobby' | 'open') || 'closed'
-  }
-
-  // Gate 3: already submitted → locked submitted page, UNLESS the teacher has
-  // returned it — then fall through and render the exam read-only in review
-  // mode (the student's answers, per-question scores, and grade).
+  // Submission state — needed both for the returned-review bypass and the
+  // already-submitted gate. A RETURNED exam stays viewable read-only regardless
+  // of the current lifecycle state (even 'hidden'), so setting an exam back to
+  // hidden never hides a student's returned exam. A submitted-but-not-returned
+  // exam shows the "submitted" page regardless of state too.
   let isReturnedReview = false
+  let submittedAt: Date | null = null
   if (!isTeacherAuthor) {
     const existingSubmission = await prisma.examSubmission.findUnique({
       where: { pageId_studentId: { pageId: page.id, studentId } },
       select: { submittedAt: true, returnedAt: true }
     })
     if (existingSubmission) {
-      if (existingSubmission.returnedAt) {
-        isReturnedReview = true
-      } else {
-        return (
-          <ExamSubmittedPage
-            pageTitle={page.title}
-            pageId={page.id}
-            submittedAt={existingSubmission.submittedAt}
-          />
-        )
-      }
+      if (existingSubmission.returnedAt) isReturnedReview = true
+      else submittedAt = existingSubmission.submittedAt
     }
   }
 
-  // Gate 4: SEB required but request is not from SEB (skipped for a returned
-  // review — the student is just looking at their graded exam, not taking it).
-  if (examSettings?.requireSEB && !isTeacherAuthor && !isReturnedReview && !authenticatedViaToken && !authenticatedViaExamSession) {
-    if (!isSEBRequest(headersList)) {
-      return <SEBRequiredPage pageTitle={page.title} pageId={page.id} />
-    }
+  // Effective exam lifecycle state for this student (the single source of truth —
+  // see lib/exam-state). Teachers and unlockForAll pages bypass to 'open'.
+  const examState: ExamLifecycleState = isTeacherAuthor || hasUnlockForAll
+    ? 'open'
+    : await resolveExamState(page.id, studentId)
+
+  // Classes shown in the teacher's class toolbar: assigned (has an ExamState row)
+  // OR having a submitted answer. See getExamClassesForTeacher. `studentId` here
+  // is the current (teacher) user id.
+  let unlockedClassesForExam: { id: string; name: string }[] = []
+  if (isTeacherAuthor) {
+    unlockedClassesForExam = await getExamClassesForTeacher(page.id, studentId)
   }
 
-  // Gate 5: closed state blocks students (but not a returned review)
-  if (!isTeacherAuthor && !isReturnedReview && examState === 'closed') {
+  // Gate: already submitted (not yet returned) → submitted page, before the
+  // access gate so a student who submitted then had the exam closed/hidden still
+  // sees "submitted", not "locked".
+  if (submittedAt) {
+    return (
+      <ExamSubmittedPage
+        pageTitle={page.title}
+        pageId={page.id}
+        submittedAt={submittedAt}
+      />
+    )
+  }
+
+  // Access gate: not assigned ('hidden') or not yet enterable ('closed') blocks
+  // students — except a returned review (handled above/below). 'lobby' and 'open'
+  // fall through; the client shows the waiting room while in lobby.
+  if (!isTeacherAuthor && !isReturnedReview && (examState === 'hidden' || examState === 'closed')) {
     return (
       <ExamLockedPage
         pageTitle={page.title}
@@ -245,6 +217,14 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
         loginUrl={loginUrl}
       />
     )
+  }
+
+  // Gate: SEB required but request is not from SEB (skipped for a returned
+  // review — the student is just looking at their graded exam, not taking it).
+  if (examSettings?.requireSEB && !isTeacherAuthor && !isReturnedReview && !authenticatedViaToken && !authenticatedViaExamSession) {
+    if (!isSEBRequest(headersList)) {
+      return <SEBRequiredPage pageTitle={page.title} pageId={page.id} />
+    }
   }
 
   // Fetch public annotations, snaps, and sticky notes (same as non-exam path)

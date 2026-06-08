@@ -22,6 +22,8 @@ import { authOptions } from '@/lib/auth'
 import { headers } from 'next/headers'
 import { getFullSiteStructure } from '@/lib/cached-queries'
 import { buildSiteStructure } from '@/lib/site-structure'
+import { getExamClassesForTeacher } from '@/lib/scoring/auth'
+import { resolveExamState, type ExamLifecycleState } from '@/lib/exam-state'
 
 interface PageProps {
   params: Promise<{
@@ -197,7 +199,7 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
   let isInExamSession = false
   let examSessionUserName: string | null = null
   let examSessionUserEmail: string | null = null
-  let examState: 'closed' | 'lobby' | 'open' | null = null
+  let examState: ExamLifecycleState | null = null
   let examClassId: string | null = null
   let isTeacherViewingExam = false
   let unlockedClassesForExam: { id: string; name: string }[] = []
@@ -271,22 +273,8 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
     const studentId = authenticatedUserId
     examAuthenticatedUserId = authenticatedUserId
 
-    // Skip unlock check if exam is unlocked for all
+    // Skip the lifecycle check entirely if the exam is unlocked for all.
     const hasUnlockForAll = examSettings?.unlockForAll === true
-
-    const studentUnlock = !hasUnlockForAll ? await prisma.pageUnlock.findFirst({
-      where: { pageId: page.id, studentId }
-    }) : null
-
-    const classUnlock = !hasUnlockForAll ? await prisma.pageUnlock.findFirst({
-      where: {
-        pageId: page.id,
-        classId: { not: null },
-        class: { memberships: { some: { studentId } } }
-      }
-    }) : null
-
-    const hasUnlock = hasUnlockForAll || studentUnlock || classUnlock
 
     const skriptAuthorRecord = await prisma.skriptAuthor.findFirst({
       where: { skriptId: skript.id, userId: studentId, permission: 'author' }
@@ -315,38 +303,23 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
     }
     const isTeacherAuthor = !!skriptAuthorRecord || isSiteOwner
 
-    if (!hasUnlock && !isTeacherAuthor) {
-      return (
-        <ExamLockedPage
-          pageTitle={page.title}
-          teacherName={teacher.name || teacher.site?.pageName || 'Unknown'}
-          isLoggedIn={true}
-          loginUrl={loginUrl}
-        />
-      )
-    }
-
     if (isTeacherAuthor) {
       isTeacherViewingExam = true
-      const unlocks = await prisma.pageUnlock.findMany({
-        where: { pageId: page.id, classId: { not: null } },
-        include: { class: { select: { id: true, name: true, teacherId: true } } }
-      })
-      unlockedClassesForExam = unlocks
-        .filter(u => u.class?.teacherId === studentId)
-        .map(u => ({ id: u.class!.id, name: u.class!.name }))
-    }
-
-    if (!isTeacherAuthor && classUnlock?.classId) {
-      examClassId = classUnlock.classId
-      const stateRecord = await prisma.examState.findUnique({
-        where: { pageId_classId: { pageId: page.id, classId: classUnlock.classId } },
-        select: { state: true }
-      })
-      examState = (stateRecord?.state as 'closed' | 'lobby' | 'open') || 'closed'
+      // Assigned (has an ExamState row) OR has a submitted answer. See getExamClassesForTeacher.
+      unlockedClassesForExam = await getExamClassesForTeacher(page.id, studentId)
     }
 
     if (!isTeacherAuthor) {
+      // Effective lifecycle state (single source of truth — see lib/exam-state);
+      // unlockForAll bypasses to 'open'. examClassId is the class-level row that
+      // governs this student, used for the lobby waiting-room stream below.
+      examState = hasUnlockForAll ? 'open' : await resolveExamState(page.id, studentId)
+      const classRow = await prisma.examState.findFirst({
+        where: { pageId: page.id, studentId: null, class: { memberships: { some: { studentId } } } },
+        select: { classId: true }
+      })
+      examClassId = classRow?.classId ?? null
+
       const submission = await prisma.examSubmission.findUnique({
         where: { pageId_studentId: { pageId: page.id, studentId } },
         select: { submittedAt: true }
@@ -356,6 +329,8 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
       }
     }
 
+    // Submitted → submitted page, before the access gate (a student who submitted
+    // then had the exam closed/hidden still sees "submitted", not "locked").
     if (!isTeacherAuthor && existingSubmission) {
       return (
         <ExamSubmittedPage
@@ -377,7 +352,9 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
       }
     }
 
-    if (!isTeacherAuthor && examState === 'closed') {
+    // Access gate: not assigned ('hidden') or not yet enterable ('closed') blocks
+    // students. 'lobby'/'open' fall through; lobby renders the waiting room below.
+    if (!isTeacherAuthor && (examState === 'hidden' || examState === 'closed')) {
       return (
         <ExamLockedPage
           pageTitle={page.title}

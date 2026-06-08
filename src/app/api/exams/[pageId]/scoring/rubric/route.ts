@@ -15,6 +15,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { examClassActivityWhere } from '@/lib/exam-state'
 import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import { getAuthoredExamPage } from '@/lib/scoring/auth'
 import { parseGradableComponents } from '@/lib/scoring/components'
@@ -30,7 +31,7 @@ const SAMPLE_SIZE = 5
 /** Student ids the teacher teaches for this page (one query). */
 async function teacherStudentIds(userId: string, pageId: string): Promise<string[]> {
   const rows = await prisma.classMembership.findMany({
-    where: { class: { teacherId: userId, pageUnlocks: { some: { pageId } } } },
+    where: { class: { teacherId: userId, ...examClassActivityWhere(pageId) } },
     select: { studentId: true },
   })
   return [...new Set(rows.map((r) => r.studentId))]

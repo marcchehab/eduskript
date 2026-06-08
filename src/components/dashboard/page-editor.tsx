@@ -14,7 +14,9 @@ import { EditModal } from '@/components/dashboard/edit-modal'
 import { CreatePageModal } from '@/components/dashboard/create-page-modal'
 import { SkriptAccessManager } from '@/components/permissions/SkriptAccessManager'
 import { EditorWithMedia, type ExtraManageTab } from '@/components/dashboard/editor-with-media'
-import { ArrowLeft, ArrowRightLeft, Save, History, Eye, EyeOff, ClipboardCopy, Check, Shield, Lock, Unlock, Globe, Maximize2, Minimize2, BookA, BookOpen, FileText, FilePenLine, GripVertical, Trash2, Users, Loader2, CircleCheckBig, CircleMinus, Presentation } from 'lucide-react'
+import { ArrowLeft, ArrowRightLeft, Save, History, Eye, EyeOff, ClipboardCopy, Check, Shield, Globe, Maximize2, Minimize2, BookA, BookOpen, FileText, FilePenLine, GripVertical, Trash2, Users, Loader2, CircleCheckBig, CircleMinus, Presentation } from 'lucide-react'
+import { ExamStateStepper } from '@/components/exam/exam-state-stepper'
+import type { ExamLifecycleState } from '@/lib/exam-state'
 import {
   Dialog,
   DialogContent,
@@ -124,7 +126,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
   )
   const [presentationPublic, setPresentationPublic] = useState(page.presentationPublic ?? false)
   const [teacherClasses, setTeacherClasses] = useState<Array<{ id: string; name: string }>>([])
-  const [unlockedClassIds, setUnlockedClassIds] = useState<string[]>([])
+  const [examStates, setExamStates] = useState<Record<string, ExamLifecycleState>>({})
   const [sebLinkCopied, setSebLinkCopied] = useState(false)
   // Tracks which page just had its stable link copied — keyed by page.id so
   // both the metadata-header button and the per-row sidebar buttons can share
@@ -335,49 +337,44 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
     fetchClasses()
   }, [])
 
-  // Fetch unlock status for this page
-  const loadUnlocks = useCallback(async () => {
-    if (pageType !== 'exam') return
-    try {
-      const response = await fetch(`/api/pages/${page.id}/unlock`)
-      if (response.ok) {
-        const data = await response.json()
-        const classIds = (data.unlocks || [])
-          .filter((u: { classId?: string }) => u.classId)
-          .map((u: { classId: string }) => u.classId)
-        setUnlockedClassIds(classIds)
-      }
-    } catch (error) {
-      console.error('Error fetching unlocks:', error)
-    }
-  }, [page.id, pageType])
+  // Fetch the per-class exam lifecycle state for this page (the single source of
+  // truth — see lib/exam-state). One request per class; teachers have few.
+  const loadExamStates = useCallback(async () => {
+    if (pageType !== 'exam' || teacherClasses.length === 0) return
+    const entries = await Promise.all(
+      teacherClasses.map(async (cls): Promise<[string, ExamLifecycleState]> => {
+        try {
+          const r = await fetch(`/api/exams/${page.id}/state?classId=${cls.id}`)
+          if (!r.ok) return [cls.id, 'hidden']
+          const j = await r.json()
+          return [cls.id, (j.state ?? 'hidden') as ExamLifecycleState]
+        } catch {
+          return [cls.id, 'hidden']
+        }
+      })
+    )
+    setExamStates(Object.fromEntries(entries))
+  }, [page.id, pageType, teacherClasses])
 
   useEffect(() => {
-    loadUnlocks()
-  }, [loadUnlocks])
+    loadExamStates()
+  }, [loadExamStates])
 
-  // Handle class unlock toggle
-  const handleClassUnlockToggle = async (classId: string, unlock: boolean) => {
+  // Set a class's exam state. 'hidden' un-assigns; closed/lobby/open assign +
+  // control entry. Optimistic, reverts on failure.
+  const handleExamStateChange = async (classId: string, state: ExamLifecycleState) => {
+    const prev = examStates[classId] ?? 'hidden'
+    setExamStates(s => ({ ...s, [classId]: state }))
     try {
-      if (unlock) {
-        const response = await fetch(`/api/pages/${page.id}/unlock`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ classId })
-        })
-        if (response.ok) {
-          setUnlockedClassIds(prev => [...prev, classId])
-        }
-      } else {
-        const response = await fetch(`/api/pages/${page.id}/unlock?classId=${classId}`, {
-          method: 'DELETE'
-        })
-        if (response.ok) {
-          setUnlockedClassIds(prev => prev.filter(id => id !== classId))
-        }
-      }
+      const r = await fetch(`/api/exams/${page.id}/state`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ classId, state }),
+      })
+      if (!r.ok) throw new Error('failed')
     } catch (error) {
-      console.error('Error toggling unlock:', error)
+      console.error('Error setting exam state:', error)
+      setExamStates(s => ({ ...s, [classId]: prev }))
     }
   }
 
@@ -915,23 +912,15 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                   </Label>
                 </div>
                 {teacherClasses.length > 0 && (
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm text-muted-foreground">Unlock for:</span>
+                  <div className="flex flex-col gap-2">
+                    <span className="text-sm text-muted-foreground">Assign to classes:</span>
                     {teacherClasses.map((cls) => (
-                      <div key={cls.id} className="flex items-center gap-1.5">
-                        <Checkbox
-                          id={`unlock-${cls.id}`}
-                          checked={unlockedClassIds.includes(cls.id)}
-                          onCheckedChange={(checked) => handleClassUnlockToggle(cls.id, !!checked)}
+                      <div key={cls.id} className="flex items-center justify-between gap-3">
+                        <span className="text-sm">{cls.name}</span>
+                        <ExamStateStepper
+                          value={examStates[cls.id] ?? 'hidden'}
+                          onChange={(state) => handleExamStateChange(cls.id, state)}
                         />
-                        <Label htmlFor={`unlock-${cls.id}`} className="text-sm cursor-pointer flex items-center gap-1">
-                          {unlockedClassIds.includes(cls.id) ? (
-                            <Unlock className="w-3.5 h-3.5 text-green-600" />
-                          ) : (
-                            <Lock className="w-3.5 h-3.5 text-muted-foreground" />
-                          )}
-                          {cls.name}
-                        </Label>
                       </div>
                     ))}
                   </div>

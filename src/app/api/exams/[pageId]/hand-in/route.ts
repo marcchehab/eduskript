@@ -21,21 +21,17 @@ import { validateExamSession, ExamSessionData } from '@/lib/exam-tokens'
 import { eventBus } from '@/lib/events'
 import { applyHandinSnapshots, type HandinSnapshot } from '@/lib/exam-recovery'
 import type { ExamSettings } from '@/lib/seb'
+import { resolveExamState } from '@/lib/exam-state'
 
 /**
  * Non-SEB access gate: a logged-in student may hand in if the exam is unlocked
- * for everyone, for them individually, or for a class they belong to.
+ * for everyone, or it's assigned to them (their effective state isn't 'hidden' —
+ * a per-student override or a class-level row). See lib/exam-state.
  */
 async function studentHasExamAccess(studentId: string, pageId: string): Promise<boolean> {
   const page = await prisma.page.findUnique({ where: { id: pageId }, select: { examSettings: true } })
   if ((page?.examSettings as ExamSettings | null)?.unlockForAll) return true
-  const direct = await prisma.pageUnlock.findFirst({ where: { pageId, studentId }, select: { id: true } })
-  if (direct) return true
-  const viaClass = await prisma.classMembership.findFirst({
-    where: { studentId, class: { pageUnlocks: { some: { pageId } } } },
-    select: { id: true },
-  })
-  return Boolean(viaClass)
+  return (await resolveExamState(pageId, studentId)) !== 'hidden'
 }
 
 /**
@@ -119,12 +115,12 @@ export async function POST(
     }
 
     // Find the student's class for this exam to emit event
-    // The student should be a member of a class that has this page unlocked
+    // The student should be a member of a class assigned this page (ExamState row)
     const membership = await prisma.classMembership.findFirst({
       where: {
         studentId,
         class: {
-          pageUnlocks: {
+          examStates: {
             some: { pageId: examPageId }
           }
         }
