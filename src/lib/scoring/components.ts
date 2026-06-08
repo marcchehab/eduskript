@@ -149,3 +149,81 @@ export function parseGradableComponents(content: string): GradableComponent[] {
 
   return out
 }
+
+/**
+ * Return the markdown slice for the exercise SECTION that contains a component —
+ * from the nearest h1/h2 heading at or before it to the next h1/h2 heading (or
+ * EOF). Used to give the AI scorer only the relevant exercise instead of the
+ * whole exam page.
+ *
+ * WHY: a reasoning model (minimax) handed the entire 13k-char exam can spiral on
+ * a single ambiguous submission — chain-of-thought eats the whole token budget,
+ * it emits EMPTY content, and the request then times out (the browser sees an
+ * HTML 504, hence "JSON.parse: unexpected character at line 1 column 1"). The
+ * trigger isn't size: the 9.7k "Teil 2" section scores cleanly in ~4s, but the
+ * full page spirals because Part 1's nine "predict the exact output" programs
+ * derail it. Scoping to the section drops that noise. Verified with
+ * scripts/reasoning-probe.mjs.
+ *
+ * Boundary is h1/h2 — NOT every heading: a single exercise often spans several
+ * h3 sub-parts and multiple editors that all need the shared exercise context,
+ * so cutting at h3 would starve them. Headings inside ``` code fences (e.g. a
+ * `# comment` in a python editor block) are ignored — they aren't markdown
+ * headings.
+ *
+ * Returns null when the component can't be located (caller falls back to the
+ * full page).
+ */
+export function extractComponentContext(content: string, componentId: string): string | null {
+  // Recover the author-facing id (the `for`/`id` attr) from the componentId.
+  const rawId = componentId.startsWith('python-check-')
+    ? componentId.slice('python-check-'.length)
+    : componentId.startsWith(`quiz-${CLOBBER_PREFIX}`)
+      ? componentId.slice(`quiz-${CLOBBER_PREFIX}`.length)
+      : null
+  if (!rawId) return null
+
+  const lines = content.split('\n')
+  // Single forward pass, tracking ``` fence state, to find both the component's
+  // anchor line and every h1/h2 heading OUTSIDE fences. Fence-awareness matters:
+  // a `# comment` inside a python editor block is NOT a markdown heading and must
+  // not become a section boundary.
+  let anchor = -1
+  let inFence = false
+  const h1h2: number[] = []
+  for (let i = 0; i < lines.length; i++) {
+    const fenceMatch = lines[i].match(/^\s*```+\s*(.*)$/)
+    if (fenceMatch) {
+      const info = fenceMatch[1].trim()
+      if (!inFence) {
+        inFence = true
+        if (anchor < 0) {
+          const isCheck = /^python-check\b/i.test(info) && (attr(info, 'for') === rawId || attr(info, 'id') === rawId)
+          const isEditor = /^python\b/i.test(info) && /\beditor\b/i.test(info) && attr(info, 'id') === rawId
+          if (isCheck || isEditor) anchor = i
+        }
+      } else {
+        inFence = false
+      }
+      continue
+    }
+    if (inFence) continue
+    if (/^#{1,2}\s+/.test(lines[i])) h1h2.push(i)
+    else if (anchor < 0) {
+      const qMatch = lines[i].match(/<question\b[^>]*>/i)
+      if (qMatch && attr(qMatch[0], 'id') === rawId) anchor = i
+    }
+  }
+  if (anchor < 0) return null
+
+  // Section start: nearest h1/h2 at or before the anchor (0 if the component
+  // precedes any h1/h2 — keep the leading content rather than dropping it).
+  // Section end: next h1/h2 strictly after start.
+  let start = 0
+  let end = lines.length
+  for (const h of h1h2) {
+    if (h <= anchor) start = h
+    else { end = h; break }
+  }
+  return lines.slice(start, end).join('\n').trim() || null
+}

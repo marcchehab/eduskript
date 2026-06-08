@@ -17,7 +17,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import { getAuthoredExamPage, isTeacherOfStudentForPage } from '@/lib/scoring/auth'
-import { parseGradableComponents } from '@/lib/scoring/components'
+import { parseGradableComponents, extractComponentContext } from '@/lib/scoring/components'
 import { readComponentSubmissions } from '@/lib/scoring/submissions'
 import { SCORE_PRIORITY } from '@/lib/scoring/score-component'
 import { scoreSubmission, scoringModel, type RubricCriterion, type AiDebug } from '@/lib/ai/scoring'
@@ -127,12 +127,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const criteria = rubric.criteria as unknown as RubricCriterion[]
     const max = rubric.maxPoints ?? c.maxPoints ?? null
     const subs = await readComponentSubmissions(pageId, c, studentIds)
+    // Scope the context to this exercise's h1/h2 SECTION, not the whole page: a
+    // reasoning model can spiral on a single submission when handed the entire
+    // exam (e.g. Part 1's "predict the output" programs derail it) → empty
+    // content → request timeout. Falls back to the full page if the section
+    // can't be located. See extractComponentContext.
+    const componentContext = extractComponentContext(content, c.componentId) ?? content
 
     await pool(studentIds, CONCURRENCY, async (sid) => {
       const sub = subs.get(sid)
       if (!sub || sub.empty) return // nothing submitted → leave to the check source
       const res = await scoreWithRetry({
-        pageContext: content,
+        pageContext: componentContext,
         label: c.label,
         criteria,
         submission: sub.text,

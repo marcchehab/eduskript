@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseGradableComponents } from '@/lib/scoring/components'
+import { parseGradableComponents, extractComponentContext } from '@/lib/scoring/components'
 
 const fence = '```'
 
@@ -80,5 +80,80 @@ ${fence}`
     expect(py?.starterCode).toContain('def doppelt(x):')
     expect(py?.starterCode).toContain('pass')
     expect(py?.checkCode).toContain('assert doppelt(2) == 4')
+  })
+})
+
+describe('extractComponentContext', () => {
+  it('returns the h1/h2 section containing the component, excluding other parts', () => {
+    const ctx = extractComponentContext(md, 'python-check-a8')
+    expect(ctx).toContain('## Teil 2')
+    expect(ctx).toContain('python-check for="a8"')
+    // Part 1 (a different h2 section) must be excluded.
+    expect(ctx).not.toContain('Teil 1')
+    expect(ctx).not.toContain('Aufgabe 1 — Modulo')
+  })
+
+  it('keeps multiple h3 sub-parts under one h1/h2 together (shared exercise context)', () => {
+    const f = '```'
+    const multi = `## Aufgabe Roboter
+
+Gemeinsamer Kontext für beide Teile.
+
+### Teil a
+
+${f}python editor id="ra" points="2"
+def a():
+    pass
+${f}
+${f}python-check for="ra" points="2"
+assert a()
+${f}
+
+### Teil b
+
+${f}python editor id="rb" points="2"
+def b():
+    pass
+${f}
+${f}python-check for="rb" points="2"
+assert b()
+${f}
+`
+    const ctx = extractComponentContext(multi, 'python-check-rb')
+    // The shared intro and the sibling h3 sub-part both stay in context.
+    expect(ctx).toContain('Gemeinsamer Kontext')
+    expect(ctx).toContain('### Teil a')
+    expect(ctx).toContain('### Teil b')
+  })
+
+  it('scopes to a quiz component by its clobbered id', () => {
+    const ctx = extractComponentContext(md, 'quiz-user-content-p1')
+    expect(ctx).toContain('## Teil 1')
+    expect(ctx).not.toContain('Teil 2')
+  })
+
+  it('returns null when the component is absent', () => {
+    expect(extractComponentContext(md, 'python-check-nope')).toBeNull()
+  })
+
+  it('does not treat a # comment inside a code fence as a section boundary', () => {
+    const f = '```'
+    const withComment = `## Aufgabe
+
+${f}python editor id="x" points="3"
+def f():
+    pass
+# Zum Ausprobieren:
+print(f())
+${f}
+${f}python-check for="x" points="3"
+assert f()
+${f}
+`
+    const ctx = extractComponentContext(withComment, 'python-check-x')
+    // The fence comment must NOT split the section — the check stays in context.
+    expect(ctx).toContain('# Zum Ausprobieren:')
+    expect(ctx).toContain('python-check for="x"')
+    expect(ctx).toContain('assert f()')
   })
 })
