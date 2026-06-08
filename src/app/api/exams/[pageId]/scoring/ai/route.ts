@@ -30,17 +30,19 @@ export const runtime = 'nodejs'
 const CONCURRENCY = 4
 
 /** Score one submission, retrying TRANSIENT failures (provider timeout / rate
- *  limit) with backoff. Deterministic failures (unparseable output) are returned
- *  immediately — retrying them with the fixed seed would just fail again. */
+ *  limit) with backoff. Deterministic PARSE failures are returned immediately.
+ *  An EMPTY response (reasoning ate the token budget) IS retried, but with the
+ *  attempt index passed through so scoreSubmission escalates the cap + perturbs
+ *  the seed — an identical retry at temperature 0 would reproduce the stall. */
 async function scoreWithRetry(
   input: Parameters<typeof scoreSubmission>[0],
   attempts = 3,
 ): Promise<Awaited<ReturnType<typeof scoreSubmission>>> {
-  let res = await scoreSubmission(input)
+  let res = await scoreSubmission(input, 0)
   for (let i = 1; i < attempts && 'error' in res; i++) {
     if (/parse|no usable criteria/i.test(res.error)) break // deterministic → don't retry
     await new Promise((r) => setTimeout(r, 500 * 2 ** (i - 1))) // 0.5s, 1s backoff
-    res = await scoreSubmission(input)
+    res = await scoreSubmission(input, i)
   }
   return res
 }

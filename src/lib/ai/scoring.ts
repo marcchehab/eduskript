@@ -407,6 +407,15 @@ export function parseAiScore(
 
 export async function scoreSubmission(
   input: ScorePromptInput,
+  // Retry attempt index (0 = first try). On retries we ESCALATE: more token
+  // headroom + a perturbed seed. A reasoning model (minimax) can spiral on a
+  // single pathological submission — e.g. subtly buggy code that is coincidentally
+  // correct for the given test, with a misleading comment — burning the whole
+  // token budget on chain-of-thought and emitting EMPTY content. At temperature 0
+  // with a fixed seed, an identical retry reproduces that stall byte-for-byte, so
+  // the student never gets scored. Raising the cap gives reasoning room to finish;
+  // perturbing the seed steers it onto a different, terminating path.
+  attempt = 0,
 ): Promise<AiScoreResult | { error: string; debug?: AiDebug }> {
   // Split: a criterion with an INLINE regex in its description is scored
   // DETERMINISTICALLY (full points on match, else 0 — no LLM, so no multi-criterion
@@ -442,10 +451,13 @@ export async function scoreSubmission(
       // (smaller, cheaper, and free of the syntax-check noise). 8k tokens: the
       // reasoning model (minimax) spends tokens on reasoning, so a tight cap
       // truncates mid-reasoning and returns empty/partial content → unparseable.
-      // Matches generateRubric's headroom.
-      ;({ content: text, diag } = await complete(withGuidance(SCORE_SYSTEM, input.guidance), buildScoreUserPrompt({ ...input, criteria: aiCriteria }), 8192, {
+      // Matches generateRubric's headroom. On a retry (attempt > 0) we double the
+      // cap and perturb the seed so a reasoning-stall (empty content) isn't just
+      // reproduced identically — see the `attempt` param note above.
+      const maxTokens = attempt === 0 ? 8192 : 16384
+      ;({ content: text, diag } = await complete(withGuidance(SCORE_SYSTEM, input.guidance), buildScoreUserPrompt({ ...input, criteria: aiCriteria }), maxTokens, {
         temperature: 0,
-        seed: SCORING_SEED,
+        seed: SCORING_SEED + attempt,
       }))
     } catch (e) {
       return { error: e instanceof Error ? e.message : 'LLM request failed' }
