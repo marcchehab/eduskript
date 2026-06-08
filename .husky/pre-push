@@ -27,3 +27,9 @@ echo "✅ Tests passed"
 echo ""
 
 echo "🎉 All checks passed! Pushing..."
+
+# Detached, self-terminating watcher: fires a desktop notification when the Koyeb
+# deploy this push triggers settles HEALTHY or fails. `timeout 20m` is a hard outer
+# cap so a hung CLI call can never leave it running; setsid -f fully detaches it so
+# the push returns immediately. No-ops silently without koyeb/jq/notify-send.
+setsid -f timeout 20m "$(dirname "$0")/../scripts/koyeb-deploy-watch.sh" >/dev/null 2>&1 || true
