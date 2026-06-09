@@ -82,3 +82,5 @@ export-output/
 
 # personal scratch task list
 prompts.md
+# grading prompt test-bench (real student data — never commit)
+.bench-data/

@@ -110,15 +110,25 @@ interface GradeStats {
   passRate: number
   dist: { band: number; count: number }[]
 }
-/** Average grade, pass rate, and a 1–6 distribution over students who handed in. */
+/** Half-grade bands from 1 to 6 (1, 1.5, 2, …, 6). */
+const GRADE_BANDS = Array.from({ length: 11 }, (_, i) => 1 + i * 0.5)
+
+/** Bar colour for a grade: red at ≤2, yellow at 4, green at ≥6 (hue 0→60→120). */
+function gradeColor(grade: number): string {
+  const hue = Math.max(0, Math.min(120, ((grade - 2) / 4) * 120))
+  return `hsl(${hue} 75% 50%)`
+}
+
+/** Average grade, pass rate, and a half-grade distribution over students who handed in.
+ *  Band b holds grades in [b-0.25, b+0.25) — e.g. 4.5 covers 4.25–4.74999. */
 function computeStats(students: StudentRow[], passGrade: number): GradeStats | null {
   const graded = students.filter((s) => s.status !== 'not_started')
   if (graded.length === 0) return null
   const average = graded.reduce((a, s) => a + s.grade, 0) / graded.length
   const passing = graded.filter((s) => s.grade >= passGrade).length
-  const dist = [1, 2, 3, 4, 5, 6].map((band) => ({
+  const dist = GRADE_BANDS.map((band) => ({
     band,
-    count: graded.filter((s) => Math.round(s.grade) === band).length,
+    count: graded.filter((s) => Math.round(s.grade * 2) / 2 === band).length,
   }))
   return {
     count: graded.length,
@@ -408,15 +418,15 @@ export default function ExamGradingPage() {
             </div>
             <div className="flex-1 min-w-[240px]">
               <div className="text-xs text-muted-foreground mb-1">Distribution (n={stats.count})</div>
-              <div className="flex items-end gap-1.5 h-16">
+              <div className="flex items-end gap-1 h-16">
                 {stats.dist.map((d) => (
-                  <div key={d.band} className="flex-1 flex flex-col items-center justify-end" title={`Grade ${d.band}: ${d.count}`}>
+                  <div key={d.band} className="flex-1 flex flex-col items-center justify-end" title={`Grade ${fmt(d.band)}: ${d.count}`}>
                     {d.count > 0 && <span className="text-[10px] tabular-nums text-muted-foreground">{d.count}</span>}
                     <div
-                      className={`w-full rounded-t ${d.band >= c.passGrade ? 'bg-green-500/70' : 'bg-amber-500/70'}`}
-                      style={{ height: `${(d.count / peak) * 100}%`, minHeight: d.count > 0 ? 4 : 0 }}
+                      className="w-full rounded-t"
+                      style={{ height: `${(d.count / peak) * 100}%`, minHeight: d.count > 0 ? 4 : 0, backgroundColor: gradeColor(d.band) }}
                     />
-                    <div className="text-[10px] text-muted-foreground mt-0.5">{d.band}</div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5">{fmt(d.band)}</div>
                   </div>
                 ))}
               </div>
