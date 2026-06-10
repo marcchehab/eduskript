@@ -416,16 +416,18 @@ export default function ExamGradingPage() {
               <div className="text-xs text-muted-foreground">Pass rate (≥ {fmt(c.passGrade)})</div>
               <div className="text-3xl font-bold tabular-nums">{stats.passRate}%</div>
             </div>
-            <div className="flex-1 min-w-[240px]">
+            <div>
               <div className="text-xs text-muted-foreground mb-1">Distribution (n={stats.count})</div>
-              <div className="flex items-end gap-1 h-16">
+              <div className="flex items-end gap-1">
                 {stats.dist.map((d) => (
-                  <div key={d.band} className="flex-1 flex flex-col items-center justify-end" title={`Grade ${fmt(d.band)}: ${d.count}`}>
-                    {d.count > 0 && <span className="text-[10px] tabular-nums text-muted-foreground">{d.count}</span>}
-                    <div
-                      className="w-full rounded-t"
-                      style={{ height: `${(d.count / peak) * 100}%`, minHeight: d.count > 0 ? 4 : 0, backgroundColor: gradeColor(d.band) }}
-                    />
+                  <div key={d.band} className="w-10 flex flex-col items-center" title={`Grade ${fmt(d.band)}: ${d.count}`}>
+                    {d.count > 0 && <span className="text-[10px] tabular-nums text-muted-foreground leading-none mb-0.5">{d.count}</span>}
+                    <div className="w-full h-16 flex items-end">
+                      <div
+                        className="w-full rounded-t"
+                        style={{ height: `${(d.count / peak) * 100}%`, minHeight: d.count > 0 ? 4 : 0, backgroundColor: gradeColor(d.band) }}
+                      />
+                    </div>
                     <div className="text-[10px] text-muted-foreground mt-0.5">{fmt(d.band)}</div>
                   </div>
                 ))}
