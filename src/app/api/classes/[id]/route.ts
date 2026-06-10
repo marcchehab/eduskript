@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
+import { eventBus } from '@/lib/events'
 
 // PATCH /api/classes/[id] - Update a class
 export async function PATCH(
@@ -25,7 +26,7 @@ export async function PATCH(
     // Verify user owns this class
     const existingClass = await prisma.class.findUnique({
       where: { id },
-      select: { teacherId: true }
+      select: { teacherId: true, lockdownMode: true }
     })
 
     if (!existingClass) {
@@ -40,13 +41,14 @@ export async function PATCH(
     }
 
     const body = await request.json()
-    const { name, description, allowAnonymous } = body
+    const { name, description, allowAnonymous, lockdownMode } = body
 
     // Build update data
     const updateData: {
       name?: string
       description?: string | null
       allowAnonymous?: boolean
+      lockdownMode?: boolean
     } = {}
 
     if (name !== undefined) {
@@ -64,6 +66,10 @@ export async function PATCH(
       updateData.allowAnonymous = allowAnonymous === true
     }
 
+    if (lockdownMode !== undefined) {
+      updateData.lockdownMode = lockdownMode === true
+    }
+
     // Update the class
     const updatedClass = await prisma.class.update({
       where: { id },
@@ -78,6 +84,18 @@ export async function PATCH(
       }
     })
 
+    // Lockdown flipped → tell every member's open tab to reload so it re-hits the
+    // middleware gate (locked → SEB-required screen; unlocked → normal content).
+    // Fire-and-forget: a missed event just means the student reloads manually.
+    if (updateData.lockdownMode !== undefined && updateData.lockdownMode !== existingClass.lockdownMode) {
+      void eventBus.publish(`lockdown:${id}`, {
+        type: 'lockdown-change',
+        classId: id,
+        locked: updateData.lockdownMode,
+        timestamp: Date.now(),
+      }).catch((err) => console.error('[API] Failed to publish lockdown change:', err))
+    }
+
     return NextResponse.json({
       class: {
         id: updatedClass.id,
@@ -85,6 +103,7 @@ export async function PATCH(
         description: updatedClass.description,
         inviteCode: updatedClass.inviteCode,
         allowAnonymous: updatedClass.allowAnonymous,
+        lockdownMode: updatedClass.lockdownMode,
         memberCount: updatedClass._count.memberships,
         preAuthorizedCount: updatedClass._count.preAuthorizedStudents,
         createdAt: updatedClass.createdAt,

@@ -85,6 +85,7 @@ export async function GET(request: NextRequest) {
         description: c.description,
         inviteCode: c.inviteCode,
         allowAnonymous: c.allowAnonymous,
+        lockdownMode: c.lockdownMode,
         memberCount: c._count.memberships,
         preAuthorizedCount: c._count.preAuthorizedStudents,
         createdAt: c.createdAt,

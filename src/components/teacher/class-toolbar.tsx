@@ -89,6 +89,9 @@ interface PageClass {
   /** Total member count (students enrolled). Optional because the
    *  `unlockedClasses` prop carries only id+name from the route layer. */
   memberCount?: number
+  /** Anti-distraction SEB gate. Only populated for the teacher-fetched
+   *  `teacherClasses` list (not the server `unlockedClasses` prop). */
+  lockdownMode?: boolean
 }
 
 interface ClassToolbarProps {
@@ -163,9 +166,9 @@ export function ClassToolbar({
       cache: 'no-store',
     })
       .then((r) => (r.ok ? r.json() : { classes: [] }))
-      .then((data: { classes?: Array<{ id: string; name: string; memberCount?: number }> }) => {
+      .then((data: { classes?: Array<{ id: string; name: string; memberCount?: number; lockdownMode?: boolean }> }) => {
         if (cancelled) return
-        setTeacherClasses((data.classes ?? []).map((c) => ({ id: c.id, name: c.name, memberCount: c.memberCount })))
+        setTeacherClasses((data.classes ?? []).map((c) => ({ id: c.id, name: c.name, memberCount: c.memberCount, lockdownMode: c.lockdownMode })))
       })
       .catch(() => {
         if (!cancelled) setTeacherClasses([])
@@ -391,6 +394,39 @@ export function ClassToolbar({
     if (!yourAnonymousUserId) return null
     return submissions.find(s => s.userId === yourAnonymousUserId)?.displayName ?? null
   }, [submissions, yourAnonymousUserId])
+
+  // Anti-distraction lockdown toggle for the selected class. Reads current state
+  // from the teacher-fetched class list; PATCH flips it and the server pushes a
+  // reload event to affected students (see /api/classes/[id]).
+  const [lockdownUpdating, setLockdownUpdating] = useState(false)
+  const selectedClassLocked = !!(
+    selectedClass && teacherClasses?.find((c) => c.id === selectedClass.id)?.lockdownMode
+  )
+
+  const toggleLockdown = async () => {
+    if (!selectedClass) return
+    const next = !selectedClassLocked
+    setLockdownUpdating(true)
+    try {
+      const res = await fetch(`/api/classes/${selectedClass.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lockdownMode: next }),
+      })
+      if (res.ok) {
+        setTeacherClasses((prev) =>
+          prev?.map((c) => (c.id === selectedClass.id ? { ...c, lockdownMode: next } : c)) ?? prev
+        )
+      } else {
+        const data = await res.json().catch(() => ({}))
+        dialog.showError(data?.error ?? 'Failed to update lockdown mode')
+      }
+    } catch {
+      dialog.showError('Failed to update lockdown mode')
+    } finally {
+      setLockdownUpdating(false)
+    }
+  }
 
   // Set exam state for the whole class (studentId omitted) or for one student
   // (studentId set → a per-student override row that wins over the class state).
@@ -864,7 +900,18 @@ export function ClassToolbar({
             </DropdownMenu>
           )}
 
-          {/* 3. Class member count + expand chevron. Reflects the class size
+          {/* 3. Lockdown toggle (anti-distraction). Shown whenever a class is the
+              current target, on exam and non-exam pages alike — lockdown gates the
+              whole teacher site, not just this page. */}
+          {selectedClass && (
+            <LockdownToggle
+              locked={selectedClassLocked}
+              disabled={lockdownUpdating}
+              onToggle={toggleLockdown}
+            />
+          )}
+
+          {/* 4. Class member count + expand chevron. Reflects the class size
               (not just answer-submitting respondents). Hidden when no class
               is the current target. */}
           <button
@@ -1079,6 +1126,50 @@ function AudienceDropdown({
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
+  )
+}
+
+/**
+ * Anti-distraction lockdown toggle (NOT security). ON = logged-in members of the
+ * selected class must open the teacher's site in Safe Exam Browser; everyone else
+ * (incl. logged-out students) is unaffected. Amber when on, to read as "caution /
+ * active" without colliding with the red broadcast toggle.
+ */
+function LockdownToggle({
+  locked,
+  disabled,
+  onToggle,
+}: {
+  locked: boolean
+  disabled: boolean
+  onToggle: () => void
+}) {
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={onToggle}
+      disabled={disabled}
+      className={cn(
+        'h-8 w-8 p-0 flex-shrink-0',
+        locked &&
+          'bg-amber-500 text-white border-amber-500 hover:bg-amber-600 hover:text-white hover:border-amber-600'
+      )}
+      title={
+        locked
+          ? 'Lockdown ON — class members must use Safe Exam Browser to view your site. Click to turn off.'
+          : 'Lockdown OFF — click to require Safe Exam Browser for this class (anti-distraction).'
+      }
+      aria-label="Toggle Safe Exam Browser lockdown for this class"
+    >
+      {disabled ? (
+        <Loader2 className="w-4 h-4 animate-spin" />
+      ) : locked ? (
+        <Lock className="w-4 h-4" />
+      ) : (
+        <Unlock className="w-4 h-4" />
+      )}
+    </Button>
   )
 }
 

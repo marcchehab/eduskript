@@ -19,6 +19,7 @@ export type AppEvent =
   | ExamReopenedEvent
   | ExamReturnedEvent
   | StudentWorkUpdateEvent
+  | LockdownChangeEvent
 
 /**
  * Fired when a student is invited to a class (via bulk import or direct invite)
@@ -131,6 +132,19 @@ export interface StudentWorkUpdateEvent {
   studentId: string
   classId: string
   pageId: string
+  timestamp: number
+}
+
+/**
+ * Fired when a teacher toggles a class's lockdown mode (anti-distraction SEB gate).
+ * Sent on the `lockdown:${classId}` channel to every member's open tab so it can
+ * reload — a reload re-hits the middleware gate (locked → SEB-required screen;
+ * unlocked → normal content). NOT a security signal; see Class.lockdownMode.
+ */
+export interface LockdownChangeEvent {
+  type: 'lockdown-change'
+  classId: string
+  locked: boolean
   timestamp: number
 }
 

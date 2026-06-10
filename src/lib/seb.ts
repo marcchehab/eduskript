@@ -18,20 +18,22 @@ export interface ExamSettings {
 }
 
 /**
+ * Check if a raw user-agent string belongs to Safe Exam Browser.
+ * SEB adds its identifier to the UA (works with SEB 2.x and 3.x):
+ *   - "Mozilla/5.0 ... SEB/3.4.0"
+ *   - "Mozilla/5.0 ... SafeExamBrowser"
+ * Shared by the server (isSEBRequest) and any client check (navigator.userAgent).
+ */
+export function isSEBUserAgent(userAgent: string): boolean {
+  return userAgent.includes('SEB/') || userAgent.includes('SafeExamBrowser')
+}
+
+/**
  * Check if request is coming from Safe Exam Browser
  * Uses user-agent detection (works with SEB 2.x and 3.x)
  */
 export function isSEBRequest(headers: Headers): boolean {
-  const userAgent = headers.get('user-agent') || ''
-
-  // SEB adds its identifier to the user agent string
-  // Examples:
-  // - "Mozilla/5.0 ... SEB/3.4.0"
-  // - "Mozilla/5.0 ... SafeExamBrowser"
-  return (
-    userAgent.includes('SEB/') ||
-    userAgent.includes('SafeExamBrowser')
-  )
+  return isSEBUserAgent(headers.get('user-agent') || '')
 }
 
 /**

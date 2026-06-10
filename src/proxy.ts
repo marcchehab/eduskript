@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { recordMetric } from '@/lib/metrics/buffer'
+import { isSEBRequest } from '@/lib/seb'
 
 // Cache entry types for domain lookups
 type DomainCacheEntry =
@@ -31,6 +32,11 @@ export async function proxy(request: NextRequest) {
 
   // Extract just the domain (without port for localhost)
   const domain = hostname.split(':')[0]
+
+  // First path segment doubles as the teacher/org pageSlug on org + localhost
+  // routes (eduskript.org/<slug>/...). Used by the lockdown gate below. On
+  // teacher custom domains the slug instead comes from domain resolution.
+  const firstSegment = pathname.split('/')[1] || ''
 
   // Track page loads - must happen BEFORE early returns
   // 1. Hard navigation: Sec-Fetch-Mode: navigate (direct URL, refresh)
@@ -63,6 +69,7 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith('/embed/') ||
     pathname.startsWith('/exam/') ||
     pathname.startsWith('/exam-complete') ||
+    pathname.startsWith('/seb-required') ||
     pathname.startsWith('/impressum') ||
     pathname.startsWith('/terms')
   ) {
@@ -71,7 +78,7 @@ export async function proxy(request: NextRequest) {
 
   // Short-circuit for the app's own hostnames (no DB/API lookup needed)
   if (APP_DOMAINS[domain]) {
-    return rewriteToOrg(request, APP_DOMAINS[domain])
+    return gatedOrg(request, APP_DOMAINS[domain], firstSegment)
   }
 
   // For localhost: rewrite root and the org-content prefix /c/* to the
@@ -83,7 +90,10 @@ export async function proxy(request: NextRequest) {
     if (pathname === '/' || pathname === '/c' || pathname.startsWith('/c/')) {
       return rewriteToOrg(request, DEFAULT_ORG_SLUG)
     }
-    return NextResponse.next()
+    // Teacher page on localhost: /<pageSlug>/... falls through to the [domain]
+    // route. Run the lockdown gate using the first path segment as the slug.
+    const gated = await maybeRewriteForLockdown(request, firstSegment)
+    return gated ?? NextResponse.next()
   }
 
   // Check cache first
@@ -93,14 +103,14 @@ export async function proxy(request: NextRequest) {
       // Negative cache hit (domain not found) - fall back to default org
       const expiry = negativeCacheExpiry.get(domain)
       if (expiry && expiry > Date.now()) {
-        return rewriteToOrg(request, DEFAULT_ORG_SLUG)
+        return gatedOrg(request, DEFAULT_ORG_SLUG, firstSegment)
       }
     } else if (cached.expiry > Date.now()) {
       // Positive cache hit
       if (cached.type === 'org') {
-        return rewriteToOrg(request, cached.orgSlug)
+        return gatedOrg(request, cached.orgSlug, firstSegment)
       } else {
-        return rewriteToTeacher(request, cached.pageSlug)
+        return gatedTeacher(request, cached.pageSlug)
       }
     }
   }
@@ -129,7 +139,7 @@ export async function proxy(request: NextRequest) {
           pageSlug: data.pageSlug,
           expiry: Date.now() + CACHE_TTL,
         })
-        return rewriteToTeacher(request, data.pageSlug)
+        return gatedTeacher(request, data.pageSlug)
       } else {
         // Cache org domain result (default behavior)
         domainCache.set(domain, {
@@ -137,7 +147,7 @@ export async function proxy(request: NextRequest) {
           orgSlug: data.orgSlug,
           expiry: Date.now() + CACHE_TTL,
         })
-        return rewriteToOrg(request, data.orgSlug)
+        return gatedOrg(request, data.orgSlug, firstSegment)
       }
     } else {
       // Domain not found - negative cache
@@ -150,7 +160,69 @@ export async function proxy(request: NextRequest) {
   }
 
   // Domain not found in database - fall back to default org
-  return rewriteToOrg(request, DEFAULT_ORG_SLUG)
+  return gatedOrg(request, DEFAULT_ORG_SLUG, firstSegment)
+}
+
+/**
+ * Anti-distraction lockdown gate (NOT security). When a logged-in student belongs
+ * to a lockdown class of `pageSlug`'s teacher and isn't in Safe Exam Browser, send
+ * them to the SEB-required screen instead of the page. Returns a rewrite to gate,
+ * or null to pass.
+ *
+ * Skips entirely (no DB hit, no fetch) for: SEB requests, router prefetches, empty
+ * slugs, and anonymous visitors (no session cookie). That keeps public-page ISR/SEO
+ * for crawlers and logged-out visitors completely untouched — only logged-in,
+ * non-SEB navigations pay for one internal lookup.
+ */
+async function maybeRewriteForLockdown(
+  request: NextRequest,
+  pageSlug: string
+): Promise<NextResponse | null> {
+  if (!pageSlug) return null
+  // SEB users always pass — that's the whole point.
+  if (isSEBRequest(request.headers)) return null
+  // Don't gate router prefetches; only real navigations.
+  if (request.headers.get('Next-Router-Prefetch') === '1') return null
+  // No NextAuth session cookie → anonymous → pass without touching the DB.
+  // Dev uses `next-auth.session-token`; prod prefixes `__Secure-`, which still
+  // contains the same substring, so one check covers both.
+  const cookieHeader = request.headers.get('cookie') || ''
+  if (!cookieHeader.includes('next-auth.session-token=')) return null
+
+  try {
+    const port = process.env.PORT || '3000'
+    const checkUrl = new URL(`http://localhost:${port}/api/internal/check-lockdown`)
+    checkUrl.searchParams.set('pageSlug', pageSlug)
+    const res = await fetch(checkUrl.toString(), {
+      headers: { cookie: request.headers.get('cookie') || '' },
+    })
+    if (!res.ok) return null
+    const { locked } = await res.json()
+    if (!locked) return null
+
+    // Rewrite to the SEB-required screen, preserving the URL the student was on so
+    // the screen can offer to reopen exactly here inside SEB.
+    const from = request.nextUrl.pathname + request.nextUrl.search
+    const url = request.nextUrl.clone()
+    url.pathname = '/seb-required'
+    url.search = ''
+    url.searchParams.set('from', from)
+    return NextResponse.rewrite(url)
+  } catch (error) {
+    console.error('Lockdown check error:', error)
+    return null // fail open — anti-distraction must never lock the site on errors
+  }
+}
+
+// Gate-then-rewrite wrappers used at every teacher/org terminal branch.
+async function gatedTeacher(request: NextRequest, pageSlug: string) {
+  const gated = await maybeRewriteForLockdown(request, pageSlug)
+  return gated ?? rewriteToTeacher(request, pageSlug)
+}
+
+async function gatedOrg(request: NextRequest, orgSlug: string, slug: string) {
+  const gated = await maybeRewriteForLockdown(request, slug)
+  return gated ?? rewriteToOrg(request, orgSlug)
 }
 
 function rewriteToOrg(request: NextRequest, orgSlug: string) {

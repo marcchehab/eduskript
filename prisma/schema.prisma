@@ -596,6 +596,10 @@ model Class {
   inviteCode     String   @unique @map("invite_code")
   isActive       Boolean  @default(true) @map("is_active")
   allowAnonymous Boolean  @default(false) @map("allow_anonymous")
+  // Anti-distraction (NOT security): when true, logged-in members must use Safe
+  // Exam Browser to view the teacher's site. Enforced client-side via middleware
+  // gate (src/proxy.ts → /api/internal/check-lockdown). Anonymous visitors bypass.
+  lockdownMode   Boolean  @default(false) @map("lockdown_mode")
   isImplicit     Boolean  @default(false) @map("is_implicit") // True for auto-generated survey/pseudo classes
   implicitPageId String?  @unique @map("implicit_page_id") // For isImplicit=true: the page this class is bound to
   createdAt      DateTime @default(now()) @map("created_at")

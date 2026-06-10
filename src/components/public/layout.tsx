@@ -16,6 +16,7 @@ import { InlineMarkdown } from '@/components/ui/inline-markdown'
 import { useLayout } from '@/contexts/layout-context'
 import { TeacherClassProvider } from '@/contexts/teacher-class-context'
 import { AdminToolbox } from './admin-toolbox'
+import { LockdownWatcher } from './lockdown-watcher'
 
 interface Teacher {
   name: string | null
@@ -440,6 +441,9 @@ export function PublicSiteLayout({
 
   return (
     <TeacherClassProvider>
+      {/* Reloads a logged-in student's tab when their class's lockdown toggles,
+          so the middleware gate re-applies live. No-op for anon/teacher tabs. */}
+      <LockdownWatcher />
       <div
         className="min-h-screen bg-background overflow-visible"
         data-typography={typographyPreference}
