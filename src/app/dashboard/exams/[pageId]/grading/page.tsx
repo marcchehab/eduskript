@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
-import { ArrowLeft, Send, Loader2, Play, Wand2 } from 'lucide-react'
+import { ArrowLeft, Send, Loader2, Play, Wand2, ArrowDownAZ, ArrowUpAZ } from 'lucide-react'
 import { runChecksForStudents } from '@/lib/scoring/run-checks.client'
 import { AiScoringModal } from '@/components/dashboard/ai-scoring-modal'
 import { getReverseMappingsForClass } from '@/lib/email-mapping-db'
@@ -226,6 +226,53 @@ export default function ExamGradingPage() {
       (s.pseudonym ? resolvedEmails[s.pseudonym] : undefined) || s.email || s.name || s.pseudonym || '—',
     [resolvedEmails],
   )
+
+  // The student's real email if the teacher has one mapped/revealed, else null.
+  const mappedEmail = useCallback(
+    (s: StudentRow): string | null =>
+      (s.pseudonym ? resolvedEmails[s.pseudonym] : undefined) || s.email || null,
+    [resolvedEmails],
+  )
+  const nicknameOf = (s: StudentRow): string => s.name || s.pseudonym || '—'
+
+  // --- roster sorting ---------------------------------------------------
+  // 'alpha': mapped emails A–Z, then the email-less by nickname A–Z.
+  // 'surname': by lastname parsed from firstname.lastname@… emails, the rest after.
+  const [sortKey, setSortKey] = useState<'alpha' | 'surname'>('alpha')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const toggleSort = (key: 'alpha' | 'surname') => {
+    if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    else { setSortKey(key); setSortDir('asc') }
+  }
+  const sortedStudents = useMemo(() => {
+    // Lastname from a firstname[.middle].lastname local part; null if no dot.
+    const surnameOf = (email: string | null): string | null => {
+      if (!email) return null
+      const local = email.split('@')[0]
+      const parts = local.split('.')
+      return parts.length < 2 ? null : parts[parts.length - 1]
+    }
+    if (!data) return []
+    const arr = [...data.students]
+    // Build the ascending order, then reverse wholesale for 'desc' so the
+    // group ordering (keyed vs un-keyed) flips too.
+    arr.sort((a, b) => {
+      if (sortKey === 'alpha') {
+        const ea = mappedEmail(a), eb = mappedEmail(b)
+        if (ea && eb) return ea.localeCompare(eb)
+        if (ea) return -1
+        if (eb) return 1
+        return nicknameOf(a).localeCompare(nicknameOf(b))
+      }
+      const sa = surnameOf(mappedEmail(a)), sb = surnameOf(mappedEmail(b))
+      if (sa && sb) return sa.localeCompare(sb) || mappedEmail(a)!.localeCompare(mappedEmail(b)!)
+      if (sa) return -1
+      if (sb) return 1
+      return nicknameOf(a).localeCompare(nicknameOf(b))
+    })
+    if (sortDir === 'desc') arr.reverse()
+    return arr
+  }, [data, sortKey, sortDir, mappedEmail])
 
   useEffect(() => {
     if (status !== 'authenticated') return
@@ -499,7 +546,30 @@ export default function ExamGradingPage() {
         <table className="w-full text-sm border-collapse">
           <thead>
             <tr className="bg-muted/50 text-left">
-              <th className="px-3 py-2 font-medium">Student</th>
+              <th className="px-3 py-2 font-medium">
+                <div className="flex items-center gap-2">
+                  <span>Student</span>
+                  <button
+                    type="button"
+                    onClick={() => toggleSort('alpha')}
+                    title="Sort A–Z by email, then nickname"
+                    aria-label="Sort by email / nickname"
+                    className={`inline-flex items-center rounded p-1 transition-colors ${sortKey === 'alpha' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
+                  >
+                    {sortKey === 'alpha' && sortDir === 'desc' ? <ArrowUpAZ className="w-4 h-4" /> : <ArrowDownAZ className="w-4 h-4" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => toggleSort('surname')}
+                    title="Sort by surname (firstname.lastname@…)"
+                    aria-label="Sort by surname"
+                    className={`inline-flex items-center gap-1 rounded px-1.5 py-1 text-xs transition-colors ${sortKey === 'surname' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
+                  >
+                    {sortKey === 'surname' && sortDir === 'desc' ? <ArrowUpAZ className="w-4 h-4" /> : <ArrowDownAZ className="w-4 h-4" />}
+                    Surname
+                  </button>
+                </div>
+              </th>
               {allMode && <th className="px-3 py-2 font-medium">Class</th>}
               <th className="px-3 py-2 font-medium text-right">Total</th>
               <th className="px-3 py-2 font-medium text-right">Grade</th>
@@ -508,7 +578,7 @@ export default function ExamGradingPage() {
             </tr>
           </thead>
           <tbody>
-            {data.students.map((s) => (
+            {sortedStudents.map((s) => (
               <tr key={s.studentId} className="border-t hover:bg-accent/30">
                 <td className="px-3 py-2">
                   {/* Links to the in-exam view of this student's graded answers. */}

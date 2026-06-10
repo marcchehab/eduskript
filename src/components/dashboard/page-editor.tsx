@@ -14,7 +14,7 @@ import { EditModal } from '@/components/dashboard/edit-modal'
 import { CreatePageModal } from '@/components/dashboard/create-page-modal'
 import { SkriptAccessManager } from '@/components/permissions/SkriptAccessManager'
 import { EditorWithMedia, type ExtraManageTab } from '@/components/dashboard/editor-with-media'
-import { ArrowLeft, ArrowRightLeft, Save, History, Eye, EyeOff, ClipboardCopy, Check, Shield, Globe, Maximize2, Minimize2, BookA, BookOpen, FileText, FilePenLine, GripVertical, Trash2, Users, Loader2, CircleCheckBig, CircleMinus, Presentation } from 'lucide-react'
+import { ArrowLeft, ArrowRightLeft, Save, History, Eye, EyeOff, ClipboardCopy, Check, Shield, Globe, Maximize2, Minimize2, BookA, BookOpen, FileText, FilePenLine, GripVertical, Trash2, Users, Loader2, CircleCheckBig, CircleMinus, Presentation, Link2, GraduationCap } from 'lucide-react'
 import { ExamStateStepper } from '@/components/exam/exam-state-stepper'
 import type { ExamLifecycleState } from '@/lib/exam-state'
 import {
@@ -57,6 +57,7 @@ interface SkriptPage {
   slug: string
   isPublished: boolean
   isUnlisted?: boolean
+  pageType?: string
 }
 
 type SkriptAuthorWithUser = SkriptAuthor & { user: Pick<User, 'id' | 'name' | 'email' | 'image' | 'title'> }
@@ -379,12 +380,14 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
     }
   }
 
-  // Copy exam link to clipboard (regular https - students login first, then SEB opens via download button)
+  // Copy exam link to clipboard. The exam lives under the /exam/ route
+  // (/exam/{site}/{skript}/{page}), not the regular page path — students log in
+  // there, then SEB opens via the download button.
   const handleCopySebLink = async () => {
     const userPageSlug = (session?.user as { pageSlug?: string })?.pageSlug
     if (!userPageSlug) return
 
-    const examUrl = `https://${window.location.host}/${userPageSlug}/${skript.slug}/${page.slug}`
+    const examUrl = `https://${window.location.host}/exam/${userPageSlug}/${skript.slug}/${page.slug}`
     await navigator.clipboard.writeText(examUrl)
     setSebLinkCopied(true)
     setTimeout(() => setSebLinkCopied(false), 2000)
@@ -563,8 +566,13 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              <FileText className="w-4 h-4 flex-shrink-0" />
-              <span className="truncate">{p.title}</span>
+              {p.pageType === 'exam'
+                ? <FilePenLine className={`w-4 h-4 flex-shrink-0 ${p.id === page.id ? '' : 'text-orange-500'}`} />
+                : <FileText className="w-4 h-4 flex-shrink-0" />}
+              <span className={`truncate ${p.pageType === 'exam' && p.id !== page.id ? 'text-orange-500' : ''}`}>
+                {p.title}
+                {p.pageType === 'exam' && <span className="text-orange-500/70 font-normal"> (exam)</span>}
+              </span>
               {/* Visibility marker — mirrors PublishToggle's icon/color
                   language so the read-only indicator and the interactive
                   toggle speak the same visual vocabulary. */}
@@ -883,7 +891,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
             </div>
 
             {pageType === 'exam' && !isFullscreen && (
-              <div className="flex flex-wrap items-start gap-6 p-4 border rounded-lg bg-muted/30">
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-3 p-4 border rounded-lg bg-muted/30">
                 <div className="flex items-center gap-2">
                   <Checkbox
                     id="require-seb"
@@ -912,69 +920,74 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                     Unlock for all
                   </Label>
                 </div>
-                {teacherClasses.length > 0 && (() => {
-                  const assignedCount = teacherClasses.filter(
-                    (cls) => (examStates[cls.id] ?? 'hidden') !== 'hidden',
-                  ).length
-                  return (
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button variant="outline" size="sm" className="gap-1.5 self-start">
-                          <Users className="w-4 h-4" />
-                          Assign to classes
-                          {assignedCount > 0 && (
-                            <span className="ml-0.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary tabular-nums">
-                              {assignedCount}
-                            </span>
-                          )}
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="sm:max-w-md">
-                        <DialogHeader>
-                          <DialogTitle>Assign to classes</DialogTitle>
-                          <DialogDescription>
-                            Hidden = not assigned · Closed = visible, no entry yet · Lobby = waiting room · Open = students can take it.
-                          </DialogDescription>
-                        </DialogHeader>
-                        <div className="flex flex-col gap-2">
-                          {teacherClasses.map((cls) => (
-                            <div key={cls.id} className="flex items-center justify-between gap-3">
-                              <span className="text-sm">{cls.name}</span>
-                              <ExamStateStepper
-                                value={examStates[cls.id] ?? 'hidden'}
-                                onChange={(state) => handleExamStateChange(cls.id, state)}
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      </DialogContent>
-                    </Dialog>
-                  )
-                })()}
-                {examSettings.requireSEB && sessionStatus === 'authenticated' && (session?.user as { pageSlug?: string })?.pageSlug && (
-                  <div className="flex items-center gap-2">
-                    <code className="text-xs bg-background px-2 py-1 rounded border font-mono">
-                      https://{typeof window !== 'undefined' ? window.location.host : 'example.com'}/{(session?.user as { pageSlug?: string })?.pageSlug}/{skript.slug}/{page.slug}
-                    </code>
+                {teacherClasses.length === 0 && (
+                  <span className="text-sm text-muted-foreground italic">
+                    No classes yet. Create a class to unlock exams for students.
+                  </span>
+                )}
+
+                {/* Actions, pushed to the right */}
+                <div className="flex items-center gap-2 ml-auto">
+                  {teacherClasses.length > 0 && (() => {
+                    const assignedCount = teacherClasses.filter(
+                      (cls) => (examStates[cls.id] ?? 'hidden') !== 'hidden',
+                    ).length
+                    return (
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button variant="outline" size="sm" className="gap-1.5">
+                            <Users className="w-4 h-4" />
+                            Assign to classes
+                            {assignedCount > 0 && (
+                              <span className="ml-0.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary tabular-nums">
+                                {assignedCount}
+                              </span>
+                            )}
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-md">
+                          <DialogHeader>
+                            <DialogTitle>Assign to classes</DialogTitle>
+                            <DialogDescription>
+                              Hidden = not assigned · Closed = visible, no entry yet · Lobby = waiting room · Open = students can take it.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="flex flex-col gap-2">
+                            {teacherClasses.map((cls) => (
+                              <div key={cls.id} className="flex items-center justify-between gap-3">
+                                <span className="text-sm">{cls.name}</span>
+                                <ExamStateStepper
+                                  value={examStates[cls.id] ?? 'hidden'}
+                                  onChange={(state) => handleExamStateChange(cls.id, state)}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    )
+                  })()}
+                  <Button variant="outline" size="sm" className="gap-1.5" asChild>
+                    <Link href={`/dashboard/exams/${page.id}/grading`}>
+                      <GraduationCap className="w-4 h-4" />
+                      Grading
+                    </Link>
+                  </Button>
+                  {sessionStatus === 'authenticated' && (session?.user as { pageSlug?: string })?.pageSlug && (
                     <Button
                       variant="ghost"
-                      size="sm"
+                      size="icon"
                       onClick={handleCopySebLink}
                       title="Copy exam link"
                     >
                       {sebLinkCopied ? (
                         <Check className="w-4 h-4 text-green-600" />
                       ) : (
-                        <ClipboardCopy className="w-4 h-4" />
+                        <Link2 className="w-4 h-4" />
                       )}
                     </Button>
-                  </div>
-                )}
-                {teacherClasses.length === 0 && (
-                  <span className="text-sm text-muted-foreground italic">
-                    No classes yet. Create a class to unlock exams for students.
-                  </span>
-                )}
+                  )}
+                </div>
               </div>
             )}
 

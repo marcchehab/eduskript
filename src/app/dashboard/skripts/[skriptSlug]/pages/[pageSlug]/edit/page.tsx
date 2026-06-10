@@ -29,6 +29,7 @@ async function getPageData(skriptSlug: string, pageSlug: string, userId: string,
           slug: true,
           isPublished: true,
           isUnlisted: true,
+          pageType: true,
         }
       },
       authors: {
