@@ -224,7 +224,15 @@ Rules:
   already given to the student" section is present, treat EVERYTHING in it as provided:
   never make a criterion that is already satisfied by that starter code (e.g. "defines
   the function with the correct signature" when the signature is in the starter).
-- Criteria must be concrete and checkable against a student's answer (e.g. "Handles the empty-list case", "Correct loop bound", "Uses a base case").
+- Score PRINCIPLES and TECHNIQUES, not input/output test cases. Automated tests
+  (python-check / asserts) already cover "returns X for input Y" — do NOT duplicate
+  them. A criterion must name the programming concept the student had to apply, e.g.
+  "Loop over the correct range (1 to n inclusive)", "Tests divisibility with modulo and
+  combines the conditions with OR (i % 3 == 0 or i % 5 == 0)", "Initialises an
+  accumulator, sums the matching numbers and returns it". NEVER write outcome criteria
+  like "Returns 2 when is_member is True" or "Returns 4 when not a member and age < 16".
+- Criteria must still be concrete and checkable against the student's CODE (the approach
+  they used), e.g. "Uses a base case for the recursion", "Correct loop bound".
 - The sum of criterion points MUST equal the given maximum points.
 - Use partial-credit granularity that matches the max (e.g. 0.5-point steps are fine).
 - Prefer ATOMIC criteria — one independently-awardable thing each.
