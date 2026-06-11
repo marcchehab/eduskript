@@ -236,7 +236,10 @@ Rules:
 - The sum of criterion points MUST equal the given maximum points.
 - Use partial-credit granularity that matches the max (e.g. 0.5-point steps are fine).
 - Prefer ATOMIC criteria — one independently-awardable thing each.
-- Reply in the SAME LANGUAGE as the exercise.
+- Reply in the SAME LANGUAGE as the exercise. Use proper native characters — in German
+  write real umlauts (für, Rückgabe, prüft), NEVER ASCII transliterations (fuer,
+  Rueckgabe, prueft). Follow any teacher/organization guidance on regional spelling
+  (e.g. Swiss German uses "ss", not "ß"); absent such guidance, use standard orthography.
 - Output STRICT JSON only, no prose, no code fences:
   {"criteria":[{"description":"...","points":2},{"description":"...","points":1}]}`
 
@@ -341,7 +344,7 @@ Rules:
   all-or-nothing/regex treatment — judge it NORMALLY with PARTIAL credit per the rule above,
   even when it names a construct. Criteria about correct logic / the right variable / the right
   result are never regex-style.
-- Write a short overall feedback for the student (1-3 sentences), in the SAME LANGUAGE as the submission/exercise.
+- Write a short overall feedback for the student (1-3 sentences), in the SAME LANGUAGE as the submission/exercise. Use proper native characters — in German write real umlauts (für, Rückgabe, prüft), NEVER ASCII transliterations (fuer, Rueckgabe, prueft). Follow any teacher/organization guidance on regional spelling (e.g. Swiss German uses "ss", not "ß"); absent such guidance, use standard orthography.
 - This is a SUBMITTED, already-graded exam — the student CANNOT revise it. So do NOT give
   corrective instructions ("Korrigieren Sie…", "Verwenden Sie…", "Bauen Sie … ein", "you
   should…"). Describe what is wrong and, where useful, what WOULD have been correct
