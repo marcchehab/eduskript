@@ -73,6 +73,24 @@ function CodeBlockInner({ code, language, className, showCopy = true }: CodeBloc
         langSupport = json()
       }
 
+      // Vertical indent guides for Python, where indentation carries meaning.
+      // Read-only block, so no active-block highlight (there's no cursor).
+      // Config mirrors the interactive editor (src/components/public/code-editor/index.tsx).
+      let indentGuides = null
+      if (lang === 'python' || lang === 'py') {
+        const { indentationMarkers } = await import('@replit/codemirror-indentation-markers')
+        indentGuides = indentationMarkers({
+          highlightActiveBlock: false,
+          hideFirstIndent: true,
+          colors: {
+            light: '#c2c8d0',
+            dark: '#3b4048',
+            activeLight: '#8a93a0',
+            activeDark: '#5c6470',
+          },
+        })
+      }
+
       if (!containerRef.current) return
 
       // Clear the placeholder
@@ -84,6 +102,7 @@ function CodeBlockInner({ code, language, className, showCopy = true }: CodeBloc
           doc: code,
           extensions: [
             ...(langSupport ? [langSupport] : []),
+            ...(indentGuides ? [indentGuides] : []),
             ...(isDark ? [vsCodeDark] : [vsCodeLight]),
             EditorState.readOnly.of(true),
             EditorView.editable.of(false),
