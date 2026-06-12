@@ -545,14 +545,14 @@ export function ClassToolbar({
 
   return (
     <FixedToolbarFrame>
-      <div className="overflow-hidden">
-      {/* Roster expansion slides UP (rendered ABOVE row 1) because the
-          toolbar sits at the bottom of the sidebar — unfolding downward
-          would push the row 1 off-screen, while unfolding upward grows
-          into the empty sidebar space above. */}
+      {/* When expanded, the roster is an opaque panel anchored above the toolbar
+          rows (`bottom-full`) so it floats up and covers the sidebar's site-menu,
+          rather than growing the footer and squeezing the nav. The border, shadow
+          and shared tint mark it as a distinct teacher surface over the menu. It
+          grows with the roster up to nearly the full sidebar height. */}
       {isExpanded && (
-        <div className="border-b border-border mb-2 pb-2">
-          <div className="max-h-96 overflow-y-auto -mx-1">
+        <div className="absolute bottom-full inset-x-0 mb-2 z-20 overflow-hidden rounded-lg border border-border bg-card shadow-lg">
+          <div className="max-h-[calc(100dvh-13rem)] overflow-y-auto p-2 bg-muted/50 dark:bg-muted/30">
             {rows.length === 0 ? (
               <div className="px-1 py-3 text-center text-xs text-muted-foreground">
                 {selectedClass
@@ -819,7 +819,9 @@ export function ClassToolbar({
           </div>
         </div>
       )}
-      <div className="">
+      {/* Slight tint marks the toolbar as a distinct teacher surface, matching
+          the expanded roster overlay above. */}
+      <div className="rounded-lg bg-muted/50 dark:bg-muted/30 px-2 py-1.5">
         <div className="flex items-center gap-2 min-w-0">
           {/* 1. Master broadcast toggle (icon only, red when active). */}
           <BroadcastToggle
@@ -954,8 +956,6 @@ export function ClassToolbar({
           </div>
         )}
       </div>
-
-      </div>
       <AlertDialogModal
         open={dialog.open}
         onOpenChange={dialog.setOpen}
@@ -1007,7 +1007,9 @@ function FixedToolbarFrame({ children }: { children: ReactNode }) {
 
   if (!slot) return null
   return createPortal(
-    <div id="class-toolbar">
+    // `relative` anchors the expanded roster overlay, which is positioned
+    // `bottom-full` to float up over the sidebar's site-menu.
+    <div id="class-toolbar" className="relative">
       {children}
     </div>,
     slot
