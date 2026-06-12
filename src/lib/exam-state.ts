@@ -23,7 +23,7 @@ export const EXAM_STATES: ExamLifecycleState[] = ['hidden', 'closed', 'lobby', '
 // order can't change what they see).
 const RANK: Record<ExamLifecycleState, number> = { hidden: 0, closed: 1, lobby: 2, open: 3 }
 
-function normalize(state: string): ExamLifecycleState {
+export function normalize(state: string): ExamLifecycleState {
   return (EXAM_STATES as string[]).includes(state) ? (state as ExamLifecycleState) : 'hidden'
 }
 

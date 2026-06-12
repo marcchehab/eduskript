@@ -16,6 +16,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useRealtimeEvents } from '@/hooks/use-realtime-events'
+import type { ExamLifecycleState } from '@/lib/exam-state'
 
 export interface ExamRosterStudent {
   id: string
@@ -29,6 +30,8 @@ export interface ExamRosterStudent {
   submittedAt?: string
   /** Throwaway emergency-laptop account → enables the "Transfer answers" action. */
   isTemporary?: boolean
+  /** Per-student exam-state override; undefined when following the class state. */
+  overrideState?: ExamLifecycleState
 }
 
 export interface ExamRosterCounts {
@@ -37,8 +40,6 @@ export interface ExamRosterCounts {
   taking: number
   submitted: number
 }
-
-import type { ExamLifecycleState } from '@/lib/exam-state'
 
 export type ExamState = ExamLifecycleState | null
 

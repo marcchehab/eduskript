@@ -130,6 +130,8 @@ interface MergedRow {
   lastActivityAt: string | null
   /** Throwaway emergency-laptop account → enables the "Transfer answers" action. */
   isTemporary?: boolean
+  /** Per-student exam-state override; undefined when following the class state. */
+  overrideState?: ExamLifecycleState
 }
 
 export function ClassToolbar({
@@ -328,6 +330,7 @@ export function ClassToolbar({
         submittedAt: student.submittedAt ?? null,
         answerCount: 0,
         lastActivityAt: student.submittedAt ?? student.startedAt ?? null,
+        overrideState: student.overrideState,
       })
     }
 
@@ -389,14 +392,19 @@ export function ClassToolbar({
     return submissions.find(s => s.userId === yourAnonymousUserId)?.displayName ?? null
   }, [submissions, yourAnonymousUserId])
 
-  const setExamStateTo = async (newState: ExamLifecycleState) => {
+  // Set exam state for the whole class (studentId omitted) or for one student
+  // (studentId set → a per-student override row that wins over the class state).
+  // Setting "hidden" on a student deletes their override row, i.e. reverts them
+  // to following the class — there is no representable per-student "hidden"
+  // (no row == hidden), so the Hidden step doubles as "follow class".
+  const setExamStateTo = async (newState: ExamLifecycleState, studentId: string | null = null) => {
     if (!selectedClass) return
     setIsUpdating(true)
     try {
       const response = await fetch(`/api/exams/${pageId}/state`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ classId: selectedClass.id, state: newState }),
+        body: JSON.stringify({ classId: selectedClass.id, studentId: studentId ?? undefined, state: newState }),
       })
       if (response.ok) refreshRoster()
     } catch (error) {
@@ -405,6 +413,13 @@ export function ClassToolbar({
       setIsUpdating(false)
     }
   }
+
+  // The selected student's current override (if any), read from the live roster.
+  // Drives the row-2 stepper value + the "follow class" reset visibility.
+  const selectedStudentOverride: ExamLifecycleState | undefined = useMemo(() => {
+    if (!selectedStudent) return undefined
+    return students.find((s) => s.id === selectedStudent.id)?.overrideState
+  }, [selectedStudent, students])
 
   const reopenForStudent = async (studentId: string) => {
     if (!selectedClass) return
@@ -661,6 +676,13 @@ export function ClassToolbar({
                         >
                           {row.displayName}
                         </button>
+                        {isExam && row.overrideState && (
+                          <span
+                            className="w-2 h-2 rounded-full bg-amber-500 flex-shrink-0"
+                            title={`Individual override: ${row.overrideState} (class is ${examState ?? 'hidden'}). Select this student to change or clear it.`}
+                            aria-label={`Individual exam override: ${row.overrideState}`}
+                          />
+                        )}
                         {row.isAnonymous && (
                           <span className="text-[10px] uppercase tracking-wide px-1 py-0.5 rounded bg-muted text-muted-foreground flex-shrink-0">
                             anon
@@ -878,12 +900,45 @@ export function ClassToolbar({
         {isExam && selectedClass && (
           <div className="mt-2 flex items-center gap-2 flex-wrap">
             {/* One control for the whole lifecycle. Hidden = not assigned (not in
-                the class's sidebar); Closed/Lobby/Open control entry. */}
+                the class's sidebar); Closed/Lobby/Open control entry.
+
+                Context-sensitive: with a student selected it drives THAT student's
+                per-student override (e.g. open a makeup for one student while the
+                class stays closed); with none selected it drives the class state.
+                Reusing the established "select a student → toolbar acts on them"
+                model that already retargets broadcast + grading. */}
             <ExamStateStepper
-              value={examState ?? 'hidden'}
-              onChange={setExamStateTo}
+              value={
+                selectedStudent
+                  ? (selectedStudentOverride ?? examState ?? 'hidden')
+                  : (examState ?? 'hidden')
+              }
+              onChange={(s) => setExamStateTo(s, selectedStudent?.id ?? null)}
               disabled={isUpdating}
+              className={selectedStudent ? 'ring-1 ring-amber-400 dark:ring-amber-500' : undefined}
             />
+            {selectedStudent ? (
+              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span className="truncate max-w-[8rem]">
+                  Override:{' '}
+                  <strong className="text-foreground">{selectedStudent.displayName}</strong>
+                </span>
+                {selectedStudentOverride && (
+                  <button
+                    type="button"
+                    onClick={() => setExamStateTo('hidden', selectedStudent.id)}
+                    disabled={isUpdating}
+                    className="inline-flex items-center gap-1 rounded px-1 py-0.5 hover:bg-muted/60 disabled:opacity-50"
+                    title="Clear this student's override so they follow the class state again"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    follow class
+                  </button>
+                )}
+              </span>
+            ) : (
+              <span className="text-xs text-muted-foreground">Whole class</span>
+            )}
             <label
               className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none"
               title="Cycle only through students who have handed in"

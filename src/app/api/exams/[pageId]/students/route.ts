@@ -17,6 +17,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { eventBus } from '@/lib/events'
 import { applyHandinSnapshots } from '@/lib/exam-recovery'
+import { normalize, type ExamLifecycleState } from '@/lib/exam-state'
 
 interface StudentStatus {
   id: string
@@ -29,6 +30,9 @@ interface StudentStatus {
   submittedAt?: Date
   /** Throwaway emergency-laptop account → enables the "Transfer answers" action. */
   isTemporary?: boolean
+  /** Per-student exam-state override (an ExamState row with this studentId).
+   *  Undefined when the student just follows the class-level state. */
+  overrideState?: ExamLifecycleState
 }
 
 /**
@@ -145,6 +149,16 @@ export async function GET(
       submissions.map(s => [s.studentId, s])
     )
 
+    // Per-student exam-state overrides (rows with studentId set). Used by the
+    // toolbar to show an "individual override" marker + a "follow class" reset.
+    const overrideRows = await prisma.examState.findMany({
+      where: { pageId, classId, studentId: { in: studentIds } },
+      select: { studentId: true, state: true },
+    })
+    const overrideByUserId = new Map(
+      overrideRows.map(r => [r.studentId, normalize(r.state)])
+    )
+
     // Build status list
     const students: StudentStatus[] = classMemberships.map(m => {
       const submission = submissionByUserId.get(m.studentId)
@@ -168,7 +182,8 @@ export async function GET(
         status,
         source: submission?.source,
         startedAt: activeSession?.createdAt,
-        submittedAt: submission?.submittedAt
+        submittedAt: submission?.submittedAt,
+        overrideState: overrideByUserId.get(m.studentId)
       }
     })
 
