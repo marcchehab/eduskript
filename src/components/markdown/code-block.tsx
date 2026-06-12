@@ -3,6 +3,7 @@
 import { useEffect, useRef, memo, useState } from 'react'
 import { useTheme } from 'next-themes'
 import { Check, Copy } from 'lucide-react'
+import type { Extension } from '@codemirror/state'
 
 interface CodeBlockProps {
   code: string
@@ -75,20 +76,29 @@ function CodeBlockInner({ code, language, className, showCopy = true }: CodeBloc
 
       // Vertical indent guides for Python, where indentation carries meaning.
       // Read-only block, so no active-block highlight (there's no cursor).
-      // Config mirrors the interactive editor (src/components/public/code-editor/index.tsx).
-      let indentGuides = null
+      // indentUnit/tabSize MUST be set: the indentation-markers plugin reads
+      // getIndentUnit() to place guides, and without it CodeMirror defaults to
+      // 2 — drawing a guide every 2 columns over 4-space Python indents (doubled
+      // guides). 4 spaces matches the interactive editor (src/components/public/
+      // code-editor/index.tsx).
+      const indentExtensions: Extension[] = []
       if (lang === 'python' || lang === 'py') {
+        const { indentUnit } = await import('@codemirror/language')
         const { indentationMarkers } = await import('@replit/codemirror-indentation-markers')
-        indentGuides = indentationMarkers({
-          highlightActiveBlock: false,
-          hideFirstIndent: true,
-          colors: {
-            light: '#c2c8d0',
-            dark: '#3b4048',
-            activeLight: '#8a93a0',
-            activeDark: '#5c6470',
-          },
-        })
+        indentExtensions.push(
+          indentUnit.of('    '),
+          EditorState.tabSize.of(4),
+          indentationMarkers({
+            highlightActiveBlock: false,
+            hideFirstIndent: true,
+            colors: {
+              light: '#c2c8d0',
+              dark: '#3b4048',
+              activeLight: '#8a93a0',
+              activeDark: '#5c6470',
+            },
+          }),
+        )
       }
 
       if (!containerRef.current) return
@@ -102,7 +112,7 @@ function CodeBlockInner({ code, language, className, showCopy = true }: CodeBloc
           doc: code,
           extensions: [
             ...(langSupport ? [langSupport] : []),
-            ...(indentGuides ? [indentGuides] : []),
+            ...indentExtensions,
             ...(isDark ? [vsCodeDark] : [vsCodeLight]),
             EditorState.readOnly.of(true),
             EditorView.editable.of(false),
