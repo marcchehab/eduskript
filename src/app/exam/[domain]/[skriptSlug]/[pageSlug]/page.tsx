@@ -307,6 +307,7 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
         publicStickyNotes={publicStickyNotes}
         isExamStudent={isExamStudent}
         teacherPageSlug={teacher.pageSlug}
+        pageLanguage={teacher.pageLanguage}
       />
       {isExamTaker && (
         <div className="mt-10 flex flex-col items-center gap-2 border-t border-border pt-6">

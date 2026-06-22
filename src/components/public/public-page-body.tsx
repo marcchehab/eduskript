@@ -28,6 +28,8 @@ interface PublicPageBodyProps {
    * session at render time).
    */
   teacherPageSlug: string
+  /** Site language (BCP-47) — localizes the GFM footnotes heading. null → English. */
+  pageLanguage?: string | null
 }
 
 /**
@@ -42,7 +44,7 @@ interface PublicPageBodyProps {
  * separately above this body with full server-side props (state controls,
  * unlocked classes).
  */
-export function PublicPageBody({ page, skriptId, publicAnnotations, publicSnaps, publicStickyNotes, isExamStudent, teacherPageSlug }: PublicPageBodyProps) {
+export function PublicPageBody({ page, skriptId, publicAnnotations, publicSnaps, publicStickyNotes, isExamStudent, teacherPageSlug, pageLanguage }: PublicPageBodyProps) {
   const showToolbar = page.pageType !== 'exam' && !isExamStudent
   return (
     <>
@@ -84,6 +86,7 @@ export function PublicPageBody({ page, skriptId, publicAnnotations, publicSnaps,
               pageId={page.id}
               isExam={page.pageType === 'exam'}
               presentationPublic={page.presentationPublic ?? false}
+              pageLanguage={pageLanguage}
             />
           </AnnotationWrapper>
         </article>

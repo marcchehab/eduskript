@@ -1,4 +1,4 @@
-import { compileMarkdown } from '@/lib/markdown-compiler'
+import { compileMarkdown, footnoteLabelForLang } from '@/lib/markdown-compiler'
 import { createMarkdownComponents } from '@/lib/markdown-components'
 import { createEmptySkriptFiles } from '@/lib/skript-files'
 import { getSkriptFiles } from '@/lib/skript-files.server'
@@ -22,6 +22,8 @@ interface ServerMarkdownRendererProps {
   isExam?: boolean
   /** When true, the Present button is shown to everyone (not just teachers). */
   presentationPublic?: boolean
+  /** Site language (BCP-47) — localizes the GFM footnotes heading. null/undefined → English. */
+  pageLanguage?: string | null
 }
 
 /**
@@ -34,7 +36,8 @@ interface ServerMarkdownRendererProps {
  * 2. Compile markdown with remark/rehype plugins
  * 3. Create components with files prop bound
  */
-export async function ServerMarkdownRenderer({ content, skriptId, pageId, organizationSlug, isExam, presentationPublic }: ServerMarkdownRendererProps) {
+export async function ServerMarkdownRenderer({ content, skriptId, pageId, organizationSlug, isExam, presentationPublic, pageLanguage }: ServerMarkdownRendererProps) {
+  const footnoteLabel = footnoteLabelForLang(pageLanguage)
   // 1. Get all files for this skript upfront
   const files = skriptId ? await getSkriptFiles(skriptId) : createEmptySkriptFiles()
 
@@ -71,10 +74,10 @@ export async function ServerMarkdownRenderer({ content, skriptId, pageId, organi
       const split = splitStages(content)
       stageMarkers = split.markers
       compiledStages = await Promise.all(
-        split.stages.map((s) => compileMarkdown(s, { components, resolvedStableLinks })),
+        split.stages.map((s) => compileMarkdown(s, { components, resolvedStableLinks, footnoteLabel })),
       )
     } else {
-      rendered = await compileMarkdown(content, { components, resolvedStableLinks })
+      rendered = await compileMarkdown(content, { components, resolvedStableLinks, footnoteLabel })
     }
     if (!isExam) {
       const slideSplit = splitSlides(content)
@@ -82,7 +85,7 @@ export async function ServerMarkdownRenderer({ content, skriptId, pageId, organi
       compiledSlides = await Promise.all(
         // anchors:false — slides re-render the page's content; emitting the same
         // heading ids / data-section-id again would collide in the DOM.
-        slideSplit.slides.map((s) => compileMarkdown(s, { components, resolvedStableLinks, anchors: false })),
+        slideSplit.slides.map((s) => compileMarkdown(s, { components, resolvedStableLinks, anchors: false, footnoteLabel })),
       )
     }
   } catch (e) {

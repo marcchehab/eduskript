@@ -68,6 +68,15 @@ export const rehypePlugins: PluggableList = [
  */
 export const sanitizeSchema = {
   ...defaultSchema,
+  // defaultSchema.clobberPrefix is 'user-content-' and clobber includes 'id'.
+  // remark-rehype ALREADY prefixes footnote ids/hrefs with 'user-content-'
+  // (matching pairs like id="user-content-fn-x" ↔ href="#user-content-fn-x").
+  // Sanitize then re-prefixes only the `id` (not the href fragment), producing
+  // id="user-content-user-content-fn-x" — so footnote anchor + backref links
+  // jump nowhere. Empty prefix stops the double-prefix; the ids remain
+  // namespaced because remark-rehype already added the prefix. See the test in
+  // git history / docs/internals/06-markdown-pipeline.md.
+  clobberPrefix: '',
   tagNames: [
     ...(defaultSchema.tagNames || []),
     // Custom components (lowercase HTML elements)
@@ -254,6 +263,24 @@ export interface CompileMarkdownOptions {
    *  output is rendered alongside the same content (e.g. slide copies in the
    *  presenter) to avoid duplicate ids colliding with the page in the DOM. */
   anchors?: boolean
+  /** Visible heading for the GFM footnotes section. Defaults to 'Footnotes'.
+   *  Pass a localized string (e.g. 'Fussnoten') per the page/site language —
+   *  see footnoteLabelForLang. The label is always rendered visible (sr-only
+   *  is dropped via footnoteLabelProperties below). */
+  footnoteLabel?: string
+}
+
+/**
+ * Localized heading for the GFM footnotes section, keyed on a BCP-47 tag
+ * (the site's pageLanguage; null/undefined → English). Kept small on purpose —
+ * extend when a content language is actually used.
+ */
+export function footnoteLabelForLang(lang?: string | null): string {
+  const l = (lang || 'en').toLowerCase()
+  if (l.startsWith('de')) return 'Fussnoten' // Swiss spelling (no ß)
+  if (l.startsWith('fr')) return 'Notes de bas de page'
+  if (l.startsWith('it')) return 'Note a piè di pagina'
+  return 'Footnotes'
 }
 
 /**
@@ -412,7 +439,7 @@ export async function compileMarkdown(
   content: string,
   options?: CompileMarkdownOptions
 ): Promise<ReactNode> {
-  const { components = {}, resolvedStableLinks = new Map<string, ResolvedPage>(), anchors = true } = options ?? {}
+  const { components = {}, resolvedStableLinks = new Map<string, ResolvedPage>(), anchors = true, footnoteLabel } = options ?? {}
 
   const { text: processed, lineMap } = preprocessMarkdown(content)
 
@@ -430,7 +457,14 @@ export async function compileMarkdown(
   const processor = unified()
     .use(remarkParse)
     .use(remarkPlugins)
-    .use(remarkRehype, { allowDangerousHtml: true })
+    .use(remarkRehype, {
+      allowDangerousHtml: true,
+      // GFM footnotes: visible, localized section heading. footnoteLabelProperties
+      // {} drops the default `sr-only` class so the title shows (default text
+      // 'Footnotes', overridden per language via footnoteLabel).
+      ...(footnoteLabel ? { footnoteLabel } : {}),
+      footnoteLabelProperties: {},
+    })
     .use(rehypeRaw)
     // Re-parse markdown inside custom container tags (flex-item, tab-item,
     // question, left/center/right, …) so they work with OR without blank

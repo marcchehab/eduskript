@@ -110,6 +110,7 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
   const orgSiteRow = await prisma.site.findUnique({
     where: { slug: orgSlug },
     select: {
+      pageLanguage: true,
       pageDescription: true,
       pageIcon: true,
       showIcon: true,
@@ -435,6 +436,7 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
             skriptId={skript.id}
             pageId={page.id}
             organizationSlug={orgSlug}
+            pageLanguage={orgSiteRow?.pageLanguage}
           />
         </AnnotationWrapper>
       </article>

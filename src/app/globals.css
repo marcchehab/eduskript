@@ -560,6 +560,131 @@ article.prose-theme > div > :first-child {
   transform: scale(0.98);
 }
 
+/* ── GFM footnotes ───────────────────────────────────────────────────────────
+   remark-gfm emits <section class="footnotes"> with an <h2 id="footnote-label">
+   heading and an <ol> of notes; each ref is a <sup><a data-footnote-ref> and
+   each note ends with a <a data-footnote-backref>↩</a>. Anchor + backref links
+   only work because sanitize's clobberPrefix is '' (see markdown-compiler.ts) —
+   otherwise the li ids get double-prefixed and the jumps go nowhere. */
+
+.prose-theme .footnotes {
+  margin-top: 4rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid hsl(var(--border));
+  font-size: 0.875em;
+  color: hsl(var(--muted-foreground));
+}
+
+/* Override the big rainbow-bar h2 treatment for the footnotes label. */
+.prose-theme .footnotes h2 {
+  margin: 0 0 1rem 0;
+  padding-left: 0;
+  font-size: 1.1em;
+  font-weight: 600;
+  color: hsl(var(--prose-headings));
+}
+
+.prose-theme .footnotes h2::before {
+  display: none; /* no animated rainbow bar on the footnotes heading */
+}
+
+.prose-theme .footnotes ol {
+  padding-left: 1.25rem;
+}
+
+.prose-theme .footnotes li {
+  margin: 0.5rem 0;
+  /* Breathing room so an anchored note isn't flush against the viewport top
+     (and clears any sticky chrome) when jumped to. */
+  scroll-margin-top: 5rem;
+}
+
+.prose-theme .footnotes li p {
+  margin: 0.25rem 0;
+}
+
+/* The footnote markers are deliberately set apart from body text as small
+   white circular "stickers" (like a superscript ©): a circled number for the
+   inline reference, a circled return arrow (↩) for the back-link. White fill +
+   border + shadow reads on both light and dark themes. */
+
+/* Back-to-reference link → circled ↩. .footnotes scope gives it enough
+   specificity to override the generic `.prose-theme a` (underline/primary). */
+.prose-theme .footnotes .data-footnote-backref {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5em;
+  height: 1.5em;
+  margin-left: 0.4em;
+  border-radius: 50%;
+  background: #fff;
+  color: #1f2937;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  font-size: 0.85em;
+  line-height: 1;
+  text-decoration: none;
+  vertical-align: middle;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.prose-theme .footnotes .data-footnote-backref:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+  color: #1f2937;
+}
+
+/* Inline reference superscript. line-height:0 keeps the badge from stretching
+   the text line; the <sup> already raises it. */
+.prose-theme sup:has(> a[data-footnote-ref]) {
+  /* Land the reference clear of sticky chrome when a backref jumps to it. */
+  scroll-margin-top: 5rem;
+  vertical-align: super;
+  font-size: 0.7em;
+  line-height: 0;
+  margin-left: 0.15em;
+}
+
+/* Circled number badge. `sup a[…]` (0,1,2) beats the generic `.prose-theme a`
+   (0,1,1) so the underline/primary colour don't leak in. min-width + pill
+   radius keep multi-digit footnotes (10+) round-ish. */
+.prose-theme sup a[data-footnote-ref] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.6em;
+  height: 1.6em;
+  padding: 0 0.3em;
+  border-radius: 999px;
+  background: #fff;
+  color: #1f2937;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.prose-theme sup a[data-footnote-ref]:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+  text-decoration: none;
+}
+
+/* Highlight whatever was jumped to: a tint behind the note, a ring around the
+   inline badge (its white fill would swallow a background tint). */
+.prose-theme .footnotes li:target {
+  background: hsl(var(--accent) / 0.35);
+  border-radius: 3px;
+  transition: background 0.6s ease;
+}
+
+.prose-theme sup:has(> a[data-footnote-ref]):target a[data-footnote-ref] {
+  box-shadow: 0 0 0 3px hsl(var(--accent) / 0.65);
+}
+
 .prose-theme p {
   @apply my-5 text-foreground;
 }

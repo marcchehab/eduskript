@@ -194,6 +194,27 @@ Quiz option indices are **dense element-only** positions (0,1,2,…): `extractOp
 render map in `components/markdown/quiz.tsx` count only `<answer>` elements, skipping the prompt
 text and inter-answer whitespace text nodes.
 
+## GFM footnotes
+
+Footnotes come from `remarkGfm` + `remark-rehype`'s footnote handler. Two things
+make them work here:
+
+- **Anchor/backref links** — `remark-rehype` prefixes footnote ids *and* their
+  matching `#…` hrefs with `user-content-` (e.g. `id="user-content-fn-x"` ↔
+  `href="#user-content-fn-x"`). `rehype-sanitize`'s `defaultSchema` ALSO has
+  `clobberPrefix: 'user-content-'` and clobbers `id`, so it re-prefixes only the
+  `id` (not the href fragment) → `user-content-user-content-fn-x`, and every
+  footnote jump (forward and backref) lands nowhere. Fix: `sanitizeSchema` sets
+  `clobberPrefix: ''` so sanitize leaves the already-namespaced ids alone. See
+  `markdown-compiler.ts`.
+- **Visible, localized heading** — `remark-rehype` defaults to a `sr-only`
+  "Footnotes" `<h2>`. We pass `footnoteLabelProperties: {}` (drops `sr-only`,
+  making it visible) and `footnoteLabel` from `footnoteLabelForLang(pageLanguage)`
+  (de → "Fussnoten", fr/it variants, else "Footnotes"). `pageLanguage` is the
+  site-level language, threaded from the page routes through
+  `ServerMarkdownRenderer` / `MarkdownRenderer`. Styling lives in `globals.css`
+  under `.prose-theme .footnotes`.
+
 ## Debugging Tips
 
 **Plugin not running:** check TypeScript types (especially `tree: Root` parameter). Add `console.log()` to verify execution.

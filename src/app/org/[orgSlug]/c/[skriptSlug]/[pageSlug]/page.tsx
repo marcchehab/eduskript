@@ -265,6 +265,7 @@ export default async function OrgPublicPage({ params }: PageProps) {
               skriptId={skript.id}
               pageId={page.id}
               organizationSlug={orgSlug}
+              pageLanguage={organization?.pageLanguage}
             />
           </AnnotationWrapper>
         </article>

@@ -105,7 +105,7 @@ export default async function SkriptPreviewPage({ params }: SkriptPreviewProps) 
 
     const teacherSiteRow = await prisma.site.findUnique({
       where: { slug: domain },
-      select: { user: { select: { id: true, email: true, billingPlan: true } } }
+      select: { pageLanguage: true, user: { select: { id: true, email: true, billingPlan: true } } }
     })
     const teacher = teacherSiteRow?.user
 
@@ -188,6 +188,7 @@ export default async function SkriptPreviewPage({ params }: SkriptPreviewProps) 
                   content={frontPage.content}
                   skriptId={skript.id}
                   pageId={frontPage.id}
+                  pageLanguage={teacherSiteRow?.pageLanguage}
                 />
               </AnnotationWrapper>
             </article>

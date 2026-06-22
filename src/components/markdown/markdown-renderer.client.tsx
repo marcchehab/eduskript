@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useLayoutEffect, useRef, useDeferredValue, useCallback, memo, useMemo, type ReactNode } from 'react'
-import { compileMarkdown } from '@/lib/markdown-compiler'
+import { compileMarkdown, footnoteLabelForLang } from '@/lib/markdown-compiler'
 import { createMarkdownComponents } from '@/lib/markdown-components'
 import { createSkriptFiles, createEmptySkriptFiles, type SkriptFilesData } from '@/lib/skript-files'
 import type { VideoInfo } from '@/lib/skript-files'
@@ -19,10 +19,12 @@ interface MarkdownRendererProps {
   skriptId?: string
   onContentChange?: (newContent: string) => void
   onExcalidrawEdit?: (filename: string, fileId: string) => void
+  /** Site language (BCP-47) — localizes the GFM footnotes heading. null/undefined → English. */
+  pageLanguage?: string | null
 }
 
 // Inner component that does the actual rendering
-function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId, onContentChange, onExcalidrawEdit }: MarkdownRendererProps) {
+function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId, onContentChange, onExcalidrawEdit, pageLanguage }: MarkdownRendererProps) {
   // Create SkriptFiles from the file list
   const files: SkriptFilesData = useMemo(() => {
     if (fileList && fileList.length > 0) {
@@ -124,7 +126,7 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
         setError(null)
 
         // Compile markdown using safe unified pipeline (no JS execution)
-        const rendered = await compileMarkdown(deferredContent, { components })
+        const rendered = await compileMarkdown(deferredContent, { components, footnoteLabel: footnoteLabelForLang(pageLanguage) })
 
         // Bail out if a newer generation started
         if (currentGeneration !== processingRef.current) return
@@ -141,7 +143,7 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
     }
 
     processContent()
-  }, [deferredContent, components])
+  }, [deferredContent, components, pageLanguage])
 
   // Restore scroll position after DOM updates
   useLayoutEffect(() => {
@@ -280,6 +282,7 @@ function arePropsEqual(prevProps: MarkdownRendererProps, nextProps: MarkdownRend
   // Compare context by meaningful fields
   if (prevProps.pageId !== nextProps.pageId) return false
   if (prevProps.skriptId !== nextProps.skriptId) return false
+  if (prevProps.pageLanguage !== nextProps.pageLanguage) return false
 
   // Re-render when fileList reference changes (refreshFileList creates a new array)
   if (prevProps.fileList !== nextProps.fileList) return false

@@ -233,6 +233,7 @@ export default async function OrgPage({ params }: OrgPageProps) {
                 pageId={frontPage.id}
                 skriptId={frontPage.fileSkriptId || undefined}
                 organizationSlug={orgSlug}
+                pageLanguage={organization.pageLanguage}
               />
             </AnnotationWrapper>
           </article>
