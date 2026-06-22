@@ -619,56 +619,83 @@ article.prose-theme > div > :first-child {
 .prose-theme sup:has(> a[href^="#user-content-fn-"]) {
   scroll-margin-top: 5rem; /* clear sticky chrome when a backref jumps here */
   vertical-align: super;
-  font-size: 0.7em;
+  font-size: 0.58em;
   line-height: 0;
   margin-left: 0.1em;
 }
 
 /* Circled number. `sup a[href…]` (0,2,2) beats generic `.prose-theme a`
-   (0,1,1). min-width + pill radius keep 2-digit footnotes round-ish. */
+   (0,1,1). min-width + pill radius keep 2-digit footnotes round-ish.
+   Colour follows --foreground (≈white on dark, dark on light) so the marker
+   stays legible in both themes rather than a fixed white that vanishes on a
+   light page. */
 .prose-theme sup a[href^="#user-content-fn-"] {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 1.5em;
-  height: 1.5em;
-  padding: 0 0.3em;
+  min-width: 1.55em;
+  height: 1.55em;
+  padding: 0 0.25em;
   border: 1px solid currentColor;
   border-radius: 999px;
   box-sizing: border-box;
-  color: hsl(var(--primary));
-  font-weight: 600;
+  color: hsl(var(--foreground));
+  /* digit a touch smaller than the circle so it sits with some breathing room */
+  font-size: 0.88em;
+  font-weight: 800;
   line-height: 1;
   text-decoration: none;
 }
 
 .prose-theme sup a[href^="#user-content-fn-"]:hover {
-  background: hsl(var(--primary) / 0.12);
+  background: hsl(var(--foreground) / 0.12);
   text-decoration: none;
 }
 
-/* Back-to-reference link → outlined circle with ↩. `.footnotes …` (0,3,0)
-   beats `.prose-theme a` (0,1,1). */
+/* Back-to-reference link → outlined circle holding a "return" (corner-up-left)
+   icon. `.footnotes …` (0,3,0) beats `.prose-theme a` (0,1,1).
+
+   The default ↩ glyph is hidden (color: transparent) and replaced by a crisp
+   SVG drawn via mask + background-color, so it inherits the muted colour and
+   scales cleanly. Border colour is set explicitly (not currentColor, which is
+   now transparent). */
 .prose-theme .footnotes .data-footnote-backref {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 1.6em;
   height: 1.6em;
-  margin-left: 0.4em;
-  border: 1px solid currentColor;
+  margin-left: 0;
+  border: 1px solid hsl(var(--muted-foreground));
   border-radius: 50%;
   box-sizing: border-box;
-  color: hsl(var(--muted-foreground));
-  font-size: 0.8em;
+  color: transparent;
+  font-size: 0.65em;
   line-height: 1;
   text-decoration: none;
-  vertical-align: middle;
+  vertical-align: super; /* raise it like a superscript marker */
+}
+
+.prose-theme .footnotes .data-footnote-backref::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 0.95em;
+  height: 0.95em;
+  background-color: hsl(var(--muted-foreground));
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 14 4 9l5-5'/%3E%3Cpath d='M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 14 4 9l5-5'/%3E%3Cpath d='M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 
 .prose-theme .footnotes .data-footnote-backref:hover {
-  color: hsl(var(--prose-text));
+  border-color: hsl(var(--prose-text));
   background: hsl(var(--muted-foreground) / 0.12);
+}
+
+.prose-theme .footnotes .data-footnote-backref:hover::before {
+  background-color: hsl(var(--prose-text));
 }
 
 /* Highlight whatever was jumped to: a tint behind the note, an outline ring on
