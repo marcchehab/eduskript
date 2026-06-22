@@ -1336,7 +1336,7 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
   grid-template-rows: min-content 0fr;
 }
 
-.prose-theme blockquote.callout-foldable.callout-folded .callout-title {
+.prose-theme blockquote.callout-foldable.callout-folded > .callout-title {
   border-bottom-right-radius: 5px;
 }
 
@@ -1388,10 +1388,10 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
 .prose-theme blockquote.callout-check {
   border-left: 6px solid var(--callout-done) !important;
 }
-.prose-theme blockquote.callout-success .callout-title,
-.prose-theme blockquote.callout-lernziele .callout-title,
-.prose-theme blockquote.callout-done .callout-title,
-.prose-theme blockquote.callout-check .callout-title {
+.prose-theme blockquote.callout-success > .callout-title,
+.prose-theme blockquote.callout-lernziele > .callout-title,
+.prose-theme blockquote.callout-done > .callout-title,
+.prose-theme blockquote.callout-check > .callout-title {
   background-color: var(--callout-done-accent) !important;
 }
 
@@ -1401,10 +1401,10 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
 .prose-theme blockquote.callout-tldr {
   border-left: 6px solid var(--callout-summary) !important;
 }
-.prose-theme blockquote.callout-exercise .callout-title,
-.prose-theme blockquote.callout-summary .callout-title,
-.prose-theme blockquote.callout-abstract .callout-title,
-.prose-theme blockquote.callout-tldr .callout-title {
+.prose-theme blockquote.callout-exercise > .callout-title,
+.prose-theme blockquote.callout-summary > .callout-title,
+.prose-theme blockquote.callout-abstract > .callout-title,
+.prose-theme blockquote.callout-tldr > .callout-title {
   background-color: var(--callout-summary-accent) !important;
 }
 
@@ -1413,9 +1413,9 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
 .prose-theme blockquote.callout-cite {
   border-left: 6px solid var(--callout-quote) !important;
 }
-.prose-theme blockquote.callout-solution .callout-title,
-.prose-theme blockquote.callout-quote .callout-title,
-.prose-theme blockquote.callout-cite .callout-title {
+.prose-theme blockquote.callout-solution > .callout-title,
+.prose-theme blockquote.callout-quote > .callout-title,
+.prose-theme blockquote.callout-cite > .callout-title {
   background-color: var(--callout-quote-accent) !important;
 }
 
@@ -1424,9 +1424,9 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
 .prose-theme blockquote.callout-tip {
   border-left: 6px solid var(--callout-important) !important;
 }
-.prose-theme blockquote.callout-hint .callout-title,
-.prose-theme blockquote.callout-important .callout-title,
-.prose-theme blockquote.callout-tip .callout-title {
+.prose-theme blockquote.callout-hint > .callout-title,
+.prose-theme blockquote.callout-important > .callout-title,
+.prose-theme blockquote.callout-tip > .callout-title {
   background-color: var(--callout-important-accent) !important;
 }
 
@@ -1434,8 +1434,8 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
 .prose-theme blockquote.callout-todo {
   border-left: 6px solid var(--callout-info) !important;
 }
-.prose-theme blockquote.callout-info .callout-title,
-.prose-theme blockquote.callout-todo .callout-title {
+.prose-theme blockquote.callout-info > .callout-title,
+.prose-theme blockquote.callout-todo > .callout-title {
   background-color: var(--callout-info-accent) !important;
 }
 
@@ -1444,37 +1444,37 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
 .prose-theme blockquote.callout-caution {
   border-left: 6px solid var(--callout-warning) !important;
 }
-.prose-theme blockquote.callout-warning .callout-title,
-.prose-theme blockquote.callout-attention .callout-title,
-.prose-theme blockquote.callout-caution .callout-title {
+.prose-theme blockquote.callout-warning > .callout-title,
+.prose-theme blockquote.callout-attention > .callout-title,
+.prose-theme blockquote.callout-caution > .callout-title {
   background-color: var(--callout-warning-accent) !important;
 }
 
 .prose-theme blockquote.callout-note {
   border-left: 6px solid var(--callout-note) !important;
 }
-.prose-theme blockquote.callout-note .callout-title {
+.prose-theme blockquote.callout-note > .callout-title {
   background-color: var(--callout-note-accent) !important;
 }
 
 .prose-theme blockquote.callout-discuss {
   border-left: 6px solid var(--callout-discuss) !important;
 }
-.prose-theme blockquote.callout-discuss .callout-title {
+.prose-theme blockquote.callout-discuss > .callout-title {
   background-color: var(--callout-discuss-accent) !important;
 }
 
 .prose-theme blockquote.callout-idea {
   border-left: 6px solid var(--callout-idea) !important;
 }
-.prose-theme blockquote.callout-idea .callout-title {
+.prose-theme blockquote.callout-idea > .callout-title {
   background-color: var(--callout-idea-accent) !important;
 }
 
 .prose-theme blockquote.callout-code {
   border-left: 6px solid var(--callout-code) !important;
 }
-.prose-theme blockquote.callout-code .callout-title {
+.prose-theme blockquote.callout-code > .callout-title {
   background-color: var(--callout-code-accent) !important;
 }
 
@@ -1482,8 +1482,8 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
 .prose-theme blockquote.callout-error {
   border-left: 6px solid var(--callout-danger) !important;
 }
-.prose-theme blockquote.callout-danger .callout-title,
-.prose-theme blockquote.callout-error .callout-title {
+.prose-theme blockquote.callout-danger > .callout-title,
+.prose-theme blockquote.callout-error > .callout-title {
   background-color: var(--callout-danger-accent) !important;
 }
 
@@ -1492,23 +1492,23 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
 .prose-theme blockquote.callout-missing {
   border-left: 6px solid var(--callout-fail) !important;
 }
-.prose-theme blockquote.callout-failure .callout-title,
-.prose-theme blockquote.callout-fail .callout-title,
-.prose-theme blockquote.callout-missing .callout-title {
+.prose-theme blockquote.callout-failure > .callout-title,
+.prose-theme blockquote.callout-fail > .callout-title,
+.prose-theme blockquote.callout-missing > .callout-title {
   background-color: var(--callout-fail-accent) !important;
 }
 
 .prose-theme blockquote.callout-bug {
   border-left: 6px solid var(--callout-bug) !important;
 }
-.prose-theme blockquote.callout-bug .callout-title {
+.prose-theme blockquote.callout-bug > .callout-title {
   background-color: var(--callout-bug-accent) !important;
 }
 
 .prose-theme blockquote.callout-example {
   border-left: 6px solid var(--callout-example) !important;
 }
-.prose-theme blockquote.callout-example .callout-title {
+.prose-theme blockquote.callout-example > .callout-title {
   background-color: var(--callout-example-accent) !important;
 }
 
@@ -1517,9 +1517,9 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
 .prose-theme blockquote.callout-faq {
   border-left: 6px solid var(--callout-question) !important;
 }
-.prose-theme blockquote.callout-question .callout-title,
-.prose-theme blockquote.callout-help .callout-title,
-.prose-theme blockquote.callout-faq .callout-title {
+.prose-theme blockquote.callout-question > .callout-title,
+.prose-theme blockquote.callout-help > .callout-title,
+.prose-theme blockquote.callout-faq > .callout-title {
   background-color: var(--callout-question-accent) !important;
 }
 
