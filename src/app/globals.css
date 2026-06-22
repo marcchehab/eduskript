@@ -603,86 +603,87 @@ article.prose-theme > div > :first-child {
   margin: 0.25rem 0;
 }
 
-/* The footnote markers are deliberately set apart from body text as small
-   white circular "stickers" (like a superscript ©): a circled number for the
-   inline reference, a circled return arrow (↩) for the back-link. White fill +
-   border + shadow reads on both light and dark themes. */
+/* Footnote markers styled like a superscript © — just a thin circular outline
+   around the number (inline ref) or a return arrow ↩ (backref). Transparent
+   fill, no shadow, currentColor border so they sit calmly in both themes.
 
-/* Back-to-reference link → circled ↩. .footnotes scope gives it enough
-   specificity to override the generic `.prose-theme a` (underline/primary). */
+   Selector note: rehype-sanitize strips remark-gfm's `data-footnote-ref`
+   attribute (it's not in the `a` allowlist), so the inline ref <a> has NO class
+   or data hook — only its `href="#user-content-fn-…"`. We target that href
+   prefix. (`#user-content-fnref-…` is the backref and does NOT match the
+   `#user-content-fn-` prefix, so the two don't collide.) The backref keeps its
+   `class="data-footnote-backref"`, so we hook that. */
+
+/* Inline reference superscript wrapper. line-height:0 stops the badge from
+   stretching the text line; <sup> already raises it. */
+.prose-theme sup:has(> a[href^="#user-content-fn-"]) {
+  scroll-margin-top: 5rem; /* clear sticky chrome when a backref jumps here */
+  vertical-align: super;
+  font-size: 0.7em;
+  line-height: 0;
+  margin-left: 0.1em;
+}
+
+/* Circled number. `sup a[href…]` (0,2,2) beats generic `.prose-theme a`
+   (0,1,1). min-width + pill radius keep 2-digit footnotes round-ish. */
+.prose-theme sup a[href^="#user-content-fn-"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5em;
+  height: 1.5em;
+  padding: 0 0.3em;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  box-sizing: border-box;
+  color: hsl(var(--primary));
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.prose-theme sup a[href^="#user-content-fn-"]:hover {
+  background: hsl(var(--primary) / 0.12);
+  text-decoration: none;
+}
+
+/* Back-to-reference link → outlined circle with ↩. `.footnotes …` (0,3,0)
+   beats `.prose-theme a` (0,1,1). */
 .prose-theme .footnotes .data-footnote-backref {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.5em;
-  height: 1.5em;
+  width: 1.6em;
+  height: 1.6em;
   margin-left: 0.4em;
+  border: 1px solid currentColor;
   border-radius: 50%;
-  background: #fff;
-  color: #1f2937;
-  border: 1px solid rgba(0, 0, 0, 0.18);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
-  font-size: 0.85em;
+  box-sizing: border-box;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.8em;
   line-height: 1;
   text-decoration: none;
   vertical-align: middle;
-  transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
 
 .prose-theme .footnotes .data-footnote-backref:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
-  color: #1f2937;
+  color: hsl(var(--prose-text));
+  background: hsl(var(--muted-foreground) / 0.12);
 }
 
-/* Inline reference superscript. line-height:0 keeps the badge from stretching
-   the text line; the <sup> already raises it. */
-.prose-theme sup:has(> a[data-footnote-ref]) {
-  /* Land the reference clear of sticky chrome when a backref jumps to it. */
-  scroll-margin-top: 5rem;
-  vertical-align: super;
-  font-size: 0.7em;
-  line-height: 0;
-  margin-left: 0.15em;
-}
-
-/* Circled number badge. `sup a[…]` (0,1,2) beats the generic `.prose-theme a`
-   (0,1,1) so the underline/primary colour don't leak in. min-width + pill
-   radius keep multi-digit footnotes (10+) round-ish. */
-.prose-theme sup a[data-footnote-ref] {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.6em;
-  height: 1.6em;
-  padding: 0 0.3em;
-  border-radius: 999px;
-  background: #fff;
-  color: #1f2937;
-  border: 1px solid rgba(0, 0, 0, 0.18);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
-  font-weight: 700;
-  line-height: 1;
-  text-decoration: none;
-  transition: transform 0.12s ease, box-shadow 0.12s ease;
-}
-
-.prose-theme sup a[data-footnote-ref]:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
-  text-decoration: none;
-}
-
-/* Highlight whatever was jumped to: a tint behind the note, a ring around the
-   inline badge (its white fill would swallow a background tint). */
+/* Highlight whatever was jumped to: a tint behind the note, an outline ring on
+   the inline badge (its transparent fill needs the ring, not a tint). */
 .prose-theme .footnotes li:target {
   background: hsl(var(--accent) / 0.35);
   border-radius: 3px;
   transition: background 0.6s ease;
 }
 
-.prose-theme sup:has(> a[data-footnote-ref]):target a[data-footnote-ref] {
-  box-shadow: 0 0 0 3px hsl(var(--accent) / 0.65);
+/* A backref jumps to the ref <a> itself (its id is user-content-fnref-…), so
+   it — not the <sup> — becomes :target. Ring the badge. */
+.prose-theme sup a[href^="#user-content-fn-"]:target {
+  outline: 2px solid hsl(var(--primary) / 0.6);
+  outline-offset: 1px;
 }
 
 .prose-theme p {
