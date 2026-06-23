@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
-import { ArrowLeft, Send, Loader2, Play, Wand2, ArrowDownAZ, ArrowUpAZ } from 'lucide-react'
+import { ArrowLeft, Send, Loader2, Play, Wand2, ArrowDownAZ, ArrowUpAZ, Copy, Check } from 'lucide-react'
 import { runChecksForStudents } from '@/lib/scoring/run-checks.client'
 import { AiScoringModal } from '@/components/dashboard/ai-scoring-modal'
 import { getReverseMappingsForClass } from '@/lib/email-mapping-db'
@@ -155,6 +155,7 @@ export default function ExamGradingPage() {
   const [runAll, setRunAll] = useState<{ done: number; total: number } | null>(null)
   const [aiOpen, setAiOpen] = useState(false)
   const [tab, setTab] = useState<'class' | 'exam'>('class')
+  const [copied, setCopied] = useState(false)
   // Teacher's local pseudonym → real-email mapping (IndexedDB), so the roster
   // shows people the teacher can identify — same source the StudentNavigator /
   // ClassToolbar use. The mapping takes precedence over the stored name/pseudonym.
@@ -343,6 +344,64 @@ export default function ExamGradingPage() {
     () => data?.students.filter((s) => s.status !== 'not_started').length ?? 0,
     [data],
   )
+
+  // Copy the roster in the current sort order. We put TWO flavours on the
+  // clipboard: an HTML <table> and a TSV plain-text fallback. Excel/Calc paste
+  // the HTML straight into cells (no "Text Import" dialog); the TSV is what
+  // editors without HTML-clipboard support get. Includes the final score
+  // (points/max) and the computed grade; not_started rows get blank cells.
+  const STATUS_LABEL: Record<StudentRow['status'], string> = {
+    not_started: 'Not started',
+    submitted: 'Submitted',
+    returned: 'Returned',
+  }
+  const copyTable = async () => {
+    if (!data) return
+    const allMode = data.selectedClassId === 'all'
+    // Identity is split into two columns: the nickname (name/pseudonym) and the
+    // teacher's mapped email, if any (blank when unmapped) — handier in a sheet
+    // than the single combined "Student" label the on-screen table shows.
+    const headers = ['Nickname', 'Email', ...(allMode ? ['Class'] : []), 'Points', 'Max', 'Grade', 'Status']
+    const rows = sortedStudents.map((s) => {
+      const started = s.status !== 'not_started'
+      return [
+        s.name || s.pseudonym || '',
+        mappedEmail(s) ?? '',
+        ...(allMode ? [s.className ?? ''] : []),
+        started ? fmt(s.totalEarned) : '',
+        started ? fmt(s.totalMax) : '',
+        started ? fmt(s.grade) : '',
+        STATUS_LABEL[s.status],
+      ]
+    })
+    const allRows = [headers, ...rows]
+    const tsv = allRows.map((r) => r.join('\t')).join('\n')
+    const esc = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    // Plain <td> cells only (no <th>/styles) so the paste lands unformatted —
+    // no bold header — while still dropping straight into cells (no dialog).
+    const html =
+      '<table>' +
+      allRows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join('')}</tr>`).join('') +
+      '</table>'
+    try {
+      // ClipboardItem with text/html → direct table paste. Fall back to plain
+      // TSV where the async write API / ClipboardItem isn't available.
+      if (typeof ClipboardItem !== 'undefined' && navigator.clipboard.write) {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            'text/html': new Blob([html], { type: 'text/html' }),
+            'text/plain': new Blob([tsv], { type: 'text/plain' }),
+          }),
+        ])
+      } else {
+        await navigator.clipboard.writeText(tsv)
+      }
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      dialog.showError('Could not copy the table to the clipboard.')
+    }
+  }
 
   // Re-run code checks for every submitted student on this device, then refresh.
   const runAllChecks = async () => {
@@ -574,7 +633,21 @@ export default function ExamGradingPage() {
               <th className="px-3 py-2 font-medium text-right">Total</th>
               <th className="px-3 py-2 font-medium text-right">Grade</th>
               <th className="px-3 py-2 font-medium">Status</th>
-              <th className="px-3 py-2"></th>
+              <th className="px-3 py-2">
+                {/* Copy the whole table (current sort order) as TSV for Excel/Calc. */}
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={copyTable}
+                    title="Copy the table in the current sort order — paste into Excel/Calc"
+                    aria-label="Copy table"
+                    className={`inline-flex items-center gap-1 rounded px-1.5 py-1 text-xs font-normal transition-colors ${copied ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
+                  >
+                    {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                    {copied ? 'Copied' : 'Copy'}
+                  </button>
+                </div>
+              </th>
             </tr>
           </thead>
           <tbody>
