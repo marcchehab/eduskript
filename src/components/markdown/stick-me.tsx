@@ -9,6 +9,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from 'react'
 import { MoveDiagonal2 } from 'lucide-react'
@@ -109,11 +110,21 @@ export function StickMe({
   footer,
   enabled = true,
   storageKey = DEFAULT_STORAGE_KEY,
+  className,
+  style,
 }: {
   children: ReactNode
   footer?: ReactNode
   enabled?: boolean
   storageKey?: string
+  // Author-supplied class/style forwarded to the content wrapper. Lets authors
+  // add a background, padding, border, etc. via plain CSS — handy for
+  // transparent assets (e.g. Excalidraw SVGs) that would otherwise show the
+  // page text through them once pinned. Applied both inline and while pinned;
+  // note that `transform`/`position`/`zIndex` are managed by the pin logic and
+  // will be overridden while docked.
+  className?: string
+  style?: CSSProperties
 }) {
   const slotRef = useRef<HTMLSpanElement>(null)
   const innerRef = useRef<HTMLSpanElement>(null)
@@ -230,7 +241,13 @@ export function StickMe({
       // icon and decorative icons (e.g. a callout's) are SVGs and would be
       // matched instead. Excalidraw/schemas render as <img>, so they're
       // covered; arbitrary content with no media falls back to the wrapper.
-      const media = inner.querySelector('iframe, video, img, canvas, mux-player')
+      // Skip display:none matches (zero rect): Excalidraw renders a light and a
+      // dark <img>, one always hidden, so querySelector's first match would be
+      // the hidden one in the inactive theme and fling the handle to the origin.
+      const media =
+        Array.from(
+          inner.querySelectorAll('iframe, video, img, canvas, mux-player'),
+        ).find((el) => el.getBoundingClientRect().width > 0) ?? null
       const ir = (media ?? inner).getBoundingClientRect()
 
       // Handle lives *inside* inner, so it inherits inner's transform exactly.
@@ -336,7 +353,13 @@ export function StickMe({
   if (!enabled) {
     return (
       <>
-        {children}
+        {className || style ? (
+          <span className={className ? `block ${className}` : 'block'} style={style}>
+            {children}
+          </span>
+        ) : (
+          children
+        )}
         {footer}
       </>
     )
@@ -346,7 +369,17 @@ export function StickMe({
     <>
       <span ref={slotRef} className="relative block">
         <span ref={innerRef} className="block">
-          {children}
+          {/* Author class/style wrap only the content, not the handle/overlay,
+              and sit *inside* innerRef so the pin transform (set imperatively on
+              innerRef) is never clobbered by React re-applying `style`. Omitted
+              entirely when unstyled to keep the original DOM byte-identical. */}
+          {className || style ? (
+            <span className={className ? `block ${className}` : 'block'} style={style}>
+              {children}
+            </span>
+          ) : (
+            children
+          )}
           {/* Handle lives inside the player so it inherits the pin transform;
               its left/top are set imperatively to the media's bottom-left. */}
           {pinned && (

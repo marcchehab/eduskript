@@ -5,7 +5,7 @@
  * This is the single source of truth for component definitions.
  */
 
-import React, { type ComponentType, type ReactNode, Children, isValidElement } from 'react'
+import React, { type ComponentType, type CSSProperties, type ReactNode, Children, isValidElement } from 'react'
 import Image from 'next/image'
 import type { SkriptFilesData } from './skript-files'
 import { resolveFile, resolveExcalidraw } from './skript-files'
@@ -715,10 +715,22 @@ export function createMarkdownComponents(
     'answer': QuizOptionComponent,
     'survey': Survey,
     // <stickme> pins any wrapped content to the margin (general-purpose).
-    // An optional id gives the resize width its own persistence slot.
-    'stickme': function StickMeTag(props: { children?: ReactNode; id?: string }) {
+    // An optional id gives the resize width its own persistence slot. class/style
+    // are forwarded to the content wrapper (e.g. `style="background:white"` to
+    // back a transparent Excalidraw SVG); the pipeline already parses style into
+    // an object and allows class/style via the sanitize wildcard.
+    'stickme': function StickMeTag(props: {
+      children?: ReactNode
+      id?: string
+      className?: string
+      style?: CSSProperties
+    }) {
       return (
-        <StickMe storageKey={props.id ? `stickme:${props.id}` : undefined}>
+        <StickMe
+          storageKey={props.id ? `stickme:${props.id}` : undefined}
+          className={props.className}
+          style={props.style}
+        >
           {props.children}
         </StickMe>
       )
