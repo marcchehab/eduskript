@@ -28,7 +28,12 @@ if (!connectionString) {
   process.exit(1)
 }
 
-const client = new pg.Client({ connectionString })
+// Koyeb (managed Postgres) requires SSL; local dev doesn't. Enable SSL when the
+// URL asks for it or points at a non-local host. rejectUnauthorized:false mirrors
+// scripts/db-query-prod.mjs (Koyeb's cert chain isn't in the local trust store).
+// To run against prod: DATABASE_URL="$DATABASE_URL_PROD" node scripts/backfill-return-events.mjs
+const needsSsl = /sslmode=require/.test(connectionString) || !/@(localhost|127\.0\.0\.1)/.test(connectionString)
+const client = new pg.Client({ connectionString, ssl: needsSsl ? { rejectUnauthorized: false } : undefined })
 
 async function main() {
   await client.connect()
