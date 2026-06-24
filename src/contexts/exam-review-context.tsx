@@ -65,6 +65,11 @@ interface ReviewState {
   grade: number | null
   totalEarned: number | null
   totalMax: number | null
+  /** Is the viewed student's exam currently returned? Score edits are locked. */
+  returnedToStudent: boolean
+  /** Does ANY student on this exam currently have a returned exam? Rubric edits
+   *  are locked exam-wide (teacher view only; false for a student reviewing). */
+  examHasReturned: boolean
   byComponent: Record<string, ComponentReview>
   /** The studentId this state was loaded for. Lets consumers (the quiz
    *  auto-grade recompute) confirm `byComponent`/answerPayload belongs to the
@@ -113,7 +118,7 @@ interface ReviewContextValue extends ReviewState {
   refreshGrades: () => void
 }
 
-const empty: ReviewState = { grade: null, totalEarned: null, totalMax: null, byComponent: {}, loadedStudentId: null }
+const empty: ReviewState = { grade: null, totalEarned: null, totalMax: null, returnedToStudent: false, examHasReturned: false, byComponent: {}, loadedStudentId: null }
 
 const ExamReviewContext = createContext<ReviewContextValue>({
   ...empty,
@@ -182,7 +187,7 @@ export function ExamReviewProvider({ pageId, mode, studentId, children }: Provid
         if (j.studentId && j.studentId !== sid) return // response for a different student
         const byComponent: Record<string, ComponentReview> = {}
         for (const c of j.components as ComponentReview[]) byComponent[c.componentId] = c
-        setState({ grade: j.grade, totalEarned: j.totalEarned, totalMax: j.totalMax, byComponent, loadedStudentId: sid })
+        setState({ grade: j.grade, totalEarned: j.totalEarned, totalMax: j.totalMax, returnedToStudent: !!j.returnedToStudent, examHasReturned: !!j.examHasReturned, byComponent, loadedStudentId: sid })
         setLoading(false)
       })
       .catch(() => {
@@ -382,6 +387,10 @@ export function useComponentReview(componentId: string): {
    *  before acting on answerPayload (see ReviewState.loadedStudentId). */
   loadedStudentId: string | null
   review: ComponentReview | null
+  /** This student's exam is returned → all score edits are locked. */
+  locked: boolean
+  /** Any student on this exam is returned → rubric generation/editing is locked. */
+  rubricLocked: boolean
   setOverride: (awardedPoints: number | null) => Promise<void>
   setFeedback: (feedback: string | null) => Promise<void>
   setCriterion: (criterionId: string, value: { points?: number | null; comment?: string | null }) => Promise<void>
@@ -404,6 +413,8 @@ export function useComponentReview(componentId: string): {
       ctx.active && ctx.loadedStudentId === ctx.studentId
         ? ctx.byComponent[componentId] ?? null
         : null,
+    locked: ctx.returnedToStudent,
+    rubricLocked: ctx.examHasReturned,
     setOverride: (awardedPoints) => ctx.setOverride(componentId, awardedPoints),
     setFeedback: (feedback) => ctx.setFeedback(componentId, feedback),
     setCriterion: (criterionId, value) => ctx.setCriterion(componentId, criterionId, value),

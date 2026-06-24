@@ -165,15 +165,18 @@ model User {
   oauthAccessTokens       OAuthAccessToken[]       @relation("OAuthAccessTokens")
   oauthRefreshTokens      OAuthRefreshToken[]      @relation("OAuthRefreshTokens")
 
-  // Exam submissions (student) and scoring (teacher)
+  // Exam submissions (student). Scoring/return state lives in ExamAuditLog now;
+  // scoredExamSubmissions is a dead back-relation kept until the contract migration.
   examSubmissions       ExamSubmission[] @relation("StudentExamSubmissions")
   scoredExamSubmissions ExamSubmission[] @relation("ScoredExamSubmissions")
   // Per-student exam-state overrides (makeups / accommodations)
   examStates            ExamState[]      @relation("StudentExamStates")
 
-  // Append-only event log for exam attempts (started / submitted / reopened).
-  // Used by the teacher roster to surface "took 43m" + an event timeline.
-  examAuditLogs ExamAuditLog[] @relation("StudentExamAuditLogs")
+  // Append-only event log for exam attempts (started / submitted / reopened) plus
+  // grading events (return / take_back). Source of truth for "currently returned".
+  examAuditLogs      ExamAuditLog[] @relation("StudentExamAuditLogs")
+  // Grading events (return / take_back) this user performed as the teacher actor.
+  actedExamAuditLogs ExamAuditLog[] @relation("ActorExamAuditLogs")
   // Per-question score sources (check / ai / override), priority-resolved.
   componentScores ComponentScore[] @relation("StudentComponentScores")
 
@@ -1081,19 +1084,17 @@ model ExamSubmission {
   //   <future>   — e.g. timeout / auto-submit
   source String @default("student")
 
-  // Scoring. `score` is the aggregate points earned (not the 1-6 grade), written
-  // on return. Status is derived: submitted (returnedAt null) -> scored (score
-  // set, returnedAt null) -> returned (returnedAt set, visible to the student).
-  score      Float?
-  scoredBy   String?   @map("scored_by")
-  scoredAt   DateTime? @map("scored_at")
-  returnedAt DateTime? @map("returned_at")
-  // Frozen review score-payload written at return time so a returned exam is an
-  // IMMUTABLE record: the student always sees exactly what was returned, even if the
-  // teacher later re-scores or edits a rubric (those reach the student only on a
-  // re-return, which overwrites this). Shape = buildReviewScores() (see review-payload.ts).
-  // Null on legacy/never-returned rows → the review falls back to live scores.
-  gradeSnapshot Json? @map("grade_snapshot")
+  // DEPRECATED / DEAD — superseded by the append-only exam log. Return state +
+  // scoring now live in ExamAuditLog ('return' / 'take_back' events, frozen
+  // snapshot in payload) and are derived via src/lib/scoring/return-state.ts; no
+  // code reads these columns anymore. Kept temporarily so this change is pure
+  // expand (the contract migration `drop_exam_submission_return_fields` drops them
+  // AFTER this ships + is verified — see CLAUDE plan / backfill-return-events.mjs).
+  score         Float?
+  scoredBy      String?   @map("scored_by")
+  scoredAt      DateTime? @map("scored_at")
+  returnedAt    DateTime? @map("returned_at")
+  gradeSnapshot Json?     @map("grade_snapshot")
 
   page    Page  @relation("ExamSubmissions", fields: [pageId], references: [id], onDelete: Cascade)
   student User  @relation("StudentExamSubmissions", fields: [studentId], references: [id], onDelete: Cascade)
@@ -1105,22 +1106,37 @@ model ExamSubmission {
   @@map("exam_submissions")
 }
 
-// Append-only audit log of exam events per student per page. Sessions and
-// submissions are deleted when the teacher reopens an attempt, which loses
-// the history the roster needs to show "took 43m" across multiple attempts.
-// This table keeps every started/submitted/reopened event so the roster
-// can pair starts with submits and sum durations.
+// Append-only event log of everything that happens to one student's exam, per
+// page. Two families of events share this one timeline:
+//   - Attempt lifecycle: "started" | "submitted" | "reopened". The roster pairs
+//     starts with submits (and reopens) to show "took 43m" across attempts, even
+//     after sessions/submissions are deleted on reopen.
+//   - Grading: "return" | "take_back". This log is the SINGLE SOURCE OF TRUTH for
+//     return state — there is no denormalized flag on ExamSubmission. A student is
+//     "currently returned" iff their latest event in {return, take_back, reopened}
+//     is a "return" (so a reopen naturally un-returns). Every "return" keeps its OWN
+//     frozen snapshot in `payload` forever — re-returning APPENDS, never overwrites,
+//     so the original return is preserved. See src/lib/scoring/return-state.ts.
+// Readers that only want the attempt lifecycle (the roster) MUST filter by event;
+// see src/app/api/exams/[pageId]/audit/route.ts.
 model ExamAuditLog {
   id         String   @id @default(cuid())
   pageId     String   @map("page_id")
   studentId  String   @map("student_id")
-  event      String // "started" | "submitted" | "reopened"
+  event      String // "started" | "submitted" | "reopened" | "return" | "take_back"
   occurredAt DateTime @default(now()) @map("occurred_at")
 
-  page    Page @relation("PageExamAuditLogs", fields: [pageId], references: [id], onDelete: Cascade)
-  student User @relation("StudentExamAuditLogs", fields: [studentId], references: [id], onDelete: Cascade)
+  // Set only on grading events (return / take_back); null on lifecycle events.
+  payload   Json?   @map("payload") // "return": frozen buildReviewScores() snapshot. null otherwise.
+  score     Float? // "return": aggregate points earned (mirrors payload.totalEarned).
+  createdBy String? @map("created_by") // teacher actor for return/take_back; null for student/system events.
+
+  page    Page  @relation("PageExamAuditLogs", fields: [pageId], references: [id], onDelete: Cascade)
+  student User  @relation("StudentExamAuditLogs", fields: [studentId], references: [id], onDelete: Cascade)
+  actor   User? @relation("ActorExamAuditLogs", fields: [createdBy], references: [id])
 
   @@index([pageId, studentId, occurredAt])
+  @@index([pageId, occurredAt])
   @@index([pageId])
   @@map("exam_audit_logs")
 }

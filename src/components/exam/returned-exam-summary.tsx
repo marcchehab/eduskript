@@ -8,11 +8,18 @@
 
 import { Award } from 'lucide-react'
 import { useExamReview } from '@/contexts/exam-review-context'
+import { useRealtimeEvents } from '@/hooks/use-realtime-events'
 
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
 
 export function ReturnedExamSummary() {
-  const { mode, grade, totalEarned, totalMax } = useExamReview()
+  const { mode, grade, totalEarned, totalMax, pageId } = useExamReview()
+  // If the teacher takes the exam back to correct it, reload so the server drops
+  // this student out of review mode (the grade hides until it's re-returned).
+  useRealtimeEvents(
+    ['exam-taken-back'],
+    (event) => { if (event.pageId === pageId) window.location.reload() },
+  )
   if (mode !== 'review' || grade === null) return null
   return (
     <div className="mx-auto max-w-4xl px-6 lg:px-8 pt-4">

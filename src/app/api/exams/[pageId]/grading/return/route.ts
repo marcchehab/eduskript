@@ -1,6 +1,6 @@
 /**
- * Return scored exams to students. Writes the aggregate score + scoredBy/At +
- * returnedAt on each ExamSubmission and notifies the student via SSE so their
+ * Return scored exams to students. Appends an append-only `return` event (with the
+ * frozen score-payload) to the exam log and notifies the student via SSE so their
  * My Exams view updates. Teacher-only.
  *
  * POST /api/exams/[pageId]/grading/return
@@ -8,7 +8,9 @@
  *       { all: true, classId }     → return every submitted student in the class
  *
  * Only students who have actually submitted are returned (no submission row =
- * skipped). Idempotent: re-returning just refreshes the score + timestamp.
+ * skipped). Re-returning APPENDS a new `return` event — prior returns and their
+ * snapshots are preserved. Return state is derived from the log, never from a flag
+ * on ExamSubmission. See src/lib/scoring/return-state.ts. Inverse: ./take-back.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -78,9 +80,10 @@ export async function POST(
       return NextResponse.json({ returned: 0, students: [] })
     }
 
-    // Freeze each student's full review score-payload so the returned exam is an
-    // IMMUTABLE record — later re-scores / rubric edits only reach the student on a
-    // re-return (which overwrites this). See review-payload.ts + ExamSubmission.gradeSnapshot.
+    // Freeze each student's full review score-payload into an append-only `return`
+    // event so the returned exam is an IMMUTABLE record. Re-returning appends a new
+    // event (prior returns + their snapshots are preserved); later re-scores/rubric
+    // edits only reach the student on a re-return. See review-payload.ts + return-state.ts.
     const snapshots = new Map(
       await Promise.all(submittedIds.map(async (sid) => [sid, await buildReviewScores(pageId, sid)] as const)),
     )
@@ -89,14 +92,15 @@ export async function POST(
     await prisma.$transaction(
       submittedIds.map((studentId) => {
         const snap = snapshots.get(studentId)!
-        return prisma.examSubmission.update({
-          where: { pageId_studentId: { pageId, studentId } },
+        return prisma.examAuditLog.create({
           data: {
+            pageId,
+            studentId,
+            event: 'return',
+            payload: snap as unknown as Prisma.InputJsonValue,
             score: snap.totalEarned,
-            gradeSnapshot: snap as unknown as Prisma.InputJsonValue,
-            scoredBy: session.user.id,
-            scoredAt: now,
-            returnedAt: now,
+            createdBy: session.user.id,
+            occurredAt: now,
           },
         })
       }),

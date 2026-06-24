@@ -18,6 +18,7 @@ import { prisma } from '@/lib/prisma'
 import { examClassActivityWhere } from '@/lib/exam-state'
 import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import { getAuthoredExamPage } from '@/lib/scoring/auth'
+import { examHasReturnedStudent, returnedLockResponse } from '@/lib/scoring/return-state'
 import { parseGradableComponents } from '@/lib/scoring/components'
 import { readComponentSubmissions } from '@/lib/scoring/submissions'
 import { generateRubric, scoringModel, type RubricCriterion, type AiDebug } from '@/lib/ai/scoring'
@@ -65,6 +66,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { pageId } = await params
   const page = await getAuthoredExamPage(session.user.id, pageId)
   if (!page) return NextResponse.json({ error: 'Page not found or access denied' }, { status: 404 })
+  // Rubric changes re-base every student's AI score — locked once anyone is returned.
+  if (await examHasReturnedStudent(pageId)) return returnedLockResponse('exam')
 
   const body = await request.json().catch(() => ({}))
   const { componentId, componentIds, all } = body as {
@@ -142,6 +145,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   if (!(await getAuthoredExamPage(session.user.id, pageId))) {
     return NextResponse.json({ error: 'Page not found or access denied' }, { status: 404 })
   }
+  if (await examHasReturnedStudent(pageId)) return returnedLockResponse('exam')
   const body = await request.json().catch(() => ({}))
   const { componentId, criteria } = body as {
     componentId?: string
@@ -181,6 +185,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   if (!(await getAuthoredExamPage(session.user.id, pageId))) {
     return NextResponse.json({ error: 'Page not found or access denied' }, { status: 404 })
   }
+  if (await examHasReturnedStudent(pageId)) return returnedLockResponse('exam')
   const componentId = new URL(request.url).searchParams.get('componentId')
   if (!componentId) return NextResponse.json({ error: 'componentId required' }, { status: 400 })
   await prisma.scoringRubric.deleteMany({ where: { pageId, componentId } })

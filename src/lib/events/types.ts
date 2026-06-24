@@ -18,6 +18,7 @@ export type AppEvent =
   | ExamStudentStatusEvent
   | ExamReopenedEvent
   | ExamReturnedEvent
+  | ExamTakenBackEvent
   | StudentWorkUpdateEvent
   | LockdownChangeEvent
 
@@ -118,6 +119,17 @@ export interface ExamReopenedEvent {
  */
 export interface ExamReturnedEvent {
   type: 'exam-returned'
+  pageId: string
+  studentId: string
+  timestamp: number
+}
+
+/**
+ * Fired when a teacher takes back a returned exam (un-returns it to correct the
+ * score). Sent to the student so their grade hides again until it's re-returned.
+ */
+export interface ExamTakenBackEvent {
+  type: 'exam-taken-back'
   pageId: string
   studentId: string
   timestamp: number

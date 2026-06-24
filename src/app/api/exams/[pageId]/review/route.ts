@@ -16,6 +16,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { buildReviewScores, type ReviewScores } from '@/lib/scoring/review-payload'
 import { isTeacherOfStudentForPage } from '@/lib/scoring/auth'
+import { getCurrentReturn, examHasReturnedStudent } from '@/lib/scoring/return-state'
 
 export async function GET(
   request: NextRequest,
@@ -31,26 +32,24 @@ export async function GET(
     const studentId = requested || session.user.id
     const isSelf = studentId === session.user.id
 
-    // Authorize + (for self) require the exam to be returned.
-    const submission = await prisma.examSubmission.findUnique({
-      where: { pageId_studentId: { pageId, studentId } },
-      select: { returnedAt: true, gradeSnapshot: true },
-    })
+    // Authorize + (for self) require the exam to be CURRENTLY returned. Return state
+    // is derived from the exam log (single source of truth). See return-state.ts.
+    const ret = await getCurrentReturn(pageId, studentId)
     if (isSelf) {
-      if (!submission?.returnedAt) {
+      if (!ret?.returned) {
         return NextResponse.json({ error: 'Not returned yet' }, { status: 403 })
       }
     } else if (!(await isTeacherOfStudentForPage(session.user.id, studentId, pageId))) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    // A returned exam viewed by the STUDENT serves the FROZEN snapshot taken at
-    // return time (immutable record — re-scores/rubric edits don't leak in). The
-    // teacher (live grading) and any legacy return without a snapshot use the live
-    // scores. Answers are immutable post-submission, so they're always live.
+    // A returned exam viewed by the STUDENT serves the FROZEN snapshot from the last
+    // return (immutable record — re-scores/rubric edits don't leak in). The teacher
+    // (live grading) and any return without a snapshot use the live scores. Answers
+    // are immutable post-submission, so they're always live.
     const scores: ReviewScores =
-      isSelf && submission?.returnedAt && submission.gradeSnapshot
-        ? (submission.gradeSnapshot as unknown as ReviewScores)
+      isSelf && ret?.returned && ret.snapshot
+        ? ret.snapshot
         : await buildReviewScores(pageId, studentId)
     const componentIds = scores.components.map((c) => c.componentId)
 
@@ -67,7 +66,12 @@ export async function GET(
       grade: scores.grade,
       totalEarned: scores.totalEarned,
       totalMax: scores.totalMax,
-      returnedAt: submission?.returnedAt ?? null,
+      returnedAt: ret?.returned ? ret.at : null,
+      // Lock flags for the in-exam grading UI: per-student (this student returned?)
+      // and exam-level (any student returned → rubric locked). Only the teacher view
+      // needs the exam-level flag.
+      returnedToStudent: ret?.returned ?? false,
+      examHasReturned: isSelf ? false : await examHasReturnedStudent(pageId),
       components: scores.components.map((c) => ({
         ...c,
         answerPayload: payloadByComponent.get(c.componentId) ?? null,

@@ -13,6 +13,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { isTeacherOfStudentForPage } from '@/lib/scoring/auth'
+import { isStudentReturned, returnedLockResponse } from '@/lib/scoring/return-state'
 import { SCORE_PRIORITY } from '@/lib/scoring/score-component'
 
 export async function PUT(
@@ -33,6 +34,8 @@ export async function PUT(
     if (!(await isTeacherOfStudentForPage(session.user.id, studentId, pageId))) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
+    // Don't let a check re-run mutate a returned exam's frozen scores.
+    if (await isStudentReturned(pageId, studentId)) return returnedLockResponse('student')
 
     const earned = Number(body.earned)
     const max = Number(body.max)

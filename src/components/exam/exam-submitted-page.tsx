@@ -33,9 +33,10 @@ export function ExamSubmittedPage({
     minute: '2-digit'
   })
 
-  // Listen for exam-reopened events from the teacher
+  // Reload when the teacher reopens (re-enter) or takes back a returned exam
+  // (so the visible grade disappears until it's re-returned).
   useRealtimeEvents(
-    ['exam-reopened'],
+    ['exam-reopened', 'exam-taken-back'],
     (event) => {
       // Only reload if this is for our exam page
       if (event.pageId === pageId) {

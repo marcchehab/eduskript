@@ -18,7 +18,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { Check, X, Clock, RotateCcw, Trash2, Wand2, Loader2, AlertTriangle, Plus, Regex } from 'lucide-react'
+import { Check, X, Clock, RotateCcw, Trash2, Wand2, Loader2, AlertTriangle, Plus, Regex, Lock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { extractCriterionRegex, runCriterionCheck } from '@/lib/scoring/regex-check'
 import { useComponentReview, type ComponentScoreSource } from '@/contexts/exam-review-context'
@@ -85,6 +85,8 @@ function CriterionRow({
   onRubricRemove,
   onSet,
   onReset,
+  locked,
+  rubricLocked,
 }: {
   rc: RubricCriterion
   aiC?: AiCriterion
@@ -95,6 +97,10 @@ function CriterionRow({
   onRubricRemove: () => void
   onSet: (value: { points?: number | null; comment?: string | null }) => void
   onReset: () => void
+  /** This student is returned → per-student score/comment edits are locked. */
+  locked: boolean
+  /** Any student returned → shared rubric edits are locked. */
+  rubricLocked: boolean
 }) {
   const max = Number(rc.points) || 0
   const effPoints = ovC?.points ?? aiC?.points ?? null
@@ -169,12 +175,13 @@ function CriterionRow({
       <div className={cn('flex flex-1 items-start gap-1.5 px-2 py-1.5', STUDENT_BG)}>
         <textarea
           value={cmtDraft}
+          disabled={locked}
           onFocus={() => { cmtFocused.current = true }}
           onChange={(e) => setCmtDraft(e.target.value)}
           onBlur={() => { cmtFocused.current = false; saveCmt(cmtDraft) }}
           placeholder="Comment for this student…"
           rows={2}
-          className={cn('min-w-0 flex-1 resize-y rounded border bg-background px-2 py-1 text-sm', overridden && 'border-foreground/40')}
+          className={cn('min-w-0 flex-1 resize-y rounded border bg-background px-2 py-1 text-sm disabled:opacity-60', overridden && 'border-foreground/40')}
         />
         {/* points + the small "regex" tag directly beneath the score (this criterion
             is scored by its inline regex, not the AI) + a live out-of-sync hint. */}
@@ -182,7 +189,8 @@ function CriterionRow({
           <input
             type="number"
             step="0.1"
-            className={cn('h-7 w-12 rounded border bg-background px-1 text-right text-sm tabular-nums', overridden && 'border-foreground/40')}
+            disabled={locked}
+            className={cn('h-7 w-12 rounded border bg-background px-1 text-right text-sm tabular-nums disabled:opacity-60', overridden && 'border-foreground/40')}
             value={ptsDraft}
             placeholder="–"
             title="Points this student gets"
@@ -203,7 +211,7 @@ function CriterionRow({
           )}
           {outOfSync && <span className="text-right text-[8px] leading-tight text-muted-foreground">save rubric to update</span>}
         </div>
-        {overridden ? (
+        {overridden && !locked ? (
           <button type="button" title="Reset this criterion to the AI score" className="mt-2 text-muted-foreground hover:text-foreground" onClick={onReset}>
             <RotateCcw className="h-3.5 w-3.5" />
           </button>
@@ -217,21 +225,25 @@ function CriterionRow({
         <input
           type="number"
           step="0.5"
-          className="mt-1 h-7 w-12 rounded border bg-background px-1 text-right text-sm tabular-nums"
+          disabled={rubricLocked}
+          className="mt-1 h-7 w-12 rounded border bg-background px-1 text-right text-sm tabular-nums disabled:opacity-60"
           value={rc.points}
           title="Max points for this criterion (rubric, all students)"
           onChange={(e) => onRubricChange({ points: Number(e.target.value) })}
         />
         <textarea
           value={rc.description}
+          disabled={rubricLocked}
           onChange={(e) => onRubricChange({ description: e.target.value })}
           placeholder="Criterion…"
           rows={2}
-          className="min-w-0 flex-1 resize-y rounded border bg-background px-2 py-1 text-sm"
+          className="min-w-0 flex-1 resize-y rounded border bg-background px-2 py-1 text-sm disabled:opacity-60"
         />
-        <button type="button" className="mt-1.5 text-muted-foreground hover:text-destructive" title="Remove criterion (all students)" onClick={onRubricRemove}>
-          <Trash2 className="h-4 w-4" />
-        </button>
+        {!rubricLocked && (
+          <button type="button" className="mt-1.5 text-muted-foreground hover:text-destructive" title="Remove criterion (all students)" onClick={onRubricRemove}>
+            <Trash2 className="h-4 w-4" />
+          </button>
+        )}
       </div>
     </div>
   )
@@ -263,7 +275,7 @@ export function CodeScorePanel({
   onRevertSnapshot: () => void
 }) {
   const {
-    active, mode, pageId, studentId, review,
+    active, mode, pageId, studentId, review, locked, rubricLocked,
     setOverride, setFeedback, setCriterion, resetCriterion, clearOverride, clearAiScore, refreshGrades,
   } = useComponentReview(componentId)
   const [rubricBusy, setRubricBusy] = useState(false)
@@ -554,6 +566,17 @@ export function CodeScorePanel({
 
         {tab === 'score' && (
           <div className="space-y-3">
+            {locked ? (
+              <div className="flex items-center gap-1.5 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-400">
+                <Lock className="h-3.5 w-3.5 flex-shrink-0" />
+                Returned to the student — take it back (top bar) to change the score.
+              </div>
+            ) : rubricLocked && (
+              <div className="flex items-center gap-1.5 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-400">
+                <Lock className="h-3.5 w-3.5 flex-shrink-0" />
+                Another student&apos;s exam is returned — the shared rubric is locked.
+              </div>
+            )}
             {aiStale && (
               <div className="flex items-center gap-1.5 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-400">
                 <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
@@ -570,13 +593,13 @@ export function CodeScorePanel({
                   <div className={cn('flex flex-1 items-center justify-between gap-2 px-2 py-1', STUDENT_BG)}>
                     <span>This student</span>
                     <span className="flex items-center gap-1">
-                      {hasRubric && (
+                      {hasRubric && !locked && (
                         <button type="button" onClick={scoreThisStudent} disabled={scoreBusy} className="inline-flex items-center gap-1 rounded px-1 py-0.5 normal-case hover:bg-background/60 disabled:opacity-50" title="AI-score this student against the rubric">
                           {scoreBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
                           {ai ? 'Re-score' : 'AI-score'}
                         </button>
                       )}
-                      {ai && (
+                      {ai && !locked && (
                         <button type="button" onClick={() => clearAiScore()} className="inline-flex items-center gap-1 rounded px-1 py-0.5 normal-case hover:bg-background/60 hover:text-destructive" title="Clear this AI score">
                           <Trash2 className="h-3.5 w-3.5" /> Clear AI
                         </button>
@@ -585,10 +608,12 @@ export function CodeScorePanel({
                   </div>
                   <div className={cn('flex flex-1 items-center justify-between gap-2 px-2 py-1', RUBRIC_BG)}>
                     <span>Rubric for all students</span>
-                    <button type="button" onClick={generateRubric} disabled={rubricBusy} className="inline-flex items-center gap-1 rounded px-1 py-0.5 normal-case hover:bg-background/60 disabled:opacity-50" title={rubric ? 'Regenerate the rubric from the AI' : 'Generate a rubric from the AI'}>
-                      {rubricBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
-                      {rubric ? 'Regenerate' : 'Generate'}
-                    </button>
+                    {!rubricLocked && (
+                      <button type="button" onClick={generateRubric} disabled={rubricBusy} className="inline-flex items-center gap-1 rounded px-1 py-0.5 normal-case hover:bg-background/60 disabled:opacity-50" title={rubric ? 'Regenerate the rubric from the AI' : 'Generate a rubric from the AI'}>
+                        {rubricBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
+                        {rubric ? 'Regenerate' : 'Generate'}
+                      </button>
+                    )}
                   </div>
                 </div>
                 {rubricDraft.map((rc, i) => (
@@ -603,6 +628,8 @@ export function CodeScorePanel({
                       onRubricRemove={() => removeRubric(i)}
                       onSet={(value) => setCriterion(rc.id, value)}
                       onReset={() => resetCriterion(rc.id)}
+                      locked={locked}
+                      rubricLocked={rubricLocked}
                     />
                   </div>
                 ))}
@@ -618,19 +645,21 @@ export function CodeScorePanel({
                   <div className={cn('flex flex-1 items-center gap-1.5 px-2 py-1.5', RUBRIC_BG)}>
                     <span className="w-12 text-right font-semibold tabular-nums">Σ {fmt(rubricSum)}</span>
                     <span className="text-muted-foreground">pts</span>
-                    <span className="ml-auto flex items-center gap-2">
-                      <button type="button" onClick={addRubric} className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-muted-foreground hover:bg-background/60">
-                        <Plus className="h-3.5 w-3.5" /> Add
-                      </button>
-                      <button
-                        type="button"
-                        onClick={saveRubric}
-                        disabled={rubricBusy || !rubricDirty}
-                        className="rounded border bg-background px-2 py-0.5 hover:bg-accent/50 disabled:opacity-50"
-                      >
-                        {rubricDirty ? 'Save' : 'Saved'}
-                      </button>
-                    </span>
+                    {!rubricLocked && (
+                      <span className="ml-auto flex items-center gap-2">
+                        <button type="button" onClick={addRubric} className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-muted-foreground hover:bg-background/60">
+                          <Plus className="h-3.5 w-3.5" /> Add
+                        </button>
+                        <button
+                          type="button"
+                          onClick={saveRubric}
+                          disabled={rubricBusy || !rubricDirty}
+                          className="rounded border bg-background px-2 py-0.5 hover:bg-accent/50 disabled:opacity-50"
+                        >
+                          {rubricDirty ? 'Save' : 'Saved'}
+                        </button>
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -640,38 +669,43 @@ export function CodeScorePanel({
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                   <span>No rubric yet.</span>
-                  <button
-                    type="button"
-                    onClick={generateRubric}
-                    disabled={rubricBusy}
-                    className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 hover:bg-accent/50 disabled:opacity-50"
-                    title="Generate a rubric from the AI (samples the class)"
-                  >
-                    {rubricBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
-                    Generate rubric
-                  </button>
-                  <span>or</span>
-                  <button
-                    type="button"
-                    onClick={() => { setRubricDraft([{ id: 'c1', description: '', points: 0 }]); setRubricDirty(true) }}
-                    className="rounded border px-1.5 py-0.5 hover:bg-accent/50"
-                  >
-                    start one manually
-                  </button>
+                  {!rubricLocked && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={generateRubric}
+                        disabled={rubricBusy}
+                        className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 hover:bg-accent/50 disabled:opacity-50"
+                        title="Generate a rubric from the AI (samples the class)"
+                      >
+                        {rubricBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
+                        Generate rubric
+                      </button>
+                      <span>or</span>
+                      <button
+                        type="button"
+                        onClick={() => { setRubricDraft([{ id: 'c1', description: '', points: 0 }]); setRubricDirty(true) }}
+                        className="rounded border px-1.5 py-0.5 hover:bg-accent/50"
+                      >
+                        start one manually
+                      </button>
+                    </>
+                  )}
                 </div>
                 <div className="flex items-center gap-1.5 rounded-md border px-2 py-1 text-sm">
                   <span className="text-xs text-muted-foreground">Points</span>
                   <input
                     type="number"
                     step="0.1"
-                    className="h-7 w-12 rounded border bg-background px-1 text-right tabular-nums"
+                    disabled={locked}
+                    className="h-7 w-12 rounded border bg-background px-1 text-right tabular-nums disabled:opacity-60"
                     value={absDraft}
                     onFocus={() => { absFocused.current = true }}
                     onChange={(e) => setAbsDraft(e.target.value)}
                     onBlur={() => { absFocused.current = false; saveAbs(absDraft) }}
                   />
                   <span className="tabular-nums text-muted-foreground">/ {fmt(max)}</span>
-                  {override != null && (
+                  {override != null && !locked && (
                     <button type="button" title="Clear manual score" className="ml-auto text-muted-foreground hover:text-destructive" onClick={() => clearOverride()}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -686,7 +720,7 @@ export function CodeScorePanel({
             <div className="space-y-1">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Feedback (shown to the student)</span>
-                {overrideFeedback != null && (
+                {overrideFeedback != null && !locked && (
                   <button type="button" onClick={() => setFeedback(null)} className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent/50" title="Reset feedback to the AI text">
                     <RotateCcw className="h-3.5 w-3.5" /> Reset
                   </button>
@@ -694,12 +728,13 @@ export function CodeScorePanel({
               </div>
               <textarea
                 value={fbDraft}
+                disabled={locked}
                 onFocus={() => { fbFocused.current = true }}
                 onChange={(e) => setFbDraft(e.target.value)}
                 onBlur={() => { fbFocused.current = false; saveFb(fbDraft) }}
                 placeholder="General feedback for this answer…"
                 rows={2}
-                className="w-full resize-y rounded border bg-background px-2 py-1 text-sm"
+                className="w-full resize-y rounded border bg-background px-2 py-1 text-sm disabled:opacity-60"
               />
             </div>
 

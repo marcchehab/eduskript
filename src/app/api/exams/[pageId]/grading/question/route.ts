@@ -24,6 +24,7 @@ import { Prisma } from '@prisma/client'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getAuthoredExamPage, isTeacherOfStudentForPage } from '@/lib/scoring/auth'
+import { isStudentReturned, returnedLockResponse } from '@/lib/scoring/return-state'
 import { SCORE_PRIORITY } from '@/lib/scoring/score-component'
 import { mergedCriterionTotal, type OverrideCriterion, type AiCriterion } from '@/lib/scoring/merge-criteria'
 
@@ -49,6 +50,8 @@ export async function PUT(
     if (!(await isTeacherOfStudentForPage(session.user.id, studentId, pageId))) {
       return NextResponse.json({ error: 'Not the teacher of this student' }, { status: 403 })
     }
+    // A returned exam's scores are an immutable record — take it back to edit.
+    if (await isStudentReturned(pageId, studentId)) return returnedLockResponse('student')
 
     const existing = await prisma.componentScore.findUnique({
       where: {

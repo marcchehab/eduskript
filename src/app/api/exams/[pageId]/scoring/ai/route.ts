@@ -18,6 +18,7 @@ import { prisma } from '@/lib/prisma'
 import { examClassActivityWhere } from '@/lib/exam-state'
 import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import { getAuthoredExamPage, isTeacherOfStudentForPage } from '@/lib/scoring/auth'
+import { getCurrentReturnsForPage, isStudentReturned, returnedLockResponse } from '@/lib/scoring/return-state'
 import { parseGradableComponents, extractComponentContext } from '@/lib/scoring/components'
 import { readComponentSubmissions } from '@/lib/scoring/submissions'
 import { SCORE_PRIORITY } from '@/lib/scoring/score-component'
@@ -106,6 +107,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const allowedSet = new Set(allowed)
   const studentIds = (requested && requested.length ? requested.filter((s) => allowedSet.has(s)) : allowed)
   if (studentIds.length === 0) return NextResponse.json({ scored: 0, results: [], errors: [] })
+
+  // A returned exam's scores are an immutable record — reject the whole batch if
+  // ANY target student is currently returned (the teacher must take it back first).
+  const returns = await getCurrentReturnsForPage(pageId, studentIds)
+  if (studentIds.some((s) => returns.get(s)?.returned)) return returnedLockResponse('student')
 
   const rubrics = await prisma.scoringRubric.findMany({
     where: { pageId, componentId: { in: targets.map((t) => t.componentId) } },
@@ -219,6 +225,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   if (!(await isTeacherOfStudentForPage(session.user.id, studentId, pageId))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
+  if (await isStudentReturned(pageId, studentId)) return returnedLockResponse('student')
   await prisma.componentScore.deleteMany({ where: { pageId, studentId, componentId, source: 'ai' } })
   return NextResponse.json({ cleared: true })
 }

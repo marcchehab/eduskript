@@ -83,7 +83,7 @@ function GradingBar({
   studentName: string | null
 }) {
   const dialog = useAlertDialog()
-  const { runningChecks, rerunChecks, refreshGrades, totalEarned, totalMax, grade, loadedStudentId } = useExamReview()
+  const { runningChecks, rerunChecks, refreshGrades, totalEarned, totalMax, grade, loadedStudentId, returnedToStudent, examHasReturned } = useExamReview()
   // Only trust the totals when they were loaded for the currently-selected student
   // (during a switch the previous student's totals linger until the refetch lands).
   const totalsForCurrent = loadedStudentId === studentId
@@ -115,17 +115,26 @@ function GradingBar({
     }
   }
 
-  const post = (body: object, label: string) => {
+  // Return or take back (un-return). Both append an event; take-back is the
+  // explicit unlock a teacher uses before correcting a returned score.
+  const act = (endpoint: 'return' | 'take-back', body: object, label: string) => {
     setBusy(true)
-    fetch(`/api/exams/${pageId}/grading/return`, {
+    fetch(`/api/exams/${pageId}/grading/${endpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
       .then((r) => r.json())
-      .then((j) => dialog.showSuccess(`Returned ${j.returned ?? 0} exam(s).`, label))
-      .catch(() => dialog.showError('Could not return.'))
-      .finally(() => setBusy(false))
+      .then((j) =>
+        endpoint === 'return'
+          ? dialog.showSuccess(`Returned ${j.returned ?? 0} exam(s).`, label)
+          : dialog.showSuccess(`Took back ${j.takenBack ?? 0} exam(s).`, label),
+      )
+      .catch(() => dialog.showError(endpoint === 'return' ? 'Could not return.' : 'Could not take back.'))
+      .finally(() => {
+        setBusy(false)
+        refreshGrades() // reflect the new lock state on the selected student
+      })
   }
 
   // Re-run code checks for every submitted student in the class, on this device.
@@ -176,6 +185,9 @@ function GradingBar({
         {studentId && !totalsForCurrent && (
           <span className="rounded-md bg-muted/60 px-2.5 py-0.5 text-sm text-muted-foreground">…</span>
         )}
+        {studentId && totalsForCurrent && returnedToStudent && (
+          <span className="rounded-md bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">Returned</span>
+        )}
         {studentId && (
           <Button size="sm" variant="ghost" disabled={runningChecks} onClick={() => rerunChecks()} title="Re-run this student's code checks on this device">
             {runningChecks ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
@@ -194,24 +206,47 @@ function GradingBar({
             <><Play className="w-4 h-4 mr-1.5" />Run all checks</>
           )}
         </Button>
-        <Button size="sm" variant="outline" onClick={openAiScoring} title="Generate scoring rubrics and AI-score the class">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={openAiScoring}
+          disabled={examHasReturned}
+          title={examHasReturned ? 'Locked — a returned exam exists. Take it back to re-score.' : 'Generate scoring rubrics and AI-score the class'}
+        >
           <Wand2 className="w-4 h-4 mr-1.5" />AI scoring
         </Button>
         {studentId && (
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={busy}
-            onClick={() =>
-              dialog.showConfirm(
-                `Return this exam to ${studentName || 'this student'}? They'll see their grade and feedback.`,
-                () => post({ studentId }, 'Returned'),
-                { title: 'Return exam', confirmText: 'Return' },
-              )
-            }
-          >
-            Return {studentName ? studentName.split(' ')[0] : 'student'}
-          </Button>
+          returnedToStudent ? (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={() =>
+                dialog.showConfirm(
+                  `Take back ${studentName || 'this student'}'s exam? Their grade hides until you return it again; their scores are kept.`,
+                  () => act('take-back', { studentId }, 'Took back'),
+                  { title: 'Take back exam', confirmText: 'Take back' },
+                )
+              }
+            >
+              Take back {studentName ? studentName.split(' ')[0] : 'student'}
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={() =>
+                dialog.showConfirm(
+                  `Return this exam to ${studentName || 'this student'}? They'll see their grade and feedback.`,
+                  () => act('return', { studentId }, 'Returned'),
+                  { title: 'Return exam', confirmText: 'Return' },
+                )
+              }
+            >
+              Return {studentName ? studentName.split(' ')[0] : 'student'}
+            </Button>
+          )
         )}
         <Button
           size="sm"
@@ -219,7 +254,7 @@ function GradingBar({
           onClick={() =>
             dialog.showConfirm(
               'Return the graded exam to every student in this class who handed in?',
-              () => post({ all: true, classId }, 'Returned all'),
+              () => act('return', { all: true, classId }, 'Returned all'),
               { title: 'Return all', confirmText: 'Return all' },
             )
           }
@@ -227,6 +262,23 @@ function GradingBar({
           {busy ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Send className="w-4 h-4 mr-1.5" />}
           Return all
         </Button>
+        {examHasReturned && (
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={busy}
+            title="Take back every returned exam in this class"
+            onClick={() =>
+              dialog.showConfirm(
+                'Take back every returned exam in this class? Grades hide until you return them again; scores are kept.',
+                () => act('take-back', { all: true, classId }, 'Took back all'),
+                { title: 'Take back all', confirmText: 'Take back all' },
+              )
+            }
+          >
+            Take back all
+          </Button>
+        )}
       </div>,
         document.body,
       )}

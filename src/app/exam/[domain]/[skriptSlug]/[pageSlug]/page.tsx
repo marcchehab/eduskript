@@ -25,6 +25,7 @@ import { ReturnedExamSummary } from '@/components/exam/returned-exam-summary'
 import { ExamPageContextProvider } from '@/contexts/exam-page-context'
 import { getOrCreateActiveExamKey } from '@/lib/exam-keys'
 import { getExamClassesForTeacher } from '@/lib/scoring/auth'
+import { isStudentReturned } from '@/lib/scoring/return-state'
 import { resolveExamState, type ExamLifecycleState } from '@/lib/exam-state'
 import { isSEBRequest, type ExamSettings } from '@/lib/seb'
 import { validateExamToken, validateExamSession } from '@/lib/exam-tokens'
@@ -170,10 +171,12 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
   if (!isTeacherAuthor) {
     const existingSubmission = await prisma.examSubmission.findUnique({
       where: { pageId_studentId: { pageId: page.id, studentId } },
-      select: { submittedAt: true, returnedAt: true }
+      select: { submittedAt: true }
     })
     if (existingSubmission) {
-      if (existingSubmission.returnedAt) isReturnedReview = true
+      // Returned state is derived from the exam log (single source of truth), so a
+      // take-back drops the student back to the "submitted" view automatically.
+      if (await isStudentReturned(page.id, studentId)) isReturnedReview = true
       else submittedAt = existingSubmission.submittedAt
     }
   }

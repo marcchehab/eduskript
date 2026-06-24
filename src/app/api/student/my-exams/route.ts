@@ -10,6 +10,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { getCurrentReturnsForStudent } from '@/lib/scoring/return-state'
 
 export async function GET() {
   try {
@@ -18,30 +19,33 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const submissions = await prisma.examSubmission.findMany({
-      where: { studentId: session.user.id },
-      orderBy: { submittedAt: 'desc' },
-      select: {
-        pageId: true,
-        submittedAt: true,
-        returnedAt: true,
-        page: {
-          select: {
-            title: true,
-            slug: true,
-            skript: {
-              select: {
-                slug: true,
-                collectionSkripts: {
-                  take: 1,
-                  select: { collection: { select: { site: { select: { slug: true } } } } },
+    // Return status comes from the exam log (single source of truth), per page.
+    const [submissions, returns] = await Promise.all([
+      prisma.examSubmission.findMany({
+        where: { studentId: session.user.id },
+        orderBy: { submittedAt: 'desc' },
+        select: {
+          pageId: true,
+          submittedAt: true,
+          page: {
+            select: {
+              title: true,
+              slug: true,
+              skript: {
+                select: {
+                  slug: true,
+                  collectionSkripts: {
+                    take: 1,
+                    select: { collection: { select: { site: { select: { slug: true } } } } },
+                  },
                 },
               },
             },
           },
         },
-      },
-    })
+      }),
+      getCurrentReturnsForStudent(session.user.id),
+    ])
 
     const exams = submissions.map((s) => {
       const siteSlug = s.page.skript?.collectionSkripts?.[0]?.collection?.site?.slug
@@ -49,12 +53,13 @@ export async function GET() {
       // The returned exam opens read-only in review mode at the exam route.
       const examUrl =
         siteSlug && skriptSlug ? `/exam/${siteSlug}/${skriptSlug}/${s.page.slug}` : null
+      const ret = returns.get(s.pageId)
       return {
         pageId: s.pageId,
         title: s.page.title,
         submittedAt: s.submittedAt,
-        returnedAt: s.returnedAt,
-        status: s.returnedAt ? 'returned' : 'submitted',
+        returnedAt: ret?.returned ? ret.at : null,
+        status: ret?.returned ? 'returned' : 'submitted',
         examUrl,
       }
     })

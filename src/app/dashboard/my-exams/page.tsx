@@ -3,7 +3,8 @@
 /**
  * Student "My Exams" — lists exams the student has handed in and their state.
  * A returned exam links to the feedback view. Refreshes live on the
- * `exam-returned` SSE event so a grade appears the moment the teacher returns it.
+ * `exam-returned` / `exam-taken-back` SSE events so a grade appears the moment the
+ * teacher returns it and hides again if they take it back to correct it.
  */
 
 import { useCallback, useEffect, useState } from 'react'
@@ -39,7 +40,7 @@ export default function MyExamsPage() {
     if (status === 'authenticated') load()
   }, [status, load])
 
-  useRealtimeEvents(['exam-returned'], load, { enabled: status === 'authenticated' })
+  useRealtimeEvents(['exam-returned', 'exam-taken-back'], load, { enabled: status === 'authenticated' })
 
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-6">

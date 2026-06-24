@@ -97,6 +97,9 @@ export async function GET(
       where: {
         pageId,
         studentId: { in: studentIds },
+        // Attempt-lifecycle events only — the log now also holds grading events
+        // (return / take_back), which must not leak into the duration roster.
+        event: { in: ['started', 'submitted', 'reopened'] },
       },
       orderBy: { occurredAt: 'asc' },
       select: {

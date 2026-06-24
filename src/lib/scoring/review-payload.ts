@@ -3,9 +3,10 @@
  * breakdown + each component's per-source rows (check/ai/override) + its rubric,
  * but NOT the answer payload (answers are immutable and stay live).
  *
- * Shared by the review endpoint (live) and the return endpoint (frozen into
- * ExamSubmission.gradeSnapshot so a returned exam is an immutable record). Keeping
- * both on this one builder guarantees the snapshot is byte-identical to a live review.
+ * Shared by the review endpoint (live) and the return endpoint (frozen into an
+ * ExamAuditLog 'return' event's payload so a returned exam is an immutable record).
+ * Keeping both on this one builder guarantees the snapshot is byte-identical to a
+ * live review. See [[return-state]].
  *
  * Related: [[aggregate]], [[score-component]]. The review route re-attaches answers.
  */

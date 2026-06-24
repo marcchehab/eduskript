@@ -14,6 +14,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { computeExamGrades } from '@/lib/scoring/aggregate'
 import { getAuthoredExamPage, getExamClassesForTeacher, getExamUrl, isClassTeacher } from '@/lib/scoring/auth'
+import { getCurrentReturnsForPage } from '@/lib/scoring/return-state'
 
 export async function GET(
   request: NextRequest,
@@ -83,19 +84,22 @@ export async function GET(
     })
     const studentIds = uniqueMemberships.map((m) => m.studentId)
 
-    const [grading, submissions] = await Promise.all([
+    // Return status comes from the exam log (single source of truth), not a flag.
+    const [grading, submissions, returns] = await Promise.all([
       computeExamGrades(pageId, studentIds),
       prisma.examSubmission.findMany({
         where: { pageId, studentId: { in: studentIds } },
-        select: { studentId: true, submittedAt: true, returnedAt: true, score: true, source: true },
+        select: { studentId: true, submittedAt: true, source: true },
       }),
+      getCurrentReturnsForPage(pageId, studentIds),
     ])
     const subByStudent = new Map(submissions.map((s) => [s.studentId, s]))
 
     const students = uniqueMemberships.map((m) => {
       const g = grading.byStudent.get(m.studentId)!
       const sub = subByStudent.get(m.studentId)
-      const status: 'not_started' | 'submitted' | 'returned' = sub?.returnedAt
+      const ret = returns.get(m.studentId)
+      const status: 'not_started' | 'submitted' | 'returned' = ret?.returned
         ? 'returned'
         : sub
           ? 'submitted'
@@ -110,7 +114,7 @@ export async function GET(
         status,
         source: sub?.source ?? null,
         submittedAt: sub?.submittedAt ?? null,
-        returnedAt: sub?.returnedAt ?? null,
+        returnedAt: ret?.returned ? ret.at : null,
         totalEarned: g.totalEarned,
         totalMax: g.totalMax,
         grade: g.grade,
