@@ -107,6 +107,7 @@ export const sanitizeSchema = {
     'geogebra', // Interactive GeoGebra applet (deployggb.js) by material id
     'ping', // Server-side TCP-connect "ping" terminal (not ICMP)
     'login-codes', // Live login-code display for an inbound-email hook (CloudMailin)
+    'onlyfor', // Audience gate (auth/anon/students/class) — wraps children
     'plugin', // User-created plugins rendered in sandboxed iframes
     'iframe', // Raw embeds (geotraceroute, etc.) — sandbox forced post-sanitize by rehypeSandboxIframes
     'style', // <style> blocks for scoped CSS in markdown
@@ -153,6 +154,8 @@ export const sanitizeSchema = {
     'geogebra': ['material-id', 'materialId', 'src', 'height', 'width', 'show-toolbar', 'showToolbar', 'show-algebra-input', 'showAlgebraInput', 'correct-when', 'correctWhen'],
     'ping': ['host', 'count', 'os'],
     'login-codes': ['hook', 'interval'],
+    // class="3a" arrives as className (allowed on *); these are the rest.
+    'onlyfor': ['auth', 'anon', 'students', 'prompt', 'class'],
     'question': ['id', 'type', 'showfeedback', 'minvalue', 'maxvalue', 'step', 'minlabel', 'maxlabel', 'gateat', 'gate-at', 'dataGateAt', 'data-gate-at', 'points', 'data-expected', 'dataExpected', 'ignore-case', 'ignorecase', 'ignore-whitespace', 'ignorewhitespace'],
     'quiz-option': ['correct', 'is', 'feedback'],
     'answer': ['correct', 'is', 'feedback'],

@@ -35,6 +35,7 @@ import { Geogebra } from '@/components/markdown/geogebra'
 import { PingTerminal } from '@/components/markdown/ping-terminal'
 import { MermaidDiagram } from '@/components/markdown/mermaid-diagram'
 import { LoginCodes } from '@/components/markdown/login-codes'
+import { OnlyFor } from '@/components/markdown/only-for'
 
 // Simple hash function for generating stable IDs
 function hashCode(str: string): string {
@@ -183,6 +184,7 @@ function BlockquoteComponent({ children, className, ...props }: React.HTMLAttrib
 
 interface CreateMarkdownComponentsOptions {
   pageId?: string
+  ownerPageSlug?: string  // Page owner's pageSlug — scopes <onlyfor students|class>
   skriptId?: string  // For Python global imports (shared across editors in a skript)
   onImageWidthChange?: (srcForMatching: string, newMarkdown: string) => void  // Stable callback for image resize
   organizationSlug?: string  // For organization pages (OurTeachers component)
@@ -201,7 +203,7 @@ export function createMarkdownComponents(
   files: SkriptFilesData,
   options?: CreateMarkdownComponentsOptions
 ): Record<string, ComponentType<any>> {
-  const { pageId, skriptId, onImageWidthChange, organizationSlug, onExcalidrawEdit, optimizeImages, isExam } = options ?? {}
+  const { pageId, ownerPageSlug, skriptId, onImageWidthChange, organizationSlug, onExcalidrawEdit, optimizeImages, isExam } = options ?? {}
 
   // Img element handler - handles <img> elements from markdown with data-* attributes
   function ImgElementComponent({ src, alt, title, style, ...props }: React.ImgHTMLAttributes<HTMLImageElement>) {
@@ -859,6 +861,12 @@ export function createMarkdownComponents(
         typeof props[k] === 'string' ? (props[k] as string) : undefined
       return <LoginCodes hook={str('hook')} interval={str('interval')} />
     },
+
+    // Audience gate: <onlyfor auth|anon|students|class="3a">…children…</onlyfor>.
+    // ownerPageSlug scopes students/class to the page owner. See only-for.tsx.
+    'onlyfor': (props: Record<string, unknown>) => (
+      <OnlyFor {...props} ownerPageSlug={ownerPageSlug} />
+    ),
 
     // User-created plugins (sandboxed iframes)
     // Inner text content is passed as config.content to the plugin

@@ -18,6 +18,8 @@ interface ServerMarkdownRendererProps {
   content: string
   skriptId?: string
   pageId?: string
+  /** Page owner's pageSlug — scopes <onlyfor students|class> to this teacher. */
+  ownerPageSlug?: string
   organizationSlug?: string
   isExam?: boolean
   /** When true, the Present button is shown to everyone (not just teachers). */
@@ -36,13 +38,13 @@ interface ServerMarkdownRendererProps {
  * 2. Compile markdown with remark/rehype plugins
  * 3. Create components with files prop bound
  */
-export async function ServerMarkdownRenderer({ content, skriptId, pageId, organizationSlug, isExam, presentationPublic, pageLanguage }: ServerMarkdownRendererProps) {
+export async function ServerMarkdownRenderer({ content, skriptId, pageId, ownerPageSlug, organizationSlug, isExam, presentationPublic, pageLanguage }: ServerMarkdownRendererProps) {
   const footnoteLabel = footnoteLabelForLang(pageLanguage)
   // 1. Get all files for this skript upfront
   const files = skriptId ? await getSkriptFiles(skriptId) : createEmptySkriptFiles()
 
   // 2. Create components with files prop bound
-  const components = createMarkdownComponents(files, { pageId, skriptId, organizationSlug, optimizeImages: true, isExam })
+  const components = createMarkdownComponents(files, { pageId, ownerPageSlug, skriptId, organizationSlug, optimizeImages: true, isExam })
 
   // 3. Pre-resolve `/p/{id}` stable links to canonical URLs in one batched
   //    DB query so public HTML ships with real hrefs. Done here (server) so

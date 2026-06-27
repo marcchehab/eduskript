@@ -84,6 +84,7 @@ export function PublicPageBody({ page, skriptId, publicAnnotations, publicSnaps,
               content={page.content}
               skriptId={skriptId}
               pageId={page.id}
+              ownerPageSlug={teacherPageSlug}
               isExam={page.pageType === 'exam'}
               presentationPublic={page.presentationPublic ?? false}
               pageLanguage={pageLanguage}

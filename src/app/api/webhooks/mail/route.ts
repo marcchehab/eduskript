@@ -154,8 +154,11 @@ export async function POST(request: NextRequest) {
     if (hook.mode === 'login-code' && !extracted) {
       log.warn('no code extracted — accepted + dropped', {
         hookId: hook.id,
-        htmlSample: payload.html?.slice(0, 400),
-        plainSample: payload.plain?.slice(0, 200),
+        htmlSample: payload.html?.slice(0, 1200),
+        // Full-ish plain body: confirmation/verification links (e.g. setting up
+        // a Proton→CloudMailin forward) live here and need to be readable from
+        // the DEBUG=mail:* logs. Bounded so a huge body can't flood logs.
+        plainSample: payload.plain?.slice(0, 8000),
       })
       return NextResponse.json({ status: 'ignored', reason: 'no-code' }, { status: 200 })
     }

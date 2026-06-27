@@ -188,6 +188,7 @@ export default async function SkriptPreviewPage({ params }: SkriptPreviewProps) 
                   content={frontPage.content}
                   skriptId={skript.id}
                   pageId={frontPage.id}
+                  ownerPageSlug={domain}
                   pageLanguage={teacherSiteRow?.pageLanguage}
                 />
               </AnnotationWrapper>

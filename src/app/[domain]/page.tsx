@@ -187,6 +187,7 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
               content={frontPage.content}
               pageId={frontPage.id}
               skriptId={frontPage.fileSkriptId || undefined}
+              ownerPageSlug={teacher.pageSlug ?? domain}
               pageLanguage={teacher.pageLanguage}
             />
           </AnnotationWrapper>
