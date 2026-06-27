@@ -20,6 +20,7 @@ interface MailHook {
   ttlMinutes: number | null
   createdAt: string
   forwardingAddress: string | null
+  baseAddress: string | null
   snippet: string
 }
 
@@ -242,10 +243,21 @@ export function MailHooksSettings() {
                       Forward emails to
                     </div>
                     {hook.forwardingAddress ? (
-                      <div className="flex items-center justify-between gap-2">
-                        <code className="break-all">{hook.forwardingAddress}</code>
-                        <CopyButton value={hook.forwardingAddress} />
-                      </div>
+                      <>
+                        <div className="flex items-center justify-between gap-2">
+                          <code className="break-all">{hook.forwardingAddress}</code>
+                          <CopyButton value={hook.forwardingAddress} />
+                        </div>
+                        {hook.baseAddress && (
+                          <p className="text-xs text-muted-foreground mt-1.5">
+                            If your provider can&apos;t forward to a{' '}
+                            <code>+</code> address (e.g. Proton), forward to{' '}
+                            <code className="break-all">{hook.baseAddress}</code>{' '}
+                            instead and set this hook&apos;s <b>Source email</b>{' '}
+                            to the inbox that receives the codes.
+                          </p>
+                        )}
+                      </>
                     ) : (
                       <p className="text-xs text-amber-600 dark:text-amber-400">
                         CLOUDMAILIN_INBOX_ADDRESS is not configured — set it to

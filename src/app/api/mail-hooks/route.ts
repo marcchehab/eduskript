@@ -44,6 +44,9 @@ function serialize(hook: {
     createdAt: hook.createdAt.toISOString(),
     // null when CLOUDMAILIN_INBOX_ADDRESS is unset — UI surfaces a hint.
     forwardingAddress: base ? buildSubAddress(base, hook.token) : null,
+    // Bare address for providers that can't forward to a +token (e.g. Proton);
+    // those route via sourceEmail instead.
+    baseAddress: base ?? null,
     snippet: `<login-codes hook="${hook.token}" />`,
   }
 }

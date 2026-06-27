@@ -97,7 +97,11 @@ export async function POST(request: NextRequest) {
       hasPlain: !!payload.plain,
     })
 
-    // Route: sub-address token first, then sourceEmail fallback.
+    // Route: sub-address token first, then sourceEmail fallback. The fallback
+    // is the real path for providers that can't forward to a +token address
+    // (e.g. Proton's own forwarding scheme already uses + and =), where the
+    // mail lands on the bare CloudMailin address and the original recipient
+    // shows up in the To header.
     const token =
       parseSubAddressToken(envTo) || parseSubAddressToken(headerTo)
     let hook = token
@@ -106,20 +110,29 @@ export async function POST(request: NextRequest) {
     let routedBy: 'token' | 'sourceEmail' | null = hook ? 'token' : null
 
     if (!hook) {
+      // Contains-match (not exact) so a "Name <addr>" To header still routes.
       const candidates = [envTo, headerTo]
         .filter((v): v is string => !!v)
         .map((v) => v.toLowerCase())
       if (candidates.length > 0) {
-        hook = await prisma.mailHook.findFirst({
-          where: { sourceEmail: { in: candidates, mode: 'insensitive' } },
+        const sourced = await prisma.mailHook.findMany({
+          where: { sourceEmail: { not: null } },
         })
+        hook =
+          sourced.find(
+            (h) =>
+              h.sourceEmail &&
+              candidates.some((c) => c.includes(h.sourceEmail!.toLowerCase()))
+          ) ?? null
         if (hook) routedBy = 'sourceEmail'
       }
     }
 
     if (!hook) {
-      log.warn('no matching hook', { token, envTo, headerTo })
-      return NextResponse.json({ error: 'No matching hook' }, { status: 404 })
+      // Return 200, NOT 404: CloudMailin relays the HTTP status as the SMTP
+      // reply, so a non-2xx bounces the sender's email. Accept and drop.
+      log.warn('no matching hook — accepted + dropped', { token, envTo, headerTo })
+      return NextResponse.json({ status: 'ignored', reason: 'no-hook' }, { status: 200 })
     }
 
     log('routed', { hookId: hook.id, label: hook.label, mode: hook.mode, routedBy })
@@ -135,14 +148,16 @@ export async function POST(request: NextRequest) {
 
     log('parsed', { hookId: hook.id, extracted })
 
-    // For login-code, nothing useful without an extracted code (mirrors the
-    // old handler's 422). Persistent modes would store regardless.
+    // For login-code, nothing to store without a code. Return 200 (not 422) so
+    // CloudMailin doesn't bounce the mail; log an HTML snippet so the regex can
+    // be tuned from the logs (DEBUG=mail:*).
     if (hook.mode === 'login-code' && !extracted) {
-      log.warn('no code extracted', { hookId: hook.id })
-      return NextResponse.json(
-        { status: 'error', message: 'No code found in email' },
-        { status: 422 }
-      )
+      log.warn('no code extracted — accepted + dropped', {
+        hookId: hook.id,
+        htmlSample: payload.html?.slice(0, 400),
+        plainSample: payload.plain?.slice(0, 200),
+      })
+      return NextResponse.json({ status: 'ignored', reason: 'no-code' }, { status: 200 })
     }
 
     await purgeExpired(hook.id)
