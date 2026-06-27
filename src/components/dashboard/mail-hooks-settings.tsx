@@ -360,15 +360,23 @@ export function MailHooksSettings() {
                           <code className="break-all">{hook.forwardingAddress}</code>
                           <CopyButton value={hook.forwardingAddress} />
                         </div>
-                        {hook.baseAddress && (
-                          <p className="text-xs text-muted-foreground mt-1.5">
-                            If your provider can&apos;t forward to a{' '}
-                            <code>+</code> address (e.g. Proton), forward to{' '}
-                            <code className="break-all">{hook.baseAddress}</code>{' '}
-                            instead and set this hook&apos;s <b>Source email</b>{' '}
-                            to the inbox that receives the codes.
-                          </p>
-                        )}
+                        {hook.baseAddress &&
+                          (hook.sourceEmail ? (
+                            <p className="text-xs text-muted-foreground mt-1.5">
+                              Also routing by <b>Source email</b> (
+                              <code className="break-all">{hook.sourceEmail}</code>):
+                              mail forwarded to{' '}
+                              <code className="break-all">{hook.baseAddress}</code>{' '}
+                              addressed to it routes here too.
+                            </p>
+                          ) : (
+                            <p className="text-xs text-muted-foreground mt-1.5">
+                              Alternatively, forward to the bare address{' '}
+                              <code className="break-all">{hook.baseAddress}</code>{' '}
+                              and set a <b>Source email</b> below — mail addressed
+                              to it routes here without the token.
+                            </p>
+                          ))}
                       </>
                     ) : (
                       <p className="text-xs text-amber-600 dark:text-amber-400">
