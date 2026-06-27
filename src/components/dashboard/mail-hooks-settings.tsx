@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
-import { ChevronLeft, Mailbox, Trash2, Copy, Check } from 'lucide-react'
+import { ChevronLeft, Mailbox, Trash2, Copy, Check, Pencil } from 'lucide-react'
 
 interface MailHook {
   id: string
@@ -54,6 +54,12 @@ export function MailHooksSettings() {
   const [sourceEmail, setSourceEmail] = useState('')
   const [creating, setCreating] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
+  // Inline edit state (label / source email / regex; token + mode are immutable).
+  const [editing, setEditing] = useState<string | null>(null)
+  const [eLabel, setELabel] = useState('')
+  const [eSourceEmail, setESourceEmail] = useState('')
+  const [eRegex, setERegex] = useState('')
+  const [saving, setSaving] = useState(false)
   const alert = useAlertDialog()
 
   async function load() {
@@ -100,6 +106,41 @@ export function MailHooksSettings() {
       setError(err instanceof Error ? err.message : 'Unknown error')
     } finally {
       setCreating(false)
+    }
+  }
+
+  function startEdit(hook: MailHook) {
+    setEditing(hook.token)
+    setELabel(hook.label)
+    setESourceEmail(hook.sourceEmail ?? '')
+    setERegex(hook.regex ?? '')
+    setError(null)
+  }
+
+  async function saveEdit(token: string) {
+    if (!eLabel.trim()) return
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/mail-hooks/${encodeURIComponent(token)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          label: eLabel.trim(),
+          sourceEmail: eSourceEmail.trim(),
+          regex: eRegex.trim(),
+        }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || 'Could not save hook')
+      }
+      setEditing(null)
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -229,6 +270,16 @@ export function MailHooksSettings() {
                     variant="outline"
                     size="sm"
                     className="gap-2"
+                    disabled={editing === hook.token}
+                    onClick={() => startEdit(hook)}
+                  >
+                    <Pencil className="h-4 w-4" />
+                    Edit
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
                     disabled={deleting === hook.token}
                     onClick={() => remove(hook.token, hook.label)}
                   >
@@ -236,6 +287,67 @@ export function MailHooksSettings() {
                     {deleting === hook.token ? 'Deleting…' : 'Delete'}
                   </Button>
                 </div>
+
+                {editing === hook.token && (
+                  <div className="rounded-md border p-3 space-y-3">
+                    <div>
+                      <Label htmlFor={`label-${hook.id}`}>Label</Label>
+                      <Input
+                        id={`label-${hook.id}`}
+                        value={eLabel}
+                        onChange={(e) => setELabel(e.target.value)}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor={`src-${hook.id}`}>
+                        Source email{' '}
+                        <span className="text-muted-foreground">(optional)</span>
+                      </Label>
+                      <Input
+                        id={`src-${hook.id}`}
+                        value={eSourceEmail}
+                        onChange={(e) => setESourceEmail(e.target.value)}
+                        placeholder="kurse@yourdomain.com"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor={`rgx-${hook.id}`}>
+                        Code regex{' '}
+                        <span className="text-muted-foreground">(optional)</span>
+                      </Label>
+                      <Input
+                        id={`rgx-${hook.id}`}
+                        value={eRegex}
+                        onChange={(e) => setERegex(e.target.value)}
+                        placeholder="Default: 6-digit code in an <h1>"
+                        className="mt-1 font-mono"
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      The forwarding address and{' '}
+                      <code>&lt;login-codes&gt;</code> token can&apos;t change.
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        disabled={saving || !eLabel.trim()}
+                        onClick={() => saveEdit(hook.token)}
+                      >
+                        {saving ? 'Saving…' : 'Save'}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={saving}
+                        onClick={() => setEditing(null)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
 
                 <div className="rounded-md bg-muted p-3 space-y-2 text-sm">
                   <div>
