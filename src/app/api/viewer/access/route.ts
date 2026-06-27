@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
 
   const session = await getServerSession(authOptions)
   const viewerId = session?.user?.id ?? null
-  const result = { authenticated: !!viewerId, isStudent: false, inClass: false }
+  const result = { authenticated: !!viewerId, isOwner: false, isStudent: false, inClass: false }
 
   const owner = request.nextUrl.searchParams.get('owner')?.trim()
   const klass = request.nextUrl.searchParams.get('class')?.trim()
@@ -47,6 +47,9 @@ export async function GET(request: NextRequest) {
   if (!ownerUserId) {
     return NextResponse.json(result)
   }
+
+  // The owner (teacher) always has access to their own gated content.
+  result.isOwner = viewerId === ownerUserId
 
   // isStudent: in any real (non-implicit) class owned by this teacher.
   const membership = await prisma.classMembership.findFirst({

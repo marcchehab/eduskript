@@ -73,7 +73,9 @@ export function OnlyFor(props: {
       .then((d) => {
         if (cancelled) return
         if (!d) return setServerOk(false)
-        setServerOk(mode === 'class' ? !!d.inClass : !!d.isStudent)
+        // The owner (teacher) always sees their own students/class content.
+        const ok = mode === 'class' ? d.inClass : d.isStudent
+        setServerOk(!!(ok || d.isOwner))
       })
       .catch(() => !cancelled && setServerOk(false))
     return () => {
