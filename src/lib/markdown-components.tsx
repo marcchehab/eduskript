@@ -34,6 +34,7 @@ import { PdfEmbed } from '@/components/markdown/pdf-embed'
 import { Geogebra } from '@/components/markdown/geogebra'
 import { PingTerminal } from '@/components/markdown/ping-terminal'
 import { MermaidDiagram } from '@/components/markdown/mermaid-diagram'
+import { LoginCodes } from '@/components/markdown/login-codes'
 
 // Simple hash function for generating stable IDs
 function hashCode(str: string): string {
@@ -849,6 +850,14 @@ export function createMarkdownComponents(
         return undefined
       }
       return <PingTerminal host={str('host')} count={str('count')} os={str('os')} />
+    },
+
+    // Live login-code display for an inbound-email hook (CloudMailin → codes).
+    // host is author-set via the hook token. See login-codes.tsx.
+    'login-codes': (props: Record<string, unknown>) => {
+      const str = (k: string): string | undefined =>
+        typeof props[k] === 'string' ? (props[k] as string) : undefined
+      return <LoginCodes hook={str('hook')} interval={str('interval')} />
     },
 
     // User-created plugins (sandboxed iframes)

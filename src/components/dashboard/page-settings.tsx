@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { Save, Loader2, FileText, Upload, X, ExternalLink, Globe, Wand2, KeyRound } from 'lucide-react'
+import { Save, Loader2, FileText, Upload, X, ExternalLink, Globe, Wand2, KeyRound, Mailbox } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { InlineMarkdown } from '@/components/ui/inline-markdown'
@@ -634,6 +634,23 @@ export function PageSettings() {
             <Button variant="outline" className="gap-2">
               <KeyRound className="w-4 h-4" />
               Manage Connected Apps
+            </Button>
+          </Link>
+        </div>
+
+        {/* Mail Hooks Section (inbound email → login codes on a page) */}
+        <div className="space-y-4 border-t pt-6">
+          <div>
+            <Label className="text-sm font-medium">Mail Hooks</Label>
+            <p className="text-sm text-muted-foreground mt-1">
+              Forward login-code emails (e.g. a shared Udemy account) into a
+              <code> &lt;login-codes&gt;</code> block on your pages.
+            </p>
+          </div>
+          <Link href="/dashboard/settings/mail-hooks">
+            <Button variant="outline" className="gap-2">
+              <Mailbox className="w-4 h-4" />
+              Manage Mail Hooks
             </Button>
           </Link>
         </div>

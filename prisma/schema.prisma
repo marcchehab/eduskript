@@ -193,6 +193,9 @@ model User {
   // Plugins
   plugins Plugin[]
 
+  // Inbound-email hooks (CloudMailin → login codes, future modes)
+  mailHooks MailHook[]
+
   // Pages forked from this user's content
   forkedPages Page[] @relation("ForkedPages")
 
@@ -1349,4 +1352,49 @@ model Plugin {
   @@unique([authorId, slug])
   @@index([authorId])
   @@map("plugins")
+}
+
+/// Per-user inbound-email hook. A generic primitive: inbound email (via
+/// CloudMailin) is routed to the owning teacher by an unguessable sub-address
+/// token, parsed by the hook's `mode`, and surfaced. Slice 1 ships only
+/// mode="login-code" (regex-extract a code, show it live on a page). Future
+/// modes (file-drop, post-by-email, inbox) reuse the same spine — see
+/// src/lib/mail-hooks/parsers.ts.
+model MailHook {
+  id           String        @id @default(cuid())
+  userId       String        @map("user_id")
+  token        String        @unique // sub-address tag, unguessable (inbox+<token>@…)
+  label        String // human label, e.g. "Udemy – Klasse 3a"
+  mode         String        @default("login-code") // parser/sink selector
+  parserConfig Json?         @map("parser_config") // mode-specific, e.g. { regex }
+  sourceEmail  String?       @map("source_email") // fallback router (matched against headers.to)
+  ttlMinutes   Int?          @map("ttl_minutes") // null = persistent; 15 for codes
+  createdAt    DateTime      @default(now()) @map("created_at")
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages     MailMessage[]
+
+  @@index([userId])
+  @@map("mail_hooks")
+}
+
+/// A received inbound email belonging to a MailHook. Stores the raw message
+/// plus the parser's `extracted` output (e.g. { code }). TTL'd rows
+/// (expiresAt set) are deleted opportunistically on webhook insert + read, so
+/// the login-code use case stays tiny. Persistent modes leave expiresAt null.
+model MailMessage {
+  id          String    @id @default(cuid())
+  hookId      String    @map("hook_id")
+  fromAddr    String    @map("from_addr")
+  subject     String?
+  bodyText    String?   @map("body_text") @db.Text
+  bodyHtml    String?   @map("body_html") @db.Text
+  attachments Json? // S3 refs — schema-ready, unused in slice 1 (login-code)
+  extracted   Json? // parser output, e.g. { code: "123456" }
+  expiresAt   DateTime? @map("expires_at") // null = persistent
+  createdAt   DateTime  @default(now()) @map("created_at")
+  hook        MailHook  @relation(fields: [hookId], references: [id], onDelete: Cascade)
+
+  @@index([hookId, expiresAt])
+  @@index([hookId, createdAt])
+  @@map("mail_messages")
 }

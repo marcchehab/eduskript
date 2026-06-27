@@ -206,6 +206,16 @@ export const pingRateLimiter = new RateLimiter('ping', {
 })
 
 /**
+ * Inbound mail webhook rate limiter: 120 requests per minute per IP.
+ * CloudMailin POSTs from a small set of IPs; this bounds abuse if the URL
+ * leaks, while staying well above real inbound-email volume.
+ */
+export const mailWebhookRateLimiter = new RateLimiter('mail-webhook', {
+  interval: 60 * 1000, // 1 minute
+  maxRequests: 120
+})
+
+/**
  * Extracts client identifier from request headers
  * Tries multiple headers to get the real IP address
  * @param request - The incoming request

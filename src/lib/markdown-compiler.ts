@@ -106,6 +106,7 @@ export const sanitizeSchema = {
     'pdf', // PDF embed using browser's native PDF viewer
     'geogebra', // Interactive GeoGebra applet (deployggb.js) by material id
     'ping', // Server-side TCP-connect "ping" terminal (not ICMP)
+    'login-codes', // Live login-code display for an inbound-email hook (CloudMailin)
     'plugin', // User-created plugins rendered in sandboxed iframes
     'iframe', // Raw embeds (geotraceroute, etc.) — sandbox forced post-sanitize by rehypeSandboxIframes
     'style', // <style> blocks for scoped CSS in markdown
@@ -151,6 +152,7 @@ export const sanitizeSchema = {
     // reserved for a future uploaded .ggb. Both kebab + camel for HAST/raw-HTML.
     'geogebra': ['material-id', 'materialId', 'src', 'height', 'width', 'show-toolbar', 'showToolbar', 'show-algebra-input', 'showAlgebraInput', 'correct-when', 'correctWhen'],
     'ping': ['host', 'count', 'os'],
+    'login-codes': ['hook', 'interval'],
     'question': ['id', 'type', 'showfeedback', 'minvalue', 'maxvalue', 'step', 'minlabel', 'maxlabel', 'gateat', 'gate-at', 'dataGateAt', 'data-gate-at', 'points', 'data-expected', 'dataExpected', 'ignore-case', 'ignorecase', 'ignore-whitespace', 'ignorewhitespace'],
     'quiz-option': ['correct', 'is', 'feedback'],
     'answer': ['correct', 'is', 'feedback'],
