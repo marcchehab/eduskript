@@ -452,7 +452,7 @@ export function PublicSiteLayout({
         <ReadingProgress />
 
       {/* Top-right controls - always visible when sidebar is hidden, otherwise only on mobile */}
-      <div className={`floating-page-controls ${hideSidebar ? '' : 'min-[1344px]:hidden '}fixed top-8 right-4 z-50 flex items-center gap-2`}>
+      <div className={`floating-page-controls print:hidden ${hideSidebar ? '' : 'min-[1344px]:hidden '}fixed top-8 right-4 z-50 flex items-center gap-2`}>
         <AdminToolbox pageId={pageId} />
         <FontSizeControls />
         <PublicThemeToggle />
@@ -461,7 +461,7 @@ export function PublicSiteLayout({
 
       {/* Mobile menu button */}
       {!hideSidebar && (
-      <div className="min-[1344px]:hidden fixed top-8 left-4 z-50">
+      <div className="min-[1344px]:hidden print:hidden fixed top-8 left-4 z-50">
         <button
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
           className="p-2 bg-card rounded-md shadow-md border border-border"
@@ -473,7 +473,7 @@ export function PublicSiteLayout({
 
       {/* Sidebar */}
       {!hideSidebar && (
-      <div className={`fixed inset-y-0 left-0 z-40 bg-card paper-shadow transform transition-all duration-300 ease-in-out ${
+      <div className={`fixed inset-y-0 left-0 z-40 print:hidden bg-card paper-shadow transform transition-all duration-300 ease-in-out ${
         isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
       } min-[1344px]:translate-x-0 ${
         isSidebarCollapsed ? 'w-16 min-w-16' : 'w-80'
@@ -842,7 +842,7 @@ export function PublicSiteLayout({
       {/* Overlay for mobile */}
       {!hideSidebar && isSidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-30 min-[1344px]:hidden"
+          className="fixed inset-0 bg-black/50 z-30 min-[1344px]:hidden print:hidden"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}

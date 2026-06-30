@@ -379,6 +379,89 @@ body {
   margin-right: 0;
 }
 
+/*
+ * Print / Save-as-PDF. The on-screen reader hijacks #paper geometry for
+ * annotations (transform: scale() zoom on <main>, --paper-scale on the paper,
+ * a fixed-height overflow scroll container, and a #zoom-spacer sizing div).
+ * Left untouched these clip the print to a single viewport and leak the zoom
+ * transform. Here we undo all of that so the document flows and paginates,
+ * while keeping the paper's 1280px width and px-48 padding intact — annotation
+ * coordinates depend on them, and the browser's uniform shrink-to-fit keeps
+ * every annotation layer (SVG strokes, <mark> highlights, snaps, sticky notes)
+ * aligned exactly as on screen. !important overrides the inline styles
+ * AnnotationLayer sets via JS (none of which are !important).
+ * See: annotation-layer.tsx (transform + #zoom-spacer), POSITIONING.md.
+ */
+@media print {
+  /* Force annotation strokes, highlights, callouts, snaps to actually print */
+  *,
+  *::before,
+  *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Let the whole document flow & paginate instead of clipping to one screen */
+  html,
+  body {
+    height: auto !important;
+    overflow: visible !important;
+  }
+  #scroll-container {
+    height: auto !important;
+    overflow: visible !important;
+    margin: 0 !important;
+  }
+
+  /* Kill the interactive zoom/pan transform leak (and leftover inline geom) */
+  main {
+    transform: none !important;
+    max-width: none !important;
+    margin: 0 !important;
+    min-height: 0 !important;
+  }
+
+  /* Reset responsive --paper-scale transform; unclip so nothing is cut off.
+     Width (1280px) and px-48 padding stay untouched — browser shrink-to-fit
+     handles page width and preserves annotation alignment. */
+  .paper-responsive {
+    transform: none !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+    border: none !important;
+    margin-bottom: 0 !important;
+  }
+
+  /* The absolute zoom sizing div would otherwise create blank trailing pages */
+  #zoom-spacer {
+    display: none !important;
+  }
+
+  /* Interactive chrome rendered as portals outside layout.tsx's reach */
+  #annotation-toolbar,
+  #annotation-toolbar-aside,
+  #class-toolbar,
+  #class-toolbar-slot {
+    display: none !important;
+  }
+
+  /* Light pagination hygiene */
+  img,
+  figure,
+  table {
+    break-inside: avoid;
+  }
+  h1,
+  h2,
+  h3 {
+    break-after: avoid;
+  }
+
+  @page {
+    margin: 1.5cm; /* size omitted → respects the user's chosen paper */
+  }
+}
+
 /* Custom prose styles that respect our theme */
 .prose-theme {
   @apply max-w-none;
