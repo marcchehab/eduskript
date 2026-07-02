@@ -55,6 +55,14 @@ import {
   updateSkriptFrontpage,
   updateSkriptFrontpageConfig,
 } from '@/lib/mcp/tools/update-skript-frontpage'
+import {
+  readSiteFrontpage,
+  readSiteFrontpageConfig,
+} from '@/lib/mcp/tools/read-site-frontpage'
+import {
+  updateSiteFrontpage,
+  updateSiteFrontpageConfig,
+} from '@/lib/mcp/tools/update-site-frontpage'
 import { readCollection, readCollectionConfig } from '@/lib/mcp/tools/read-collection'
 import {
   updateCollection,
@@ -125,7 +133,7 @@ function buildServerInstructions(userPrompt?: string | null): string {
     getCondensedSyntaxReference(),
     '',
     '## MCP-specific guidance',
-    'You are connected to a teacher\'s Eduskript account via MCP. Use the available tools to discover, read, and edit their content. Page-level: list_my_skripts, search_my_content, read_page, create_page, update_page_metadata (title/slug/description/publish), update_page_content (markdown body — destructive, creates a new version each time), list_page_versions + restore_page_version (audit & undo). The legacy update_page is deprecated; prefer the metadata/content split. Skript-level: read_skript, update_skript, read_skript_frontpage, update_skript_frontpage. Collection-level: read_collection, update_collection. Bulk SEO scan: audit_skript_seo (returns excerpts + issue flags for every page in a skript — call this before sweeping descriptions). The teacher only sees the natural-language reply — show edits in human-readable form rather than raw markdown dumps.',
+    'You are connected to a teacher\'s Eduskript account via MCP. Use the available tools to discover, read, and edit their content. Page-level: list_my_skripts, search_my_content, read_page, create_page, update_page_metadata (title/slug/description/publish), update_page_content (markdown body — destructive, creates a new version each time), list_page_versions + restore_page_version (audit & undo). The legacy update_page is deprecated; prefer the metadata/content split. Skript-level: read_skript, update_skript, read_skript_frontpage, update_skript_frontpage. Site-level landing page: read_site_frontpage, update_site_frontpage (no organizationId = the teacher\'s own landing page under their pageSlug; pass organizationId for an org landing page, owner/admin only). Collection-level: read_collection, update_collection. Bulk SEO scan: audit_skript_seo (returns excerpts + issue flags for every page in a skript — call this before sweeping descriptions). The teacher only sees the natural-language reply — show edits in human-readable form rather than raw markdown dumps.',
     '- Prefer interactive code editors (`editor` keyword) when an example is meant to be run by students.',
   ]
   if (userPrompt && userPrompt.trim()) {
@@ -194,6 +202,14 @@ export function buildMcpServer(opts: { userPrompt?: string | null } = {}): McpSe
     'update_skript_frontpage',
     updateSkriptFrontpageConfig,
     async (args) => safe('update_skript_frontpage', () => updateSkriptFrontpage(args)) as never
+  )
+  server.registerTool('read_site_frontpage', readSiteFrontpageConfig, async (args) =>
+    safe('read_site_frontpage', () => readSiteFrontpage(args)) as never
+  )
+  server.registerTool(
+    'update_site_frontpage',
+    updateSiteFrontpageConfig,
+    async (args) => safe('update_site_frontpage', () => updateSiteFrontpage(args)) as never
   )
   server.registerTool('read_collection', readCollectionConfig, async (args) =>
     safe('read_collection', () => readCollection(args)) as never
