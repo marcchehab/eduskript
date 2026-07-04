@@ -168,10 +168,11 @@ export const sanitizeSchema = {
     // Extended img attributes — bare names (user-facing) and data- variants (pipeline/compat)
     'img': [
       ...(defaultSchema.attributes?.['img'] || []),
-      'align', 'wrap', 'invert', 'saturate',
+      'align', 'wrap', 'invert', 'saturate', 'inline',
       'dataOriginalSrc', 'data-original-src',
       'dataAlign', 'data-align',
       'dataWrap', 'data-wrap',
+      'dataInline', 'data-inline',
       'dataInvert', 'data-invert',
       'dataSaturate', 'data-saturate',
       'dataExcalidraw', 'data-excalidraw',

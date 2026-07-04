@@ -243,6 +243,7 @@ export function createMarkdownComponents(
     const dataWrap = (dataProps['data-wrap'] as string) || (dataProps['dataWrap'] as string) || (dataProps['wrap'] as string)
     const dataInvert = (dataProps['data-invert'] as string) || (dataProps['dataInvert'] as string) || (dataProps['invert'] as string)
     const dataSaturate = (dataProps['data-saturate'] as string) || (dataProps['dataSaturate'] as string) || (dataProps['saturate'] as string)
+    const dataInline = (dataProps['data-inline'] as string) || (dataProps['dataInline'] as string) || (dataProps['inline'] as string)
 
     const srcStr = typeof src === 'string' ? src : ''
 
@@ -256,6 +257,7 @@ export function createMarkdownComponents(
         originalSrc={originalSrc}
         align={dataAlign as 'left' | 'center' | 'right'}
         wrap={dataWrap === 'true'}
+        inline={dataInline === 'true'}
         invert={dataInvert as 'dark' | 'light' | 'always' | undefined}
         saturate={dataSaturate}
         files={files}

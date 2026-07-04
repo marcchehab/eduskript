@@ -1894,6 +1894,37 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
   -webkit-text-fill-color: transparent !important;
 }
 
+/* Inline logos (e.g. a logo in the title) get duplicated into the shadow layer.
+ * A replaced <img> can't be coloured by the shadow's transparent text-fill, so we
+ * paint a rainbow *silhouette* instead: hide the duplicated bitmap (keeping its box
+ * so the foreground copy still wraps identically) and fill the logo's alpha shape
+ * via ::after — the animated rainbow gradient masked by the logo's own URL
+ * (--logo-url, set inline by ContentImage). The whole shadow layer is already
+ * offset by translate(2px,2px), so this reads as a rainbow shadow behind the logo. */
+.prose-theme h1.color-title-js .color-title-shadow .ez-inline-logo img {
+  visibility: hidden;
+}
+.prose-theme h1.color-title-js .color-title-shadow .ez-inline-logo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(to right,
+    #ff0000, #ff8000, #ffff00, #80ff00, #00ff00, #00ff80,
+    #00ffff, #0080ff, #0000ff, #8000ff, #ff00ff, #ff0000);
+  background-size: 300% auto;
+  animation: rainbow-text-flow 180s linear infinite;
+  will-change: background-position;
+  -webkit-mask-image: var(--logo-url);
+  mask-image: var(--logo-url);
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  pointer-events: none;
+}
+
 /* ===== Layer Badge Styles ===== */
 /* Floating badges to identify annotation layer ownership (student work, class broadcast, etc.) */
 .layer-badge {

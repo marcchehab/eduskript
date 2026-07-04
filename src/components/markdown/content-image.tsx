@@ -56,6 +56,7 @@ interface ContentImageProps {
   originalSrc?: string // The original filename from markdown (before URL resolution)
   align?: 'left' | 'center' | 'right'
   wrap?: boolean
+  inline?: boolean // Render as an inline-block <img> (e.g. a logo inside a heading), no block wrapper/handles
   invert?: 'dark' | 'light' | 'always' // Invert colors for diagrams
   saturate?: string // Saturation percentage to apply with invert (e.g., '70' or '150')
   optimizeImages?: boolean // Enable Next.js Image optimization (WebP/AVIF, resizing)
@@ -66,7 +67,7 @@ interface ContentImageProps {
   sourceLineEnd?: string
 }
 
-export function ContentImage({ src, alt = '', title, style, onWidthChange, originalSrc, align = 'center', wrap = false, invert, saturate, optimizeImages, files, sourceLineStart, sourceLineEnd }: ContentImageProps) {
+export function ContentImage({ src, alt = '', title, style, onWidthChange, originalSrc, align = 'center', wrap = false, inline = false, invert, saturate, optimizeImages, files, sourceLineStart, sourceLineEnd }: ContentImageProps) {
   const filename = originalSrc || src
   const { resolvedTheme } = useTheme()
   const [lightboxOpen, setLightboxOpen] = useState(false)
@@ -120,6 +121,42 @@ export function ContentImage({ src, alt = '', title, style, onWidthChange, origi
 
     onWidthChange(`<img ${attrs} />`)
   }, [alt, filename, invert, saturate, onWidthChange])
+
+  // Inline logo/icon mode: an inline-block logo that flows with surrounding text
+  // (e.g. inside an <h1>). No resize/align handles, no float wrapper. Sizes to the
+  // text (height:1em) by default; author style (width/height) overrides, and the
+  // unset dimension stays auto so aspect ratio is preserved.
+  // Placed after all hooks so it doesn't create a conditional-hook path.
+  //
+  // Wrapped in a span that exposes the resolved URL as `--logo-url`. Inside a
+  // color-title <h1>, the rainbow shadow layer masks that URL over the animated
+  // gradient to paint a rainbow silhouette of the logo (globals.css) — plain
+  // background-clip can't colour a replaced <img>, so we fill its alpha shape.
+  if (inline) {
+    const imgStyle: React.CSSProperties = {
+      display: 'block',
+      width: 'auto',
+      height: 'auto',
+      ...(invertFilter ? { filter: invertFilter } : {}),
+      ...style,
+    }
+    if (!style?.width && !style?.height) imgStyle.height = '1em'
+    return (
+      <span
+        className="ez-inline-logo"
+        style={{
+          display: 'inline-block',
+          verticalAlign: '-0.15em',
+          position: 'relative',
+          ['--logo-url' as string]: `url("${imageSrc}")`,
+        }}
+      >
+        {/* Plain img (not next/image): inline flow + intrinsic sizing, no block wrapper. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={imageSrc} alt={alt || ''} title={title} style={imgStyle} loading="lazy" />
+      </span>
+    )
+  }
 
   // Build data attributes for source line tracking
   const dataAttributes: Record<string, string> = {}
