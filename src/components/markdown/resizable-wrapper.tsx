@@ -131,12 +131,16 @@ export function ResizableWrapper({
     }
   }, [isDragging, handleMouseMove, handleMouseUp])
 
-  // Calculate alignment classes
+  // Calculate alignment classes.
+  // Floated images get z-10 so they (and their hover resize/align handles) paint
+  // above overlapping sibling blocks. Notably a color-title <h1> sets z-index:0
+  // (globals.css) and, being later in the DOM, would otherwise cover the float
+  // and swallow the group-hover that reveals the handles.
   const alignmentClasses = currentWrap
     ? currentAlign === 'left'
-      ? 'float-left mr-4 mb-4'
+      ? 'float-left mr-4 mb-4 z-10'
       : currentAlign === 'right'
-      ? 'float-right ml-4 mb-4'
+      ? 'float-right ml-4 mb-4 z-10'
       : 'mx-auto'
     : currentAlign === 'left'
     ? 'mr-auto'
