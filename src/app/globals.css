@@ -1824,13 +1824,23 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
   display: none;
 }
 
-/* Rainbow shadow layer - duplicates content structure for perfect alignment */
+/* Rainbow shadow layer - duplicates content structure for perfect alignment.
+ *
+ * It must be an IN-FLOW block (not position:absolute) so its text wraps around
+ * a floated image exactly like the foreground does — an absolutely positioned
+ * layer ignores floats and lays out across the full width (the old bug: the
+ * shadow no longer tracks the wrapped foreground).
+ *
+ * It keeps its FULL rendered height so `background-clip: text` has an area to
+ * paint the gradient into — a height:0 box paints no background, so the rainbow
+ * would be invisible. To stop that height from pushing the foreground copy down,
+ * ColorTitleHeading measures the height and sets an equal negative margin-bottom
+ * inline, collapsing the shadow's net footprint to 0. The foreground then lands
+ * at the same top and wraps around the float identically. Offset via transform. */
 .prose-theme h1.color-title-js .color-title-shadow {
-  position: absolute;
-  left: 2px;
-  right: 0;
-  top: 2px;
-  bottom: 0;
+  position: relative;
+  display: block;
+  transform: translate(2px, 2px);
   z-index: 0;
   background-image: linear-gradient(to right,
     #ff0000,
