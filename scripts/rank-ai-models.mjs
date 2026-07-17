@@ -3,9 +3,9 @@
  * rank-ai-models.mjs
  *
  * Rank AI models for the AI Edit feature against three criteria:
- *   - Intelligence (Artificial Analysis Index, manually cached)
- *   - Speed (OpenRouter p50 throughput + p50 TTFT, fastest provider)
- *   - Cost (OpenRouter completion price)
+ *   - Intelligence (Artificial Analysis Intelligence Index)
+ *   - Speed (AA median output throughput + median time-to-first-token)
+ *   - Cost (AA median output-token price)
  *
  * Composite score: 50% intelligence + 30% speed + 20% cost (min-max normalised).
  * Speed sub-score: 70% throughput + 30% TTFT.
@@ -23,13 +23,21 @@
  *   pnpm ai:ranking:update                                # refresh live data + regenerate the public page in one step
  *
  * Data sources:
- *   - scripts/data/ai-model-intelligence.json (OpenRouter -> Artificial Analysis slug map)
- *   - https://artificialanalysis.ai/api/v2/data/llms/models (intelligence; live, needs ARTIFICIAL_ANALYSIS_API_KEY in .env)
- *   - https://openrouter.ai/api/v1/models (cost; live)
- *   - https://openrouter.ai/api/frontend/stats/endpoint (speed; live, undocumented)
+ *   - scripts/data/ai-model-intelligence.json (model slug -> Artificial Analysis slug map)
+ *   - https://artificialanalysis.ai/api/v2/data/llms/models (intelligence, speed AND cost;
+ *     live, needs ARTIFICIAL_ANALYSIS_API_KEY in .env)
  *
- * Intelligence data is provided by Artificial Analysis (artificialanalysis.ai);
- * their terms require attribution, which the generated HTML renders.
+ * All three axes now come from Artificial Analysis. We previously sourced speed
+ * from OpenRouter's undocumented frontend stats endpoint and cost from its
+ * public models API, but as of 2026-07 that frontend endpoint returns the SPA
+ * HTML (dead) and the public API reports null throughput/latency — so AA, which
+ * already exposes median_output_tokens_per_second, median_time_to_first_token
+ * and price_1m_output_tokens, is the single live source. "Provider" is now the
+ * AA model creator rather than a specific serving host.
+ *
+ * Intelligence, speed and cost data are provided by Artificial Analysis
+ * (artificialanalysis.ai); their terms require attribution, which the generated
+ * HTML renders.
  */
 
 import 'dotenv/config'
@@ -64,88 +72,32 @@ const opts = {
   html: args.includes('--html') ? (typeof flag('html') === 'string' ? flag('html') : join(__dirname, '..', 'public', 'model-ranking.html')) : null,
 }
 
-async function fetchJson(url) {
-  const res = await fetch(url, {
-    headers: { 'User-Agent': 'eduskript-model-ranker/1.0' },
-  })
-  if (!res.ok) throw new Error(`${url} → ${res.status}`)
-  return res.json()
-}
-
 /**
- * Fetch p50 throughput + TTFT for a model from OpenRouter's frontend stats
- * endpoint. The endpoint keys models by `canonical_slug` (the dated
- * permaslug, e.g. `anthropic/claude-4.7-opus-20260416`), NOT the friendly
- * user-facing id. The caller passes the resolved canonical slug.
+ * Fetch the full Artificial Analysis model dataset, keyed by AA slug. Each
+ * entry carries all three ranking axes so AA is our single live source:
+ *   - intelligence: artificial_analysis_intelligence_index
+ *   - throughput:   median_output_tokens_per_second (tok/s)
+ *   - latency:      median_time_to_first_answer_token (seconds). We use the
+ *                   first-*answer*-token field, NOT median_time_to_first_token,
+ *                   because for reasoning variants the latter is inconsistent
+ *                   across models (some count visible reasoning tokens at ~1s,
+ *                   others only the answer token at ~100s). Time-to-first-answer
+ *                   is the uniform, user-perceived wait and the fair axis. It
+ *                   therefore INCLUDES reasoning time — tens of seconds is normal.
+ *   - cost:         pricing.price_1m_output_tokens ($/Mtok out)
+ *   - provider:     model_creator.name (AA measures one reference deployment,
+ *                   so this is the creator, not a specific serving host)
+ *
+ * Returns Map<aaSlug, {intelligence, throughput, ttft, cost, provider}>, or
+ * null if no API key is set or the request fails. AA lists multiple variants
+ * per model (reasoning / non-reasoning / effort), each its own slug, so the
+ * data file pins which slug to read. AA terms require attribution to
+ * artificialanalysis.ai (rendered in the HTML).
  */
-async function fetchSpeed(canonicalSlug) {
-  try {
-    // NOTE: don't encodeURIComponent the slug — its `/` is part of the path
-    // shape OpenRouter expects. encoding it to `%2F` returns 404.
-    const data = await fetchJson(
-      `https://openrouter.ai/api/frontend/stats/endpoint?permaslug=${canonicalSlug}&variant=standard`
-    )
-    const endpoints = (data.data ?? []).filter(
-      e => e.stats?.p50_throughput != null
-    )
-    if (endpoints.length === 0) return null
-
-    const fastest = endpoints.reduce((a, b) =>
-      b.stats.p50_throughput > a.stats.p50_throughput ? b : a
-    )
-    return {
-      provider: fastest.provider_name,
-      throughput: fastest.stats.p50_throughput,
-      ttft: fastest.stats.p50_latency,
-      providerCostPerM: parseFloat(fastest.pricing.completion) * 1_000_000,
-    }
-  } catch {
-    return null
-  }
-}
-
-/**
- * Fetch the full model list once to build a friendly-id → canonical_slug
- * map. Models without a separate canonical_slug fall back to the id itself.
- */
-async function fetchCanonicalSlugMap() {
-  const data = await fetchJson('https://openrouter.ai/api/v1/models')
-  const map = new Map()
-  for (const m of data.data ?? []) {
-    map.set(m.id, m.canonical_slug || m.id)
-  }
-  return map
-}
-
-async function fetchModelCost(slug) {
-  try {
-    // Don't encodeURIComponent — the `/` is part of the URL path.
-    const data = await fetchJson(
-      `https://openrouter.ai/api/v1/models/${slug}/endpoints`
-    )
-    // The model-level page lists all endpoints; lowest completion price is our reference.
-    const prices = (data.data?.endpoints ?? [])
-      .map(e => parseFloat(e.pricing?.completion))
-      .filter(p => Number.isFinite(p))
-    if (prices.length === 0) return null
-    return Math.min(...prices) * 1_000_000
-  } catch {
-    return null
-  }
-}
-
-/**
- * Fetch the Artificial Analysis Intelligence Index for every model, keyed by
- * AA slug. Returns Map<aaSlug, number>, or null if no API key is set or the
- * request fails — the caller then falls back to static values in the slug map.
- * AA lists multiple variants per model (reasoning / non-reasoning / effort),
- * each its own slug + index, so the data file pins which slug to read.
- * AA terms require attribution to artificialanalysis.ai (rendered in the HTML).
- */
-async function fetchArtificialAnalysisIndex() {
+async function fetchArtificialAnalysis() {
   const key = process.env.ARTIFICIAL_ANALYSIS_API_KEY
   if (!key) {
-    console.error('No ARTIFICIAL_ANALYSIS_API_KEY set — falling back to static intelligence values where available.')
+    console.error('No ARTIFICIAL_ANALYSIS_API_KEY set — cannot fetch model data. Set it in .env.')
     return null
   }
   try {
@@ -156,12 +108,20 @@ async function fetchArtificialAnalysisIndex() {
     const json = await res.json()
     const map = new Map()
     for (const m of json.data ?? []) {
-      const idx = m.evaluations?.artificial_analysis_intelligence_index
-      if (idx != null) map.set(m.slug, idx)
+      const intelligence = m.evaluations?.artificial_analysis_intelligence_index
+      if (intelligence == null) continue
+      map.set(m.slug, {
+        intelligence,
+        throughput: m.median_output_tokens_per_second,
+        // Seconds; time to first ANSWER token (includes reasoning). See doc above.
+        ttft: m.median_time_to_first_answer_token,
+        cost: m.pricing?.price_1m_output_tokens,
+        provider: m.model_creator?.name ?? '—',
+      })
     }
     return map
   } catch (e) {
-    console.error(`AA API fetch failed (${e.message}) — falling back to static intelligence values.`)
+    console.error(`AA API fetch failed (${e.message}).`)
     return null
   }
 }
@@ -180,10 +140,10 @@ async function fetchArtificialAnalysisIndex() {
  *                                           crushing the dense cluster below.
  *   color = composite score (Viridis)
  *   marker symbol: diamond if Pareto-optimal, circle otherwise
- *   marker size: scaled inverse-TTFT so faster-to-first-byte models stand out
+ *   marker size: scaled inverse-latency so faster-to-first-answer models stand out
  *
  * The 2D chart is the same data flattened (intel × throughput, bubble = 1/cost,
- * color = TTFT) for readers who don't want to rotate.
+ * color = latency to first answer) for readers who don't want to rotate.
  */
 function renderHtml(rows, meta) {
   const data = rows.map(r => ({
@@ -253,9 +213,9 @@ function renderHtml(rows, meta) {
 <p class="meta">
   <strong>Last updated: ${meta.generated}</strong><br>
   Weights: <code>${(meta.weights.intelligence * 100).toFixed(0)}% intelligence + ${(meta.weights.speed * 100).toFixed(0)}% speed + ${(meta.weights.cost * 100).toFixed(0)}% cost</code>;
-  speed sub-score <code>${(meta.speedWeights.throughput * 100).toFixed(0)}% throughput + ${(meta.speedWeights.ttft * 100).toFixed(0)}% TTFT</code>;
+  speed sub-score <code>${(meta.speedWeights.throughput * 100).toFixed(0)}% throughput + ${(meta.speedWeights.ttft * 100).toFixed(0)}% time-to-first-answer</code>;
   intelligence floor <code>${meta.floor === -Infinity ? 'none' : '≥ ' + meta.floor}</code>.<br>
-  Intelligence: ${meta.intelSource}, data by <a href="https://artificialanalysis.ai" target="_blank" rel="noopener">Artificial Analysis</a>. Speed &amp; cost: OpenRouter live data (${meta.generated}).
+  Intelligence, speed &amp; cost: ${meta.intelSource}, all data by <a href="https://artificialanalysis.ai" target="_blank" rel="noopener">Artificial Analysis</a> (${meta.generated}).
 </p>
 
 <div class="panel">
@@ -264,7 +224,7 @@ function renderHtml(rows, meta) {
 </div>
 
 <div class="panel">
-  <h2>2D view — Intelligence × Throughput, bubble size = 1/cost, colour = TTFT</h2>
+  <h2>2D view — Intelligence × Throughput, bubble size = 1/cost, colour = time to first answer</h2>
   <div id="plot2d" style="height:480px"></div>
 </div>
 
@@ -278,7 +238,7 @@ function renderHtml(rows, meta) {
         <th data-key="intelligence" data-numeric="true">Intel</th>
         <th data-key="provider">Provider</th>
         <th data-key="throughput" data-numeric="true">Throughput (tok/s)</th>
-        <th data-key="ttft" data-numeric="true">TTFT (ms)</th>
+        <th data-key="ttft" data-numeric="true">Time to answer (s)</th>
         <th data-key="cost" data-numeric="true">$/M out</th>
         <th data-key="score" data-numeric="true">Score</th>
         <th data-key="pareto">Pareto</th>
@@ -289,7 +249,7 @@ function renderHtml(rows, meta) {
 </div>
 
 <p class="footer">Pareto-optimal entries (rendered as diamonds in the scatter, ✓ in the table) aren't dominated on all three axes by another model in the candidate set.<br>
-Intelligence Index data by <a href="https://artificialanalysis.ai" target="_blank" rel="noopener">Artificial Analysis</a>. Speed and cost data from <a href="https://openrouter.ai" target="_blank" rel="noopener">OpenRouter</a>.</p>
+Intelligence, speed and cost data by <a href="https://artificialanalysis.ai" target="_blank" rel="noopener">Artificial Analysis</a>. Provider column is the model creator; AA measures one reference deployment per model.</p>
 
 <script>
 const data = ${JSON.stringify(data)};
@@ -300,14 +260,14 @@ const hovers = data.map(d =>
   'Provider: ' + d.provider + '<br>' +
   'Intelligence: ' + d.intelligence.toFixed(1) + '<br>' +
   'Throughput: ' + Math.round(d.throughput) + ' tok/s<br>' +
-  'TTFT: ' + Math.round(d.ttft) + ' ms<br>' +
+  'Time to first answer: ' + d.ttft.toFixed(1) + ' s<br>' +
   'Cost: $' + d.cost.toFixed(2) + ' / Mtok<br>' +
   'Score: ' + d.score.toFixed(3) + (d.pareto ? '<br>★ Pareto-optimal' : '')
 );
 
-// Inverse-TTFT marker size for the 3D plot: faster TTFT (lower ms) → bigger
-// marker. Clamped so very-slow models still appear.
-const markerSize = data.map(d => Math.max(8, Math.min(28, 4000 / d.ttft)));
+// Inverse-latency marker size for the 3D plot: faster time-to-first-answer
+// (lower seconds) → bigger marker. Clamped so very-slow models still appear.
+const markerSize = data.map(d => Math.max(8, Math.min(28, 60 / d.ttft)));
 
 const symbols = data.map(d => d.pareto ? 'diamond' : 'circle');
 const labels = data.map(d => d.slug.split('/')[1] || d.slug);
@@ -359,7 +319,7 @@ Plotly.newPlot('plot2d', [{
     color: data.map(d => d.ttft),
     colorscale: 'RdYlGn',
     reversescale: true,
-    colorbar: { title: { text: 'TTFT (ms)', font: { size: 11 } }, thickness: 12, len: 0.75 },
+    colorbar: { title: { text: 'Answer latency (s)', font: { size: 11 } }, thickness: 12, len: 0.75 },
     line: { color: 'rgba(0,0,0,0.3)', width: 1 },
     opacity: 0.85,
     symbol: symbols,
@@ -391,7 +351,7 @@ function render() {
     '<td class="num">' + r.intelligence.toFixed(1) + '</td>' +
     '<td>' + r.provider + '</td>' +
     '<td class="num">' + Math.round(r.throughput) + '</td>' +
-    '<td class="num">' + Math.round(r.ttft) + '</td>' +
+    '<td class="num">' + r.ttft.toFixed(1) + '</td>' +
     '<td class="num">$' + r.cost.toFixed(2) + '</td>' +
     '<td class="num">' + r.score.toFixed(3) + '</td>' +
     '<td>' + (r.pareto ? '<span class="pareto-yes">✓</span>' : '') + '</td>' +
@@ -445,69 +405,54 @@ function paretoMask(rows) {
 
 async function main() {
   const intelData = JSON.parse(readFileSync(INTEL_CACHE, 'utf-8'))
-  const aaIndex = await fetchArtificialAnalysisIndex()
+  const aa = await fetchArtificialAnalysis()
 
-  // Resolve each model's intelligence: prefer the live AA index for its mapped
-  // slug, else the static fallback. Models with neither are dropped.
-  const intelNotes = []
-  const allModels = Object.entries(intelData.models)
+  if (!aa) {
+    console.error('No Artificial Analysis data — cannot rank. Set ARTIFICIAL_ANALYSIS_API_KEY in .env.')
+    process.exit(1)
+  }
+
+  // Resolve each mapped model against the live AA dataset. All three axes
+  // (intelligence, speed, cost) come from the same AA record. A model is
+  // dropped if its AA slug is missing or the record lacks any axis.
+  const notes = []
+  const usable = Object.entries(intelData.models)
     .map(([slug, spec]) => {
-      let intelligence = null
-      if (spec.aa && aaIndex?.has(spec.aa)) {
-        intelligence = aaIndex.get(spec.aa)
-      } else if (spec.fallback != null) {
-        intelligence = spec.fallback
-        if (spec.aa) intelNotes.push(`${slug}: AA slug "${spec.aa}" not found — used fallback ${spec.fallback}`)
-      } else {
-        intelNotes.push(`${slug}: no AA data and no fallback — skipped`)
+      if (!spec.aa || !aa.has(spec.aa)) {
+        notes.push(`${slug}: AA slug ${spec.aa ? `"${spec.aa}" not found` : 'not set'} — skipped`)
+        return null
       }
-      return { slug, intelligence }
+      const rec = aa.get(spec.aa)
+      if (rec.throughput == null || rec.ttft == null || rec.cost == null) {
+        notes.push(`${slug}: AA record missing speed/cost — skipped`)
+        return null
+      }
+      return {
+        slug,
+        intelligence: rec.intelligence,
+        provider: rec.provider,
+        throughput: rec.throughput,
+        ttft: rec.ttft,
+        cost: rec.cost,
+      }
     })
-    .filter(m => m.intelligence != null)
+    .filter(Boolean)
+    .filter(m => (opts.noFloor ? true : m.intelligence >= opts.floor))
 
-  if (intelNotes.length) console.error('Intelligence notes:\n  ' + intelNotes.join('\n  '))
+  if (notes.length) console.error('Notes:\n  ' + notes.join('\n  '))
 
   const floor = opts.noFloor ? -Infinity : opts.floor
-  const candidates = allModels.filter(m => m.intelligence >= floor)
-
-  if (candidates.length === 0) {
-    console.error(`No models pass the intelligence floor of ${floor}`)
-    process.exit(1)
-  }
-
-  console.error(`Fetching live data for ${candidates.length} models...`)
-
-  // Build the friendly-id → canonical_slug map up front (single API call).
-  const canonicalMap = await fetchCanonicalSlugMap()
-
-  // Fetch speed + cost in parallel for all candidates.
-  const enriched = await Promise.all(
-    candidates.map(async m => {
-      const canonicalSlug = canonicalMap.get(m.slug) ?? m.slug
-      const [speed, cost] = await Promise.all([
-        fetchSpeed(canonicalSlug),
-        fetchModelCost(m.slug),
-      ])
-      return { ...m, speed, cost }
-    })
-  )
-
-  const usable = enriched.filter(m => m.speed && m.cost != null)
-
   if (usable.length === 0) {
-    console.error('No models had usable live speed + cost data')
+    console.error(`No models pass the intelligence floor of ${floor} with usable AA data`)
     process.exit(1)
   }
 
-  if (usable.length < enriched.length) {
-    const dropped = enriched.filter(m => !m.speed || m.cost == null).map(m => m.slug)
-    console.error(`Dropped (no live data): ${dropped.join(', ')}`)
-  }
+  console.error(`Ranking ${usable.length} models from Artificial Analysis data...`)
 
   // Normalise.
   const intelNorm = minmax(usable.map(m => m.intelligence))
-  const throughputNorm = minmax(usable.map(m => m.speed.throughput))
-  const ttftNorm = minmax(usable.map(m => m.speed.ttft), { invert: true })
+  const throughputNorm = minmax(usable.map(m => m.throughput))
+  const ttftNorm = minmax(usable.map(m => m.ttft), { invert: true })
   const costNorm = minmax(usable.map(m => m.cost), { invert: true })
 
   const rows = usable.map((m, i) => {
@@ -521,9 +466,9 @@ async function main() {
     return {
       slug: m.slug,
       intelligence: m.intelligence,
-      provider: m.speed.provider,
-      throughput: m.speed.throughput,
-      ttft: m.speed.ttft,
+      provider: m.provider,
+      throughput: m.throughput,
+      ttft: m.ttft,
       cost: m.cost,
       combinedSpeed,
       score,
@@ -544,7 +489,7 @@ async function main() {
       weights: WEIGHTS,
       speedWeights: SPEED_WEIGHTS,
       floor: opts.noFloor ? -Infinity : opts.floor,
-      intelSource: aaIndex ? 'live via Artificial Analysis API' : 'static fallback values',
+      intelSource: 'live via Artificial Analysis API',
       generated: new Date().toISOString().replace('T', ' ').slice(0, 16) + ' UTC',
     })
     writeFileSync(outPath, html, 'utf-8')
@@ -565,12 +510,12 @@ async function main() {
   // Markdown table to stdout.
   const fmtCost = c => `$${c.toFixed(2)}`
   const fmtThroughput = t => `${Math.round(t)} t/s`
-  const fmtTtft = ms => `${Math.round(ms)} ms`
+  const fmtTtft = s => `${s.toFixed(1)} s`
   const fmtScore = s => s.toFixed(3)
   const fmtIntel = n => n.toFixed(1)
 
   console.log()
-  console.log('| #  | Model                                   | Intel | Provider     | Throughput | TTFT     | $/M out | Score | Pareto |')
+  console.log('| #  | Model                                   | Intel | Provider     | Throughput | Answer   | $/M out | Score | Pareto |')
   console.log('|----|-----------------------------------------|-------|--------------|------------|----------|---------|-------|--------|')
   top.forEach((r, i) => {
     console.log(
@@ -580,9 +525,9 @@ async function main() {
 
   console.log()
   console.log(`Weights: ${(WEIGHTS.intelligence * 100).toFixed(0)}% intelligence + ${(WEIGHTS.speed * 100).toFixed(0)}% speed + ${(WEIGHTS.cost * 100).toFixed(0)}% cost`)
-  console.log(`Speed:   ${(SPEED_WEIGHTS.throughput * 100).toFixed(0)}% throughput + ${(SPEED_WEIGHTS.ttft * 100).toFixed(0)}% TTFT (lower better)`)
+  console.log(`Speed:   ${(SPEED_WEIGHTS.throughput * 100).toFixed(0)}% throughput + ${(SPEED_WEIGHTS.ttft * 100).toFixed(0)}% time-to-first-answer (lower better)`)
   console.log(`Floor:   intelligence ≥ ${opts.noFloor ? 'none' : floor}`)
-  console.log(`Sources: Artificial Analysis Intelligence Index (${aaIndex ? 'live via API' : 'static fallback'}); OpenRouter (live)`)
+  console.log(`Sources: Artificial Analysis — intelligence, speed & cost (live via API)`)
   console.log()
   console.log(`Pareto-optimal entries are marked with *. They aren't dominated on all axes by another model in the set.`)
 }

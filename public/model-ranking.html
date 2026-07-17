@@ -52,11 +52,11 @@
 
 <h1>AI Model Ranking for Eduskript AI Edit</h1>
 <p class="meta">
-  <strong>Last updated: 2026-05-26 20:27 UTC</strong><br>
+  <strong>Last updated: 2026-07-17 20:54 UTC</strong><br>
   Weights: <code>50% intelligence + 30% speed + 20% cost</code>;
-  speed sub-score <code>70% throughput + 30% TTFT</code>;
+  speed sub-score <code>70% throughput + 30% time-to-first-answer</code>;
   intelligence floor <code>≥ 40</code>.<br>
-  Intelligence: live via Artificial Analysis API, data by <a href="https://artificialanalysis.ai" target="_blank" rel="noopener">Artificial Analysis</a>. Speed &amp; cost: OpenRouter live data (2026-05-26 20:27 UTC).
+  Intelligence, speed &amp; cost: live via Artificial Analysis API, all data by <a href="https://artificialanalysis.ai" target="_blank" rel="noopener">Artificial Analysis</a> (2026-07-17 20:54 UTC).
 </p>
 
 <div class="panel">
@@ -65,7 +65,7 @@
 </div>
 
 <div class="panel">
-  <h2>2D view — Intelligence × Throughput, bubble size = 1/cost, colour = TTFT</h2>
+  <h2>2D view — Intelligence × Throughput, bubble size = 1/cost, colour = time to first answer</h2>
   <div id="plot2d" style="height:480px"></div>
 </div>
 
@@ -79,7 +79,7 @@
         <th data-key="intelligence" data-numeric="true">Intel</th>
         <th data-key="provider">Provider</th>
         <th data-key="throughput" data-numeric="true">Throughput (tok/s)</th>
-        <th data-key="ttft" data-numeric="true">TTFT (ms)</th>
+        <th data-key="ttft" data-numeric="true">Time to answer (s)</th>
         <th data-key="cost" data-numeric="true">$/M out</th>
         <th data-key="score" data-numeric="true">Score</th>
         <th data-key="pareto">Pareto</th>
@@ -90,10 +90,10 @@
 </div>
 
 <p class="footer">Pareto-optimal entries (rendered as diamonds in the scatter, ✓ in the table) aren't dominated on all three axes by another model in the candidate set.<br>
-Intelligence Index data by <a href="https://artificialanalysis.ai" target="_blank" rel="noopener">Artificial Analysis</a>. Speed and cost data from <a href="https://openrouter.ai" target="_blank" rel="noopener">OpenRouter</a>.</p>
+Intelligence, speed and cost data by <a href="https://artificialanalysis.ai" target="_blank" rel="noopener">Artificial Analysis</a>. Provider column is the model creator; AA measures one reference deployment per model.</p>
 
 <script>
-const data = [{"slug":"moonshotai/kimi-k2.6","intelligence":53.9,"provider":"WandB","throughput":133,"ttft":479,"cost":3.4,"score":0.7187723978303607,"pareto":true},{"slug":"minimax/minimax-m2.7","intelligence":49.6,"provider":"SambaNova","throughput":284,"ttft":1010.5,"cost":1.2,"score":0.6579183809938904,"pareto":true},{"slug":"openai/gpt-5.4","intelligence":56.8,"provider":"OpenAI","throughput":45,"ttft":1195,"cost":15,"score":0.6506990007196425,"pareto":true},{"slug":"google/gemini-3.1-pro-preview","intelligence":57.2,"provider":"Google AI Studio","throughput":68,"ttft":3424.5,"cost":12,"score":0.6334804376746088,"pareto":true},{"slug":"z-ai/glm-5.1","intelligence":51.4,"provider":"Friendli","throughput":93,"ttft":621,"cost":3.08,"score":0.6157674145107616,"pareto":true},{"slug":"anthropic/claude-opus-4.7","intelligence":57.3,"provider":"Google","throughput":63,"ttft":1727,"cost":25,"score":0.5771281540597781,"pareto":true},{"slug":"z-ai/glm-5","intelligence":49.8,"provider":"StreamLake","throughput":77,"ttft":1702,"cost":1.92,"score":0.5329896461254471,"pareto":true},{"slug":"qwen/qwen3.6-plus","intelligence":50,"provider":"Alibaba","throughput":11,"ttft":1055,"cost":1.95,"score":0.5252046355240748,"pareto":true},{"slug":"z-ai/glm-4.7","intelligence":42.1,"provider":"Cerebras","throughput":426,"ttft":418,"cost":1.54,"score":0.5011823031740046,"pareto":true},{"slug":"openai/gpt-5.3-codex","intelligence":53.6,"provider":"OpenAI","throughput":48,"ttft":3395,"cost":14,"score":0.4907624151359382,"pareto":false},{"slug":"anthropic/claude-sonnet-4.6","intelligence":51.7,"provider":"Amazon Bedrock","throughput":49,"ttft":1535,"cost":15,"score":0.4769607337409588,"pareto":false},{"slug":"openai/gpt-5.2","intelligence":51.3,"provider":"OpenAI","throughput":36,"ttft":2573,"cost":14,"score":0.43462148681870494,"pareto":false},{"slug":"anthropic/claude-opus-4.6","intelligence":52.9,"provider":"Google","throughput":42,"ttft":1676.5,"cost":25,"score":0.42515622977524603,"pareto":false},{"slug":"minimax/minimax-m2.5","intelligence":41.9,"provider":"Mara","throughput":233.5,"ttft":1169.5,"cost":0.8999999999999999,"score":0.38009410333834925,"pareto":true}];
+const data = [{"slug":"google/gemini-3.5-flash","intelligence":50.2,"provider":"Google","throughput":236.938,"ttft":12.153,"cost":9,"score":0.7166531086077415,"pareto":true},{"slug":"x-ai/grok-4.5","intelligence":53.8,"provider":"SpaceXAI","throughput":119.08,"ttft":12.241,"cost":6,"score":0.6830553565017364,"pareto":true},{"slug":"z-ai/glm-5.2","intelligence":51.1,"provider":"Z AI","throughput":164.504,"ttft":13.094,"cost":4.4,"score":0.6735812234191825,"pareto":true},{"slug":"openai/gpt-5.6-luna","intelligence":51.2,"provider":"OpenAI","throughput":180.321,"ttft":72.479,"cost":6,"score":0.6522662464203683,"pareto":true},{"slug":"moonshotai/kimi-k3","intelligence":57.1,"provider":"Kimi","throughput":58.503,"ttft":35.534,"cost":15,"score":0.6458482258332149,"pareto":true},{"slug":"openai/gpt-5.6-terra","intelligence":55,"provider":"OpenAI","throughput":137.899,"ttft":154.483,"cost":15,"score":0.6133342446019361,"pareto":true},{"slug":"openai/gpt-5.6-sol","intelligence":58.9,"provider":"OpenAI","throughput":65.703,"ttft":87.543,"cost":30,"score":0.6078250058589046,"pareto":true},{"slug":"meta/muse-spark-1.1","intelligence":50.6,"provider":"Meta","throughput":112.777,"ttft":18.587,"cost":4.25,"score":0.5986062416151797,"pareto":true},{"slug":"anthropic/claude-opus-4.8","intelligence":55.7,"provider":"Anthropic","throughput":55.038,"ttft":23.674,"cost":25,"score":0.5735669872663316,"pareto":true},{"slug":"qwen/qwen3.7-max","intelligence":46,"provider":"Alibaba","throughput":195.125,"ttft":13.881,"cost":7.5,"score":0.5678495585549742,"pareto":true},{"slug":"anthropic/claude-fable-5","intelligence":59.9,"provider":"Anthropic","throughput":62.481,"ttft":66.108,"cost":50,"score":0.5616489245015313,"pareto":true},{"slug":"anthropic/claude-sonnet-5","intelligence":53.4,"provider":"Anthropic","throughput":78.201,"ttft":126.938,"cost":10,"score":0.5408623959196398,"pareto":false},{"slug":"google/gemini-3.1-pro-preview","intelligence":46.5,"provider":"Google","throughput":128.556,"ttft":22.543,"cost":12,"score":0.4802581428277216,"pareto":false},{"slug":"minimax/minimax-m3","intelligence":44.4,"provider":"MiniMax","throughput":100.536,"ttft":21.329,"cost":1.2,"score":0.43931789053684595,"pareto":true},{"slug":"openai/gpt-5.4-mini","intelligence":40,"provider":"OpenAI","throughput":177.081,"ttft":4.571,"cost":4.5,"score":0.4139212013443508,"pareto":true},{"slug":"deepseek/deepseek-v4-pro","intelligence":44.3,"provider":"DeepSeek","throughput":69.234,"ttft":64.194,"cost":0.87,"score":0.37626111591063627,"pareto":true},{"slug":"deepseek/deepseek-v4-flash","intelligence":40.3,"provider":"DeepSeek","throughput":104.071,"ttft":54.748,"cost":0.28,"score":0.32402145733154086,"pareto":true}];
 
 // Build hover text shared by both plots — keeps tooltip layout consistent.
 const hovers = data.map(d =>
@@ -101,14 +101,14 @@ const hovers = data.map(d =>
   'Provider: ' + d.provider + '<br>' +
   'Intelligence: ' + d.intelligence.toFixed(1) + '<br>' +
   'Throughput: ' + Math.round(d.throughput) + ' tok/s<br>' +
-  'TTFT: ' + Math.round(d.ttft) + ' ms<br>' +
+  'Time to first answer: ' + d.ttft.toFixed(1) + ' s<br>' +
   'Cost: $' + d.cost.toFixed(2) + ' / Mtok<br>' +
   'Score: ' + d.score.toFixed(3) + (d.pareto ? '<br>★ Pareto-optimal' : '')
 );
 
-// Inverse-TTFT marker size for the 3D plot: faster TTFT (lower ms) → bigger
-// marker. Clamped so very-slow models still appear.
-const markerSize = data.map(d => Math.max(8, Math.min(28, 4000 / d.ttft)));
+// Inverse-latency marker size for the 3D plot: faster time-to-first-answer
+// (lower seconds) → bigger marker. Clamped so very-slow models still appear.
+const markerSize = data.map(d => Math.max(8, Math.min(28, 60 / d.ttft)));
 
 const symbols = data.map(d => d.pareto ? 'diamond' : 'circle');
 const labels = data.map(d => d.slug.split('/')[1] || d.slug);
@@ -160,7 +160,7 @@ Plotly.newPlot('plot2d', [{
     color: data.map(d => d.ttft),
     colorscale: 'RdYlGn',
     reversescale: true,
-    colorbar: { title: { text: 'TTFT (ms)', font: { size: 11 } }, thickness: 12, len: 0.75 },
+    colorbar: { title: { text: 'Answer latency (s)', font: { size: 11 } }, thickness: 12, len: 0.75 },
     line: { color: 'rgba(0,0,0,0.3)', width: 1 },
     opacity: 0.85,
     symbol: symbols,
@@ -192,7 +192,7 @@ function render() {
     '<td class="num">' + r.intelligence.toFixed(1) + '</td>' +
     '<td>' + r.provider + '</td>' +
     '<td class="num">' + Math.round(r.throughput) + '</td>' +
-    '<td class="num">' + Math.round(r.ttft) + '</td>' +
+    '<td class="num">' + r.ttft.toFixed(1) + '</td>' +
     '<td class="num">$' + r.cost.toFixed(2) + '</td>' +
     '<td class="num">' + r.score.toFixed(3) + '</td>' +
     '<td>' + (r.pareto ? '<span class="pareto-yes">✓</span>' : '') + '</td>' +
