@@ -218,7 +218,7 @@ export async function POST(request: Request): Promise<Response> {
 
     for (let attempt = 1; attempt <= MAX_PLAN_RETRIES; attempt++) {
       const planMessage = await openai.chat.completions.create({
-        model: process.env.OPENROUTER_MODEL ?? 'z-ai/glm-5',
+        model: process.env.OPENROUTER_MODEL ?? 'z-ai/glm-5.2',
         max_tokens: 8192,
         messages: [{ role: 'system', content: planPrompt }, { role: 'user', content: instruction }],
         // OpenRouter-specific: pin preferred providers via OPENROUTER_PROVIDERS env.

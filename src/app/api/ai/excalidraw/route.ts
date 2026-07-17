@@ -88,7 +88,7 @@ export async function POST(request: Request) {
         : buildUserPrompt(prompt, language)
 
     const completion = await openai.chat.completions.create({
-      model: process.env.OPENROUTER_MODEL ?? 'z-ai/glm-5',
+      model: process.env.OPENROUTER_MODEL ?? 'z-ai/glm-5.2',
       max_tokens: 1024,
       messages: [
         { role: 'system', content: EXCALIDRAW_SYSTEM_PROMPT },

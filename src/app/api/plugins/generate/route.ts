@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       const response = await openai.chat.completions.create({
-        model: process.env.OPENROUTER_MODEL ?? 'z-ai/glm-5',
+        model: process.env.OPENROUTER_MODEL ?? 'z-ai/glm-5.2',
         max_tokens: 16384,
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },

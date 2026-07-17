@@ -234,7 +234,7 @@ export async function POST(
       })
 
       const newPageMessage = await openai.chat.completions.create({
-        model: process.env.OPENROUTER_MODEL ?? 'z-ai/glm-5',
+        model: process.env.OPENROUTER_MODEL ?? 'z-ai/glm-5.2',
         max_tokens: 8192,
         messages: [
           { role: 'system', content: newPagePrompt },
@@ -261,7 +261,7 @@ export async function POST(
       })
 
       const editMessage = await openai.chat.completions.create({
-        model: process.env.OPENROUTER_MODEL ?? 'z-ai/glm-5',
+        model: process.env.OPENROUTER_MODEL ?? 'z-ai/glm-5.2',
         max_tokens: 8192,
         messages: [
           { role: 'system', content: editPrompt },
