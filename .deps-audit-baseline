@@ -1,0 +1,37 @@
+# Accepted `pnpm audit --prod` advisories, by advisory id.
+#
+# These are transitive dependencies of packages we don't control, with no
+# patched version published upstream — there is nothing to upgrade to. They are
+# listed here so the pre-push nudge stays quiet about them and only speaks up
+# for advisories that are NEW, which are the ones that might be actionable.
+#
+# `pnpm deps:check` always prints the full audit regardless of this file.
+#
+# Re-check occasionally: when an upstream ships a fix, drop the line and bump
+# the dependency. Blank lines and #-comments are ignored.
+#
+# Baselined 2026-07-17.
+
+# lodash-es via @excalidraw/excalidraw > @excalidraw/mermaid-to-excalidraw.
+# excalidraw 0.18.1 is latest and still bundles the vulnerable range. The
+# code-injection one needs attacker-controlled _.template input, which we
+# never pass.
+1115805
+1115809
+1120368
+
+# nanoid via @excalidraw/excalidraw (direct + through mermaid-to-excalidraw).
+# Our own nanoid is 6.x and unaffected; this is excalidraw's bundled copy.
+1109563
+1109564
+
+# @hono/node-server via prisma > @prisma/dev. Ships in the prisma CLI, which is
+# a production dep only because the Koyeb build runs `prisma generate`; the dev
+# server it belongs to never runs in production.
+1116281
+
+# postcss via next.
+1117015
+
+# uuid via next-auth.
+1119441
