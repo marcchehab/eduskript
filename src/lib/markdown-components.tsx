@@ -36,6 +36,7 @@ import { PingTerminal } from '@/components/markdown/ping-terminal'
 import { MermaidDiagram } from '@/components/markdown/mermaid-diagram'
 import { LoginCodes } from '@/components/markdown/login-codes'
 import { OnlyFor } from '@/components/markdown/only-for'
+import { AIFeedback } from '@/components/markdown/ai-feedback'
 
 // Simple hash function for generating stable IDs
 function hashCode(str: string): string {
@@ -840,6 +841,20 @@ export function createMarkdownComponents(
           correctWhen={str('correct-when', 'correctWhen')}
           pageId={pageId}
           files={files}
+        />
+      )
+    },
+
+    // Student-triggered AI feedback on handwritten/annotated work.
+    // Scope: the enclosing H2 section. See ai-feedback.tsx.
+    'ai-feedback': (props: Record<string, unknown>) => {
+      const str = (k: string): string | undefined =>
+        typeof props[k] === 'string' ? (props[k] as string) : undefined
+      return (
+        <AIFeedback
+          pageId={pageId}
+          feedbackId={str('id')}
+          label={str('label')}
         />
       )
     },

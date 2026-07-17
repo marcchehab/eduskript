@@ -106,6 +106,7 @@ export const sanitizeSchema = {
     'pdf', // PDF embed using browser's native PDF viewer
     'geogebra', // Interactive GeoGebra applet (deployggb.js) by material id
     'ping', // Server-side TCP-connect "ping" terminal (not ICMP)
+    'ai-feedback', // Student-triggered AI feedback on annotation strokes / pasted screenshots
     'login-codes', // Live login-code display for an inbound-email hook (CloudMailin)
     'onlyfor', // Audience gate (auth/anon/students/class) — wraps children
     'plugin', // User-created plugins rendered in sandboxed iframes
@@ -153,6 +154,9 @@ export const sanitizeSchema = {
     // reserved for a future uploaded .ggb. Both kebab + camel for HAST/raw-HTML.
     'geogebra': ['material-id', 'materialId', 'src', 'height', 'width', 'show-toolbar', 'showToolbar', 'show-algebra-input', 'showAlgebraInput', 'correct-when', 'correctWhen'],
     'ping': ['host', 'count', 'os'],
+    // AI feedback on student work. prompt is the teacher's grading instruction;
+    // the server re-reads it from page content, the attr here is authoring UX.
+    'ai-feedback': ['id', 'prompt', 'label'],
     'login-codes': ['hook', 'interval'],
     // class="3a" arrives as className (allowed on *); these are the rest.
     'onlyfor': ['auth', 'anon', 'students', 'prompt', 'class'],
