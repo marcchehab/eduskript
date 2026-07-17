@@ -81,7 +81,7 @@ function UserCard({
         </div>
       )}
       
-      <div className="w-8 h-8 bg-muted rounded-full flex items-center justify-center flex-shrink-0">
+      <div className="w-8 h-8 bg-muted rounded-full flex items-center justify-center shrink-0">
         {userPermission.user.image ? (
           <Image 
             src={userPermission.user.image} 
@@ -272,8 +272,8 @@ export function PermissionManager({
       onClick={onShareClick}
       className="flex items-center gap-2 w-full p-3 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
     >
-      <Plus className="w-4 h-4 flex-shrink-0" />
-      <Users className="w-4 h-4 flex-shrink-0" />
+      <Plus className="w-4 h-4 shrink-0" />
+      <Users className="w-4 h-4 shrink-0" />
       <span>Add collaborator</span>
     </button>
   )

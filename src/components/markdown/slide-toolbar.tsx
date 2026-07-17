@@ -80,10 +80,10 @@ export function SlideToolbar({
 
   return (
     <div
-      className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[61] select-none"
+      className="fixed bottom-6 left-1/2 -translate-x-1/2 z-61 select-none"
       style={{ touchAction: 'manipulation' }}
     >
-      <div className="bg-background/95 backdrop-blur border border-border rounded-lg shadow-lg p-2 flex items-center gap-1">
+      <div className="bg-background/95 backdrop-blur-sm border border-border rounded-lg shadow-lg p-2 flex items-center gap-1">
         {[0, 1, 2].map((i) => (
           <div key={i} className="relative" onMouseEnter={() => show(i)} onMouseLeave={scheduleHide}>
             <button
@@ -111,7 +111,7 @@ export function SlideToolbar({
                 onMouseLeave={scheduleHide}
               >
                 <div className="bg-background border border-border rounded-lg shadow-lg p-3 flex flex-col items-center gap-3 min-h-[200px]">
-                  <BrushThickIcon className="w-6 h-6 flex-shrink-0 opacity-60" />
+                  <BrushThickIcon className="w-6 h-6 shrink-0 opacity-60" />
                   <input
                     type="range"
                     min="0.1"
@@ -119,9 +119,9 @@ export function SlideToolbar({
                     step="0.1"
                     value={penSizes[i]}
                     onChange={(e) => onPenSizeChange(i, parseFloat(e.target.value))}
-                    className="flex-grow cursor-pointer [writing-mode:vertical-lr] [direction:rtl] slider-vertical"
+                    className="grow cursor-pointer [writing-mode:vertical-lr] [direction:rtl] slider-vertical"
                   />
-                  <BrushThinIcon className="w-6 h-6 flex-shrink-0 opacity-60" />
+                  <BrushThinIcon className="w-6 h-6 shrink-0 opacity-60" />
                 </div>
                 <div className="bg-background border border-border rounded-lg shadow-lg p-3 annotation-color-picker">
                   <Circle

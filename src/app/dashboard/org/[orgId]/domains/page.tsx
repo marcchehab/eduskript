@@ -353,15 +353,15 @@ export default function OrgDomainsPage({ params }: { params: Promise<{ orgId: st
                 <div key={domain.id} className="p-4 flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3 min-w-0">
                     {domain.isVerified ? (
-                      <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />
+                      <CheckCircle className="h-5 w-5 text-green-500 shrink-0" />
                     ) : (
-                      <AlertCircle className="h-5 w-5 text-amber-500 flex-shrink-0" />
+                      <AlertCircle className="h-5 w-5 text-amber-500 shrink-0" />
                     )}
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-medium truncate">{domain.domain}</span>
                         {domain.isPrimary && (
-                          <Badge variant="secondary" className="flex-shrink-0 gap-1">
+                          <Badge variant="secondary" className="shrink-0 gap-1">
                             <Star className="h-3 w-3" />
                             Primary
                           </Badge>
@@ -381,7 +381,7 @@ export default function OrgDomainsPage({ params }: { params: Promise<{ orgId: st
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="flex items-center gap-2 shrink-0">
                     {!domain.isVerified && (
                       <Button
                         variant="outline"
@@ -458,15 +458,15 @@ export default function OrgDomainsPage({ params }: { params: Promise<{ orgId: st
                 <div key={domain.id} className="p-4 flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3 min-w-0">
                     {domain.isVerified ? (
-                      <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />
+                      <CheckCircle className="h-5 w-5 text-green-500 shrink-0" />
                     ) : (
-                      <AlertCircle className="h-5 w-5 text-amber-500 flex-shrink-0" />
+                      <AlertCircle className="h-5 w-5 text-amber-500 shrink-0" />
                     )}
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-medium truncate">{domain.domain}</span>
                         {domain.isPrimary && (
-                          <Badge variant="secondary" className="flex-shrink-0 gap-1">
+                          <Badge variant="secondary" className="shrink-0 gap-1">
                             <Star className="h-3 w-3" />
                             Primary
                           </Badge>
@@ -496,7 +496,7 @@ export default function OrgDomainsPage({ params }: { params: Promise<{ orgId: st
                     variant="ghost"
                     size="sm"
                     onClick={() => handleDeleteTeacherDomain(domain)}
-                    className="text-destructive hover:text-destructive flex-shrink-0"
+                    className="text-destructive hover:text-destructive shrink-0"
                     title="Remove this domain"
                   >
                     <Trash2 className="h-4 w-4" />

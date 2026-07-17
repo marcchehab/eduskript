@@ -636,7 +636,7 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
       onMouseLeave={() => onShowLayerBadgesChange?.(false)}
     >
       {/* Single horizontal toolbar */}
-      <div className="bg-background/95 backdrop-blur border border-border rounded-lg shadow-lg p-2 flex items-center gap-1">
+      <div className="bg-background/95 backdrop-blur-sm border border-border rounded-lg shadow-lg p-2 flex items-center gap-1">
 
         {/* Audience selection + per-broadcast management (Public/class/student
             eye+trash) all moved up to the ClassToolbar (id="class-toolbar")
@@ -831,7 +831,7 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
                   {/* Size slider — pens only */}
                   {pen.type !== 'highlight' && (
                     <div className="bg-background border border-border rounded-lg shadow-lg p-3 flex flex-col items-center gap-3 min-h-[200px]">
-                      <BrushThickIcon className="w-6 h-6 flex-shrink-0 opacity-60" />
+                      <BrushThickIcon className="w-6 h-6 shrink-0 opacity-60" />
                       <input
                         type="range"
                         min="0.1"
@@ -839,9 +839,9 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
                         step="0.1"
                         value={pen.size}
                         onChange={(e) => handleSizeChange(pen.id, parseFloat(e.target.value))}
-                        className="flex-grow cursor-pointer [writing-mode:vertical-lr] [direction:rtl] slider-vertical"
+                        className="grow cursor-pointer [writing-mode:vertical-lr] [direction:rtl] slider-vertical"
                       />
-                      <BrushThinIcon className="w-6 h-6 flex-shrink-0 opacity-60" />
+                      <BrushThinIcon className="w-6 h-6 shrink-0 opacity-60" />
                     </div>
                   )}
 
@@ -855,7 +855,7 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
                       value={colorToHue(pen.color)}
                       onChange={(e) => handleColorChange(pen.id, hueToColor(parseFloat(e.target.value)))}
                       aria-label="Pen colour"
-                      className="flex-grow cursor-pointer [writing-mode:vertical-lr] [direction:rtl] slider-vertical hue-slider"
+                      className="grow cursor-pointer [writing-mode:vertical-lr] [direction:rtl] slider-vertical hue-slider"
                     />
                     {pens.length > MIN_PENS && (
                       <button
@@ -983,23 +983,23 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
                 <div className="bg-popover text-popover-foreground text-sm rounded-md shadow-lg border border-border p-2 w-64 space-y-2">
                   {/* Snap explanation */}
                   <div className="flex items-start gap-2.5 px-1 py-1">
-                    <Camera className="w-4 h-4 mt-0.5 flex-shrink-0 text-muted-foreground" />
+                    <Camera className="w-4 h-4 mt-0.5 shrink-0 text-muted-foreground" />
                     <div>
                       <span className="text-foreground font-medium">Snap</span>
                       <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
                         Paste and crop a screenshot
                         <br />
                         <span className="inline-flex items-baseline gap-0.5 mt-0.5">
-                          <kbd className="px-1 py-0.5 bg-muted rounded text-xs font-mono border border-border shadow-sm">{typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'}</kbd>
+                          <kbd className="px-1 py-0.5 bg-muted rounded text-xs font-mono border border-border shadow-xs">{typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'}</kbd>
                           <span className="text-muted-foreground mx-0.5">+</span>
-                          <kbd className="px-1 py-0.5 bg-muted rounded text-xs font-mono border border-border shadow-sm">V</kbd>
+                          <kbd className="px-1 py-0.5 bg-muted rounded text-xs font-mono border border-border shadow-xs">V</kbd>
                         </span>
                       </p>
                     </div>
                   </div>
                   {/* Highlight explanation */}
                   <div className="flex items-start gap-2.5 px-1 py-1">
-                    <Highlighter className="w-4 h-4 mt-0.5 flex-shrink-0 text-muted-foreground" />
+                    <Highlighter className="w-4 h-4 mt-0.5 shrink-0 text-muted-foreground" />
                     <div>
                       <span className="text-foreground font-medium">Highlight</span>
                       <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">

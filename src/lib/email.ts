@@ -1,14 +1,16 @@
-import * as brevo from '@getbrevo/brevo'
+import { BrevoClient, BrevoError } from '@getbrevo/brevo'
 import { createLogger } from '@/lib/logger'
 
 const log = createLogger('email')
 
-// Initialize Brevo API
-const apiInstance = new brevo.TransactionalEmailsApi()
-apiInstance.setApiKey(
-  brevo.TransactionalEmailsApiApiKeys.apiKey,
-  process.env.BREVO_API_KEY || ''
-)
+// Built lazily: the SDK validates the API key at construction, so a
+// module-level client would throw at import time whenever BREVO_API_KEY is
+// unset (tests, local dev, build-time module evaluation).
+let client: BrevoClient | undefined
+function getClient(apiKey: string): BrevoClient {
+  client ??= new BrevoClient({ apiKey })
+  return client
+}
 
 export interface EmailOptions {
   to: string
@@ -18,48 +20,38 @@ export interface EmailOptions {
 }
 
 export async function sendEmail({ to, subject, htmlContent, textContent }: EmailOptions) {
-  if (!process.env.BREVO_API_KEY) {
+  const apiKey = process.env.BREVO_API_KEY
+  if (!apiKey) {
     throw new Error('BREVO_API_KEY is not configured')
   }
 
-  const sendSmtpEmail = new brevo.SendSmtpEmail()
-  sendSmtpEmail.subject = subject
-  sendSmtpEmail.htmlContent = htmlContent
-  sendSmtpEmail.textContent = textContent
-  sendSmtpEmail.sender = {
-    name: process.env.EMAIL_FROM_NAME || 'Eduskript',
-    email: process.env.EMAIL_FROM || 'noreply@localhost'
-  }
-  sendSmtpEmail.to = [{ email: to }]
-  
-  // Disable click tracking completely - Brevo specific settings
-  sendSmtpEmail.tags = ['verification', 'no-tracking']
-  
-  // Try another approach to disable tracking
-  sendSmtpEmail.headers = {
-    'X-Mailin-Tag': 'verification',
-    'List-Unsubscribe': '<mailto:unsubscribe@eduskript.org>'
-  }
-
   try {
-    const result = await apiInstance.sendTransacEmail(sendSmtpEmail)
-    return result
+    return await getClient(apiKey).transactionalEmails.sendTransacEmail({
+      subject,
+      htmlContent,
+      textContent,
+      sender: {
+        name: process.env.EMAIL_FROM_NAME || 'Eduskript',
+        email: process.env.EMAIL_FROM || 'noreply@localhost'
+      },
+      to: [{ email: to }],
+      // Brevo-specific: suppress click tracking.
+      tags: ['verification', 'no-tracking'],
+      headers: {
+        'X-Mailin-Tag': 'verification',
+        'List-Unsubscribe': '<mailto:unsubscribe@eduskript.org>'
+      }
+    })
   } catch (error) {
-    // Surface Brevo's real response — the SDK wraps HTTP errors so the useful
-    // bits (status + body.message/code) live on error.response, not error.message.
-    // Without this, IP-authorization blocks, SPF/DKIM failures, and quota errors
-    // all collapse into an indistinguishable "Failed to send email".
-    const err = error as {
-      statusCode?: number
-      response?: { statusCode?: number; body?: unknown }
-      message?: string
-    }
-    const status = err.response?.statusCode ?? err.statusCode
-    const body = err.response?.body
+    // Surface Brevo's real response. BrevoError carries status + parsed body;
+    // without unpacking them, IP-authorization blocks, SPF/DKIM failures, and
+    // quota errors all collapse into an indistinguishable "Failed to send email".
+    const status = error instanceof BrevoError ? error.statusCode : undefined
+    const body = error instanceof BrevoError ? error.body : undefined
     const detail =
       typeof body === 'object' && body !== null
         ? JSON.stringify(body)
-        : (body ?? err.message ?? String(error))
+        : (body ?? (error as Error)?.message ?? String(error))
     log.error(`send failed (status ${status ?? 'unknown'}): ${detail}`)
     throw new Error(`Failed to send email: ${status ?? 'error'} ${detail}`)
   }

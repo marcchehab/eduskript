@@ -8,7 +8,7 @@ import { ThemeToggle } from '@/components/theme-toggle'
 export function Navigation() {
   const { data: session } = useSession()
   return (
-    <nav className="border-b border-border bg-background/80 backdrop-blur-sm">
+    <nav className="border-b border-border bg-background/80 backdrop-blur-xs">
       <div className="container mx-auto px-4">
         <div className="flex justify-between items-center h-16">
           <Link href="/" className="text-2xl font-bold text-foreground">

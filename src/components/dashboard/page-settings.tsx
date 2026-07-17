@@ -355,7 +355,7 @@ export function PageSettings() {
             <div className="flex items-start gap-3">
               {/* Icon */}
               {pageIcon ? (
-                <div className="relative w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-background">
+                <div className="relative w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-background">
                   <Image
                     src={pageIcon}
                     alt="Page icon"
@@ -364,7 +364,7 @@ export function PageSettings() {
                   />
                 </div>
               ) : (
-                <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
                   <span className="text-muted-foreground text-lg font-heading">
                     {(pageName || session?.user?.name || 'P').charAt(0).toUpperCase()}
                   </span>
@@ -551,7 +551,7 @@ export function PageSettings() {
               onChange={(e) => setPageLanguage(e.target.value)}
               placeholder="e.g. de-CH, en, fr-CH"
               maxLength={35}
-              className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
             />
             <datalist id="page-language-suggestions">
               <option value="de-CH" />

@@ -20,7 +20,7 @@ export function GitInfo() {
     <div className="fixed bottom-2 right-2 z-50">
       <div 
         className={`
-          bg-black/10 dark:bg-white/10 backdrop-blur-sm rounded-lg p-2 text-xs 
+          bg-black/10 dark:bg-white/10 backdrop-blur-xs rounded-lg p-2 text-xs 
           transition-all duration-200 cursor-pointer
           ${isExpanded ? 'min-w-64' : 'w-auto'}
         `}
@@ -32,7 +32,7 @@ export function GitInfo() {
               <span className="font-semibold">Commit:</span> {shortSha}
             </div>
             {gitMessage && (
-              <div className="text-wrap break-words">
+              <div className="text-wrap wrap-break-word">
                 <span className="font-semibold">Message:</span> {gitMessage.trim()}
               </div>
             )}

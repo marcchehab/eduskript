@@ -447,7 +447,7 @@ function PageBuilderItem({ item, index, onRemove, expandedCollections, onToggleC
           ref={provided.innerRef}
           {...provided.draggableProps}
           className={cn(
-            "bg-card border border-border rounded-lg hover:shadow-sm transition-shadow",
+            "bg-card border border-border rounded-lg hover:shadow-xs transition-shadow",
             !item.permissions?.canEdit && "opacity-60 bg-muted/50",
             item.permissions?.canView === false && "border-red-200 bg-red-50",
             snapshot.isDragging && "opacity-50"
@@ -494,7 +494,7 @@ function PageBuilderItem({ item, index, onRemove, expandedCollections, onToggleC
           <div className="flex items-center gap-2">
             <div className="relative">
               <Icon
-                className="w-5 h-5 flex-shrink-0 text-primary"
+                className="w-5 h-5 shrink-0 text-primary"
                 style={
                   item.type === 'collection' && item.accentColor
                     ? { color: item.accentColor }
@@ -547,7 +547,7 @@ function PageBuilderItem({ item, index, onRemove, expandedCollections, onToggleC
                     className="font-medium text-sm truncate hover:underline flex items-center gap-1 w-fit"
                   >
                     {item.title}
-                    <Edit className="w-3 h-3 flex-shrink-0" />
+                    <Edit className="w-3 h-3 shrink-0" />
                   </Link>
                 ) : (
                   <h4 className="font-medium text-sm truncate">{item.title}</h4>
@@ -661,7 +661,7 @@ function SimpleSkriptItem({ item, index, parentId, parentCanEdit = true, parentA
           ref={provided.innerRef}
           {...provided.draggableProps}
           className={cn(
-            "bg-muted/30 border border-border rounded-lg hover:bg-muted/50 hover:shadow-sm transition-all",
+            "bg-muted/30 border border-border rounded-lg hover:bg-muted/50 hover:shadow-xs transition-all",
             snapshot.isDragging && "opacity-50",
             !item.permissions?.canEdit && "opacity-70 bg-muted/50",
             item.permissions?.canView === false && "border-red-200 bg-red-50"
@@ -681,7 +681,7 @@ function SimpleSkriptItem({ item, index, parentId, parentCanEdit = true, parentA
             <div className="relative mt-0.5">
               <FileText
                 className={cn(
-                  "w-4 h-4 flex-shrink-0",
+                  "w-4 h-4 shrink-0",
                   !item.permissions?.canEdit
                     ? "text-muted-foreground"
                     : !parentAccentColor && "text-primary"
@@ -715,7 +715,7 @@ function SimpleSkriptItem({ item, index, parentId, parentCanEdit = true, parentA
                         )}
                       >
                         {item.title}
-                        <Edit className="w-2.5 h-2.5 flex-shrink-0" />
+                        <Edit className="w-2.5 h-2.5 shrink-0" />
                       </Link>
                     ) : (
                       <h5 className={cn(
@@ -869,7 +869,7 @@ function CollectionTitleInlineEditor({
           }
         }}
         disabled={saving}
-        className="font-medium text-sm bg-transparent border-b border-primary outline-none w-fit min-w-[10ch] max-w-full"
+        className="font-medium text-sm bg-transparent border-b border-primary outline-hidden w-fit min-w-[10ch] max-w-full"
       />
     )
   }
@@ -882,7 +882,7 @@ function CollectionTitleInlineEditor({
       title="Rename collection"
     >
       {title}
-      <Edit className="w-3 h-3 flex-shrink-0" />
+      <Edit className="w-3 h-3 shrink-0" />
     </button>
   )
 }
@@ -922,7 +922,7 @@ function CollectionColorButton({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="rounded-full border border-border w-4 h-4 hover:scale-110 transition-transform flex-shrink-0"
+          className="rounded-full border border-border w-4 h-4 hover:scale-110 transition-transform shrink-0"
           style={{ backgroundColor: displayColor }}
           title={accentColor ? `Accent: ${accentColor}` : 'Set accent colour'}
           aria-label="Set collection accent colour"

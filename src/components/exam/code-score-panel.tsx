@@ -510,11 +510,11 @@ export function CodeScorePanel({
           {snapshots.length === 0 ? (
             <div className="text-muted-foreground">{snapshotsLoading ? 'Loading…' : 'No saved snapshots for this student.'}</div>
           ) : (
-            <ul className="!m-0 max-h-[6rem] !list-none overflow-y-auto !p-0">
+            <ul className="m-0! max-h-24 list-none! overflow-y-auto p-0!">
               {snapshots.map((s) => {
                 const isActive = (viewedSnapshotId ?? snapshots[0].id) === s.id
                 return (
-                  <li key={s.id} className="!m-0 !list-none !p-0 marker:content-['']">
+                  <li key={s.id} className="m-0! list-none! p-0! marker:content-['']">
                     <button
                       type="button"
                       onClick={() => onViewSnapshot(s)}
@@ -523,9 +523,9 @@ export function CodeScorePanel({
                         isActive && 'bg-amber-50 font-medium dark:bg-amber-950/30',
                       )}
                     >
-                      <span className="w-14 flex-shrink-0 whitespace-nowrap text-[9px] uppercase tracking-wide text-muted-foreground">{s.kind}</span>
+                      <span className="w-14 shrink-0 whitespace-nowrap text-[9px] uppercase tracking-wide text-muted-foreground">{s.kind}</span>
                       <span className="flex-1 truncate">{s.label ?? ''}</span>
-                      <span className="flex-shrink-0 tabular-nums text-[10px] text-muted-foreground">{new Date(s.createdAt).toLocaleTimeString()}</span>
+                      <span className="shrink-0 tabular-nums text-[10px] text-muted-foreground">{new Date(s.createdAt).toLocaleTimeString()}</span>
                     </button>
                   </li>
                 )
@@ -545,12 +545,12 @@ export function CodeScorePanel({
                 <span className="tabular-nums">{fmt(review.autoEarned)} / {fmt(checkPoints)}</span> pts
               </div>
               {testResults && testResults.length > 0 ? (
-                <ul className="!m-0 space-y-1 !p-0 !list-none">
+                <ul className="m-0! space-y-1 p-0! list-none!">
                   {testResults.map((r) => (
-                    <li key={r.index} className="!m-0 flex items-start gap-1.5 !p-0 text-sm marker:content-['']">
-                      {r.passed ? <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500" /> : <X className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-500" />}
+                    <li key={r.index} className="m-0! flex items-start gap-1.5 p-0! text-sm marker:content-['']">
+                      {r.passed ? <Check className="mt-0.5 h-4 w-4 shrink-0 text-green-500" /> : <X className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />}
                       <span className="min-w-0">
-                        <span className="break-words">{r.label}</span>
+                        <span className="wrap-break-word">{r.label}</span>
                         {!r.passed && r.error && <span className="block font-mono text-xs text-muted-foreground">{r.error}</span>}
                       </span>
                     </li>
@@ -568,18 +568,18 @@ export function CodeScorePanel({
           <div className="space-y-3">
             {locked ? (
               <div className="flex items-center gap-1.5 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-400">
-                <Lock className="h-3.5 w-3.5 flex-shrink-0" />
+                <Lock className="h-3.5 w-3.5 shrink-0" />
                 Returned to the student — take it back (top bar) to change the score.
               </div>
             ) : rubricLocked && (
               <div className="flex items-center gap-1.5 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-400">
-                <Lock className="h-3.5 w-3.5 flex-shrink-0" />
+                <Lock className="h-3.5 w-3.5 shrink-0" />
                 Another student&apos;s exam is returned — the shared rubric is locked.
               </div>
             )}
             {aiStale && (
               <div className="flex items-center gap-1.5 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-400">
-                <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                 Rubric changed since this score was computed — re-score to update.
               </div>
             )}

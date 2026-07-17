@@ -180,7 +180,7 @@ export function FileImportDialog({ open, onOpenChange, targetSkriptId, onImporte
                         isSelected ? 'bg-muted' : ''
                       }`}
                     >
-                      <span className="flex-shrink-0">{fileIcon(file.name)}</span>
+                      <span className="shrink-0">{fileIcon(file.name)}</span>
                       <span className="flex-1 min-w-0">
                         <span className="block text-sm truncate">{file.name}</span>
                         <span className="block text-xs text-muted-foreground truncate">

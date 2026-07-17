@@ -494,11 +494,11 @@ export function PublicSiteLayout({
                   title="Go to homepage"
                 >
                   {teacher.pageIcon === 'default' ? (
-                    <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                    <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
                       <NotebookPen className="w-6 h-6 text-muted-foreground" />
                     </div>
                   ) : teacher.pageIcon ? (
-                    <div className="relative w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-background">
+                    <div className="relative w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-background">
                       <Image
                         src={teacher.pageIcon}
                         alt="Page icon"
@@ -507,7 +507,7 @@ export function PublicSiteLayout({
                       />
                     </div>
                   ) : (
-                    <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                    <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
                       <span className="text-muted-foreground text-lg font-heading">
                         {(teacher.pageName || teacher.name || 'P').charAt(0).toUpperCase()}
                       </span>
@@ -541,11 +541,11 @@ export function PublicSiteLayout({
                 >
                   {/* Icon: custom URL, default NotebookPen, or letter placeholder */}
                   {teacher.pageIcon === 'default' ? (
-                    <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                    <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
                       <NotebookPen className="w-6 h-6 text-muted-foreground" />
                     </div>
                   ) : teacher.pageIcon ? (
-                    <div className="relative w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-background">
+                    <div className="relative w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-background">
                       <Image
                         src={teacher.pageIcon}
                         alt="Page icon"
@@ -554,7 +554,7 @@ export function PublicSiteLayout({
                       />
                     </div>
                   ) : (
-                    <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                    <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
                       <span className="text-muted-foreground text-lg font-heading">
                         {(teacher.pageName || teacher.name || 'P').charAt(0).toUpperCase()}
                       </span>
@@ -652,7 +652,7 @@ export function PublicSiteLayout({
                           >
                             {/* Letter marker - uses skript.order (position in collection) or fallback to index */}
                             <span
-                              className="w-5 h-5 rounded text-xs font-bold flex items-center justify-center mr-2 flex-shrink-0 text-white"
+                              className="w-5 h-5 rounded text-xs font-bold flex items-center justify-center mr-2 shrink-0 text-white"
                               style={{ backgroundColor: collection.accentColor || '#6b7280' }}
                             >
                               {String.fromCharCode(65 + (skript.order ?? skriptIndex))}
@@ -666,7 +666,7 @@ export function PublicSiteLayout({
                             </button>
                             {/* Chevron - toggle only, right-aligned (non-interactive in contextual single skript mode) */}
                             {isContextualSingle ? (
-                              <span className="p-1.5 ml-1 flex-shrink-0 text-muted-foreground">
+                              <span className="p-1.5 ml-1 shrink-0 text-muted-foreground">
                                 <ChevronDown className="w-4 h-4" />
                               </span>
                             ) : (
@@ -675,7 +675,7 @@ export function PublicSiteLayout({
                                   e.stopPropagation()
                                   toggleSkript(skript.id)
                                 }}
-                                className="p-1.5 ml-1 hover:bg-muted rounded flex-shrink-0 text-muted-foreground cursor-pointer"
+                                className="p-1.5 ml-1 hover:bg-muted rounded shrink-0 text-muted-foreground cursor-pointer"
                                 aria-label={expandedSkripts.includes(skript.id) ? 'Collapse' : 'Expand'}
                               >
                                 {expandedSkripts.includes(skript.id) ? (
@@ -704,7 +704,7 @@ export function PublicSiteLayout({
                                     }`}
                                   >
                                     {/* Page number marker */}
-                                    <span className="w-5 h-5 rounded text-xs font-medium flex items-center justify-center mr-2 flex-shrink-0 bg-muted text-muted-foreground">
+                                    <span className="w-5 h-5 rounded text-xs font-medium flex items-center justify-center mr-2 shrink-0 bg-muted text-muted-foreground">
                                       {pageIndex + 1}
                                     </span>
                                     <span className="truncate">{page.title}</span>
@@ -739,7 +739,7 @@ export function PublicSiteLayout({
                       {skript.title}
                     </button>
                     {isContextualSingle ? (
-                      <span className="p-1.5 ml-1 flex-shrink-0 text-muted-foreground">
+                      <span className="p-1.5 ml-1 shrink-0 text-muted-foreground">
                         <ChevronDown className="w-4 h-4" />
                       </span>
                     ) : (
@@ -748,7 +748,7 @@ export function PublicSiteLayout({
                           e.stopPropagation()
                           toggleSkript(skript.id)
                         }}
-                        className="p-1.5 ml-1 hover:bg-muted rounded flex-shrink-0 text-muted-foreground cursor-pointer"
+                        className="p-1.5 ml-1 hover:bg-muted rounded shrink-0 text-muted-foreground cursor-pointer"
                         aria-label={expandedSkripts.includes(skript.id) ? 'Collapse' : 'Expand'}
                       >
                         {expandedSkripts.includes(skript.id) ? (
@@ -774,7 +774,7 @@ export function PublicSiteLayout({
                                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                             }`}
                           >
-                            <span className="w-5 h-5 rounded text-xs font-medium flex items-center justify-center mr-2 flex-shrink-0 bg-muted text-muted-foreground">
+                            <span className="w-5 h-5 rounded text-xs font-medium flex items-center justify-center mr-2 shrink-0 bg-muted text-muted-foreground">
                               {pageIndex + 1}
                             </span>
                             <span className="truncate">{page.title}</span>
@@ -801,7 +801,7 @@ export function PublicSiteLayout({
           <div className={`relative shrink-0 ${isSidebarCollapsed ? 'p-2 pt-0 flex flex-col items-center gap-2' : 'p-4 pt-0 space-y-2'}`}>
             <div
               aria-hidden
-              className="pointer-events-none absolute inset-x-0 -top-6 h-6 bg-gradient-to-b from-transparent to-card"
+              className="pointer-events-none absolute inset-x-0 -top-6 h-6 bg-linear-to-b from-transparent to-card"
             />
             {/* Slot is rendered in both collapsed and expanded modes —
                 ClassToolbar reads `sidebarCollapsed` from useLayout and

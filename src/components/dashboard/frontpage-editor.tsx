@@ -378,19 +378,19 @@ export function FrontPageEditor({
       {!hideHeader && (
         <section className="border rounded-lg">
           <div className="flex items-center gap-2 px-3 py-2">
-            <div className="flex items-center justify-between w-[7.5rem] flex-shrink-0">
+            <div className="flex items-center justify-between w-30 shrink-0">
               <Link href={backUrl}>
                 <Button variant="ghost" size="sm">
                   <ArrowLeft className="w-4 h-4" />
                 </Button>
               </Link>
               <div className="flex items-center gap-1.5">
-                <BookA className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                <BookA className="w-4 h-4 text-muted-foreground shrink-0" />
                 <span className="text-sm text-muted-foreground">Front page:</span>
               </div>
             </div>
             <span className="text-3xl font-semibold truncate">{title}</span>
-            <div className="ml-auto flex-shrink-0">{actionCluster}</div>
+            <div className="ml-auto shrink-0">{actionCluster}</div>
           </div>
         </section>
       )}

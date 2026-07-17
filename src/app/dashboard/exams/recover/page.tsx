@@ -153,7 +153,7 @@ export default function ExamRecoverPage() {
 
       {error && (
         <div className="rounded-md border border-destructive/40 bg-destructive/10 text-destructive p-3 text-sm flex gap-2">
-          <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
           <span>{error}</span>
         </div>
       )}
@@ -213,7 +213,7 @@ export default function ExamRecoverPage() {
 
           {result && (
             <div className="mt-4 rounded-md border border-green-500/40 bg-green-500/10 text-green-700 dark:text-green-400 p-3 text-sm flex gap-2">
-              <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" />
               <div>
                 <p className="font-medium">
                   Recovered submission for &ldquo;{result.pageTitle}&rdquo;

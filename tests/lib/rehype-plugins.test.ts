@@ -5,9 +5,12 @@ import remarkRehype from 'remark-rehype'
 import rehypeRaw from 'rehype-raw'
 import rehypeSanitize from 'rehype-sanitize'
 import rehypeSlug from 'rehype-slug'
+import rehypeStringify from 'rehype-stringify'
 import { rehypeHeadingSectionIds } from '@/lib/rehype-plugins/heading-section-ids'
 import { rehypeAllowPluginAttrs } from '@/lib/rehype-plugins/plugin-attrs'
 import { rehypeColorClasses } from '@/lib/rehype-plugins/color-classes'
+import { rehypeColorTitle } from '@/lib/rehype-plugins/color-title'
+import { rehypeExternalLinks } from '@/lib/rehype-plugins/external-links'
 import { compileMarkdown, sanitizeSchema } from '@/lib/markdown-compiler'
 
 describe('Rehype Plugins', () => {
@@ -311,6 +314,46 @@ describe('Rehype Plugins', () => {
             : false,
       )
       expect(found).toBe(true)
+    })
+  })
+
+  // @types/hast >= 3.0.5 types `className`/`rel` as string[], so these plugins
+  // build arrays rather than space-joined strings. hast-util-to-html joins
+  // space-separated props on serialization, so the emitted HTML is unchanged —
+  // these tests pin that equivalence.
+  describe('className/rel serialization', () => {
+    async function render(md: string) {
+      return String(
+        await unified()
+          .use(remarkParse)
+          .use(remarkRehype, { allowDangerousHtml: true })
+          .use(rehypeRaw)
+          .use(rehypeColorClasses)
+          .use(rehypeColorTitle)
+          .use(rehypeExternalLinks)
+          .use(rehypeStringify, { allowDangerousHtml: true })
+          .process(md),
+      )
+    }
+
+    it('external links serialize rel as a space-separated string', async () => {
+      const html = await render('[x](https://example.com)')
+      expect(html).toContain('target="_blank"')
+      expect(html).toContain('rel="noopener noreferrer"')
+    })
+
+    it('leaves internal links alone', async () => {
+      expect(await render('[x](/local)')).not.toContain('target="_blank"')
+    })
+
+    it('color classes merge with an existing class rather than clobbering it', async () => {
+      const html = await render('<span class="keepme" style="color: cyan">hi</span>')
+      expect(html).toContain('keepme')
+      expect(html).toContain('es-color-cyan')
+    })
+
+    it('h1 gets color-title appended to existing classes', async () => {
+      expect(await render('<h1 class="mine">Title</h1>')).toMatch(/class="mine color-title"/)
     })
   })
 })

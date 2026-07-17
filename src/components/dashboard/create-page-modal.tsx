@@ -82,8 +82,8 @@ export function CreatePageModal({ skriptId, onPageCreated }: CreatePageModalProp
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogTrigger asChild>
           <button className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer">
-            <Plus className="w-4 h-4 flex-shrink-0" />
-            <FileText className="w-4 h-4 flex-shrink-0" />
+            <Plus className="w-4 h-4 shrink-0" />
+            <FileText className="w-4 h-4 shrink-0" />
             <span>Add page</span>
           </button>
         </DialogTrigger>

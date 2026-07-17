@@ -206,7 +206,7 @@ export function PythonProgressBar({ classId, className, pageId, componentId }: P
                       !attempted && 'opacity-60'
                     )}
                   >
-                    <div className="flex-shrink-0">
+                    <div className="shrink-0">
                       {!attempted
                         ? <Clock className="h-4 w-4 text-muted-foreground" />
                         : ratio >= 1
@@ -215,7 +215,7 @@ export function PythonProgressBar({ classId, className, pageId, componentId }: P
                             ? <Minus className="h-4 w-4 text-yellow-500" />
                             : <X className="h-4 w-4 text-red-500" />}
                     </div>
-                    <div className="flex-shrink-0 w-32 truncate font-medium">{resolveDisplayName(r, resolvedEmails)}</div>
+                    <div className="shrink-0 w-32 truncate font-medium">{resolveDisplayName(r, resolvedEmails)}</div>
                     <div className="flex-1 text-xs text-muted-foreground">
                       {!attempted ? (
                         'Not attempted yet'

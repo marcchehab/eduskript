@@ -42,7 +42,7 @@ export function AIChatInput({ onSend, disabled, placeholder }: AIChatInputProps)
   )
 
   return (
-    <div className="flex-shrink-0 border-t p-4">
+    <div className="shrink-0 border-t p-4">
       <div className="flex gap-2">
         <Textarea
           ref={textareaRef}
@@ -58,7 +58,7 @@ export function AIChatInput({ onSend, disabled, placeholder }: AIChatInputProps)
           onClick={handleSubmit}
           disabled={disabled || !input.trim()}
           size="icon"
-          className="flex-shrink-0"
+          className="shrink-0"
         >
           {disabled ? (
             <Loader2 className="h-4 w-4 animate-spin" />

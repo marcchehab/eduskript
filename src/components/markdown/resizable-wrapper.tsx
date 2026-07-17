@@ -181,7 +181,7 @@ export function ResizableWrapper({
 
           {/* Width indicator */}
           {(isDragging || currentWidth < 100) && (
-            <span className={`block absolute -top-8 left-1/2 -translate-x-1/2 bg-background/95 backdrop-blur border border-border/50 px-2 py-1 rounded text-[10px] font-mono text-foreground z-10 pointer-events-none transition-opacity ${
+            <span className={`block absolute -top-8 left-1/2 -translate-x-1/2 bg-background/95 backdrop-blur-sm border border-border/50 px-2 py-1 rounded text-[10px] font-mono text-foreground z-10 pointer-events-none transition-opacity ${
               isDragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
             }`}>
               {Math.round(currentWidth)}%
@@ -189,7 +189,7 @@ export function ResizableWrapper({
           )}
 
           {/* Alignment and wrap controls */}
-          <span className="absolute top-2 right-2 bg-background/95 backdrop-blur border border-border/50 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10 flex gap-0.5 p-0.5">
+          <span className="absolute top-2 right-2 bg-background/95 backdrop-blur-sm border border-border/50 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10 flex gap-0.5 p-0.5">
             <button
               onClick={() => handleAlignChange('left')}
               className={`p-1.5 rounded hover:bg-accent transition-colors ${

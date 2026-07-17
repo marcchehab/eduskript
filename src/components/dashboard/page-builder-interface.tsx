@@ -779,7 +779,7 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
           <div className="flex-1 flex items-center justify-center">
             <p className="text-muted-foreground">Loading page builder...</p>
           </div>
-          <div className="w-80 flex-shrink-0">
+          <div className="w-80 shrink-0">
             <ContentLibrary
               onDataLoad={setLibraryData}
               refreshTrigger={refreshTrigger}
@@ -836,7 +836,7 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
         </div>
 
         {/* Content Library - Right Side */}
-        <div className="w-80 flex-shrink-0">
+        <div className="w-80 shrink-0">
           <ContentLibrary
             onDataLoad={setLibraryData}
             refreshTrigger={refreshTrigger}

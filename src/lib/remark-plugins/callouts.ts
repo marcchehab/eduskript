@@ -149,7 +149,7 @@ export const remarkCallouts: Plugin<[], Root> = function () {
         data: {
           hName: 'span',
           hProperties: {
-            className: 'block py-2'
+            className: ['block', 'py-2']
           }
         }
       }
@@ -161,7 +161,7 @@ export const remarkCallouts: Plugin<[], Root> = function () {
         data: {
           hName: 'div',
           hProperties: {
-            className: `callout-title ${calloutType}`
+            className: ['callout-title', calloutType]
           }
         }
       }
@@ -185,7 +185,7 @@ export const remarkCallouts: Plugin<[], Root> = function () {
         data: {
           hName: 'div',
           hProperties: {
-            className: 'callout-content'
+            className: ['callout-content']
           }
         }
       }
@@ -207,7 +207,7 @@ export const remarkCallouts: Plugin<[], Root> = function () {
       blockquote.data = {
         ...blockquote.data,
         hProperties: {
-          className: classList.join(' ')
+          className: classList
         }
       }
     })

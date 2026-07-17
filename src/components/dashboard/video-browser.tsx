@@ -137,7 +137,7 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
 
     if (status === 'waiting' || status === 'processing') {
       return (
-        <span className="flex-shrink-0" title={`Video is ${status}`}>
+        <span className="shrink-0" title={`Video is ${status}`}>
           <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
         </span>
       )
@@ -145,7 +145,7 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
 
     if (status === 'errored') {
       return (
-        <span className="flex-shrink-0" title="Video processing failed">
+        <span className="shrink-0" title="Video processing failed">
           <AlertCircle className="w-3.5 h-3.5 text-destructive" />
         </span>
       )
@@ -213,19 +213,19 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
       {/* Search + Upload + Admin Add buttons */}
       <div className="px-2 pt-2 pb-1 flex items-center gap-1.5">
         <div className="flex-1 flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1">
-          <Search className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+          <Search className="w-3 h-3 text-muted-foreground shrink-0" />
           <input
             type="text"
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder="Filter videos…"
-            className="flex-1 text-xs bg-transparent outline-none placeholder:text-muted-foreground"
+            className="flex-1 text-xs bg-transparent outline-hidden placeholder:text-muted-foreground"
           />
         </div>
         {/* Upload button for all teachers */}
         <button
           onClick={() => setShowUploadModal(true)}
-          className="flex-shrink-0 p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+          className="shrink-0 p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
           title="Upload video"
         >
           <Upload className="w-3.5 h-3.5" />
@@ -234,7 +234,7 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
         {skriptId && (
           <button
             onClick={() => setShowImportDialog(true)}
-            className="flex-shrink-0 p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+            className="shrink-0 p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
             title="Import video from another skript"
           >
             <Import className="w-3.5 h-3.5" />
@@ -244,7 +244,7 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
         {isAdmin && (
           <button
             onClick={() => setShowAddForm(f => !f)}
-            className="flex-shrink-0 p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+            className="shrink-0 p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
             title="Add video entry manually"
           >
             {showAddForm ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
@@ -260,21 +260,21 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
             value={addFilename}
             onChange={e => setAddFilename(e.target.value)}
             placeholder="Filename (e.g. lecture.mp4)"
-            className="w-full text-xs rounded border border-border bg-background px-2 py-1 outline-none focus:ring-1 focus:ring-ring"
+            className="w-full text-xs rounded border border-border bg-background px-2 py-1 outline-hidden focus:ring-1 focus:ring-ring"
           />
           <input
             type="text"
             value={addPlaybackId}
             onChange={e => setAddPlaybackId(e.target.value)}
             placeholder="Mux Playback ID"
-            className="w-full text-xs rounded border border-border bg-background px-2 py-1 outline-none focus:ring-1 focus:ring-ring"
+            className="w-full text-xs rounded border border-border bg-background px-2 py-1 outline-hidden focus:ring-1 focus:ring-ring"
           />
           <input
             type="text"
             value={addAspectRatio}
             onChange={e => setAddAspectRatio(e.target.value)}
             placeholder="Aspect ratio (optional, e.g. 1.778)"
-            className="w-full text-xs rounded border border-border bg-background px-2 py-1 outline-none focus:ring-1 focus:ring-ring"
+            className="w-full text-xs rounded border border-border bg-background px-2 py-1 outline-hidden focus:ring-1 focus:ring-ring"
           />
           {addError && <p className="text-xs text-destructive">{addError}</p>}
           <button
@@ -318,10 +318,10 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
                     <img
                       src={video.metadata.poster}
                       alt=""
-                      className="w-12 h-8 object-cover rounded flex-shrink-0 bg-muted"
+                      className="w-12 h-8 object-cover rounded shrink-0 bg-muted"
                     />
                   ) : (
-                    <div className="w-12 h-8 flex items-center justify-center rounded flex-shrink-0 bg-muted">
+                    <div className="w-12 h-8 flex items-center justify-center rounded shrink-0 bg-muted">
                       <Film className="w-4 h-4 text-muted-foreground" />
                     </div>
                   )}
@@ -332,7 +332,7 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
                   {getStatusIndicator(video)}
 
                   {isReady && (
-                    <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded flex-shrink-0">
+                    <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0">
                       {video.provider}
                     </span>
                   )}
@@ -341,7 +341,7 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
                   {video.metadata.playbackId && (
                     <button
                       onClick={e => { e.stopPropagation(); handleCopyPlaybackId(video.metadata.playbackId!) }}
-                      className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-accent"
+                      className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-accent"
                       title="Copy Mux Playback ID"
                     >
                       {copiedPlaybackId === video.metadata.playbackId ? (
@@ -355,7 +355,7 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
                   {/* Copy filename button */}
                   <button
                     onClick={e => { e.stopPropagation(); handleCopyFilename(video.filename) }}
-                    className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-accent"
+                    className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-accent"
                     title="Copy filename to clipboard"
                   >
                     {copiedFilename === video.filename ? (
@@ -369,7 +369,7 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
                   <button
                     onClick={e => { e.stopPropagation(); handleDelete(video) }}
                     disabled={deletingId === video.id}
-                    className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-destructive/10"
+                    className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-destructive/10"
                     title="Delete video entry"
                   >
                     {deletingId === video.id ? (

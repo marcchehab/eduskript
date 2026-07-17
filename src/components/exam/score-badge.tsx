@@ -105,7 +105,7 @@ export function ScoreBadge({ componentId }: { componentId: string }) {
                   </div>
                   {/* LEFT — your comment + points (small "regex" tag under the score) */}
                   <div className="flex flex-1 items-start gap-1.5 px-2 py-1 text-xs">
-                    <p className="!my-0 min-w-0 flex-1 whitespace-pre-wrap">
+                    <p className="my-0! min-w-0 flex-1 whitespace-pre-wrap">
                       {comment ?? <span className="text-muted-foreground">—</span>}
                     </p>
                     <span className="flex w-10 shrink-0 flex-col items-end gap-0.5">
@@ -125,7 +125,7 @@ export function ScoreBadge({ componentId }: { componentId: string }) {
                   {/* RIGHT — the rubric criterion (regex annotation stripped for the student) */}
                   <div className={cn('flex flex-1 items-start gap-1.5 px-2 py-1 text-xs', RUBRIC_BG)}>
                     <span className="w-10 shrink-0 text-right tabular-nums text-muted-foreground">/ {fmt(rc.points)}</span>
-                    <p className="!my-0 min-w-0 flex-1">
+                    <p className="my-0! min-w-0 flex-1">
                       <span className="mr-1 font-mono text-[10px] text-muted-foreground">{rc.id}</span>
                       {stripInlineRegex(rc.description)}
                     </p>

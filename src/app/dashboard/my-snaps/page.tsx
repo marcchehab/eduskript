@@ -178,7 +178,7 @@ export default function MySnapsPage() {
                         e.stopPropagation()
                         setDeletingSnap(snap)
                       }}
-                      className="absolute top-2 right-2 p-1.5 bg-background/80 backdrop-blur border border-border rounded-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/10 hover:text-destructive"
+                      className="absolute top-2 right-2 p-1.5 bg-background/80 backdrop-blur-sm border border-border rounded-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/10 hover:text-destructive"
                       title="Delete snap"
                     >
                       <Trash2 className="w-4 h-4" />

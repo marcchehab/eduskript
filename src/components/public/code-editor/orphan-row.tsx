@@ -70,9 +70,9 @@ export function OrphanRow({ pageId, orphanId, onRestore, onDelete, onPreviewVers
           title={expanded ? 'Collapse' : 'Expand to view recent versions'}
         >
           {expanded ? (
-            <ChevronDown className="w-4 h-4 flex-shrink-0" />
+            <ChevronDown className="w-4 h-4 shrink-0" />
           ) : (
-            <ChevronRight className="w-4 h-4 flex-shrink-0" />
+            <ChevronRight className="w-4 h-4 shrink-0" />
           )}
           <code className="text-xs font-mono truncate">{orphanId}</code>
         </button>
@@ -86,7 +86,7 @@ export function OrphanRow({ pageId, orphanId, onRestore, onDelete, onPreviewVers
             <Button
               size="sm"
               variant="ghost"
-              className="h-7 w-7 p-0 flex-shrink-0"
+              className="h-7 w-7 p-0 shrink-0"
               title="Restore to this editor — move all saves from this orphaned editor onto the current one"
             >
               <Import className="w-3.5 h-3.5" />
@@ -103,7 +103,7 @@ export function OrphanRow({ pageId, orphanId, onRestore, onDelete, onPreviewVers
             <Button
               size="sm"
               variant="ghost"
-              className="h-7 w-7 p-0 flex-shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              className="h-7 w-7 p-0 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
               title="Delete — permanently remove every save under this orphaned editor id"
             >
               <Trash2 className="w-3.5 h-3.5" />

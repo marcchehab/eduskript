@@ -134,7 +134,7 @@ export function DashboardSidebar() {
               )}
               title={`Back to ${lastTeacherPage.name}`}
             >
-              <CornerUpLeft className="w-4 h-4 flex-shrink-0" />
+              <CornerUpLeft className="w-4 h-4 shrink-0" />
               {!isCollapsed && <span className="truncate max-w-36">Back to {lastTeacherPage.name}</span>}
             </Link>
           ) : (

@@ -296,7 +296,7 @@ function QuestionInner({
       : ''
 
   return (
-    <div className="space-y-4 border rounded-lg p-4 shadow-sm bg-card my-4" data-source-line-start={sourceLineStart} data-source-line-end={sourceLineEnd}>
+    <div className="space-y-4 border rounded-lg p-4 shadow-xs bg-card my-4" data-source-line-start={sourceLineStart} data-source-line-end={sourceLineEnd}>
       {/* Single/Multiple Choice */}
       {(type === 'single' || type === 'multiple') && (
         <div className="space-y-2">

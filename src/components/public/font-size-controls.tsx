@@ -106,7 +106,7 @@ export function FontSizeControls({ orientation = 'horizontal' }: FontSizeControl
         <Minus className="h-4 w-4" />
       </button>
 
-      <div className={isVertical ? 'h-[1px] w-4 bg-border mx-auto' : 'w-[1px] h-4 bg-border'} />
+      <div className={isVertical ? 'h-px w-4 bg-border mx-auto' : 'w-px h-4 bg-border'} />
 
       {/* Show font size number in development */}
       {process.env.NODE_ENV === 'development' && (
@@ -114,7 +114,7 @@ export function FontSizeControls({ orientation = 'horizontal' }: FontSizeControl
           <span className="text-xs text-muted-foreground tabular-nums px-1 min-w-[24px] text-center">
             {fontSize}
           </span>
-          <div className={isVertical ? 'h-[1px] w-4 bg-border mx-auto' : 'w-[1px] h-4 bg-border'} />
+          <div className={isVertical ? 'h-px w-4 bg-border mx-auto' : 'w-px h-4 bg-border'} />
         </>
       )}
 

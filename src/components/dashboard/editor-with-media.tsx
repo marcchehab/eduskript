@@ -35,7 +35,9 @@ import {
   Link2,
   Loader2,
   Maximize2,
-  Youtube,
+  // lucide-react 1.x removed all brand icons (incl. Youtube) over trademark
+  // concerns; Video is the generic stand-in for the YouTube paste option.
+  Video,
 } from 'lucide-react'
 
 export interface ExtraManageTab {
@@ -523,7 +525,7 @@ export function EditorWithMedia({
               onClick={() => handleTabClick(tab.id)}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${
                 activeTab === tab.id
-                  ? 'bg-background text-foreground shadow-sm border-b-2 border-primary'
+                  ? 'bg-background text-foreground shadow-xs border-b-2 border-primary'
                   : 'text-muted-foreground hover:text-foreground bg-muted/50'
               }`}
             >
@@ -925,7 +927,7 @@ export function EditorWithMedia({
             {pasteMenu.options.map((option, idx) => {
               const Icon =
                 option.icon === 'image' ? ImageIcon
-                : option.icon === 'youtube' ? Youtube
+                : option.icon === 'youtube' ? Video
                 : Link2
               return (
                 <button
@@ -944,7 +946,7 @@ export function EditorWithMedia({
 
       {/* PDF page extraction progress overlay */}
       {pdfExtracting && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-xs">
           <div className="flex items-center gap-3 bg-popover border border-border rounded-lg px-5 py-3 shadow-lg">
             <Loader2 className="w-4 h-4 animate-spin" />
             <span className="text-sm">{pdfExtracting}</span>

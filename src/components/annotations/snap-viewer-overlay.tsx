@@ -88,7 +88,7 @@ export function SnapViewerOverlay<T extends SnapViewerItem>({
       {/* Top bar with controls */}
       <div className="absolute top-4 left-4 right-4 flex items-center justify-between z-10">
         {/* Info - left */}
-        <div className="bg-background/80 backdrop-blur rounded-lg px-4 py-2">
+        <div className="bg-background/80 backdrop-blur-sm rounded-lg px-4 py-2">
           <h3 className="font-semibold text-foreground">
             {currentSnap.name}
           </h3>
@@ -105,17 +105,17 @@ export function SnapViewerOverlay<T extends SnapViewerItem>({
         <div className="flex items-center gap-2">
           <button
             onClick={(e) => { e.stopPropagation(); setZoomLevel(z => Math.max(0.25, z - 0.25)) }}
-            className="p-2 bg-background/80 backdrop-blur hover:bg-background rounded-full transition-colors"
+            className="p-2 bg-background/80 backdrop-blur-sm hover:bg-background rounded-full transition-colors"
             title="Zoom out"
           >
             <ZoomOut className="w-5 h-5" />
           </button>
-          <span className="bg-background/80 backdrop-blur rounded-lg px-3 py-1 text-sm min-w-[4rem] text-center">
+          <span className="bg-background/80 backdrop-blur-sm rounded-lg px-3 py-1 text-sm min-w-16 text-center">
             {Math.round(zoomLevel * 100)}%
           </span>
           <button
             onClick={(e) => { e.stopPropagation(); setZoomLevel(z => Math.min(4, z + 0.25)) }}
-            className="p-2 bg-background/80 backdrop-blur hover:bg-background rounded-full transition-colors"
+            className="p-2 bg-background/80 backdrop-blur-sm hover:bg-background rounded-full transition-colors"
             title="Zoom in"
           >
             <ZoomIn className="w-5 h-5" />
@@ -124,14 +124,14 @@ export function SnapViewerOverlay<T extends SnapViewerItem>({
             href={currentSnap.imageUrl}
             download={`${currentSnap.name}.jpg`}
             onClick={(e) => e.stopPropagation()}
-            className="p-2 bg-background/80 backdrop-blur hover:bg-background rounded-full transition-colors"
+            className="p-2 bg-background/80 backdrop-blur-sm hover:bg-background rounded-full transition-colors"
             title="Download"
           >
             <Download className="w-5 h-5" />
           </a>
           <button
             onClick={handleClose}
-            className="p-2 bg-background/80 backdrop-blur hover:bg-background rounded-full transition-colors"
+            className="p-2 bg-background/80 backdrop-blur-sm hover:bg-background rounded-full transition-colors"
             title="Close (Esc)"
           >
             <X className="w-5 h-5" />
@@ -143,7 +143,7 @@ export function SnapViewerOverlay<T extends SnapViewerItem>({
       {currentIndex > 0 && (
         <button
           onClick={(e) => { e.stopPropagation(); goToPrev() }}
-          className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-background/80 backdrop-blur hover:bg-background rounded-full transition-colors z-10"
+          className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-background/80 backdrop-blur-sm hover:bg-background rounded-full transition-colors z-10"
           title="Previous (←)"
         >
           <ChevronLeft className="w-6 h-6" />
@@ -154,7 +154,7 @@ export function SnapViewerOverlay<T extends SnapViewerItem>({
       {currentIndex < snaps.length - 1 && (
         <button
           onClick={(e) => { e.stopPropagation(); goToNext() }}
-          className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-background/80 backdrop-blur hover:bg-background rounded-full transition-colors z-10"
+          className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-background/80 backdrop-blur-sm hover:bg-background rounded-full transition-colors z-10"
           title="Next (→)"
         >
           <ChevronRight className="w-6 h-6" />
@@ -169,7 +169,7 @@ export function SnapViewerOverlay<T extends SnapViewerItem>({
       )}
 
       {/* Bottom right - custom or default dimensions */}
-      <div className="absolute bottom-4 right-4 bg-background/80 backdrop-blur rounded-lg px-3 py-1 text-sm text-muted-foreground z-10">
+      <div className="absolute bottom-4 right-4 bg-background/80 backdrop-blur-sm rounded-lg px-3 py-1 text-sm text-muted-foreground z-10">
         {renderBottomRight ? renderBottomRight(currentSnap) : (
           <>{Math.round(currentSnap.width)} x {Math.round(currentSnap.height)}</>
         )}

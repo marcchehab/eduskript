@@ -41,7 +41,7 @@ export function VersionCardDisplay({ version, defaultLabel, onClick }: VersionCa
   const timeAgo = formatTimeAgo(version.createdAt, mountedAt)
 
   const interactive = !!onClick
-  const baseClasses = 'relative flex-shrink-0 w-24 min-h-28 max-h-40 border rounded-lg p-3 flex flex-col items-center justify-center gap-1 bg-muted/20'
+  const baseClasses = 'relative shrink-0 w-24 min-h-28 max-h-40 border rounded-lg p-3 flex flex-col items-center justify-center gap-1 bg-muted/20'
 
   const inner = (
     <>

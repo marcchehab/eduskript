@@ -36,11 +36,11 @@ function BrandingHeader({ context }: { context: SignInFormProps['context'] }) {
   return (
     <div className="flex items-center justify-center gap-3 mb-2">
       {context.icon && context.icon !== 'default' ? (
-        <div className="relative w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-background">
+        <div className="relative w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-background">
           <Image src={context.icon} alt="" fill className="object-cover" />
         </div>
       ) : (
-        <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+        <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
           <NotebookPen className="w-6 h-6 text-muted-foreground" />
         </div>
       )}
@@ -218,7 +218,7 @@ export function SignInForm({ context, callbackUrl = '/dashboard' }: SignInFormPr
 
             {/* Privacy note */}
             <div className="flex items-start gap-2 text-xs text-muted-foreground mb-4">
-              <ShieldCheck className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <ShieldCheck className="w-4 h-4 mt-0.5 shrink-0" />
               <span>Your privacy is our priority. Student accounts use pseudonymous identifiers.</span>
             </div>
 
@@ -351,7 +351,7 @@ export function SignInForm({ context, callbackUrl = '/dashboard' }: SignInFormPr
               </Button>
 
               <div className="flex items-start gap-2 text-xs text-muted-foreground mt-4">
-                <ShieldCheck className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <ShieldCheck className="w-4 h-4 mt-0.5 shrink-0" />
                 <span>Student accounts use pseudonymous identifiers to protect your privacy.</span>
               </div>
             </CardContent>

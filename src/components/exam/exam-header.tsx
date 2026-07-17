@@ -44,10 +44,10 @@ export function ExamHeader({
   const displayEmail = studentName && studentEmail ? studentEmail : null
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 h-14 bg-card border-b border-border shadow-sm">
+    <header className="fixed top-0 left-0 right-0 z-50 h-14 bg-card border-b border-border shadow-xs">
       <div className="h-full px-4 flex items-center justify-between">
         {/* Left: Hand in button */}
-        <div className="flex-shrink-0">
+        <div className="shrink-0">
           <HandInButton
             pageId={pageId}
             publicKeyJwk={backupPublicKeyJwk}
@@ -65,7 +65,7 @@ export function ExamHeader({
         </div>
 
         {/* Right: Controls and student info */}
-        <div className="flex items-center gap-3 flex-shrink-0">
+        <div className="flex items-center gap-3 shrink-0">
           {/* Student info */}
           <div className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground">
             <User className="w-4 h-4" />

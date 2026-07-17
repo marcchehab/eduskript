@@ -167,7 +167,7 @@ function GradingBar({
           toolbar. */}
       {typeof window !== 'undefined' && createPortal(
       <div
-        className="fixed top-8 z-50 flex items-center gap-2 rounded-lg border border-border bg-background/95 px-3 py-2 shadow-lg backdrop-blur"
+        className="fixed top-8 z-50 flex items-center gap-2 rounded-lg border border-border bg-background/95 px-3 py-2 shadow-lg backdrop-blur-sm"
         // Center within the CONTENT area (viewport minus sidebar), like the
         // annotation toolbar — not the raw viewport.
         style={{ left: `calc(${sidebarWidth}px + (100% - ${sidebarWidth}px) / 2)`, transform: 'translateX(-50%)' }}

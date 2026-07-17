@@ -3304,7 +3304,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
       {orphanedStrokesCount > 0 && (
         <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-yellow-100 dark:bg-yellow-900/20 border border-yellow-400 dark:border-yellow-600 rounded-lg shadow-lg px-4 py-2 max-w-md">
           <div className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
+            <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 shrink-0" />
             <span className="text-sm text-yellow-800 dark:text-yellow-200">
               {orphanedStrokesCount} annotation{orphanedStrokesCount > 1 ? 's are' : ' is'} orphaned (original section{orphanedStrokesCount > 1 ? 's' : ''} deleted)
             </span>

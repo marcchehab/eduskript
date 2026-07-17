@@ -250,7 +250,7 @@ export default function JoinClassPage() {
           {session && classInfo && !classInfo.allowAnonymous && !isPreAuthorized && (
             <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg space-y-3">
               <div className="flex items-start gap-3">
-                <ShieldAlert className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+                <ShieldAlert className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
                 <div>
                   <h4 className="font-medium text-amber-900 dark:text-amber-100">
                     Teacher approval required
@@ -274,7 +274,7 @@ export default function JoinClassPage() {
           {session && isPreAuthorized && (
             <div className="p-4 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg">
               <div className="flex items-start gap-3">
-                <ShieldCheck className="w-5 h-5 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
+                <ShieldCheck className="w-5 h-5 text-green-600 dark:text-green-400 mt-0.5 shrink-0" />
                 <div>
                   <h4 className="font-medium text-green-900 dark:text-green-100">
                     Your teacher has added you

@@ -339,7 +339,7 @@ const SpacerSidePanel = forwardRef<HTMLDivElement, SpacerSidePanelProps>(
             key={key}
             type="button"
             className={cn(
-              'h-6 w-6 rounded border transition-transform hover:scale-125 focus:outline-none focus:ring-2 focus:ring-ring spacer-preview',
+              'h-6 w-6 rounded border transition-transform hover:scale-125 focus:outline-hidden focus:ring-2 focus:ring-ring spacer-preview',
               key === spacer.pattern
                 ? 'border-foreground/50 scale-110'
                 : 'border-black/10 dark:border-white/10',

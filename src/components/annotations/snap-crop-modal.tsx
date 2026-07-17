@@ -143,7 +143,7 @@ export function SnapCropModal({ blob, onConfirm, onCancel }: SnapCropModalProps)
   ]
 
   const content = (
-    <div className="fixed inset-0 z-[200] bg-black/80 flex flex-col items-center justify-center gap-6 select-none">
+    <div className="fixed inset-0 z-200 bg-black/80 flex flex-col items-center justify-center gap-6 select-none">
       {/* Image + crop overlay */}
       <div
         className="relative overflow-hidden"

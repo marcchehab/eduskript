@@ -1,5 +1,6 @@
 import { visit } from 'unist-util-visit'
 import type { Root, Element } from 'hast'
+import { addClass } from './class-names'
 
 /**
  * Rehype plugin that adds data-text attribute to h1 elements
@@ -18,19 +19,7 @@ export function rehypeColorTitle() {
         }
         node.properties['dataHeadingText'] = textContent
 
-        // Add the color-title class
-        const currentClass = node.properties.className
-        if (Array.isArray(currentClass)) {
-          if (!currentClass.includes('color-title')) {
-            currentClass.push('color-title')
-          }
-        } else if (typeof currentClass === 'string') {
-          if (!currentClass.includes('color-title')) {
-            node.properties.className = `${currentClass} color-title`
-          }
-        } else {
-          node.properties.className = 'color-title'
-        }
+        addClass(node.properties, 'color-title')
       }
     })
   }

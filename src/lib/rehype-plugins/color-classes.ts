@@ -14,8 +14,9 @@
  * right escape hatch for the toolbar's "custom hex" picker.
  */
 import { visit } from 'unist-util-visit'
-import type { Element, Properties, Root } from 'hast'
+import type { Element, Root } from 'hast'
 import { resolveHighlightColor, resolveTextColor } from '@/lib/color-palette'
+import { addClass } from './class-names'
 
 // CSS declaration matching is intentionally loose: handles any whitespace,
 // optional trailing semicolon, and case-insensitive property names. The value
@@ -24,19 +25,6 @@ import { resolveHighlightColor, resolveTextColor } from '@/lib/color-palette'
 // that happen to be preceded by `background-`.
 const COLOR_DECL = /(?<![a-z-])color\s*:\s*([^;]+?)\s*(?:;|$)/i
 const BG_DECL = /background-color\s*:\s*([^;]+?)\s*(?:;|$)/i
-
-function addClass(properties: Properties, cls: string) {
-  const existing = properties.className
-  if (Array.isArray(existing)) {
-    if (!existing.includes(cls)) existing.push(cls)
-  } else if (typeof existing === 'string') {
-    properties.className = existing.split(/\s+/).includes(cls)
-      ? existing
-      : `${existing} ${cls}`
-  } else {
-    properties.className = [cls]
-  }
-}
 
 function rewriteOne(node: Element): void {
   const props = node.properties

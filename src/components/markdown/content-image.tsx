@@ -177,7 +177,7 @@ export function ContentImage({ src, alt = '', title, style, onWidthChange, origi
         {!isMissing && (
           <button
             onClick={() => setLightboxOpen(true)}
-            className="absolute top-2 right-2 z-20 p-1.5 rounded-md bg-background/80 backdrop-blur-sm border border-border shadow-sm opacity-0 group-hover/img:opacity-100 transition-opacity hover:bg-accent cursor-zoom-in"
+            className="absolute top-2 right-2 z-20 p-1.5 rounded-md bg-background/80 backdrop-blur-xs border border-border shadow-xs opacity-0 group-hover/img:opacity-100 transition-opacity hover:bg-accent cursor-zoom-in"
             title="Fullscreen"
           >
             <Maximize2 className="w-3.5 h-3.5" />

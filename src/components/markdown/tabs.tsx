@@ -56,7 +56,7 @@ function TabsComponent({ items, children, tabContents: preExtractedContents, cla
             onClick={() => setActiveTab(index)}
             className={cn(
               'px-4 py-2 text-sm font-medium transition-colors whitespace-nowrap',
-              'hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20',
+              'hover:bg-muted focus:outline-hidden focus:ring-2 focus:ring-primary/20',
               activeTab === index
                 ? 'bg-card text-foreground border-b-2 border-primary -mb-px'
                 : 'text-muted-foreground'
@@ -68,7 +68,7 @@ function TabsComponent({ items, children, tabContents: preExtractedContents, cla
       </div>
       {/* Tab content. Drop the first child's top margin (e.g. a leading
           heading) so it doesn't add dead space under the tab strip. */}
-      <div className="p-4 bg-card [&>*:first-child]:!mt-0">
+      <div className="p-4 bg-card [&>*:first-child]:mt-0!">
         {tabContents[activeTab]}
       </div>
     </div>

@@ -374,7 +374,7 @@ export function QuizProgressBar({
     if (questionType === 'text') {
       const ratio = response.data.textRatio
       return (
-        <span className="text-sm break-words">
+        <span className="text-sm wrap-break-word">
           &ldquo;{response.data.textAnswer}&rdquo;
           {ratio !== undefined && (
             <span className="ml-1.5 whitespace-nowrap tabular-nums text-xs text-muted-foreground">
@@ -556,12 +556,12 @@ export function QuizProgressBar({
                     )}
                   >
                     {/* Status icon */}
-                    <div className="flex-shrink-0">
+                    <div className="shrink-0">
                       {getStatusIcon(response)}
                     </div>
 
                     {/* Student name */}
-                    <div className="flex-shrink-0 w-32 truncate font-medium">
+                    <div className="shrink-0 w-32 truncate font-medium">
                       {resolveDisplayName(response, resolvedEmails)}
                     </div>
 

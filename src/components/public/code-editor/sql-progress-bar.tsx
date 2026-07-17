@@ -184,14 +184,14 @@ export function SqlProgressBar({ classId, className, pageId, componentId }: SqlP
                     r.isCorrect === null && 'opacity-60'
                   )}
                 >
-                  <div className="flex-shrink-0">
+                  <div className="shrink-0">
                     {r.isCorrect === null
                       ? <Clock className="h-4 w-4 text-muted-foreground" />
                       : r.isCorrect
                         ? <Check className="h-4 w-4 text-green-500" />
                         : <X className="h-4 w-4 text-red-500" />}
                   </div>
-                  <div className="flex-shrink-0 w-32 truncate font-medium">{resolveDisplayName(r, resolvedEmails)}</div>
+                  <div className="shrink-0 w-32 truncate font-medium">{resolveDisplayName(r, resolvedEmails)}</div>
                   <div className="flex-1 text-xs text-muted-foreground">
                     {r.isCorrect === null
                       ? 'Not attempted yet'

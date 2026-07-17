@@ -391,7 +391,7 @@ export function StickMe({
               onPointerUp={onHandlePointerUp}
               title="Drag to resize"
               aria-label="Resize pinned element"
-              className="absolute z-[60] flex h-7 w-7 items-center justify-center rounded-full border border-background/60 bg-foreground/85 text-background shadow-md"
+              className="absolute z-60 flex h-7 w-7 items-center justify-center rounded-full border border-background/60 bg-foreground/85 text-background shadow-md"
               style={{ left: 0, top: 0, cursor: 'nesw-resize', touchAction: 'none' }}
             >
               <MoveDiagonal2 className="h-3.5 w-3.5 rotate-90" />

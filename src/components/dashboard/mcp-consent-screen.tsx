@@ -32,7 +32,7 @@ export function McpConsentScreen({
 }: ConsentScreenProps) {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center px-4 py-16">
-      <div className="w-full max-w-md bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-sm p-8 space-y-6">
+      <div className="w-full max-w-md bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-xs p-8 space-y-6">
         <div>
           <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
             Allow access?

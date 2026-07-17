@@ -207,7 +207,7 @@ export function VideoUploadModal({ open, onOpenChange, onUploadComplete, skriptI
                   value={filename}
                   onChange={e => setFilename(e.target.value)}
                   placeholder="e.g., lecture-01.mp4"
-                  className="w-full text-sm rounded-md border border-border bg-background px-3 py-2 outline-none focus:ring-1 focus:ring-ring"
+                  className="w-full text-sm rounded-md border border-border bg-background px-3 py-2 outline-hidden focus:ring-1 focus:ring-ring"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
                   This is how you&apos;ll reference the video in markdown
@@ -216,7 +216,7 @@ export function VideoUploadModal({ open, onOpenChange, onUploadComplete, skriptI
 
               {error && (
                 <div className="flex items-center gap-2 text-sm text-destructive">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  <AlertCircle className="w-4 h-4 shrink-0" />
                   {error}
                 </div>
               )}

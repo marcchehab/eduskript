@@ -33,7 +33,7 @@ export function ImageLightbox({ open, onClose, children }: ImageLightboxProps) {
 
   const overlay = (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-8 cursor-zoom-out"
+      className="fixed inset-0 z-9999 flex items-center justify-center p-4 sm:p-8 cursor-zoom-out"
       onClick={onClose}
       style={{ backdropFilter: 'blur(8px)', backgroundColor: 'rgba(0,0,0,0.75)' }}
     >

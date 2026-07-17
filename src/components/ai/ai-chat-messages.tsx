@@ -48,7 +48,7 @@ export function AIChatMessages({ messages, isStreaming, error }: AIChatMessagesP
           )}
         >
           {message.role === 'assistant' && (
-            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+            <div className="shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
               <Bot className="h-4 w-4 text-primary" />
             </div>
           )}
@@ -121,12 +121,12 @@ export function AIChatMessages({ messages, isStreaming, error }: AIChatMessagesP
                   )}
               </div>
             ) : (
-              <div className="whitespace-pre-wrap break-words">{message.content}</div>
+              <div className="whitespace-pre-wrap wrap-break-word">{message.content}</div>
             )}
           </div>
 
           {message.role === 'user' && (
-            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary flex items-center justify-center">
+            <div className="shrink-0 w-8 h-8 rounded-full bg-primary flex items-center justify-center">
               <User className="h-4 w-4 text-primary-foreground" />
             </div>
           )}
@@ -135,7 +135,7 @@ export function AIChatMessages({ messages, isStreaming, error }: AIChatMessagesP
 
       {error && (
         <div className="flex items-center gap-2 text-destructive bg-destructive/10 rounded-lg px-4 py-2">
-          <AlertCircle className="h-4 w-4 flex-shrink-0" />
+          <AlertCircle className="h-4 w-4 shrink-0" />
           <span>{error}</span>
         </div>
       )}

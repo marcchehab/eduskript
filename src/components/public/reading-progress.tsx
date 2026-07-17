@@ -231,7 +231,7 @@ export function ReadingProgress() {
         return (
           <div
             key={chapter.id}
-            className="relative flex-shrink-0 transition-all duration-200 ease-out cursor-pointer opacity-80"
+            className="relative shrink-0 transition-all duration-200 ease-out cursor-pointer opacity-80"
             style={{
               flexBasis: `${chapter.widthPercent}%`,
               flexGrow: 0,

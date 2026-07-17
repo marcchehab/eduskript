@@ -43,8 +43,8 @@ export function FlexItem({ children, className, style, width, grow = true, ...da
   return (
     <div
       className={cn(
-        'min-w-0 [&>*:first-child]:!mt-0',
-        grow ? 'flex-grow' : 'flex-grow-0',
+        'min-w-0 [&>*:first-child]:mt-0!',
+        grow ? 'grow' : 'grow-0',
         grow && !width && 'basis-0',
         className
       )}

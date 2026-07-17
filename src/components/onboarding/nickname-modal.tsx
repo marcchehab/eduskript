@@ -93,7 +93,7 @@ export function NicknameModal({ initialName, onDismiss }: NicknameModalProps) {
             autoFocus
           />
           <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-            <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-amber-500" />
+            <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-500" />
             <span>
               <strong>Heads up:</strong> whatever you type here is stored in plain text and visible
               to your teacher.

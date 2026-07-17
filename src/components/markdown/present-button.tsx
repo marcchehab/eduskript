@@ -94,7 +94,7 @@ export function PresentButton({ slides, slideStartLines, publiclyVisible = false
         createPortal(
           // Mirror the annotation toolbar's pill (p-2) wrapping a p-2 button so
           // this one-button toolbar matches its height and width exactly.
-          <div className="ml-2 flex items-center rounded-lg border border-border bg-background/95 p-2 shadow-lg backdrop-blur print:hidden">
+          <div className="ml-2 flex items-center rounded-lg border border-border bg-background/95 p-2 shadow-lg backdrop-blur-sm print:hidden">
             <button
               onClick={() => setStartIndex(scrolledSlideIndex(slideStartLines))}
               title="Present this page as slides"

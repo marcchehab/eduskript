@@ -131,7 +131,7 @@ export function VersionHistory({ versions, currentContent, onRestoreVersion }: V
                       setSelectedVersion(selectedVersion === version.id ? null : version.id)
                       setShowPreview(!showPreview || selectedVersion !== version.id)
                     }}
-                    className="inline-flex items-center px-3 py-1.5 border border-border text-sm font-medium rounded-md text-card-foreground bg-card hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="inline-flex items-center px-3 py-1.5 border border-border text-sm font-medium rounded-md text-card-foreground bg-card hover:bg-accent focus:outline-hidden focus:ring-2 focus:ring-ring"
                   >
                     <Eye className="w-4 h-4 mr-1.5" />
                     {selectedVersion === version.id && showPreview ? 'Hide' : 'Preview'}
@@ -140,7 +140,7 @@ export function VersionHistory({ versions, currentContent, onRestoreVersion }: V
                   {hasContentChanged(version.content) && (
                     <button
                       onClick={() => handleRestore(version)}
-                      className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-primary-foreground bg-primary hover:bg-primary/80 focus:outline-none focus:ring-2 focus:ring-ring"
+                      className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-primary-foreground bg-primary hover:bg-primary/80 focus:outline-hidden focus:ring-2 focus:ring-ring"
                     >
                       <RotateCcw className="w-4 h-4 mr-1.5" />
                       Restore

@@ -156,7 +156,7 @@ function SyncStatusModal({ onClose }: { onClose: () => void }) {
         {annotationVersionMismatch && (
           <div className="px-4 py-3 border-b border-border bg-amber-500/10">
             <div className="flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+              <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
               <div className="flex-1">
                 <p className="text-sm text-amber-800 dark:text-amber-200">
                   Page content has changed. Your annotations may not align correctly.
@@ -324,12 +324,12 @@ function OperationRow({ operation }: { operation: SyncOperation }) {
       {isGrouped ? (
         <ChevronRight
           className={cn(
-            'w-3 h-3 text-muted-foreground transition-transform flex-shrink-0',
+            'w-3 h-3 text-muted-foreground transition-transform shrink-0',
             expanded && 'rotate-90'
           )}
         />
       ) : (
-        <span className="w-3 h-3 flex-shrink-0" />
+        <span className="w-3 h-3 shrink-0" />
       )}
       {getStatusIcon(operation.status)}
       <span className="font-medium">{getTypeLabel(operation.type)}</span>

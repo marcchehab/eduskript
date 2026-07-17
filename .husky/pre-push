@@ -28,6 +28,11 @@ echo ""
 
 echo "🎉 All checks passed! Pushing..."
 
+# Advisory dependency-staleness nudge. Never blocks: always exits 0, and
+# self-throttles to roughly once a week so the network calls stay off the
+# critical path. `pnpm deps:check` for the full report.
+bash "$(dirname "$0")/../scripts/deps-check.sh" --nudge || true
+
 # Detached, self-terminating watcher: fires a desktop notification when the Koyeb
 # deploy this push triggers settles HEALTHY or fails. `timeout 20m` is a hard outer
 # cap so a hung CLI call can never leave it running; setsid -f fully detaches it so

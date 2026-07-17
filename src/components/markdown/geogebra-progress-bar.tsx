@@ -163,14 +163,14 @@ export function GeogebraProgressBar({ classId, className, pageId, componentId }:
                   key={r.studentId}
                   className={cn('flex items-center gap-3 px-4 py-2 text-sm', r.isCorrect === null && 'opacity-60')}
                 >
-                  <div className="flex-shrink-0">
+                  <div className="shrink-0">
                     {r.isCorrect === null
                       ? <Clock className="h-4 w-4 text-muted-foreground" />
                       : r.isCorrect
                         ? <Check className="h-4 w-4 text-green-500" />
                         : <X className="h-4 w-4 text-red-500" />}
                   </div>
-                  <div className="flex-shrink-0 w-32 truncate font-medium">{r.displayName}</div>
+                  <div className="shrink-0 w-32 truncate font-medium">{r.displayName}</div>
                   <div className="flex-1 text-xs text-muted-foreground">
                     {r.isCorrect === null ? 'Not attempted yet' : r.isCorrect ? 'Correct' : 'Incorrect (last attempt)'}
                   </div>

@@ -129,10 +129,10 @@ export function SlidePresenter({ slides, initialIndex = 0, onExit }: SlidePresen
       aria-modal="true"
       aria-label="Slide presentation"
       tabIndex={-1}
-      className="fixed inset-0 z-[60] bg-background outline-none"
+      className="fixed inset-0 z-60 bg-background outline-hidden"
     >
       {/* Counter — top-left. */}
-      <span className="fixed top-4 left-5 z-[61] text-sm text-muted-foreground tabular-nums">
+      <span className="fixed top-4 left-5 z-61 text-sm text-muted-foreground tabular-nums">
         {index + 1} / {slides.length}
       </span>
 
@@ -142,7 +142,7 @@ export function SlidePresenter({ slides, initialIndex = 0, onExit }: SlidePresen
         size="sm"
         onClick={onExit}
         title="Exit presentation (Esc)"
-        className="fixed top-3 right-4 z-[61]"
+        className="fixed top-3 right-4 z-61"
       >
         <X className="w-4 h-4" />
       </Button>
@@ -172,7 +172,7 @@ export function SlidePresenter({ slides, initialIndex = 0, onExit }: SlidePresen
       </div>
 
       {/* Prev/next + zoom — right edge, vertically centered. */}
-      <div className="fixed right-4 top-1/2 -translate-y-1/2 z-[61] flex flex-col items-center gap-2">
+      <div className="fixed right-4 top-1/2 -translate-y-1/2 z-61 flex flex-col items-center gap-2">
         <Button variant="outline" size="icon" onClick={prev} disabled={index === 0} title="Previous (←)">
           <ChevronLeft className="w-5 h-5" />
         </Button>
@@ -183,11 +183,11 @@ export function SlidePresenter({ slides, initialIndex = 0, onExit }: SlidePresen
             overlay revealed on hover, so expanding causes zero layout shift
             (the pill keeps a fixed footprint). top-full sits flush under the
             pill so the hover area is continuous. */}
-        <div className="group relative mt-1 flex flex-col items-center rounded-lg border border-border bg-background/95 p-2 shadow-lg backdrop-blur">
+        <div className="group relative mt-1 flex flex-col items-center rounded-lg border border-border bg-background/95 p-2 shadow-lg backdrop-blur-sm">
           <span title={`Zoom ${Math.round(zoom * 100)}%`} className="flex">
             <ZoomIn className="w-4 h-4 opacity-70" />
           </span>
-          <div className="absolute left-1/2 top-full z-10 hidden -translate-x-1/2 flex-col items-center gap-2 rounded-lg border border-border bg-background/95 p-2 shadow-lg backdrop-blur group-hover:flex">
+          <div className="absolute left-1/2 top-full z-10 hidden -translate-x-1/2 flex-col items-center gap-2 rounded-lg border border-border bg-background/95 p-2 shadow-lg backdrop-blur-sm group-hover:flex">
             <input
               type="range"
               min="0.5"

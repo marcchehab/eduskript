@@ -53,16 +53,16 @@ export function DashboardNav() {
           {isStudent && teacherPage ? (
             <Link href={`/${teacherPage.slug}`} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
               {teacherPage.pageIcon === 'default' ? (
-                <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
                   <NotebookPen className="w-5 h-5 text-muted-foreground" />
                 </div>
               ) : teacherPage.pageIcon ? (
-                <div className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0 bg-background">
+                <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 bg-background">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={teacherPage.pageIcon} alt="Page icon" className="w-full h-full object-cover" />
                 </div>
               ) : (
-                <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
                   <span className="text-muted-foreground font-bold text-sm">
                     {(teacherPage.name || 'P').charAt(0).toUpperCase()}
                   </span>

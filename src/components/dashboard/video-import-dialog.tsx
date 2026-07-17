@@ -167,10 +167,10 @@ export function VideoImportDialog({ open, onOpenChange, targetSkriptId, onImport
                         <img
                           src={video.poster}
                           alt=""
-                          className="w-14 h-9 object-cover rounded flex-shrink-0 bg-muted"
+                          className="w-14 h-9 object-cover rounded shrink-0 bg-muted"
                         />
                       ) : (
-                        <div className="w-14 h-9 flex items-center justify-center rounded flex-shrink-0 bg-muted">
+                        <div className="w-14 h-9 flex items-center justify-center rounded shrink-0 bg-muted">
                           <Film className="w-4 h-4 text-muted-foreground" />
                         </div>
                       )}
@@ -183,7 +183,7 @@ export function VideoImportDialog({ open, onOpenChange, targetSkriptId, onImport
                         </span>
                       </span>
                       {video.status !== 'ready' && (
-                        <span className="flex-shrink-0 text-xs text-muted-foreground">{video.status}</span>
+                        <span className="shrink-0 text-xs text-muted-foreground">{video.status}</span>
                       )}
                     </button>
                   </li>

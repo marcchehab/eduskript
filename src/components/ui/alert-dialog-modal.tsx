@@ -65,7 +65,7 @@ export function AlertDialogModal({
             {getIcon()}
             {title}
           </DialogTitle>
-          <DialogDescription className="whitespace-pre-line break-words">{message}</DialogDescription>
+          <DialogDescription className="whitespace-pre-line wrap-break-word">{message}</DialogDescription>
         </DialogHeader>
         <div className="flex justify-end gap-2">
           {showCancel && (

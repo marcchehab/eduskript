@@ -723,7 +723,7 @@ export function StickyNotesLayer({ pageId, children, isExamStudent, publicSticky
       {/* Placement-mode hint — fixed tooltip above toolbar */}
       {placementMode && createPortal(
         <div
-          className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[9998] pointer-events-none select-none"
+          className="fixed bottom-24 left-1/2 -translate-x-1/2 z-9998 pointer-events-none select-none"
           aria-hidden
         >
           <div className="bg-yellow-50 dark:bg-yellow-950 text-yellow-900 dark:text-yellow-100 text-xs px-3 py-2 rounded-lg shadow-lg border border-yellow-200 dark:border-yellow-800 flex items-center gap-1.5 whitespace-nowrap">
@@ -1085,7 +1085,7 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly, onPositio
                 'w-5 h-5 rounded-full border-2 transition-all duration-100 hover:scale-110',
                 colors[c].dot,
                 note.color === c
-                  ? 'border-foreground scale-110 shadow-sm'
+                  ? 'border-foreground scale-110 shadow-xs'
                   : 'border-transparent opacity-70 hover:opacity-100',
               )}
               title={c.charAt(0).toUpperCase() + c.slice(1)}
@@ -1099,7 +1099,7 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly, onPositio
         <div className="relative flex-1 flex flex-col">
           <textarea
             className={cn(
-              'w-full bg-transparent text-sm leading-relaxed p-3 outline-none resize-none',
+              'w-full bg-transparent text-sm leading-relaxed p-3 outline-hidden resize-none',
               'placeholder:text-foreground/30',
               'text-foreground',
             )}
@@ -1135,7 +1135,7 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly, onPositio
               onMouseDown={handleResizeStart}
               title="Resize"
             >
-              <ChevronsDownUp className="w-2.5 h-2.5 rotate-[135deg]" aria-hidden />
+              <ChevronsDownUp className="w-2.5 h-2.5 rotate-135" aria-hidden />
             </div>
           )}
         </div>

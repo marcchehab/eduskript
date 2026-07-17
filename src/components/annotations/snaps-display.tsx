@@ -1030,7 +1030,7 @@ const SnapItem = memo(function SnapItem({
             }}
             onBlur={handleSaveEdit}
             onPointerDown={(e) => e.stopPropagation()}
-            className="snap-title px-2 py-1 text-xs border border-border rounded bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+            className="snap-title px-2 py-1 text-xs border border-border rounded bg-background text-foreground focus:outline-hidden focus:ring-2 focus:ring-primary"
             autoFocus
           />
         ) : (
@@ -1083,7 +1083,7 @@ const SnapItem = memo(function SnapItem({
               key={c}
               onClick={() => { onUpdate(snap.id, { color: c }); setShowColorPicker(false) }}
               className={`w-5 h-5 rounded-full border-2 transition-all duration-100 hover:scale-110 ${SNAP_COLOR_CONFIG[c].dot} ${
-                color === c ? 'border-foreground scale-110 shadow-sm' : 'border-transparent opacity-70 hover:opacity-100'
+                color === c ? 'border-foreground scale-110 shadow-xs' : 'border-transparent opacity-70 hover:opacity-100'
               }`}
               title={c.charAt(0).toUpperCase() + c.slice(1)}
             />

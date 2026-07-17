@@ -322,9 +322,9 @@ function PasswordRequirements({ password }: { password: string }) {
       {rules.map((rule) => (
         <li key={rule.label} className="flex items-center gap-1.5">
           {rule.met ? (
-            <Check className="w-3 h-3 text-green-500 flex-shrink-0" />
+            <Check className="w-3 h-3 text-green-500 shrink-0" />
           ) : (
-            <X className="w-3 h-3 text-muted-foreground/50 flex-shrink-0" />
+            <X className="w-3 h-3 text-muted-foreground/50 shrink-0" />
           )}
           <span className={rule.met ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}>
             {rule.label}

@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { unified } from 'unified'
 import remarkParse from 'remark-parse'
+import remarkRehype from 'remark-rehype'
+import rehypeStringify from 'rehype-stringify'
+import remarkCallouts from '@/lib/remark-plugins/callouts'
 import remarkCodeEditor from '@/lib/remark-plugins/code-editor'
 import { remarkImageResolver } from '@/lib/remark-plugins/image-resolver'
 import { remarkImageAttrs } from '@/lib/remark-plugins/image-attrs'
@@ -613,6 +616,38 @@ console.log("second")
       const tree = await runMux('![](photo.jpg "thumbnail.jpg")')
       const img = findNode(tree, (n: any) => n.type === 'image')
       expect(img).toBeDefined()
+    })
+  })
+
+  // remarkCallouts hand-writes hProperties. Those now carry className as
+  // string[] to satisfy @types/hast >= 3.0.5; mdast-util-to-hast passes them
+  // through unnormalized and hast-util-to-html space-joins them, so the HTML
+  // is unchanged. These tests pin the emitted class strings.
+  describe('remarkCallouts', () => {
+    async function renderCallout(md: string) {
+      return String(
+        await unified()
+          .use(remarkParse)
+          .use(remarkCallouts)
+          .use(remarkRehype, { allowDangerousHtml: true })
+          .use(rehypeStringify, { allowDangerousHtml: true })
+          .process(md),
+      )
+    }
+
+    it('emits callout + type classes and the title/content wrappers', async () => {
+      const html = await renderCallout('> [!tip] Handy\n> body text\n')
+      expect(html).toContain('class="callout callout-tip"')
+      expect(html).toContain('callout-title tip')
+      expect(html).toContain('callout-content')
+      expect(html).toContain('class="block py-2"')
+      expect(html).toContain('body text')
+    })
+
+    it('marks a collapsed callout foldable and folded', async () => {
+      const html = await renderCallout('> [!note]- Folded\n> hidden\n')
+      expect(html).toContain('callout-foldable')
+      expect(html).toContain('callout-folded')
     })
   })
 })

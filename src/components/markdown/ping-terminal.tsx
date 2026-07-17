@@ -312,7 +312,7 @@ export function PingTerminal({ host, count, os }: PingTerminalProps) {
         onClick={() => inputRef.current?.focus()}
       >
         {/* OS toggle + info, top-right */}
-        <div className="absolute top-2 right-2 z-10 flex items-center gap-0.5 rounded border border-border/40 bg-background/90 p-0.5 backdrop-blur">
+        <div className="absolute top-2 right-2 z-10 flex items-center gap-0.5 rounded border border-border/40 bg-background/90 p-0.5 backdrop-blur-sm">
           <span
             className="flex cursor-help items-center px-1 text-muted-foreground"
             title="TCP connect from the server (ports 443/80) · RTT is real, not ICMP"
@@ -343,7 +343,7 @@ export function PingTerminal({ host, count, os }: PingTerminalProps) {
           className="max-h-80 overflow-y-auto px-4 py-3 font-mono text-xs leading-relaxed text-green-400"
         >
           {history.map((e, i) => (
-            <pre key={i} className="whitespace-pre-wrap break-words">
+            <pre key={i} className="whitespace-pre-wrap wrap-break-word">
               {renderEntry(e, activeOs)}
             </pre>
           ))}
@@ -362,7 +362,7 @@ export function PingTerminal({ host, count, os }: PingTerminalProps) {
               autoCapitalize="off"
               autoCorrect="off"
               placeholder={history.length === 0 ? 'try: ping wairualodge.co.nz' : ''}
-              className="flex-1 border-0 bg-transparent font-mono text-xs text-green-400 outline-none placeholder:text-green-900"
+              className="flex-1 border-0 bg-transparent font-mono text-xs text-green-400 outline-hidden placeholder:text-green-900"
               aria-label="ping command"
             />
           </div>

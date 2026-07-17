@@ -459,7 +459,7 @@ export function FileBrowser({ skriptId, onFileSelect, className = '', onUploadCo
                     className="flex items-center space-x-2 p-2 rounded hover:bg-muted group"
                   >
                     {/* Image preview or file icon */}
-                    <div className="flex-shrink-0">
+                    <div className="shrink-0">
                       {isImageFile(getFileName(file)) ? (
                         <div className="w-8 h-8 rounded overflow-hidden bg-muted relative">
                           <Image
@@ -500,7 +500,7 @@ export function FileBrowser({ skriptId, onFileSelect, className = '', onUploadCo
                               e.stopPropagation()
                               openFileLink(getFileUrl(file))
                             }}
-                            className="flex-shrink-0 p-1 text-muted-foreground hover:text-foreground transition-colors"
+                            className="shrink-0 p-1 text-muted-foreground hover:text-foreground transition-colors"
                             title="Open original file"
                           >
                             <ExternalLink className="w-3 h-3" />
@@ -581,7 +581,7 @@ export function FileBrowser({ skriptId, onFileSelect, className = '', onUploadCo
       {/* Rename Modal */}
       {renameFile && (
         <Dialog open={!!renameFile} onOpenChange={() => setRenameFile(null)}>
-          <div className="fixed inset-0 bg-background/80 backdrop-blur-sm" />
+          <div className="fixed inset-0 bg-background/80 backdrop-blur-xs" />
           <div className="fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 sm:rounded-lg">
             <div className="flex flex-col space-y-1.5 text-center sm:text-left">
               <h2 className="text-lg font-semibold leading-none tracking-tight">
@@ -660,7 +660,7 @@ export function FileBrowser({ skriptId, onFileSelect, className = '', onUploadCo
       {/* Duplicate Upload Modal */}
       {duplicateUpload && (
         <Dialog open={!!duplicateUpload} onOpenChange={() => setDuplicateUpload(null)}>
-          <div className="fixed inset-0 bg-background/80 backdrop-blur-sm" />
+          <div className="fixed inset-0 bg-background/80 backdrop-blur-xs" />
           <div className="fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 sm:rounded-lg">
             <div className="flex flex-col space-y-1.5 text-center sm:text-left">
               <h2 className="text-lg font-semibold leading-none tracking-tight">

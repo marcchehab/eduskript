@@ -557,7 +557,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
               p.id === page.id ? 'bg-primary/10' : 'hover:bg-muted'
             }`}
           >
-            <GripVertical className="w-4 h-4 flex-shrink-0 text-muted-foreground opacity-40 hover:opacity-80 cursor-grab ml-1" />
+            <GripVertical className="w-4 h-4 shrink-0 text-muted-foreground opacity-40 hover:opacity-80 cursor-grab ml-1" />
             <Link
               href={`/dashboard/skripts/${skript.slug}/pages/${p.slug}/edit`}
               className={`flex items-center gap-2 flex-1 min-w-0 px-1 py-1.5 ${
@@ -567,8 +567,8 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
               }`}
             >
               {p.pageType === 'exam'
-                ? <FilePenLine className={`w-4 h-4 flex-shrink-0 ${p.id === page.id ? '' : 'text-orange-500'}`} />
-                : <FileText className="w-4 h-4 flex-shrink-0" />}
+                ? <FilePenLine className={`w-4 h-4 shrink-0 ${p.id === page.id ? '' : 'text-orange-500'}`} />
+                : <FileText className="w-4 h-4 shrink-0" />}
               <span className={`truncate ${p.pageType === 'exam' && p.id !== page.id ? 'text-orange-500' : ''}`}>
                 {p.title}
                 {p.pageType === 'exam' && <span className="text-orange-500/70 font-normal"> (exam)</span>}
@@ -582,7 +582,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                 const color = state === 'draft' ? 'text-warning' : state === 'unlisted' ? 'text-violet-500' : 'text-success'
                 const label = state === 'draft' ? 'Draft' : state === 'unlisted' ? 'Unlisted' : 'Published'
                 return (
-                  <span className={`ml-auto flex-shrink-0 ${color}`} title={label} aria-label={label}>
+                  <span className={`ml-auto shrink-0 ${color}`} title={label} aria-label={label}>
                     <Icon className="w-3.5 h-3.5" />
                   </span>
                 )
@@ -592,14 +592,14 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
               <>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleOpenMoveDialog(p.id) }}
-                  className="p-1 rounded text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground hover:bg-muted transition-all flex-shrink-0"
+                  className="p-1 rounded text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground hover:bg-muted transition-all shrink-0"
                   title="Move to another skript"
                 >
                   <ArrowRightLeft className="w-3.5 h-3.5" />
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleCopyStableLink(p.id) }}
-                  className="p-1 rounded text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground hover:bg-muted transition-all flex-shrink-0"
+                  className="p-1 rounded text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground hover:bg-muted transition-all shrink-0"
                   title="Copy stable link (survives slug renames)"
                 >
                   {stableLinkCopiedFor === p.id ? (
@@ -610,7 +610,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleDeletePage(p.id, p.title) }}
-                  className="p-1 rounded text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-muted transition-all flex-shrink-0"
+                  className="p-1 rounded text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-muted transition-all shrink-0"
                   title="Delete page"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -663,14 +663,14 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
       {!isFullscreen && (
         <section className="border rounded-lg">
           <div className="flex items-center gap-2 px-3 py-2">
-            <div className="flex items-center justify-between w-[7.5rem] flex-shrink-0">
+            <div className="flex items-center justify-between w-30 shrink-0">
               <Link href="/dashboard/page-builder">
                 <Button variant="ghost" size="sm">
                   <ArrowLeft className="w-4 h-4" />
                 </Button>
               </Link>
               <div className="flex items-center gap-1.5">
-                <BookOpen className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                <BookOpen className="w-4 h-4 text-muted-foreground shrink-0" />
                 <span className="text-sm text-muted-foreground">Skript:</span>
               </div>
             </div>
@@ -681,7 +681,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
               )}
             </div>
             {canEdit && (
-              <div className="flex items-center gap-1 ml-auto flex-shrink-0">
+              <div className="flex items-center gap-1 ml-auto shrink-0">
                 <PublishToggle
                   type="skript"
                   itemId={skript.id}
@@ -751,8 +751,8 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
             {/* Page title row — always visible (Save/Fullscreen toggle live here). */}
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <div className="flex items-center justify-end gap-1.5 w-[7.5rem] flex-shrink-0">
-                  <FilePenLine className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                <div className="flex items-center justify-end gap-1.5 w-30 shrink-0">
+                  <FilePenLine className="w-4 h-4 text-muted-foreground shrink-0" />
                   <span className="text-sm text-muted-foreground">Page:</span>
                 </div>
                 <Input
@@ -765,7 +765,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                   placeholder="Page title"
                   className="flex-1 min-w-0 text-2xl font-semibold border-transparent hover:border-border focus:border-border"
                 />
-                <div className="flex gap-2 items-center flex-shrink-0">
+                <div className="flex gap-2 items-center shrink-0">
                   <Select
                     value={pageType}
                     onValueChange={(value) => {
@@ -865,7 +865,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
 
               {!isFullscreen && (
                 <div className="flex items-center gap-2">
-                  <div className="w-[7.5rem] flex-shrink-0" />
+                  <div className="w-30 shrink-0" />
                   <Input
                     type="text"
                     value={description}
@@ -884,7 +884,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                       setHasUnsavedChanges(true)
                     }}
                     placeholder="page-slug"
-                    className="text-sm font-mono border-transparent hover:border-border focus:border-border w-[200px] flex-shrink-0"
+                    className="text-sm font-mono border-transparent hover:border-border focus:border-border w-[200px] shrink-0"
                   />
                 </div>
               )}
@@ -1075,10 +1075,10 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                   onClick={() => handleMovePage(s.id)}
                   className="w-full flex items-center gap-2 px-4 py-2 text-sm text-left hover:bg-muted rounded-md transition-colors disabled:opacity-50"
                 >
-                  <BookOpen className="w-4 h-4 flex-shrink-0 text-muted-foreground" />
+                  <BookOpen className="w-4 h-4 shrink-0 text-muted-foreground" />
                   <span className="truncate">{s.title}</span>
                   {moveInFlight && (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin ml-auto flex-shrink-0" />
+                    <Loader2 className="w-3.5 h-3.5 animate-spin ml-auto shrink-0" />
                   )}
                 </button>
               ))}

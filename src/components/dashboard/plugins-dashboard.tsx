@@ -493,7 +493,7 @@ export function PluginsDashboard({ userId, userPageSlug }: PluginsDashboardProps
             value={editorHtml}
             onChange={(e) => setEditorHtml(e.target.value)}
             disabled={!canEdit}
-            className="flex-1 rounded-md border bg-muted/30 p-3 font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+            className="flex-1 rounded-md border bg-muted/30 p-3 font-mono text-sm resize-none focus:outline-hidden focus:ring-2 focus:ring-ring"
             spellCheck={false}
           />
         </div>

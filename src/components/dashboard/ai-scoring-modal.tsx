@@ -299,9 +299,9 @@ export function AiScoringModal({
         {groupedErrors.length > 0 && (
           <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs">
             <p className="mb-1 font-medium text-amber-700 dark:text-amber-400">Not scored — re-run to retry:</p>
-            <ul className="!m-0 space-y-0.5 !p-0 !list-none">
+            <ul className="m-0! space-y-0.5 p-0! list-none!">
               {groupedErrors.map((g, i) => (
-                <li key={i} className="!m-0 flex gap-2 !p-0 marker:content-['']">
+                <li key={i} className="m-0! flex gap-2 p-0! marker:content-['']">
                   <span className="shrink-0 font-medium">{g.students.length || 1}×</span>
                   <span className="min-w-0">
                     <span className="text-muted-foreground">{g.label}:</span> {g.error}

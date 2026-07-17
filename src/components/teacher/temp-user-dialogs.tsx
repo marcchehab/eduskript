@@ -220,7 +220,7 @@ export function TransferAnswersDialog({
         </DialogHeader>
 
         <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
-          <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
             This <strong>overwrites</strong> the selected student&apos;s current answers, hand-in
             snapshots and submission for the affected exam(s). Any existing work of theirs on those

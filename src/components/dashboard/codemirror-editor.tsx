@@ -2236,7 +2236,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
                     variant="ghost"
                     size="sm"
                     onClick={() => setEditorWidth(50)}
-                    className="w-8 h-8 p-0 border rounded-md text-red-500 hover:text-foreground hover:!bg-blue-100 dark:hover:!bg-blue-900"
+                    className="w-8 h-8 p-0 border rounded-md text-red-500 hover:text-foreground hover:bg-blue-100! dark:hover:bg-blue-900!"
                     title="Show Editor"
                   >
                     <FilePen className="w-4 h-4" />
@@ -2247,7 +2247,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
                     variant="ghost"
                     size="sm"
                     onClick={() => setEditorWidth(50)}
-                    className="w-8 h-8 p-0 border rounded-md text-red-500 hover:text-foreground hover:!bg-blue-100 dark:hover:!bg-blue-900"
+                    className="w-8 h-8 p-0 border rounded-md text-red-500 hover:text-foreground hover:bg-blue-100! dark:hover:bg-blue-900!"
                     title="Show Preview"
                   >
                     <Eye className="w-4 h-4" />
@@ -2291,7 +2291,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
               value={textareaContent}
               onChange={handleTextareaChange}
               readOnly={isReadOnly}
-              className="w-full h-full p-3 border-0 bg-transparent text-foreground font-mono text-sm resize-none focus:outline-none"
+              className="w-full h-full p-3 border-0 bg-transparent text-foreground font-mono text-sm resize-none focus:outline-hidden"
               placeholder="Start typing your markdown here..."
               style={{ minHeight: '100%' }}
             />
@@ -2305,7 +2305,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
           <div
             onMouseDown={handleSplitterMouseDown}
             onTouchStart={handleSplitterTouchStart}
-            className={`w-2 sm:w-2 touch:w-4 bg-border hover:bg-primary/20 cursor-col-resize flex-shrink-0 transition-colors relative flex items-center justify-center touch-none ${
+            className={`w-2 sm:w-2 touch:w-4 bg-border hover:bg-primary/20 cursor-col-resize shrink-0 transition-colors relative flex items-center justify-center touch-none ${
               isDragging ? 'bg-primary/30' : ''
             }`}
             style={{ minWidth: '8px' }}

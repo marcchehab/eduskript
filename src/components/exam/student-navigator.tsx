@@ -108,7 +108,7 @@ export function StudentNavigator({ pageId }: StudentNavigatorProps) {
         aria-label="Previous student"
         // On wide screens the public sidebar occupies the left edge (≥1344px,
         // ml-80); shift the arrow right of it so it isn't hidden behind it.
-        className="fixed left-2 min-[1344px]:left-[21rem] top-1/2 -translate-y-1/2 z-40 h-16 w-10 rounded-r-lg bg-card/90 hover:bg-card border border-l-0 border-border shadow-lg flex items-center justify-center text-foreground/70 hover:text-foreground transition-colors backdrop-blur-sm"
+        className="fixed left-2 min-[1344px]:left-84 top-1/2 -translate-y-1/2 z-40 h-16 w-10 rounded-r-lg bg-card/90 hover:bg-card border border-l-0 border-border shadow-lg flex items-center justify-center text-foreground/70 hover:text-foreground transition-colors backdrop-blur-xs"
       >
         <ChevronLeft className="w-6 h-6" />
       </button>
@@ -117,14 +117,14 @@ export function StudentNavigator({ pageId }: StudentNavigatorProps) {
         type="button"
         onClick={() => go(1)}
         aria-label="Next student"
-        className="fixed right-2 top-1/2 -translate-y-1/2 z-40 h-16 w-10 rounded-l-lg bg-card/90 hover:bg-card border border-r-0 border-border shadow-lg flex items-center justify-center text-foreground/70 hover:text-foreground transition-colors backdrop-blur-sm"
+        className="fixed right-2 top-1/2 -translate-y-1/2 z-40 h-16 w-10 rounded-l-lg bg-card/90 hover:bg-card border border-r-0 border-border shadow-lg flex items-center justify-center text-foreground/70 hover:text-foreground transition-colors backdrop-blur-xs"
       >
         <ChevronRight className="w-6 h-6" />
       </button>
 
       {/* Position chip — anchored under the right arrow so the teacher knows
           where they are in the roster without expanding the toolbar. */}
-      <div className="fixed right-2 top-[calc(50%+44px)] z-40 px-2 py-0.5 rounded-md bg-card/90 border border-border shadow-sm text-[11px] text-muted-foreground backdrop-blur-sm">
+      <div className="fixed right-2 top-[calc(50%+44px)] z-40 px-2 py-0.5 rounded-md bg-card/90 border border-border shadow-xs text-[11px] text-muted-foreground backdrop-blur-xs">
         {positionText}
       </div>
     </>,

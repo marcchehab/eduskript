@@ -78,11 +78,11 @@ export function PythonTestResults({ results, points, earnedPoints, checksUsed, m
         {results.map((r) => (
           <div key={r.index} className="px-3 py-1.5 flex items-start gap-2">
             {r.passed ? (
-              <span data-check-icon className="flex-shrink-0 mt-0.5 relative">
+              <span data-check-icon className="shrink-0 mt-0.5 relative">
                 <Check className="w-4 h-4 text-green-500" />
               </span>
             ) : (
-              <X className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
+              <X className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
             )}
             <div className="min-w-0">
               <span className={r.passed ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}>

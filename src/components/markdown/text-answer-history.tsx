@@ -59,7 +59,7 @@ export function TextAnswerHistory({
       <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
         Answer history ({snapshots.length})
       </div>
-      <ul className="!m-0 !list-none !p-0 max-h-40 space-y-0.5 overflow-y-auto">
+      <ul className="m-0! list-none! p-0! max-h-40 space-y-0.5 overflow-y-auto">
         {snapshots.map((s) => {
           const text = (s.payload as QuizData | null)?.textAnswer ?? ''
           const open = openId === s.id
@@ -81,7 +81,7 @@ export function TextAnswerHistory({
                 </span>
               </button>
               {open && (
-                <pre className="mb-1 mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-background/60 p-2 font-mono text-[11px] leading-relaxed">
+                <pre className="mb-1 mt-1 max-h-48 overflow-auto whitespace-pre-wrap wrap-break-word rounded bg-background/60 p-2 font-mono text-[11px] leading-relaxed">
                   {text || '(empty)'}
                 </pre>
               )}

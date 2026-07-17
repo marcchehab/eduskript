@@ -261,7 +261,7 @@ export function AIEditModal({
           // Progressive view - show edits as they complete
           <div className="flex flex-col h-full">
             {/* Header with progress */}
-            <div className="flex-shrink-0 border-b px-4 py-3 bg-muted/30">
+            <div className="shrink-0 border-b px-4 py-3 bg-muted/30">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <Wand2 className="h-5 w-5 text-primary" />
@@ -278,7 +278,7 @@ export function AIEditModal({
               {overflow && (
                 <div className="mb-3 p-3 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
                   <div className="flex items-start gap-2">
-                    <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+                    <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
                         Oops, our AI didn&apos;t quite format the response correctly
@@ -334,7 +334,7 @@ export function AIEditModal({
                 the "did Save actually do something?" anxiety the older
                 Accept-All framing caused. */}
             {(completedEdits.length > 0 || (proposal?.edits?.length ?? 0) > 0) && (
-              <div className="flex-shrink-0 px-4 py-2 border-b bg-blue-50/50 dark:bg-blue-950/10 text-xs text-blue-900 dark:text-blue-200">
+              <div className="shrink-0 px-4 py-2 border-b bg-blue-50/50 dark:bg-blue-950/10 text-xs text-blue-900 dark:text-blue-200">
                 AI suggestions are kept by default — use the gutter buttons inside each edit to revert individual changes. Click <span className="font-medium">Apply</span> below when you&apos;re happy.
               </div>
             )}
@@ -373,13 +373,13 @@ export function AIEditModal({
                       ) : (
                         <ChevronRight className="h-4 w-4 text-muted-foreground" />
                       )}
-                      <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
+                      <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center shrink-0">
                         <Check className="w-3 h-3 text-white" />
                       </div>
                       {edit.isNew ? (
-                        <Plus className="h-4 w-4 text-green-500 flex-shrink-0" />
+                        <Plus className="h-4 w-4 text-green-500 shrink-0" />
                       ) : (
-                        <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
                       )}
                       <div className="flex-1 min-w-0">
                         <div className="font-medium truncate flex items-center gap-2">
@@ -424,13 +424,13 @@ export function AIEditModal({
                   <div key={`failed:${fp.pageIndex}`} className="border-b">
                     <div className="flex items-center gap-3 px-4 py-3">
                       <div className="w-4 h-4" /> {/* Spacer for chevron */}
-                      <div className="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center flex-shrink-0">
+                      <div className="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center shrink-0">
                         <X className="w-3 h-3 text-white" />
                       </div>
                       {page.isNew ? (
-                        <Plus className="h-4 w-4 text-red-500 flex-shrink-0" />
+                        <Plus className="h-4 w-4 text-red-500 shrink-0" />
                       ) : (
-                        <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
                       )}
                       <div className="flex-1 min-w-0">
                         <div className="font-medium truncate">{page.pageTitle}</div>
@@ -460,14 +460,14 @@ export function AIEditModal({
                     <div className="flex items-center gap-3 px-4 py-3 opacity-60">
                       <div className="w-4 h-4" /> {/* Spacer for chevron */}
                       {isCurrent ? (
-                        <Loader2 className="w-5 h-5 text-blue-500 animate-spin flex-shrink-0" />
+                        <Loader2 className="w-5 h-5 text-blue-500 animate-spin shrink-0" />
                       ) : (
-                        <div className="w-5 h-5 rounded-full border-2 border-muted-foreground/30 flex-shrink-0" />
+                        <div className="w-5 h-5 rounded-full border-2 border-muted-foreground/30 shrink-0" />
                       )}
                       {page.isNew ? (
-                        <Plus className="h-4 w-4 text-green-500 flex-shrink-0" />
+                        <Plus className="h-4 w-4 text-green-500 shrink-0" />
                       ) : (
-                        <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
                       )}
                       <div className="flex-1 min-w-0">
                         <div className="font-medium truncate flex items-center gap-2">
@@ -487,7 +487,7 @@ export function AIEditModal({
             </div>
 
             {/* Footer actions */}
-            <div className="flex-shrink-0 border-t px-4 py-3 bg-background flex items-center justify-between">
+            <div className="shrink-0 border-t px-4 py-3 bg-background flex items-center justify-between">
               <p className="text-sm text-muted-foreground">
                 {completedEdits.length || proposal?.edits.length || 0} {(completedEdits.length || proposal?.edits.length || 0) === 1 ? 'page' : 'pages'} ready
                 {failedPages.length > 0 && `, ${failedPages.length} failed`}
@@ -523,7 +523,7 @@ export function AIEditModal({
         ) : (
           // Input mode
           <>
-            <DialogHeader className="px-6 py-4 border-b flex-shrink-0">
+            <DialogHeader className="px-6 py-4 border-b shrink-0">
               <div className="flex items-center gap-2">
                 <Wand2 className="h-5 w-5 text-primary" />
                 <DialogTitle>AI Edit</DialogTitle>
@@ -568,7 +568,7 @@ export function AIEditModal({
                   {overflow?.fullResponse && (
                     <div className="p-3 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
                       <div className="flex items-start gap-2">
-                        <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+                        <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-amber-800 dark:text-amber-200 mb-2">
                             AI Response:

@@ -101,7 +101,7 @@ export function DraggableCollection({
               <div className="relative">
                 <BookOpen
                   className={cn(
-                    "w-5 h-5 mt-0.5 flex-shrink-0",
+                    "w-5 h-5 mt-0.5 shrink-0",
                     isViewOnly ? "text-muted-foreground" : "text-primary"
                   )}
                   style={accentColor ? { color: accentColor } : undefined}
@@ -197,7 +197,7 @@ export function DraggableSkript({
               </div>
               <div className="relative">
                 <FileText className={cn(
-                  "w-5 h-5 mt-0.5 flex-shrink-0",
+                  "w-5 h-5 mt-0.5 shrink-0",
                   isViewOnly ? "text-muted-foreground" : "text-primary"
                 )} />
                 {isViewOnly && (

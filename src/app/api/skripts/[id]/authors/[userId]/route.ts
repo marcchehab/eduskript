@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 
 const updatePermissionSchema = z.object({
-  permission: z.enum(['author', 'viewer'], { required_error: 'Permission must be author or viewer' })
+  permission: z.enum(['author', 'viewer'], { error: 'Permission must be author or viewer' })
 })
 
 // PATCH /api/skripts/[id]/authors/[userId] - Update an author's permission
@@ -84,7 +84,7 @@ export async function PATCH(
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Invalid request data', details: error.errors },
+        { error: 'Invalid request data', details: error.issues },
         { status: 400 }
       )
     }

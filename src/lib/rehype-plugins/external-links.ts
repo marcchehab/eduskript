@@ -27,7 +27,7 @@ export function rehypeExternalLinks() {
       if (props.title === '_blank') {
         delete props.title
         props.target = '_blank'
-        props.rel = 'noopener noreferrer'
+        props.rel = ['noopener', 'noreferrer']
         node.properties = props
         return
       }
@@ -35,7 +35,7 @@ export function rehypeExternalLinks() {
       const href = typeof props.href === 'string' ? props.href : ''
       if (href.startsWith('http://') || href.startsWith('https://')) {
         props.target = '_blank'
-        props.rel = 'noopener noreferrer'
+        props.rel = ['noopener', 'noreferrer']
         node.properties = props
       }
     })

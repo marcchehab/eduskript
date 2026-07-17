@@ -6,7 +6,7 @@ import { z } from 'zod'
 
 const addAuthorSchema = z.object({
   userId: z.string().min(1, 'User ID is required'),
-  permission: z.enum(['author', 'viewer'], { required_error: 'Permission must be author or viewer' })
+  permission: z.enum(['author', 'viewer'], { error: 'Permission must be author or viewer' })
 })
 
 // GET /api/skripts/[id]/authors - List all authors of a skript
@@ -153,7 +153,7 @@ export async function POST(
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Invalid request data', details: error.errors },
+        { error: 'Invalid request data', details: error.issues },
         { status: 400 }
       )
     }

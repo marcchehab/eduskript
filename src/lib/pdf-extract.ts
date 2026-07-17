@@ -14,7 +14,9 @@ export async function extractPdfPages(
   const pdfjsLib = await import('pdfjs-dist')
   pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
 
-  const doc = await pdfjsLib.getDocument(pdfUrl).promise
+  // pdfjs-dist 6 dropped the bare-string shorthand; the URL must be passed as
+  // an explicit DocumentInitParameters field.
+  const doc = await pdfjsLib.getDocument({ url: pdfUrl }).promise
   const blobs: Blob[] = []
 
   const canvas = document.createElement('canvas')

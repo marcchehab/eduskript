@@ -99,7 +99,7 @@ export function ExcalidrawImage({ src, alt, style, onWidthChange, onEdit, align 
             e.stopPropagation()
             onEdit(filename, fileId)
           }}
-          className="absolute top-2 left-2 z-20 p-2 rounded-md bg-background/80 backdrop-blur-sm border border-border shadow-sm opacity-0 group-hover/excalidraw:opacity-100 transition-opacity hover:bg-accent"
+          className="absolute top-2 left-2 z-20 p-2 rounded-md bg-background/80 backdrop-blur-xs border border-border shadow-xs opacity-0 group-hover/excalidraw:opacity-100 transition-opacity hover:bg-accent"
           title="Edit drawing"
         >
           <Pencil className="w-4 h-4 text-orange-500" />
@@ -109,7 +109,7 @@ export function ExcalidrawImage({ src, alt, style, onWidthChange, onEdit, align 
       {/* Fullscreen button */}
       <button
         onClick={() => setLightboxOpen(true)}
-        className="absolute top-2 right-2 z-20 p-1.5 rounded-md bg-background/80 backdrop-blur-sm border border-border shadow-sm opacity-0 group-hover/excalidraw:opacity-100 transition-opacity hover:bg-accent cursor-zoom-in"
+        className="absolute top-2 right-2 z-20 p-1.5 rounded-md bg-background/80 backdrop-blur-xs border border-border shadow-xs opacity-0 group-hover/excalidraw:opacity-100 transition-opacity hover:bg-accent cursor-zoom-in"
         title="Fullscreen"
       >
         <Maximize2 className="w-3.5 h-3.5" />

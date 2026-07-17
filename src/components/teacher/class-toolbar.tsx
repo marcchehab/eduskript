@@ -612,7 +612,7 @@ export function ClassToolbar({
                     )}
                     title="Show the whole-class overview (no individual student)"
                   >
-                    <Users className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                    <Users className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                     Overview
                   </button>
                   {selectedClass && (
@@ -621,7 +621,7 @@ export function ClassToolbar({
                       size="sm"
                       onClick={createTempUser}
                       disabled={creatingTempUser}
-                      className="h-7 w-7 p-0 flex-shrink-0"
+                      className="h-7 w-7 p-0 shrink-0"
                       title="Add a temporary user to this class (e.g. to give a student another device during an exam)"
                       aria-label="Add a temporary user to this class"
                     >
@@ -633,7 +633,7 @@ export function ClassToolbar({
                     </Button>
                   )}
                   {isExam && selectedClass && (
-                    <Button variant="outline" size="sm" asChild className="h-7 gap-1 flex-shrink-0">
+                    <Button variant="outline" size="sm" asChild className="h-7 gap-1 shrink-0">
                       <Link href={`/dashboard/exams/${pageId}/grading?classId=${selectedClass.id}`}>
                         <ClipboardList className="w-3.5 h-3.5" />
                         Grade
@@ -693,7 +693,7 @@ export function ClassToolbar({
                       )}
                     >
                       <div className="flex items-center gap-1 min-w-0">
-                        <User className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                        <User className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                         <button
                           type="button"
                           onClick={() =>
@@ -714,24 +714,24 @@ export function ClassToolbar({
                         </button>
                         {isExam && row.overrideState && (
                           <span
-                            className="w-2 h-2 rounded-full bg-amber-500 flex-shrink-0"
+                            className="w-2 h-2 rounded-full bg-amber-500 shrink-0"
                             title={`Individual override: ${row.overrideState} (class is ${examState ?? 'hidden'}). Select this student to change or clear it.`}
                             aria-label={`Individual exam override: ${row.overrideState}`}
                           />
                         )}
                         {row.isAnonymous && (
-                          <span className="text-[10px] uppercase tracking-wide px-1 py-0.5 rounded bg-muted text-muted-foreground flex-shrink-0">
+                          <span className="text-[10px] uppercase tracking-wide px-1 py-0.5 rounded bg-muted text-muted-foreground shrink-0">
                             anon
                           </span>
                         )}
                         {row.userId === yourAnonymousUserId && (
-                          <span className="text-[10px] uppercase tracking-wide px-1 py-0.5 rounded bg-primary/15 text-primary flex-shrink-0">
+                          <span className="text-[10px] uppercase tracking-wide px-1 py-0.5 rounded bg-primary/15 text-primary shrink-0">
                             you
                           </span>
                         )}
                         {row.isTemporary && (
                           <span
-                            className="text-[10px] uppercase tracking-wide px-1 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-400 flex-shrink-0"
+                            className="text-[10px] uppercase tracking-wide px-1 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-400 shrink-0"
                             title="Temporary spare-laptop account"
                           >
                             temp
@@ -753,7 +753,7 @@ export function ClassToolbar({
                               })
                             }
                           }}
-                          className="h-6 w-6 p-0 flex-shrink-0"
+                          className="h-6 w-6 p-0 shrink-0"
                           title={
                             isViewingThis
                               ? 'Stop broadcasting to this student (revert to class target)'
@@ -772,7 +772,7 @@ export function ClassToolbar({
                               e.stopPropagation()
                               setTransferSource({ id: row.userId, label: row.displayName })
                             }}
-                            className="h-6 w-6 p-0 flex-shrink-0"
+                            className="h-6 w-6 p-0 shrink-0"
                             title="Transfer this temporary user's answers to a real student"
                           >
                             <ArrowLeftRight className="w-3 h-3" />
@@ -787,7 +787,7 @@ export function ClassToolbar({
                               reopenForStudent(row.userId)
                             }}
                             disabled={reopeningStudent === row.userId}
-                            className="h-6 w-6 p-0 flex-shrink-0"
+                            className="h-6 w-6 p-0 shrink-0"
                             title="Allow student to retake exam"
                           >
                             {reopeningStudent === row.userId ? (
@@ -806,7 +806,7 @@ export function ClassToolbar({
                               endForStudent(row.userId)
                             }}
                             disabled={endingStudent === row.userId}
-                            className="h-6 w-6 p-0 flex-shrink-0"
+                            className="h-6 w-6 p-0 shrink-0"
                             title="End the exam for this student (e.g. their machine crashed) so you can grade their saved work"
                           >
                             {endingStudent === row.userId ? (
@@ -824,7 +824,7 @@ export function ClassToolbar({
                             confirmDelete(row)
                           }}
                           disabled={deletingUser === row.userId || (!row.hasSubmissionData && !row.submittedAt)}
-                          className="h-6 w-6 p-0 text-destructive hover:text-destructive flex-shrink-0"
+                          className="h-6 w-6 p-0 text-destructive hover:text-destructive shrink-0"
                           title="Delete this user's answers on this page"
                         >
                           {deletingUser === row.userId ? (
@@ -884,7 +884,7 @@ export function ClassToolbar({
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="gap-1.5 min-w-0">
                   <span className="truncate">{selectedClass?.name || 'Select class'}</span>
-                  <ChevronUp className="w-4 h-4 flex-shrink-0" />
+                  <ChevronUp className="w-4 h-4 shrink-0" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent side="top" align="start">
@@ -916,7 +916,7 @@ export function ClassToolbar({
               is the current target. */}
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="ml-auto flex items-center gap-1 text-sm text-muted-foreground hover:bg-muted/50 rounded-md px-2 py-1 transition-colors flex-shrink-0"
+            className="ml-auto flex items-center gap-1 text-sm text-muted-foreground hover:bg-muted/50 rounded-md px-2 py-1 transition-colors shrink-0"
             title={isExpanded ? 'Hide roster' : 'Show roster'}
           >
             <Users className="w-4 h-4" />
@@ -939,7 +939,7 @@ export function ClassToolbar({
             className="mt-1 flex items-center gap-1 text-xs text-muted-foreground"
             title="Your own anonymous survey response on this page"
           >
-            <UserCircle className="w-3.5 h-3.5 flex-shrink-0" />
+            <UserCircle className="w-3.5 h-3.5 shrink-0" />
             <span className="truncate">
               You are <strong className="text-foreground">{yourAnonymousDisplayName}</strong>
             </span>
@@ -968,7 +968,7 @@ export function ClassToolbar({
             />
             {selectedStudent ? (
               <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <span className="truncate max-w-[8rem]">
+                <span className="truncate max-w-32">
                   Override:{' '}
                   <strong className="text-foreground">{selectedStudent.displayName}</strong>
                 </span>
@@ -1099,10 +1099,10 @@ function AudienceDropdown({
           className={cn('gap-1.5 min-w-0', paused && 'opacity-50')}
         >
           <span className="flex items-center gap-1.5 truncate">
-            {broadcastToPage && <Globe className="w-3.5 h-3.5 flex-shrink-0" />}
+            {broadcastToPage && <Globe className="w-3.5 h-3.5 shrink-0" />}
             <span className="truncate">{label}</span>
           </span>
-          <ChevronUp className="w-4 h-4 flex-shrink-0" />
+          <ChevronUp className="w-4 h-4 shrink-0" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent side="top" align="start" className="min-w-[200px]">
@@ -1151,7 +1151,7 @@ function LockdownToggle({
       onClick={onToggle}
       disabled={disabled}
       className={cn(
-        'h-8 w-8 p-0 flex-shrink-0',
+        'h-8 w-8 p-0 shrink-0',
         locked &&
           'bg-amber-500 text-white border-amber-500 hover:bg-amber-600 hover:text-white hover:border-amber-600'
       )}
@@ -1194,7 +1194,7 @@ function BroadcastToggle({
       onClick={onToggle}
       disabled={disabled}
       className={cn(
-        'h-8 w-8 p-0 flex-shrink-0',
+        'h-8 w-8 p-0 shrink-0',
         active && 'bg-red-500 text-white border-red-500 hover:bg-red-600 hover:text-white hover:border-red-600'
       )}
       title={

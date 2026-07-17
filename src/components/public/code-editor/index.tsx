@@ -3952,7 +3952,7 @@ export const CodeEditor = memo(function CodeEditor({
           >
             {/* Floating Toolbar - Top Right (zoom controls + kernel indicator).
                 Highlighting is driven by the site-wide toolbar highlighter pen. */}
-            <div ref={kernelMenuRef} className="absolute top-1 right-1 z-30 flex items-center gap-0.5 bg-background/80 backdrop-blur-sm rounded px-1">
+            <div ref={kernelMenuRef} className="absolute top-1 right-1 z-30 flex items-center gap-0.5 bg-background/80 backdrop-blur-xs rounded px-1">
               {/* Zoom Controls */}
               <Button
                 size="sm"
@@ -4040,7 +4040,7 @@ export const CodeEditor = memo(function CodeEditor({
                   {showImportsDropdown && importsDropdownPosition && typeof document !== 'undefined' && createPortal(
                     <div
                       ref={importsDropdownPortalRef}
-                      className="fixed bg-popover border rounded-lg shadow-lg p-2 min-w-[200px] z-[9999]"
+                      className="fixed bg-popover border rounded-lg shadow-lg p-2 min-w-[200px] z-9999"
                       style={{
                         top: `${importsDropdownPosition.top}px`,
                         left: `${importsDropdownPosition.left}px`,
@@ -4183,7 +4183,7 @@ export const CodeEditor = memo(function CodeEditor({
               {isPython && showBinariesDropdown && binariesDropdownPosition && typeof document !== 'undefined' && createPortal(
                 <div
                   ref={binariesDropdownPortalRef}
-                  className="fixed bg-popover border rounded-lg shadow-lg p-2 min-w-[260px] max-w-[320px] z-[9999]"
+                  className="fixed bg-popover border rounded-lg shadow-lg p-2 min-w-[260px] max-w-[320px] z-9999"
                   style={{
                     top: `${binariesDropdownPosition.top}px`,
                     left: `${binariesDropdownPosition.left}px`,
@@ -4398,7 +4398,7 @@ export const CodeEditor = memo(function CodeEditor({
                   {/* Kernel Menu Dropdown - Rendered via Portal */}
                   {showKernelMenu && kernelMenuPosition && typeof document !== 'undefined' && createPortal(
                     <div
-                      className="fixed bg-popover border rounded-lg shadow-lg p-2 min-w-[160px] z-[9999]"
+                      className="fixed bg-popover border rounded-lg shadow-lg p-2 min-w-[160px] z-9999"
                       style={{
                         top: `${kernelMenuPosition.top}px`,
                         left: `${kernelMenuPosition.left}px`
@@ -4505,7 +4505,7 @@ export const CodeEditor = memo(function CodeEditor({
                             <span
                               className={`w-4 h-4 inline-flex items-center justify-center rounded-sm hover:bg-foreground/10 ${
                                 files.length <= 1 ? 'invisible' :
-                                activeTab.type === 'local' && activeFileIndex === index ? 'opacity-60 hover:opacity-100' : 'opacity-0 group-hover/tab:opacity-60 hover:!opacity-100'
+                                activeTab.type === 'local' && activeFileIndex === index ? 'opacity-60 hover:opacity-100' : 'opacity-0 group-hover/tab:opacity-60 hover:opacity-100!'
                               }`}
                               onClick={(e) => {
                                 e.stopPropagation()
@@ -4561,7 +4561,7 @@ export const CodeEditor = memo(function CodeEditor({
                           {imp.name}
                           <span
                             className={`w-4 h-4 inline-flex items-center justify-center rounded-sm hover:bg-foreground/10 ${
-                              isActive ? 'opacity-60 hover:opacity-100' : 'opacity-0 group-hover/tab:opacity-60 hover:!opacity-100'
+                              isActive ? 'opacity-60 hover:opacity-100' : 'opacity-0 group-hover/tab:opacity-60 hover:opacity-100!'
                             }`}
                             onClick={(e) => {
                               e.stopPropagation()
@@ -4592,7 +4592,7 @@ export const CodeEditor = memo(function CodeEditor({
             {tabContextMenu && typeof document !== 'undefined' && createPortal(
               <div
                 ref={tabContextMenuRef}
-                className="fixed bg-popover border rounded-lg shadow-lg py-1 min-w-[160px] z-[9999]"
+                className="fixed bg-popover border rounded-lg shadow-lg py-1 min-w-[160px] z-9999"
                 style={{ top: `${tabContextMenu.y}px`, left: `${tabContextMenu.x}px` }}
               >
                 <button
@@ -4636,7 +4636,7 @@ export const CodeEditor = memo(function CodeEditor({
             {importContextMenu && typeof document !== 'undefined' && createPortal(
               <div
                 ref={importContextMenuRef}
-                className="fixed bg-popover border rounded-lg shadow-lg py-1 min-w-[160px] z-[9999]"
+                className="fixed bg-popover border rounded-lg shadow-lg py-1 min-w-[160px] z-9999"
                 style={{ top: `${importContextMenu.y}px`, left: `${importContextMenu.x}px` }}
               >
                 <button
@@ -4682,7 +4682,7 @@ export const CodeEditor = memo(function CodeEditor({
             <div ref={editorRef} className="flex-1 overflow-auto w-full h-full relative" style={{ cursor: activeHighlightColor ? highlighterCursor(activeHighlightColor) : undefined }}>
               {/* Loading skeleton while editor initializes */}
               {!editorReady && (
-                <div className="absolute inset-0 flex items-center justify-center bg-white dark:bg-[#1e1e1e] z-[1]">
+                <div className="absolute inset-0 flex items-center justify-center bg-white dark:bg-[#1e1e1e] z-1">
                   <span className="text-xs text-muted-foreground animate-pulse">Loading editor...</span>
                 </div>
               )}
@@ -4797,7 +4797,7 @@ export const CodeEditor = memo(function CodeEditor({
           <div
             onMouseDown={handleSplitterMouseDown}
             onTouchStart={handleSplitterTouchStart}
-            className={`w-1 bg-border hover:bg-primary/20 cursor-col-resize flex-shrink-0 transition-colors relative flex items-center justify-center touch-none ${
+            className={`w-1 bg-border hover:bg-primary/20 cursor-col-resize shrink-0 transition-colors relative flex items-center justify-center touch-none ${
               isDraggingSplitter ? 'bg-primary/30' : ''
             }`}
             style={{ minWidth: '8px' }}
@@ -4859,7 +4859,7 @@ export const CodeEditor = memo(function CodeEditor({
         <div
           onMouseDown={handleHorizontalSplitterMouseDown}
           onTouchStart={handleHorizontalSplitterTouchStart}
-          className="h-1 bg-border hover:bg-primary/20 cursor-row-resize flex-shrink-0 transition-colors relative touch-none"
+          className="h-1 bg-border hover:bg-primary/20 cursor-row-resize shrink-0 transition-colors relative touch-none"
           style={{ minHeight: '8px' }}
         >
           {/* Extended touch target (invisible but increases hit area) */}
@@ -4985,7 +4985,7 @@ export const CodeEditor = memo(function CodeEditor({
                                 {row.map((cell, cellIdx) => (
                                   <td
                                     key={cellIdx}
-                                    className="border border-border !text-[0.7rem] !text-center !p-[0.2rem]"
+                                    className="border border-border text-[0.7rem]! text-center! p-[0.2rem]!"
                                   >
                                     {cell === null ? (
                                       <span className="text-muted-foreground italic">NULL</span>
@@ -5009,7 +5009,7 @@ export const CodeEditor = memo(function CodeEditor({
                   <input
                     autoFocus
                     type="text"
-                    className="flex-1 bg-transparent border-b border-muted-foreground/30 outline-none text-sm font-mono text-foreground"
+                    className="flex-1 bg-transparent border-b border-muted-foreground/30 outline-hidden text-sm font-mono text-foreground"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         const value = e.currentTarget.value
@@ -5122,7 +5122,7 @@ export const CodeEditor = memo(function CodeEditor({
                       // createVersion calls race (rare but seen in practice
                       // during fast-typing autosave bursts).
                       key={version.id ?? `v-${version.versionNumber}`}
-                      className={`group relative flex-shrink-0 w-24 min-h-28 max-h-40 border rounded-lg p-3 transition-all flex flex-col items-center justify-center gap-1 ${
+                      className={`group relative shrink-0 w-24 min-h-28 max-h-40 border rounded-lg p-3 transition-all flex flex-col items-center justify-center gap-1 ${
                         isHighlighted ? 'bg-primary/20 border-primary ring-2 ring-primary/50' : 'hover:bg-accent/50'
                       }`}
                     >
@@ -5342,7 +5342,7 @@ export const CodeEditor = memo(function CodeEditor({
           is removable (no ownership gate). Bin = remove (our convention). */}
       {hoveredHighlightId && deleteButtonPosition && typeof document !== 'undefined' && createPortal(
         <div
-          className="highlight-actions fixed flex items-center gap-1 z-[9999]"
+          className="highlight-actions fixed flex items-center gap-1 z-9999"
           style={{
             left: `${deleteButtonPosition.x}px`,
             top: `${deleteButtonPosition.y}px`,
@@ -5438,11 +5438,11 @@ export const CodeEditor = memo(function CodeEditor({
             {snapshotLoading ? 'Loading…' : 'No saved snapshots for this student.'}
           </div>
         ) : (
-          <ul className="!m-0 !mt-0.5 !p-0 !list-none max-h-[5.5rem] overflow-y-auto">
+          <ul className="m-0! mt-0.5! p-0! list-none! max-h-22 overflow-y-auto">
             {snapList.map((s) => {
               const active = (viewedSnapshotId ?? snapList[0].id) === s.id
               return (
-                <li key={s.id} className="!m-0 !p-0 !list-none marker:content-['']">
+                <li key={s.id} className="m-0! p-0! list-none! marker:content-['']">
                   <button
                     type="button"
                     onClick={() => viewSnapshot(s)}
@@ -5451,9 +5451,9 @@ export const CodeEditor = memo(function CodeEditor({
                       active && 'bg-amber-50 dark:bg-amber-950/30 font-medium',
                     )}
                   >
-                    <span className="uppercase text-[9px] tracking-wide text-muted-foreground w-14 flex-shrink-0 whitespace-nowrap">{s.kind}</span>
+                    <span className="uppercase text-[9px] tracking-wide text-muted-foreground w-14 shrink-0 whitespace-nowrap">{s.kind}</span>
                     <span className="truncate flex-1 text-[11px]">{s.label ?? ''}</span>
-                    <span className="text-[10px] text-muted-foreground flex-shrink-0 tabular-nums">{new Date(s.createdAt).toLocaleTimeString()}</span>
+                    <span className="text-[10px] text-muted-foreground shrink-0 tabular-nums">{new Date(s.createdAt).toLocaleTimeString()}</span>
                   </button>
                 </li>
               )
@@ -5494,7 +5494,7 @@ export const CodeEditor = memo(function CodeEditor({
         cost across more editors. */}
     {pendingScopeChange && typeof document !== 'undefined' && createPortal(
       <div
-        className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/40"
+        className="fixed inset-0 z-10000 flex items-center justify-center bg-black/40"
         onClick={(e) => { if (e.target === e.currentTarget) setPendingScopeChange(null) }}
       >
         <div className="bg-popover border rounded-lg shadow-xl p-4 max-w-sm w-[90%]">

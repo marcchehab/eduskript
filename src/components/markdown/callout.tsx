@@ -88,11 +88,11 @@ export function Callout({ children, className, type, isFoldable, initiallyFolded
             return (
               <div key={i} className={childProps.className}>
                 <div className="flex items-center gap-2 w-full">
-                  {Icon && <Icon className="w-5 h-5 flex-shrink-0" />}
+                  {Icon && <Icon className="w-5 h-5 shrink-0" />}
                   <span className="flex-1">{childProps.children}</span>
                   {isFoldable && (
                     <ChevronRight
-                      className={`w-5 h-5 flex-shrink-0 transition-transform duration-300 ${isOpen ? 'rotate-90' : ''}`}
+                      className={`w-5 h-5 shrink-0 transition-transform duration-300 ${isOpen ? 'rotate-90' : ''}`}
                     />
                   )}
                 </div>
