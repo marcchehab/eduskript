@@ -13,6 +13,8 @@ const LEGACY_COLORS = new Set(['yellow', 'red', 'green', 'blue', 'purple'])
  */
 export function highlightBackground(color: string): string {
   if (LEGACY_COLORS.has(color)) return `var(--text-highlight-${color})`
+  // Theme ink (currentColor): translucent foreground, flips with the theme.
+  if (color === 'currentColor') return 'color-mix(in srgb, currentColor 35%, transparent)'
   // hsl(h s l) → hsl(h s l / .35)
   if (/^hsl\(/i.test(color) && !color.includes('/')) {
     return color.replace(/\)\s*$/, ' / 0.35)')

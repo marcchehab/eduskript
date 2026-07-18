@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Pen, Eraser, Trash2, Eye, EyeOff, Radio, User, Users, UserPen, ChevronDown, Globe, Layers, Camera, Highlighter, Ellipsis, SeparatorHorizontal, StickyNote as StickyNoteIcon, Plus } from 'lucide-react'
-import { type PenConfig, type PenType, hueToColor, colorToHue, MIN_PENS, MAX_PENS } from '@/lib/annotations/pens'
+import { type PenConfig, type PenType, hueToColor, colorToHue, TRACK_MIN, MIN_PENS, MAX_PENS } from '@/lib/annotations/pens'
 import type { SpacerPattern } from '@/types/spacer'
 import { cn } from '@/lib/utils'
 import { useLayout } from '@/contexts/layout-context'
@@ -804,10 +804,12 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
                 aria-label={pen.type === 'highlight' ? `Select highlighter ${penIndex + 1}` : `Select pen ${penIndex + 1}`}
               >
                 {pen.type === 'highlight' ? <Highlighter className="w-4 h-4" /> : <Pen className="w-4 h-4" />}
-                {/* Color indicator - uses annotation-color-indicator for dark mode filter */}
+                {/* Color indicator. `color` pins the theme-ink swatch: a pen
+                    stored as `currentColor` shows the true foreground (and
+                    flips with the theme); explicit colours ignore it. */}
                 <div
                   className="annotation-color-indicator absolute bottom-0.5 right-0.5 w-2.5 h-2.5 rounded-full border border-white dark:border-gray-800"
-                  style={{ backgroundColor: pen.color }}
+                  style={{ backgroundColor: pen.color, color: 'hsl(var(--foreground))' }}
                 />
               </button>
 
@@ -849,12 +851,15 @@ if (moreToolsRef.current && !moreToolsRef.current.contains(e.target as Node)) {
                   <div className="bg-background border border-border rounded-lg shadow-lg p-3 flex flex-col items-center gap-3 min-h-[200px]">
                     <input
                       type="range"
-                      min="0"
+                      min={TRACK_MIN}
                       max="360"
                       step="1"
                       value={colorToHue(pen.color)}
                       onChange={(e) => handleColorChange(pen.id, hueToColor(parseFloat(e.target.value)))}
                       aria-label="Pen colour"
+                      // Thumb previews the selected colour. `color` resolves an
+                      // ink pen's `currentColor` thumb to the theme foreground.
+                      style={{ '--thumb-color': pen.color, color: 'hsl(var(--foreground))' } as React.CSSProperties}
                       className="grow cursor-pointer [writing-mode:vertical-lr] [direction:rtl] slider-vertical hue-slider"
                     />
                     {pens.length > MIN_PENS && (

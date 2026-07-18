@@ -493,6 +493,9 @@ function SectionStrokeSvg({
         overflow: 'visible',
         opacity,
         zIndex,
+        // Strokes stored as `currentColor` (theme ink) resolve to this — flips
+        // black↔white with the theme, no redraw. Other colours ignore it.
+        color: 'hsl(var(--foreground))',
       }}
     >
       {Array.from(offsetGroups.entries()).map(([offsetY, ps]) => (

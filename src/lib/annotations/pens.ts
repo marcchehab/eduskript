@@ -21,15 +21,37 @@ export interface PenConfig {
   type: PenType
 }
 
-/** Map a hue (0–360) to a vivid CSS colour. Used by the hue-slider colour
- *  picker shared by pens and highlighters. Stored verbatim as the pen colour. */
-export function hueToColor(hue: number): string {
-  return `hsl(${Math.round(hue)} 85% 55%)`
+/** Theme "ink": a stroke stored as `currentColor` renders in the page
+ *  foreground — black in light mode, white in dark — and flips live when the
+ *  theme toggles (SVG `fill="currentColor"` inherits the layer's CSS `color`;
+ *  the raster canvas resolves it via getComputedStyle). See the ink zone at
+ *  the bottom of the colour slider (annotation-toolbar + .hue-slider CSS). */
+export const FOREGROUND_COLOR = 'currentColor'
+
+/** The colour slider is a single track: the bottom [TRACK_MIN, 0) is the solid
+ *  ink zone (theme foreground, not blended into the rainbow); [0, 360] is the
+ *  hue rainbow. TRACK_MIN/-36 makes the ink zone the bottom 36/396 ≈ 9.1% of
+ *  the track — about one thumb tall, so the parked thumb fills it just below
+ *  red. Keep 9.1% in sync with the gradient stop in `.hue-slider`. */
+export const TRACK_MIN = -36
+// Ink parks near the bottom of the track, lifted ~2px off the floor so the
+// thumb sits cleanly on the ink block below red (not flush to the edge). The
+// lift is baked into the value — WebKit ignores transform/margin on the thumb —
+// as ~5 track units over the ≈176px track (396-unit range → ~2px).
+const INK_TRACK_VALUE = TRACK_MIN + 5
+
+/** Map a slider track value to a CSS colour. Negative → theme ink; 0–360 → a
+ *  vivid hue. Used by the colour picker shared by pens and highlighters and
+ *  stored verbatim as the pen colour. */
+export function hueToColor(value: number): string {
+  if (value < 0) return FOREGROUND_COLOR
+  return `hsl(${Math.round(value)} 85% 55%)`
 }
 
-/** Recover a hue (0–360) from a pen colour so the hue slider can position its
- *  thumb. Handles `hsl(h …)` (what hueToColor emits) and hex; else 0. */
+/** Recover a slider track value from a pen colour so the thumb can be
+ *  positioned. `currentColor` → the ink zone; `hsl(h …)`/hex → its hue; else 0. */
 export function colorToHue(color: string): number {
+  if (color === FOREGROUND_COLOR) return INK_TRACK_VALUE
   const hsl = color.match(/^hsl\(\s*([\d.]+)/i)
   if (hsl) return Math.max(0, Math.min(360, Math.round(parseFloat(hsl[1]))))
   const hex = color.replace(/^#/, '')
@@ -59,7 +81,7 @@ const LEGACY_COLORS_KEY = 'annotation-pen-colors'
 const LEGACY_SIZES_KEY = 'annotation-pen-sizes'
 
 /** Colours offered in the picker — also the source for a new pen's colour. */
-export const PEN_PALETTE = ['#000000', '#808080', '#DD5555', '#EE8844', '#44AA66', '#5577DD', '#9966DD']
+export const PEN_PALETTE = [FOREGROUND_COLOR, '#808080', '#DD5555', '#EE8844', '#44AA66', '#5577DD', '#9966DD']
 
 /** Today's defaults: two pens + two highlighters, in cyan and orange. Fixed ids
  *  (deterministic across SSR/CSR; ids only need to be unique within the list).

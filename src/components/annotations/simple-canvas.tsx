@@ -118,6 +118,17 @@ function getStrokeOptions(width: number, last = false, simulate = false): Stroke
   }
 }
 
+// Canvas 2D has no inherited `color`, so the CSS `currentColor` keyword paints
+// as opaque black. Strokes stored as `currentColor` are "theme ink" (see
+// FOREGROUND_COLOR in lib/annotations/pens): resolve them to the page
+// foreground. getComputedStyle reflects the active theme, so a redraw after a
+// theme toggle flips them black↔white. Non-ink colours pass through untouched.
+function resolveCanvasColor(color: string, el: HTMLElement): string {
+  if (color !== 'currentColor') return color
+  const fg = getComputedStyle(el).getPropertyValue('--foreground').trim()
+  return fg ? `hsl(${fg})` : '#000'
+}
+
 // Constant pressure across all samples is a reliable mouse/touch marker:
 // pen digitizers always produce varying pressure between samples, while
 // mouse/touch PointerEvents fill pressure with the default 0.5 each time.
@@ -338,13 +349,24 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         const outline = getStroke(inputPoints, getStrokeOptions(path.width, true, isUniform))
         const pathObj = getPathFromStroke(outline)
 
-        ctx.fillStyle = path.color
+        ctx.fillStyle = resolveCanvasColor(path.color, ctx.canvas)
         ctx.fill(pathObj)
       })
 
       // Reset globalAlpha
       ctx.globalAlpha = 1.0
     }, [svgHandlesDisplay])
+
+    // Repaint theme-ink (`currentColor`) strokes when the theme toggles — the
+    // theme switch stamps `class` on <html>. Only affects the non-SVG raster
+    // path (in SVG mode the committed strokes flip via CSS); harmless there
+    // since redrawCanvas just clears and returns.
+    useEffect(() => {
+      if (typeof MutationObserver === 'undefined') return
+      const obs = new MutationObserver(() => redrawCanvas())
+      obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+      return () => obs.disconnect()
+    }, [redrawCanvas])
 
     // Throttled redraw for eraser using RAF to avoid redrawing every single move
     const scheduleEraserRedraw = useCallback(() => {
@@ -781,7 +803,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         // seamless.
         const outline = getStroke(inputPoints, getStrokeOptions(strokeWidth, true, isUniform))
         const pathObj = getPathFromStroke(outline)
-        ctx.fillStyle = strokeColor
+        ctx.fillStyle = resolveCanvasColor(strokeColor, ctx.canvas)
         ctx.fill(pathObj)
       }
     }, [mode, strokeColor, strokeWidth, isPointNearStroke, scheduleEraserRedraw, updateEraserCursorPosition, updateEraserCursor, screenToPaper, onEraserMarksChange, svgHandlesDisplay])

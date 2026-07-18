@@ -72,6 +72,8 @@ export const AnnotationSvgLayer = memo(function AnnotationSvgLayer({
         right: 0,
         height: `${height}px`,
         pointerEvents: 'none',
+        // `currentColor` strokes (theme ink) resolve to this and flip with the theme.
+        color: 'hsl(var(--foreground))',
       }}
     >
       {pathData.map(p => (
