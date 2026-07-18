@@ -153,10 +153,14 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
   const session = await getServerSession(authOptions)
   const isOwner = session?.user?.id === teacher.id
 
-  // Check for frontpage (published for visitors, any for owner). Site-level
-  // FrontPages link via Site, not directly via user.
+  // Check for frontpage (published for visitors, any for owner). Scope to THIS
+  // site (the requested pageSlug), not the user — a teacher may own several
+  // sites, each with its own frontpage. Keying on userId returned the primary
+  // site's frontpage on every one of the user's slugs (e.g. /mathegarten
+  // showed informatikgarten's landing page). Mirrors the [domain] route fix
+  // in commit 20ee5bf5; this org route serves eduskript.org/<slug>.
   const frontPage = await prisma.frontPage.findFirst({
-    where: { site: { userId: teacher.id } }
+    where: { site: { slug: pageSlug } }
   })
 
   // Fetch public annotations, snaps, and sticky notes for this front page
