@@ -80,11 +80,13 @@ export async function PATCH(
       )
     }
 
-    // If setting as primary, unset other primary domains first
+    // If setting as primary, unset the OTHER primary domain for the same site
+    // (isPrimary is per-site now — each site can have its own primary domain).
     if (isPrimary) {
       await prisma.teacherCustomDomain.updateMany({
         where: {
           userId: session.user.id,
+          siteId: domain.siteId,
           isPrimary: true,
           id: { not: domainId },
         },

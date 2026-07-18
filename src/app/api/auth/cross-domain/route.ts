@@ -92,17 +92,32 @@ export async function GET(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
+    // Carry the domain's own (owned) site in the session, falling back to the
+    // user's primary. Tunnel domains aren't in the DB, so there's no domain
+    // site to resolve — they always use the primary site.
+    const domainSite = isTunnelDomain ? null : await prisma.teacherCustomDomain.findFirst({
+      where: { domain: returnDomain, userId: user.id, isVerified: true },
+      select: {
+        site: {
+          select: {
+            slug: true, pageName: true, pageDescription: true,
+            pageIcon: true, typographyPreference: true,
+          },
+        },
+      },
+    })
+    const sessionSite = domainSite?.site ?? user.sites[0] ?? null
     const jwt = await encode({
       token: {
         id: user.id, name: user.name, email: user.email,
         picture: user.image, image: user.image,
-        pageSlug: user.sites[0]?.slug ?? null,
-        pageName: user.sites[0]?.pageName ?? null,
-        pageDescription: user.sites[0]?.pageDescription ?? null,
-        pageIcon: user.sites[0]?.pageIcon ?? null,
+        pageSlug: sessionSite?.slug ?? null,
+        pageName: sessionSite?.pageName ?? null,
+        pageDescription: sessionSite?.pageDescription ?? null,
+        pageIcon: sessionSite?.pageIcon ?? null,
         title: user.title, bio: user.bio, isAdmin: user.isAdmin,
         accountType: user.accountType, studentPseudonym: user.studentPseudonym,
-        typographyPreference: user.sites[0]?.typographyPreference ?? null,
+        typographyPreference: sessionSite?.typographyPreference ?? null,
       },
       secret: process.env.NEXTAUTH_SECRET!,
     })

@@ -619,7 +619,7 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
               Add your own domain to access your page directly (e.g., yourdomain.com instead of eduskript.org/{session?.user?.pageSlug}).
             </p>
           </div>
-          <Link href="/dashboard/settings/domains">
+          <Link href={siteId ? `/dashboard/site/${siteId}/domains` : '/dashboard/settings/domains'}>
             <Button variant="outline" className="gap-2">
               <Globe className="w-4 h-4" />
               Manage Custom Domains

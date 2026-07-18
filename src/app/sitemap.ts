@@ -65,13 +65,18 @@ async function resolveHost(host: string): Promise<Resolved> {
 
   const teacherDomain = await prisma.teacherCustomDomain.findFirst({
     where: { domain: host, isVerified: true },
-    select: { user: { select: { id: true, sites: { orderBy: PRIMARY_SITE_ORDER, take: 1, select: { slug: true } } } } },
+    select: {
+      // The domain's own site, with the user's primary site as a legacy fallback.
+      site: { select: { slug: true } },
+      user: { select: { id: true, sites: { orderBy: PRIMARY_SITE_ORDER, take: 1, select: { slug: true } } } },
+    },
   })
-  if (teacherDomain?.user?.sites[0]?.slug) {
+  const teacherSlug = teacherDomain?.site?.slug ?? teacherDomain?.user?.sites[0]?.slug
+  if (teacherDomain?.user && teacherSlug) {
     return {
       type: 'teacher',
       userId: teacherDomain.user.id,
-      pageSlug: teacherDomain.user.sites[0].slug,
+      pageSlug: teacherSlug,
     }
   }
 

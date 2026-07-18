@@ -78,6 +78,15 @@ export const getTeacherByPageSlug = (pageSlug: string) =>
           pageTagline: true,
           sidebarBehavior: true,
           typographyPreference: true,
+          // Canonical host for THIS site: its own verified primary domain (a
+          // teacher may own several sites, each with its own custom domain).
+          // Reads via the site→domain back-relation, so a non-primary site no
+          // longer inherits the primary site's domain.
+          teacherCustomDomains: {
+            where: { isVerified: true, isPrimary: true },
+            select: { domain: true },
+            take: 1,
+          },
           user: {
             select: {
               id: true,
@@ -86,17 +95,16 @@ export const getTeacherByPageSlug = (pageSlug: string) =>
               title: true,
               bio: true,
               billingPlan: true,
-              customDomains: {
-                where: { isVerified: true, isPrimary: true },
-                select: { domain: true },
-                take: 1,
-              },
             },
           },
         },
       })
       if (!site?.user) return null
-      return graftSitePageFields(site.user, site)
+      // Graft page fields onto the user, then attach the SITE's domains under
+      // the legacy `customDomains` name so canonical/SEO consumers are unchanged.
+      return Object.assign(graftSitePageFields(site.user, site), {
+        customDomains: site.teacherCustomDomains,
+      })
     },
     [`teacher-${pageSlug}`],
     {

@@ -46,18 +46,20 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Check teacher custom domains (slug lives on Site).
+    // Check teacher custom domains. A domain points to a specific Site
+    // (`site.slug`). Legacy rows have no siteId → fall back to the user's
+    // primary site, matching pre-multi-site behavior.
     const teacherDomain = await prisma.teacherCustomDomain.findFirst({
       where: {
         domain: normalizedDomain,
         isVerified: true,
       },
       include: {
+        site: { select: { slug: true } },
         user: {
           select: {
             id: true,
             name: true,
-            // A teacher custom domain resolves to the user's primary site.
             sites: { orderBy: PRIMARY_SITE_ORDER, take: 1, select: { slug: true } },
           },
         },
@@ -68,7 +70,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         type: 'teacher',
         userId: teacherDomain.user.id,
-        pageSlug: teacherDomain.user.sites[0]?.slug ?? null,
+        pageSlug: teacherDomain.site?.slug ?? teacherDomain.user.sites[0]?.slug ?? null,
         userName: teacherDomain.user.name,
         isPrimary: teacherDomain.isPrimary,
       })

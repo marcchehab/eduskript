@@ -245,6 +245,7 @@ model Site {
   collections Collection[]
   pageLayout  PageLayout?
   frontPage   FrontPage?
+  teacherCustomDomains TeacherCustomDomain[]
 
   @@index([userId])
   @@map("sites")
@@ -903,6 +904,11 @@ model TeacherCustomDomain {
   id                String    @id @default(cuid())
   domain            String    @unique // "mr-smith.com", "teacher.school.edu"
   userId            String    @map("user_id")
+  // The site this domain points to. Nullable for back-compat: rows created
+  // before multi-site domains resolve to the user's primary site (see
+  // resolve-domain). New domains always carry a siteId. isPrimary is scoped
+  // per-site (the site's primary domain), not per-user.
+  siteId            String?   @map("site_id")
   isPrimary         Boolean   @default(false) @map("is_primary")
   isVerified        Boolean   @default(false) @map("is_verified")
   verificationToken String?   @map("verification_token")
@@ -910,10 +916,12 @@ model TeacherCustomDomain {
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  site Site? @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@index([domain])
   @@index([userId])
+  @@index([siteId])
   @@map("teacher_custom_domains")
 }
 

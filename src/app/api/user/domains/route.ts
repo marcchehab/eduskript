@@ -3,10 +3,13 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
+import { resolveOwnedSite, getPrimarySiteId } from '@/lib/sites'
 import { randomBytes } from 'crypto'
 
-// GET - List user's custom domains
-export async function GET() {
+// GET - List custom domains for one of the caller's sites (`?siteId=`, or the
+// primary site when omitted). Legacy rows (no siteId) surface under the primary
+// site so they remain manageable.
+export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
 
@@ -22,8 +25,23 @@ export async function GET() {
       )
     }
 
+    const requestedSiteId = new URL(request.url).searchParams.get('siteId')
+    const { site, forbidden } = await resolveOwnedSite(session.user.id, requestedSiteId)
+    if (forbidden) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+    if (!site) {
+      return NextResponse.json({ domains: [] })
+    }
+
+    const primaryId = await getPrimarySiteId(session.user.id)
+    const includeLegacy = site.id === primaryId
+
     const domains = await prisma.teacherCustomDomain.findMany({
-      where: { userId: session.user.id },
+      where: {
+        userId: session.user.id,
+        OR: [{ siteId: site.id }, ...(includeLegacy ? [{ siteId: null }] : [])],
+      },
       orderBy: [{ isPrimary: 'desc' }, { createdAt: 'desc' }],
     })
 
@@ -87,7 +105,20 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { domain } = body
+    const { domain, siteId } = body
+
+    // Bind the domain to a specific site (ownership-checked), or the primary
+    // site when siteId is omitted.
+    const { site, forbidden } = await resolveOwnedSite(session.user.id, siteId)
+    if (forbidden) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+    if (!site) {
+      return NextResponse.json(
+        { error: 'You need a page (site) before adding a custom domain' },
+        { status: 400 }
+      )
+    }
 
     // Validate domain format
     if (!domain || typeof domain !== 'string') {
@@ -148,6 +179,7 @@ export async function POST(request: NextRequest) {
       data: {
         domain: normalizedDomain,
         userId: session.user.id,
+        siteId: site.id,
         verificationToken,
         isVerified: false,
         isPrimary: false,

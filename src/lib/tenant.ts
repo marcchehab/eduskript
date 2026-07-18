@@ -64,11 +64,12 @@ const lookupTenantLang = unstable_cache(
     const teacherDomain = await prisma.teacherCustomDomain.findFirst({
       where: { domain: host, isVerified: true },
       select: {
-        // A teacher custom domain resolves to the user's primary site.
+        // The domain's own site, with the user's primary site as legacy fallback.
+        site: { select: { pageLanguage: true } },
         user: { select: { sites: { orderBy: PRIMARY_SITE_ORDER, take: 1, select: { pageLanguage: true } } } },
       },
     })
-    const teacherLang = teacherDomain?.user?.sites[0]?.pageLanguage
+    const teacherLang = teacherDomain?.site?.pageLanguage ?? teacherDomain?.user?.sites[0]?.pageLanguage
     if (teacherLang) return teacherLang
 
     return DEFAULT_LANG

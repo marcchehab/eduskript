@@ -110,6 +110,25 @@ export async function GET(request: NextRequest) {
 
   const user = crossDomainToken.user
 
+  // If the custom domain the user landed on points to a specific site they own,
+  // carry THAT site in the session so the dashboard branding/routing match the
+  // domain — not just their primary site. Falls back to the primary site.
+  const domainSite = await prisma.teacherCustomDomain.findFirst({
+    where: { domain: crossDomainToken.domain, userId: user.id, isVerified: true },
+    select: {
+      site: {
+        select: {
+          slug: true,
+          pageName: true,
+          pageDescription: true,
+          pageIcon: true,
+          typographyPreference: true,
+        },
+      },
+    },
+  })
+  const sessionSite = domainSite?.site ?? user.sites[0] ?? null
+
   // Create JWT token matching NextAuth format
   const jwtToken = await encode({
     token: {
@@ -118,16 +137,16 @@ export async function GET(request: NextRequest) {
       email: user.email,
       picture: user.image,
       image: user.image,
-      pageSlug: user.sites[0]?.slug ?? null,
-      pageName: user.sites[0]?.pageName ?? null,
-      pageDescription: user.sites[0]?.pageDescription ?? null,
-      pageIcon: user.sites[0]?.pageIcon ?? null,
+      pageSlug: sessionSite?.slug ?? null,
+      pageName: sessionSite?.pageName ?? null,
+      pageDescription: sessionSite?.pageDescription ?? null,
+      pageIcon: sessionSite?.pageIcon ?? null,
       title: user.title,
       bio: user.bio,
       isAdmin: user.isAdmin,
       accountType: user.accountType,
       studentPseudonym: user.studentPseudonym,
-      typographyPreference: user.sites[0]?.typographyPreference ?? null,
+      typographyPreference: sessionSite?.typographyPreference ?? null,
     },
     secret: process.env.NEXTAUTH_SECRET!,
   })
