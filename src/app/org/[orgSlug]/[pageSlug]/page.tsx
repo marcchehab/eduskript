@@ -256,14 +256,19 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
           }
         }
       })
-      if (skript && skript.collectionSkripts[0]?.collection) {
+      // A root skript may have no collection (skripts can exist without one).
+      // Push it regardless, with an "Uncategorized" fallback title — mirrors the
+      // [domain] route (getTeacherHomepageContent). Requiring a collection here
+      // silently dropped collection-less root skripts from the sidebar.
+      if (skript) {
+        const firstCollection = skript.collectionSkripts[0]?.collection
         rootSkripts.push({
           id: skript.id,
           title: skript.title,
           description: skript.description,
           slug: skript.slug,
           collection: {
-            title: skript.collectionSkripts[0].collection.title,
+            title: firstCollection?.title ?? 'Uncategorized',
           },
           pages: skript.pages.map(p => ({
             id: p.id,
@@ -278,7 +283,12 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
   // Fetch full site structure when sidebar is in "full" mode. URL slug +
   // page-display fields all live on Site now.
   const teacherSlug = teacherSite?.slug ?? pageSlug
-  const sidebarBehavior = teacherSite?.sidebarBehavior ?? 'contextual'
+  // Default to 'full' — matches the Prisma default ("full") and the [domain]
+  // route. Keying null off 'contextual' here meant a site that never set the
+  // preference showed an empty sidebar on eduskript.org/<slug> (contextual
+  // filters to the current skript, and the frontpage has none) while the same
+  // site rendered fully on a custom host.
+  const sidebarBehavior = teacherSite?.sidebarBehavior || 'full'
   const fullSiteStructure = sidebarBehavior === 'full'
     ? await getFullSiteStructure(teacher.id, teacherSlug)
     : undefined
@@ -299,7 +309,7 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
       siteStructure={collections}
       rootSkripts={rootSkripts}
       fullSiteStructure={fullSiteStructure}
-      sidebarBehavior={(sidebarBehavior as 'contextual' | 'full') || 'contextual'}
+      sidebarBehavior={(sidebarBehavior as 'contextual' | 'full') || 'full'}
       typographyPreference={(teacherSite?.typographyPreference as 'modern' | 'classic') || 'modern'}
       routePrefix={`/org/${orgSlug}/${pageSlug}`}
     >
