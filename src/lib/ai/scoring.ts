@@ -95,7 +95,7 @@ function client(): OpenAI {
 }
 
 export function scoringModel(): string {
-  return process.env.OPENROUTER_MODEL ?? 'z-ai/glm-5.2'
+  return process.env.OPENROUTER_MODEL ?? 'qwen/qwen3.7-max'
 }
 
 /** Append the teacher/org custom guidance (language, style, terminology) so the

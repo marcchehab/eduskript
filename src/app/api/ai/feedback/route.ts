@@ -11,9 +11,11 @@
  * Streams SSE events in the same { type: 'content' | 'error' | 'done' } shape
  * as /api/ai/chat.
  *
- * Model: OPENROUTER_VISION_MODEL env (the default text model on SambaNova has
- * no image input). OPENROUTER_PROVIDERS is deliberately NOT applied here —
- * that pin targets the text model's provider.
+ * Model: OPENROUTER_VISION_MODEL env, falling back to qwen/qwen3-vl-235b-a22b-instruct
+ * (the text model has no image input, so vision needs its own slug). We use the
+ * -instruct (non-reasoning) variant so its output isn't starved by reasoning
+ * tokens under the 2048 max_tokens cap. OPENROUTER_PROVIDERS is deliberately NOT
+ * applied here — that pin targets the text model's provider.
  */
 
 import { getServerSession } from 'next-auth'
@@ -157,7 +159,7 @@ export async function POST(request: Request) {
     ;(async () => {
       try {
         const aiStream = await openai.chat.completions.create({
-          model: process.env.OPENROUTER_VISION_MODEL ?? 'google/gemini-2.5-flash',
+          model: process.env.OPENROUTER_VISION_MODEL ?? 'qwen/qwen3-vl-235b-a22b-instruct',
           max_tokens: 2048,
           messages: [
             { role: 'system', content: systemPrompt },

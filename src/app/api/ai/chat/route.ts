@@ -164,7 +164,7 @@ export async function POST(request: Request) {
     ;(async () => {
       try {
         const aiStream = await openai.chat.completions.create({
-          model: process.env.OPENROUTER_MODEL ?? 'z-ai/glm-5.2',
+          model: process.env.OPENROUTER_MODEL ?? 'qwen/qwen3.7-max',
           max_tokens: 4096,
           messages: [
             { role: 'system', content: systemPrompt },
