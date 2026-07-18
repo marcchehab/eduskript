@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth'
 import { revalidateTag, revalidatePath } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { PRIMARY_SITE_ORDER } from '@/lib/sites'
+import { resolveOwnedSite } from '@/lib/sites'
 import { withDatabaseConnection } from '@/lib/db-connection'
 import { CACHE_TAGS } from '@/lib/cached-queries'
 import { z } from 'zod'
@@ -70,24 +70,32 @@ const adminUpdateProfileSchema = z.object({
 // edited from another path (MCP, AI Edit, direct API, another dashboard tab).
 // Symptom: user updates pageDescription, opens settings, sees the OLD text.
 // This GET is the authoritative source the UI hydrates from on mount.
-export async function GET() {
+export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  // Page fields are per-site. `?siteId=` targets one of the caller's sites
+  // (site settings UI); omitted falls back to the primary site (profile page).
+  const siteId = new URL(request.url).searchParams.get('siteId')
+  const { site, forbidden } = await resolveOwnedSite(session.user.id, siteId)
+  if (forbidden) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      title: true,
-      bio: true,
-      // The profile page shows the user's primary site (a user may own several).
-      sites: {
-        orderBy: PRIMARY_SITE_ORDER,
-        take: 1,
+    select: { id: true, name: true, email: true, title: true, bio: true },
+  })
+
+  if (!user) {
+    return NextResponse.json({ error: 'User not found' }, { status: 404 })
+  }
+
+  const siteRow = site
+    ? await prisma.site.findUnique({
+        where: { id: site.id },
         select: {
           slug: true,
           pageName: true,
@@ -95,13 +103,8 @@ export async function GET() {
           pageIcon: true,
           pageLanguage: true,
         },
-      },
-    },
-  })
-
-  if (!user) {
-    return NextResponse.json({ error: 'User not found' }, { status: 404 })
-  }
+      })
+    : null
 
   // Flatten Site fields onto the response under their legacy names so the
   // dashboard UI doesn't need to be touched. Source of truth is Site.
@@ -111,11 +114,11 @@ export async function GET() {
     email: user.email,
     title: user.title,
     bio: user.bio,
-    pageSlug: user.sites[0]?.slug ?? null,
-    pageName: user.sites[0]?.pageName ?? null,
-    pageDescription: user.sites[0]?.pageDescription ?? null,
-    pageIcon: user.sites[0]?.pageIcon ?? null,
-    pageLanguage: user.sites[0]?.pageLanguage ?? null,
+    pageSlug: siteRow?.slug ?? null,
+    pageName: siteRow?.pageName ?? null,
+    pageDescription: siteRow?.pageDescription ?? null,
+    pageIcon: siteRow?.pageIcon ?? null,
+    pageLanguage: siteRow?.pageLanguage ?? null,
   })
 }
 
@@ -127,14 +130,11 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Fetch user's admin status, org admin status, and current page slug
-    // (slug lives on Site now).
+    // Fetch user's admin status and org admin status (drive schema choice).
     const currentUser = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: {
         isAdmin: true,
-        // Profile edits target the user's primary site (a user may own several).
-        sites: { orderBy: PRIMARY_SITE_ORDER, take: 1, select: { id: true, slug: true } },
         organizationMemberships: {
           where: { role: { in: ['owner', 'admin'] } },
           select: { id: true },
@@ -145,6 +145,13 @@ export async function PATCH(request: NextRequest) {
 
     const body = await request.json()
 
+    // Page fields target the site named by `body.siteId` (site settings UI), or
+    // the primary site when omitted (profile page). Ownership-checked.
+    const { site: targetSite, forbidden } = await resolveOwnedSite(session.user.id, body.siteId)
+    if (forbidden) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
     // Use admin schema if user is platform admin or org admin, otherwise use regular schema
     const isOrgAdmin = (currentUser?.organizationMemberships?.length ?? 0) > 0
     const schema = (currentUser?.isAdmin || isOrgAdmin) ? adminUpdateProfileSchema : updateProfileSchema
@@ -152,10 +159,15 @@ export async function PATCH(request: NextRequest) {
 
     const result = await withDatabaseConnection(async () => {
       // pageSlug lives on Site. Uniqueness is the Site.slug unique constraint,
-      // global across user + org sites.
+      // global across every site. Exclude the target site itself so re-saving
+      // its own slug isn't a false conflict; any OTHER site (including the
+      // caller's other sites) sharing the slug is a real collision.
       if (validatedData.pageSlug) {
         const conflict = await prisma.site.findFirst({
-          where: { slug: validatedData.pageSlug, NOT: { userId: session.user.id } },
+          where: {
+            slug: validatedData.pageSlug,
+            ...(targetSite ? { NOT: { id: targetSite.id } } : {}),
+          },
           select: { id: true },
         })
         if (conflict) {
@@ -193,11 +205,11 @@ export async function PATCH(request: NextRequest) {
         }
       })
 
-      // Profile edits apply to the user's primary site. userId is no longer a
-      // unique key (a user may own several sites), so we mutate by the primary
+      // Edits apply to the resolved target site (siteId or primary). userId is
+      // not a unique key (a user may own several sites), so we mutate by the
       // site's id rather than upserting by userId.
-      const primarySiteId = currentUser?.sites[0]?.id ?? null
-      let newSlug = currentUser?.sites[0]?.slug ?? null
+      const primarySiteId = targetSite?.id ?? null
+      let newSlug = targetSite?.slug ?? null
       // Write the Site row if there's a slug change or any site-field change to
       // apply. Creating-on-demand keeps OAuth-signup teachers who haven't
       // claimed a slug yet from getting silently dropped here.
@@ -256,8 +268,8 @@ export async function PATCH(request: NextRequest) {
       }
     })
 
-    // Invalidate caches for the user's public page
-    const oldPageSlug = currentUser?.sites[0]?.slug ?? null
+    // Invalidate caches for the target site's public page
+    const oldPageSlug = targetSite?.slug ?? null
     const newPageSlug = result.pageSlug
 
     // Revalidate cache tags for both old and new page slugs

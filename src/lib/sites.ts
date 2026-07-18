@@ -25,3 +25,33 @@ export async function getPrimarySiteId(userId: string): Promise<string | null> {
   })
   return site?.id ?? null
 }
+
+/**
+ * Resolve which of the user's sites a per-site settings request targets.
+ *
+ * - `siteId` given → ownership-check it. `forbidden: true` (site null) if the
+ *   id isn't one of the caller's sites — the route should return 403.
+ * - `siteId` omitted → the primary site (back-compat for the pre-multi-site
+ *   settings UI, which had no site picker). `site` is null only if the user
+ *   owns no site yet (OAuth-signup teacher who hasn't claimed a slug).
+ *
+ * Callers pass `siteId` from the query string (GET) or body (PATCH/PUT).
+ */
+export async function resolveOwnedSite(
+  userId: string,
+  siteId?: string | null,
+): Promise<{ site: { id: string; slug: string } | null; forbidden: boolean }> {
+  if (siteId) {
+    const owned = await prisma.site.findFirst({
+      where: { id: siteId, userId },
+      select: { id: true, slug: true },
+    })
+    return { site: owned ?? null, forbidden: !owned }
+  }
+  const primary = await prisma.site.findFirst({
+    where: { userId },
+    orderBy: PRIMARY_SITE_ORDER,
+    select: { id: true, slug: true },
+  })
+  return { site: primary ?? null, forbidden: false }
+}

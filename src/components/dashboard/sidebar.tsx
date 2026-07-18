@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 const siteNavItems = [
   { name: 'Page Builder', suffix: '/page-builder', icon: BookOpen },
   { name: 'Frontpage', suffix: '/frontpage', icon: FileText },
+  { name: 'Settings', suffix: '/settings', icon: Settings },
 ]
 
 // Account-level items — user-wide, not tied to a single site.

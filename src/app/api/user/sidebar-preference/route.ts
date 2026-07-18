@@ -2,25 +2,30 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { PRIMARY_SITE_ORDER } from '@/lib/sites'
+import { resolveOwnedSite } from '@/lib/sites'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await getServerSession(authOptions)
-    
+
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // sidebarBehavior lives on the user's primary Site.
-    const site = await prisma.site.findFirst({
-      where: { userId: session.user.id },
-      orderBy: PRIMARY_SITE_ORDER,
-      select: { sidebarBehavior: true }
-    })
+    // sidebarBehavior is per-site. `?siteId=` targets one of the caller's sites
+    // (multi-site); omitted falls back to the primary site.
+    const siteId = new URL(request.url).searchParams.get('siteId')
+    const { site, forbidden } = await resolveOwnedSite(session.user.id, siteId)
+    if (forbidden) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    const row = site
+      ? await prisma.site.findUnique({ where: { id: site.id }, select: { sidebarBehavior: true } })
+      : null
 
     return NextResponse.json({
-      sidebarBehavior: site?.sidebarBehavior || 'full'
+      sidebarBehavior: row?.sidebarBehavior || 'full'
     })
   } catch (error) {
     console.error('Error fetching sidebar preference:', error)
@@ -40,7 +45,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { sidebarBehavior } = body
+    const { sidebarBehavior, siteId } = body
 
     // Validate the value
     if (!['contextual', 'full'].includes(sidebarBehavior)) {
@@ -50,17 +55,16 @@ export async function POST(request: Request) {
       )
     }
 
-    // Update on the user's primary Site (the per-page preference). A missing
-    // Site throws below and surfaces as a 500, matching prior behavior.
-    const primary = await prisma.site.findFirst({
-      where: { userId: session.user.id },
-      orderBy: PRIMARY_SITE_ORDER,
-      select: { id: true },
-    })
-    if (!primary) throw new Error('No site found for user')
+    // Update the targeted site (`siteId` from the body) or the primary site.
+    // A missing Site throws below and surfaces as a 500, matching prior behavior.
+    const { site, forbidden } = await resolveOwnedSite(session.user.id, siteId)
+    if (forbidden) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+    if (!site) throw new Error('No site found for user')
 
     await prisma.site.update({
-      where: { id: primary.id },
+      where: { id: site.id },
       data: { sidebarBehavior }
     })
 

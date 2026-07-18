@@ -8,17 +8,22 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { Save, Loader2, FileText, Upload, X, ExternalLink, Globe, Wand2, KeyRound, Mailbox } from 'lucide-react'
+import { Save, Loader2, FileText, Upload, X, ExternalLink, Globe, Wand2 } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { InlineMarkdown } from '@/components/ui/inline-markdown'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 
-export function PageSettings() {
+// `siteId` scopes every read/write to one of the caller's sites (multi-site
+// site-settings page). Omitted → the APIs fall back to the primary site, which
+// is the legacy single-site behavior.
+export function PageSettings({ siteId }: { siteId?: string } = {}) {
   const { data: session, update } = useSession()
   const router = useRouter()
   const dialog = useAlertDialog()
+  // Query suffix (GET) and body field (writes) that pin requests to `siteId`.
+  const siteQuery = siteId ? `?siteId=${encodeURIComponent(siteId)}` : ''
   const [sidebarBehavior, setSidebarBehavior] = useState<string>('full')
   const [typographyPreference, setTypographyPreference] = useState<string>('modern')
   const [loading, setLoading] = useState(false)
@@ -63,11 +68,11 @@ export function PageSettings() {
     const loadPreferences = async () => {
       try {
         const [sidebarResponse, typographyResponse, orgAdminResponse, aiPromptResponse, profileResponse] = await Promise.all([
-          fetch('/api/user/sidebar-preference'),
-          fetch('/api/user/typography-preference'),
+          fetch(`/api/user/sidebar-preference${siteQuery}`),
+          fetch(`/api/user/typography-preference${siteQuery}`),
           fetch('/api/user/is-org-admin'),
-          fetch('/api/user/ai-prompt'),
-          fetch('/api/user/profile'),
+          fetch(`/api/user/ai-prompt${siteQuery}`),
+          fetch(`/api/user/profile${siteQuery}`),
         ])
 
         if (sidebarResponse.ok) {
@@ -118,7 +123,7 @@ export function PageSettings() {
     if (session?.user) {
       loadPreferences()
     }
-  }, [session])
+  }, [session, siteQuery])
 
   // Debounced slug availability check
   const checkSlugAvailability = useCallback(async (slug: string) => {
@@ -172,7 +177,7 @@ export function PageSettings() {
       const response = await fetch('/api/user/sidebar-preference', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sidebarBehavior: value }),
+        body: JSON.stringify({ sidebarBehavior: value, siteId }),
       })
 
       if (response.ok) {
@@ -197,7 +202,7 @@ export function PageSettings() {
       const response = await fetch('/api/user/typography-preference', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ typographyPreference: value }),
+        body: JSON.stringify({ typographyPreference: value, siteId }),
       })
 
       if (response.ok) {
@@ -229,7 +234,8 @@ export function PageSettings() {
           pageDescription,
           pageIcon,
           pageLanguage,
-          name: session?.user?.name || 'User' // Include name as it's required by the API
+          name: session?.user?.name || 'User', // Include name as it's required by the API
+          siteId,
         }),
       })
 
@@ -324,7 +330,7 @@ export function PageSettings() {
       const response = await fetch('/api/user/ai-prompt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ aiSystemPrompt: aiSystemPrompt || null }),
+        body: JSON.stringify({ aiSystemPrompt: aiSystemPrompt || null, siteId }),
       })
 
       if (response.ok) {
@@ -597,7 +603,7 @@ export function PageSettings() {
               Customize your public landing page. This is what visitors see when they visit your profile.
             </p>
           </div>
-          <Link href="/dashboard/frontpage">
+          <Link href={siteId ? `/dashboard/site/${siteId}/frontpage` : '/dashboard/frontpage'}>
             <Button variant="outline" className="gap-2">
               <FileText className="w-4 h-4" />
               Edit Front Page
@@ -621,39 +627,9 @@ export function PageSettings() {
           </Link>
         </div>
 
-        {/* Connected Apps Section (MCP / claude.ai / Cursor / Claude Code) */}
-        <div className="space-y-4 border-t pt-6">
-          <div>
-            <Label className="text-sm font-medium">Connected Apps</Label>
-            <p className="text-sm text-muted-foreground mt-1">
-              Manage AI assistants like claude.ai, Cursor, and Claude Code
-              that can read and edit your content via MCP.
-            </p>
-          </div>
-          <Link href="/dashboard/settings/connected-apps">
-            <Button variant="outline" className="gap-2">
-              <KeyRound className="w-4 h-4" />
-              Manage Connected Apps
-            </Button>
-          </Link>
-        </div>
-
-        {/* Mail Hooks Section (inbound email → login codes on a page) */}
-        <div className="space-y-4 border-t pt-6">
-          <div>
-            <Label className="text-sm font-medium">Mail Hooks</Label>
-            <p className="text-sm text-muted-foreground mt-1">
-              Forward login-code emails (e.g. a shared Udemy account) into a
-              <code> &lt;login-codes&gt;</code> block on your pages.
-            </p>
-          </div>
-          <Link href="/dashboard/settings/mail-hooks">
-            <Button variant="outline" className="gap-2">
-              <Mailbox className="w-4 h-4" />
-              Manage Mail Hooks
-            </Button>
-          </Link>
-        </div>
+        {/* Connected Apps and Mail Hooks are account-level (user-wide, not tied
+            to a single site) — they live on the Account settings page
+            (/dashboard/settings), not here. */}
 
         {/* Sidebar Behavior Section */}
         <div className="space-y-4 border-t pt-6">

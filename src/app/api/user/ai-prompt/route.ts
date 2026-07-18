@@ -2,9 +2,9 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { PRIMARY_SITE_ORDER } from '@/lib/sites'
+import { resolveOwnedSite } from '@/lib/sites'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await getServerSession(authOptions)
 
@@ -12,15 +12,20 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // aiSystemPrompt lives on the user's primary Site.
-    const site = await prisma.site.findFirst({
-      where: { userId: session.user.id },
-      orderBy: PRIMARY_SITE_ORDER,
-      select: { aiSystemPrompt: true }
-    })
+    // aiSystemPrompt is per-site. `?siteId=` targets one of the caller's sites
+    // (multi-site); omitted falls back to the primary site.
+    const siteId = new URL(request.url).searchParams.get('siteId')
+    const { site, forbidden } = await resolveOwnedSite(session.user.id, siteId)
+    if (forbidden) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    const row = site
+      ? await prisma.site.findUnique({ where: { id: site.id }, select: { aiSystemPrompt: true } })
+      : null
 
     return NextResponse.json({
-      aiSystemPrompt: site?.aiSystemPrompt || ''
+      aiSystemPrompt: row?.aiSystemPrompt || ''
     })
   } catch (error) {
     console.error('Error fetching AI prompt:', error)
@@ -40,17 +45,17 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { aiSystemPrompt } = body
+    const { aiSystemPrompt, siteId } = body
 
-    // Update on the user's primary Site. Teachers always have a Site by this
-    // point; a missing Site means a misconfigured account so we surface a 404.
-    const primary = await prisma.site.findFirst({
-      where: { userId: session.user.id },
-      orderBy: PRIMARY_SITE_ORDER,
-      select: { id: true },
-    })
+    // Update the targeted site (`siteId` from the body) or the primary site.
+    // Teachers always have a Site by this point; a missing Site means a
+    // misconfigured account so we surface a 404.
+    const { site, forbidden } = await resolveOwnedSite(session.user.id, siteId)
+    if (forbidden) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
 
-    if (!primary) {
+    if (!site) {
       return NextResponse.json(
         { error: 'No public page found for this account' },
         { status: 404 },
@@ -58,7 +63,7 @@ export async function POST(request: Request) {
     }
 
     const updated = await prisma.site.update({
-      where: { id: primary.id },
+      where: { id: site.id },
       data: { aiSystemPrompt: aiSystemPrompt || null },
       select: { aiSystemPrompt: true },
     }).catch(() => null)
