@@ -8,6 +8,7 @@ import { CACHE_TAGS } from '@/lib/cached-queries'
 import JSZip from 'jszip'
 import { createHash } from 'crypto'
 import { uploadTeacherFile, isTeacherS3Configured, teacherFileExists } from '@/lib/s3'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 
 interface ExportManifest {
   version: number
@@ -315,8 +316,9 @@ async function performImport(
   const collectionIdMap = new Map<string, string>()
   const skriptIdMap = new Map<string, string>()
 
-  const userSite = await prisma.site.findUnique({
+  const userSite = await prisma.site.findFirst({
     where: { userId },
+    orderBy: PRIMARY_SITE_ORDER,
     select: { id: true, slug: true },
   })
   if (!userSite) {
@@ -606,8 +608,9 @@ export async function processImportZip(
 
   // Create or find collections (matched by title within the user's site).
   await onProgress?.(0, 'Creating collections...')
-  const userSite2 = await prisma.site.findUnique({
+  const userSite2 = await prisma.site.findFirst({
     where: { userId },
+    orderBy: PRIMARY_SITE_ORDER,
     select: { id: true },
   })
   if (!userSite2) {
@@ -858,8 +861,9 @@ export async function processImportZip(
   }
 
   // Invalidate cache so imported content is visible immediately
-  const userSite = await prisma.site.findUnique({
+  const userSite = await prisma.site.findFirst({
     where: { userId },
+    orderBy: PRIMARY_SITE_ORDER,
     select: { slug: true }
   })
   if (userSite?.slug) {

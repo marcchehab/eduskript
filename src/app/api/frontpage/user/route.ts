@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { revalidatePath, revalidateTag } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { CACHE_TAGS } from '@/lib/cached-queries'
 
 // GET - Get current user's frontpage
@@ -17,7 +18,7 @@ export async function GET() {
     // so the same query shape works once User.pageSlug is dropped later.
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { accountType: true, site: { select: { id: true } } }
+      select: { accountType: true, sites: { orderBy: PRIMARY_SITE_ORDER, take: 1, select: { id: true } } }
     })
 
     if (user?.accountType !== 'teacher') {
@@ -26,12 +27,13 @@ export async function GET() {
         { status: 403 }
       )
     }
-    if (!user.site) {
+    const site = user.sites[0]
+    if (!site) {
       return NextResponse.json({ frontPage: null, currentVersion: 0 })
     }
 
     const frontPage = await prisma.frontPage.findUnique({
-      where: { siteId: user.site.id },
+      where: { siteId: site.id },
       include: {
         versions: {
           orderBy: { version: 'desc' },
@@ -67,7 +69,7 @@ export async function PATCH(request: NextRequest) {
       where: { id: session.user.id },
       select: {
         accountType: true,
-        site: { select: { id: true, slug: true } },
+        sites: { orderBy: PRIMARY_SITE_ORDER, take: 1, select: { id: true, slug: true } },
       }
     })
 
@@ -77,7 +79,8 @@ export async function PATCH(request: NextRequest) {
         { status: 403 }
       )
     }
-    if (!user.site) {
+    const site = user.sites[0]
+    if (!site) {
       return NextResponse.json(
         { error: 'You need to set up your public page before editing a frontpage' },
         { status: 400 }
@@ -89,7 +92,7 @@ export async function PATCH(request: NextRequest) {
 
     // Get existing frontpage
     const existingFrontPage = await prisma.frontPage.findUnique({
-      where: { siteId: user.site.id },
+      where: { siteId: site.id },
       include: {
         versions: {
           orderBy: { version: 'desc' },
@@ -138,7 +141,7 @@ export async function PATCH(request: NextRequest) {
       // Create new frontpage scoped to the site
       frontPage = await prisma.frontPage.create({
         data: {
-          siteId: user.site.id,
+          siteId: site.id,
           content: content || '',
           isPublished: isPublished || false
         }
@@ -157,9 +160,9 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Revalidate caches
-    if (user.site.slug) {
-      revalidateTag(CACHE_TAGS.teacherContent(user.site.slug), { expire: 0 })
-      revalidatePath(`/${user.site.slug}`)
+    if (site.slug) {
+      revalidateTag(CACHE_TAGS.teacherContent(site.slug), { expire: 0 })
+      revalidatePath(`/${site.slug}`)
       revalidatePath('/dashboard')
     }
 

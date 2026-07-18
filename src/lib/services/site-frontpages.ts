@@ -23,6 +23,7 @@ import { revalidatePath, revalidateTag } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { CACHE_TAGS } from '@/lib/cached-queries'
 import { canEditSite, type OrgRole } from '@/lib/permissions'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import {
   NotFoundError,
   PermissionDeniedError,
@@ -55,8 +56,9 @@ async function resolveSiteForFrontPageAccess(
         where: { organizationId: target.organizationId },
         select: { id: true, slug: true, userId: true, organizationId: true },
       })
-    : await prisma.site.findUnique({
+    : await prisma.site.findFirst({
         where: { userId },
+        orderBy: PRIMARY_SITE_ORDER,
         select: { id: true, slug: true, userId: true, organizationId: true },
       })
 

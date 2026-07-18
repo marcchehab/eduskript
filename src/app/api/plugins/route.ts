@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 
 /**
  * GET /api/plugins — List all plugins, optionally filtered by author.
@@ -14,26 +15,26 @@ export async function GET(request: NextRequest) {
 
     const pluginsRaw = await prisma.plugin.findMany({
       where: authorFilter
-        ? { author: { site: { slug: authorFilter } } }
+        ? { author: { sites: { some: { slug: authorFilter } } } }
         : undefined,
       include: {
         author: {
-          select: { id: true, name: true, image: true, site: { select: { slug: true, pageName: true } } },
+          select: { id: true, name: true, image: true, sites: { orderBy: PRIMARY_SITE_ORDER, take: 1, select: { slug: true, pageName: true } } },
         },
       },
       orderBy: { updatedAt: 'desc' },
     })
 
-    // Flatten Site fields onto author under their legacy names (pageSlug,
-    // pageName) so the UI components don't need a sweep.
+    // Flatten the author's primary Site fields under their legacy names
+    // (pageSlug, pageName) so the UI components don't need a sweep.
     const plugins = pluginsRaw.map(p => ({
       ...p,
       author: {
         id: p.author.id,
         name: p.author.name,
         image: p.author.image,
-        pageSlug: p.author.site?.slug ?? null,
-        pageName: p.author.site?.pageName ?? null,
+        pageSlug: p.author.sites[0]?.slug ?? null,
+        pageName: p.author.sites[0]?.pageName ?? null,
       },
     }))
 
@@ -95,7 +96,7 @@ export async function POST(request: NextRequest) {
       },
       include: {
         author: {
-          select: { id: true, name: true, image: true, site: { select: { slug: true, pageName: true } } },
+          select: { id: true, name: true, image: true, sites: { orderBy: PRIMARY_SITE_ORDER, take: 1, select: { slug: true, pageName: true } } },
         },
       },
     })
@@ -106,8 +107,8 @@ export async function POST(request: NextRequest) {
         id: pluginRaw.author.id,
         name: pluginRaw.author.name,
         image: pluginRaw.author.image,
-        pageSlug: pluginRaw.author.site?.slug ?? null,
-        pageName: pluginRaw.author.site?.pageName ?? null,
+        pageSlug: pluginRaw.author.sites[0]?.slug ?? null,
+        pageName: pluginRaw.author.sites[0]?.pageName ?? null,
       },
     }
 

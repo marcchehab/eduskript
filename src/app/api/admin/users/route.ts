@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { revalidateTag, revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/admin-auth'
 import { prisma } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { CACHE_TAGS } from '@/lib/cached-queries'
 import bcrypt from 'bcryptjs'
 
@@ -16,7 +17,8 @@ export async function GET() {
         id: true,
         email: true,
         name: true,
-        site: { select: { slug: true } },
+        // Admin list shows the primary site slug (a user may own several).
+        sites: { orderBy: PRIMARY_SITE_ORDER, take: 1, select: { slug: true } },
         title: true,
         isAdmin: true,
         requirePasswordReset: true,
@@ -54,7 +56,7 @@ export async function GET() {
     })
 
     // Expose URL slug under the legacy `pageSlug` field for the admin UI.
-    const users = usersRaw.map(({ site, ...u }) => ({ ...u, pageSlug: site?.slug ?? null }))
+    const users = usersRaw.map(({ sites, ...u }) => ({ ...u, pageSlug: sites[0]?.slug ?? null }))
 
     return NextResponse.json({ users })
   } catch (error) {

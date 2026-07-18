@@ -5,6 +5,7 @@ import { checkSkriptPermissions } from '@/lib/permissions'
 import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import { assembleSystemPrompt } from '@/lib/ai/prompts'
 import type { ChatRequest, SkriptContext } from '@/lib/ai/types'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import OpenAI from 'openai'
 
 export const dynamic = 'force-dynamic'
@@ -99,7 +100,7 @@ export async function POST(request: Request) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: {
-        site: { select: { aiSystemPrompt: true } },
+        sites: { select: { aiSystemPrompt: true }, orderBy: PRIMARY_SITE_ORDER, take: 1 },
         organizationMemberships: {
           include: { organization: { include: { site: { select: { aiSystemPrompt: true } } } } },
         },
@@ -115,8 +116,8 @@ export async function POST(request: Request) {
     if (orgWithPrompt?.site?.aiSystemPrompt) {
       prompts.push(`## Organization Guidelines\n${orgWithPrompt.site.aiSystemPrompt}`)
     }
-    if (user?.site?.aiSystemPrompt) {
-      prompts.push(`## Teacher Preferences\n${user.site.aiSystemPrompt}`)
+    if (user?.sites[0]?.aiSystemPrompt) {
+      prompts.push(`## Teacher Preferences\n${user.sites[0].aiSystemPrompt}`)
     }
     if (prompts.length > 0) {
       orgPrompt = prompts.join('\n\n')

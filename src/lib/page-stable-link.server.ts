@@ -1,5 +1,6 @@
 import 'server-only'
 import { prisma } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import type { ResolvedPage } from './page-stable-link'
 
 /**
@@ -37,7 +38,7 @@ export async function resolveStableLinks(ids: string[]): Promise<Map<string, Res
             orderBy: { createdAt: 'asc' },
             take: 1,
             select: {
-              user: { select: { site: { select: { slug: true } } } },
+              user: { select: { sites: { orderBy: PRIMARY_SITE_ORDER, take: 1, select: { slug: true } } } },
             },
           },
         },
@@ -47,7 +48,7 @@ export async function resolveStableLinks(ids: string[]): Promise<Map<string, Res
 
   for (const page of pages) {
     const author = page.skript.authors[0]
-    const domain = author?.user?.site?.slug
+    const domain = author?.user?.sites[0]?.slug
     if (!domain) continue
     map.set(page.id, {
       id: page.id,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 
 /**
  * GDPR Article 15 - Right to Access
@@ -34,7 +35,7 @@ export async function GET(req: NextRequest) {
             // Exclude tokens for security
           }
         },
-        site: {
+        sites: {
           select: {
             slug: true,
             pageDescription: true,
@@ -47,6 +48,8 @@ export async function GET(req: NextRequest) {
               },
             },
           },
+          orderBy: PRIMARY_SITE_ORDER,
+          take: 1,
         },
         skriptAuthors: {
           include: {
@@ -139,10 +142,10 @@ export async function GET(req: NextRequest) {
         email: userData.email,
         emailVerified: userData.emailVerified,
         image: userData.image,
-        username: userData.site?.slug ?? null,
+        username: userData.sites[0]?.slug ?? null,
         title: userData.title,
         bio: userData.bio,
-        pageDescription: userData.site?.pageDescription ?? null,
+        pageDescription: userData.sites[0]?.pageDescription ?? null,
         accountType: userData.accountType,
         studentPseudonym: userData.studentPseudonym,
         createdAt: userData.createdAt,
@@ -152,11 +155,12 @@ export async function GET(req: NextRequest) {
       },
       preferences: {
         themePreference: userData.themePreference,
-        sidebarBehavior: userData.site?.sidebarBehavior ?? null,
+        sidebarBehavior: userData.sites[0]?.sidebarBehavior ?? null,
       },
       accounts: userData.accounts,
-      // Owned (1:1 site) collections — there's no permission level anymore.
-      ownedCollections: userData.site?.collections.map(c => ({
+      // Collections owned by the user's primary site — there's no permission
+      // level anymore. A user may own multiple sites; this exports only the primary.
+      ownedCollections: userData.sites[0]?.collections.map(c => ({
         collectionId: c.id,
         collectionTitle: c.title,
         since: c.createdAt,

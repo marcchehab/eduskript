@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import crypto from 'crypto'
 import { encode } from 'next-auth/jwt'
 import { createLogger } from '@/lib/logger'
@@ -77,7 +78,10 @@ export async function GET(request: NextRequest) {
         id: true, name: true, email: true, image: true,
         title: true, bio: true, isAdmin: true, accountType: true,
         studentPseudonym: true,
-        site: {
+        // Token carries the user's primary site (a user may own several).
+        sites: {
+          orderBy: PRIMARY_SITE_ORDER,
+          take: 1,
           select: {
             slug: true, pageName: true, pageDescription: true,
             pageIcon: true, typographyPreference: true,
@@ -92,13 +96,13 @@ export async function GET(request: NextRequest) {
       token: {
         id: user.id, name: user.name, email: user.email,
         picture: user.image, image: user.image,
-        pageSlug: user.site?.slug ?? null,
-        pageName: user.site?.pageName ?? null,
-        pageDescription: user.site?.pageDescription ?? null,
-        pageIcon: user.site?.pageIcon ?? null,
+        pageSlug: user.sites[0]?.slug ?? null,
+        pageName: user.sites[0]?.pageName ?? null,
+        pageDescription: user.sites[0]?.pageDescription ?? null,
+        pageIcon: user.sites[0]?.pageIcon ?? null,
         title: user.title, bio: user.bio, isAdmin: user.isAdmin,
         accountType: user.accountType, studentPseudonym: user.studentPseudonym,
-        typographyPreference: user.site?.typographyPreference ?? null,
+        typographyPreference: user.sites[0]?.typographyPreference ?? null,
       },
       secret: process.env.NEXTAUTH_SECRET!,
     })

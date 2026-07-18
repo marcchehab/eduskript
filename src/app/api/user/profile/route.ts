@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { revalidateTag, revalidatePath } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { withDatabaseConnection } from '@/lib/db-connection'
 import { CACHE_TAGS } from '@/lib/cached-queries'
 import { z } from 'zod'
@@ -83,7 +84,10 @@ export async function GET() {
       email: true,
       title: true,
       bio: true,
-      site: {
+      // The profile page shows the user's primary site (a user may own several).
+      sites: {
+        orderBy: PRIMARY_SITE_ORDER,
+        take: 1,
         select: {
           slug: true,
           pageName: true,
@@ -107,11 +111,11 @@ export async function GET() {
     email: user.email,
     title: user.title,
     bio: user.bio,
-    pageSlug: user.site?.slug ?? null,
-    pageName: user.site?.pageName ?? null,
-    pageDescription: user.site?.pageDescription ?? null,
-    pageIcon: user.site?.pageIcon ?? null,
-    pageLanguage: user.site?.pageLanguage ?? null,
+    pageSlug: user.sites[0]?.slug ?? null,
+    pageName: user.sites[0]?.pageName ?? null,
+    pageDescription: user.sites[0]?.pageDescription ?? null,
+    pageIcon: user.sites[0]?.pageIcon ?? null,
+    pageLanguage: user.sites[0]?.pageLanguage ?? null,
   })
 }
 
@@ -129,7 +133,8 @@ export async function PATCH(request: NextRequest) {
       where: { id: session.user.id },
       select: {
         isAdmin: true,
-        site: { select: { id: true, slug: true } },
+        // Profile edits target the user's primary site (a user may own several).
+        sites: { orderBy: PRIMARY_SITE_ORDER, take: 1, select: { id: true, slug: true } },
         organizationMemberships: {
           where: { role: { in: ['owner', 'admin'] } },
           select: { id: true },
@@ -188,51 +193,56 @@ export async function PATCH(request: NextRequest) {
         }
       })
 
-      let newSlug = currentUser?.site?.slug ?? null
-      // Upsert the Site row if there's a slug change or any site-field change
-      // to apply. Creating-on-demand keeps OAuth-signup teachers who haven't
+      // Profile edits apply to the user's primary site. userId is no longer a
+      // unique key (a user may own several sites), so we mutate by the primary
+      // site's id rather than upserting by userId.
+      const primarySiteId = currentUser?.sites[0]?.id ?? null
+      let newSlug = currentUser?.sites[0]?.slug ?? null
+      // Write the Site row if there's a slug change or any site-field change to
+      // apply. Creating-on-demand keeps OAuth-signup teachers who haven't
       // claimed a slug yet from getting silently dropped here.
       const hasSiteFields = Object.keys(siteUpdate).length > 0
       const hasNewSlug = 'pageSlug' in body && validatedData.pageSlug
+      const siteSelect = {
+        slug: true,
+        pageName: true,
+        pageDescription: true,
+        pageIcon: true,
+        pageLanguage: true,
+      } as const
       let siteRow: { slug: string; pageName: string | null; pageDescription: string | null; pageIcon: string | null; pageLanguage: string | null } | null = null
       if (hasNewSlug || hasSiteFields) {
         // Without an existing slug we can't create a Site (slug is required).
         // Fall back to keeping whatever's there if no slug was provided.
         if (hasNewSlug || newSlug) {
-          siteRow = await prisma.site.upsert({
-            where: { userId: session.user.id },
-            update: {
-              ...(hasNewSlug ? { slug: validatedData.pageSlug } : {}),
-              ...siteUpdate,
-            },
-            create: {
-              slug: (validatedData.pageSlug ?? newSlug)!,
-              userId: session.user.id,
-              ...siteUpdate,
-            },
-            select: {
-              slug: true,
-              pageName: true,
-              pageDescription: true,
-              pageIcon: true,
-              pageLanguage: true,
-            },
-          })
+          if (primarySiteId) {
+            siteRow = await prisma.site.update({
+              where: { id: primarySiteId },
+              data: {
+                ...(hasNewSlug ? { slug: validatedData.pageSlug } : {}),
+                ...siteUpdate,
+              },
+              select: siteSelect,
+            })
+          } else {
+            siteRow = await prisma.site.create({
+              data: {
+                slug: (validatedData.pageSlug ?? newSlug)!,
+                userId: session.user.id,
+                ...siteUpdate,
+              },
+              select: siteSelect,
+            })
+          }
           newSlug = siteRow.slug
         }
       }
 
       // Read back the latest site fields if we didn't just write them.
-      if (!siteRow && newSlug) {
+      if (!siteRow && primarySiteId) {
         siteRow = await prisma.site.findUnique({
-          where: { userId: session.user.id },
-          select: {
-            slug: true,
-            pageName: true,
-            pageDescription: true,
-            pageIcon: true,
-            pageLanguage: true,
-          },
+          where: { id: primarySiteId },
+          select: siteSelect,
         })
       }
 
@@ -247,7 +257,7 @@ export async function PATCH(request: NextRequest) {
     })
 
     // Invalidate caches for the user's public page
-    const oldPageSlug = currentUser?.site?.slug ?? null
+    const oldPageSlug = currentUser?.sites[0]?.slug ?? null
     const newPageSlug = result.pageSlug
 
     // Revalidate cache tags for both old and new page slugs

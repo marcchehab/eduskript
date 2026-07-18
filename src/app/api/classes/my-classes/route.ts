@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 
 // GET /api/classes/my-classes - Get student's enrolled classes
 export async function GET(request: NextRequest) {
@@ -58,7 +59,7 @@ export async function GET(request: NextRequest) {
             teacher: {
               select: {
                 name: true,
-                site: { select: { slug: true } }
+                sites: { select: { slug: true }, orderBy: PRIMARY_SITE_ORDER, take: 1 }
               }
             },
             _count: {

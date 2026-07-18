@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { inviteCodeRateLimiter, getClientIdentifier } from '@/lib/rate-limit'
 
 interface RouteParams {
@@ -65,7 +66,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         teacher: {
           select: {
             name: true,
-            site: { select: { slug: true } }
+            sites: { select: { slug: true }, orderBy: PRIMARY_SITE_ORDER, take: 1 }
           }
         }
       }
@@ -213,7 +214,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         teacher: {
           select: {
             name: true,
-            site: { select: { slug: true } }
+            sites: { select: { slug: true }, orderBy: PRIMARY_SITE_ORDER, take: 1 }
           }
         },
         _count: {

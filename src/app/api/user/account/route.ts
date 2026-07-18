@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 
 /**
  * GDPR Article 17 - Right to Erasure (Right to be Forgotten)
@@ -124,10 +125,12 @@ export async function GET(req: NextRequest) {
         accountType: true,
         createdAt: true,
         isAdmin: true,
-        site: {
+        sites: {
           select: {
             _count: { select: { collections: true } },
           },
+          orderBy: PRIMARY_SITE_ORDER,
+          take: 1,
         },
         _count: {
           select: {
@@ -158,7 +161,7 @@ export async function GET(req: NextRequest) {
         isAdmin: user.isAdmin,
       },
       stats: {
-        collections: user.site?._count.collections ?? 0,
+        collections: user.sites[0]?._count.collections ?? 0,
         skripts: user._count.skriptAuthors,
         pages: user._count.pageAuthors,
         files: user._count.files,

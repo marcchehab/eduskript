@@ -5,6 +5,7 @@ import { generateSEBConfig, getSEBMimeType, getSEBFilename } from '@/lib/seb'
 import { generateExamToken } from '@/lib/exam-tokens'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 
 /**
  * GET /api/exams/[pageId]/seb-config
@@ -84,8 +85,9 @@ export async function GET(
     const collectionSkript = page.skript.collectionSkripts[0]
 
     const teacherSite = teacher
-      ? await prisma.site.findUnique({
+      ? await prisma.site.findFirst({
           where: { userId: teacher.id },
+          orderBy: PRIMARY_SITE_ORDER,
           select: { slug: true },
         })
       : null

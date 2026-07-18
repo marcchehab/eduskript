@@ -22,6 +22,7 @@ import { CACHE_TAGS } from '@/lib/cached-queries'
 import { checkPagePermissions } from '@/lib/permissions'
 import { generateSlug } from '@/lib/markdown'
 import { createLogger } from '@/lib/logger'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 
 const log = createLogger('cache:invalidate')
 
@@ -345,8 +346,9 @@ export async function updatePageForUser(
   // Revalidate the public page cache using tags. The whole block is gated
   // on the author having a Site (URL slug lives on Site now); users without
   // a public page have nothing to invalidate.
-  const userSite = await prisma.site.findUnique({
+  const userSite = await prisma.site.findFirst({
     where: { userId },
+    orderBy: PRIMARY_SITE_ORDER,
     select: { slug: true },
   })
 
@@ -529,8 +531,9 @@ export async function restorePageVersionForUser(
 
   // Same cache fan-out as updatePageForUser. Gated on the user having a Site
   // (URL slug lives on Site); users without one have nothing to invalidate.
-  const userSite = await prisma.site.findUnique({
+  const userSite = await prisma.site.findFirst({
     where: { userId },
+    orderBy: PRIMARY_SITE_ORDER,
     select: { slug: true },
   })
 

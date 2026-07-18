@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
           hashedPassword,
           emailVerified: new Date(),
           billingPlan: 'pro',
-          site: {
+          sites: {
             create: { slug: 'demo', pageName: 'Demo' },
           },
         },

@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { revalidateTag } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { CACHE_TAGS } from '@/lib/cached-queries'
 import { saveFile, getS3Key, getFileExtension } from '@/lib/file-storage'
 import { downloadTeacherFile } from '@/lib/s3'
@@ -122,8 +123,9 @@ export async function POST(request: NextRequest) {
       where: { skriptId },
       select: { slug: true, content: true }
     })
-    const editorSite = await prisma.site.findUnique({
+    const editorSite = await prisma.site.findFirst({
       where: { userId: session.user.id },
+      orderBy: PRIMARY_SITE_ORDER,
       select: { slug: true }
     })
     if (editorSite?.slug) {

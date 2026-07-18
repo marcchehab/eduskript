@@ -35,7 +35,7 @@ async function main() {
       isAdmin: true,
       requirePasswordReset: true,
       billingPlan: 'pro',
-      site: { create: { slug: 'eduadmin', pageName: 'Edu Admin' } },
+      sites: { create: { slug: 'eduadmin', pageName: 'Edu Admin' } },
     }
   })
 

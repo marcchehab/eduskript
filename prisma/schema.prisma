@@ -112,10 +112,11 @@ model User {
   collaborationsAsRequester     Collaboration[]        @relation("RequesterCollaborations")
   collaborationsAsReceiver      Collaboration[]        @relation("ReceiverCollaborations")
 
-  // The user's public site (1:1). Owns the URL slug, page-display fields,
-  // collections, page layout, and frontpage. Teachers get a Site; students
-  // typically don't.
-  site Site?
+  // The user's public sites. A teacher normally has exactly one; a superadmin
+  // may grant additional sites (special deal, not self-serve). Each Site owns
+  // its own URL slug, page-display fields, collections, page layout, and
+  // frontpage. Students typically have none. Primary site = lowest Site.order.
+  sites Site[]
 
   // Student data
   studentProgress    StudentProgress[]   @relation("StudentProgress")
@@ -213,8 +214,16 @@ model Site {
   id   String @id @default(cuid())
   slug String @unique // Globally unique URL slug for the public page
 
-  userId         String? @unique @map("user_id")
+  // A user can own MULTIPLE sites (not unique). Extra sites are provisioned
+  // by a superadmin only — teachers never create/delete sites in the UI. An
+  // org still owns exactly one site (organizationId stays unique).
+  userId         String? @map("user_id")
   organizationId String? @unique @map("organization_id")
+
+  // Sidebar stacking + primary-site selection. The user's primary site (used
+  // for post-login redirect and legacy single-slug fallbacks) is the one with
+  // the lowest `order`; ties broken by createdAt.
+  order Int @default(0) @map("order")
 
   // Page-display fields
   pageName             String? @map("page_name")
@@ -237,6 +246,7 @@ model Site {
   pageLayout  PageLayout?
   frontPage   FrontPage?
 
+  @@index([userId])
   @@map("sites")
 }
 

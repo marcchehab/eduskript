@@ -7,12 +7,13 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 
 export async function loadAiGuidance(userId: string): Promise<string | undefined> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
-      site: { select: { aiSystemPrompt: true } },
+      sites: { select: { aiSystemPrompt: true }, orderBy: PRIMARY_SITE_ORDER, take: 1 },
       organizationMemberships: {
         include: { organization: { include: { site: { select: { aiSystemPrompt: true } } } } },
       },
@@ -21,6 +22,6 @@ export async function loadAiGuidance(userId: string): Promise<string | undefined
   const org = user?.organizationMemberships.find((m) => m.organization.site?.aiSystemPrompt)?.organization
   const parts: string[] = []
   if (org?.site?.aiSystemPrompt) parts.push(`## Organization Guidelines\n${org.site.aiSystemPrompt}`)
-  if (user?.site?.aiSystemPrompt) parts.push(`## Teacher Preferences\n${user.site.aiSystemPrompt}`)
+  if (user?.sites[0]?.aiSystemPrompt) parts.push(`## Teacher Preferences\n${user.sites[0].aiSystemPrompt}`)
   return parts.length ? parts.join('\n\n') : undefined
 }

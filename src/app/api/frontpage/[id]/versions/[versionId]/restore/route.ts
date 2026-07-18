@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { revalidatePath, revalidateTag } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { CACHE_TAGS } from '@/lib/cached-queries'
 import { checkSkriptPermissions } from '@/lib/permissions'
 
@@ -115,8 +116,9 @@ export async function POST(
       // Skript frontpage — owner site provides the URL slug
       const skriptOwner = frontPage.skript.authors[0]?.user
       if (skriptOwner) {
-        const ownerSite = await prisma.site.findUnique({
+        const ownerSite = await prisma.site.findFirst({
           where: { userId: skriptOwner.id },
+          orderBy: PRIMARY_SITE_ORDER,
           select: { slug: true }
         })
         if (ownerSite?.slug) {

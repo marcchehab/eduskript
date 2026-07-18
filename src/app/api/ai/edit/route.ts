@@ -8,6 +8,7 @@ import type { EditRequest, SkriptContext } from '@/lib/ai/types'
 import { parseJsonResponse, isValidEditPlan, type ParseJsonResponse } from '@/lib/ai/parse-json-response'
 import { loadFrontPageContext } from '@/lib/ai/frontpage-context'
 import { openrouterProviderRouting } from '@/lib/ai/openrouter'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import OpenAI from 'openai'
 import { createLogger } from '@/lib/logger'
 
@@ -186,7 +187,7 @@ export async function POST(request: Request): Promise<Response> {
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: {
-        site: { select: { aiSystemPrompt: true } },
+        sites: { select: { aiSystemPrompt: true }, orderBy: PRIMARY_SITE_ORDER, take: 1 },
         organizationMemberships: {
           include: { organization: { include: { site: { select: { aiSystemPrompt: true } } } } },
         },
@@ -201,8 +202,8 @@ export async function POST(request: Request): Promise<Response> {
     if (orgWithPrompt?.site?.aiSystemPrompt) {
       prompts.push(`## Organization Guidelines\n${orgWithPrompt.site.aiSystemPrompt}`)
     }
-    if (user?.site?.aiSystemPrompt) {
-      prompts.push(`## Teacher Preferences\n${user.site.aiSystemPrompt}`)
+    if (user?.sites[0]?.aiSystemPrompt) {
+      prompts.push(`## Teacher Preferences\n${user.sites[0].aiSystemPrompt}`)
     }
     if (prompts.length > 0) {
       orgPrompt = prompts.join('\n\n')

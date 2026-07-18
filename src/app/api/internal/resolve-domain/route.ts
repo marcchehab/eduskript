@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 
 // GET - Resolve a custom domain to organization or teacher
 // This is an internal API used by middleware for domain resolution
@@ -56,7 +57,8 @@ export async function GET(request: NextRequest) {
           select: {
             id: true,
             name: true,
-            site: { select: { slug: true } },
+            // A teacher custom domain resolves to the user's primary site.
+            sites: { orderBy: PRIMARY_SITE_ORDER, take: 1, select: { slug: true } },
           },
         },
       },
@@ -66,7 +68,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         type: 'teacher',
         userId: teacherDomain.user.id,
-        pageSlug: teacherDomain.user.site?.slug ?? null,
+        pageSlug: teacherDomain.user.sites[0]?.slug ?? null,
         userName: teacherDomain.user.name,
         isPrimary: teacherDomain.isPrimary,
       })

@@ -7,6 +7,7 @@ import type { SkriptContext } from '@/lib/ai/types'
 import { loadFrontPageContext } from '@/lib/ai/frontpage-context'
 import { normalizeContent } from '@/lib/ai/normalize-content'
 import { openrouterProviderRouting } from '@/lib/ai/openrouter'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import OpenAI from 'openai'
 import { createLogger } from '@/lib/logger'
 
@@ -194,7 +195,7 @@ export async function POST(
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
-      site: { select: { aiSystemPrompt: true } },
+      sites: { select: { aiSystemPrompt: true }, orderBy: PRIMARY_SITE_ORDER, take: 1 },
       organizationMemberships: {
         include: { organization: { include: { site: { select: { aiSystemPrompt: true } } } } },
       },
@@ -209,8 +210,8 @@ export async function POST(
   if (orgWithPrompt?.site?.aiSystemPrompt) {
     customPrompts.push(`## Organization Guidelines\n${orgWithPrompt.site.aiSystemPrompt}`)
   }
-  if (user?.site?.aiSystemPrompt) {
-    customPrompts.push(`## Teacher Preferences\n${user.site.aiSystemPrompt}`)
+  if (user?.sites[0]?.aiSystemPrompt) {
+    customPrompts.push(`## Teacher Preferences\n${user.sites[0].aiSystemPrompt}`)
   }
   if (customPrompts.length > 0) {
     orgPrompt = customPrompts.join('\n\n')

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 
 interface RouteParams {
   params: Promise<{ ownerSlug: string; pluginSlug: string }>
@@ -24,7 +25,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     const source = await prisma.plugin.findFirst({
       where: {
         slug: pluginSlug,
-        author: { site: { slug: ownerSlug } },
+        author: { sites: { some: { slug: ownerSlug } } },
       },
     })
 
@@ -61,7 +62,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       },
       include: {
         author: {
-          select: { id: true, name: true, site: { select: { slug: true, pageName: true } } },
+          select: { id: true, name: true, sites: { orderBy: PRIMARY_SITE_ORDER, take: 1, select: { slug: true, pageName: true } } },
         },
       },
     })
@@ -71,8 +72,8 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       author: {
         id: forkedRaw.author.id,
         name: forkedRaw.author.name,
-        pageSlug: forkedRaw.author.site?.slug ?? null,
-        pageName: forkedRaw.author.site?.pageName ?? null,
+        pageSlug: forkedRaw.author.sites[0]?.slug ?? null,
+        pageName: forkedRaw.author.sites[0]?.pageName ?? null,
       },
     }
 

@@ -18,6 +18,7 @@ import { revalidatePath, revalidateTag } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { CACHE_TAGS } from '@/lib/cached-queries'
 import { checkSkriptPermissions } from '@/lib/permissions'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import {
   NotFoundError,
   PermissionDeniedError,
@@ -168,8 +169,9 @@ export async function upsertSkriptFrontPageForUser(
   // Cache invalidation: a skript frontpage rendering surface lives in the
   // skript-preview route plus any teacher home that surfaces it. Invalidate
   // skriptBySlug + teacherContent to be safe; org content if member.
-  const userSite = await prisma.site.findUnique({
+  const userSite = await prisma.site.findFirst({
     where: { userId },
+    orderBy: PRIMARY_SITE_ORDER,
     select: { slug: true },
   })
   if (userSite?.slug) {

@@ -1,5 +1,6 @@
 import type { MetadataRoute } from 'next'
 import { prisma } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { getCurrentTenant } from '@/lib/tenant'
 
 // Per-host sitemap. Both eduskript.org and informatikgarten.ch run the same
@@ -64,13 +65,13 @@ async function resolveHost(host: string): Promise<Resolved> {
 
   const teacherDomain = await prisma.teacherCustomDomain.findFirst({
     where: { domain: host, isVerified: true },
-    select: { user: { select: { id: true, site: { select: { slug: true } } } } },
+    select: { user: { select: { id: true, sites: { orderBy: PRIMARY_SITE_ORDER, take: 1, select: { slug: true } } } } },
   })
-  if (teacherDomain?.user?.site?.slug) {
+  if (teacherDomain?.user?.sites[0]?.slug) {
     return {
       type: 'teacher',
       userId: teacherDomain.user.id,
-      pageSlug: teacherDomain.user.site.slug,
+      pageSlug: teacherDomain.user.sites[0].slug,
     }
   }
 

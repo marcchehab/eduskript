@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { AdminUserSites } from '@/components/dashboard/admin-user-sites'
 import { Card } from '@/components/ui/card'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -1230,6 +1231,9 @@ export default function AdminPanelPage() {
                     required
                   />
                 </div>
+              )}
+              {selectedUser && selectedUser.accountType !== 'student' && (
+                <AdminUserSites userId={selectedUser.id} />
               )}
               <div>
                 <Label htmlFor="edit-title">Title (optional)</Label>

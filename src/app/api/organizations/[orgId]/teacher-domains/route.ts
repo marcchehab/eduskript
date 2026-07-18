@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireOrgAdmin } from '@/lib/org-auth'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 
 // GET - List all teacher custom domains for teachers in this organization
 export async function GET(
@@ -32,7 +33,7 @@ export async function GET(
             name: true,
             email: true,
             image: true,
-            site: { select: { slug: true } },
+            sites: { orderBy: PRIMARY_SITE_ORDER, take: 1, select: { slug: true } },
           },
         },
       },
@@ -41,7 +42,7 @@ export async function GET(
 
     const domains = teacherDomains.map(d => ({
       ...d,
-      user: { ...d.user, pageSlug: d.user.site?.slug ?? null, site: undefined },
+      user: { ...d.user, pageSlug: d.user.sites[0]?.slug ?? null, sites: undefined },
     }))
     return NextResponse.json({ domains })
   } catch (error) {

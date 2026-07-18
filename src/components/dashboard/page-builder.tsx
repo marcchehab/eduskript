@@ -38,6 +38,8 @@ interface PageItem {
 interface PageBuilderContext {
   type: 'user' | 'organization'
   organizationId?: string
+  // For type 'user': the specific site new collections should attach to.
+  siteId?: string
 }
 
 interface PageBuilderProps {
@@ -77,7 +79,9 @@ export function PageBuilder({
   // Determine the frontpage URL based on context
   const frontpageUrl = context.type === 'organization' && context.organizationId
     ? `/dashboard/org/${context.organizationId}/frontpage`
-    : '/dashboard/frontpage'
+    : context.siteId
+      ? `/dashboard/site/${context.siteId}/frontpage`
+      : '/dashboard/frontpage'
   const [seeding, setSeeding] = useState(false)
   const [seedError, setSeedError] = useState('')
   const [seedSuccess, setSeedSuccess] = useState('')
@@ -121,7 +125,9 @@ export function PageBuilder({
       const res = await fetch('/api/collections', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, description: '' }),
+        // Attach to the specific site being edited (falls back to primary
+        // server-side when siteId is absent).
+        body: JSON.stringify({ title, description: '', siteId: context.siteId }),
       })
       if (res.ok) {
         setCreateCollectionOpen(false)

@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { extractReferencedFilenames } from '@/lib/extract-file-references'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 
 export async function POST(request: NextRequest) {
   try {
@@ -183,8 +184,9 @@ export async function POST(request: NextRequest) {
     })
 
     // Revalidate paths
-    const userSite = await prisma.site.findUnique({
+    const userSite = await prisma.site.findFirst({
       where: { userId: session.user.id },
+      orderBy: PRIMARY_SITE_ORDER,
       select: { slug: true },
     })
 
