@@ -124,7 +124,7 @@ describe('Skripts API', () => {
 
         expect(response.status).toBe(400)
         const data = await response.json()
-        expect(data.error).toBe('Title, slug, and collection ID are required')
+        expect(data.error).toBe('Title and slug are required')
       })
 
       it('should return 400 when slug is missing', async () => {
@@ -137,14 +137,26 @@ describe('Skripts API', () => {
         expect(response.status).toBe(400)
       })
 
-      it('should return 400 when collectionId is missing', async () => {
+      it('should create a root skript (no collection) when collectionId is missing', async () => {
+        // Collection-less skripts live at the page root; no collection lookup/link.
+        vi.mocked(prisma.skript.findFirst).mockResolvedValue(null)
+        vi.mocked(prisma.$transaction).mockImplementation(async (fn) => {
+          return fn({
+            skript: { create: vi.fn().mockResolvedValue({ id: 'root-skript' }) },
+            collectionSkript: { create: vi.fn().mockResolvedValue({}) },
+          } as any)
+        })
+        vi.mocked(prisma.skript.findUnique).mockResolvedValue(mockSkript)
+
         const request = createRequest({
           title: 'Test',
           slug: 'test-skript',
         })
         const response = await POST(request)
 
-        expect(response.status).toBe(400)
+        expect(response.status).toBe(200)
+        // No collection was resolved or linked.
+        expect(prisma.collection.findUnique).not.toHaveBeenCalled()
       })
 
       it('should return 400 for reserved slugs', async () => {

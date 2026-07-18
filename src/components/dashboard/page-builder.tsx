@@ -212,7 +212,7 @@ export function PageBuilder({
           </div>
         </div>
         <p className="text-sm text-muted-foreground">
-          Drag collections from the library to build your page. Add skripts inside collections.
+          Drag collections or skripts from the library to build your page. Skripts can sit at the top level or inside a collection.
         </p>
       </CardHeader>
       <CardContent>

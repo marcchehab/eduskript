@@ -20,39 +20,43 @@ export async function POST(request: NextRequest) {
 
     const { title, description, slug, collectionId } = await request.json()
 
-    // Validate input
-    if (!title || !slug || !collectionId) {
+    // Validate input. collectionId is OPTIONAL — a skript can live at the root
+    // of a page (no collection); the teacher drags it onto the page builder
+    // afterwards. When a collection IS given we still verify edit permission.
+    if (!title || !slug) {
       return NextResponse.json(
-        { error: 'Title, slug, and collection ID are required' },
+        { error: 'Title and slug are required' },
         { status: 400 }
       )
     }
 
-    // Verify the user can edit the collection (via its site's ownership)
-    const collection = await prisma.collection.findUnique({
-      where: { id: collectionId },
-      include: { site: { select: { userId: true, organizationId: true } } }
-    })
+    if (collectionId) {
+      // Verify the user can edit the collection (via its site's ownership)
+      const collection = await prisma.collection.findUnique({
+        where: { id: collectionId },
+        include: { site: { select: { userId: true, organizationId: true } } }
+      })
 
-    if (!collection) {
-      return NextResponse.json(
-        { error: 'Collection not found' },
-        { status: 404 }
-      )
-    }
+      if (!collection) {
+        return NextResponse.json(
+          { error: 'Collection not found' },
+          { status: 404 }
+        )
+      }
 
-    const orgRoles = collection.site?.organizationId
-      ? await prisma.organizationMember.findMany({
-          where: { userId: session.user.id, organizationId: collection.site.organizationId },
-          select: { organizationId: true, role: true },
-        })
-      : []
-    const permissions = checkCollectionPermissions(session.user.id, collection, orgRoles)
-    if (!permissions.canEdit) {
-      return NextResponse.json(
-        { error: 'You do not have permission to create skripts in this collection' },
-        { status: 403 }
-      )
+      const orgRoles = collection.site?.organizationId
+        ? await prisma.organizationMember.findMany({
+            where: { userId: session.user.id, organizationId: collection.site.organizationId },
+            select: { organizationId: true, role: true },
+          })
+        : []
+      const permissions = checkCollectionPermissions(session.user.id, collection, orgRoles)
+      if (!permissions.canEdit) {
+        return NextResponse.json(
+          { error: 'You do not have permission to create skripts in this collection' },
+          { status: 403 }
+        )
+      }
     }
 
     // Normalize slug
@@ -84,17 +88,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get the next order number for skripts in this collection
-    const lastCollectionSkript = await prisma.collectionSkript.findFirst({
-      where: { collectionId },
-      orderBy: { order: 'desc' }
-    })
+    // Next order within the collection (only relevant when linking to one).
+    const nextOrder = collectionId
+      ? ((await prisma.collectionSkript.findFirst({
+          where: { collectionId },
+          orderBy: { order: 'desc' },
+        }))?.order ?? -1) + 1
+      : 0
 
-    const nextOrder = (lastCollectionSkript?.order ?? -1) + 1
-
-    // Create skript and add to collection via junction table
+    // Create the skript; link it to the collection only when one was given.
     const skript = await prisma.$transaction(async (tx) => {
-      // Create the skript
       const newSkript = await tx.skript.create({
         data: {
           title,
@@ -109,14 +112,15 @@ export async function POST(request: NextRequest) {
         }
       })
 
-      // Add to collection via junction table
-      await tx.collectionSkript.create({
-        data: {
-          collectionId,
-          skriptId: newSkript.id,
-          order: nextOrder
-        }
-      })
+      if (collectionId) {
+        await tx.collectionSkript.create({
+          data: {
+            collectionId,
+            skriptId: newSkript.id,
+            order: nextOrder
+          }
+        })
+      }
 
       return newSkript
     })

@@ -105,15 +105,14 @@ export function CreateSkriptModal({ collectionId, collections, onSkriptCreated, 
           <div className="grid gap-4 py-4">
             {!collectionId && collections && collections.length > 0 && (
               <div className="space-y-2">
-                <Label htmlFor="collectionSelect">Collection *</Label>
+                <Label htmlFor="collectionSelect">Collection</Label>
                 <select
                   id="collectionSelect"
                   value={selectedCollectionId}
                   onChange={(e) => setSelectedCollectionId(e.target.value)}
-                  required
                   className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-2xs transition-colors placeholder:text-muted-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
                 >
-                  <option value="">Select a collection...</option>
+                  <option value="">No collection (add to page directly)</option>
                   {collections.map((c) => (
                     <option key={c.id} value={c.id}>{c.title}</option>
                   ))}
@@ -167,7 +166,7 @@ export function CreateSkriptModal({ collectionId, collections, onSkriptCreated, 
             </Button>
             <Button
               type="submit"
-              disabled={isLoading || !formData.title.trim() || !formData.slug.trim() || (!collectionId && !selectedCollectionId)}
+              disabled={isLoading || !formData.title.trim() || !formData.slug.trim()}
             >
               {isLoading ? 'Creating...' : 'Create Skript'}
             </Button>

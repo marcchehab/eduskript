@@ -180,13 +180,11 @@ export function ContentLibrary({ onDataLoad, refreshTrigger, context = { type: '
             className="pl-9"
           />
         </div>
-        {collections.length > 0 && (
-          <CreateSkriptModal
-            collections={collections.map(c => ({ id: c.id, title: c.title }))}
-            onSkriptCreated={() => fetchContent()}
-            onSkriptCreatedWithSlug={(slug) => router.push(`/dashboard/skripts/${slug}`)}
-          />
-        )}
+        <CreateSkriptModal
+          collections={collections.map(c => ({ id: c.id, title: c.title }))}
+          onSkriptCreated={() => fetchContent()}
+          onSkriptCreatedWithSlug={(slug) => router.push(`/dashboard/skripts/${slug}`)}
+        />
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Collections Section */}
