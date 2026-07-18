@@ -23,16 +23,24 @@ export const readSiteFrontpageConfig = {
       .describe(
         "Omit to read your own teacher landing page. Set to an org ID (cuid) to read that organization's landing page."
       ),
+    siteId: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        'When you own MULTIPLE sites, the specific site to read. Omit to use your primary site. Ignored if organizationId is set. Use list_my_sites to get IDs.'
+      ),
   },
 }
 
-export async function readSiteFrontpage(args: { organizationId?: string }) {
+export async function readSiteFrontpage(args: { organizationId?: string; siteId?: string }) {
   const ctx = getMcpContext()
   console.log(
-    `[mcp:read_site_frontpage] userId=${ctx.userId} organizationId=${args.organizationId ?? '(self)'}`
+    `[mcp:read_site_frontpage] userId=${ctx.userId} organizationId=${args.organizationId ?? '(self)'} siteId=${args.siteId ?? '(primary)'}`
   )
   const frontPage = await getSiteFrontPageForUser(ctx.userId, {
     organizationId: args.organizationId,
+    siteId: args.siteId,
   })
 
   return {

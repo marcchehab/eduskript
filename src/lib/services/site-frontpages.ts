@@ -39,6 +39,12 @@ interface ActorContext {
 export interface SiteFrontPageTarget {
   /** Omit for the caller's own landing page; set for an org landing page. */
   organizationId?: string
+  /**
+   * For an OWN site: which of the caller's sites (a user may own several).
+   * Scoped to `userId`, so a caller can only target their own sites. Omit to
+   * use the primary site (lowest order). Ignored when organizationId is set.
+   */
+  siteId?: string
 }
 
 /**
@@ -57,7 +63,9 @@ async function resolveSiteForFrontPageAccess(
         select: { id: true, slug: true, userId: true, organizationId: true },
       })
     : await prisma.site.findFirst({
-        where: { userId },
+        // siteId, when given, is scoped to the caller so it can only resolve
+        // one of their own sites; otherwise fall back to the primary site.
+        where: target.siteId ? { id: target.siteId, userId } : { userId },
         orderBy: PRIMARY_SITE_ORDER,
         select: { id: true, slug: true, userId: true, organizationId: true },
       })
