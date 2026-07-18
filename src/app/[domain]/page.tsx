@@ -107,8 +107,11 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
   const session = await getServerSession(authOptions)
   const isOwner = session?.user?.id === teacher.id
 
+  // Scope to THIS site (by its URL slug), not the user — a teacher may own
+  // several sites, each with its own frontpage. Keying on userId returned the
+  // primary site's frontpage on every one of the user's sites.
   const frontPage = await prisma.frontPage.findFirst({
-    where: { site: { userId: teacher.id } },
+    where: { site: { slug: teacher.pageSlug ?? domain } },
     select: {
       id: true,
       content: true,
