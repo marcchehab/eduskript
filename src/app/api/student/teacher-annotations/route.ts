@@ -32,6 +32,7 @@ import { getServerSession } from 'next-auth'
 import { cookies } from 'next/headers'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { validateExamSession } from '@/lib/exam-tokens'
 
 export async function GET(request: NextRequest) {
@@ -304,7 +305,7 @@ export async function GET(request: NextRequest) {
         user: {
           select: {
             name: true,
-            site: { select: { slug: true } },
+            sites: { select: { slug: true }, orderBy: PRIMARY_SITE_ORDER, take: 1 },
           },
         },
       },
@@ -324,7 +325,7 @@ export async function GET(request: NextRequest) {
         user: {
           select: {
             name: true,
-            site: { select: { slug: true } },
+            sites: { select: { slug: true }, orderBy: PRIMARY_SITE_ORDER, take: 1 },
           },
         },
       },
@@ -358,7 +359,7 @@ export async function GET(request: NextRequest) {
         user: {
           select: {
             name: true,
-            site: { select: { slug: true } },
+            sites: { select: { slug: true }, orderBy: PRIMARY_SITE_ORDER, take: 1 },
           },
         },
       },
@@ -423,14 +424,14 @@ export async function GET(request: NextRequest) {
         ? {
             data: individualFeedback.data,
             updatedAt: individualFeedback.updatedAt.getTime(),
-            teacherName: individualFeedback.user?.name || individualFeedback.user?.site?.slug || 'Teacher',
+            teacherName: individualFeedback.user?.name || individualFeedback.user?.sites[0]?.slug || 'Teacher',
           }
         : null,
       individualSnapFeedback: hasValidSnapFeedback && individualSnapFeedback
         ? {
             data: individualSnapFeedback.data,
             updatedAt: individualSnapFeedback.updatedAt.getTime(),
-            teacherName: individualSnapFeedback.user?.name || individualSnapFeedback.user?.site?.slug || 'Teacher',
+            teacherName: individualSnapFeedback.user?.name || individualSnapFeedback.user?.sites[0]?.slug || 'Teacher',
           }
         : null,
       individualSpacerFeedback: hasValidSpacerFeedback && individualSpacerFeedback
@@ -444,7 +445,7 @@ export async function GET(request: NextRequest) {
         ? {
             data: individualStickyNotes.data,
             updatedAt: individualStickyNotes.updatedAt.getTime(),
-            teacherName: individualStickyNotes.user?.name || individualStickyNotes.user?.site?.slug || 'Teacher',
+            teacherName: individualStickyNotes.user?.name || individualStickyNotes.user?.sites[0]?.slug || 'Teacher',
           }
         : null,
     }, {

@@ -4,6 +4,7 @@ import { revalidateTag } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { CACHE_TAGS } from '@/lib/cached-queries'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 
 export async function PATCH(
   request: NextRequest,
@@ -84,8 +85,9 @@ export async function PATCH(
     await prisma.$transaction(updates)
 
     // Revalidate cache for this user's content (URL slug lives on Site).
-    const userSite = await prisma.site.findUnique({
+    const userSite = await prisma.site.findFirst({
       where: { userId: session.user.id },
+      orderBy: PRIMARY_SITE_ORDER,
       select: { slug: true }
     })
     if (userSite?.slug) {

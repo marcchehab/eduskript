@@ -20,6 +20,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { prisma } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { validateAccessToken } from '@/lib/mcp/tokens'
 import { runWithMcpContext } from '@/lib/mcp/context'
 import { buildMcpServer } from '@/lib/mcp/server'
@@ -69,8 +70,9 @@ async function handle(request: NextRequest, transportSegment: string): Promise<R
   // Load the teacher's personal AI prompt so the MCP connector honors the
   // same customization as the in-product dashboard AI assistant. Prompt
   // lives on Site now.
-  const site = await prisma.site.findUnique({
+  const site = await prisma.site.findFirst({
     where: { userId: validated.userId },
+    orderBy: PRIMARY_SITE_ORDER,
     select: { aiSystemPrompt: true },
   })
 

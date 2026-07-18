@@ -35,6 +35,7 @@ vi.mock('@/lib/prisma', () => ({
     },
     site: {
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
     },
     skript: {
       findFirst: vi.fn(),
@@ -115,7 +116,7 @@ describe('PATCH /api/pages/[id] — cache invalidation contract', () => {
       ...existingPage,
       content: '# New content',
     } as never)
-    vi.mocked(prisma.site.findUnique).mockResolvedValue({
+    vi.mocked(prisma.site.findFirst).mockResolvedValue({
       slug: 'teacher',
     } as never)
     vi.mocked(prisma.organizationMember.findMany).mockResolvedValue([])

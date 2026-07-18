@@ -15,6 +15,7 @@
 import { headers } from 'next/headers'
 import { unstable_cache } from 'next/cache'
 import { prisma } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 
 export interface TenantInfo {
   /** Canonical public host (no scheme, no port, no www. prefix). */
@@ -63,10 +64,11 @@ const lookupTenantLang = unstable_cache(
     const teacherDomain = await prisma.teacherCustomDomain.findFirst({
       where: { domain: host, isVerified: true },
       select: {
-        user: { select: { site: { select: { pageLanguage: true } } } },
+        // A teacher custom domain resolves to the user's primary site.
+        user: { select: { sites: { orderBy: PRIMARY_SITE_ORDER, take: 1, select: { pageLanguage: true } } } },
       },
     })
-    const teacherLang = teacherDomain?.user?.site?.pageLanguage
+    const teacherLang = teacherDomain?.user?.sites[0]?.pageLanguage
     if (teacherLang) return teacherLang
 
     return DEFAULT_LANG

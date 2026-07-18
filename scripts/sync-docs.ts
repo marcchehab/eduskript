@@ -208,8 +208,10 @@ async function main() {
     select: { id: true },
   })
   if (!ownerSite) {
-    ownerSite = await prisma.site.findUnique({
+    ownerSite = await prisma.site.findFirst({
       where: { userId: firstAdmin.id },
+      // primary site: lowest order, oldest first (see src/lib/sites.ts)
+      orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
       select: { id: true },
     })
   }

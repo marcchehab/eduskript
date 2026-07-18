@@ -56,6 +56,10 @@ export interface PageBuilderContext {
   type: 'user' | 'organization'
   organizationId?: string
   organizationSlug?: string
+  // For type 'user': the specific site being edited. A user may own several
+  // sites; when set, authoring targets this site instead of the primary one.
+  siteId?: string
+  siteSlug?: string
 }
 
 interface PageBuilderInterfaceProps {
@@ -63,11 +67,14 @@ interface PageBuilderInterfaceProps {
 }
 
 export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilderInterfaceProps) {
-  // Determine API endpoints based on context
+  // Determine API endpoints based on context: org site, a specific user site,
+  // or the user's primary site (legacy no-siteId path).
   const pageLayoutEndpoint =
     context.type === 'organization' && context.organizationId
       ? `/api/organizations/${context.organizationId}/page-layout`
-      : '/api/page-layout'
+      : context.siteId
+        ? `/api/sites/${context.siteId}/page-layout`
+        : '/api/page-layout'
   const { data: session } = useSession()
   const [pageItems, setPageItems] = useState<PageItem[]>([])
   const [activeItem, setActiveItem] = useState<DragData | null>(null)
@@ -754,6 +761,9 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
     // Open the public page in a new tab
     if (context.type === 'organization' && context.organizationSlug) {
       window.open(`${window.location.origin}/org/${context.organizationSlug}`, '_blank')
+    } else if (context.siteSlug) {
+      // A specific user site being edited.
+      window.open(`${window.location.origin}/${context.siteSlug}`, '_blank')
     } else if (session?.user?.pageSlug) {
       const url = `${window.location.origin}/${session.user.pageSlug}`
       window.open(url, '_blank')

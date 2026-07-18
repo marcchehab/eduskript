@@ -18,11 +18,11 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     const pluginRaw = await prisma.plugin.findFirst({
       where: {
         slug: pluginSlug,
-        author: { site: { slug: ownerSlug } },
+        author: { sites: { some: { slug: ownerSlug } } },
       },
       include: {
         author: {
-          select: { id: true, name: true, site: { select: { slug: true, pageName: true } } },
+          select: { id: true, name: true, sites: { where: { slug: ownerSlug }, take: 1, select: { slug: true, pageName: true } } },
         },
       },
     })
@@ -36,8 +36,8 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       author: {
         id: pluginRaw.author.id,
         name: pluginRaw.author.name,
-        pageSlug: pluginRaw.author.site?.slug ?? null,
-        pageName: pluginRaw.author.site?.pageName ?? null,
+        pageSlug: pluginRaw.author.sites[0]?.slug ?? null,
+        pageName: pluginRaw.author.sites[0]?.pageName ?? null,
       },
     }
 
@@ -64,7 +64,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     const plugin = await prisma.plugin.findFirst({
       where: {
         slug: pluginSlug,
-        author: { site: { slug: ownerSlug } },
+        author: { sites: { some: { slug: ownerSlug } } },
       },
     })
 
@@ -90,7 +90,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       },
       include: {
         author: {
-          select: { id: true, name: true, site: { select: { slug: true, pageName: true } } },
+          select: { id: true, name: true, sites: { where: { slug: ownerSlug }, take: 1, select: { slug: true, pageName: true } } },
         },
       },
     })
@@ -100,8 +100,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       author: {
         id: updatedRaw.author.id,
         name: updatedRaw.author.name,
-        pageSlug: updatedRaw.author.site?.slug ?? null,
-        pageName: updatedRaw.author.site?.pageName ?? null,
+        pageSlug: updatedRaw.author.sites[0]?.slug ?? null,
+        pageName: updatedRaw.author.sites[0]?.pageName ?? null,
       },
     }
 
@@ -127,7 +127,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
     const plugin = await prisma.plugin.findFirst({
       where: {
         slug: pluginSlug,
-        author: { site: { slug: ownerSlug } },
+        author: { sites: { some: { slug: ownerSlug } } },
       },
     })
 

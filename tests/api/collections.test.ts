@@ -21,6 +21,7 @@ vi.mock('@/lib/prisma', () => ({
     },
     site: {
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
     },
     organizationMember: {
       findMany: vi.fn(),
@@ -132,7 +133,7 @@ describe('Collections API', () => {
         vi.mocked(getServerSession).mockResolvedValue(mockSession)
         // Site lookup now precedes Collection.create — every successful path
         // requires the user to have a Site (a public page).
-        vi.mocked(prisma.site.findUnique).mockResolvedValue({ id: 'site-123' } as never)
+        vi.mocked(prisma.site.findFirst).mockResolvedValue({ id: 'site-123' } as never)
       })
 
       it('should create collection scoped to the user site', async () => {
@@ -170,7 +171,7 @@ describe('Collections API', () => {
       })
 
       it('should 400 when user has no Site', async () => {
-        vi.mocked(prisma.site.findUnique).mockResolvedValue(null as never)
+        vi.mocked(prisma.site.findFirst).mockResolvedValue(null as never)
 
         const request = createRequest({ title: 'My Collection' })
         const response = await POST(request)
@@ -182,7 +183,7 @@ describe('Collections API', () => {
     describe('Error Handling', () => {
       it('should return 500 on database error', async () => {
         vi.mocked(getServerSession).mockResolvedValue(mockSession)
-        vi.mocked(prisma.site.findUnique).mockResolvedValue({ id: 'site-123' } as never)
+        vi.mocked(prisma.site.findFirst).mockResolvedValue({ id: 'site-123' } as never)
         vi.mocked(prisma.collection.create).mockRejectedValue(
           new Error('Database error')
         )

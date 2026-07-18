@@ -9,6 +9,7 @@ import { Readable } from 'stream'
 import Busboy from 'busboy'
 import { startImportProcessing, getJobStatus, cancelImportJob } from '@/lib/import-job-manager'
 import { uploadTeacherFile, isTeacherS3Configured, teacherFileExists } from '@/lib/s3'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 
 /**
  * Parse multipart form data using busboy (streaming, bypasses body size limits)
@@ -436,8 +437,9 @@ async function performImport(
   const skriptIdMap = new Map<string, string>() // slug -> id
 
   // Create or find collections (matched by title within the user's site).
-  const userSite = await prisma.site.findUnique({
+  const userSite = await prisma.site.findFirst({
     where: { userId },
+    orderBy: PRIMARY_SITE_ORDER,
     select: { id: true },
   })
   if (!userSite) {

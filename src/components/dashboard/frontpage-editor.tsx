@@ -29,6 +29,10 @@ interface FrontPageEditorProps {
   // For skript frontpage: pass skript details
   // For organization frontpage: pass organization details
   type: 'user' | 'skript' | 'organization'
+  // For a site-scoped user frontpage, pass the specific site's id. When set,
+  // the 'user' branch targets /api/sites/[siteId]/frontpage instead of the
+  // primary-site endpoint.
+  siteId?: string
   frontPage?: {
     id: string
     content: string
@@ -52,6 +56,7 @@ interface FrontPageEditorProps {
 
 export function FrontPageEditor({
   type,
+  siteId,
   frontPage,
   skript,
   organization,
@@ -103,13 +108,13 @@ export function FrontPageEditor({
   // Determine the API endpoint based on type
   const getApiEndpoint = useCallback(() => {
     if (type === 'user') {
-      return '/api/frontpage/user'
+      return siteId ? `/api/sites/${siteId}/frontpage` : '/api/frontpage/user'
     } else if (type === 'organization') {
       return `/api/frontpage/organization/${organization?.id}`
     } else {
       return `/api/frontpage/skript/${skript?.id}`
     }
-  }, [type, skript?.id, organization?.id])
+  }, [type, siteId, skript?.id, organization?.id])
 
   // Load version history
   const loadVersions = useCallback(async () => {

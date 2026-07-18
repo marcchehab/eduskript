@@ -17,6 +17,7 @@ import { prisma } from '@/lib/prisma'
 import { CACHE_TAGS } from '@/lib/cached-queries'
 import { checkSkriptPermissions } from '@/lib/permissions'
 import { generateExcerpt, generateSlug } from '@/lib/markdown'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import {
   ConflictError,
   NotFoundError,
@@ -193,8 +194,9 @@ export async function updateSkriptForUser(
   void ctx.editSource
   void ctx.editClient
 
-  const userSite = await prisma.site.findUnique({
+  const userSite = await prisma.site.findFirst({
     where: { userId },
+    orderBy: PRIMARY_SITE_ORDER,
     select: { slug: true },
   })
   if (userSite?.slug) {

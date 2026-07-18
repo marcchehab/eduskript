@@ -28,6 +28,13 @@ export const updateSiteFrontpageConfig = {
       .describe(
         "Omit to edit your own teacher landing page. Set to an org ID (cuid) to edit that organization's landing page (requires owner/admin)."
       ),
+    siteId: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        'When you own MULTIPLE sites, the specific site to edit. Omit to use your primary site. Ignored if organizationId is set. Use list_my_sites to get IDs.'
+      ),
     content: z
       .string()
       .optional()
@@ -38,15 +45,16 @@ export const updateSiteFrontpageConfig = {
 
 export async function updateSiteFrontpage(args: {
   organizationId?: string
+  siteId?: string
   content?: string
   isPublished?: boolean
 }) {
   requireScope('content:write')
   const ctx = getMcpContext()
-  const { organizationId, ...patch } = args
+  const { organizationId, siteId, ...patch } = args
   const { frontPage, contentChanged } = await upsertSiteFrontPageForUser(
     ctx.userId,
-    { organizationId },
+    { organizationId, siteId },
     patch,
     { editSource: 'mcp', editClient: ctx.clientName }
   )

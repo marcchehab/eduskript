@@ -6,6 +6,7 @@ import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.
 import { ClassToolbar } from '@/components/teacher/class-toolbar'
 import type { Metadata } from 'next'
 import { prisma } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { getFullSiteStructure } from '@/lib/cached-queries'
 import { buildSiteStructure } from '@/lib/site-structure'
 
@@ -41,10 +42,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
     const teacher = await prisma.user.findFirst({
       where: {
-        site: { slug: pageSlug },
+        sites: { some: { slug: pageSlug } },
         organizationMemberships: { some: { organizationId: organization.id } }
       },
-      select: { id: true, name: true, site: { select: { pageName: true } } }
+      select: { id: true, name: true, sites: { where: { slug: pageSlug }, take: 1, select: { pageName: true } } }
     })
 
     if (!teacher) {
@@ -66,7 +67,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       return { title: 'Skript Not Found', robots: 'noindex' }
     }
 
-    const teacherName = teacher.site?.pageName || teacher.name || 'Teacher'
+    const teacherName = teacher.sites[0]?.pageName || teacher.name || 'Teacher'
     const title = `${skript.title} | ${teacherName} | ${organization.name}`
 
     return {
@@ -113,7 +114,7 @@ export default async function OrgTeacherSkriptPage({ params }: PageProps) {
   // Page-display fields + sidebar/typography prefs live on Site.
   const teacher = await prisma.user.findFirst({
     where: {
-      site: { slug: pageSlug },
+      sites: { some: { slug: pageSlug } },
       organizationMemberships: { some: { organizationId: organization.id } }
     },
     select: {
@@ -121,7 +122,9 @@ export default async function OrgTeacherSkriptPage({ params }: PageProps) {
       name: true,
       bio: true,
       title: true,
-      site: {
+      sites: {
+        where: { slug: pageSlug },
+        take: 1,
         select: {
           slug: true,
           pageName: true,
@@ -210,7 +213,7 @@ export default async function OrgTeacherSkriptPage({ params }: PageProps) {
         }]
       }]
 
-  const teacherSite = teacher.site
+  const teacherSite = teacher.sites[0]
   const fullSiteStructure = teacherSite?.sidebarBehavior === 'full'
     ? await getFullSiteStructure(teacher.id, teacherSite.slug)
     : undefined

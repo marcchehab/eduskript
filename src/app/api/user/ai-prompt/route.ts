@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 
 export async function GET() {
   try {
@@ -11,9 +12,10 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // aiSystemPrompt lives on the user's Site (1:1).
-    const site = await prisma.site.findUnique({
+    // aiSystemPrompt lives on the user's primary Site.
+    const site = await prisma.site.findFirst({
       where: { userId: session.user.id },
+      orderBy: PRIMARY_SITE_ORDER,
       select: { aiSystemPrompt: true }
     })
 
@@ -40,10 +42,23 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { aiSystemPrompt } = body
 
-    // Update on the user's Site. Teachers always have a Site by this point;
-    // a missing Site means a misconfigured account so we surface a 404.
-    const updated = await prisma.site.update({
+    // Update on the user's primary Site. Teachers always have a Site by this
+    // point; a missing Site means a misconfigured account so we surface a 404.
+    const primary = await prisma.site.findFirst({
       where: { userId: session.user.id },
+      orderBy: PRIMARY_SITE_ORDER,
+      select: { id: true },
+    })
+
+    if (!primary) {
+      return NextResponse.json(
+        { error: 'No public page found for this account' },
+        { status: 404 },
+      )
+    }
+
+    const updated = await prisma.site.update({
+      where: { id: primary.id },
       data: { aiSystemPrompt: aiSystemPrompt || null },
       select: { aiSystemPrompt: true },
     }).catch(() => null)

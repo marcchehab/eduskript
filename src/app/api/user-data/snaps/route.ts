@@ -9,6 +9,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import type { SnapsData, SnapData } from '@/lib/userdata/adapters'
 
 export interface SnapWithPageInfo extends SnapData {
@@ -86,7 +87,11 @@ export async function GET() {
               where: { permission: 'author' },
               take: 1,
               select: {
-                user: { select: { site: { select: { slug: true } } } },
+                user: {
+                  select: {
+                    sites: { select: { slug: true }, orderBy: PRIMARY_SITE_ORDER, take: 1 },
+                  },
+                },
               },
             },
           },
@@ -115,7 +120,7 @@ export async function GET() {
       // a skript author's own Site for collection-less skripts.
       const authorPageSlug =
         collection?.site?.slug ||
-        pageInfo.skript.authors[0]?.user?.site?.slug ||
+        pageInfo.skript.authors[0]?.user?.sites[0]?.slug ||
         null
 
       // Add each snap with page info

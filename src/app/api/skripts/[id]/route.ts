@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { checkSkriptPermissions } from '@/lib/permissions'
 import { CACHE_TAGS } from '@/lib/cached-queries'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 
 export async function GET(
   request: NextRequest,
@@ -152,8 +153,9 @@ export async function PATCH(
     })
 
     // Get the user's site slug for cache invalidation.
-    const userSite = await prisma.site.findUnique({
+    const userSite = await prisma.site.findFirst({
       where: { userId: session.user.id },
+      orderBy: PRIMARY_SITE_ORDER,
       select: { slug: true }
     })
 
@@ -215,8 +217,9 @@ export async function DELETE(
       where: { id }
     })
 
-    const userSite = await prisma.site.findUnique({
+    const userSite = await prisma.site.findFirst({
       where: { userId: session.user.id },
+      orderBy: PRIMARY_SITE_ORDER,
       select: { slug: true }
     })
 

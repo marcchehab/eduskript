@@ -48,10 +48,10 @@ async function setupTestData(): Promise<TestData> {
     where: {
       OR: [
         { email: 'eduadmin@eduskript.org' },
-        { site: { slug: 'eduadmin' } },
+        { sites: { some: { slug: 'eduadmin' } } },
       ]
     },
-    include: { site: { select: { slug: true } } }
+    include: { sites: { where: { slug: 'eduadmin' }, take: 1, select: { slug: true } } }
   })
 
   if (!teacher) {
@@ -60,7 +60,7 @@ async function setupTestData(): Promise<TestData> {
   }
 
   const teacherEmail = teacher.email || 'eduadmin'
-  console.log('✅ Using existing teacher:', teacherEmail, '(pageSlug:', teacher.site?.slug + ')')
+  console.log('✅ Using existing teacher:', teacherEmail, '(pageSlug:', teacher.sites[0]?.slug + ')')
 
   // 2. Create anonymous class (allowAnonymous = true)
   const anonymousClassCode = generateInviteCode()

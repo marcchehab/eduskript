@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireOrgAdmin, canRemoveMember, canModifyMemberRole, OrgRole } from '@/lib/org-auth'
 import { prisma } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 
 // GET /api/organizations/[orgId]/members - List organization members
 export async function GET(
@@ -12,7 +13,7 @@ export async function GET(
   if (error) return error
 
   try {
-    const members = await prisma.organizationMember.findMany({
+    const membersRaw = await prisma.organizationMember.findMany({
       where: { organizationId: orgId },
       include: {
         user: {
@@ -20,7 +21,9 @@ export async function GET(
             id: true,
             email: true,
             name: true,
-            site: { select: { slug: true } },
+            // Flatten the member's primary Site slug to pageSlug (URL slug lives
+            // on Site now; a user may own several — pick the primary).
+            sites: { orderBy: PRIMARY_SITE_ORDER, take: 1, select: { slug: true } },
             image: true,
             accountType: true,
             studentPseudonym: true,
@@ -33,6 +36,11 @@ export async function GET(
         { createdAt: 'asc' },
       ],
     })
+
+    const members = membersRaw.map(m => ({
+      ...m,
+      user: { ...m.user, pageSlug: m.user.sites[0]?.slug ?? null, sites: undefined },
+    }))
 
     return NextResponse.json({ members })
   } catch (error) {
@@ -133,7 +141,7 @@ export async function POST(
     }
 
     // Create membership
-    const membership = await prisma.organizationMember.create({
+    const membershipRaw = await prisma.organizationMember.create({
       data: {
         organizationId: orgId,
         userId: user.id,
@@ -145,13 +153,18 @@ export async function POST(
             id: true,
             email: true,
             name: true,
-            site: { select: { slug: true } },
+            sites: { orderBy: PRIMARY_SITE_ORDER, take: 1, select: { slug: true } },
             image: true,
             accountType: true,
           },
         },
       },
     })
+
+    const membership = {
+      ...membershipRaw,
+      user: { ...membershipRaw.user, pageSlug: membershipRaw.user.sites[0]?.slug ?? null, sites: undefined },
+    }
 
     return NextResponse.json({ membership }, { status: 201 })
   } catch (error) {
@@ -236,7 +249,7 @@ export async function PATCH(
     }
 
     // Update role
-    const updated = await prisma.organizationMember.update({
+    const updatedRaw = await prisma.organizationMember.update({
       where: {
         organizationId_userId: {
           organizationId: orgId,
@@ -250,13 +263,18 @@ export async function PATCH(
             id: true,
             email: true,
             name: true,
-            site: { select: { slug: true } },
+            sites: { orderBy: PRIMARY_SITE_ORDER, take: 1, select: { slug: true } },
             image: true,
             accountType: true,
           },
         },
       },
     })
+
+    const updated = {
+      ...updatedRaw,
+      user: { ...updatedRaw.user, pageSlug: updatedRaw.user.sites[0]?.slug ?? null, sites: undefined },
+    }
 
     return NextResponse.json({ membership: updated })
   } catch (error) {

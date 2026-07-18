@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { revalidateTag } from 'next/cache'
 import { requireAdmin } from '@/lib/admin-auth'
 import { prisma } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { CACHE_TAGS } from '@/lib/cached-queries'
 import bcrypt from 'bcryptjs'
 
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
         emailVerified: new Date(),
         requirePasswordReset: false,
         billingPlan: 'pro',
-        site: {
+        sites: {
           create: { slug: 'teacher' },
         },
       },
@@ -77,8 +78,9 @@ export async function POST(request: Request) {
 
     // Create example collection on the teacher's site (collections are now
     // 1:1-owned by a site, not multi-authored).
-    const seedTeacherSite = await prisma.site.findUnique({
+    const seedTeacherSite = await prisma.site.findFirst({
       where: { userId: teacherUser.id },
+      orderBy: PRIMARY_SITE_ORDER,
       select: { id: true },
     })
     if (!seedTeacherSite) {

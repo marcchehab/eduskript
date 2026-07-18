@@ -7,6 +7,7 @@ import { PublicSiteLayout } from '@/components/public/layout'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
 import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
 import { prisma } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { getFullSiteStructure } from '@/lib/cached-queries'
 import { getPublicLayers, EMPTY_PUBLIC_LAYERS } from '@/lib/public-page-data'
 
@@ -43,7 +44,7 @@ export async function generateMetadata({ params }: OrgTeacherPageProps): Promise
     // member. Page-display fields live on Site now.
     const teacher = await prisma.user.findFirst({
       where: {
-        site: { slug: pageSlug },
+        sites: { some: { slug: pageSlug } },
         organizationMemberships: {
           some: { organizationId: organization.id }
         }
@@ -51,7 +52,7 @@ export async function generateMetadata({ params }: OrgTeacherPageProps): Promise
       select: {
         name: true,
         bio: true,
-        site: { select: { pageName: true, pageDescription: true } },
+        sites: { where: { slug: pageSlug }, take: 1, select: { pageName: true, pageDescription: true } },
       }
     })
 
@@ -62,8 +63,8 @@ export async function generateMetadata({ params }: OrgTeacherPageProps): Promise
       }
     }
 
-    const title = `${teacher.site?.pageName || teacher.name || 'Teacher'} | ${organization.name}`
-    const description = teacher.site?.pageDescription || teacher.bio || `Educational content by ${teacher.name}`
+    const title = `${teacher.sites[0]?.pageName || teacher.name || 'Teacher'} | ${organization.name}`
+    const description = teacher.sites[0]?.pageDescription || teacher.bio || `Educational content by ${teacher.name}`
 
     return {
       title,
@@ -122,13 +123,15 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
   // this org. Layout AND page-display fields all live on Site now.
   const teacher = await prisma.user.findFirst({
     where: {
-      site: { slug: pageSlug },
+      sites: { some: { slug: pageSlug } },
       organizationMemberships: {
         some: { organizationId: organization.id }
       }
     },
     include: {
-      site: {
+      sites: {
+        where: { slug: pageSlug },
+        take: 1,
         include: {
           pageLayout: {
             include: {
@@ -139,12 +142,12 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
       }
     }
   })
-  const teacherSite = teacher?.site
+  const teacherSite = teacher?.sites[0]
 
   if (!teacher) {
     notFound()
   }
-  const teacherPageLayout = teacher.site?.pageLayout
+  const teacherPageLayout = teacherSite?.pageLayout
 
   // Check if current user is the owner of this page
   const session = await getServerSession(authOptions)
@@ -270,7 +273,7 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
 
   // Fetch full site structure when sidebar is in "full" mode. URL slug +
   // page-display fields all live on Site now.
-  const teacherSlug = teacher.site?.slug ?? pageSlug
+  const teacherSlug = teacherSite?.slug ?? pageSlug
   const sidebarBehavior = teacherSite?.sidebarBehavior ?? 'contextual'
   const fullSiteStructure = sidebarBehavior === 'full'
     ? await getFullSiteStructure(teacher.id, teacherSlug)

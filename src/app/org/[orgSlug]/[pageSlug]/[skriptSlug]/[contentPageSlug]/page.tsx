@@ -17,6 +17,7 @@ import { getOrCreateActiveExamKey } from '@/lib/exam-keys'
 import { cookies } from 'next/headers'
 import type { Metadata } from 'next'
 import { prisma } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { headers } from 'next/headers'
@@ -58,10 +59,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
     const teacher = await prisma.user.findFirst({
       where: {
-        site: { slug: pageSlug },
+        sites: { some: { slug: pageSlug } },
         organizationMemberships: { some: { organizationId: organization.id } }
       },
-      select: { id: true, name: true, site: { select: { pageName: true } } }
+      select: { id: true, name: true, sites: { where: { slug: pageSlug }, take: 1, select: { pageName: true } } }
     })
 
     if (!teacher) {
@@ -83,7 +84,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       return { title: 'Page Not Found', robots: 'noindex' }
     }
 
-    const teacherName = teacher.site?.pageName || teacher.name || 'Teacher'
+    const teacherName = teacher.sites[0]?.pageName || teacher.name || 'Teacher'
     const title = `${page.title} | ${teacherName} | ${organization.name}`
 
     return {
@@ -132,7 +133,7 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
 
   const teacher = await prisma.user.findFirst({
     where: {
-      site: { slug: pageSlug },
+      sites: { some: { slug: pageSlug } },
       organizationMemberships: { some: { organizationId: organization.id } }
     },
     select: {
@@ -140,7 +141,9 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
       name: true,
       bio: true,
       title: true,
-      site: {
+      sites: {
+        where: { slug: pageSlug },
+        take: 1,
         select: {
           slug: true,
           pageName: true,
@@ -264,7 +267,7 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
       return (
         <ExamLockedPage
           pageTitle={page.title}
-          teacherName={teacher.name || teacher.site?.pageName || 'Unknown'}
+          teacherName={teacher.name || teacher.sites[0]?.pageName || 'Unknown'}
           isLoggedIn={false}
           loginUrl={loginUrl}
         />
@@ -359,7 +362,7 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
       return (
         <ExamLockedPage
           pageTitle={page.title}
-          teacherName={teacher.name || teacher.site?.pageName || 'Unknown'}
+          teacherName={teacher.name || teacher.sites[0]?.pageName || 'Unknown'}
           isLoggedIn={true}
           loginUrl={`/auth/signin?callbackUrl=${encodeURIComponent(`/org/${orgSlug}/${pageSlug}/${skriptSlug}/${contentPageSlug}`)}`}
         />
@@ -408,7 +411,7 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
         }]
       }]
 
-  const teacherSite = teacher.site
+  const teacherSite = teacher.sites[0]
   const fullSiteStructure = teacherSite?.sidebarBehavior === 'full'
     ? await getFullSiteStructure(teacher.id, teacherSite.slug)
     : undefined
@@ -464,7 +467,7 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
             pageTitle={page.title}
             studentName={examSessionUserName}
             studentEmail={examSessionUserEmail}
-            typographyPreference={(teacher.site?.typographyPreference as 'modern' | 'classic') || 'modern'}
+            typographyPreference={(teacher.sites[0]?.typographyPreference as 'modern' | 'classic') || 'modern'}
             backupPublicKeyJwk={backupKey.publicKeyJwk}
             backupKeyId={backupKey.keyId}
             studentId={examAuthenticatedUserId}
@@ -496,7 +499,7 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
           pageTitle={page.title}
           studentName={examSessionUserName}
           studentEmail={examSessionUserEmail}
-          typographyPreference={(teacher.site?.typographyPreference as 'modern' | 'classic') || 'modern'}
+          typographyPreference={(teacher.sites[0]?.typographyPreference as 'modern' | 'classic') || 'modern'}
           backupPublicKeyJwk={backupKey.publicKeyJwk}
           backupKeyId={backupKey.keyId}
           studentId={examAuthenticatedUserId}
@@ -515,7 +518,7 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
       fullSiteStructure={fullSiteStructure}
       currentPath={currentPath}
       sidebarBehavior={(teacherSite?.sidebarBehavior as 'contextual' | 'full') || 'contextual'}
-      typographyPreference={(teacher.site?.typographyPreference as 'modern' | 'classic') || 'modern'}
+      typographyPreference={(teacher.sites[0]?.typographyPreference as 'modern' | 'classic') || 'modern'}
       routePrefix={`/org/${orgSlug}/${pageSlug}`}
       pageId={page.id}
       hideSidebar={page.pageType === 'exam'}

@@ -1,0 +1,192 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { revalidateTag } from 'next/cache'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { CACHE_TAGS } from '@/lib/cached-queries'
+import { hydratePageLayoutItems } from '@/lib/page-layout'
+
+/** Resolve a specific site owned by the user. Unlike the personal
+ *  /api/page-layout route (which picks the user's primary site), this route
+ *  targets a site by id and ownership-checks it — a user must not read or edit
+ *  another user's site. */
+async function getOwnedSite(siteId: string, userId: string) {
+  const site = await prisma.site.findFirst({
+    where: { id: siteId, userId },
+    select: { id: true, slug: true },
+  })
+  return site
+}
+
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ siteId: string }> }
+) {
+  try {
+    const session = await getServerSession(authOptions)
+
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
+    const { siteId } = await params
+
+    const site = await getOwnedSite(siteId, session.user.id)
+    if (!site) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    const pageLayout = await prisma.pageLayout.findUnique({
+      where: { siteId: site.id },
+      include: {
+        items: {
+          orderBy: { order: 'asc' }
+        }
+      }
+    })
+    if (!pageLayout) {
+      return NextResponse.json({ success: true, data: { items: [] } })
+    }
+
+    // Return items fully hydrated (collections + their skripts + permissions)
+    // so the page builder renders from one request instead of one API call
+    // per collection/skript. Collections in a user's own layout live on the
+    // user's own site, so canEditSite resolves without org roles.
+    const items = await hydratePageLayoutItems(pageLayout.items, {
+      userId: session.user.id,
+      isAdmin: !!session.user.isAdmin,
+      orgRoles: [],
+    })
+
+    return NextResponse.json({
+      success: true,
+      data: { id: pageLayout.id, items },
+    })
+  } catch (error) {
+    console.error('Error fetching page layout:', error)
+    return NextResponse.json(
+      { error: 'Failed to fetch page layout' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ siteId: string }> }
+) {
+  try {
+    const session = await getServerSession(authOptions)
+
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
+    const { siteId } = await params
+
+    const { items } = await request.json()
+
+    if (!Array.isArray(items)) {
+      return NextResponse.json(
+        { error: 'Items must be an array' },
+        { status: 400 }
+      )
+    }
+
+    const site = await getOwnedSite(siteId, session.user.id)
+    if (!site) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    // SECURITY: Validate that the user can place each item on their site.
+    // Collections must belong to the user's site; skripts must be authored
+    // by the user.
+    const validatedItems: Array<{ id: string; type: string }> = []
+
+    for (const item of items) {
+      if (!item.id || !item.type) {
+        continue
+      }
+
+      if (item.type === 'collection') {
+        const collection = await prisma.collection.findFirst({
+          where: {
+            id: item.id,
+            siteId: site.id,
+          }
+        })
+        if (collection) {
+          validatedItems.push(item)
+        } else {
+          console.warn(`[Page Layout] User ${session.user.email} attempted to add collection ${item.id} without permission`)
+        }
+      } else if (item.type === 'skript') {
+        const skript = await prisma.skript.findFirst({
+          where: {
+            id: item.id,
+            authors: {
+              some: { userId: session.user.id }
+            }
+          }
+        })
+        if (skript) {
+          validatedItems.push(item)
+        } else {
+          console.warn(`[Page Layout] User ${session.user.email} attempted to add skript ${item.id} without permission`)
+        }
+      }
+    }
+
+    const pageLayout = await prisma.pageLayout.upsert({
+      where: { siteId: site.id },
+      update: {
+        items: {
+          deleteMany: {},
+          create: validatedItems.map((item, index) => ({
+            type: item.type,
+            contentId: item.id,
+            order: index
+          }))
+        }
+      },
+      create: {
+        siteId: site.id,
+        items: {
+          create: validatedItems.map((item, index) => ({
+            type: item.type,
+            contentId: item.id,
+            order: index
+          }))
+        }
+      },
+      include: {
+        items: {
+          orderBy: { order: 'asc' }
+        }
+      }
+    })
+
+    // The public sidebar reads page-layout items through two cached queries
+    // (getTeacherWithLayout + getTeacherHomepageContent). Both are tagged with
+    // teacherContent and user; without these invalidations a root-promoted
+    // skript stays invisible on the live site until the tag is bumped elsewhere.
+    if (site.slug) {
+      revalidateTag(CACHE_TAGS.teacherContent(site.slug), { expire: 0 })
+      revalidateTag(CACHE_TAGS.user(site.slug), { expire: 0 })
+    }
+
+    return NextResponse.json({ success: true, data: pageLayout })
+  } catch (error) {
+    console.error('Error saving page layout:', error)
+    return NextResponse.json(
+      { error: 'Failed to save page layout' },
+      { status: 500 }
+    )
+  }
+}

@@ -1,6 +1,7 @@
 import { GitFork } from 'lucide-react'
 import Link from 'next/link'
 import { prisma } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 
 interface ForkAttributionProps {
   forkedFromPageId: string | null
@@ -32,7 +33,7 @@ export async function ForkAttribution({
                 orderBy: { createdAt: 'asc' as const },
                 take: 1,
                 include: {
-                  user: { select: { name: true, site: { select: { slug: true } } } },
+                  user: { select: { name: true, sites: { orderBy: PRIMARY_SITE_ORDER, take: 1, select: { slug: true } } } },
                 },
               },
             },
@@ -46,14 +47,14 @@ export async function ForkAttribution({
     !originalPage && forkedFromAuthorId
       ? await prisma.user.findUnique({
           where: { id: forkedFromAuthorId },
-          select: { name: true, site: { select: { slug: true } } },
+          select: { name: true, sites: { orderBy: PRIMARY_SITE_ORDER, take: 1, select: { slug: true } } },
         })
       : null
 
   // Build attribution content
   const pageAuthor = originalPage?.skript.authors[0]?.user
   const authorName = pageAuthor?.name || originalAuthor?.name
-  const authorSlug = pageAuthor?.site?.slug || originalAuthor?.site?.slug
+  const authorSlug = pageAuthor?.sites[0]?.slug || originalAuthor?.sites[0]?.slug
 
   if (!authorName && !originalPage) return null
 

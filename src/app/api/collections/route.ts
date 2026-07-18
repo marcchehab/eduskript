@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,7 +15,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { title } = await request.json()
+    const { title, siteId } = await request.json()
 
     if (!title || !title.trim()) {
       return NextResponse.json(
@@ -23,14 +24,26 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Collections belong to the creator's Site. Every teacher with a pageSlug
-    // gets a Site at signup; if there's none, the user hasn't claimed their
-    // page yet and can't own collections.
-    const site = await prisma.site.findUnique({
-      where: { userId: session.user.id },
-      select: { id: true },
-    })
+    // Collections belong to the creator's Site. When a specific siteId is
+    // provided, target that site (ownership-checked so a user can't create
+    // collections on another user's site). Otherwise fall back to the user's
+    // primary site. Every teacher with a pageSlug gets a Site at signup; if
+    // there's none, the user hasn't claimed their page yet and can't own
+    // collections.
+    const site = siteId
+      ? await prisma.site.findFirst({
+          where: { id: siteId, userId: session.user.id },
+          select: { id: true },
+        })
+      : await prisma.site.findFirst({
+          where: { userId: session.user.id },
+          orderBy: PRIMARY_SITE_ORDER,
+          select: { id: true },
+        })
     if (!site) {
+      if (siteId) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
       return NextResponse.json(
         { error: 'You need to set up your public page before creating collections' },
         { status: 400 }

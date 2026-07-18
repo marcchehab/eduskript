@@ -5,12 +5,14 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { CACHE_TAGS } from '@/lib/cached-queries'
 import { hydratePageLayoutItems } from '@/lib/page-layout'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 
-/** Look up the user's Site id (1:1 with the user). Page layouts now key on
- *  site, not user, since orgs share the same table. */
+/** Look up the user's primary Site id. A user can own multiple sites; page
+ *  layouts key on site, not user, since orgs share the same table. */
 async function getUserSiteId(userId: string) {
-  const site = await prisma.site.findUnique({
+  const site = await prisma.site.findFirst({
     where: { userId },
+    orderBy: PRIMARY_SITE_ORDER,
     select: { id: true, slug: true },
   })
   return site

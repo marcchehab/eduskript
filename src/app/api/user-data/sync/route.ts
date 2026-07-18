@@ -14,6 +14,7 @@ import { getServerSession } from 'next-auth'
 import { cookies } from 'next/headers'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import { uploadSnapImage, deleteSnapImage, isS3Configured } from '@/lib/s3'
 import { eventBus } from '@/lib/events'
@@ -541,7 +542,11 @@ export async function POST(request: NextRequest) {
                   slug: true,
                   authors: {
                     select: {
-                      user: { select: { site: { select: { slug: true } } } },
+                      user: {
+                        select: {
+                          sites: { select: { slug: true }, orderBy: PRIMARY_SITE_ORDER, take: 1 },
+                        },
+                      },
                     },
                   },
                   collectionSkripts: {
@@ -570,7 +575,7 @@ export async function POST(request: NextRequest) {
             // via the SkriptAuthor relation, so the cache must invalidate there too.
             const revalidatedTeacherSlugs = new Set<string>()
             for (const author of page.skript.authors) {
-              const teacherSlug = author.user?.site?.slug
+              const teacherSlug = author.user?.sites[0]?.slug
               if (teacherSlug && !revalidatedTeacherSlugs.has(teacherSlug)) {
                 revalidatePath(`/${teacherSlug}/${skriptSlug}/${contentPageSlug}`)
                 revalidatedTeacherSlugs.add(teacherSlug)

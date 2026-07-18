@@ -57,6 +57,7 @@ import GithubProvider from 'next-auth/providers/github'
 import AzureADProvider from 'next-auth/providers/azure-ad'
 import bcrypt from 'bcryptjs'
 import { prisma, prismaBase } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { generatePseudonym, isStudentEmail } from '@/lib/privacy/pseudonym'
 import { PrivacyAdapter, type SignupContext } from '@/lib/privacy-adapter'
 import { cookies } from 'next/headers'
@@ -296,7 +297,13 @@ export const authOptions: NextAuthOptions = {
             accountType: true,
             studentPseudonym: true,
             billingPlan: true,
-            site: {
+            // A user may own multiple sites; the token carries the PRIMARY
+            // site (lowest order) for the post-login redirect and legacy
+            // single-slug fallbacks. The dashboard resolves the active site by
+            // route param, not from the token.
+            sites: {
+              orderBy: PRIMARY_SITE_ORDER,
+              take: 1,
               select: {
                 slug: true,
                 pageName: true,
@@ -309,10 +316,10 @@ export const authOptions: NextAuthOptions = {
         })
 
         if (dbUser) {
-          token.pageSlug = dbUser.site?.slug ?? null
-          token.pageName = dbUser.site?.pageName ?? null
-          token.pageDescription = dbUser.site?.pageDescription ?? null
-          token.pageIcon = dbUser.site?.pageIcon ?? null
+          token.pageSlug = dbUser.sites[0]?.slug ?? null
+          token.pageName = dbUser.sites[0]?.pageName ?? null
+          token.pageDescription = dbUser.sites[0]?.pageDescription ?? null
+          token.pageIcon = dbUser.sites[0]?.pageIcon ?? null
           token.title = dbUser.title
           token.bio = dbUser.bio
           token.name = dbUser.name
@@ -351,7 +358,7 @@ export const authOptions: NextAuthOptions = {
           token.accountType = dbUser.accountType
           token.studentPseudonym = dbUser.studentPseudonym
           token.billingPlan = dbUser.billingPlan
-          token.typographyPreference = dbUser.site?.typographyPreference ?? null
+          token.typographyPreference = dbUser.sites[0]?.typographyPreference ?? null
 
           // For students, store OAuth email in token (for display purposes, NOT stored in DB)
           // This allows showing the student their email when they need to share it with teachers
@@ -487,7 +494,13 @@ export const authOptions: NextAuthOptions = {
             accountType: true,
             studentPseudonym: true,
             billingPlan: true,
-            site: {
+            // A user may own multiple sites; the token carries the PRIMARY
+            // site (lowest order) for the post-login redirect and legacy
+            // single-slug fallbacks. The dashboard resolves the active site by
+            // route param, not from the token.
+            sites: {
+              orderBy: PRIMARY_SITE_ORDER,
+              take: 1,
               select: {
                 slug: true,
                 pageName: true,
@@ -500,10 +513,10 @@ export const authOptions: NextAuthOptions = {
         })
 
         if (dbUser) {
-          token.pageSlug = dbUser.site?.slug ?? null
-          token.pageName = dbUser.site?.pageName ?? null
-          token.pageDescription = dbUser.site?.pageDescription ?? null
-          token.pageIcon = dbUser.site?.pageIcon ?? null
+          token.pageSlug = dbUser.sites[0]?.slug ?? null
+          token.pageName = dbUser.sites[0]?.pageName ?? null
+          token.pageDescription = dbUser.sites[0]?.pageDescription ?? null
+          token.pageIcon = dbUser.sites[0]?.pageIcon ?? null
           token.title = dbUser.title
           token.bio = dbUser.bio
           token.name = dbUser.name
@@ -517,7 +530,7 @@ export const authOptions: NextAuthOptions = {
           token.accountType = dbUser.accountType
           token.studentPseudonym = dbUser.studentPseudonym
           token.billingPlan = dbUser.billingPlan
-          token.typographyPreference = dbUser.site?.typographyPreference ?? null
+          token.typographyPreference = dbUser.sites[0]?.typographyPreference ?? null
         }
       }
 

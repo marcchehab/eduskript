@@ -5,12 +5,18 @@ import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { cn } from '@/lib/utils'
-import { BookOpen, Settings, Users, ChevronLeft, ChevronRight, Shield, GraduationCap, User, Camera, CornerUpLeft, Globe, BarChart3, CreditCard, Lock, Tag, Puzzle, ClipboardCheck } from 'lucide-react'
+import { BookOpen, Settings, Users, ChevronLeft, ChevronRight, Shield, GraduationCap, User, Camera, CornerUpLeft, Globe, BarChart3, CreditCard, Lock, Tag, Puzzle, ClipboardCheck, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
-// Personal navigation items for teachers
-const personalNavigation = [
-  { name: 'Page Builder', href: '/dashboard/page-builder', icon: BookOpen },
+// Per-site authoring items (site-scoped URLs). A teacher normally has one
+// site; superadmin-granted extra sites each get their own stacked block.
+const siteNavItems = [
+  { name: 'Page Builder', suffix: '/page-builder', icon: BookOpen },
+  { name: 'Frontpage', suffix: '/frontpage', icon: FileText },
+]
+
+// Account-level items — user-wide, not tied to a single site.
+const accountNavigation = [
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
   { name: 'Plugins', href: '/dashboard/plugins', icon: Puzzle },
   { name: 'Collaborate', href: '/dashboard/collaborate', icon: Users },
@@ -41,6 +47,14 @@ interface OrgWithRole {
   role: 'owner' | 'admin' | 'member'
 }
 
+interface UserSite {
+  id: string
+  slug: string
+  pageName: string | null
+  pageIcon: string | null
+  order: number
+}
+
 // Section header component
 function SectionHeader({ title, isCollapsed }: { title: string; isCollapsed: boolean }) {
   if (isCollapsed) return null
@@ -57,6 +71,7 @@ export function DashboardSidebar() {
   const { data: session } = useSession()
   const [lastTeacherPage, setLastTeacherPage] = useState<{ slug: string; name: string; pageIcon?: string | null; href?: string } | null>(null)
   const [adminOrgs, setAdminOrgs] = useState<OrgWithRole[]>([])
+  const [sites, setSites] = useState<UserSite[]>([])
 
   // Determine which navigation to show based on account type
   const isStudent = session?.user?.accountType === 'student'
@@ -102,6 +117,28 @@ export function DashboardSidebar() {
 
     // Allow other components to trigger a sidebar refresh
     const handler = () => fetchOrgs()
+    window.addEventListener('sidebar:refresh', handler)
+    return () => window.removeEventListener('sidebar:refresh', handler)
+  }, [isTeacher, session?.user?.id])
+
+  // Fetch the teacher's own sites (usually one; superadmin can grant more).
+  useEffect(() => {
+    if (!isTeacher || !session?.user?.id) return
+
+    const fetchSites = async () => {
+      try {
+        const response = await fetch('/api/user/sites')
+        if (response.ok) {
+          const data = await response.json()
+          setSites(data.sites ?? [])
+        }
+      } catch {
+        // Silently fail — site nav is best-effort.
+      }
+    }
+
+    fetchSites()
+    const handler = () => fetchSites()
     window.addEventListener('sidebar:refresh', handler)
     return () => window.removeEventListener('sidebar:refresh', handler)
   }, [isTeacher, session?.user?.id])
@@ -187,47 +224,64 @@ export function DashboardSidebar() {
             </>
           )}
 
-          {/* Teacher Navigation - Personal Section (hidden for eduadmin default account) */}
+          {/* Teacher Navigation (hidden for eduadmin default account).
+              Stacking order: one block per site → orgs → account → admin. */}
           {isTeacher && session?.user?.pageSlug !== 'eduadmin' && (
             <>
-              <SectionHeader title={userName} isCollapsed={isCollapsed} />
-              {personalNavigation.map((item) => {
-                const Icon = item.icon
-                // Highlight page-builder for both /dashboard and /dashboard/page-builder
-                const isActive = pathname === item.href ||
-                               (item.href === '/dashboard/page-builder' && pathname === '/dashboard')
-                // Items gated behind a paid plan.
-                // Page Builder, Collaborate, and Plugins (browse) are free.
-                // Classes (student management) is paid — covers AI, cloud sync,
-                // student accounts, broadcasts, exam sessions, etc.
-                const gatedPaths = ['/dashboard/classes']
-                const isGated = isFreePlan && gatedPaths.includes(item.href)
+              {/* Per-site blocks. A teacher normally has exactly one; extra
+                  sites are superadmin-granted and stack below it. Falls back to
+                  a single legacy block if the sites fetch hasn't resolved. */}
+              {sites.length > 0 ? (
+                sites.map((site) => (
+                  <div key={site.id} className="mb-2">
+                    <SectionHeader title={site.pageName || site.slug} isCollapsed={isCollapsed} />
+                    {siteNavItems.map((item) => {
+                      const Icon = item.icon
+                      const href = `/dashboard/site/${site.id}${item.suffix}`
+                      const isActive = pathname === href ||
+                        (item.suffix === '/page-builder' &&
+                          site.order === 0 &&
+                          (pathname === '/dashboard' || pathname === '/dashboard/page-builder'))
 
-                return (
+                      return (
+                        <Link
+                          key={`${site.id}-${item.name}`}
+                          href={href}
+                          className={cn(
+                            'flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors',
+                            isActive
+                              ? 'bg-primary/10 text-primary'
+                              : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                            isCollapsed ? 'justify-center px-2' : ''
+                          )}
+                          title={isCollapsed ? `${site.pageName || site.slug} · ${item.name}` : undefined}
+                        >
+                          <Icon className="w-5 h-5" />
+                          {!isCollapsed && <span>{item.name}</span>}
+                        </Link>
+                      )
+                    })}
+                  </div>
+                ))
+              ) : (
+                <div className="mb-2">
+                  <SectionHeader title={userName} isCollapsed={isCollapsed} />
                   <Link
-                    key={item.name}
-                    href={item.href}
+                    href="/dashboard/page-builder"
                     className={cn(
                       'flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors',
-                      isActive
+                      pathname === '/dashboard/page-builder' || pathname === '/dashboard'
                         ? 'bg-primary/10 text-primary'
-                        : isGated
-                          ? 'text-muted-foreground/50 hover:bg-muted hover:text-muted-foreground'
-                          : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground',
                       isCollapsed ? 'justify-center px-2' : ''
                     )}
-                    title={isCollapsed ? item.name : undefined}
+                    title={isCollapsed ? 'Page Builder' : undefined}
                   >
-                    <Icon className="w-5 h-5" />
-                    {!isCollapsed && (
-                      <span className="flex items-center gap-2">
-                        {item.name}
-                        {isGated && <Lock className="w-3 h-3" />}
-                      </span>
-                    )}
+                    <BookOpen className="w-5 h-5" />
+                    {!isCollapsed && <span>Page Builder</span>}
                   </Link>
-                )
-              })}
+                </div>
+              )}
             </>
           )}
 
@@ -260,6 +314,45 @@ export function DashboardSidebar() {
               })}
             </div>
           ))}
+
+          {/* Account Section (user-wide teacher items, hidden for eduadmin) */}
+          {isTeacher && session?.user?.pageSlug !== 'eduadmin' && (
+            <div className="mt-6">
+              <SectionHeader title="Account" isCollapsed={isCollapsed} />
+              {accountNavigation.map((item) => {
+                const Icon = item.icon
+                const isActive = pathname === item.href
+                // Classes (student management) is paid; everything else is free.
+                const gatedPaths = ['/dashboard/classes']
+                const isGated = isFreePlan && gatedPaths.includes(item.href)
+
+                return (
+                  <Link
+                    key={item.name}
+                    href={item.href}
+                    className={cn(
+                      'flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors',
+                      isActive
+                        ? 'bg-primary/10 text-primary'
+                        : isGated
+                          ? 'text-muted-foreground/50 hover:bg-muted hover:text-muted-foreground'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                      isCollapsed ? 'justify-center px-2' : ''
+                    )}
+                    title={isCollapsed ? item.name : undefined}
+                  >
+                    <Icon className="w-5 h-5" />
+                    {!isCollapsed && (
+                      <span className="flex items-center gap-2">
+                        {item.name}
+                        {isGated && <Lock className="w-3 h-3" />}
+                      </span>
+                    )}
+                  </Link>
+                )
+              })}
+            </div>
+          )}
 
           {/* Admin Section (only visible to admins) */}
           {session?.user?.isAdmin && (

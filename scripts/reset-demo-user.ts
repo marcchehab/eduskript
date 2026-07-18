@@ -46,7 +46,7 @@ async function main() {
         hashedPassword,
         emailVerified: new Date(),
         billingPlan: 'pro',
-        site: { create: { slug: DEMO_PAGE_SLUG, pageName: 'Demo' } },
+        sites: { create: { slug: DEMO_PAGE_SLUG, pageName: 'Demo' } },
       }
     })
     console.log(`   ✓ Created demo user: ${DEMO_EMAIL}`)

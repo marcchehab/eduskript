@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { checkCollectionPermissions } from '@/lib/permissions'
 import { CACHE_TAGS } from '@/lib/cached-queries'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 
 export async function PUT(
   request: NextRequest,
@@ -75,8 +76,9 @@ export async function PUT(
       }
     })
 
-    const userSite = await prisma.site.findUnique({
+    const userSite = await prisma.site.findFirst({
       where: { userId: session.user.id },
+      orderBy: PRIMARY_SITE_ORDER,
       select: { slug: true }
     })
     if (userSite?.slug) {

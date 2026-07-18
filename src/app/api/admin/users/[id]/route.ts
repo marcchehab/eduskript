@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/admin-auth'
 import { prisma } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import bcrypt from 'bcryptjs'
 import { createTrialSubscription } from '@/lib/trial'
 
@@ -21,7 +22,9 @@ export async function GET(
         id: true,
         email: true,
         name: true,
-        site: { select: { slug: true } },
+        // A user may own several sites; expose the primary slug under the
+        // legacy pageSlug field. Full multi-site listing is a separate view.
+        sites: { orderBy: PRIMARY_SITE_ORDER, take: 1, select: { slug: true } },
         title: true,
         isAdmin: true,
         requirePasswordReset: true,
@@ -44,8 +47,8 @@ export async function GET(
 
     // Expose only whether a password is set (an email user can have it changed),
     // never the hash itself.
-    const { site, hashedPassword, ...rest } = userRaw
-    const user = { ...rest, pageSlug: site?.slug ?? null, hasPassword: !!hashedPassword }
+    const { sites, hashedPassword, ...rest } = userRaw
+    const user = { ...rest, pageSlug: sites[0]?.slug ?? null, hasPassword: !!hashedPassword }
 
     return NextResponse.json({ user })
   } catch (error) {
@@ -169,20 +172,27 @@ export async function PATCH(
         },
       })
 
-      let siteSlug: string | null = null
+      // pageSlug edits the user's PRIMARY site (userId is no longer unique).
+      // Granting an *additional* site is a separate admin action.
+      const primarySite = await tx.site.findFirst({
+        where: { userId: id },
+        orderBy: PRIMARY_SITE_ORDER,
+        select: { id: true, slug: true },
+      })
+      let siteSlug: string | null = primarySite?.slug ?? null
       if (pageSlug) {
-        const upserted = await tx.site.upsert({
-          where: { userId: id },
-          update: { slug: pageSlug },
-          create: { slug: pageSlug, userId: id },
-        })
-        siteSlug = upserted.slug
-      } else {
-        const existing = await tx.site.findUnique({
-          where: { userId: id },
-          select: { slug: true },
-        })
-        siteSlug = existing?.slug ?? null
+        if (primarySite) {
+          const updated = await tx.site.update({
+            where: { id: primarySite.id },
+            data: { slug: pageSlug },
+          })
+          siteSlug = updated.slug
+        } else {
+          const created = await tx.site.create({
+            data: { slug: pageSlug, userId: id },
+          })
+          siteSlug = created.slug
+        }
       }
 
       return { ...u, pageSlug: siteSlug }

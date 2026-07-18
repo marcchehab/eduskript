@@ -2,6 +2,7 @@ import { getServerSession } from 'next-auth'
 import { notFound, redirect } from 'next/navigation'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { checkSkriptPermissions } from '@/lib/permissions'
 import { FrontPageEditor } from '@/components/dashboard/frontpage-editor'
 import { UpgradePrompt } from '@/components/dashboard/upgrade-prompt'
@@ -59,11 +60,11 @@ export default async function SkriptFrontPageEditPage({ params }: SkriptFrontPag
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { site: { select: { slug: true } } }
+    select: { sites: { orderBy: PRIMARY_SITE_ORDER, take: 1, select: { slug: true } } }
   })
 
-  const previewUrl = user?.site?.slug
-    ? `/${user.site.slug}/${skriptSlug}`
+  const previewUrl = user?.sites[0]?.slug
+    ? `/${user.sites[0].slug}/${skriptSlug}`
     : undefined
 
   return (

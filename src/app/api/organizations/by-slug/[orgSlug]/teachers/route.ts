@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 
 interface RouteParams {
   params: Promise<{ orgSlug: string }>
@@ -42,7 +43,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         role: { in: roles },
         user: {
           accountType: 'teacher',
-          site: { isNot: null },
+          sites: { some: {} },
         },
       },
       include: {
@@ -52,7 +53,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             name: true,
             image: true,
             title: true,
-            site: { select: { slug: true, pageName: true } },
+            sites: { orderBy: PRIMARY_SITE_ORDER, take: 1, select: { slug: true, pageName: true } },
           },
         },
       },
@@ -61,9 +62,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const teachers = members.map((m) => ({
       ...m.user,
-      pageSlug: m.user.site?.slug ?? null,
-      pageName: m.user.site?.pageName ?? null,
-      site: undefined,
+      pageSlug: m.user.sites[0]?.slug ?? null,
+      pageName: m.user.sites[0]?.pageName ?? null,
+      sites: undefined,
     }))
 
     return NextResponse.json({ success: true, teachers })

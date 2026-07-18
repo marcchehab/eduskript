@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 
 export async function GET() {
   try {
@@ -11,9 +12,10 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // typographyPreference lives on the user's Site.
-    const site = await prisma.site.findUnique({
+    // typographyPreference lives on the user's primary Site.
+    const site = await prisma.site.findFirst({
       where: { userId: session.user.id },
+      orderBy: PRIMARY_SITE_ORDER,
       select: { typographyPreference: true }
     })
 
@@ -48,9 +50,17 @@ export async function POST(request: Request) {
       )
     }
 
-    // Update on the user's Site.
-    await prisma.site.update({
+    // Update on the user's primary Site. A missing Site throws below and
+    // surfaces as a 500, matching prior behavior.
+    const primary = await prisma.site.findFirst({
       where: { userId: session.user.id },
+      orderBy: PRIMARY_SITE_ORDER,
+      select: { id: true },
+    })
+    if (!primary) throw new Error('No site found for user')
+
+    await prisma.site.update({
+      where: { id: primary.id },
       data: { typographyPreference }
     })
 

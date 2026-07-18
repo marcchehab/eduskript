@@ -17,6 +17,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { BASE_PROMPT } from '@/lib/ai/prompts'
 import { getCondensedSyntaxReference } from '@/lib/ai/syntax-reference'
 import { getMcpContext } from '@/lib/mcp/context'
@@ -31,8 +32,9 @@ export const getEduskriptContextConfig = {
 export async function getEduskriptContext() {
   const ctx = getMcpContext()
   // aiSystemPrompt lives on the teacher's Site.
-  const site = await prisma.site.findUnique({
+  const site = await prisma.site.findFirst({
     where: { userId: ctx.userId },
+    orderBy: PRIMARY_SITE_ORDER,
     select: { aiSystemPrompt: true },
   })
 
