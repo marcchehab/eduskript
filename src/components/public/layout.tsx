@@ -9,6 +9,7 @@ import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { ReadingProgress } from './reading-progress'
 import { PublicThemeToggle } from './theme-toggle'
+import { ReflowToggle } from './reflow-toggle'
 import { AuthButton } from './auth-button'
 import { FontSizeControls } from './font-size-controls'
 import { SyncStatusButton } from '@/components/ui/sync-status'
@@ -455,6 +456,7 @@ export function PublicSiteLayout({
       <div className={`floating-page-controls print:hidden ${hideSidebar ? '' : 'min-[1344px]:hidden '}fixed top-8 right-4 z-50 flex items-center gap-2`}>
         <AdminToolbox pageId={pageId} />
         <FontSizeControls />
+        <ReflowToggle />
         <PublicThemeToggle />
         <AuthButton pageId={pageId} teacherPageSlug={teacher.pageSlug} teacherBillingPlan={teacher.billingPlan} isOrgPage={routePrefix?.startsWith('/org/')} orgSlug={routePrefix?.startsWith('/org/') ? routePrefix.split('/')[2] : undefined} />
       </div>
@@ -524,6 +526,7 @@ export function PublicSiteLayout({
                 </Button>
                 <AdminToolbox pageId={pageId} />
                 <AuthButton pageId={pageId} teacherPageSlug={teacher.pageSlug} teacherBillingPlan={teacher.billingPlan} isOrgPage={routePrefix?.startsWith('/org/')} orgSlug={routePrefix?.startsWith('/org/') ? routePrefix.split('/')[2] : undefined} />
+                <ReflowToggle />
                 <PublicThemeToggle />
                 <FontSizeControls orientation="vertical" />
               </div>
@@ -579,6 +582,7 @@ export function PublicSiteLayout({
                   <div className="flex-1 flex items-center justify-center gap-2">
                     <AdminToolbox pageId={pageId} />
                     <FontSizeControls />
+                    <ReflowToggle />
                     <PublicThemeToggle />
                     <AuthButton pageId={pageId} teacherPageSlug={teacher.pageSlug} teacherBillingPlan={teacher.billingPlan} isOrgPage={routePrefix?.startsWith('/org/')} orgSlug={routePrefix?.startsWith('/org/') ? routePrefix.split('/')[2] : undefined} />
                   </div>

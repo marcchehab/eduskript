@@ -82,9 +82,17 @@ function getScrollProgress(): number {
   const article = document.querySelector('article.prose-theme')
   if (!article) return 0
 
+  // In annotation mode #scroll-container is the scroller (h-screen, overflow
+  // auto). In reflow/reading mode it becomes overflow:visible + height:auto,
+  // so the document/window scrolls instead — then its clientHeight is the full
+  // content height and totalRange goes negative, pinning progress at 100.
+  // Measure against whichever actually scrolls: the container, or the viewport.
   const scrollContainer = document.getElementById('scroll-container')
-  const containerTop = scrollContainer?.getBoundingClientRect().top ?? 0
-  const containerHeight = scrollContainer?.clientHeight ?? window.innerHeight
+  const containerScrolls =
+    scrollContainer != null &&
+    getComputedStyle(scrollContainer).overflowY !== 'visible'
+  const containerTop = containerScrolls ? scrollContainer.getBoundingClientRect().top : 0
+  const containerHeight = containerScrolls ? scrollContainer.clientHeight : window.innerHeight
 
   const rect = article.getBoundingClientRect()
   const articleTop = rect.top - containerTop
@@ -165,6 +173,11 @@ export function ReadingProgress() {
       scrollContainer.addEventListener('scroll', scheduleUpdate, { passive: true })
     }
 
+    // Toggling reflow mode swaps the scroller (container ↔ window) and reflows
+    // the paper — recompute chapter geometry and progress against the new
+    // reference immediately, not only on the next scroll.
+    window.addEventListener('eduskript:reflow-change', handleResize)
+
     // Recompute chapters when article content changes — debounced so a burst
     // of mutations during initial hydration doesn't cause heading-position
     // thrash in the bar. Observe a stable container instead of the article
@@ -193,6 +206,7 @@ export function ReadingProgress() {
       window.removeEventListener('wheel', scheduleUpdate)
       window.removeEventListener('touchmove', scheduleUpdate)
       window.removeEventListener('resize', handleResize)
+      window.removeEventListener('eduskript:reflow-change', handleResize)
       if (scrollContainer) {
         scrollContainer.removeEventListener('scroll', scheduleUpdate)
       }

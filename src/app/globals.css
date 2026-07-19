@@ -467,6 +467,47 @@
 }
 
 /*
+ * Reflow / reading mode. Toggled via the reflow button (on by default on
+ * phones — see use-reflow-mode.ts). Drops the fixed 1280px paper and its
+ * --paper-scale transform so content reflows to viewport width, and turns
+ * #scroll-container back into normal document scrolling (no scroll-hijack).
+ * The annotation system is *unmounted* in React (ReflowGate), so this block
+ * only has to neutralize the paper geometry and any leftover inline styles
+ * AnnotationLayer may have set on <main>/#paper before it unmounted — hence
+ * the !important, mirroring the @media print block below.
+ */
+/* Undo the global `html, body { height: 100% }` (line ~142) that, combined with
+   `overflow-x: hidden`, otherwise turns <body> into a nested 100vh scroller and
+   traps scrolling there — so window scroll events never fire and the page isn't
+   the normal document scroll we want. height:auto lets the root/viewport scroll. */
+.reflow-mode,
+.reflow-mode body {
+  height: auto !important;
+}
+.reflow-mode #scroll-container {
+  height: auto !important;
+  overflow: visible !important;
+}
+.reflow-mode main {
+  transform: none !important;
+  max-width: none !important;
+  margin: 0 !important;
+  min-height: 0 !important;
+}
+.reflow-mode .paper-responsive {
+  width: auto !important;
+  max-width: 48rem !important;
+  transform: none !important;
+  overflow: visible !important;
+  margin: 0 auto 4rem !important;
+  padding: 4rem 1.25rem !important;
+  box-shadow: none !important;
+}
+.reflow-mode #zoom-spacer {
+  display: none !important;
+}
+
+/*
  * Exam / no-sidebar: with no sidebar to occupy the left space, the centered
  * `margin: 0 auto` paper leaves a left gap that a student CANNOT pan away —
  * pinch-zoom+pan is native scroll, and scrollLeft can't go below 0, so the

@@ -92,6 +92,19 @@ export default function RootLayout({
             __html: `(function(){try{var s=localStorage.getItem('eduskript-theme');var d=s==='dark'||((!s||s==='system')&&window.matchMedia('(prefers-color-scheme: dark)').matches);var c=document.documentElement.classList;if(d){c.add('dark')}else{c.remove('dark')}document.documentElement.style.colorScheme=d?'dark':'light';}catch(e){}})();`,
           }}
         />
+        {/*
+          Reflow-mode bootstrap. Runs pre-paint so the reflow-mode class is on
+          <html> before the first frame — otherwise phones flash the desktop
+          paper before useReflowMode applies the class on mount. Resolution must
+          stay in sync with resolveReflow() in use-reflow-mode.ts: explicit
+          'on'/'off' wins, else auto-on when the device's short edge < 640px
+          (phone in either orientation; tablets' short edge is ≥ 768px).
+        */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var s=localStorage.getItem('eduskript-reflow');var on=s==='on'||(s!=='off'&&Math.min(window.innerWidth,window.innerHeight)<640);document.documentElement.classList.toggle('reflow-mode',on);}catch(e){}})();`,
+          }}
+        />
         <link
           rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css"

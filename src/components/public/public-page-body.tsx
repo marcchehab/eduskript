@@ -1,6 +1,7 @@
 import { Suspense } from 'react'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
-import { AnnotationWrapper, type PublicAnnotation, type PublicSnap } from '@/components/public/annotation-wrapper'
+import { type PublicAnnotation, type PublicSnap } from '@/components/public/annotation-wrapper'
+import { ReflowGate } from '@/components/public/reflow-gate'
 import { ForkAttribution } from '@/components/public/fork-attribution'
 import { ClassToolbar } from '@/components/teacher/class-toolbar'
 import type { StickyNote } from '@/components/annotations/sticky-notes-layer'
@@ -72,7 +73,7 @@ export function PublicPageBody({ page, skriptId, publicAnnotations, publicSnaps,
           </div>
         )}
         <article className="prose-theme">
-          <AnnotationWrapper
+          <ReflowGate
             pageId={page.id}
             content={page.content}
             publicAnnotations={publicAnnotations}
@@ -89,7 +90,7 @@ export function PublicPageBody({ page, skriptId, publicAnnotations, publicSnaps,
               presentationPublic={page.presentationPublic ?? false}
               pageLanguage={pageLanguage}
             />
-          </AnnotationWrapper>
+          </ReflowGate>
         </article>
       </div>
     </>
