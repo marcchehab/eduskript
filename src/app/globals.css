@@ -517,6 +517,15 @@
 .reflow-mode #annotation-toolbar-aside {
   display: none !important;
 }
+/* Inline KaTeX output is breakable, so in a narrow column a formula can wrap
+   mid-expression (e.g. at a top-level `=`). Keep inline formulas on one line
+   (nobr) everywhere; block formulas (.katex-display) keep normal wrapping. */
+.katex {
+  white-space: nowrap;
+}
+.katex-display > .katex {
+  white-space: normal;
+}
 
 /*
  * Exam / no-sidebar: with no sidebar to occupy the left space, the centered
