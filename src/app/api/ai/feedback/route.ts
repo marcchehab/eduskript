@@ -111,6 +111,15 @@ export async function POST(request: Request) {
           select: {
             isPublished: true,
             authors: { include: { user: true } },
+            // Page → Skript → (first) Collection → Site. The site's
+            // aiSystemPrompt (teacher voice/language) is folded into the
+            // feedback prompt so student feedback matches the site's style.
+            // A skript can sit in several collections; the first by order wins.
+            collectionSkripts: {
+              orderBy: { order: 'asc' },
+              take: 1,
+              select: { collection: { select: { site: { select: { aiSystemPrompt: true } } } } },
+            },
           },
         },
       },
@@ -142,9 +151,16 @@ export async function POST(request: Request) {
       )
     }
 
-    const systemPrompt = context.prompt
-      ? `${BASE_SYSTEM_PROMPT}\n\nTeacher's instructions for this exercise:\n${context.prompt}`
-      : BASE_SYSTEM_PROMPT
+    // Layer the prompt: base tutor role → site voice/language (aiSystemPrompt,
+    // shared with the authoring AI) → this exercise's teacher instructions.
+    const sitePrompt = page.skript.collectionSkripts[0]?.collection.site.aiSystemPrompt
+    let systemPrompt = BASE_SYSTEM_PROMPT
+    if (sitePrompt?.trim()) {
+      systemPrompt += `\n\nSite style and language guidelines:\n${sitePrompt.trim()}`
+    }
+    if (context.prompt) {
+      systemPrompt += `\n\nTeacher's instructions for this exercise:\n${context.prompt}`
+    }
 
     const openai = new OpenAI({
       apiKey: process.env.OPENROUTER_API_KEY,
