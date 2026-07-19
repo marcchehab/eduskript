@@ -17,6 +17,7 @@ import { Tabs, TabItem } from '@/components/markdown/tabs'
 import { Youtube } from '@/components/markdown/youtube'
 import { MuxVideo } from '@/components/markdown/mux-video'
 import { ExcalidrawImage } from '@/components/markdown/excalidraw-image'
+import { ContentSpacer, type SpacerPattern } from '@/components/markdown/content-spacer'
 import { ContentImage } from '@/components/markdown/content-image'
 import { Question, Option } from '@/components/markdown/quiz'
 import { Survey } from '@/components/markdown/survey'
@@ -190,6 +191,7 @@ interface CreateMarkdownComponentsOptions {
   onImageWidthChange?: (srcForMatching: string, newMarkdown: string) => void  // Stable callback for image resize
   organizationSlug?: string  // For organization pages (OurTeachers component)
   onExcalidrawEdit?: (filename: string, fileId: string) => void  // Callback to edit Excalidraw drawings
+  onSpacerChange?: (id: string | undefined, newMarkdown: string) => void  // Stable callback for <spacer> resize/pattern/delete
   optimizeImages?: boolean  // Enable Next.js Image optimization (only safe for public pages)
   isExam?: boolean  // Exam page: hide code-block copy buttons by default
 }
@@ -204,7 +206,7 @@ export function createMarkdownComponents(
   files: SkriptFilesData,
   options?: CreateMarkdownComponentsOptions
 ): Record<string, ComponentType<any>> {
-  const { pageId, ownerPageSlug, skriptId, onImageWidthChange, organizationSlug, onExcalidrawEdit, optimizeImages, isExam } = options ?? {}
+  const { pageId, ownerPageSlug, skriptId, onImageWidthChange, organizationSlug, onExcalidrawEdit, onSpacerChange, optimizeImages, isExam } = options ?? {}
 
   // Img element handler - handles <img> elements from markdown with data-* attributes
   function ImgElementComponent({ src, alt, title, style, ...props }: React.ImgHTMLAttributes<HTMLImageElement>) {
@@ -783,6 +785,40 @@ export function createMarkdownComponents(
         />
       )
     },
+    // <spacer> author-placed writing area. Attrs arrive kebab/camel (HAST) or
+    // bare (raw HTML); accept all. onSpacerChange is passed by the client
+    // renderer only, so gizmos render in the editor and never on public pages.
+    'spacer': (props: Record<string, unknown>) => {
+      const str = (...keys: string[]): string | undefined => {
+        for (const k of keys) {
+          const v = props[k]
+          if (typeof v === 'string') return v
+        }
+        return undefined
+      }
+      const id = str('id')
+      // `height` is a known HTML property, so property-information delivers it as
+      // a NUMBER; `pattern` is custom and stays a string. Accept both shapes.
+      const rawHeight = props['height'] ?? props['data-height'] ?? props['dataHeight']
+      const parsedHeight = typeof rawHeight === 'number' ? rawHeight : parseInt(String(rawHeight ?? ''), 10)
+      const height = Number.isFinite(parsedHeight) ? parsedHeight : 200
+      const rawPattern = str('pattern', 'data-pattern', 'dataPattern')
+      const pattern: SpacerPattern =
+        rawPattern === 'blank' || rawPattern === 'lines' || rawPattern === 'dots'
+          ? rawPattern
+          : 'checkered'
+      return (
+        <ContentSpacer
+          id={id}
+          height={height}
+          pattern={pattern}
+          onChange={onSpacerChange}
+          sourceLineStart={str('data-source-line-start', 'dataSourceLineStart')}
+          sourceLineEnd={str('data-source-line-end', 'dataSourceLineEnd')}
+        />
+      )
+    },
+
     // <image> is an alias for <img> — both use the same handler
     'image': ImgElementComponent,
 

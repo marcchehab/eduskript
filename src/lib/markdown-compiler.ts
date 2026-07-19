@@ -100,6 +100,7 @@ export const sanitizeSchema = {
     'nobr',  // <nobr> non-standard but widely supported; prevents line breaks
     'image', // Alias for <img> — passes through sanitizer, mapped to img handler
     'excali', // <excali> shorthand for excalidraw drawings
+    'spacer', // <spacer> author-placed writing area (blank/checkered/lines/dots)
     'flex', // <flex> layout container
     'flex-item', // <flex-item> child of flex
     'fullwidth', // Breaks out of #paper padding for edge-to-edge content
@@ -140,6 +141,8 @@ export const sanitizeSchema = {
     'excalidraw-image': ['src', 'alt', 'dataAlign', 'dataWrap', 'data-align', 'data-wrap'],
     // <excali> component - shorthand for excalidraw (src without .excalidraw extension)
     'excali': ['src', 'alt', 'width', 'align', 'wrap'],
+    // <spacer> writing area. id keys the round-trip find/replace on edit.
+    'spacer': ['id', 'height', 'pattern'],
     // <image> component attributes (src, alt, width, align, wrap, invert, saturate)
     'image': ['src', 'alt', 'width', 'align', 'wrap', 'invert', 'saturate'],
     // Plugin: intrinsic attrs the React PluginContainer reads as named props.

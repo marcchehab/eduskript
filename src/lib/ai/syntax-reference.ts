@@ -386,6 +386,18 @@ Embed an interactive GeoGebra applet by its online material id (the code at the 
 
 **Attributes:** \`material-id\` (required), \`height\` (px — OPTIONAL; omit it and the applet auto-fits its content so nothing is clipped; set it only to pin a fixed height), \`width\` (px, default fits the page), \`show-toolbar\` and \`show-algebra-input\` (default off — a clean read-only embed), \`correct-when\` (name of a boolean object in the construction that is true when the answer is right — captures per-student correctness for the teacher's class tally). Students can use the applet without a GeoGebra account; on exam pages their construction is captured for grading automatically.`)
 
+  // Spacer writing area
+  sections.push(`## Spacer (writing area)
+
+A blank vertical space students write on by hand with the annotation pens — e.g. room to solve an equation, sketch, or show working below an exercise. Choose a background pattern: \`checkered\` (grid/graph paper), \`lines\`, \`dots\`, or \`blank\`. Self-closing, lowercase tag.
+
+\`\`\`html
+<spacer id="sp-solve1" pattern="checkered" height="200" />
+<spacer pattern="lines" height="300" />
+\`\`\`
+
+**Attributes (all optional):** \`pattern\` — \`checkered\` (default) | \`lines\` | \`dots\` | \`blank\`; \`height\` — px (default 200, range 40–1000); \`id\` — stable identifier (auto-added when inserted from the toolbar; keeps in-preview resize/restyle edits pointing at the right tag). In the editor the spacer shows a bottom drag-handle to change height and a top-right toolbar to switch pattern or delete it; on the published page it renders as a plain patterned area.`)
+
   // AI feedback
   sections.push(`## AI Feedback
 
@@ -656,6 +668,8 @@ export function getCondensedSyntaxReference(): string {
 **YouTube:** \`![caption](https://youtu.be/VIDEO_ID?t=120)\` is the simplest form (alt becomes caption). Or \`<youtube id="VIDEO_ID" startTime={120} caption="..." />\`, or the underlying \`<youtube-embed data-id="VIDEO_ID" data-start-time="120" data-caption="..."></youtube-embed>\`. Use \`playlist\`/\`data-playlist\` for playlists.
 
 **GeoGebra:** \`<geogebra material-id="dNPHaqgb" [show-toolbar="true"] [correct-when="correct"] />\` — embeds an interactive GeoGebra applet by material id (from a geogebra.org share link); auto-fits height by default (add \`height="450"\` to pin). \`correct-when\` captures per-student correctness for the teacher's class tally.
+
+**Spacer:** \`<spacer [pattern="checkered|lines|dots|blank"] [height="200"] [id="sp1"] />\` — blank writing area students solve on by hand with the pens; \`checkered\` is graph paper. Editor gives drag-to-resize + a pattern/delete toolbar; publishes as a plain patterned box.
 
 **AI feedback:** \`<ai-feedback prompt="teacher instructions for the AI" [id="fb1"] [label="Check my solution"] />\` — button for students: sends their pen strokes in the surrounding h1/h2 section (rendered to an image) + the section markdown to a vision model for feedback; pasting a screenshot (hover box, Ctrl+V) works as alternative input. Several tags per page map to their prompts by position (\`id\` optional); requires login.
 

@@ -26,6 +26,7 @@ export function rehypeSourceLine(lineMap?: number[]) {
       'table', 'div', 'section', 'article', 'figure', 'span',
       'code-editor', // Interactive code editor blocks
       'excalidraw-image', // Excalidraw drawings
+      'spacer', // <spacer> writing area
       'muxvideo', // Video embeds
       'image', // Custom Image component
       'img', // Native images

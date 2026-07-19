@@ -88,6 +88,32 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
     onExcalidrawEditRef.current?.(filename, fileId)
   }, [])
 
+  // Stable callback: find/replace a <spacer> tag in the source, then notify.
+  // Matches by id when the tag has one; otherwise targets the first <spacer>
+  // lacking an id (hand-typed bare tag). newMarkdown === '' deletes the tag.
+  const stableOnSpacerChange = useCallback((id: string | undefined, newMarkdown: string) => {
+    const currentContent = contentRef.current
+    const notify = onContentChangeRef.current
+    if (!notify || !currentContent) return
+
+    let pattern: RegExp
+    if (id) {
+      const escapedId = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      pattern = new RegExp(`<spacer[^>]*\\bid="${escapedId}"[^>]*/?>`)
+    } else {
+      // Bare tag: a <spacer ...> whose attribute run has no id=
+      pattern = /<spacer(?![^>]*\bid=)[^>]*\/?>/
+    }
+
+    if (!pattern.test(currentContent)) return
+    // On delete, also swallow a trailing newline so no blank line is left behind.
+    const matcher = newMarkdown === '' ? new RegExp(pattern.source + '\\n?') : pattern
+    const newContent = currentContent.replace(matcher, newMarkdown)
+    if (newContent !== currentContent) {
+      notify(newContent)
+    }
+  }, [])
+
   // Memoize the components map — only recreated when files or pageId change.
   // Callbacks are stable (empty deps) so they don't bust the memo.
   // The callbacks read refs internally but only when invoked from event handlers,
@@ -99,8 +125,9 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
       skriptId,
       onImageWidthChange: stableOnImageWidthChange,
       onExcalidrawEdit: stableOnExcalidrawEdit,
+      onSpacerChange: stableOnSpacerChange,
     })
-  }, [files, pageId, skriptId, stableOnImageWidthChange, stableOnExcalidrawEdit])
+  }, [files, pageId, skriptId, stableOnImageWidthChange, stableOnExcalidrawEdit, stableOnSpacerChange])
 
   // Capture scroll position before any DOM changes
   useLayoutEffect(() => {

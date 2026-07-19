@@ -6,7 +6,7 @@ import { useSession } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
-import { Eye, EyeOff, Pencil, Code, Bold, Italic, Heading, Heading1, Heading2, Heading3, List, ListOrdered, Link, Palette, Highlighter, Circle, Wand2, ChevronDown, FilePen, Minus, Plus, CircleHelp, TextQuote, Puzzle, Sigma, AlignLeft, AlignCenter, AlignRight, MessageSquare, Compass } from 'lucide-react'
+import { Eye, EyeOff, Pencil, Code, Bold, Italic, Heading, Heading1, Heading2, Heading3, List, ListOrdered, Link, Palette, Highlighter, Circle, Wand2, ChevronDown, FilePen, Minus, Plus, CircleHelp, TextQuote, Puzzle, Sigma, AlignLeft, AlignCenter, AlignRight, MessageSquare, Compass, SeparatorHorizontal } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1117,6 +1117,35 @@ const CodeMirrorEditor = function CodeMirrorEditor({
     }
   }
 
+  // Insert a <spacer> writing area. An explicit id keys the round-trip
+  // find/replace when the student/teacher resizes or restyles it in the preview.
+  const insertSpacer = () => {
+    const spacerTemplate = `<spacer id="${generateId()}" pattern="checkered" height="200" />\n`
+
+    if (editorViewRef.current && !useSimpleEditor) {
+      const view = editorViewRef.current
+      const insertPos = view.state.selection.main.head
+      const transaction = view.state.update({
+        changes: { from: insertPos, insert: spacerTemplate },
+        selection: { anchor: insertPos + spacerTemplate.length }
+      })
+      view.dispatch(transaction)
+      onChange(view.state.doc.toString())
+    } else if (useSimpleEditor) {
+      const textarea = document.querySelector('textarea') as HTMLTextAreaElement
+      if (textarea) {
+        const start = textarea.selectionStart
+        const newContent = textareaContent.substring(0, start) + spacerTemplate + textareaContent.substring(start)
+        setTextareaContent(newContent)
+        onChange(newContent)
+        setTimeout(() => {
+          textarea.selectionStart = textarea.selectionEnd = start + spacerTemplate.length
+          textarea.focus()
+        }, 0)
+      }
+    }
+  }
+
   // Insert plugin from picker
   const insertPlugin = (pluginSrc: string, configHint: string) => {
     const pluginTag = `<plugin src="${pluginSrc}"${configHint} />\n`
@@ -2139,6 +2168,15 @@ const CodeMirrorEditor = function CodeMirrorEditor({
                 <Pencil className="w-4 h-4" />
               </Button>
             )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={insertSpacer}
+              className="w-8 h-8 p-0 border rounded-md"
+              title="Add Spacer (writing area)"
+            >
+              <SeparatorHorizontal className="w-4 h-4" />
+            </Button>
             <Button
               variant="ghost"
               size="sm"
