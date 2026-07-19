@@ -217,6 +217,8 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
     const hasLoadedInitialDataRef = useRef(false)
     const activePointersRef = useRef<Set<number>>(new Set())
     const activeTouchPointersRef = useRef<Set<number>>(new Set()) // Track only touch/mouse (not pen) for multi-touch detection
+    // Potential tap-through click (pointer-down position/time) — see stopDrawing
+    const tapCandidateRef = useRef<{ id: number; x: number; y: number; t: number } | null>(null)
     const eraserRedrawRafRef = useRef<number | null>(null) // RAF ID for throttling eraser redraws
     const eraserCursorRef = useRef<HTMLDivElement>(null) // Ref to eraser cursor element for direct DOM manipulation
     const canvasRectRef = useRef<DOMRect | null>(null) // Cache canvas bounding rect to avoid layout thrashing
@@ -533,6 +535,12 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
     }, [initialData])
 
     const startDrawing = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+      // Record every pointer-down as a potential tap-through click. While a
+      // pen is selected (or stylus mode is active) this canvas sits over the
+      // whole paper with pointer-events:auto, so buttons/links underneath are
+      // unreachable without this — see the tap check in stopDrawing.
+      tapCandidateRef.current = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now() }
+
       // Detect stylus input first
       const isStylusInput = e.pointerType === 'pen'
       // Detect eraser button (button 5 = 32 in bitmask)
@@ -596,7 +604,11 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       // Chrome fix: Explicitly capture pointer for pen input to ensure we get all move events
       // Without this, Chrome may stop sending pointermove events after the first few
       if (isStylusInput) {
-        canvas.setPointerCapture(e.pointerId)
+        try {
+          canvas.setPointerCapture(e.pointerId)
+        } catch {
+          // Inactive pointer id (synthetic events) — drawing still works without capture
+        }
       }
 
       isDrawingRef.current = true
@@ -836,6 +848,60 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       if (currentModeRef.current === 'erase') {
         hideEraserCursor()
         updateEraserCursor(false)
+      }
+
+      // Tap-through: a stationary, short pointer-up over an interactive
+      // element clicks it instead of leaving a dot / being swallowed.
+      // Covers all three stuck cases: pen tapping a button while a pen is
+      // selected, mouse clicks while a pen is selected, and finger/mouse
+      // clicks in stylus mode's view state (where startDrawing early-returns
+      // and the event used to die on the canvas).
+      if (e && e.type === 'pointerup') {
+        const cand = tapCandidateRef.current
+        tapCandidateRef.current = null
+        const isErasing = isDrawingRef.current && currentModeRef.current === 'erase'
+        if (
+          cand && cand.id === e.pointerId && !isErasing &&
+          Math.hypot(e.clientX - cand.x, e.clientY - cand.y) < 6 &&
+          performance.now() - cand.t < 400
+        ) {
+          // A fast stroke that happens to end at its start is not a tap
+          let pathLen = 0
+          const pts = currentPathRef.current
+          for (let i = 1; i < pts.length; i++) {
+            pathLen += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y)
+          }
+          const canvas = canvasRef.current
+          if (pathLen < 12 && canvas) {
+            // Walk the full hit-test stack: the canvas AND its
+            // annotation-content-wrapper cover the paper, so a single
+            // elementFromPoint would only ever see overlay divs.
+            const stack = document.elementsFromPoint(e.clientX, e.clientY)
+            let target: HTMLElement | null = null
+            for (const el of stack) {
+              if (el === canvas || !(el instanceof HTMLElement)) continue
+              const t = el.closest<HTMLElement>(
+                'button, a[href], input, textarea, select, summary, label, [role="button"], [role="tab"], [role="checkbox"], [contenteditable="true"]'
+              )
+              if (t) {
+                target = t
+                break
+              }
+            }
+            if (target) {
+              // Discard the would-be dot stroke and forward the click
+              if (isDrawingRef.current) {
+                isDrawingRef.current = false
+                currentPathRef.current = []
+                snapshotCanvasRef.current = null
+                redrawCanvas()
+              }
+              target.focus?.()
+              target.click()
+              return
+            }
+          }
+        }
       }
 
       if (!isDrawingRef.current) return
