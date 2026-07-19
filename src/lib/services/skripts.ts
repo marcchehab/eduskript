@@ -15,9 +15,10 @@
 import { revalidatePath, revalidateTag } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { CACHE_TAGS } from '@/lib/cached-queries'
-import { checkSkriptPermissions } from '@/lib/permissions'
-import { generateExcerpt, generateSlug } from '@/lib/markdown'
+import { checkCollectionPermissions, checkSkriptPermissions } from '@/lib/permissions'
+import { generateExcerpt, generateSlug, isReservedSlug } from '@/lib/markdown'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
+import { ensurePageLayoutItem, revalidateSiteContent } from '@/lib/page-layout'
 import {
   ConflictError,
   NotFoundError,
@@ -222,6 +223,204 @@ export async function updateSkriptForUser(
   }
 
   return updated
+}
+
+async function loadOrgRoles(userId: string, organizationId: string | null | undefined) {
+  if (!organizationId) return []
+  return prisma.organizationMember.findMany({
+    where: { userId, organizationId },
+    select: { organizationId: true, role: true },
+  })
+}
+
+export interface CreateSkriptInput {
+  title: string
+  /** URL slug; defaults to a slug derived from the title. Normalized. */
+  slug?: string
+  description?: string | null
+  /** Place the new skript inside this collection. Omit → a root skript on the
+   *  user's primary site. Either way the container is added to the sidebar. */
+  collectionId?: string
+  /** Publish immediately (default true) so it shows in the sidebar right away. */
+  publish?: boolean
+}
+
+/**
+ * Create a skript AND place it in the sidebar in one call — the MCP counterpart
+ * to the dashboard's "create skript" flow. Unlike POST /api/skripts (which
+ * creates a detached skript the teacher drags in later), this auto-adds the
+ * container (collection, or the skript as a root item) to the site's PageLayout
+ * and publishes by default, so it appears on the live site immediately.
+ *
+ * Reuses the same slug normalize/reserve/per-user-dedupe + nested SkriptAuthor
+ * write as the REST route; kept separate because the placement semantics differ.
+ */
+export async function createSkriptForUser(
+  userId: string,
+  input: CreateSkriptInput,
+  ctx: ActorContext = {}
+) {
+  const { title, description, collectionId, publish = true } = input
+  if (!title || !title.trim()) throw new ValidationError('Title is required')
+
+  // Resolve the target site + verify the caller may place content there.
+  let siteId: string
+  let siteSlug: string | null
+  if (collectionId) {
+    const collection = await prisma.collection.findUnique({
+      where: { id: collectionId },
+      include: { site: { select: { id: true, slug: true, userId: true, organizationId: true } } },
+    })
+    if (!collection) throw new NotFoundError('Collection not found')
+    const orgRoles = await loadOrgRoles(userId, collection.site?.organizationId)
+    if (!checkCollectionPermissions(userId, collection, orgRoles, ctx.isAdmin).canEdit) {
+      throw new PermissionDeniedError('Cannot create skripts in this collection')
+    }
+    siteId = collection.site!.id
+    siteSlug = collection.site!.slug
+  } else {
+    const site = await prisma.site.findFirst({
+      where: { userId },
+      orderBy: PRIMARY_SITE_ORDER,
+      select: { id: true, slug: true },
+    })
+    if (!site) {
+      throw new ValidationError('You need to set up your public page before creating skripts')
+    }
+    siteId = site.id
+    siteSlug = site.slug
+  }
+
+  const normalizedSlug = generateSlug(input.slug?.trim() || title)
+  if (isReservedSlug(normalizedSlug)) {
+    throw new ValidationError(`The slug "${normalizedSlug}" is reserved and cannot be used`)
+  }
+  // Slugs are unique per user across owned + authored skripts.
+  const existing = await prisma.skript.findFirst({
+    where: {
+      slug: normalizedSlug,
+      OR: [
+        { authors: { some: { userId } } },
+        { collectionSkripts: { some: { collection: { site: { userId } } } } },
+      ],
+    },
+  })
+  if (existing) throw new ConflictError(`You already have a skript with the slug "${normalizedSlug}"`)
+
+  const nextOrder = collectionId
+    ? ((await prisma.collectionSkript.findFirst({
+        where: { collectionId },
+        orderBy: { order: 'desc' },
+      }))?.order ?? -1) + 1
+    : 0
+
+  const skript = await prisma.$transaction(async (tx) => {
+    const created = await tx.skript.create({
+      data: {
+        title: title.trim(),
+        description: description?.toString() ?? null,
+        slug: normalizedSlug,
+        isPublished: publish,
+        authors: { create: { userId, permission: 'author' } },
+      },
+    })
+    if (collectionId) {
+      await tx.collectionSkript.create({
+        data: { collectionId, skriptId: created.id, order: nextOrder },
+      })
+    }
+    return created
+  })
+
+  // Make it visible in the sidebar: the collection (or the skript, as a root
+  // item) must be present in the site's PageLayout.
+  await ensurePageLayoutItem(siteId, collectionId ? 'collection' : 'skript', collectionId ?? skript.id)
+  revalidateSiteContent(siteSlug)
+  void ctx.editSource
+  void ctx.editClient
+  return skript
+}
+
+export interface PlaceSkriptInput {
+  skriptId: string
+  /** Collection to place the skript in. Omit → place as a root sidebar item. */
+  collectionId?: string
+  /** 0-based insert index within the collection; defaults to the end. */
+  position?: number
+}
+
+/**
+ * Place an EXISTING skript into a collection (or as a root sidebar item) and
+ * ensure the container is in the site's PageLayout. Idempotent: re-placing a
+ * skript already in the target collection is a no-op on membership. Requires
+ * author on the skript, plus edit on the collection (or site ownership for root).
+ *
+ * Note: this does not REMOVE the skript from other collections or the root
+ * layout; hydratePageLayoutItems already hides a skript that is both a root
+ * item and a collection member (shown only inside the collection).
+ */
+export async function placeSkriptForUser(
+  userId: string,
+  input: PlaceSkriptInput,
+  ctx: ActorContext = {}
+) {
+  const { skriptId, collectionId, position } = input
+
+  const skript = await prisma.skript.findUnique({
+    where: { id: skriptId },
+    include: { authors: { include: { user: { select: { id: true } } } } },
+  })
+  if (!skript) throw new NotFoundError('Skript not found')
+  if (!checkSkriptPermissions(userId, skript.authors, ctx.isAdmin).canEdit) {
+    throw new PermissionDeniedError('Cannot edit this skript')
+  }
+
+  if (collectionId) {
+    const collection = await prisma.collection.findUnique({
+      where: { id: collectionId },
+      include: {
+        site: { select: { id: true, slug: true, userId: true, organizationId: true } },
+        collectionSkripts: { orderBy: { order: 'asc' }, select: { skriptId: true } },
+      },
+    })
+    if (!collection) throw new NotFoundError('Collection not found')
+    const orgRoles = await loadOrgRoles(userId, collection.site?.organizationId)
+    if (!checkCollectionPermissions(userId, collection, orgRoles, ctx.isAdmin).canEdit) {
+      throw new PermissionDeniedError('Cannot edit this collection')
+    }
+
+    const alreadyMember = collection.collectionSkripts.some(cs => cs.skriptId === skriptId)
+    if (!alreadyMember) {
+      const insertAt = Math.max(
+        0,
+        Math.min(position ?? collection.collectionSkripts.length, collection.collectionSkripts.length)
+      )
+      await prisma.$transaction([
+        prisma.collectionSkript.updateMany({
+          where: { collectionId, order: { gte: insertAt } },
+          data: { order: { increment: 1 } },
+        }),
+        prisma.collectionSkript.create({
+          data: { collectionId, skriptId, order: insertAt },
+        }),
+      ])
+    }
+
+    await ensurePageLayoutItem(collection.site!.id, 'collection', collectionId)
+    revalidateSiteContent(collection.site!.slug)
+    return { skriptId, collectionId, alreadyMember }
+  }
+
+  // Root placement on the user's primary site.
+  const site = await prisma.site.findFirst({
+    where: { userId },
+    orderBy: PRIMARY_SITE_ORDER,
+    select: { id: true, slug: true },
+  })
+  if (!site) throw new ValidationError('You need to set up your public page first')
+  await ensurePageLayoutItem(site.id, 'skript', skriptId)
+  revalidateSiteContent(site.slug)
+  return { skriptId, root: true }
 }
 
 /**

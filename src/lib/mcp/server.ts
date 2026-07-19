@@ -73,6 +73,16 @@ import {
   auditSkriptSeo,
   auditSkriptSeoConfig,
 } from '@/lib/mcp/tools/audit-skript-seo'
+import { createSkript, createSkriptConfig } from '@/lib/mcp/tools/create-skript'
+import {
+  createCollection,
+  createCollectionConfig,
+} from '@/lib/mcp/tools/create-collection'
+import { placeSkript, placeSkriptConfig } from '@/lib/mcp/tools/place-skript'
+import {
+  reorderCollectionSkripts,
+  reorderCollectionSkriptsConfig,
+} from '@/lib/mcp/tools/reorder-collection-skripts'
 
 type ToolResult = Awaited<ReturnType<typeof readPage>>
 
@@ -134,7 +144,7 @@ function buildServerInstructions(userPrompt?: string | null): string {
     getCondensedSyntaxReference(),
     '',
     '## MCP-specific guidance',
-    'You are connected to a teacher\'s Eduskript account via MCP. Use the available tools to discover, read, and edit their content. Page-level: list_my_skripts, search_my_content, read_page, create_page, update_page_metadata (title/slug/description/publish), update_page_content (markdown body — destructive, creates a new version each time), list_page_versions + restore_page_version (audit & undo). The legacy update_page is deprecated; prefer the metadata/content split. Skript-level: read_skript, update_skript, read_skript_frontpage, update_skript_frontpage. Sites: list_my_sites (a teacher may own several public pages; primary first). Site-level landing page: read_site_frontpage, update_site_frontpage (no organizationId = the teacher\'s own landing page under their pageSlug — pass siteId to target a specific one of your sites, else the primary is used; pass organizationId for an org landing page, owner/admin only). Collection-level: read_collection, update_collection. Bulk SEO scan: audit_skript_seo (returns excerpts + issue flags for every page in a skript — call this before sweeping descriptions). The teacher only sees the natural-language reply — show edits in human-readable form rather than raw markdown dumps.',
+    'You are connected to a teacher\'s Eduskript account via MCP. Use the available tools to discover, read, and edit their content. Page-level: list_my_skripts, search_my_content, read_page, create_page, update_page_metadata (title/slug/description/publish), update_page_content (markdown body — destructive, creates a new version each time), list_page_versions + restore_page_version (audit & undo). The legacy update_page is deprecated; prefer the metadata/content split. Skript-level: read_skript, update_skript, read_skript_frontpage, update_skript_frontpage. Sites: list_my_sites (a teacher may own several public pages; primary first). Site-level landing page: read_site_frontpage, update_site_frontpage (no organizationId = the teacher\'s own landing page under their pageSlug — pass siteId to target a specific one of your sites, else the primary is used; pass organizationId for an org landing page, owner/admin only). Collection-level: read_collection, update_collection. Structure & sidebar: create_collection (new sidebar section), create_skript (new skript, placed in the sidebar — published by default; add pages with create_page), place_skript (move an existing skript into a collection or to the sidebar root), reorder_collection_skripts (order skripts within a collection). Creating a skript this way makes it appear in the public sidebar immediately; the dashboard page-builder is only needed for drag-and-drop tweaks. Bulk SEO scan: audit_skript_seo (returns excerpts + issue flags for every page in a skript — call this before sweeping descriptions). The teacher only sees the natural-language reply — show edits in human-readable form rather than raw markdown dumps.',
     '- Prefer interactive code editors (`editor` keyword) when an example is meant to be run by students.',
   ]
   if (userPrompt && userPrompt.trim()) {
@@ -223,6 +233,20 @@ export function buildMcpServer(opts: { userPrompt?: string | null } = {}): McpSe
   )
   server.registerTool('audit_skript_seo', auditSkriptSeoConfig, async (args) =>
     safe('audit_skript_seo', () => auditSkriptSeo(args)) as never
+  )
+  server.registerTool('create_collection', createCollectionConfig, async (args) =>
+    safe('create_collection', () => createCollection(args)) as never
+  )
+  server.registerTool('create_skript', createSkriptConfig, async (args) =>
+    safe('create_skript', () => createSkript(args)) as never
+  )
+  server.registerTool('place_skript', placeSkriptConfig, async (args) =>
+    safe('place_skript', () => placeSkript(args)) as never
+  )
+  server.registerTool(
+    'reorder_collection_skripts',
+    reorderCollectionSkriptsConfig,
+    async (args) => safe('reorder_collection_skripts', () => reorderCollectionSkripts(args)) as never
   )
 
   return server

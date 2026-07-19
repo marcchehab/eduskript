@@ -1,5 +1,52 @@
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { prisma } from './prisma'
+import { CACHE_TAGS } from './cached-queries'
 import { canEditSite, checkSkriptPermissions, type OrgRole } from './permissions'
+
+/**
+ * Append a collection or skript to a site's sidebar layout if it isn't already
+ * present. This is what actually makes a skript/collection *appear* in the
+ * public sidebar — a CollectionSkript row alone is not enough; the container
+ * must be referenced by the site's PageLayout (see getTeacherHomepageContent
+ * in cached-queries.ts). Idempotent: an existing item is left untouched (its
+ * order is preserved). New items go to the end.
+ *
+ * Ordering within a collection is CollectionSkript.order; this only governs the
+ * top-level sidebar position of the collection / root-skript.
+ */
+export async function ensurePageLayoutItem(
+  siteId: string,
+  type: 'collection' | 'skript',
+  contentId: string
+): Promise<void> {
+  const layout = await prisma.pageLayout.upsert({
+    where: { siteId },
+    update: {},
+    create: { siteId },
+    include: { items: { select: { contentId: true, type: true, order: true } } },
+  })
+
+  const exists = layout.items.some(i => i.contentId === contentId && i.type === type)
+  if (exists) return
+
+  const maxOrder = layout.items.reduce((m, i) => Math.max(m, i.order), -1)
+  await prisma.pageLayoutItem.create({
+    data: { pageLayoutId: layout.id, type, contentId, order: maxOrder + 1 },
+  })
+}
+
+/**
+ * Flush the caches behind the public sidebar (getTeacherWithLayout +
+ * getTeacherHomepageContent) plus the dashboard. Without this a freshly placed
+ * skript stays invisible on the live site until some other write bumps the tag.
+ * No-op when the site has no slug (page not claimed yet).
+ */
+export function revalidateSiteContent(siteSlug?: string | null): void {
+  if (!siteSlug) return
+  revalidateTag(CACHE_TAGS.teacherContent(siteSlug), { expire: 0 })
+  revalidateTag(CACHE_TAGS.user(siteSlug), { expire: 0 })
+  revalidatePath('/dashboard')
+}
 
 /** A raw page-layout item row — a reference to a collection or skript. */
 export interface LayoutItemRow {
