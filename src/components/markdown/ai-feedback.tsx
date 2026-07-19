@@ -25,19 +25,29 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
+import { useSession } from 'next-auth/react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
-import { Sparkles, Loader2, AlertCircle, ClipboardPaste, Camera } from 'lucide-react'
+import { Sparkles, Loader2, AlertCircle, ClipboardPaste, Camera, LogIn } from 'lucide-react'
 import { userDataService } from '@/lib/userdata'
 import type { AnnotationData } from '@/lib/userdata/types'
 import { parseStrokes } from '@/hooks/use-stroke-animation'
+import { usePublicSignInUrl } from '@/hooks/use-public-signin-url'
 import {
   renderStrokesToPng,
   type RenderableImage,
   type RenderableStroke,
 } from '@/lib/annotations/render-strokes-to-png'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog'
 import type { ChatStreamEvent } from '@/lib/ai/types'
 
 interface AIFeedbackProps {
@@ -78,8 +88,30 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
   const [feedback, setFeedback] = useState('')
   const [sentImage, setSentImage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [loginModalOpen, setLoginModalOpen] = useState(false)
+
+  const { status: authStatus } = useSession()
+  const signInUrl = usePublicSignInUrl()
+  // Server enforces auth (route returns 401 for anon); this is the friendly
+  // gate so a logged-out student gets a "sign in" modal instead of an error.
+  // Treat only a resolved 'unauthenticated' as logged-out — while 'loading'
+  // we let the action proceed and the 401 path still catches a real anon.
+  const loggedIn = authStatus !== 'unauthenticated'
+  // Read in the document-level paste handler (bound in an effect) without
+  // re-subscribing it on every auth change.
+  const loggedInRef = useRef(loggedIn)
+  loggedInRef.current = loggedIn
 
   const busy = status !== 'idle'
+
+  /** Gate an action behind sign-in. Returns true if the caller may proceed. */
+  const requireLogin = (): boolean => {
+    if (!loggedIn) {
+      setLoginModalOpen(true)
+      return false
+    }
+    return true
+  }
 
   const sendImage = async (image: string) => {
     if (!pageId) {
@@ -149,6 +181,7 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
   /** Button path: strokes in the enclosing H2 section → PNG → send. */
   const handleFeedbackClick = async () => {
     if (busy) return
+    if (!requireLogin()) return
     if (!pageId) {
       setError('AI feedback needs a saved page context.')
       return
@@ -287,6 +320,10 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
             // (paste-snap-handler.tsx listens on document in the bubble
             // phase; we listen in capture, so this kills it reliably).
             e.stopImmediatePropagation()
+            if (!loggedInRef.current) {
+              setLoginModalOpen(true)
+              return
+            }
             void handlePastedBlob(blob)
             return
           }
@@ -323,6 +360,7 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
           onMouseLeave={() => { pasteArmedRef.current = false }}
           onFocus={() => { pasteArmedRef.current = true }}
           onBlur={() => { pasteArmedRef.current = false }}
+          onClick={() => { if (!loggedIn) setLoginModalOpen(true) }}
           className="inline-flex items-center gap-2 rounded-md border border-dashed border-muted-foreground/40 px-4 py-2 text-sm text-muted-foreground hover:border-muted-foreground hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
         >
           <ClipboardPaste className="h-4 w-4" />
@@ -331,7 +369,7 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
 
         <button
           type="button"
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => { if (requireLogin()) fileInputRef.current?.click() }}
           disabled={busy}
           aria-label="Take a picture for AI feedback"
           className="inline-flex items-center gap-2 rounded-md border border-dashed border-muted-foreground/40 px-4 py-2 text-sm text-muted-foreground hover:border-muted-foreground hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
@@ -385,6 +423,25 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
           </div>
         </div>
       )}
+
+      <Dialog open={loginModalOpen} onOpenChange={setLoginModalOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Sign in to use AI feedback</DialogTitle>
+            <DialogDescription>
+              AI feedback is only available to signed-in students. Sign in to send
+              your work and get feedback.
+            </DialogDescription>
+          </DialogHeader>
+          <Link
+            href={signInUrl}
+            className="mt-2 inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            <LogIn className="h-4 w-4" />
+            Sign in
+          </Link>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
