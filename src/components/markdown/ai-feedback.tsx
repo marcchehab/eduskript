@@ -278,28 +278,52 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
     }
   }
 
-  /** Paste path: normalize the pasted image to a capped PNG data URL. */
+  /**
+   * Paste/camera path: normalize the image to a capped PNG data URL.
+   *
+   * Phone camera photos carry an EXIF orientation flag; canvas drawImage does
+   * NOT apply it, so a portrait shot lands sideways. createImageBitmap with
+   * `imageOrientation: 'from-image'` bakes the rotation into the bitmap's
+   * pixels (and its width/height come out already-oriented). Fall back to
+   * <img> (which some browsers auto-orient, some don't) if the bitmap path is
+   * unavailable.
+   */
   const handlePastedBlob = async (blob: Blob) => {
-    const url = URL.createObjectURL(blob)
     try {
-      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-        const el = new Image()
-        el.onload = () => resolve(el)
-        el.onerror = () => reject(new Error('Could not read the pasted image'))
-        el.src = url
-      })
-      const scale = Math.min(1, MAX_PASTE_EDGE / Math.max(img.naturalWidth, img.naturalHeight))
+      let source: ImageBitmap | HTMLImageElement
+      let srcW: number
+      let srcH: number
+      try {
+        source = await createImageBitmap(blob, { imageOrientation: 'from-image' })
+        srcW = source.width
+        srcH = source.height
+      } catch {
+        const url = URL.createObjectURL(blob)
+        try {
+          source = await new Promise<HTMLImageElement>((resolve, reject) => {
+            const el = new Image()
+            el.onload = () => resolve(el)
+            el.onerror = () => reject(new Error('Could not read the image'))
+            el.src = url
+          })
+          srcW = source.naturalWidth
+          srcH = source.naturalHeight
+        } finally {
+          URL.revokeObjectURL(url)
+        }
+      }
+
+      const scale = Math.min(1, MAX_PASTE_EDGE / Math.max(srcW, srcH))
       const canvas = document.createElement('canvas')
-      canvas.width = Math.round(img.naturalWidth * scale)
-      canvas.height = Math.round(img.naturalHeight * scale)
+      canvas.width = Math.round(srcW * scale)
+      canvas.height = Math.round(srcH * scale)
       const ctx = canvas.getContext('2d')
-      if (!ctx) throw new Error('Could not process the pasted image')
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+      if (!ctx) throw new Error('Could not process the image')
+      ctx.drawImage(source, 0, 0, canvas.width, canvas.height)
+      if (source instanceof ImageBitmap) source.close()
       await sendImage(canvas.toDataURL('image/png'))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not read the pasted image')
-    } finally {
-      URL.revokeObjectURL(url)
+      setError(err instanceof Error ? err.message : 'Could not read the image')
     }
   }
 
