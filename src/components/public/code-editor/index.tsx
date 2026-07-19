@@ -18,7 +18,7 @@ import { autocompletion } from '@codemirror/autocomplete'
 import { indentationMarkers } from '@replit/codemirror-indentation-markers'
 import { createPythonCompletions } from './python-completions'
 import { Button } from '@/components/ui/button'
-import { Play, Square, RotateCcw, Maximize2, Minimize2, Scan, X, Plus, FileText, ZoomIn, ZoomOut, Save, History, WrapText, Circle, CheckCircle2, Package, Trash2, Paperclip, Upload, Pencil, Cloud, HardDrive } from 'lucide-react'
+import { Play, Square, RotateCcw, Maximize2, Minimize2, Scan, X, Plus, FileText, ZoomIn, ZoomOut, Save, History, WrapText, Circle, CheckCircle2, Package, Trash2, Paperclip, Upload, Pencil, Cloud, HardDrive, PanelLeftClose, PanelRightClose, PanelLeftOpen, PanelRightOpen } from 'lucide-react'
 import { useZoom } from '@/contexts/zoom-context'
 import { useUserData, useCreateVersion, useVersionHistory, useRestoreVersion, useDeleteVersion, useUpdateVersionLabel, useOrphanedComponentIds, useReassignVersionHistory } from '@/lib/userdata/hooks'
 import { userDataService, syncEngine } from '@/lib/userdata'
@@ -141,6 +141,10 @@ interface CodeEditorProps {
   // Overrides the line-count auto-height. The user's manual splitter drag still
   // wins over this. Output panel adds to the total below the splitter.
   height?: number
+  // Output-only mode (markdown ` output-only`): auto-run once on mount and start
+  // with the code panel collapsed, so only the output/graphics show. Great for
+  // matplotlib figures. The reader can expand the code panel to see/edit + rerun.
+  outputOnly?: boolean
 }
 
 /** One stage of a staged Python check (see CodeEditorProps.checkStages). */
@@ -316,6 +320,7 @@ export const CodeEditor = memo(function CodeEditor({
   allowUpload = false,
   acceptUploads,
   height: explicitHeight,
+  outputOnly = false,
 }: CodeEditorProps) {
   const { resolvedTheme } = useTheme()
   const { data: session } = useSession()
@@ -579,6 +584,20 @@ export const CodeEditor = memo(function CodeEditor({
   const [isDraggingSplitter, setIsDraggingSplitter] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const MIN_VISIBLE_WIDTH = 100 // pixels
+  // Explicit collapse of one side (button-driven), independent of the width
+  // split. 'editor' hides the code panel (output-only default), 'graphics' hides
+  // the plot panel; both stay MOUNTED (display:none) so CodeMirror keeps running
+  // and rendered plots survive. Session-only (not persisted) — deliberately
+  // resets on reload so a collapsed editor never becomes a permanent trap.
+  const [collapsed, setCollapsed] = useState<'none' | 'editor' | 'graphics'>(
+    outputOnly ? 'editor' : 'none'
+  )
+  const expandPanels = useCallback(() => {
+    // Restore both panels regardless of why one was hidden (explicit collapse OR
+    // a width-drag that shrank a pane below MIN_VISIBLE_WIDTH).
+    setCollapsed('none')
+    setEditorWidth(w => (w <= 5 || w >= 95 ? 50 : w))
+  }, [])
   // Measured container width, tracked via ResizeObserver below. Used to decide
   // whether the editor/graphics split panels are wide enough to show. Kept in
   // state (not read from the DOM in render) so render stays layout-read-free —
@@ -980,8 +999,12 @@ export const CodeEditor = memo(function CodeEditor({
   const hasGraphics = hasTurtleModule || hasMatplotlib || hasPil || hasSqlSchema
   // Computed from measured state, not a live DOM read — see containerWidth above.
   // Before measurement (width 0) default to showing both, matching prior behavior.
-  const showEditor = containerWidth ? (editorWidth / 100) * containerWidth >= MIN_VISIBLE_WIDTH : true
-  const showGraphics = containerWidth ? ((100 - editorWidth) / 100) * containerWidth >= MIN_VISIBLE_WIDTH : true
+  // Width-based visibility (a pane dragged too narrow hides). Explicit `collapsed`
+  // overrides it: a collapsed side is force-hidden, the other force-shown full width.
+  const widthShowEditor = containerWidth ? (editorWidth / 100) * containerWidth >= MIN_VISIBLE_WIDTH : true
+  const widthShowGraphics = containerWidth ? ((100 - editorWidth) / 100) * containerWidth >= MIN_VISIBLE_WIDTH : true
+  const showEditor = collapsed === 'editor' ? false : collapsed === 'graphics' ? true : widthShowEditor
+  const showGraphics = collapsed === 'graphics' ? false : collapsed === 'editor' ? true : widthShowGraphics
   const [canvasVisible, setCanvasVisible] = useState(false) // Start hidden, show only when graphics detected
 
   // The floating toolbar (highlighter / zoom / kernel indicator) is absolutely
@@ -3628,6 +3651,21 @@ export const CodeEditor = memo(function CodeEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isGradingCheck, isViewingSnapshot, studentSnapshot, gradeStudentId])
 
+  // Output-only mode: auto-run once as soon as the editor is ready. The editor
+  // panel is collapsed (display:none) but stays mounted, so runCode can read the
+  // code from CodeMirror. Mirrors the grading auto-check guard pattern above.
+  // Skipped in teacher snapshot view (grading has its own run path).
+  const autoRunRanRef = useRef(false)
+  useEffect(() => {
+    if (!outputOnly || autoRunRanRef.current || !editorReady || isViewingSnapshot) return
+    if (!editorViewRef.current) return
+    autoRunRanRef.current = true
+    const t = setTimeout(() => { void runCode() }, 0)
+    return () => clearTimeout(t)
+    // runCode omitted intentionally (stable enough; one-shot guarded by the ref).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [outputOnly, editorReady, isViewingSnapshot])
+
   // Restart Python kernel
   const restartKernel = () => {
     if (activeKernel === 'pyodide') {
@@ -3941,8 +3979,9 @@ export const CodeEditor = memo(function CodeEditor({
     >
       {/* Main content area */}
       <div ref={containerRef} className="flex flex-1 overflow-hidden relative">
-        {/* Code Editor Panel */}
-        {showEditor && (
+        {/* Code Editor Panel — always mounted; hidden via display:none when
+            collapsed so CodeMirror keeps running (output-only auto-run reads
+            from it) and a re-expand doesn't remount/reinit the editor. */}
           <div
             className="flex flex-col border-r relative"
             style={{
@@ -4694,6 +4733,17 @@ export const CodeEditor = memo(function CodeEditor({
                   persistence is gated, so a scratch run saves nothing. */}
               {(
               <div className="absolute bottom-2 left-2 flex items-center gap-1 z-10">
+                {canvasVisible && showGraphics && (
+                  <Button
+                    onClick={() => setCollapsed('editor')}
+                    size="sm"
+                    variant="outline"
+                    className="h-7 w-7 p-0 shadow-lg"
+                    title="Hide code — show only the output"
+                  >
+                    <PanelLeftClose className="w-3 h-3" />
+                  </Button>
+                )}
                 {runState === RunState.STOPPED ? (
                   <Button
                     onClick={runCode}
@@ -4790,6 +4840,30 @@ export const CodeEditor = memo(function CodeEditor({
               )}
             </div>
           </div>
+
+        {/* Collapsed-editor rail: the only way back once the code panel is
+            hidden, and it keeps Run/Stop reachable while collapsed. */}
+        {!showEditor && (
+          <div className="flex flex-col items-center gap-1 border-r bg-muted/30 px-1 py-2 shrink-0">
+            <Button
+              onClick={expandPanels}
+              size="sm"
+              variant="ghost"
+              className="h-7 w-7 p-0"
+              title="Show code"
+            >
+              <PanelLeftOpen className="w-4 h-4" />
+            </Button>
+            {runState === RunState.STOPPED ? (
+              <Button onClick={runCode} size="sm" className="h-7 w-7 p-0 shadow-lg" title="Run">
+                <Play className="w-3.5 h-3.5" />
+              </Button>
+            ) : (
+              <Button onClick={stopCode} size="sm" variant="destructive" className="h-7 w-7 p-0 shadow-lg" title="Stop">
+                <Square className="w-3.5 h-3.5" />
+              </Button>
+            )}
+          </div>
         )}
 
         {/* Draggable Splitter - wider touch target on mobile */}
@@ -4811,11 +4885,16 @@ export const CodeEditor = memo(function CodeEditor({
           </div>
         )}
 
-        {/* Graphics Panel (Turtle Graphics & Matplotlib for Python) */}
-        {canvasVisible && showGraphics && (
+        {/* Graphics Panel (Turtle Graphics & Matplotlib for Python) — stays
+            mounted (display:none when collapsed) so rendered plots survive a
+            collapse/expand without a rerun. */}
+        {canvasVisible && (
           <div
             className="flex flex-col relative"
-            style={{ width: showEditor ? `${100 - editorWidth}%` : '100%' }}
+            style={{
+              display: showGraphics ? 'flex' : 'none',
+              width: showEditor && showGraphics ? `${100 - editorWidth}%` : '100%',
+            }}
           >
             <div
               ref={canvasContainerRef}
@@ -4833,6 +4912,11 @@ export const CodeEditor = memo(function CodeEditor({
             >
               {/* Floating Control Buttons */}
               <div className="absolute top-2 right-2 flex items-center gap-1 z-10">
+                {showEditor && (
+                  <Button onClick={() => setCollapsed('graphics')} size="sm" variant="outline" className="h-7 w-7 p-0 shadow-lg" title="Hide plot">
+                    <PanelRightClose className="w-3 h-3" />
+                  </Button>
+                )}
                 <Button onClick={fitToView} size="sm" variant="outline" className="h-7 w-7 p-0 shadow-lg" title="Fit to view — show everything">
                   <Scan className="w-3 h-3" />
                 </Button>
@@ -4850,6 +4934,21 @@ export const CodeEditor = memo(function CodeEditor({
                 }}
               />
             </div>
+          </div>
+        )}
+
+        {/* Collapsed-graphics rail: re-open the plot panel once it's hidden. */}
+        {canvasVisible && !showGraphics && (
+          <div className="flex flex-col items-center gap-1 border-l bg-muted/30 px-1 py-2 shrink-0">
+            <Button
+              onClick={expandPanels}
+              size="sm"
+              variant="ghost"
+              className="h-7 w-7 p-0"
+              title="Show plot"
+            >
+              <PanelRightOpen className="w-4 h-4" />
+            </Button>
           </div>
         )}
       </div>

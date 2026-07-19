@@ -309,6 +309,11 @@ function parseMeta(node: CodeNode): Record<string, string> {
       return
     }
 
+    if (part === 'output-only') {
+      attributes['output-only'] = 'true'
+      return
+    }
+
     const eqIdx = part.indexOf('=')
     if (eqIdx !== -1) {
       const key = part.slice(0, eqIdx)

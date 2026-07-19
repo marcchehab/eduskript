@@ -103,6 +103,9 @@ Other language identifiers (java, cpp, go, rust, php, css, json, yaml, xml, …)
 - \`db="database.db"\` - For SQL: specify database file
 - \`solution="SELECT ..."\` - For SQL: expected solution query. Enables automatic pass/fail verification after each run. Multi-line solutions use \`\\n\` literals: \`solution="SELECT a, b\\nFROM t"\`
 - \`height="500"\` - For HTML: total pixel height of editor + preview (default 400)
+- \`output-only\` - Auto-runs once on load and starts with the code panel collapsed, so only the output/plot shows. Ideal for displaying a matplotlib figure without the reader running anything. The reader can click "Show code" to reveal, edit, and rerun. Works with \`python\`; combine with \`height="..."\` to size the plot area.
+
+Both the code panel and the plot panel can be collapsed and re-opened live (buttons on each panel); the Run button stays reachable while the code panel is collapsed.
 
 Examples:
 \`\`\`markdown
@@ -628,7 +631,7 @@ export function getCondensedSyntaxReference(): string {
   - Collapsible: \`> [!type]-\` (closed) or \`> [!type]+\` (open)
   - WRONG: \`> [!tip]\\n> **Title**\` - NEVER put title on new line!
 
-**Code Editors:** \`\`\`language editor [single] [exam] [id="x"] [db="file.db"] [solution="SELECT ..."] [height="500"]\`\`\`
+**Code Editors:** \`\`\`language editor [single] [exam] [output-only] [id="x"] [db="file.db"] [solution="SELECT ..."] [height="500"]\`\`\` — \`output-only\` auto-runs on load and shows just the output/plot (collapsed code, expandable); great for matplotlib figures.
   - Executable: python, javascript, sql, html. Other language IDs only get syntax highlighting.
   - \`html editor\` is special: split view with a sandboxed iframe live-preview (\`allow-scripts allow-modals allow-forms\`, no \`allow-same-origin\`). No exam/python-check pairing.
   - \`single\`: hides file tabs (single-file mode).

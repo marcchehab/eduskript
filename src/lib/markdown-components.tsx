@@ -293,6 +293,7 @@ export function createMarkdownComponents(
     const assetsAttr = (props['dataAssets'] as string) || (props['data-assets'] as string)
     const allowUploadAttr = (props['dataAllowUpload'] as string) || (props['data-allow-upload'] as string)
     const acceptAttr = (props['dataAccept'] as string) || (props['data-accept'] as string)
+    const outputOnly = (props['dataOutputOnly'] as string) || (props['data-output-only'] as string)
 
     // Parse multi-file data if present, otherwise fall back to single-file initialCode
     let initialFiles: { name: string; content: string }[] | undefined
@@ -464,6 +465,7 @@ export function createMarkdownComponents(
             allowUpload={allowUploadAttr === 'true'}
             acceptUploads={acceptAttr}
             height={editorHeight}
+            outputOnly={outputOnly === 'true'}
           />
         </DeferredMount>
       </div>
