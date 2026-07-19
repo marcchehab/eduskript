@@ -506,6 +506,17 @@
 .reflow-mode #zoom-spacer {
   display: none !important;
 }
+/* Belt-and-suspenders for the annotation toolbar. ReflowGate unmounts the
+   whole annotation tree in React, but the toolbar is server-rendered inline
+   (SSR returns it non-portaled) and only portals to <body> after hydration —
+   so on mobile it lingers through the pre-hydration window (desktop hydrates
+   fast enough to hide it). The pre-paint reflow-mode class makes this cover
+   that window and any stale portal. #annotation-toolbar-aside is its split-off
+   secondary rail. */
+.reflow-mode #annotation-toolbar,
+.reflow-mode #annotation-toolbar-aside {
+  display: none !important;
+}
 
 /*
  * Exam / no-sidebar: with no sidebar to occupy the left space, the centered
