@@ -3,13 +3,15 @@
 /**
  * <ai-feedback> — student-triggered AI feedback on handwritten/annotated work.
  *
- * Two input paths:
+ * Three input paths:
  * 1. Button: collects the student's own annotation strokes that currently sit
  *    inside the enclosing H2 section (previous h1/h2 → next h1/h2, live DOM
  *    positions), renders them to a PNG (render-strokes-to-png.ts) and sends it.
  * 2. Paste zone: hover/focus the dashed box and press Ctrl+V with a screenshot
  *    in the clipboard — sends the pasted image instead. Covers work on top of
  *    tables/SVG/plugins where we can't rasterize the underlying DOM.
+ * 3. Camera/file: pick or shoot a photo (capture="environment" opens the rear
+ *    camera on mobile). Same normalize path as paste — for work done on paper.
  *
  * The server re-derives the exercise text + teacher prompt from page content;
  * the client only sends pageId, feedbackId and the image.
@@ -27,7 +29,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
-import { Sparkles, Loader2, AlertCircle, ClipboardPaste } from 'lucide-react'
+import { Sparkles, Loader2, AlertCircle, ClipboardPaste, Camera } from 'lucide-react'
 import { userDataService } from '@/lib/userdata'
 import type { AnnotationData } from '@/lib/userdata/types'
 import { parseStrokes } from '@/hooks/use-stroke-animation'
@@ -71,6 +73,7 @@ type Status = 'idle' | 'preparing' | 'streaming'
 export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const pasteArmedRef = useRef(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [status, setStatus] = useState<Status>('idle')
   const [feedback, setFeedback] = useState('')
   const [sentImage, setSentImage] = useState<string | null>(null)
@@ -323,8 +326,33 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
           className="inline-flex items-center gap-2 rounded-md border border-dashed border-muted-foreground/40 px-4 py-2 text-sm text-muted-foreground hover:border-muted-foreground hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
         >
           <ClipboardPaste className="h-4 w-4" />
-          …or hover here and press Ctrl+V to paste a screenshot
+          …or paste a screenshot
         </div>
+
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={busy}
+          aria-label="Take a picture for AI feedback"
+          className="inline-flex items-center gap-2 rounded-md border border-dashed border-muted-foreground/40 px-4 py-2 text-sm text-muted-foreground hover:border-muted-foreground hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+        >
+          <Camera className="h-4 w-4" />
+          …or take a picture
+        </button>
+        {/* capture="environment" opens the rear camera on phones/tablets; on
+            desktop it falls back to the file picker (webcam via the OS). */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            e.target.value = '' // allow re-selecting the same file
+            if (file && !busy) void handlePastedBlob(file)
+          }}
+        />
       </div>
 
       {error && (
