@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
+import { revalidateTag } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { resolveOwnedSite } from '@/lib/sites'
+import { CACHE_TAGS } from '@/lib/cached-queries'
 
 export async function GET(request: Request) {
   try {
@@ -67,6 +69,11 @@ export async function POST(request: Request) {
       where: { id: site.id },
       data: { typographyPreference }
     })
+
+    // Same stale-cache flush as sidebar-preference: the public layout caches
+    // this site's typographyPreference with revalidate:false, keyed by slug.
+    revalidateTag(CACHE_TAGS.user(site.slug), { expire: 0 })
+    revalidateTag(CACHE_TAGS.teacherContent(site.slug), { expire: 0 })
 
     return NextResponse.json({
       success: true,

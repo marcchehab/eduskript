@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
+import { revalidateTag } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { resolveOwnedSite } from '@/lib/sites'
+import { CACHE_TAGS } from '@/lib/cached-queries'
 
 export async function GET(request: Request) {
   try {
@@ -68,7 +70,15 @@ export async function POST(request: Request) {
       data: { sidebarBehavior }
     })
 
-    return NextResponse.json({ 
+    // getTeacherWithLayout / getTeacherByPageSlug cache the site's
+    // sidebarBehavior with revalidate:false, keyed by this site's slug. Without
+    // this flush the public sidebar keeps the old mode until another change
+    // (e.g. a page save) happens to invalidate the same tags — the reason a
+    // non-primary site's toggle appeared not to "take".
+    revalidateTag(CACHE_TAGS.user(site.slug), { expire: 0 })
+    revalidateTag(CACHE_TAGS.teacherContent(site.slug), { expire: 0 })
+
+    return NextResponse.json({
       success: true,
       sidebarBehavior 
     })
