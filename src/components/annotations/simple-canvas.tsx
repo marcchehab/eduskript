@@ -184,6 +184,7 @@ interface SimpleCanvasProps {
   readOnly?: boolean  // When true, disables all interaction
   svgHandlesDisplay?: boolean  // When true, skip rendering committed strokes (SVG layer shows them)
   scrollContainer?: HTMLElement | null  // For viewport-sized canvas (svgHandlesDisplay mode)
+  textSelectionMode?: boolean  // Highlight mode: keep canvas inert (even for stylus) so text selection reaches the prose
 }
 
 export interface SimpleCanvasHandle {
@@ -192,7 +193,7 @@ export interface SimpleCanvasHandle {
 }
 
 export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
-  ({ width, height, mode, onUpdate, initialData, strokeWidth = 2, strokeColor = '#000000', stylusModeActive = false, onStylusDetected, onNonStylusInput, onPenStateChange, onDrawStart, onEraserMarksChange, onTelemetry, zoom = 1.0, headingPositions = [], readOnly = false, svgHandlesDisplay = false, scrollContainer = null }, ref) => {
+  ({ width, height, mode, onUpdate, initialData, strokeWidth = 2, strokeColor = '#000000', stylusModeActive = false, onStylusDetected, onNonStylusInput, onPenStateChange, onDrawStart, onEraserMarksChange, onTelemetry, zoom = 1.0, headingPositions = [], readOnly = false, svgHandlesDisplay = false, scrollContainer = null, textSelectionMode = false }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const isDrawingRef = useRef(false)
     const [isPenDrawing, setIsPenDrawing] = useState(false) // Track if pen is actively drawing
@@ -1131,8 +1132,9 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
             // When pen is not drawing, use 'auto' to allow finger scrolling
             touchAction: isPenDrawing ? 'none' : 'auto',
             cursor: mode === 'erase' ? 'none' : (mode === 'draw' ? 'crosshair' : 'default'),
-            // Capture events in draw/erase mode OR stylus mode (to prevent selection)
-            pointerEvents: (mode !== 'view' || stylusModeActive) ? 'auto' : 'none'
+            // Capture events in draw/erase mode OR stylus mode (to prevent selection).
+            // Exception: highlight mode (textSelectionMode) must stay inert so the selection reaches the prose.
+            pointerEvents: textSelectionMode ? 'none' : ((mode !== 'view' || stylusModeActive) ? 'auto' : 'none')
           }}
         />
         {/* Eraser cursor element - positioned via direct DOM manipulation */}

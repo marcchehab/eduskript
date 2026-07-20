@@ -3337,8 +3337,10 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
           className={`annotation-content-wrapper ${!activeLayerVisible ? 'annotation-layer-hidden' : ''}`}
           style={{
             height: pageHeight,
-            // Always capture events when in draw/erase mode or stylus mode (spacer mode bypasses canvas)
-            pointerEvents: ((mode === 'draw' || mode === 'erase') || stylusModeActive) ? 'auto' : 'none',
+            // Always capture events when in draw/erase mode or stylus mode (spacer mode bypasses canvas).
+            // Exception: highlight mode must stay inert so text selection reaches the prose — even for
+            // a stylus (stylusModeActive is true whenever a pen is in use), matching mouse behavior.
+            pointerEvents: mode === 'highlight' ? 'none' : (((mode === 'draw' || mode === 'erase') || stylusModeActive) ? 'auto' : 'none'),
             // CRITICAL: When pen is actively drawing, disable touch actions to prevent scroll
             // When pen is not drawing, allow touch scrolling
             touchAction: penActive ? 'none' : 'auto',
@@ -3364,6 +3366,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
             width={paperWidth}
             height={pageHeight}
             mode={(mode === 'view' || mode === 'spacer' || mode === 'highlight') ? 'view' : (mode as DrawMode)}
+            textSelectionMode={mode === 'highlight'}
             onUpdate={handleCanvasUpdate}
             onTelemetry={handleTelemetry}
             onDrawStart={ensureActiveLayerVisible}
