@@ -737,7 +737,6 @@ export const getOrgPublishedPage = (
               collection: true
             },
             orderBy: { order: 'asc' },
-            take: 1,
           },
           pages: {
             where: { isPublished: true },
@@ -764,11 +763,11 @@ export const getOrgPublishedPage = (
 
       // The skript has to be reachable from the org's home page — either as a
       // root skript pinned directly in the org's page layout, or via a
-      // collection that's in the layout. A skript can be both "in a
-      // collection" AND "pinned at root" since the page builder added root
-      // skripts; the old check only looked at the collection side and
-      // 404'd valid root pins.
-      const collectionSkript = skript.collectionSkripts[0]
+      // collection that's in the layout. A skript can be both "in a collection"
+      // AND "pinned at root", and can belong to MULTIPLE collections (e.g. also
+      // filed under an "Organisatorisches" collection that isn't in the layout).
+      // Check ALL memberships: the previous take:1 fetched only the order-first
+      // membership and 404'd skripts reachable via a different collection.
       const orgPageLayout = await prisma.pageLayout.findFirst({
         where: { site: { organizationId: orgId } },
         include: {
@@ -782,8 +781,14 @@ export const getOrgPublishedPage = (
       const layoutSkriptIds = new Set(
         orgPageLayout.items.filter(i => i.type === 'skript').map(i => i.contentId)
       )
-      const reachableViaCollection =
-        !!collectionSkript?.collection && layoutCollectionIds.has(collectionSkript.collection.id)
+      // Prefer the membership whose collection is in the org nav (drives the
+      // breadcrumb/structure); fall back to the first membership for display.
+      const collectionSkript =
+        skript.collectionSkripts.find(cs => layoutCollectionIds.has(cs.collection.id))
+        ?? skript.collectionSkripts[0]
+      const reachableViaCollection = skript.collectionSkripts.some(
+        cs => layoutCollectionIds.has(cs.collection.id)
+      )
       const reachableAsRootSkript = layoutSkriptIds.has(skript.id)
       if (!reachableViaCollection && !reachableAsRootSkript) {
         return null
