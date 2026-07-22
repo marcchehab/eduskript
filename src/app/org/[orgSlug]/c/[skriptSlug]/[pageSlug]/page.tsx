@@ -1,5 +1,7 @@
+import { Suspense } from 'react'
 import { notFound } from 'next/navigation'
 import { PublicSiteLayout } from '@/components/public/layout'
+import { ClassToolbar } from '@/components/teacher/class-toolbar'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
 import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
 import type { Metadata } from 'next'
@@ -257,6 +259,23 @@ export default async function OrgPublicPage({ params }: PageProps) {
       homeUrl={`/org/${orgSlug}`}
       pageId={page.id}
     >
+      {/* Class toolbar (portals into the sidebar slot) — the only UI that sets
+          the broadcast target, so without it teachers can't broadcast
+          annotations to a class on org content pages. This route is ISR and
+          has no owner slug to match, so the toolbar self-gates client-side on
+          the server-verified page-author flag (gateOnPageAuthor). Wrapped in
+          Suspense because ClassToolbar calls useSearchParams(). Skipped for
+          exam pages, mirroring PublicPageBody. */}
+      {page.pageType !== 'exam' && (
+        <Suspense fallback={null}>
+          <ClassToolbar
+            pageId={page.id}
+            pageType={page.pageType ?? 'standard'}
+            unlockedClasses={[]}
+            gateOnPageAuthor
+          />
+        </Suspense>
+      )}
       <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border">
         <article className="prose-theme">
           <AnnotationWrapper pageId={page.id} content={page.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes}>

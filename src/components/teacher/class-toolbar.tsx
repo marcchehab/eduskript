@@ -108,6 +108,16 @@ interface ClassToolbarProps {
    * gate on `isPageAuthor`).
    */
   requireOwnerSlug?: string | null
+  /**
+   * Client-side page-authorship gate for ISR routes that can't read the
+   * session server-side. When true, the toolbar additionally hides itself
+   * until `usePageSubmissions().isAuthor` confirms the viewer authored this
+   * page. Used by the org `/c/` content route (see
+   * app/org/[orgSlug]/c/[skriptSlug]/[pageSlug]/page.tsx), which is ISR and
+   * has no stable owner slug to match against. Force-dynamic org mounts gate
+   * on server-side `isPageAuthor` instead and leave this false.
+   */
+  gateOnPageAuthor?: boolean
 }
 
 type SortKey = 'name' | 'email' | 'status' | 'answers' | 'activity'
@@ -142,6 +152,7 @@ export function ClassToolbar({
   pageType,
   unlockedClasses,
   requireOwnerSlug = null,
+  gateOnPageAuthor = false,
 }: ClassToolbarProps) {
   const isExam = pageType === 'exam'
   const { data: session, status: sessionStatus } = useSession()
@@ -548,6 +559,9 @@ export function ClassToolbar({
   if (!isOwnSite) return null
   if (teacherClasses.length === 0) return null
   if (isResolving) return null
+  // ISR org-content mounts have no owner slug to match; hold the toolbar
+  // until the server-verified author flag lands (see gateOnPageAuthor).
+  if (gateOnPageAuthor && !isAuthor) return null
 
   // Empty-shell case: exam page with no unlocked classes AND no submissions.
   if (isExam && unlockedClasses.length === 0 && submissions.length === 0) {

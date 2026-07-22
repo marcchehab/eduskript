@@ -33,6 +33,7 @@ import { cookies } from 'next/headers'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
+import { isPaidUser } from '@/lib/billing'
 import { validateExamSession } from '@/lib/exam-tokens'
 
 export async function GET(request: NextRequest) {
@@ -81,9 +82,16 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Free-teacher early-return: if the page belongs to a free teacher, no
-    // broadcasts can exist (the teacher's sync endpoint returns 402). Skip the
-    // 10+ downstream queries and return an empty payload.
+    // Free-teacher early-return: if NO author can broadcast, no broadcasts can
+    // exist (a free author's sync endpoint returns 402). Skip the 10+ downstream
+    // queries and return an empty payload.
+    //
+    // Must inspect ALL authors, not `take: 1`: a skript can be co-authored by
+    // both a free and a paid teacher (e.g. shared/forked org content co-authored
+    // by the free eduadmin account). The paid co-author's broadcasts are real, so
+    // bail only when EVERY author is free. The previous `take: 1` (no orderBy)
+    // picked an arbitrary author and suppressed broadcasts whenever that row
+    // happened to be the free one.
     const pageOwner = await prisma.page.findUnique({
       where: { id: pageId },
       select: {
@@ -92,14 +100,16 @@ export async function GET(request: NextRequest) {
             authors: {
               where: { permission: 'author' },
               select: { user: { select: { billingPlan: true } } },
-              take: 1,
             },
           },
         },
       },
     })
-    const ownerPlan = pageOwner?.skript?.authors[0]?.user?.billingPlan
-    if (ownerPlan === 'free') {
+    const authors = pageOwner?.skript?.authors ?? []
+    const hasPaidAuthor = authors.some(a =>
+      isPaidUser({ billingPlan: a.user?.billingPlan, accountType: 'teacher' })
+    )
+    if (authors.length > 0 && !hasPaidAuthor) {
       return NextResponse.json({
         classAnnotations: [],
         classSnaps: [],
