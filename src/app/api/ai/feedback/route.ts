@@ -11,11 +11,13 @@
  * Streams SSE events in the same { type: 'content' | 'error' | 'done' } shape
  * as /api/ai/chat.
  *
- * Model: OPENROUTER_VISION_MODEL env, falling back to qwen/qwen3-vl-235b-a22b-instruct
- * (the text model has no image input, so vision needs its own slug). We use the
- * -instruct (non-reasoning) variant so its output isn't starved by reasoning
- * tokens under the 2048 max_tokens cap. OPENROUTER_PROVIDERS is deliberately NOT
- * applied here — that pin targets the text model's provider.
+ * Model: OPENROUTER_VISION_MODEL env, falling back to google/gemini-3.5-flash-lite
+ * (the text-only chat/plan models have no image input, so vision needs its own
+ * multimodal slug). Chosen over qwen/qwen3-vl-235b-a22b-instruct on a 2-image
+ * handwritten-math A/B (2026-07-23): flash-lite read the strokes as accurately,
+ * was 5-11x faster, and followed the "don't reveal the full solution" guideline
+ * where qwen-VL kept handing over the answer. OPENROUTER_PROVIDERS is deliberately
+ * NOT applied here — that pin targets the text model's provider.
  */
 
 import { getServerSession } from 'next-auth'
@@ -175,7 +177,7 @@ export async function POST(request: Request) {
     ;(async () => {
       try {
         const aiStream = await openai.chat.completions.create({
-          model: process.env.OPENROUTER_VISION_MODEL ?? 'qwen/qwen3-vl-235b-a22b-instruct',
+          model: process.env.OPENROUTER_VISION_MODEL ?? 'google/gemini-3.5-flash-lite',
           max_tokens: 2048,
           messages: [
             { role: 'system', content: systemPrompt },
