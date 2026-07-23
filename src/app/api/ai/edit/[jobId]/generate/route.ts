@@ -235,7 +235,8 @@ export async function POST(
       })
 
       const newPageMessage = await openai.chat.completions.create({
-        model: process.env.OPENROUTER_MODEL ?? 'qwen/qwen3.7-max',
+        // glm-5.2 :nitro = fastest provider (Friendli); best full-depth page gen at low cost (see docs/ai-model-selection-eval.md)
+        model: 'z-ai/glm-5.2:nitro',
         max_tokens: 8192,
         messages: [
           { role: 'system', content: newPagePrompt },
@@ -262,7 +263,8 @@ export async function POST(
       })
 
       const editMessage = await openai.chat.completions.create({
-        model: process.env.OPENROUTER_MODEL ?? 'qwen/qwen3.7-max',
+        // glm-5.2 :nitro = fastest provider (Friendli); best full-depth page gen at low cost (see docs/ai-model-selection-eval.md)
+        model: 'z-ai/glm-5.2:nitro',
         max_tokens: 8192,
         messages: [
           { role: 'system', content: editPrompt },

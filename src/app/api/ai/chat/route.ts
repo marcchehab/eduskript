@@ -165,7 +165,8 @@ export async function POST(request: Request) {
     ;(async () => {
       try {
         const aiStream = await openai.chat.completions.create({
-          model: process.env.OPENROUTER_MODEL ?? 'qwen/qwen3.7-max',
+          // flash-lite: fastest+cheapest, correct on chat-scale prompts (see docs/ai-model-selection-eval.md)
+          model: 'google/gemini-3.5-flash-lite',
           max_tokens: 4096,
           messages: [
             { role: 'system', content: systemPrompt },

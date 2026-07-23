@@ -88,7 +88,8 @@ export async function POST(request: Request) {
         : buildUserPrompt(prompt, language)
 
     const completion = await openai.chat.completions.create({
-      model: process.env.OPENROUTER_MODEL ?? 'qwen/qwen3.7-max',
+      // glm-5.2 :nitro = fastest provider (Friendli); strong+cheap on structured diagram gen (see docs/ai-model-selection-eval.md)
+      model: 'z-ai/glm-5.2:nitro',
       max_tokens: 1024,
       messages: [
         { role: 'system', content: EXCALIDRAW_SYSTEM_PROMPT },

@@ -219,7 +219,9 @@ export async function POST(request: Request): Promise<Response> {
 
     for (let attempt = 1; attempt <= MAX_PLAN_RETRIES; attempt++) {
       const planMessage = await openai.chat.completions.create({
-        model: process.env.OPENROUTER_MODEL ?? 'qwen/qwen3.7-max',
+        // Plan step (decide how many pages to edit): short JSON, so use the fastest+cheapest
+        // model. OPENROUTER_PLAN_MODEL overrides. See docs/ai-model-selection-eval.md.
+        model: process.env.OPENROUTER_PLAN_MODEL ?? 'google/gemini-3.5-flash-lite',
         max_tokens: 8192,
         messages: [{ role: 'system', content: planPrompt }, { role: 'user', content: instruction }],
         // OpenRouter-specific: pin preferred providers via OPENROUTER_PROVIDERS env.

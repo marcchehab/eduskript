@@ -128,7 +128,8 @@ export async function POST(request: NextRequest) {
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       const response = await openai.chat.completions.create({
-        model: process.env.OPENROUTER_MODEL ?? 'qwen/qwen3.7-max',
+        // glm-5.2 :nitro = fastest provider (Friendli); strong+cheap on code gen (see docs/ai-model-selection-eval.md)
+        model: 'z-ai/glm-5.2:nitro',
         max_tokens: 16384,
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
