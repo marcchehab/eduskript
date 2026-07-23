@@ -19,7 +19,7 @@ import { MarkdownEditor } from '@/components/dashboard/markdown-editor'
 import { FileBrowser } from '@/components/dashboard/file-browser'
 import { VideoBrowser } from '@/components/dashboard/video-browser'
 import { ExcalidrawEditor } from '@/components/dashboard/excalidraw-editor'
-import { AIEditModal } from '@/components/ai'
+import { AIEditChatModal } from '@/components/ai'
 import type { AIEditTarget } from '@/hooks/use-ai-edit'
 import { useIsFreeTeacher } from '@/hooks/use-billing'
 import { useRouter } from 'next/navigation'
@@ -956,7 +956,7 @@ export function EditorWithMedia({
 
       {/* AI Edit modal */}
       {aiEdit && (
-        <AIEditModal
+        <AIEditChatModal
           open={aiEditModalOpen}
           onOpenChange={setAiEditModalOpen}
           target={aiEdit.target}

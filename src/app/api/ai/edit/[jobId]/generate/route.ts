@@ -66,8 +66,11 @@ export async function POST(
     return Response.json({ error: 'AI service not configured' }, { status: 503 })
   }
 
-  const body = (await request.json()) as { pageIndex: number }
+  const body = (await request.json()) as { pageIndex: number; feedback?: string }
   const { pageIndex } = body
+  // Optional per-card revision request from the chat UI's "respond" action.
+  // Appended to the job instruction so the model refines its previous attempt.
+  const feedback = typeof body.feedback === 'string' ? body.feedback.trim() : ''
 
   if (typeof pageIndex !== 'number' || pageIndex < 0) {
     return Response.json({ error: 'Invalid pageIndex' }, { status: 400 })
@@ -94,6 +97,12 @@ export async function POST(
   }
 
   const plannedEdit = jobResult.plan.pages[pageIndex]
+
+  // Fold any per-card "respond" feedback into the instruction so the model
+  // revises its previous attempt for this specific page.
+  const effectiveInstruction = feedback
+    ? `${jobResult.instruction}\n\nThe user reviewed your previous attempt for this page and asked for this revision:\n${feedback}`
+    : jobResult.instruction
 
   // 2. Build context — branch on job mode (skript vs frontpage).
   let skriptContext: SkriptContext
@@ -190,6 +199,17 @@ export async function POST(
     defaultHeaders: { 'HTTP-Referer': 'https://eduskript.org', 'X-Title': 'Eduskript' },
   })
 
+  // Provider routing for GLM: OPENROUTER_PROVIDERS env WINS if set (so clients
+  // who run this code can override), otherwise fall back to the code-pinned
+  // order below. Order picked from a delivered-latency probe on a typical short
+  // edit (2026-07-24): Together ~1.5s total / 0.9s TTFC and stable; Parasail /
+  // BaseTen as fallbacks. Friendli dropped — swung 48→410 t/s and errored
+  // mid-stream. Bare `:nitro` kept routing to Friendli, hence the explicit list.
+  const envRouting = openrouterProviderRouting()
+  const glmRouting = ('provider' in envRouting
+    ? envRouting
+    : { provider: { order: ['Together', 'Parasail', 'BaseTen'], allow_fallbacks: true } }) as Record<string, unknown>
+
   // Fetch user and organization custom AI prompts (both live on Site).
   let orgPrompt: string | undefined
   const user = await prisma.user.findUnique({
@@ -231,18 +251,17 @@ export async function POST(
           isNew: true,
         },
         editSummary: plannedEdit.summary,
-        instruction: jobResult.instruction,
+        instruction: effectiveInstruction,
       })
 
       const newPageMessage = await openai.chat.completions.create({
-        // glm-5.2 :nitro = fastest provider (Friendli); best full-depth page gen at low cost (see docs/ai-model-selection-eval.md)
-        model: 'z-ai/glm-5.2:nitro',
+        model: 'z-ai/glm-5.2',
         max_tokens: 8192,
         messages: [
           { role: 'system', content: newPagePrompt },
           { role: 'user', content: `Create the content for the new page "${plannedEdit.pageTitle}". ${plannedEdit.summary}` },
         ],
-        ...(openrouterProviderRouting() as Record<string, unknown>),
+        ...glmRouting,
       })
 
       proposedContent = (newPageMessage.choices[0]?.message?.content ?? '').trim()
@@ -259,18 +278,17 @@ export async function POST(
           isNew: false,
         },
         editSummary: plannedEdit.summary,
-        instruction: jobResult.instruction,
+        instruction: effectiveInstruction,
       })
 
       const editMessage = await openai.chat.completions.create({
-        // glm-5.2 :nitro = fastest provider (Friendli); best full-depth page gen at low cost (see docs/ai-model-selection-eval.md)
-        model: 'z-ai/glm-5.2:nitro',
+        model: 'z-ai/glm-5.2',
         max_tokens: 8192,
         messages: [
           { role: 'system', content: editPrompt },
           { role: 'user', content: `Apply the following change to the page "${originalPage?.title || plannedEdit.pageTitle}": ${plannedEdit.summary}` },
         ],
-        ...(openrouterProviderRouting() as Record<string, unknown>),
+        ...glmRouting,
       })
 
       proposedContent = (editMessage.choices[0]?.message?.content ?? '').trim()
