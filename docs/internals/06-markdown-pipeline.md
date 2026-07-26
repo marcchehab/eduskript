@@ -207,6 +207,17 @@ make them work here:
   footnote jump (forward and backref) lands nowhere. Fix: `sanitizeSchema` sets
   `clobberPrefix: ''` so sanitize leaves the already-namespaced ids alone. See
   `markdown-compiler.ts`.
+
+  **Side effect (bit us on 2026-07-26):** that setting is global, so *every*
+  authored `id` stopped being clobbered too. `<question id="q1">` used to reach
+  the quiz component as `id="user-content-q1"`, giving componentId
+  `quiz-user-content-q1`; since commit 3b02b16f (2026-06-22) it is `quiz-q1`.
+  Every quiz answer, checkpoint, and score written before that date is stored
+  under the old key, so survey results / CSV export / exam grading found nothing
+  and reported the questions as unanswered. Repair:
+  `scripts/normalize-clobbered-component-ids.mjs`. Changing `clobberPrefix`
+  again renames componentIds again — treat it as a data migration, not a
+  rendering tweak.
 - **Visible, localized heading** — `remark-rehype` defaults to a `sr-only`
   "Footnotes" `<h2>`. We pass `footnoteLabelProperties: {}` (drops `sr-only`,
   making it visible) and `footnoteLabel` from `footnoteLabelForLang(pageLanguage)`

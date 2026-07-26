@@ -46,8 +46,8 @@ describe('parseGradableComponents', () => {
   it('enumerates questions + python-checks in document order with ids, types, points', () => {
     const comps = parseGradableComponents(md)
     expect(comps).toEqual([
-      { componentId: 'quiz-user-content-p1', kind: 'quiz', questionType: 'text', maxPoints: 1, label: 'Aufgabe 1 — Modulo (1 Punkt)' },
-      { componentId: 'quiz-user-content-q3', kind: 'quiz', questionType: 'single', maxPoints: 2, label: 'Aufgabe 3 — Wahl (2 Punkte)' },
+      { componentId: 'quiz-p1', kind: 'quiz', questionType: 'text', maxPoints: 1, label: 'Aufgabe 1 — Modulo (1 Punkt)' },
+      { componentId: 'quiz-q3', kind: 'quiz', questionType: 'single', maxPoints: 2, label: 'Aufgabe 3 — Wahl (2 Punkte)' },
       { componentId: 'python-check-a8', kind: 'python', maxPoints: 3, label: 'Aufgabe 8 — Fläche (3 Punkte)', checkCode: 'assert f() == 1', starterCode: 'def f():\n    pass' },
     ])
   })
@@ -64,7 +64,7 @@ describe('parseGradableComponents', () => {
 
   it('defaults question type to multiple when unset', () => {
     const comps = parseGradableComponents(`<question id="x" points="1">\n<answer correct="true">A</answer>\n</question>`)
-    expect(comps[0]).toMatchObject({ componentId: 'quiz-user-content-x', questionType: 'multiple' })
+    expect(comps[0]).toMatchObject({ componentId: 'quiz-x', questionType: 'multiple' })
   })
 
   it('captures the python editor stub as the matching component starterCode', () => {
@@ -126,7 +126,15 @@ ${f}
     expect(ctx).toContain('### Teil b')
   })
 
-  it('scopes to a quiz component by its clobbered id', () => {
+  it('scopes to a quiz component by id', () => {
+    const ctx = extractComponentContext(md, 'quiz-p1')
+    expect(ctx).toContain('## Teil 1')
+    expect(ctx).not.toContain('Teil 2')
+  })
+
+  // Pre-2026-06-22 rows still carry the `user-content-` clobber prefix (see the
+  // header note in components.ts); grading them must still find the section.
+  it('scopes to a quiz component by its legacy clobbered id', () => {
     const ctx = extractComponentContext(md, 'quiz-user-content-p1')
     expect(ctx).toContain('## Teil 1')
     expect(ctx).not.toContain('Teil 2')

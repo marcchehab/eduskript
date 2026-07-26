@@ -5,10 +5,13 @@
  * aggregator knows the authoritative max from the teacher's current markdown.
  *
  * Runtime componentIds this must match (see quiz.tsx / code-editor/index.tsx):
- * - quiz:   `quiz-user-content-${id}` — rehype-sanitize clobbers the `id`
- *           attribute with its default `user-content-` prefix, so the quiz
- *           component sees `id="user-content-q1"`. (`data-*` attrs are NOT
- *           clobbered, so code editors are unaffected.)
+ * - quiz:   `quiz-${id}` — the author-written `id` verbatim. Until 2026-06-22
+ *           rehype-sanitize clobbered `id` with `user-content-`, so the quiz
+ *           component saw `id="user-content-q1"` and wrote its answers under
+ *           `quiz-user-content-q1`. Commit 3b02b16f set `clobberPrefix: ''`
+ *           (to fix footnote anchors), which silently renamed every quiz
+ *           componentId. Rows written before that date carry the old key —
+ *           `scripts/normalize-clobbered-component-ids.mjs` renames them.
  * - python: `python-check-${id}`    from a ```python-check for="<id>" points```
  *           block (its `for` is the editor's id). The python *score* lives under
  *           `python-check-<id>`, not `code-editor-<id>`.
@@ -38,11 +41,6 @@ export interface GradableComponent {
    *  student) — so rubric generation doesn't credit pre-provided scaffolding. */
   starterCode?: string
 }
-
-// rehype-sanitize's defaultSchema clobbers `id`/`name` with this prefix to
-// prevent DOM clobbering; markdown-compiler.ts keeps the default. So a question
-// authored as id="q1" renders with id="user-content-q1".
-const CLOBBER_PREFIX = 'user-content-'
 
 function attr(tag: string, name: string): string | undefined {
   // Matches name="value" or name='value' (case-insensitive attribute name).
@@ -137,7 +135,7 @@ export function parseGradableComponents(content: string): GradableComponent[] {
       if (id) {
         const type = (attr(tag, 'type') as GradableComponent['questionType']) ?? 'multiple'
         out.push({
-          componentId: `quiz-${CLOBBER_PREFIX}${id}`,
+          componentId: `quiz-${id}`,
           kind: 'quiz',
           questionType: type,
           maxPoints: num(attr(tag, 'points')),
@@ -176,11 +174,15 @@ export function parseGradableComponents(content: string): GradableComponent[] {
  */
 export function extractComponentContext(content: string, componentId: string): string | null {
   // Recover the author-facing id (the `for`/`id` attr) from the componentId.
+  // Legacy `quiz-user-content-<id>` keys (pre-2026-06-22, see the header note)
+  // are still accepted here so grading an un-migrated exam finds its section.
   const rawId = componentId.startsWith('python-check-')
     ? componentId.slice('python-check-'.length)
-    : componentId.startsWith(`quiz-${CLOBBER_PREFIX}`)
-      ? componentId.slice(`quiz-${CLOBBER_PREFIX}`.length)
-      : null
+    : componentId.startsWith('quiz-user-content-')
+      ? componentId.slice('quiz-user-content-'.length)
+      : componentId.startsWith('quiz-')
+        ? componentId.slice('quiz-'.length)
+        : null
   if (!rawId) return null
 
   const lines = content.split('\n')
