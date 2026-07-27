@@ -5,11 +5,16 @@
  * The metric will automatically appear in the admin panel.
  */
 
+/**
+ * `live: false` means the metric is recorded in a different Next.js bundle
+ * than the one serving /api/metrics (currently: the proxy), so it never shows
+ * up in the in-memory live view — only in the hourly history.
+ */
 export const METRICS = {
   // Server-side metrics (active)
-  page_loads_total: { unit: 'loads', source: 'server' as const, display: 'count' as const },
-  db_queries_total: { unit: 'queries', source: 'server' as const, display: 'count' as const },
-  db_query_time_ms: { unit: 'ms', source: 'server' as const, display: 'avg' as const },
+  page_loads_total: { unit: 'loads', source: 'server' as const, display: 'count' as const, live: false },
+  db_queries_total: { unit: 'queries', source: 'server' as const, display: 'count' as const, live: true },
+  db_query_time_ms: { unit: 'ms', source: 'server' as const, display: 'avg' as const, live: true },
 } as const
 
 /**

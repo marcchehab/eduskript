@@ -39,7 +39,10 @@ const basePrisma = globalForPrisma.prisma ?? new PrismaClient({
 // Export base client for NextAuth adapter (requires $on method)
 export const prismaBase = basePrisma
 
-// Add metrics tracking extension for general use
+// Add metrics tracking extension for general use.
+// Caveat: db_queries_total/db_query_time_ms only see queries made through this
+// extended client. Queries issued via `prismaBase` — the NextAuth adapter and
+// the metrics flush itself (src/lib/metrics/buffer.ts) — are NOT counted.
 export const prisma = basePrisma.$extends({
   query: {
     $allOperations({ operation, model, args, query }) {

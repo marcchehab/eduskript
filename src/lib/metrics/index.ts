@@ -12,6 +12,11 @@
  * - db_queries_per_page_load: queries / page loads
  *
  * Add new metrics by updating registry.ts
+ *
+ * Storage: samples accumulate in memory and merge into one DB row per metric
+ * per hour, flushed every minute. See buffer.ts for the process-boundary
+ * caveat (page_loads_total is recorded in the proxy bundle, so it never shows
+ * in the live view).
  */
 
 export { recordMetric, getRecentMinutes, startMetricsFlush, stopMetricsFlush, getActiveMetricNames } from './buffer'

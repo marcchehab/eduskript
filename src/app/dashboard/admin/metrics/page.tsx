@@ -92,36 +92,21 @@ export default function MetricsAdminPage() {
   // Only show metrics defined in registry (not auto-discovered)
   const allMetricNames = Object.keys(METRICS) as MetricName[]
 
-  // Calculate totals for calculated metrics
+  // Metrics recorded in this process, i.e. the only ones /api/metrics can
+  // return from memory.
+  const liveMetricNames = allMetricNames.filter(name => METRICS[name].live)
+
+  // Totals feeding the calculated metrics. History only — the in-memory ring
+  // buffer overlaps hours that are already flushed to the DB, so adding it
+  // would double-count, and page loads are not in this process's memory at all.
   const getTotals = () => {
     const totals: Record<string, number> = {}
     for (const name of allMetricNames) {
-      const liveSummary = getLiveSummary(name)
-      const historySummary = getHistorySummary(name)
-      const displayMode = METRICS[name]?.display || 'avg'
-      if (displayMode === 'count') {
-        totals[name] = (liveSummary?.count ?? 0) + (historySummary?.count ?? 0)
+      if ((METRICS[name]?.display || 'avg') === 'count') {
+        totals[name] = getHistorySummary(name)?.count ?? 0
       }
     }
     return totals
-  }
-
-  // Calculate summary stats for a metric from live data
-  const getLiveSummary = (metricName: MetricName) => {
-    const values = liveData
-      .map(s => s.data[metricName])
-      .filter(Boolean)
-      .map(d => d.avg)
-
-    if (values.length === 0) return null
-
-    return {
-      current: values[values.length - 1],
-      avg: values.reduce((a, b) => a + b, 0) / values.length,
-      min: Math.min(...values),
-      max: Math.max(...values),
-      count: liveData.reduce((sum, s) => sum + (s.data[metricName]?.count || 0), 0),
-    }
   }
 
   // Calculate summary stats for a metric from history data
@@ -210,16 +195,14 @@ export default function MetricsAdminPage() {
       {/* Metric Cards Overview */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {allMetricNames.map(name => {
-          const liveSummary = getLiveSummary(name)
-          const historySummary = getHistorySummary(name)
-          const summary = liveSummary || historySummary
+          // Everything on this card comes from the hourly history so the
+          // numbers are comparable across metrics — page loads live in a
+          // different process and are never in this one's memory.
+          const summary = getHistorySummary(name)
           const displayMode = METRICS[name as MetricName]?.display || 'avg'
           const isCountMetric = displayMode === 'count'
 
-          // Get sparkline data from live or history (use count for count metrics)
-          const sparklineData = liveData.length > 0
-            ? liveData.map(s => s.data[name] ? (isCountMetric ? s.data[name].count : s.data[name].avg) : undefined).filter((v): v is number => v !== undefined)
-            : (historyData[name] || []).map(p => isCountMetric ? p.count : p.avg)
+          const sparklineData = (historyData[name] || []).map(p => isCountMetric ? p.count : p.avg)
 
           return (
             <Card
@@ -249,12 +232,15 @@ export default function MetricsAdminPage() {
                       {getMetricUnit(name as MetricName)}
                     </span>
                   </div>
+                  <p className="text-xs text-muted-foreground mb-1">
+                    {isCountMetric ? 'Sum over the last 7 days' : 'Latest hour (weighted stats over 7 days)'}
+                  </p>
                   <div className="h-10 mb-2">
                     <Sparkline data={sparklineData} />
                   </div>
                   <div className="flex justify-between text-xs text-muted-foreground">
                     {isCountMetric ? (
-                      <span>Total: {summary.count}</span>
+                      <span>Total (7d): {summary.count}</span>
                     ) : (
                       <>
                         <span>Avg: {summary.avg.toFixed(1)}</span>
@@ -274,7 +260,9 @@ export default function MetricsAdminPage() {
 
       {/* Calculated Metrics */}
       <div className="space-y-2">
-        <h2 className="text-lg font-semibold">Calculated Metrics</h2>
+        <h2 className="text-lg font-semibold">
+          Calculated Metrics <span className="text-sm font-normal text-muted-foreground">(last 7 days)</span>
+        </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {Object.entries(CALCULATED_METRICS).map(([key, metric]) => {
             const totals = getTotals()
@@ -319,12 +307,18 @@ export default function MetricsAdminPage() {
 
           {loading ? (
             <div className="py-8 text-center text-muted-foreground">Loading...</div>
-          ) : (
+          ) : (() => {
+            const points = historyData[selectedMetric] || []
+            // Counters record the value 1 per sample, so their stored `avg` is
+            // always 1.00 — the samples-per-hour count is the real series.
+            const isCountMetric = (METRICS[selectedMetric]?.display || 'avg') === 'count'
+
+            return (
             <div className="space-y-4">
-              {/* Large sparkline */}
+              {/* Hourly chart */}
               <div className="h-32 border rounded-md p-4">
                 <Sparkline
-                  data={(historyData[selectedMetric] || []).map(p => p.avg)}
+                  data={points.map(p => isCountMetric ? p.count : p.avg)}
                   height={100}
                 />
               </div>
@@ -334,13 +328,13 @@ export default function MetricsAdminPage() {
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 bg-background border-b">
                     <tr>
-                      <th className="text-left p-2">Timestamp</th>
-                      <th className="text-right p-2">Average</th>
-                      <th className="text-right p-2">Count</th>
+                      <th className="text-left p-2">Hour</th>
+                      {!isCountMetric && <th className="text-right p-2">Average</th>}
+                      <th className="text-right p-2">{isCountMetric ? getMetricUnit(selectedMetric) : 'Samples'}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {(historyData[selectedMetric] || [])
+                    {points
                       .slice(-50)
                       .reverse()
                       .map((point, i) => (
@@ -348,9 +342,11 @@ export default function MetricsAdminPage() {
                           <td className="p-2 font-mono text-xs">
                             {new Date(point.timestamp).toLocaleString()}
                           </td>
-                          <td className="p-2 text-right">
-                            {point.avg.toFixed(2)}
-                          </td>
+                          {!isCountMetric && (
+                            <td className="p-2 text-right">
+                              {point.avg.toFixed(2)}
+                            </td>
+                          )}
                           <td className="p-2 text-right text-muted-foreground">
                             {point.count}
                           </td>
@@ -360,7 +356,8 @@ export default function MetricsAdminPage() {
                 </table>
               </div>
             </div>
-          )}
+            )
+          })()}
         </Card>
       )}
 
@@ -372,6 +369,14 @@ export default function MetricsAdminPage() {
           <span className="text-sm text-muted-foreground">Last {liveData.length} minutes</span>
         </div>
 
+        {liveMetricNames.length < allMetricNames.length && (
+          <p className="text-xs text-muted-foreground mb-4">
+            Not shown here: {allMetricNames.filter(n => !METRICS[n].live).map(formatMetricName).join(', ')} —
+            recorded in the proxy process, which has its own memory. It reaches the DB every minute, so it
+            appears in the cards and history above.
+          </p>
+        )}
+
         {liveData.length === 0 ? (
           <p className="text-muted-foreground">No live data yet. Metrics will appear as they are recorded.</p>
         ) : (
@@ -380,7 +385,7 @@ export default function MetricsAdminPage() {
               <thead className="border-b">
                 <tr>
                   <th className="text-left p-2">Time</th>
-                  {allMetricNames.map(name => (
+                  {liveMetricNames.map(name => (
                     <th key={name} className="text-right p-2 whitespace-nowrap">
                       {formatMetricName(name)}
                     </th>
@@ -393,7 +398,7 @@ export default function MetricsAdminPage() {
                     <td className="p-2 font-mono text-xs">
                       {new Date(minute.timestamp).toLocaleTimeString()}
                     </td>
-                    {allMetricNames.map(name => {
+                    {liveMetricNames.map(name => {
                       const displayMode = METRICS[name]?.display || 'avg'
                       const data = minute.data[name]
                       return (
