@@ -84,3 +84,6 @@ export-output/
 prompts.md
 # grading prompt test-bench (real student data — never commit)
 .bench-data/
+
+# dev query log (QUERY_LOG=1 pnpm dev)
+.querylog.jsonl
