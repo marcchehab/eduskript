@@ -50,6 +50,7 @@ vi.mock('@/lib/email', () => ({
     htmlContent: '<p>Verify</p>',
     textContent: 'Verify',
   })),
+  notifyAdminsOfNewTeacher: vi.fn(() => Promise.resolve()),
 }))
 
 vi.mock('@/lib/trial', () => ({

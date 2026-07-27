@@ -1,5 +1,6 @@
 import { BrevoClient, BrevoError } from '@getbrevo/brevo'
 import { createLogger } from '@/lib/logger'
+import { prisma } from '@/lib/prisma'
 
 const log = createLogger('email')
 
@@ -13,13 +14,15 @@ function getClient(apiKey: string): BrevoClient {
 }
 
 export interface EmailOptions {
-  to: string
+  to: string | string[]
   subject: string
   htmlContent: string
   textContent?: string
+  /** Brevo tag; also used for the X-Mailin-Tag header. */
+  tag?: string
 }
 
-export async function sendEmail({ to, subject, htmlContent, textContent }: EmailOptions) {
+export async function sendEmail({ to, subject, htmlContent, textContent, tag = 'verification' }: EmailOptions) {
   const apiKey = process.env.BREVO_API_KEY
   if (!apiKey) {
     throw new Error('BREVO_API_KEY is not configured')
@@ -34,11 +37,11 @@ export async function sendEmail({ to, subject, htmlContent, textContent }: Email
         name: process.env.EMAIL_FROM_NAME || 'Eduskript',
         email: process.env.EMAIL_FROM || 'noreply@localhost'
       },
-      to: [{ email: to }],
+      to: (Array.isArray(to) ? to : [to]).map((email) => ({ email })),
       // Brevo-specific: suppress click tracking.
-      tags: ['verification', 'no-tracking'],
+      tags: [tag, 'no-tracking'],
       headers: {
-        'X-Mailin-Tag': 'verification',
+        'X-Mailin-Tag': tag,
         'List-Unsubscribe': '<mailto:unsubscribe@eduskript.org>'
       }
     })
@@ -54,6 +57,97 @@ export async function sendEmail({ to, subject, htmlContent, textContent }: Email
         : (body ?? (error as Error)?.message ?? String(error))
     log.error(`send failed (status ${status ?? 'unknown'}): ${detail}`)
     throw new Error(`Failed to send email: ${status ?? 'error'} ${detail}`)
+  }
+}
+
+/**
+ * Recipients for platform notifications: every user with `isAdmin = true` that
+ * has a real email, overridable via ADMIN_NOTIFICATION_EMAILS (comma-separated).
+ * The override wins outright — it does not merge with the DB admins.
+ */
+async function getAdminNotificationRecipients(): Promise<string[]> {
+  const override = process.env.ADMIN_NOTIFICATION_EMAILS
+  if (override) {
+    return override.split(',').map((e) => e.trim()).filter(Boolean)
+  }
+
+  const admins = await prisma.user.findMany({
+    where: { isAdmin: true, email: { not: null } },
+    select: { email: true },
+  })
+
+  // Students carry synthetic @eduskript.local addresses; never mail those.
+  return admins
+    .map((a) => a.email!)
+    .filter((email) => !email.endsWith('@eduskript.local'))
+}
+
+export interface NewTeacherNotification {
+  name: string | null
+  email: string
+  pageSlug: string | null
+  /** How the account was created — 'email' still needs email verification. */
+  method: 'email' | 'oauth'
+  provider?: string
+}
+
+/**
+ * Notify platform admins that a teacher account was created. Fires at account
+ * creation, so email/password signups are reported *before* the address is
+ * verified — the body says so. Never throws: signup must not fail because a
+ * notification could not be sent.
+ */
+export async function notifyAdminsOfNewTeacher(teacher: NewTeacherNotification): Promise<void> {
+  try {
+    const recipients = await getAdminNotificationRecipients()
+    if (recipients.length === 0) return
+
+    const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000'
+    const verification =
+      teacher.method === 'oauth'
+        ? `OAuth${teacher.provider ? ` (${teacher.provider})` : ''} — email verified by provider`
+        : 'Email/password — email verification pending'
+
+    const rows: [string, string][] = [
+      ['Name', teacher.name || '—'],
+      ['Email', teacher.email],
+      ['Page', teacher.pageSlug ? `${baseUrl}/${teacher.pageSlug}` : 'not claimed yet'],
+      ['Signup', verification],
+    ]
+
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+        <h2 style="color: #2563eb; margin-bottom: 16px;">New teacher signup</h2>
+        <table style="border-collapse: collapse;">
+          ${rows
+            .map(
+              ([label, value]) => `
+            <tr>
+              <td style="padding: 4px 16px 4px 0; color: #6b7280;">${label}</td>
+              <td style="padding: 4px 0;">${value}</td>
+            </tr>`
+            )
+            .join('')}
+        </table>
+        <p style="margin-top: 24px;">
+          <a href="${baseUrl}/dashboard/admin" style="color: #2563eb;">Open admin dashboard</a>
+        </p>
+      </div>
+    `
+
+    const textContent = `New teacher signup\n\n${rows
+      .map(([label, value]) => `${label}: ${value}`)
+      .join('\n')}\n\n${baseUrl}/dashboard/admin\n`
+
+    await sendEmail({
+      to: recipients,
+      subject: `New teacher signup: ${teacher.email}`,
+      htmlContent,
+      textContent,
+      tag: 'admin-notification',
+    })
+  } catch (error) {
+    log.error(`admin new-teacher notification failed: ${(error as Error)?.message ?? String(error)}`)
   }
 }
 

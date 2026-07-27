@@ -77,6 +77,7 @@ import { generatePseudonym, getStableStudentNickname } from './privacy/pseudonym
 import { createLogger } from '@/lib/logger'
 import { createTrialSubscription } from '@/lib/trial'
 import { CACHE_TAGS } from './cached-queries'
+import { notifyAdminsOfNewTeacher } from '@/lib/email'
 
 const log = createLogger('auth:create-user')
 
@@ -445,6 +446,16 @@ export function PrivacyAdapter(options: PrivacyAdapterOptions): Adapter {
           }
         } catch (error) {
           log.error(`Default-org auto-join failed for ${maskedEmail}: ${(error as Error).message}`)
+        }
+
+        // Tell admins a teacher signed up. Swallows its own errors.
+        if (user.email) {
+          await notifyAdminsOfNewTeacher({
+            name: user.name ?? null,
+            email: user.email,
+            pageSlug,
+            method: 'oauth',
+          })
         }
 
         return createdUser

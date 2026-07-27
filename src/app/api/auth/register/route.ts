@@ -3,7 +3,7 @@ import { revalidateTag, revalidatePath } from 'next/cache'
 import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/prisma'
 import { generateSlug } from '@/lib/markdown'
-import { sendEmail, generateVerificationEmailContent } from '@/lib/email'
+import { sendEmail, generateVerificationEmailContent, notifyAdminsOfNewTeacher } from '@/lib/email'
 import { randomBytes } from 'crypto'
 import { registrationRateLimiter, getClientIdentifier } from '@/lib/rate-limit'
 import { validatePassword } from '@/lib/password-validation'
@@ -231,6 +231,14 @@ export async function POST(request: NextRequest) {
       console.error('Failed to send verification email:', emailError)
       // Don't fail registration if email fails - user can request resend
     }
+
+    // Tell admins a teacher signed up. Swallows its own errors.
+    await notifyAdminsOfNewTeacher({
+      name,
+      email,
+      pageSlug,
+      method: 'email',
+    })
 
     // Return success (without password)
     return NextResponse.json({
