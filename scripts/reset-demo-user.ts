@@ -8,6 +8,13 @@
  * and re-seeds from the demo-content/ directory.
  */
 
+// Loaded before the Pool is built — without this, running the file directly
+// (npx tsx) leaves DATABASE_URL unset, the isLocal check below reads undefined,
+// and the client tries TLS against a local Postgres that has none.
+import { config } from 'dotenv'
+config({ path: '.env.local' })
+config()
+
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { Pool } from 'pg'

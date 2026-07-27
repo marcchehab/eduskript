@@ -1,4 +1,10 @@
-// Seed Eduskript organization and add all users as members
+// Seed Eduskript organization and add all users as members.
+// The URL slug lives on Site, not Organization (multi-site refactor), so the
+// org is looked up through its Site row.
+import { config } from 'dotenv'
+config({ path: '.env.local' })
+config()
+
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { Pool } from 'pg'
@@ -17,20 +23,30 @@ const EDUSKRIPT_ORG_SLUG = 'eduskript'
 async function main() {
   console.log('Setting up Eduskript organization...')
 
-  // Check if Eduskript org already exists
-  let org = await prisma.organization.findUnique({
-    where: { slug: EDUSKRIPT_ORG_SLUG }
+  // Slugs live on Site — find the org through it.
+  const site = await prisma.site.findUnique({
+    where: { slug: EDUSKRIPT_ORG_SLUG },
+    select: { organizationId: true },
   })
+
+  let org = site?.organizationId
+    ? await prisma.organization.findUnique({ where: { id: site.organizationId } })
+    : null
 
   if (!org) {
     console.log('Creating Eduskript organization...')
     org = await prisma.organization.create({
       data: {
         name: 'Eduskript',
-        slug: EDUSKRIPT_ORG_SLUG,
-        description: 'The Eduskript platform organization',
         billingPlan: 'free',
-      }
+        site: {
+          create: {
+            slug: EDUSKRIPT_ORG_SLUG,
+            pageName: 'Eduskript',
+            pageDescription: 'The Eduskript platform organization',
+          },
+        },
+      },
     })
     console.log('✅ Eduskript organization created')
   } else {

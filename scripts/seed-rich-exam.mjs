@@ -200,10 +200,11 @@ try {
 
   await prisma.pageUnlock.deleteMany({ where: { pageId } })
   await prisma.pageUnlock.create({ data: { pageId, classId: klass.id, unlockedBy: teacher.id } })
-  await prisma.examState.upsert({
-    where: { pageId_classId: { pageId, classId: klass.id } },
-    create: { pageId, classId: klass.id, state: 'open', openedAt: new Date() },
-    update: { state: 'open', openedAt: new Date(), closedAt: null },
+  // The class-level row has studentId = null. Prisma can't target the
+  // (pageId, classId, studentId) unique with a null member, so find-then-write.
+  await prisma.examState.deleteMany({ where: { pageId, classId: klass.id, studentId: null } })
+  await prisma.examState.create({
+    data: { pageId, classId: klass.id, state: 'open', openedAt: new Date() },
   })
 
   // Wipe all prior data for this exam (any student) + clean orphaned component

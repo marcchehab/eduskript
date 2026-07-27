@@ -12,6 +12,12 @@
 import { readFileSync, readdirSync, existsSync } from 'fs'
 import { join } from 'path'
 
+// Mirrors PRIMARY_SITE_ORDER in src/lib/sites.ts. Inlined rather than imported:
+// that module pulls in @/lib/prisma, which throws at import time when
+// DATABASE_URL is not yet loaded — and this file is imported by standalone
+// scripts that load their env after the import graph is evaluated.
+const PRIMARY_SITE_ORDER = [{ order: 'asc' as const }, { createdAt: 'asc' as const }]
+
 // Accept any Prisma-like client (the app uses an extended client, scripts use plain).
 type PrismaLike = any
 
@@ -150,9 +156,12 @@ export async function seedDemoContent(options: SeedDemoContentOptions): Promise<
 
   // Create collection. Ownership goes through the user's Site, not via a
   // CollectionAuthor row — the demo seeder requires the user to already have
-  // a Site (every teacher with a pageSlug does).
-  const site = await prisma.site.findUnique({
+  // a Site (every teacher with a pageSlug does). A user can own several sites,
+  // so this takes the primary one (findUnique on userId stopped being valid
+  // when Site went one-to-many).
+  const site = await prisma.site.findFirst({
     where: { userId },
+    orderBy: PRIMARY_SITE_ORDER,
     select: { id: true },
   })
   if (!site) {

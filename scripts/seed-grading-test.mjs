@@ -146,10 +146,11 @@ try {
   // Unlock + open the exam for the class
   await prisma.pageUnlock.deleteMany({ where: { pageId: page.id } })
   await prisma.pageUnlock.create({ data: { pageId: page.id, classId: klass.id, unlockedBy: teacher.id } })
-  await prisma.examState.upsert({
-    where: { pageId_classId: { pageId: page.id, classId: klass.id } },
-    create: { pageId: page.id, classId: klass.id, state: 'open', openedAt: new Date() },
-    update: { state: 'open', openedAt: new Date(), closedAt: null },
+  // The class-level row has studentId = null. Prisma can't target the
+  // (pageId, classId, studentId) unique with a null member, so find-then-write.
+  await prisma.examState.deleteMany({ where: { pageId: page.id, classId: klass.id, studentId: null } })
+  await prisma.examState.create({
+    data: { pageId: page.id, classId: klass.id, state: 'open', openedAt: new Date() },
   })
 
   // Reset any prior attempt by this student
