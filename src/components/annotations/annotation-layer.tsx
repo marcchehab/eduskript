@@ -239,15 +239,24 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
       }
     }
     refresh()
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') refresh()
+
+    // visibilitychange and focus both fire on a single tab switch, so an
+    // unthrottled pair doubled the work on every alt-tab. Collapse them.
+    let lastRefreshAt = Date.now()
+    const REFRESH_MIN_INTERVAL_MS = 15_000
+    const refreshThrottled = () => {
+      if (document.visibilityState !== 'visible') return
+      if (Date.now() - lastRefreshAt < REFRESH_MIN_INTERVAL_MS) return
+      lastRefreshAt = Date.now()
+      refresh()
     }
-    document.addEventListener('visibilitychange', onVisible)
-    window.addEventListener('focus', refresh)
+
+    document.addEventListener('visibilitychange', refreshThrottled)
+    window.addEventListener('focus', refreshThrottled)
     return () => {
       cancelled = true
-      document.removeEventListener('visibilitychange', onVisible)
-      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', refreshThrottled)
+      window.removeEventListener('focus', refreshThrottled)
     }
   }, [isPageAuthor, pageId])
 

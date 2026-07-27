@@ -7,7 +7,7 @@ import { ClassToolbar } from '@/components/teacher/class-toolbar'
 import type { Metadata } from 'next'
 import { prisma } from '@/lib/prisma'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
-import { getFullSiteStructure } from '@/lib/cached-queries'
+import { getFullSiteStructure, getOrgTeacherSkript } from '@/lib/cached-queries'
 import { buildSiteStructure } from '@/lib/site-structure'
 
 interface PageProps {
@@ -18,8 +18,13 @@ interface PageProps {
   }>
 }
 
-// Enable ISR
-export const revalidate = false
+// Dynamic, not ISR. The route reads the session below (to show unpublished
+// skripts to their author), and `revalidate = false` + generateStaticParams()
+// put it in static-with-on-demand-generation mode, where reading cookies
+// throws DYNAMIC_SERVER_USAGE — every eduskript.org/<teacher>/<skript> URL
+// returned 500 in production because of it. Matches the sibling content route.
+// The DB work is cached in getOrgTeacherSkript(), so dynamic costs no queries.
+export const dynamic = 'force-dynamic'
 export const dynamicParams = true
 
 export async function generateStaticParams() {
@@ -30,43 +35,14 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { orgSlug, pageSlug, skriptSlug } = await params
 
   try {
-    const orgSite = await prisma.site.findUnique({
-      where: { slug: orgSlug },
-      select: { organization: { select: { id: true, name: true } } }
-    })
-    const organization = orgSite?.organization
+    // Same cached entry the component below uses, so metadata is free.
+    const data = await getOrgTeacherSkript(orgSlug, pageSlug, skriptSlug)
 
-    if (!organization) {
-      return { title: 'Page Not Found' }
-    }
-
-    const teacher = await prisma.user.findFirst({
-      where: {
-        sites: { some: { slug: pageSlug } },
-        organizationMemberships: { some: { organizationId: organization.id } }
-      },
-      select: { id: true, name: true, sites: { where: { slug: pageSlug }, take: 1, select: { pageName: true } } }
-    })
-
-    if (!teacher) {
-      return { title: 'Teacher Not Found' }
-    }
-
-    const skript = await prisma.skript.findFirst({
-      where: {
-        slug: skriptSlug,
-        OR: [
-          { authors: { some: { userId: teacher.id } } },
-          { collectionSkripts: { some: { collection: { site: { userId: teacher.id } } } } }
-        ]
-      },
-      select: { title: true, description: true }
-    })
-
-    if (!skript) {
+    if (!data) {
       return { title: 'Skript Not Found', robots: 'noindex' }
     }
 
+    const { organization, teacher, skript } = data
     const teacherName = teacher.sites[0]?.pageName || teacher.name || 'Teacher'
     const title = `${skript.title} | ${teacherName} | ${organization.name}`
 
@@ -89,86 +65,19 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function OrgTeacherSkriptPage({ params }: PageProps) {
   const { orgSlug, pageSlug, skriptSlug } = await params
 
-  const orgSiteRow = await prisma.site.findUnique({
-    where: { slug: orgSlug },
-    select: {
-      pageDescription: true,
-      pageIcon: true,
-      showIcon: true,
-      organization: { select: { id: true, name: true } }
-    }
-  })
-  const organization = orgSiteRow?.organization
-    ? {
-        ...orgSiteRow.organization,
-        description: orgSiteRow.pageDescription,
-        iconUrl: orgSiteRow.pageIcon,
-        showIcon: orgSiteRow.showIcon,
-      }
-    : null
+  // One cached lookup for org + teacher + skript (shared with generateMetadata).
+  const data = await getOrgTeacherSkript(orgSlug, pageSlug, skriptSlug)
 
-  if (!organization) {
+  if (!data) {
     notFound()
   }
 
-  // Page-display fields + sidebar/typography prefs live on Site.
-  const teacher = await prisma.user.findFirst({
-    where: {
-      sites: { some: { slug: pageSlug } },
-      organizationMemberships: { some: { organizationId: organization.id } }
-    },
-    select: {
-      id: true,
-      name: true,
-      bio: true,
-      title: true,
-      sites: {
-        where: { slug: pageSlug },
-        take: 1,
-        select: {
-          slug: true,
-          pageName: true,
-          pageDescription: true,
-          pageIcon: true,
-          sidebarBehavior: true,
-          typographyPreference: true,
-        },
-      },
-    }
-  })
-
-  if (!teacher) {
-    notFound()
-  }
-
-  // Find skript by slug scoped to teacher
-  const skript = await prisma.skript.findFirst({
-    where: {
-      slug: skriptSlug,
-      OR: [
-        { authors: { some: { userId: teacher.id } } },
-        { collectionSkripts: { some: { collection: { site: { userId: teacher.id } } } } }
-      ]
-    },
-    include: {
-      frontPage: true,
-      collectionSkripts: {
-        include: {
-          collection: true
-        },
-        orderBy: { order: 'asc' },
-        take: 1
-      },
-      pages: {
-        where: { isPublished: true },
-        orderBy: { order: 'asc' },
-        select: { id: true, title: true, slug: true }
-      }
-    }
-  })
-
-  if (!skript) {
-    notFound()
+  const { orgSite, teacher, skript } = data
+  const organization = {
+    ...data.organization,
+    description: orgSite.pageDescription,
+    iconUrl: orgSite.pageIcon,
+    showIcon: orgSite.showIcon,
   }
 
   const collectionSkript = skript.collectionSkripts[0]

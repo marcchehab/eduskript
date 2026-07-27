@@ -2,12 +2,13 @@
  * In-memory metrics buffer.
  *
  * Accumulates metrics per minute for the live view and flushes the pending
- * delta to the DB once a minute (and at every hour boundary). The DB stores
- * one row per metric per hour; flushes merge into that row (count summed, avg
- * re-weighted), so partial flushes, several runtimes and several deployed
- * instances all add up instead of overwriting each other.
+ * delta to the DB every DB_FLUSH_INTERVAL_MS (and at every hour boundary). The
+ * DB stores one row per metric per hour; flushes merge into that row (count
+ * summed, avg re-weighted), so partial flushes, several runtimes and several
+ * deployed instances all add up instead of overwriting each other.
  *
- * A restart therefore loses at most the last minute of data.
+ * An unclean restart loses at most one flush interval; SIGTERM/SIGINT flush
+ * first (src/instrumentation.ts), best-effort.
  *
  * NOTE ON PROCESS BOUNDARIES: this module is instantiated separately in each
  * Next.js bundle. `src/proxy.ts` (page_loads_total) and the app server
@@ -42,6 +43,11 @@ const MAX_RECENT_MINUTES = 60
 // Track timestamps
 let currentMinuteTimestamp: number = getMinuteTimestamp(new Date())
 let currentHourTimestamp: number = getHourTimestamp(new Date())
+
+// How often the pending delta may reach the DB. Also the worst-case data loss
+// on an unclean restart (a clean SIGTERM flushes — see src/instrumentation.ts).
+const DB_FLUSH_INTERVAL_MS = 10 * 60 * 1000
+let lastDbFlushAt: number = currentMinuteTimestamp
 
 // Flush interval handle
 let flushIntervalId: NodeJS.Timeout | null = null
@@ -107,8 +113,17 @@ function rollBuffers(): void {
   if (nowMinute !== currentMinuteTimestamp) {
     flushMinuteToRingBuffer()
     currentMinuteTimestamp = nowMinute
-    // Cap data loss on restart at roughly one minute.
-    void flushPendingToDb()
+
+    // Bound the DB write rate. The managed Postgres bills compute-hours and
+    // suspends after ~5 minutes without a connection, so a write every minute
+    // holds it awake for as long as anyone is browsing — and now that page
+    // renders are cached and issue no queries, this flush is often the only
+    // thing touching the DB at all. Ten minutes keeps restart loss small while
+    // letting the instance suspend between bursts of traffic.
+    if (nowMinute - lastDbFlushAt >= DB_FLUSH_INTERVAL_MS) {
+      lastDbFlushAt = nowMinute
+      void flushPendingToDb()
+    }
   }
 }
 

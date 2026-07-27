@@ -21,7 +21,7 @@ import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { headers } from 'next/headers'
-import { getFullSiteStructure } from '@/lib/cached-queries'
+import { getFullSiteStructure, getOrgTeacherContentPage } from '@/lib/cached-queries'
 import { buildSiteStructure } from '@/lib/site-structure'
 import { getExamClassesForTeacher } from '@/lib/scoring/auth'
 import { resolveExamState, type ExamLifecycleState } from '@/lib/exam-state'
@@ -47,43 +47,14 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { orgSlug, pageSlug, skriptSlug, contentPageSlug } = await params
 
   try {
-    const orgSite = await prisma.site.findUnique({
-      where: { slug: orgSlug },
-      select: { organization: { select: { id: true, name: true } } }
-    })
-    const organization = orgSite?.organization
+    // Same cached entry the component below uses, so metadata is free.
+    const data = await getOrgTeacherContentPage(orgSlug, pageSlug, skriptSlug, contentPageSlug)
 
-    if (!organization) {
-      return { title: 'Page Not Found' }
-    }
-
-    const teacher = await prisma.user.findFirst({
-      where: {
-        sites: { some: { slug: pageSlug } },
-        organizationMemberships: { some: { organizationId: organization.id } }
-      },
-      select: { id: true, name: true, sites: { where: { slug: pageSlug }, take: 1, select: { pageName: true } } }
-    })
-
-    if (!teacher) {
-      return { title: 'Teacher Not Found' }
-    }
-
-    const page = await prisma.page.findFirst({
-      where: {
-        slug: contentPageSlug,
-        skript: {
-          slug: skriptSlug,
-          authors: { some: { userId: teacher.id } }
-        }
-      },
-      select: { title: true }
-    })
-
-    if (!page) {
+    if (!data) {
       return { title: 'Page Not Found', robots: 'noindex' }
     }
 
+    const { organization, teacher, page } = data
     const teacherName = teacher.sites[0]?.pageName || teacher.name || 'Teacher'
     const title = `${page.title} | ${teacherName} | ${organization.name}`
 
@@ -108,90 +79,19 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
   const { orgSlug, pageSlug, skriptSlug, contentPageSlug } = await params
   const resolvedSearchParams = await searchParams
 
-  const orgSiteRow = await prisma.site.findUnique({
-    where: { slug: orgSlug },
-    select: {
-      pageLanguage: true,
-      pageDescription: true,
-      pageIcon: true,
-      showIcon: true,
-      organization: { select: { id: true, name: true } }
-    }
-  })
-  const organization = orgSiteRow?.organization
-    ? {
-        ...orgSiteRow.organization,
-        description: orgSiteRow.pageDescription,
-        iconUrl: orgSiteRow.pageIcon,
-        showIcon: orgSiteRow.showIcon,
-      }
-    : null
+  // One cached lookup for org + teacher + page (shared with generateMetadata).
+  const data = await getOrgTeacherContentPage(orgSlug, pageSlug, skriptSlug, contentPageSlug)
 
-  if (!organization) {
+  if (!data) {
     notFound()
   }
 
-  const teacher = await prisma.user.findFirst({
-    where: {
-      sites: { some: { slug: pageSlug } },
-      organizationMemberships: { some: { organizationId: organization.id } }
-    },
-    select: {
-      id: true,
-      name: true,
-      bio: true,
-      title: true,
-      sites: {
-        where: { slug: pageSlug },
-        take: 1,
-        select: {
-          slug: true,
-          pageName: true,
-          pageDescription: true,
-          pageIcon: true,
-          sidebarBehavior: true,
-          typographyPreference: true,
-        },
-      },
-    }
-  })
-
-  if (!teacher) {
-    notFound()
-  }
-
-  // Find page via skript unique slug
-  const page = await prisma.page.findFirst({
-    where: {
-      slug: contentPageSlug,
-      skript: {
-        slug: skriptSlug,
-        OR: [
-          { authors: { some: { userId: teacher.id } } },
-          { collectionSkripts: { some: { collection: { site: { userId: teacher.id } } } } }
-        ]
-      }
-    },
-    include: {
-      skript: {
-        include: {
-          collectionSkripts: {
-            include: { collection: true },
-            orderBy: { order: 'asc' },
-            take: 1
-          },
-          pages: {
-            where: { isPublished: true },
-            orderBy: { order: 'asc' },
-            select: { id: true, title: true, slug: true }
-          }
-        }
-      }
-    }
-  })
-
-  if (!page) {
-    notFound()
+  const { orgSite, teacher, page } = data
+  const organization = {
+    ...data.organization,
+    description: orgSite.pageDescription,
+    iconUrl: orgSite.pageIcon,
+    showIcon: orgSite.showIcon,
   }
 
   const skript = page.skript
@@ -439,7 +339,7 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
             skriptId={skript.id}
             pageId={page.id}
             organizationSlug={orgSlug}
-            pageLanguage={orgSiteRow?.pageLanguage}
+            pageLanguage={orgSite.pageLanguage}
           />
         </AnnotationWrapper>
       </article>

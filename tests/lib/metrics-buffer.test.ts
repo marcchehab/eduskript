@@ -5,6 +5,9 @@
  * 1. The hourly row used to be stamped with the NEW hour, because the flush
  *    read `currentHourTimestamp` after the caller had already advanced it.
  * 2. Samples recorded while a flush was in flight were cleared away.
+ *
+ * The DB write cadence (DB_FLUSH_INTERVAL_MS, 10 min) is why these tests jump
+ * the clock by more than ten minutes rather than by one.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -70,8 +73,8 @@ describe('metrics buffer', () => {
 
     recordMetric('db_queries_total', 1)
 
-    // Minute rollover starts a flush that has not resolved yet.
-    vi.setSystemTime(new Date('2026-07-27T10:31:00.000Z'))
+    // Crossing the flush interval starts a write that has not resolved yet.
+    vi.setSystemTime(new Date('2026-07-27T10:41:00.000Z'))
     recordMetric('db_queries_total', 1)
     await vi.waitFor(() => expect(executeRaw).toHaveBeenCalledTimes(1))
 
@@ -92,7 +95,7 @@ describe('metrics buffer', () => {
     executeRaw.mockRejectedValueOnce(new Error('connection lost'))
 
     recordMetric('db_queries_total', 1)
-    vi.setSystemTime(new Date('2026-07-27T10:31:00.000Z'))
+    vi.setSystemTime(new Date('2026-07-27T10:41:00.000Z'))
     recordMetric('db_queries_total', 1)
     await vi.waitFor(() => expect(executeRaw).toHaveBeenCalledTimes(1))
 

@@ -947,3 +947,230 @@ export const getOrgHomepageContent = (
       revalidate: false,
     }
   )()
+
+/**
+ * The three lookups behind /org/[orgSlug]/[pageSlug]/[skriptSlug]/[contentPageSlug]
+ * — a teacher's page served under an org host (every eduskript.org teacher URL).
+ *
+ * That route is `force-dynamic` and ran these uncached, twice per request
+ * (generateMetadata + the component), measured at 11 DB queries per page view
+ * against 0 for the same page on a custom domain, which is served by the ISR
+ * `[domain]` tree. Both callers share this one cached entry.
+ *
+ * The where-clauses match what the route did before, deliberately: unlike
+ * getPublishedPage() this does NOT require skript.isPublished or
+ * page.isPublished, so the org route keeps serving unpublished content exactly
+ * as it did. That inconsistency with the [domain] route is pre-existing and
+ * worth deciding on separately — do not "fix" it here by accident.
+ *
+ * Tag set is a superset of what page/skript/collection saves invalidate
+ * (teacherContent + orgContent), so edits show up without a deploy.
+ */
+export const getOrgTeacherContentPage = (
+  orgSlug: string,
+  pageSlug: string,
+  skriptSlug: string,
+  contentPageSlug: string
+) =>
+  unstable_cache(
+    async () => {
+      log('MISS getOrgTeacherContentPage', { orgSlug, pageSlug, skriptSlug, contentPageSlug })
+
+      const orgSite = await prisma.site.findUnique({
+        where: { slug: orgSlug },
+        select: {
+          pageLanguage: true,
+          pageDescription: true,
+          pageIcon: true,
+          showIcon: true,
+          organization: { select: { id: true, name: true } },
+        },
+      })
+      if (!orgSite?.organization) return null
+
+      const teacher = await prisma.user.findFirst({
+        where: {
+          sites: { some: { slug: pageSlug } },
+          organizationMemberships: { some: { organizationId: orgSite.organization.id } },
+        },
+        select: {
+          id: true,
+          name: true,
+          bio: true,
+          title: true,
+          sites: {
+            where: { slug: pageSlug },
+            take: 1,
+            select: {
+              slug: true,
+              pageName: true,
+              pageDescription: true,
+              pageIcon: true,
+              sidebarBehavior: true,
+              typographyPreference: true,
+            },
+          },
+        },
+      })
+      if (!teacher) return null
+
+      const page = await prisma.page.findFirst({
+        where: {
+          slug: contentPageSlug,
+          skript: {
+            slug: skriptSlug,
+            OR: [
+              { authors: { some: { userId: teacher.id } } },
+              { collectionSkripts: { some: { collection: { site: { userId: teacher.id } } } } },
+            ],
+          },
+        },
+        include: {
+          skript: {
+            include: {
+              collectionSkripts: {
+                include: { collection: true },
+                orderBy: { order: 'asc' },
+                take: 1,
+              },
+              pages: {
+                where: { isPublished: true },
+                orderBy: { order: 'asc' },
+                select: { id: true, title: true, slug: true },
+              },
+            },
+          },
+        },
+      })
+      if (!page) return null
+
+      return {
+        orgSite: {
+          pageLanguage: orgSite.pageLanguage,
+          pageDescription: orgSite.pageDescription,
+          pageIcon: orgSite.pageIcon,
+          showIcon: orgSite.showIcon,
+        },
+        organization: orgSite.organization,
+        teacher,
+        page,
+      }
+    },
+    [`org-teacher-page-${orgSlug}-${pageSlug}-${skriptSlug}-${contentPageSlug}`],
+    {
+      tags: [
+        CACHE_TAGS.organization(orgSlug),
+        CACHE_TAGS.orgContent(orgSlug),
+        CACHE_TAGS.user(pageSlug),
+        CACHE_TAGS.teacherContent(pageSlug),
+        CACHE_TAGS.skriptBySlug(pageSlug, skriptSlug),
+        CACHE_TAGS.pageBySlug(pageSlug, skriptSlug, contentPageSlug),
+      ],
+      revalidate: false,
+    }
+  )()
+
+/**
+ * Org + teacher + skript for /org/[orgSlug]/[pageSlug]/[skriptSlug] — the
+ * skript front page under an org host. Same story as
+ * getOrgTeacherContentPage: force-dynamic route, three lookups run twice per
+ * request (generateMetadata + component), measured at 6 queries per request
+ * even on repeat views. Next prefetches these from every sidebar link, so they
+ * fire constantly while a reader browses.
+ *
+ * Where-clauses preserved exactly as the route had them, including the absence
+ * of an isPublished filter on the skript.
+ */
+export const getOrgTeacherSkript = (
+  orgSlug: string,
+  pageSlug: string,
+  skriptSlug: string
+) =>
+  unstable_cache(
+    async () => {
+      log('MISS getOrgTeacherSkript', { orgSlug, pageSlug, skriptSlug })
+
+      const orgSite = await prisma.site.findUnique({
+        where: { slug: orgSlug },
+        select: {
+          pageDescription: true,
+          pageIcon: true,
+          showIcon: true,
+          organization: { select: { id: true, name: true } },
+        },
+      })
+      if (!orgSite?.organization) return null
+
+      const teacher = await prisma.user.findFirst({
+        where: {
+          sites: { some: { slug: pageSlug } },
+          organizationMemberships: { some: { organizationId: orgSite.organization.id } },
+        },
+        select: {
+          id: true,
+          name: true,
+          bio: true,
+          title: true,
+          sites: {
+            where: { slug: pageSlug },
+            take: 1,
+            select: {
+              slug: true,
+              pageName: true,
+              pageDescription: true,
+              pageIcon: true,
+              sidebarBehavior: true,
+              typographyPreference: true,
+            },
+          },
+        },
+      })
+      if (!teacher) return null
+
+      const skript = await prisma.skript.findFirst({
+        where: {
+          slug: skriptSlug,
+          OR: [
+            { authors: { some: { userId: teacher.id } } },
+            { collectionSkripts: { some: { collection: { site: { userId: teacher.id } } } } },
+          ],
+        },
+        include: {
+          frontPage: true,
+          collectionSkripts: {
+            include: { collection: true },
+            orderBy: { order: 'asc' },
+            take: 1,
+          },
+          pages: {
+            where: { isPublished: true },
+            orderBy: { order: 'asc' },
+            select: { id: true, title: true, slug: true },
+          },
+        },
+      })
+      if (!skript) return null
+
+      return {
+        orgSite: {
+          pageDescription: orgSite.pageDescription,
+          pageIcon: orgSite.pageIcon,
+          showIcon: orgSite.showIcon,
+        },
+        organization: orgSite.organization,
+        teacher,
+        skript,
+      }
+    },
+    [`org-teacher-skript-${orgSlug}-${pageSlug}-${skriptSlug}`],
+    {
+      tags: [
+        CACHE_TAGS.organization(orgSlug),
+        CACHE_TAGS.orgContent(orgSlug),
+        CACHE_TAGS.user(pageSlug),
+        CACHE_TAGS.teacherContent(pageSlug),
+        CACHE_TAGS.skriptBySlug(pageSlug, skriptSlug),
+      ],
+      revalidate: false,
+    }
+  )()

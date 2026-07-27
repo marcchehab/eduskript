@@ -5,6 +5,7 @@
  * in server components or API routes.
  */
 
+import { unstable_cache } from 'next/cache'
 import { prisma } from './prisma'
 import { getS3Key } from './file-storage'
 import { getTeacherFileUrl } from './s3'
@@ -14,7 +15,7 @@ import type { SkriptFilesData, SkriptFile, VideoInfo } from './skript-files'
  * SSR: Query database for all files and videos associated with a skript.
  * Call this once at the start of rendering, not per-file.
  */
-export async function getSkriptFiles(skriptId: string): Promise<SkriptFilesData> {
+async function fetchSkriptFiles(skriptId: string): Promise<SkriptFilesData> {
   // Fetch all files for this skript
   const dbFiles = await prisma.file.findMany({
     where: {
@@ -78,4 +79,23 @@ export async function getSkriptFiles(skriptId: string): Promise<SkriptFilesData>
   }
 
   return { env: 'ssr', files, videos }
+}
+
+/**
+ * Cached wrapper — 2 queries on every markdown render otherwise.
+ *
+ * Time-based (60s), not tag-based, on purpose: files and videos are written
+ * from seven places (upload confirm, file import, video upload-url, admin
+ * videos, import-actions, file-storage, files/import) and none of them
+ * invalidate a cache tag today. A tagged forever-cache would therefore show a
+ * teacher's freshly uploaded image as missing until the next deploy. A minute
+ * of staleness that heals itself is the safer trade; if a tag is ever wired
+ * into all seven writers, switch to `tags: [CACHE_TAGS.skript(skriptId)]`.
+ */
+export async function getSkriptFiles(skriptId: string): Promise<SkriptFilesData> {
+  return unstable_cache(
+    () => fetchSkriptFiles(skriptId),
+    ['skript-files', skriptId],
+    { revalidate: 60 }
+  )()
 }

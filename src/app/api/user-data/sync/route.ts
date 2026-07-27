@@ -9,12 +9,13 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { getServerSession } from 'next-auth'
 import { cookies } from 'next/headers'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
+import { CACHE_TAGS } from '@/lib/cached-queries'
 import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import { uploadSnapImage, deleteSnapImage, isS3Configured } from '@/lib/s3'
 import { eventBus } from '@/lib/events'
@@ -529,6 +530,15 @@ export async function POST(request: NextRequest) {
       try {
         // Get all unique pageIds that were updated
         const pageIds = [...new Set(pageAnnotationItems.map(item => item.itemId))]
+
+        // Drop the cached public layers first — getPublicLayers() in
+        // src/lib/public-page-data.ts keys on this tag and caches forever.
+        // Must happen before the path revalidation below, and independently of
+        // it: the path lookup can fail to resolve a slug, and stale layers are
+        // worse than an extra revalidate.
+        for (const pageId of pageIds) {
+          revalidateTag(CACHE_TAGS.page(pageId), { expire: 0 })
+        }
 
         // Look up page paths for cache invalidation
         for (const pageId of pageIds) {

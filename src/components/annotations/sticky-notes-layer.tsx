@@ -263,28 +263,40 @@ export function StickyNotesLayer({ pageId, children, isExamStudent, publicSticky
     let cancelled = false
     const refresh = async () => {
       try {
-        const res = await fetch(`/api/user-data/sticky-notes/${encodeURIComponent(pageId)}?targetType=page`)
+        // Shares /api/user-data/public with the annotation layer instead of
+        // hitting /api/user-data/sticky-notes/<id> — same data, and that
+        // endpoint is cached server-side (getPublicLayers), so this costs no
+        // DB query. It already returns the notes flattened out of the wrapper.
+        const res = await fetch(`/api/user-data/public/${encodeURIComponent(pageId)}`)
         if (!res.ok || cancelled) return
-        const json = await res.json()
-        const d = json?.data as StickyNotesData | null
+        const json = await res.json() as { publicStickyNotes?: StickyNote[] }
         if (cancelled) return
         // Server is authoritative for the public layer — replace, don't merge.
-        // Treat "no row" (null data) as "no notes" rather than leaving stale state.
-        setPublicNotes(d?.notes ?? [])
+        // Missing array means "no notes" rather than leaving stale state.
+        setPublicNotes(json.publicStickyNotes ?? [])
       } catch {
         // Network errors are non-critical; SSR seed remains in place.
       }
     }
     refresh()
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') refresh()
+
+    // visibilitychange and focus both fire on a single tab switch; throttle so
+    // one alt-tab costs one request, not two. Mirrors annotation-layer.
+    let lastRefreshAt = Date.now()
+    const REFRESH_MIN_INTERVAL_MS = 15_000
+    const refreshThrottled = () => {
+      if (document.visibilityState !== 'visible') return
+      if (Date.now() - lastRefreshAt < REFRESH_MIN_INTERVAL_MS) return
+      lastRefreshAt = Date.now()
+      refresh()
     }
-    document.addEventListener('visibilitychange', onVisible)
-    window.addEventListener('focus', refresh)
+
+    document.addEventListener('visibilitychange', refreshThrottled)
+    window.addEventListener('focus', refreshThrottled)
     return () => {
       cancelled = true
-      document.removeEventListener('visibilitychange', onVisible)
-      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', refreshThrottled)
+      window.removeEventListener('focus', refreshThrottled)
     }
   }, [isTeacher, pageId])
 

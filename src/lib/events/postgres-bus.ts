@@ -13,6 +13,17 @@
  * Managed PostgreSQL services (Koyeb, etc.) periodically kill long-lived
  * connections for maintenance. We handle this with exponential backoff
  * (1s → 2s → 4s → ... → 30s max) and deduplicated reconnect attempts.
+ *
+ * The LISTEN connection is opened lazily, on the first subscribe(), and closed
+ * again when the last subscriber goes away. This matters for cost, not just
+ * tidiness: the managed Postgres bills compute-hours and only suspends when no
+ * client is connected. Connecting eagerly in the constructor meant that the
+ * first request to any of the ~13 routes importing this module (including
+ * /api/user-data/sync, hit on every annotation save) pinned the database awake
+ * until the next deploy — measured at 99.3% active time in July.
+ *
+ * publish() does not need the listener: NOTIFY goes through the pool, whose
+ * idle clients disconnect after POOL_IDLE_TIMEOUT_MS.
  */
 
 import pg from 'pg'
@@ -32,6 +43,10 @@ const MAX_CHANNEL_LENGTH = 63
 // Reconnection parameters
 const INITIAL_RETRY_MS = 1000
 const MAX_RETRY_MS = 30_000
+
+// How long a publish-only (NOTIFY) connection may sit idle in the pool before
+// pg closes it. Kept short so a one-off publish cannot hold the database awake.
+const POOL_IDLE_TIMEOUT_MS = 5_000
 
 function sanitizeChannel(channel: string): string {
   const sanitized = CHANNEL_PREFIX + channel.replace(/[^a-zA-Z0-9]/g, '_')
@@ -70,11 +85,12 @@ class PostgresEventBus implements EventBus {
     this.pool = new Pool({
       connectionString: process.env.DATABASE_URL,
       max: 3, // Small pool just for NOTIFY commands
+      idleTimeoutMillis: POOL_IDLE_TIMEOUT_MS,
       ...(sslConfig && { ssl: sslConfig }),
     })
 
-    // Start listening connection
-    this.connect()
+    // No LISTEN connection yet — subscribe() opens one on demand. See the file
+    // header: connecting here kept the database from ever suspending.
   }
 
   /**
@@ -83,6 +99,8 @@ class PostgresEventBus implements EventBus {
    */
   private async connect(): Promise<void> {
     if (this.isReconnecting) return
+    // Nothing to listen for — don't hold a connection open (see file header).
+    if (this.subscribers.size === 0) return
     this.isReconnecting = true
 
     try {
@@ -132,15 +150,17 @@ class PostgresEventBus implements EventBus {
       // Both 'error' and 'end' feed into the same reconnect path.
       // The error handler fires first (with the PG error), then 'end' fires.
       // We only schedule one reconnect via scheduleReconnect().
+      // Only reconnect while something is actually listening — otherwise a
+      // closed connection would be reopened forever and hold the DB awake.
       client.on('error', () => {
         // Connection lost — will reconnect via 'end' or scheduleReconnect
         this.listenerClient = null
-        this.scheduleReconnect()
+        if (this.subscribers.size > 0) this.scheduleReconnect()
       })
 
       client.on('end', () => {
         this.listenerClient = null
-        this.scheduleReconnect()
+        if (this.subscribers.size > 0) this.scheduleReconnect()
       })
 
       // Re-subscribe to all active channels on this new connection
@@ -168,6 +188,7 @@ class PostgresEventBus implements EventBus {
    */
   private scheduleReconnect(): void {
     if (this.reconnectTimer) return // Already scheduled
+    if (this.subscribers.size === 0) return // Nobody listening
 
     const delay = this.retryMs
     this.retryMs = Math.min(this.retryMs * 2, MAX_RETRY_MS)
@@ -205,8 +226,9 @@ class PostgresEventBus implements EventBus {
       this.listenerClient.query(`LISTEN ${pgChannel}`)
         .catch((err) => console.error(`[PostgresEventBus] LISTEN ${pgChannel} failed:`, err))
     } else {
-      // Connection will re-LISTEN on all channels when it reconnects
-      this.scheduleReconnect()
+      // First subscriber (or reconnecting) — connect() re-LISTENs every
+      // channel in `subscribers`, which now includes this one.
+      void this.connect()
     }
 
     // Return unsubscribe function
@@ -223,7 +245,35 @@ class PostgresEventBus implements EventBus {
           })
         }
       }
+
+      // Nobody left listening: drop the connection so the managed Postgres can
+      // suspend. The next subscribe() opens a fresh one.
+      if (this.subscribers.size === 0) {
+        this.disconnectListener()
+      }
     }
+  }
+
+  /**
+   * Close the LISTEN connection and cancel any pending reconnect.
+   * Safe to call when already disconnected.
+   */
+  private disconnectListener(): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
+
+    const client = this.listenerClient
+    if (!client) return
+
+    // Null it first so the 'end' handler sees no client and, with no
+    // subscribers left, does not schedule a reconnect.
+    this.listenerClient = null
+    client.removeAllListeners()
+    client.end().catch(() => {
+      // Closing a already-broken connection is not an error worth surfacing.
+    })
   }
 
   /**
