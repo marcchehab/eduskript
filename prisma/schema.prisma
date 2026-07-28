@@ -236,6 +236,12 @@ model Site {
   showIcon             Boolean @default(true) @map("show_icon")
   aiSystemPrompt       String? @map("ai_system_prompt") @db.Text
 
+  // Loose bag for per-site preferences that nothing queries ACROSS rows, so a
+  // new toggle needs no migration. Shape + defaults live in src/lib/settings.ts
+  // — always go through that module, never read raw keys.
+  // Anything filtered, joined, sorted or billed on stays a real column.
+  extraSettings Json @default("{}") @map("extra_settings")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -845,6 +851,9 @@ model Organization {
 
   // Billing groundwork (payment provider TBD)
   billingPlan String @default("free") @map("billing_plan")
+
+  // Same contract as Site.extraSettings — see src/lib/settings.ts.
+  extraSettings Json @default("{}") @map("extra_settings")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
