@@ -53,8 +53,8 @@ function skriptSlug(userId: string): string {
   return `demo-welcome-${slugSuffix(userId)}`
 }
 
-export { DEMO_EMAIL, DEMO_PASSWORD, DEMO_SITE_SLUG } from './demo-account.js'
-import { DEMO_EMAIL, DEMO_PASSWORD, DEMO_SITE_SLUG } from './demo-account.js'
+export { DEMO_EMAIL, DEMO_PASSWORD, DEMO_SITE_SLUG } from './demo-account'
+import { DEMO_EMAIL, DEMO_PASSWORD, DEMO_SITE_SLUG } from './demo-account'
 
 const DEMO_FRONTPAGE_CONTENT = `# Demo
 
@@ -100,7 +100,7 @@ export async function findDemoUser(prisma: PrismaLike) {
  */
 async function purgeDemoUser(prisma: PrismaLike, userId: string): Promise<void> {
   const { deleteS3Prefix, deleteTeacherFile, isS3Configured, isTeacherS3Configured } =
-    await import('./s3.js')
+    await import('./s3')
 
   const files: { hash: string | null; name: string }[] = await prisma.file.findMany({
     where: { createdBy: userId, isDirectory: false },
