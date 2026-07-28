@@ -15,10 +15,23 @@ interface YoutubeProps {
   pin?: boolean
 }
 
+/** 1280x720. Missing for some older/low-res uploads — hence the fallback. */
+const maxResThumb = (id: string) => `https://img.youtube.com/vi/${id}/maxresdefault.jpg`
+/** 480x360. YouTube generates this for every video. */
+const fallbackThumb = (id: string) => `https://img.youtube.com/vi/${id}/hqdefault.jpg`
+
 export function Youtube({ id, playlist, startTime, caption, pin }: YoutubeProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  // Derived from the id, not fetched: the <img> is then part of the server-
+  // rendered HTML and starts downloading with everything else on the page.
+  // State only so onError can fall back; `thumbFor` tracks which id it belongs
+  // to, so a changed id resets it during render rather than in an effect.
+  const [thumbnailUrl, setThumbnailUrl] = useState(() => (id ? maxResThumb(id) : null))
+  const [thumbFor, setThumbFor] = useState(id)
+  if (thumbFor !== id) {
+    setThumbFor(id)
+    setThumbnailUrl(id ? maxResThumb(id) : null)
+  }
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const pathname = usePathname()
 
@@ -39,42 +52,6 @@ export function Youtube({ id, playlist, startTime, caption, pin }: YoutubeProps)
 
     return `https://www.youtube.com/embed/${id}?${params.toString()}`
   }, [id, startTime, playlist])
-
-  useEffect(() => {
-    if (!id) return
-
-    const thumbnailQualities = [
-      'maxresdefault.jpg',
-      'sddefault.jpg',
-      'hqdefault.jpg',
-      'mqdefault.jpg',
-      'default.jpg'
-    ]
-
-    const checkThumbnail = async (index = 0) => {
-      if (index >= thumbnailQualities.length) {
-        setThumbnailUrl(`https://img.youtube.com/vi/${id}/hqdefault.jpg`)
-        setIsLoading(false)
-        return
-      }
-
-      const url = `https://img.youtube.com/vi/${id}/${thumbnailQualities[index]}`
-
-      try {
-        const response = await fetch(url, { method: 'HEAD' })
-        if (response.ok) {
-          setThumbnailUrl(url)
-          setIsLoading(false)
-        } else {
-          checkThumbnail(index + 1)
-        }
-      } catch {
-        checkThumbnail(index + 1)
-      }
-    }
-
-    checkThumbnail(0)
-  }, [id])
 
   // Listen for timestamp navigation events from YT components
   useEffect(() => {
@@ -176,22 +153,23 @@ export function Youtube({ id, playlist, startTime, caption, pin }: YoutubeProps)
       className="relative cursor-pointer aspect-video block rounded-lg overflow-hidden"
       onClick={handleClick}
     >
-      {isLoading ? (
-        <span className="absolute inset-0 bg-muted animate-pulse flex items-center justify-center">
-          <span className="text-muted-foreground">Loading thumbnail...</span>
-        </span>
-      ) : (
-        <span className="absolute inset-0 overflow-hidden">
-          <Image
-            src={thumbnailUrl || `https://img.youtube.com/vi/${id}/hqdefault.jpg`}
-            fill
-            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-            alt="YouTube video thumbnail"
-            className="object-cover"
-            priority
-          />
-        </span>
-      )}
+      <span className="absolute inset-0 overflow-hidden bg-muted">
+        <Image
+          src={thumbnailUrl || fallbackThumb(id ?? '')}
+          fill
+          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+          alt="YouTube video thumbnail"
+          className="object-cover"
+          // Straight from YouTube's CDN. Routing it through /_next/image added
+          // a hop to our own server, which then had to fetch and re-encode a
+          // JPEG that is already small and edge-cached.
+          unoptimized
+          onError={() => {
+            // maxresdefault does not exist for every video; hqdefault always does.
+            if (id && thumbnailUrl !== fallbackThumb(id)) setThumbnailUrl(fallbackThumb(id))
+          }}
+        />
+      </span>
       <span className="absolute inset-0 flex items-center justify-center">
         <span className="bg-black/50 rounded-full p-4 transition-transform hover:scale-110">
           <svg className="w-16 h-16 text-white" fill="currentColor" viewBox="0 0 24 24">
