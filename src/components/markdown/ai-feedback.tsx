@@ -5,7 +5,7 @@
  *
  * Three input paths:
  * 1. Button: collects the student's own annotation strokes that currently sit
- *    inside the enclosing H2 section (previous h1/h2 → next h1/h2, live DOM
+ *    inside the enclosing section (previous h1/h2/h3 → next one, live DOM
  *    positions), renders them to a PNG (render-strokes-to-png.ts) and sends it.
  * 2. Paste zone: hover/focus the dashed box and press Ctrl+V with a screenshot
  *    in the clipboard — sends the pasted image instead. Covers work on top of
@@ -178,7 +178,7 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
     }
   }
 
-  /** Button path: strokes in the enclosing H2 section → PNG → send. */
+  /** Button path: strokes in the enclosing section → PNG → send. */
   const handleFeedbackClick = async () => {
     if (busy) return
     if (!requireLogin()) return
@@ -202,11 +202,15 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
       const scale = paperRect.width / paperEl.offsetWidth || 1
       const toPaperY = (clientY: number) => (clientY - paperRect.top) / scale
 
-      // Section bounds: previous h1/h2 (or paper top) → next h1/h2 (or paper end)
+      // Section bounds: previous h1/h2/h3 (or paper top) → next one (or paper
+      // end). Must stay in step with HEADING_RE in src/lib/ai/feedback-context.ts,
+      // which scopes the markdown sent alongside this image — if the two
+      // disagree, the model is shown strokes from one section and text from
+      // another.
       const componentTop = toPaperY(hostEl.getBoundingClientRect().top)
       let yTop = 0
       let yBottom = paperRect.height / scale
-      for (const el of paperEl.querySelectorAll('[data-section-id^="h1-"], [data-section-id^="h2-"]')) {
+      for (const el of paperEl.querySelectorAll('[data-section-id^="h1-"], [data-section-id^="h2-"], [data-section-id^="h3-"]')) {
         const top = toPaperY(el.getBoundingClientRect().top)
         if (top <= componentTop && top > yTop) yTop = top
         if (top > componentTop && top < yBottom) yBottom = top

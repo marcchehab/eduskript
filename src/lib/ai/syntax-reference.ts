@@ -428,14 +428,14 @@ An email capture box. Addresses go to the site's Brevo list, which owns the conf
   // AI feedback
   sections.push(`## AI Feedback
 
-A button students press to get AI feedback on what they drew or wrote by hand on the page (with the annotation pens) — e.g. a math derivation written next to an exercise. The strokes in the surrounding section (from the previous h1/h2 heading to the next) are rendered to an image and sent to a vision model together with the section's markdown and the teacher's prompt. Students can alternatively paste a screenshot (hover the dashed box, Ctrl+V) — useful when they marked up content like tables or diagrams. Self-closing, lowercase tag.
+A button students press to get AI feedback on what they drew or wrote by hand on the page (with the annotation pens) — e.g. a math derivation written next to an exercise. The strokes in the surrounding section (from the previous h1, h2 or h3 heading to the next one) are rendered to an image and sent to a vision model together with the section's markdown and the teacher's prompt. Students can alternatively paste a screenshot (hover the dashed box, Ctrl+V) — useful when they marked up content like tables or diagrams. Self-closing, lowercase tag.
 
 \`\`\`html
 <ai-feedback prompt="Check each simplification step. Point out the first error, do not reveal the solution." />
 <ai-feedback id="fb-quadratics" label="Check my solution" prompt="..." />
 \`\`\`
 
-**Attributes:** \`prompt\` — teacher instructions for the AI (not shown to students); \`id\` — optional stable identifier (components map to their prompt by position automatically, even with several per page); \`label\` — button text (default "Get AI feedback"). Place the tag inside the exercise's H2 section. Requires a logged-in user; requests are rate-limited.`)
+**Attributes:** \`prompt\` — teacher instructions for the AI (not shown to students); \`id\` — optional stable identifier (components map to their prompt by position automatically, even with several per page); \`label\` — button text (default "Get AI feedback"). Place the tag inside the exercise's own heading section; an h3 per exercise keeps the context tight. Requires a logged-in user; requests are rate-limited.`)
 
   // Ping terminal
   sections.push(`## Ping Terminal
@@ -702,7 +702,7 @@ export function getCondensedSyntaxReference(): string {
 
 **Newsletter:** \`<newsletter [title="..."] [description="..."] [button="..."] />\` — email capture; addresses go to the site's Brevo list, which owns confirmation and unsubscribe.
 
-**AI feedback:** \`<ai-feedback prompt="teacher instructions for the AI" [id="fb1"] [label="Check my solution"] />\` — button for students: sends their pen strokes in the surrounding h1/h2 section (rendered to an image) + the section markdown to a vision model for feedback; pasting a screenshot (hover box, Ctrl+V) works as alternative input. Several tags per page map to their prompts by position (\`id\` optional); requires login.
+**AI feedback:** \`<ai-feedback prompt="teacher instructions for the AI" [id="fb1"] [label="Check my solution"] />\` — button for students: sends their pen strokes in the surrounding h1/h2/h3 section (rendered to an image) + the section markdown to a vision model for feedback; pasting a screenshot (hover box, Ctrl+V) works as alternative input. Several tags per page map to their prompts by position (\`id\` optional); requires login.
 
 **Ping:** \`<ping [host="wairualodge.co.nz"] [count="4"] [os="linux|macos|windows"] />\` — interactive terminal; students type \`ping [-c N] host\`. Server-side TCP connect (not ICMP; works where school wifi blocks ICMP). RTT/IP/loss are real; \`host\` auto-runs a demo; requires login; private addresses blocked; top-right button switches OS style.
 

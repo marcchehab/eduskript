@@ -1,9 +1,13 @@
 /**
  * Extracts the context for an <ai-feedback> request from raw page markdown.
  *
- * Scope: the H2 section surrounding the <ai-feedback> tag — from the nearest
- * preceding h1/h2 heading (inclusive) to the next h1/h2 heading or EOF.
- * H3+ headings do NOT bound the section; they are sub-steps of the exercise.
+ * Scope: the section surrounding the <ai-feedback> tag — from the nearest
+ * preceding h1/h2/h3 heading (inclusive) to the next one or EOF. H4+ do not
+ * bound the section.
+ *
+ * H3 used to be treated as a sub-step and left inside the section, which in
+ * practice swept neighbouring exercises into the context and gave the model
+ * far more than the task it was grading.
  *
  * Runs server-side so students can't tamper with the teacher prompt or the
  * exercise text: the client only sends pageId + feedbackId, the server
@@ -23,11 +27,11 @@
 export interface FeedbackContext {
   /** Teacher prompt from the tag's prompt="..." attribute, if any. */
   prompt: string | null
-  /** The enclosing H2 section's markdown, ai-feedback tags stripped. */
+  /** The enclosing section's markdown, ai-feedback tags stripped. */
   sectionMarkdown: string
 }
 
-const HEADING_RE = /^#{1,2}\s+\S/
+const HEADING_RE = /^#{1,3}\s+\S/
 const FENCE_RE = /^\s*(```|~~~)/
 
 /** Line indices that are inside fenced code blocks (exclusive of fences). */
@@ -101,7 +105,7 @@ export function extractFeedbackContext(
   const promptMatch = tag.tagText.match(/\bprompt\s*=\s*"([^"]*)"/i)
   const prompt = promptMatch ? promptMatch[1] : null
 
-  // Section bounds: nearest h1/h2 at or above the tag line → next h1/h2 below
+  // Section bounds: nearest h1/h2/h3 at or above the tag line → next one below
   let start = 0
   for (let i = tag.line; i >= 0; i--) {
     if (!inFence[i] && HEADING_RE.test(lines[i])) {

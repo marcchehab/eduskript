@@ -40,11 +40,16 @@ describe('extractFeedbackContext', () => {
     expect(ctx!.sectionMarkdown).not.toContain('Algebra basics')
   })
 
-  it('does not treat h3 headings as section boundaries', () => {
+  it('treats h3 headings as section boundaries', () => {
+    // The tag sits under "### Hints", so the context is that h3 subsection —
+    // not the whole of Exercise 2 above it. Scoping to h2 swept in neighbouring
+    // material and gave the model more than the task being graded.
     const ctx = extractFeedbackContext(PAGE, 'fb2')
     expect(ctx!.prompt).toBe('Do not reveal the solution.')
-    expect(ctx!.sectionMarkdown).toContain('## Exercise 2')
     expect(ctx!.sectionMarkdown).toContain('### Hints')
+    expect(ctx!.sectionMarkdown).toContain('A hint under an h3.')
+    expect(ctx!.sectionMarkdown).not.toContain('## Exercise 2')
+    expect(ctx!.sectionMarkdown).not.toContain('Solve $x^2 = 9$.')
     expect(ctx!.sectionMarkdown).not.toContain('Exercise 3')
   })
 
@@ -63,7 +68,7 @@ describe('extractFeedbackContext', () => {
     expect(extractFeedbackContext(PAGE, null, 0)!.prompt).toBe('Check each step.')
     const ctx = extractFeedbackContext(PAGE, null, 1)
     expect(ctx!.prompt).toBe('Do not reveal the solution.')
-    expect(ctx!.sectionMarkdown).toContain('## Exercise 2')
+    expect(ctx!.sectionMarkdown).toContain('### Hints')
     expect(extractFeedbackContext(PAGE, null, 5)).toBeNull()
   })
 
