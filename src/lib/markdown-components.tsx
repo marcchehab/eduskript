@@ -29,6 +29,8 @@ import { StickMe } from '@/components/markdown/stick-me'
 import { ColorTitleHeading } from '@/components/markdown/color-title-heading'
 import { YT } from '@/components/markdown/youtube'
 import { Flex, FlexItem } from '@/components/markdown/flex'
+import { CtaButton, type CtaVariant, type CtaSize, type CtaAlign } from '@/components/markdown/cta-button'
+import { NewsletterBox } from '@/components/markdown/newsletter-box'
 import { PluginContainer } from '@/components/markdown/plugin-container'
 import { Fullwidth } from '@/components/markdown/fullwidth'
 import { PdfEmbed } from '@/components/markdown/pdf-embed'
@@ -817,6 +819,58 @@ export function createMarkdownComponents(
           onChange={onSpacerChange}
           sourceLineStart={str('data-source-line-start', 'dataSourceLineStart')}
           sourceLineEnd={str('data-source-line-end', 'dataSourceLineEnd')}
+        />
+      )
+    },
+
+    // <cta href="/auth/signup">Create free account</cta>
+    // Label from children, or from `label` when self-closing. Attributes reach
+    // us kebab-cased (HAST) or bare (raw HTML), so accept both spellings.
+    'cta': (props: Record<string, unknown>) => {
+      const str = (...keys: string[]): string | undefined => {
+        for (const k of keys) {
+          const v = props[k]
+          if (typeof v === 'string' && v !== '') return v
+        }
+        return undefined
+      }
+      const variant = str('variant', 'data-variant', 'dataVariant')
+      const size = str('size', 'data-size', 'dataSize')
+      const align = str('align', 'data-align', 'dataAlign')
+      const external = str('external', 'data-external', 'dataExternal')
+
+      return (
+        <CtaButton
+          href={str('href', 'data-href', 'dataHref')}
+          label={str('label', 'data-label', 'dataLabel')}
+          variant={['default', 'secondary', 'outline', 'ghost'].includes(variant ?? '')
+            ? (variant as CtaVariant)
+            : undefined}
+          size={['default', 'sm', 'lg'].includes(size ?? '') ? (size as CtaSize) : undefined}
+          align={['left', 'center', 'right'].includes(align ?? '') ? (align as CtaAlign) : undefined}
+          external={external === undefined ? undefined : external !== 'false'}
+        >
+          {props.children as React.ReactNode}
+        </CtaButton>
+      )
+    },
+
+    // <newsletter /> — email capture, stored in Brevo (see /api/newsletter).
+    'newsletter': (props: Record<string, unknown>) => {
+      const str = (...keys: string[]): string | undefined => {
+        for (const k of keys) {
+          const v = props[k]
+          if (typeof v === 'string' && v !== '') return v
+        }
+        return undefined
+      }
+      return (
+        <NewsletterBox
+          pageId={pageId}
+          title={str('title', 'data-title', 'dataTitle')}
+          description={str('description', 'data-description', 'dataDescription')}
+          button={str('button', 'data-button', 'dataButton')}
+          listId={str('list-id', 'listId', 'data-list-id', 'dataListId')}
         />
       )
     },

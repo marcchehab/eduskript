@@ -110,6 +110,8 @@ export const sanitizeSchema = {
     'ai-feedback', // Student-triggered AI feedback on annotation strokes / pasted screenshots
     'login-codes', // Live login-code display for an inbound-email hook (CloudMailin)
     'onlyfor', // Audience gate (auth/anon/students/class) — wraps children
+    'cta', // Call-to-action button link, styled with the app's button variants
+    'newsletter', // Email capture box; list lives in Brevo, per site
     'plugin', // User-created plugins rendered in sandboxed iframes
     'iframe', // Raw embeds (geotraceroute, etc.) — sandbox forced post-sanitize by rehypeSandboxIframes
     'style', // <style> blocks for scoped CSS in markdown
@@ -156,6 +158,10 @@ export const sanitizeSchema = {
     // GeoGebra applet. material-id (online) is the primary source; src is
     // reserved for a future uploaded .ggb. Both kebab + camel for HAST/raw-HTML.
     'geogebra': ['material-id', 'materialId', 'src', 'height', 'width', 'show-toolbar', 'showToolbar', 'show-algebra-input', 'showAlgebraInput', 'correct-when', 'correctWhen'],
+    'cta': ['href', 'label', 'variant', 'size', 'align', 'external'],
+    // list-id is honoured only if it matches the list the page's site owns —
+    // enforced server-side in src/lib/newsletter.ts, not here.
+    'newsletter': ['title', 'description', 'button', 'list-id', 'listId'],
     'ping': ['host', 'count', 'os'],
     // AI feedback on student work. prompt is the teacher's grading instruction;
     // the server re-reads it from page content, the attr here is authoring UX.

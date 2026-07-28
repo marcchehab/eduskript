@@ -99,14 +99,21 @@ try {
     for (const [adapter, data] of [
       ['annotations', { strokes: strokes(12 + i * 4, `ann${i}`) }],
       ['snaps', { snaps: [] }],
+      // Shape must match StickyNote in src/components/annotations/
+      // sticky-notes-layer.tsx — the layer calls content.trim() on render, so
+      // a note missing `content` crashes the page rather than degrading.
       ['sticky-notes', {
         notes: Array.from({ length: 3 }, (_, n) => ({
           id: `seed-note-${i}-${n}`,
-          text: `Seeded note ${n + 1} on ${page.title ?? page.id}`,
+          content: `Seeded note ${n + 1} on ${page.title ?? page.id}`,
           x: 120 + n * 180,
           y: 220 + n * 40,
-          color: 'yellow',
-          sectionAnchor: null,
+          color: ['yellow', 'blue', 'green'][n % 3],
+          minimized: false,
+          width: 200,
+          height: 120,
+          createdAt: 1753600000000,
+          updatedAt: 1753600000000,
         })),
       }],
     ]) {

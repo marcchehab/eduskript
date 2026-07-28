@@ -401,6 +401,30 @@ A blank vertical space students write on by hand with the annotation pens — e.
 
 **Attributes (all optional):** \`pattern\` — \`checkered\` (default) | \`lines\` | \`dots\` | \`blank\`; \`height\` — px (default 200, range 40–1000); \`id\` — stable identifier (auto-added when inserted from the toolbar; keeps in-preview resize/restyle edits pointing at the right tag). In the editor the spacer shows a bottom drag-handle to change height and a top-right toolbar to switch pattern or delete it; on the published page it renders as a plain patterned area.`)
 
+  // Call-to-action button
+  sections.push(`## CTA button
+
+A call-to-action link styled as a button, matching the site's own UI and theme. Use it for signup or "read more" links on landing and front pages — never draw a button as an image.
+
+\`\`\`html
+<cta href="/auth/signup">Create free account</cta>
+<cta href="https://example.org/docs" label="Read the docs" variant="outline" size="default" align="left" />
+\`\`\`
+
+**Attributes:** \`href\` (required); label from the children or from \`label\` when self-closing; \`variant\` — \`default\` (default) | \`secondary\` | \`outline\` | \`ghost\`; \`size\` — \`lg\` (default) | \`default\` | \`sm\`; \`align\` — \`center\` (default) | \`left\` | \`right\`; \`external\` — \`true\`/\`false\` to force or prevent opening in a new tab (absolute URLs open in a new tab by default).`)
+
+  // Newsletter signup
+  sections.push(`## Newsletter signup
+
+An email capture box. Addresses go to the site's Brevo list, which owns the confirmation mail and the unsubscribe link — nothing is stored on the page.
+
+\`\`\`html
+<newsletter />
+<newsletter title="Stay in the loop" description="One mail a month about new material." button="Sign me up" />
+\`\`\`
+
+**Attributes (all optional):** \`title\`, \`description\`, \`button\` — label on the submit button; \`list-id\` — a specific Brevo list, otherwise the site default.`)
+
   // AI feedback
   sections.push(`## AI Feedback
 
@@ -673,6 +697,10 @@ export function getCondensedSyntaxReference(): string {
 **GeoGebra:** \`<geogebra material-id="dNPHaqgb" [show-toolbar="true"] [correct-when="correct"] />\` — embeds an interactive GeoGebra applet by material id (from a geogebra.org share link); auto-fits height by default (add \`height="450"\` to pin). \`correct-when\` captures per-student correctness for the teacher's class tally.
 
 **Spacer:** \`<spacer [pattern="checkered|lines|dots|blank"] [height="200"] [id="sp1"] />\` — blank writing area students solve on by hand with the pens; \`checkered\` is graph paper. Editor gives drag-to-resize + a pattern/delete toolbar; publishes as a plain patterned box.
+
+**CTA button:** \`<cta href="/auth/signup">Create free account</cta>\` — a link styled as a button in the site's own theme; \`label\` instead of children when self-closing, plus \`variant\` (default|secondary|outline|ghost), \`size\` (lg|default|sm), \`align\` (center|left|right). Never draw a button as an image.
+
+**Newsletter:** \`<newsletter [title="..."] [description="..."] [button="..."] />\` — email capture; addresses go to the site's Brevo list, which owns confirmation and unsubscribe.
 
 **AI feedback:** \`<ai-feedback prompt="teacher instructions for the AI" [id="fb1"] [label="Check my solution"] />\` — button for students: sends their pen strokes in the surrounding h1/h2 section (rendered to an image) + the section markdown to a vision model for feedback; pasting a screenshot (hover box, Ctrl+V) works as alternative input. Several tags per page map to their prompts by position (\`id\` optional); requires login.
 
