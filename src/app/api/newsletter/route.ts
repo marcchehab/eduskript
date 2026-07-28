@@ -30,23 +30,38 @@ const rateLimiter = new RateLimiter('newsletter', {
 // Enough to reject obvious rubbish; Brevo does the real validation.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-/** The site a page belongs to, via its skript's collection. */
+/** The skript's site, via the first collection the skript sits in. */
+const SKRIPT_SITE_SELECT = {
+  collectionSkripts: {
+    take: 1,
+    orderBy: { order: 'asc' as const },
+    select: { collection: { select: { siteId: true } } },
+  },
+}
+
+/**
+ * The site the box was rendered on.
+ *
+ * The id can name either a Page or a FrontPage: site and skript frontpages are
+ * FrontPage records, and the renderers pass their id as `pageId` (see
+ * src/app/[domain]/page.tsx). Two lookups rather than one because the ids live
+ * in separate tables; the FrontPage query only runs when the Page misses.
+ */
 async function siteIdForPage(pageId: string): Promise<string | null> {
   const page = await prisma.page.findUnique({
     where: { id: pageId },
-    select: {
-      skript: {
-        select: {
-          collectionSkripts: {
-            take: 1,
-            orderBy: { order: 'asc' },
-            select: { collection: { select: { siteId: true } } },
-          },
-        },
-      },
-    },
+    select: { skript: { select: SKRIPT_SITE_SELECT } },
   })
-  return page?.skript?.collectionSkripts[0]?.collection?.siteId ?? null
+  if (page) return page.skript?.collectionSkripts[0]?.collection?.siteId ?? null
+
+  // Site frontpage: siteId directly. Skript frontpage: via its skript.
+  const frontPage = await prisma.frontPage.findUnique({
+    where: { id: pageId },
+    select: { siteId: true, skript: { select: SKRIPT_SITE_SELECT } },
+  })
+  return (
+    frontPage?.siteId ?? frontPage?.skript?.collectionSkripts[0]?.collection?.siteId ?? null
+  )
 }
 
 export async function POST(request: NextRequest) {
