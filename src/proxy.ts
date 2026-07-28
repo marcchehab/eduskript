@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { recordMetric } from '@/lib/metrics/buffer'
 import { isSEBRequest } from '@/lib/seb'
+import { DEMO_EMAIL } from '@/lib/demo-account'
 
 // Cache entry types for domain lookups
 type DomainCacheEntry =
@@ -32,9 +33,46 @@ const APP_DOMAINS: Record<string, string> = {
   'www.eduskript.org': 'eduskript',
 }
 
+// Settings the public demo account may not touch. Anything that would outlive
+// the nightly reset (src/lib/seed-demo-content.ts) or break the demo URL until
+// it runs: the site slug, custom domains, account credentials, MCP tokens,
+// billing. Content routes stay writable — editing pages is the demo.
+//
+// A prefix list, so a settings route added outside these paths is not covered.
+// Checked here rather than per-route because the alternative is a guard in
+// ~20 handlers under /api/user alone.
+const DEMO_LOCKED_PREFIXES = [
+  '/api/user/',
+  '/api/sites',
+  '/api/subscriptions',
+  '/api/mcp/',
+  '/api/organizations',
+  '/api/admin/',
+]
+
+/** 403 for a write the demo account is not allowed to make, else null. */
+async function demoWriteGuard(request: NextRequest, pathname: string) {
+  if (request.method === 'GET' || request.method === 'HEAD') return null
+  if (!DEMO_LOCKED_PREFIXES.some(p => pathname.startsWith(p))) return null
+
+  const { getToken } = await import('next-auth/jwt')
+  const token = await getToken({ req: request })
+  if (token?.email !== DEMO_EMAIL) return null
+
+  return NextResponse.json(
+    { error: 'The demo account cannot change settings. Create a free account to try this.' },
+    { status: 403 }
+  )
+}
+
 export async function proxy(request: NextRequest) {
   const hostname = request.headers.get('host') || ''
   const { pathname } = request.nextUrl
+
+  // Before the /api early return below — API routes are matched by the config
+  // at the bottom of this file, they just fall straight through otherwise.
+  const denied = await demoWriteGuard(request, pathname)
+  if (denied) return denied
 
   // Extract just the domain (without port for localhost)
   const domain = hostname.split(':')[0]

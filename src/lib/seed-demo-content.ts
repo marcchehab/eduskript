@@ -29,8 +29,6 @@ const COLLECTION_TITLE = 'Getting Started with Eduskript'
 interface SeedDemoContentOptions {
   userId: string
   prisma: PrismaLike
-  /** If true, delete existing demo content for this user before re-seeding */
-  reset?: boolean
 }
 
 export interface SeedResult {
@@ -53,6 +51,146 @@ function slugSuffix(userId: string): string {
 
 function skriptSlug(userId: string): string {
   return `demo-welcome-${slugSuffix(userId)}`
+}
+
+export { DEMO_EMAIL, DEMO_PASSWORD, DEMO_SITE_SLUG } from './demo-account.js'
+import { DEMO_EMAIL, DEMO_PASSWORD, DEMO_SITE_SLUG } from './demo-account.js'
+
+const DEMO_FRONTPAGE_CONTENT = `# Demo
+
+Here you can log in using **demo@eduskript.org** with the password **demodemo**. All changes you make are reset every night.
+
+If you would like to try Eduskript for longer, you can:
+
+<cta href="https://eduskript.org/auth/signup" size="lg">Create a free account</cta>
+`
+
+/**
+ * The demo user, by email or — if a visitor changed the email — by the site
+ * slug it owns. Without the fallback a changed email makes the nightly reset
+ * create a second demo user, which then collides on the unique site slug and
+ * fails, leaving the tampered account live indefinitely.
+ */
+export async function findDemoUser(prisma: PrismaLike) {
+  return (
+    (await prisma.user.findUnique({ where: { email: DEMO_EMAIL } })) ??
+    (await prisma.user.findFirst({
+      where: { sites: { some: { slug: DEMO_SITE_SLUG } } },
+    }))
+  )
+}
+
+/**
+ * Delete the demo user outright, plus the S3 objects only it owned.
+ *
+ * Deleting the User row is what makes the reset total: every user-owned model
+ * cascades from it (sites, collections, skripts, pages, files, classes, exams,
+ * userData, OAuth access tokens, plugins, mail hooks). Selective deletion only
+ * ever covered the seeded demo content, so anything a visitor created stayed
+ * forever.
+ *
+ * S3 has to be handled before and after the row goes:
+ * - snaps/{userId}/ is owned by this user alone, so the whole prefix goes.
+ * - files/{hash}.{ext} is content-addressed and shared across ALL users, so a
+ *   blob is only removed once no File row anywhere still references its hash.
+ *   Checked after the cascade, when the demo rows are gone.
+ *
+ * Orphan risk in the other direction: if the S3 delete fails the blob leaks,
+ * which is preferable to deleting a blob a real teacher's page still renders.
+ */
+async function purgeDemoUser(prisma: PrismaLike, userId: string): Promise<void> {
+  const { deleteS3Prefix, deleteTeacherFile, isS3Configured, isTeacherS3Configured } =
+    await import('./s3.js')
+
+  const files: { hash: string | null; name: string }[] = await prisma.file.findMany({
+    where: { createdBy: userId, isDirectory: false },
+    select: { hash: true, name: true },
+  })
+
+  if (isS3Configured()) {
+    try {
+      await deleteS3Prefix(`snaps/${userId}/`)
+    } catch (error) {
+      console.warn(`[demo] snap purge failed: ${String(error).slice(0, 200)}`)
+    }
+  }
+
+  await prisma.user.delete({ where: { id: userId } })
+
+  if (!isTeacherS3Configured()) return
+
+  const seen = new Set<string>()
+  for (const file of files) {
+    if (!file.hash || seen.has(file.hash)) continue
+    seen.add(file.hash)
+
+    const stillUsed = await prisma.file.count({ where: { hash: file.hash } })
+    if (stillUsed > 0) continue
+
+    const extension = file.name.includes('.') ? file.name.split('.').pop()! : ''
+    if (!extension) continue
+
+    try {
+      await deleteTeacherFile(`files/${file.hash}.${extension}`)
+    } catch (error) {
+      console.warn(`[demo] blob purge failed for ${file.hash}: ${String(error).slice(0, 200)}`)
+    }
+  }
+}
+
+/**
+ * Rebuild the demo account from scratch: purge, recreate, re-seed.
+ *
+ * The user id changes on every run, which is fine — every slug the seeder
+ * derives is keyed to it. Callers are the nightly cron and
+ * scripts/reset-demo-user.ts; both used to carry their own copy of this.
+ *
+ * What still survives a reset: S3 blobs whose hash another user shares,
+ * newsletter addresses in Brevo, mail already sent, and AI spend.
+ */
+export async function resetDemoUser(prisma: PrismaLike): Promise<SeedResult & { userId: string }> {
+  const bcrypt = (await import('bcryptjs')).default
+
+  const existing = await findDemoUser(prisma)
+  if (existing) await purgeDemoUser(prisma, existing.id)
+
+  const user = await prisma.user.create({
+    data: {
+      email: DEMO_EMAIL,
+      name: 'Demo Teacher',
+      accountType: 'teacher',
+      hashedPassword: await bcrypt.hash(DEMO_PASSWORD, 12),
+      emailVerified: new Date(),
+      billingPlan: 'pro',
+      sites: { create: { slug: DEMO_SITE_SLUG, pageName: 'Demo' } },
+    },
+    select: { id: true },
+  })
+
+  // Membership in the eduskript org, when that org exists (its slug lives on
+  // the org's Site).
+  const orgSite = await prisma.site.findUnique({
+    where: { slug: 'eduskript' },
+    select: { organizationId: true },
+  })
+  if (orgSite?.organizationId) {
+    await prisma.organizationMember.create({
+      data: { organizationId: orgSite.organizationId, userId: user.id, role: 'member' },
+    })
+  }
+
+  const site = await prisma.site.findFirst({
+    where: { userId: user.id, slug: DEMO_SITE_SLUG },
+    select: { id: true },
+  })
+  if (site) {
+    await prisma.frontPage.create({
+      data: { siteId: site.id, content: DEMO_FRONTPAGE_CONTENT, isPublished: true },
+    })
+  }
+
+  const result = await seedDemoContent({ userId: user.id, prisma })
+  return { ...result, userId: user.id }
 }
 
 /**
@@ -109,47 +247,8 @@ function readSkriptMeta(): { title: string; description?: string } {
   return { title: 'Welcome to Eduskript' }
 }
 
-/**
- * Delete existing demo content for a user (for reset scenarios).
- * Relies on Prisma cascade deletes for junction tables.
- */
-async function deleteDemoContent(prisma: PrismaLike, userId: string): Promise<void> {
-  const suffix = slugSuffix(userId)
-
-  // Find and delete demo skripts (cascades to pages, pageAuthors, skriptAuthors, collectionSkripts)
-  const skripts = await prisma.skript.findMany({
-    where: { slug: { startsWith: `demo-welcome-${suffix}` } },
-    select: { id: true }
-  })
-  for (const skript of skripts) {
-    await prisma.skript.delete({ where: { id: skript.id } })
-  }
-
-  // Find and delete demo collections (cascades to collectionSkripts).
-  // Collections are now owned by Site, so we match by title scoped to the
-  // user's own site.
-  const collections = await prisma.collection.findMany({
-    where: {
-      title: COLLECTION_TITLE,
-      site: { userId }
-    },
-    select: { id: true }
-  })
-  for (const collection of collections) {
-    // Clean up PageLayoutItems referencing this collection
-    await prisma.pageLayoutItem.deleteMany({
-      where: { contentId: collection.id, type: 'collection' }
-    })
-    await prisma.collection.delete({ where: { id: collection.id } })
-  }
-}
-
 export async function seedDemoContent(options: SeedDemoContentOptions): Promise<SeedResult> {
-  const { userId, prisma, reset = false } = options
-
-  if (reset) {
-    await deleteDemoContent(prisma, userId)
-  }
+  const { userId, prisma } = options
 
   const skriptMeta = readSkriptMeta()
   const pages = readDemoPages()

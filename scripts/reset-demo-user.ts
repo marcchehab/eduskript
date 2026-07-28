@@ -3,9 +3,10 @@
  *
  * Run: npx tsx scripts/reset-demo-user.ts
  *
- * Intended for nightly cron to keep the demo account fresh.
- * Finds or creates demo@eduskript.org, deletes existing demo content,
- * and re-seeds from the demo-content/ directory.
+ * Same reset the nightly cron runs (src/app/api/cron/route.ts), against
+ * whatever DATABASE_URL points at. Deletes the demo user entirely — with it
+ * everything a visitor created — then recreates the account and re-seeds from
+ * the demo-content/ directory. See resetDemoUser() for what survives.
  */
 
 // Loaded before the Pool is built — without this, running the file directly
@@ -18,12 +19,12 @@ config()
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { Pool } from 'pg'
-import bcrypt from 'bcryptjs'
-import { seedDemoContent } from '../src/lib/seed-demo-content.js'
-
-const DEMO_EMAIL = 'demo@eduskript.org'
-const DEMO_PASSWORD = 'demodemo'
-const DEMO_PAGE_SLUG = 'demo'
+import {
+  resetDemoUser,
+  DEMO_EMAIL,
+  DEMO_PASSWORD,
+  DEMO_SITE_SLUG,
+} from '../src/lib/seed-demo-content.js'
 
 // Initialize Prisma with pg adapter (same pattern as sync-docs.ts)
 const isLocal = process.env.DATABASE_URL?.includes('localhost')
@@ -37,73 +38,16 @@ const prisma = new PrismaClient({ adapter })
 async function main() {
   console.log('🔄 Resetting demo user content...')
 
-  // Find or create demo user
-  let user = await prisma.user.findUnique({
-    where: { email: DEMO_EMAIL }
-  })
-
-  if (!user) {
-    console.log('   Creating demo user...')
-    const hashedPassword = await bcrypt.hash(DEMO_PASSWORD, 12)
-    user = await prisma.user.create({
-      data: {
-        email: DEMO_EMAIL,
-        name: 'Demo Teacher',
-        accountType: 'teacher',
-        hashedPassword,
-        emailVerified: new Date(),
-        billingPlan: 'pro',
-        sites: { create: { slug: DEMO_PAGE_SLUG, pageName: 'Demo' } },
-      }
-    })
-    console.log(`   ✓ Created demo user: ${DEMO_EMAIL}`)
-  } else {
-    console.log(`   ✓ Found existing demo user: ${DEMO_EMAIL}`)
-  }
-
-  // Add to eduskript org if it exists and user isn't already a member.
-  // Org slug now lives on Site.
-  const orgSite = await prisma.site.findUnique({
-    where: { slug: 'eduskript' },
-    select: { organizationId: true }
-  })
-  const org = orgSite?.organizationId
-    ? await prisma.organization.findUnique({ where: { id: orgSite.organizationId } })
-    : null
-  if (org) {
-    const membership = await prisma.organizationMember.findUnique({
-      where: {
-        organizationId_userId: {
-          organizationId: org.id,
-          userId: user.id
-        }
-      }
-    })
-    if (!membership) {
-      await prisma.organizationMember.create({
-        data: {
-          organizationId: org.id,
-          userId: user.id,
-          role: 'member'
-        }
-      })
-      console.log('   ✓ Added demo user to eduskript org')
-    }
-  }
-
-  // Reset demo content
-  const result = await seedDemoContent({
-    userId: user.id,
-    prisma,
-    reset: true,
-  })
+  // Purge + recreate + re-seed. Everything the demo user owns cascades away
+  // with the User row; see resetDemoUser().
+  const result = await resetDemoUser(prisma)
 
   console.log(`   ✓ Seeded ${result.pageCount} pages`)
   console.log(`   Collection: ${result.collectionId}`)
   console.log(`   Skript: ${result.skriptId}`)
   console.log('\n✅ Demo user reset complete!')
   console.log(`   Login: ${DEMO_EMAIL} / ${DEMO_PASSWORD}`)
-  console.log(`   Public page: /demo`)
+  console.log(`   Public page: /${DEMO_SITE_SLUG}`)
 
   await prisma.$disconnect()
   await pool.end()

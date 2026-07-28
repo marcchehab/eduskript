@@ -11,11 +11,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import bcrypt from 'bcryptjs'
-import { seedDemoContent } from '@/lib/seed-demo-content'
+import { resetDemoUser } from '@/lib/seed-demo-content'
 
-const DEMO_EMAIL = 'demo@eduskript.org'
-const DEMO_PASSWORD = 'demodemo'
 
 export async function POST(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
@@ -63,56 +60,10 @@ export async function POST(request: NextRequest) {
   }
 
   // --- Task 2: Reset demo user content ---
+  // Deletes the demo user and rebuilds it, so anything a visitor created
+  // during the day goes with it. See resetDemoUser().
   try {
-    let user = await prisma.user.findUnique({
-      where: { email: DEMO_EMAIL },
-    })
-
-    if (!user) {
-      const hashedPassword = await bcrypt.hash(DEMO_PASSWORD, 12)
-      user = await prisma.user.create({
-        data: {
-          email: DEMO_EMAIL,
-          name: 'Demo Teacher',
-          accountType: 'teacher',
-          hashedPassword,
-          emailVerified: new Date(),
-          billingPlan: 'pro',
-          sites: {
-            create: { slug: 'demo', pageName: 'Demo' },
-          },
-        },
-      })
-    }
-
-    // Add to eduskript org if exists (lookup via the org's site).
-    const orgSite = await prisma.site.findUnique({
-      where: { slug: 'eduskript' },
-      select: { organizationId: true },
-    })
-    const org = orgSite?.organizationId ? { id: orgSite.organizationId } : null
-    if (org) {
-      await prisma.organizationMember.upsert({
-        where: {
-          organizationId_userId: {
-            organizationId: org.id,
-            userId: user.id,
-          },
-        },
-        update: {},
-        create: {
-          organizationId: org.id,
-          userId: user.id,
-          role: 'member',
-        },
-      })
-    }
-
-    const result = await seedDemoContent({
-      userId: user.id,
-      prisma,
-      reset: true,
-    })
+    const result = await resetDemoUser(prisma)
     results.demoReset = { pageCount: result.pageCount }
   } catch (error) {
     console.error('[cron] reset-demo error:', error)

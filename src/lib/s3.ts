@@ -5,7 +5,14 @@
  * that would be too large/expensive to store in PostgreSQL.
  */
 
-import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
+import {
+  S3Client,
+  PutObjectCommand,
+  DeleteObjectCommand,
+  DeleteObjectsCommand,
+  GetObjectCommand,
+  ListObjectsV2Command,
+} from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 // Scaleway Object Storage configuration
@@ -243,6 +250,45 @@ export async function deleteFromS3(key: string, bucket?: string): Promise<void> 
     Bucket: targetBucket,
     Key: key,
   }))
+}
+
+/**
+ * Delete every object under a key prefix.
+ *
+ * Only safe for prefixes that belong to a single owner — snaps/{userId}/ is,
+ * files/ is not (it is content-addressed and shared across users).
+ *
+ * O(n) in objects: lists 1000 at a time, deletes each page in one batch call.
+ *
+ * @returns how many objects were deleted
+ */
+export async function deleteS3Prefix(prefix: string, bucket?: string): Promise<number> {
+  const client = getS3Client()
+  const targetBucket = bucket || SCALEWAY_BUCKET
+
+  let deleted = 0
+  let continuationToken: string | undefined
+
+  do {
+    const listed = await client.send(new ListObjectsV2Command({
+      Bucket: targetBucket,
+      Prefix: prefix,
+      ContinuationToken: continuationToken,
+    }))
+
+    const keys = (listed.Contents ?? []).map(o => o.Key).filter((k): k is string => !!k)
+    if (keys.length > 0) {
+      await client.send(new DeleteObjectsCommand({
+        Bucket: targetBucket,
+        Delete: { Objects: keys.map(Key => ({ Key })), Quiet: true },
+      }))
+      deleted += keys.length
+    }
+
+    continuationToken = listed.IsTruncated ? listed.NextContinuationToken : undefined
+  } while (continuationToken)
+
+  return deleted
 }
 
 // File types that should display inline in browsers rather than triggering download
