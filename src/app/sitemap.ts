@@ -1,4 +1,5 @@
 import type { MetadataRoute } from 'next'
+import { unstable_cache } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { getCurrentTenant } from '@/lib/tenant'
@@ -164,6 +165,42 @@ async function getTeacherEntries(baseUrl: string, userId: string): Promise<Metad
   return entries
 }
 
+/**
+ * The 5-6 queries behind one host's entries, cached for an hour.
+ *
+ * The route itself stays dynamic — getCurrentTenant() reads headers() — so
+ * `export const revalidate` would do nothing here; the DB work has to be
+ * wrapped instead. Crawlers fetch this on their own schedule and record no
+ * page load, so it was an invisible source of queries, and on a
+ * compute-hour-billed database every such query holds the instance awake.
+ *
+ * An hour of staleness only delays a newly published page's appearance in the
+ * sitemap, which crawlers act on far more slowly than that anyway.
+ */
+const getTenantEntries = (host: string, baseUrl: string) =>
+  unstable_cache(
+    async (): Promise<MetadataRoute.Sitemap> => {
+      const resolved = await resolveHost(host).catch(err => {
+        console.error('sitemap: failed to resolve host', host, err)
+        return null
+      })
+
+      try {
+        if (resolved?.type === 'org') {
+          return await getOrgEntries(baseUrl, resolved.orgId)
+        }
+        if (resolved?.type === 'teacher') {
+          return await getTeacherEntries(baseUrl, resolved.userId)
+        }
+      } catch (err) {
+        console.error('sitemap: failed to enumerate tenant content', err)
+      }
+      return []
+    },
+    ['sitemap', host],
+    { revalidate: 3600 }
+  )()
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const tenant = await getCurrentTenant()
   const baseUrl = `https://${tenant.host}`
@@ -175,21 +212,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${baseUrl}/terms`, lastModified: now, changeFrequency: 'yearly', priority: 0.3 },
   ]
 
-  const resolved = await resolveHost(tenant.host).catch(err => {
-    console.error('sitemap: failed to resolve host', tenant.host, err)
-    return null
-  })
-
-  let dynamicEntries: MetadataRoute.Sitemap = []
-  try {
-    if (resolved?.type === 'org') {
-      dynamicEntries = await getOrgEntries(baseUrl, resolved.orgId)
-    } else if (resolved?.type === 'teacher') {
-      dynamicEntries = await getTeacherEntries(baseUrl, resolved.userId)
-    }
-  } catch (err) {
-    console.error('sitemap: failed to enumerate tenant content', err)
-  }
+  const dynamicEntries = await getTenantEntries(tenant.host, baseUrl)
 
   return [...staticEntries, ...dynamicEntries]
 }

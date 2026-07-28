@@ -12,7 +12,13 @@ type DomainCacheEntry =
 // Simple in-memory cache for domain lookups (cleared on deploy/restart)
 const domainCache = new Map<string, DomainCacheEntry>()
 const negativeCacheExpiry = new Map<string, number>()
-const CACHE_TTL = 60 * 1000 // 1 minute
+// Domain→site mappings change when someone configures a custom domain, which
+// is a deliberate, rare act. A 60s TTL meant steady traffic to one custom
+// domain cost up to 2 queries every minute (resolve-domain does two lookups)
+// — enough on its own to keep the managed Postgres from ever suspending, and
+// it bills compute-hours. Negative results stay short so a domain that was
+// just pointed at us starts working promptly.
+const CACHE_TTL = 15 * 60 * 1000 // 15 minutes
 const NEGATIVE_CACHE_TTL = 30 * 1000 // 30 seconds for "not found" results
 
 // Default organization slug - all unknown domains fall back to this org
