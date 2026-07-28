@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { Pool } from 'pg'
 import { recordMetric } from '@/lib/metrics/buffer'
+import { logQuery, queryLogEnabled } from '@/lib/query-log'
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
@@ -51,6 +52,11 @@ export const prisma = basePrisma.$extends({
         const duration = performance.now() - start
         recordMetric('db_query_time_ms', duration)
         recordMetric('db_queries_total', 1)
+        // No-op unless QUERY_LOG=1 (see src/lib/query-log.ts — never set it in
+        // a deployment).
+        if (queryLogEnabled) {
+          logQuery(model ? `${model}.${operation}` : operation, duration)
+        }
       })
     },
   },
