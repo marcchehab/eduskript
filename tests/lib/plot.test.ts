@@ -8,6 +8,7 @@ import { parsePlotSpec } from '@/lib/plot/spec'
 import { renderPlot, svgToDataUrl } from '@/lib/plot'
 import { compileExpression } from '@/lib/plot/expression'
 import { sampleCurve } from '@/lib/plot/sample'
+import { typesetPieces, typesetTspans } from '@/lib/plot/typeset'
 import { scaleLinear } from 'd3-scale'
 
 // Custom tags only become components when the caller supplies the map, exactly
@@ -135,5 +136,37 @@ describe('plot in the markdown pipeline', () => {
     const out = await html('```plot\nf(x) = sin(\n```\n\n## After')
     expect(out).toContain('Plot error on line')
     expect(out).toMatch(/<h2[^>]*>[\s\S]*After[\s\S]*<\/h2>/)
+  })
+})
+
+describe('term typesetting', () => {
+  it('italicises variables, raises exponents and swaps operator glyphs', () => {
+    const pieces = typesetPieces('1/3x^3 - 2*x')
+    const rendered = pieces.map((p) => `${p.italic ? 'i' : ''}${p.sup ? '^' : ''}${p.text}`).join('|')
+    expect(rendered).toContain('ix')
+    expect(rendered).toContain('^3')
+    expect(rendered).toContain('−')
+    expect(rendered).toContain('·')
+  })
+
+  it('keeps function names upright', () => {
+    expect(typesetPieces('sin(x)').find((p) => p.text === 'sin')?.italic).toBeFalsy()
+    expect(typesetPieces('sin(x)').find((p) => p.text === 'x')?.italic).toBe(true)
+  })
+
+  it('returns the baseline after an exponent', () => {
+    const svg = typesetTspans('x^2 + 1', 12)
+    // One raise, one matching drop.
+    expect((svg.match(/dy="-/g) || []).length).toBe(1)
+    expect((svg.match(/dy="4/g) || []).length).toBe(1)
+  })
+
+  it('renders the legend with tspans, not raw carets', () => {
+    const result = renderPlot('x: -3..3\nf(x) = x^2\ng(x) = x^3')
+    expect('plot' in result).toBe(true)
+    if (!('plot' in result)) return
+    const svg = decodeURIComponent(result.plot.light.slice('data:image/svg+xml,'.length))
+    expect(svg).toContain('font-style="italic"')
+    expect(svg).not.toContain('x^2')
   })
 })

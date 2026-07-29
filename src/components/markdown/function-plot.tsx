@@ -37,6 +37,10 @@ export function FunctionPlot({ spec }: FunctionPlotProps) {
 
   return (
     <span className="my-4 block">
+      {/* Theme switch runs through .plot-light / .plot-dark in globals.css, not
+          through `dark:hidden` utilities: the prose/paper rules set `display`
+          on images with higher specificity and would show both variants at once
+          (the same reason .excalidraw-light/-dark exist). */}
       {/* eslint-disable-next-line @next/next/no-img-element -- data-URL SVG, nothing for the image optimizer to do */}
       <img
         src={light}
@@ -44,7 +48,7 @@ export function FunctionPlot({ spec }: FunctionPlotProps) {
         width={width}
         height={height}
         decoding="async"
-        className="mx-auto block h-auto w-full max-w-full dark:hidden"
+        className="plot-light mx-auto h-auto w-full max-w-full"
         style={{ maxWidth: `${width}px` }}
       />
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -54,7 +58,7 @@ export function FunctionPlot({ spec }: FunctionPlotProps) {
         width={width}
         height={height}
         decoding="async"
-        className="mx-auto hidden h-auto w-full max-w-full dark:block"
+        className="plot-dark mx-auto h-auto w-full max-w-full"
         style={{ maxWidth: `${width}px` }}
       />
       {caption && (

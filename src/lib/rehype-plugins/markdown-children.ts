@@ -114,37 +114,61 @@ export function rehypeMarkdownChildren() {
     }
   }
 
-  // Re-parse the literal prompt text of a `<question>` and wrap it in a
-  // `<question-prompt>` element inserted before the answers. A single wrapping
-  // paragraph is unwrapped so the prompt stays inline (no block margins inside
-  // the question card).
+  /**
+   * Collect a `<question>`'s prompt into a `<question-prompt>` element placed
+   * before the answers.
+   *
+   * Everything that is not an `<answer>` belongs to the prompt — not just the
+   * text nodes. When the author breaks the opening tag over several lines,
+   * CommonMark stops treating the block as raw HTML, so remark has already
+   * turned parts of the prompt into elements (a KaTeX span, `<strong>`, …) by
+   * the time we get here. Collecting text only would silently drop exactly
+   * those pieces: a prompt reading "Bei welchem $x$ …" lost its formula.
+   *
+   * Order is preserved: runs of literal text are re-parsed in place, already
+   * parsed elements pass through untouched.
+   */
   async function reparseQuestionPrompt(node: Element): Promise<void> {
-    const textContent = node.children
-      .filter((c): c is Text => c.type === 'text')
-      .map((c) => c.value)
-      .join('')
-      .trim()
+    const promptParts: ElementContent[] = []
+    const answers: ElementContent[] = []
+    let pendingText = ''
 
-    if (!textContent) return
-
-    const hast = (await processor.run(
-      processor.parse(textContent) as MdastRoot
-    )) as Root
-
-    let parsed = (hast.children ?? []) as ElementContent[]
-    if (parsed.length === 0) return
-    if (parsed.length === 1 && parsed[0].type === 'element' && parsed[0].tagName === 'p') {
-      parsed = parsed[0].children as ElementContent[]
+    const flushText = async (): Promise<void> => {
+      const text = pendingText.trim()
+      pendingText = ''
+      if (!text) return
+      const hast = (await processor.run(processor.parse(text) as MdastRoot)) as Root
+      let parsed = (hast.children ?? []) as ElementContent[]
+      if (parsed.length === 1 && parsed[0].type === 'element' && parsed[0].tagName === 'p') {
+        parsed = parsed[0].children as ElementContent[]
+      }
+      parsed.forEach(stripPositions)
+      promptParts.push(...parsed)
     }
-    parsed.forEach(stripPositions)
+
+    for (const child of node.children) {
+      if (child.type === 'element' && child.tagName.toLowerCase() === 'answer') {
+        answers.push(child)
+        continue
+      }
+      if (child.type === 'text') {
+        pendingText += child.value
+        continue
+      }
+      await flushText()
+      promptParts.push(child as ElementContent)
+    }
+    await flushText()
+
+    if (promptParts.length === 0) return
 
     const prompt: Element = {
       type: 'element',
       tagName: PROMPT_WRAPPER,
       properties: {},
-      children: parsed,
+      children: promptParts,
     }
-    node.children = [prompt, ...node.children.filter((c) => c.type !== 'text')]
+    node.children = [prompt, ...answers]
   }
 
   function stripPositions(node: any): void {

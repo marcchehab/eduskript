@@ -1066,6 +1066,29 @@ article.prose-theme > div > :first-child {
   display: block !important;
 }
 
+/* Function plots (```plot) — same theme switch as excalidraw above, and for the
+ * same reason: `dark:hidden` utilities lose against the prose image rules, so
+ * both variants would render stacked. */
+.prose-theme .plot-light,
+.plot-light {
+  display: block !important;
+}
+
+.prose-theme .plot-dark,
+.plot-dark {
+  display: none !important;
+}
+
+.dark .prose-theme .plot-light,
+.dark .plot-light {
+  display: none !important;
+}
+
+.dark .prose-theme .plot-dark,
+.dark .plot-dark {
+  display: block !important;
+}
+
 /* SQL schema images - theme-aware display */
 .sql-schema-light {
   display: block !important;

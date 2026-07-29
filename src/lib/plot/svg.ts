@@ -10,6 +10,7 @@ import { scaleLinear } from 'd3-scale'
 import { line as d3line } from 'd3-shape'
 import { autoYRange, sampleCurve, simplify, type Sample } from './sample'
 import { PALETTES, resolveColor, type PlotPalette, type PlotTheme } from './theme'
+import { typesetTspans } from './typeset'
 import type { PlotSpec } from './types'
 
 const MARGIN = { top: 12, right: 14, bottom: 28, left: 46 }
@@ -183,13 +184,21 @@ function renderTickLabels(
 }
 
 function renderLegend(spec: PlotSpec, palette: PlotPalette): string {
+  const size = 12
   const rows = spec.curves.map((curve, index) => {
     const color = resolveColor(curve.color, palette, index)
-    const label = curve.label ?? `${curve.name}(x) = ${curve.term}`
-    const dy = index * 16
+    // An explicit label is the author's own words and stays verbatim; a term
+    // gets typeset (italic variables, raised exponents). Real KaTeX is out of
+    // reach — an img-embedded SVG renders neither HTML nor MathML.
+    const content = curve.label
+      ? escapeText(curve.label)
+      : typesetTspans(`${curve.name}(x) = ${curve.term}`, size)
+    const dy = index * 17
     return (
       `<path d="M0 ${dy + 8}h14" stroke="${color}" stroke-width="2"${DASH[curve.style]}/>` +
-      `<text x="19" y="${dy + 12}" fill="${palette.axis}" font-family="${FONT}" font-size="11">${escapeText(label)}</text>`
+      // xml:space="preserve": without it the renderer trims the spaces that sit
+      // at tspan boundaries, and "1/3x³ − x" collapses to "1/3x³−x".
+      `<text x="19" y="${dy + 12}" xml:space="preserve" fill="${palette.axis}" font-family="${FONT}" font-size="${size}">${content}</text>`
     )
   })
   return `<g transform="translate(8,6)">${rows.join('')}</g>`

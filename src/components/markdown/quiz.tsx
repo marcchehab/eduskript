@@ -617,6 +617,9 @@ function QuestionInner({
       {/* Number/Slider Question */}
       {type === 'number' && (
         <div className="space-y-4">
+          {/* Prompt above the track — a question you read after answering it
+              reads backwards. */}
+          {prompt && <div className={PROMPT_CLASS}>{prompt}</div>}
           <div className="flex flex-col gap-2">
             <div className="flex justify-between text-sm text-muted-foreground">
               <span>{minValue}</span>
@@ -645,9 +648,6 @@ function QuestionInner({
               </div>
             )}
           </div>
-          <div className={PROMPT_CLASS}>
-            {prompt}
-          </div>
           {sliderPanel}
         </div>
       )}
@@ -655,6 +655,7 @@ function QuestionInner({
       {/* Range Slider Question */}
       {type === 'range' && (
         <div className="space-y-4">
+          {prompt && <div className={PROMPT_CLASS}>{prompt}</div>}
           <div className="flex flex-col gap-2">
             <div className="flex justify-between text-sm text-muted-foreground">
               <span>{minValue}</span>
@@ -728,9 +729,6 @@ function QuestionInner({
                 }}
               />
             </div>
-          </div>
-          <div className={PROMPT_CLASS}>
-            {prompt}
           </div>
           {sliderPanel}
         </div>
