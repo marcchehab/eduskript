@@ -122,8 +122,11 @@ export function renderPlotSvg(spec: PlotSpec, theme: PlotTheme): string {
     }
   }
 
-  const legendEntries = spec.curves.filter((c) => c.label || spec.curves.length > 1)
-  if (spec.legend !== false && (spec.legend === true || legendEntries.length > 1)) {
+  // A legend appears for more than one curve, or as soon as the author wrote an
+  // explicit label — a lone labelled curve wants that label shown, otherwise the
+  // label the author typed goes nowhere.
+  const hasLabel = spec.curves.some((c) => c.label)
+  if (spec.legend !== false && (spec.legend === true || hasLabel || spec.curves.length > 1)) {
     parts.push(renderLegend(spec, palette))
   }
 

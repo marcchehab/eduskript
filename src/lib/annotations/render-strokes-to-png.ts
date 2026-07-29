@@ -113,7 +113,7 @@ export function renderStrokesToPng(
     const uniform = hasUniformPressure(s.points)
     const source = uniform ? smoothPoints(s.points) : s.points
     const input = source.map((p) => [p.x, p.y + s.yShift, p.pressure])
-    const outline = getStroke(input, getStrokeOptions(s.width, true, uniform))
+    const outline = getStroke(input, getStrokeOptions(s.width, true, uniform, s.points.length === 2))
     const d = getSvgPathFromStroke(outline)
     if (!d) continue
     ctx.fillStyle = s.color

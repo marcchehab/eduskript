@@ -108,7 +108,22 @@ function getPathFromStroke(outlinePoints: number[][]): Path2D {
 // pressure simulation for mouse-drawn strokes (constant 0.5 pressure at
 // ~60 Hz sample rate renders as visibly polygonal outlines otherwise).
 // Keep in sync with the SVG layer's copy: src/lib/annotations/svg-path.ts.
-function getStrokeOptions(width: number, last = false, simulate = false): StrokeOptions {
+function getStrokeOptions(width: number, last = false, simulate = false, straight = false): StrokeOptions {
+    // Straightened lines (exactly two points) are drawn with a constant width:
+    // no thinning, no taper. `taper: true` spans the WHOLE stroke length, which
+    // on a two-point line means the wedge covers the entire line — visibly a
+    // width gradient from one end to the other, not the intended tip taper.
+    if (straight) {
+      return {
+        size: width * 2,
+        thinning: 0,
+        smoothing: 0.5,
+        streamline: 0,
+        simulatePressure: false,
+        last,
+      }
+    }
+
   return {
     size: width * 2,
     // See svg-path.ts copy for rationale — velocity-derived pressure with
@@ -364,7 +379,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         const isUniform = hasUniformPressure(path.points)
         const sourcePoints = isUniform ? smoothPoints(path.points) : path.points
         const inputPoints = sourcePoints.map(p => [p.x, p.y, p.pressure])
-        const outline = getStroke(inputPoints, getStrokeOptions(path.width, true, isUniform))
+        const outline = getStroke(inputPoints, getStrokeOptions(path.width, true, isUniform, path.points.length === 2))
         const pathObj = getPathFromStroke(outline)
 
         ctx.fillStyle = resolveCanvasColor(path.color, ctx.canvas)
@@ -722,7 +737,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       // when the stroke ends going downward). Coordinate-wise the canvas and SVG
       // already agree to subpixel precision; this just makes the visual handoff
       // seamless.
-      const outline = getStroke(inputPoints, getStrokeOptions(strokeWidth, true, isUniform))
+      const outline = getStroke(inputPoints, getStrokeOptions(strokeWidth, true, isUniform, livePoints.length === 2))
       const pathObj = getPathFromStroke(outline)
       ctx.fillStyle = resolveCanvasColor(strokeColor, ctx.canvas)
       ctx.fill(pathObj)

@@ -36,7 +36,22 @@ export { getStroke }
  * lets the smoothing/streamline filters produce curvier outlines. Leave it
  * off for stylus input, which has real pressure + high-freq coalesced events.
  */
-export function getStrokeOptions(width: number, last = false, simulate = false): StrokeOptions {
+export function getStrokeOptions(width: number, last = false, simulate = false, straight = false): StrokeOptions {
+    // Straightened lines (exactly two points) are drawn with a constant width:
+    // no thinning, no taper. `taper: true` spans the WHOLE stroke length, which
+    // on a two-point line means the wedge covers the entire line — visibly a
+    // width gradient from one end to the other, not the intended tip taper.
+    if (straight) {
+      return {
+        size: width * 2,
+        thinning: 0,
+        smoothing: 0.5,
+        streamline: 0,
+        simulatePressure: false,
+        last,
+      }
+    }
+
   return {
     size: width * 2,
     // Lower thinning on simulated pressure: velocity-derived pressure

@@ -105,7 +105,7 @@ function buildPath(stroke: AnimatedStroke): PathDatum {
   const isUniform = hasUniformPressure(stroke.points)
   const sourcePoints = isUniform ? smoothPoints(stroke.points) : stroke.points
   const inputPoints = sourcePoints.map(p => [p.x, p.y, p.pressure])
-  const outline = getStroke(inputPoints, getStrokeOptions(stroke.width, true, isUniform))
+  const outline = getStroke(inputPoints, getStrokeOptions(stroke.width, true, isUniform, stroke.points.length === 2))
   return {
     id: stroke.id,
     d: getSvgPathFromStroke(outline),
