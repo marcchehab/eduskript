@@ -479,6 +479,36 @@ graph LR
 
 Supports all mermaid diagram types: flowcharts, sequence diagrams, class diagrams, state, ER, gantt, etc.`)
 
+  // Function plots
+  sections.push(`## Function Plots
+
+Use a \`\`\`plot\`\`\` code fence for a graph of one or more functions. It renders as a static SVG image (light + dark), so students can draw on it with the annotation pens and an \`<ai-feedback>\` tag in the same section picks the graph up automatically.
+
+\`\`\`markdown
+\`\`\`plot
+x: -4..4
+y: -3..3
+grid
+f(x) = 1/3x^3 - x
+g(x) = 2sin(x), blue, dashed
+A = (-1, 2/3), label="A"
+vline x=-1 dashed
+\`\`\`
+\`\`\`
+
+**One entry per line, order does not matter, \`#\` starts a comment:**
+- \`f(x) = <term>\`, \`y = <term>\` or a bare \`<term>\` — a curve. Later curves may use earlier ones: \`g(x) = f(x) + 2\`.
+- \`A = (a, b)\` — a point. \`vline x=-1\` / \`hline y=2\` — a guide line.
+- \`x: -4..4\`, \`y: -3..3\` — the window. Leave \`y:\` out and it is derived from the curve.
+- Flags: \`grid\` / \`nogrid\`, \`axes\` / \`noaxes\`, \`legend\` / \`nolegend\`, \`aspect: equal\`, \`size: 640x400\`, \`caption: …\`.
+- Options after a comma: a colour word (\`red\`, \`blue\`, \`green\`, \`orange\`, \`purple\`, \`teal\`, \`pink\`, \`brown\`, \`gray\`) or \`color=#2563eb\`, \`label="…"\`, \`dashed\`, \`dotted\`, \`thick\`.
+
+**Terms:** implicit multiplication works the way it is written on paper (\`2x\`, \`2sin(x)\`, \`1/3x^3\`). Functions: \`sin cos tan asin acos atan sinh cosh tanh exp ln log log2 sqrt abs sign floor ceil round min max mod\` — \`ln\` is the natural logarithm, \`log\` is base 10. Constants \`pi\` and \`e\`. Poles (\`1/x\`, \`tan\`) are detected, so no vertical line is drawn through an asymptote.
+
+\`x: -4..4\` sets the window; \`x = 3\` draws a vertical line. Colon versus equals is the difference.
+
+A fence with only a window and \`grid\` gives an empty coordinate system to draw on.`)
+
   // Plugins
   const owner = BUILTIN_PLUGIN_OWNER
   sections.push(`## Built-in Plugins
@@ -720,6 +750,8 @@ export function getCondensedSyntaxReference(): string {
 **Ping:** \`<ping [host="wairualodge.co.nz"] [count="4"] [os="linux|macos|windows"] />\` — interactive terminal; students type \`ping [-c N] host\`. Server-side TCP connect (not ICMP; works where school wifi blocks ICMP). RTT/IP/loss are real; \`host\` auto-runs a demo; requires login; private addresses blocked; top-right button switches OS style.
 
 **Mermaid:** \`\`\`mermaid fenced code block — renders natively, theme-aware.
+
+**Function plots:** \`\`\`plot fenced code block, one entry per line: \`f(x) = 1/3x^3 - x\` (curve, implicit multiplication allowed), \`x: -4..4\` / \`y: -3..3\` (window, y optional), \`A = (2, 1)\` (point), \`vline x=-1\` / \`hline y=2\`, flags \`grid\`/\`nogrid\`/\`aspect: equal\`/\`size: 640x400\`/\`caption: …\`, per-entry options after a comma (colour word, \`label="…"\`, \`dashed\`, \`thick\`). \`ln\` natural, \`log\` base 10. Renders as a static SVG \`<img>\`, so \`<ai-feedback>\` in the same section captures the graph — the way to build "draw the tangent" tasks.
 
 **Built-in plugins:** \`<plugin src="${BUILTIN_PLUGIN_OWNER}/<slug>" [attrs] [height="500"]></plugin>\` — user-scoped; built-ins on this deployment under \`${BUILTIN_PLUGIN_OWNER}\`:
   - \`mod-calc\` (\`formula\`, \`base\`, \`exp\`, \`mod\`, \`lang\`), \`color-sliders\`, \`cipher-lab\` (\`cipher\`, \`cipherkey\`, \`text\`, \`lang\`)

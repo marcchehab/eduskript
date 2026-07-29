@@ -6,7 +6,7 @@ import { useSession } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
-import { Eye, EyeOff, Pencil, Code, Bold, Italic, Heading, Heading1, Heading2, Heading3, List, ListOrdered, Link, Palette, Highlighter, Circle, Wand2, ChevronDown, FilePen, Minus, Plus, CircleHelp, TextQuote, Puzzle, Sigma, AlignLeft, AlignCenter, AlignRight, MessageSquare, Compass, SeparatorHorizontal } from 'lucide-react'
+import { Eye, EyeOff, Pencil, Code, Bold, Italic, Heading, Heading1, Heading2, Heading3, List, ListOrdered, Link, Palette, Highlighter, Circle, Wand2, ChevronDown, FilePen, Minus, Plus, CircleHelp, TextQuote, Puzzle, Sigma, AlignLeft, AlignCenter, AlignRight, MessageSquare, Compass, SeparatorHorizontal, ChartSpline } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1146,6 +1146,35 @@ const CodeMirrorEditor = function CodeMirrorEditor({
     }
   }
 
+  // Insert a ```plot fence with a starter graph the author edits in place.
+  const insertPlot = () => {
+    const template = '```plot\nx: -5..5\nf(x) = x^2\n```\n'
+
+    if (editorViewRef.current && !useSimpleEditor) {
+      const view = editorViewRef.current
+      const insertPos = view.state.selection.main.head
+      view.dispatch(
+        view.state.update({
+          changes: { from: insertPos, insert: template },
+          selection: { anchor: insertPos + template.length },
+        })
+      )
+      onChange(view.state.doc.toString())
+    } else if (useSimpleEditor) {
+      const textarea = document.querySelector('textarea') as HTMLTextAreaElement
+      if (textarea) {
+        const start = textarea.selectionStart
+        const newContent = textareaContent.substring(0, start) + template + textareaContent.substring(start)
+        setTextareaContent(newContent)
+        onChange(newContent)
+        setTimeout(() => {
+          textarea.selectionStart = textarea.selectionEnd = start + template.length
+          textarea.focus()
+        }, 0)
+      }
+    }
+  }
+
   // Insert plugin from picker
   const insertPlugin = (pluginSrc: string, configHint: string) => {
     const pluginTag = `<plugin src="${pluginSrc}"${configHint} />\n`
@@ -2176,6 +2205,15 @@ const CodeMirrorEditor = function CodeMirrorEditor({
               title="Add Spacer (writing area)"
             >
               <SeparatorHorizontal className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={insertPlot}
+              className="w-8 h-8 p-0 border rounded-md"
+              title="Insert function plot"
+            >
+              <ChartSpline className="w-4 h-4" />
             </Button>
             <Button
               variant="ghost"

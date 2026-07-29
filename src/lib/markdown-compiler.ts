@@ -92,6 +92,7 @@ export const sanitizeSchema = {
     'answer',
     'survey', // <Survey> region marker — wraps <Question>s for anonymous-submission flow
     'mermaid-diagram',
+    'function-plot', // ```plot fence; body rides in data-spec
     'stickme',
     'demoeditor',
     'ourteachers',
@@ -140,6 +141,7 @@ export const sanitizeSchema = {
     'tabs-container': ['dataItems', 'data-items'],
     'youtube-embed': ['dataId', 'dataPlaylist', 'dataStartTime', 'dataCaption', 'dataPin', 'data-id', 'data-playlist', 'data-start-time', 'data-caption', 'data-pin'],
     'mermaid-diagram': ['dataDefinition', 'data-definition'],
+    'function-plot': ['dataSpec', 'data-spec'],
     // autoplay/loop are known HTML media properties, so property-information
     // hands them over camelCased (autoPlay) and as booleans — allow both
     // spellings (cf. the bool() reader in markdown-components.tsx).

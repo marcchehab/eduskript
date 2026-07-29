@@ -203,6 +203,33 @@ render map in `components/markdown/quiz.tsx` count only `<answer>` elements (sha
 `isAnswerElement`), skipping the `<question-prompt>` wrapper and inter-answer whitespace text
 nodes.
 
+## Function plots (```plot)
+
+`remarkPlot` (`src/lib/remark-plugins/plot.ts`) rewrites a ```` ```plot ```` fence to
+`<function-plot data-spec="…">`; `src/lib/plot/` turns that body into two SVG strings (light +
+dark) which `components/markdown/function-plot.tsx` emits as `<img src="data:image/svg+xml,…">`,
+toggled with `dark:hidden` / `hidden dark:block` like Excalidraw. Notes:
+
+- It **must** stay an `<img>`: `<ai-feedback>` composites the section's `<img>` elements into the
+  vision-model request; inline SVG, mermaid divs and canvases are invisible to it.
+- The fence body is **not** markdown — `function-plot` must never be added to
+  `MARKDOWN_CHILDREN_ELEMENTS`, and unlike mermaid the component does **not** run
+  `decodeHtmlEntities` on the attribute (parse5 already decoded it; a second pass would turn a
+  literal `&lt;` in a label into `<`).
+- `remarkPlot` walks every container, so plots work inside callouts and `<flex-item>` —
+  `remarkMermaid` only visits root children and still has that gap.
+- It runs before `remarkCodeEditor` / `remarkCodeCopy`, which claim every remaining fence.
+- Parsing uses mathjs (implicit multiplication: `2x`, `2sin(x)`) on a hardened instance
+  (`import`/`createUnit`/`evaluate`/`config` disabled) — never `eval`. `ln`/`log` are remapped to
+  school notation in the evaluation scope. Scales, ticks and path data come from d3-scale/d3-shape.
+- Bundle: `mathjs/number` (the number-only build) lands in the **dashboard editor** bundle, because
+  the live preview compiles markdown in the browser — ~550 KB unminified in its own chunk. Public
+  pages render through `markdown-renderer.server.tsx`, a server component, so students never
+  download it.
+- Poles are found by bisection, not by a single midpoint probe: `sample.ts:isPole` gates on
+  "jump larger than the plot height + sign flip", then bisects toward the sign change. A single
+  probe misreads `tan` whenever the pole sits near one end of a sample interval.
+
 ## GFM footnotes
 
 Footnotes come from `remarkGfm` + `remark-rehype`'s footnote handler. Two things

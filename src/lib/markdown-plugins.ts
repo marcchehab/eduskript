@@ -22,6 +22,7 @@ import { remarkQuiz } from './remark-plugins/quiz'
 import { remarkSurvey } from './remark-plugins/survey'
 import { remarkFileLinkResolver } from './remark-plugins/file-link-resolver'
 import { remarkMermaid } from './remark-plugins/mermaid'
+import { remarkPlot } from './remark-plugins/plot'
 
 /**
  * Remark plugins - transform markdown AST
@@ -38,6 +39,7 @@ export const remarkPlugins: PluggableList = [
   remarkExcalidraw,
   remarkMuxVideo,
   remarkMermaid,
+  remarkPlot, // before remarkCodeEditor/remarkCodeCopy: they claim every remaining fence
   remarkCodeEditor,
   remarkCodeCopy, // after remarkCodeEditor: only plain code blocks remain
   remarkCallouts,

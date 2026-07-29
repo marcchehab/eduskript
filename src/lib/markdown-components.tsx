@@ -38,6 +38,7 @@ import { PdfEmbed } from '@/components/markdown/pdf-embed'
 import { Geogebra } from '@/components/markdown/geogebra'
 import { PingTerminal } from '@/components/markdown/ping-terminal'
 import { MermaidDiagram } from '@/components/markdown/mermaid-diagram'
+import { FunctionPlot } from '@/components/markdown/function-plot'
 import { LoginCodes } from '@/components/markdown/login-codes'
 import { OnlyFor } from '@/components/markdown/only-for'
 import { AIFeedback } from '@/components/markdown/ai-feedback'
@@ -743,6 +744,12 @@ export function createMarkdownComponents(
       const encoded = props['data-definition'] ?? ''
       return <MermaidDiagram definition={decodeHtmlEntities(encoded)} />
     },
+    // ```plot fence. No decodeHtmlEntities here (unlike mermaid): parse5 has
+    // already decoded the attribute, and a second pass would turn a literal
+    // &lt; in a label into <.
+    'function-plot': (props: { 'data-spec'?: string; dataSpec?: string }) => (
+      <FunctionPlot spec={props['data-spec'] ?? props.dataSpec ?? ''} />
+    ),
     'muxvideo': MuxVideoComponent,
     'excalidraw-image': ExcalidrawImageComponent,
     'question': QuizQuestionComponent,
