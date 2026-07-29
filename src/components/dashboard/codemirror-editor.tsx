@@ -1146,9 +1146,20 @@ const CodeMirrorEditor = function CodeMirrorEditor({
     }
   }
 
-  // Insert a ```plot fence with a starter graph the author edits in place.
+  // Insert a ```plot fence. The starter shows the features an author would
+  // otherwise have to look up — a second curve with colour/style/label, marked
+  // points — rather than the shortest possible plot.
   const insertPlot = () => {
-    const template = '```plot\nx: -5..5\nf(x) = x^2\n```\n'
+    const template =
+      '```plot\n' +
+      'x: -4..4\n' +
+      'y: -3..3\n' +
+      'grid\n' +
+      'f(x) = 1/3x^3 - x\n' +
+      'g(x) = x^2 - 1, red, dashed, label="f\'(x)"\n' +
+      'A = (-1, 2/3), label="H"\n' +
+      'B = (1, -2/3), label="T"\n' +
+      '```\n'
 
     if (editorViewRef.current && !useSimpleEditor) {
       const view = editorViewRef.current
