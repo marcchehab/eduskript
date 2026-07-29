@@ -344,7 +344,19 @@ Inline \`style="..."\` attributes also work on any element.`)
 
 Reference video files by name. The system looks up the corresponding \`.json\` metadata file for Mux playback.
 
-\`![Video description](lecture.mp4)\``)
+\`![Video description](lecture.mp4)\`
+
+The alt text is the caption. Playback options are attributes on the tag form (valueless):
+
+\`\`\`html
+<muxvideo src="geogebra-class.mp4" gif />
+<muxvideo src="intro.mp4" alt="Overview" autoplay loop />
+<muxvideo src="lecture.mp4" poster="cover.png" pin />
+\`\`\`
+
+**Attributes:** \`gif\` — play it like an animated GIF (muted autoplay, looping, no controls, not clickable; browsers only autoplay muted video); \`autoplay\` (muted), \`loop\`, \`pin\` (pins into a corner overlay when scrolled past), \`poster\` (filename or URL overriding the auto thumbnail), \`alt\` (caption).
+
+In the dashboard preview these toggle from a toolbar in the video's top-right corner.`)
 
   // YouTube
   sections.push(`## YouTube Embeds

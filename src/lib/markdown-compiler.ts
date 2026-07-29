@@ -140,7 +140,10 @@ export const sanitizeSchema = {
     'tabs-container': ['dataItems', 'data-items'],
     'youtube-embed': ['dataId', 'dataPlaylist', 'dataStartTime', 'dataCaption', 'dataPin', 'data-id', 'data-playlist', 'data-start-time', 'data-caption', 'data-pin'],
     'mermaid-diagram': ['dataDefinition', 'data-definition'],
-    'muxvideo': ['src', 'alt', 'poster', 'pin'],
+    // autoplay/loop are known HTML media properties, so property-information
+    // hands them over camelCased (autoPlay) and as booleans — allow both
+    // spellings (cf. the bool() reader in markdown-components.tsx).
+    'muxvideo': ['src', 'alt', 'poster', 'pin', 'gif', 'autoplay', 'autoPlay', 'loop'],
     'excalidraw-image': ['src', 'alt', 'dataAlign', 'dataWrap', 'data-align', 'data-wrap'],
     // <excali> component - shorthand for excalidraw (src without .excalidraw extension)
     'excali': ['src', 'alt', 'width', 'align', 'wrap'],

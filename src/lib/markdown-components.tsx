@@ -18,6 +18,7 @@ import { Youtube } from '@/components/markdown/youtube'
 import { MuxVideo } from '@/components/markdown/mux-video'
 import { ExcalidrawImage } from '@/components/markdown/excalidraw-image'
 import { ContentSpacer, type SpacerPattern } from '@/components/markdown/content-spacer'
+import { MuxVideoOptions } from '@/components/markdown/mux-video-options'
 import { ContentImage } from '@/components/markdown/content-image'
 import { Question, Option } from '@/components/markdown/quiz'
 import { Survey } from '@/components/markdown/survey'
@@ -194,6 +195,7 @@ interface CreateMarkdownComponentsOptions {
   organizationSlug?: string  // For organization pages (OurTeachers component)
   onExcalidrawEdit?: (filename: string, fileId: string) => void  // Callback to edit Excalidraw drawings
   onSpacerChange?: (id: string | undefined, newMarkdown: string) => void  // Stable callback for <spacer> resize/pattern/delete
+  onMuxVideoChange?: (src: string, newMarkdown: string) => void  // Stable callback for the <muxvideo> options toolbar
   optimizeImages?: boolean  // Enable Next.js Image optimization (only safe for public pages)
   isExam?: boolean  // Exam page: hide code-block copy buttons by default
 }
@@ -208,7 +210,7 @@ export function createMarkdownComponents(
   files: SkriptFilesData,
   options?: CreateMarkdownComponentsOptions
 ): Record<string, ComponentType<any>> {
-  const { pageId, ownerPageSlug, skriptId, onImageWidthChange, organizationSlug, onExcalidrawEdit, onSpacerChange, optimizeImages, isExam } = options ?? {}
+  const { pageId, ownerPageSlug, skriptId, onImageWidthChange, organizationSlug, onExcalidrawEdit, onSpacerChange, onMuxVideoChange, optimizeImages, isExam } = options ?? {}
 
   // Img element handler - handles <img> elements from markdown with data-* attributes
   function ImgElementComponent({ src, alt, title, style, ...props }: React.ImgHTMLAttributes<HTMLImageElement>) {
@@ -482,19 +484,40 @@ export function createMarkdownComponents(
     // an absolute URL. When omitted, the MuxVideo component falls back to the
     // auto-generated Mux thumbnail (frame at time=0).
     const poster = (props['poster'] as string) || undefined
-    const pin = (props['pin'] as string) === 'true' || props['pin'] === ''
+    // Valueless attributes (`<muxvideo src="x" gif />`) arrive as '' — and for
+    // names property-information knows as boolean HTML properties (loop,
+    // autoplay→autoPlay) as `true`. Accept every shape.
+    const bool = (...keys: string[]): boolean =>
+      keys.some((k) => props[k] === true || props[k] === '' || props[k] === 'true')
+    const pin = bool('pin')
+    const gif = bool('gif')
+    const autoplay = bool('autoplay', 'autoPlay')
+    const loop = bool('loop')
 
     return (
-      <span className="block my-6">
+      <span className="group relative block my-6">
         <MuxVideo
           src={src}
           alt={alt}
           poster={poster}
           files={files}
           pin={pin}
+          gif={gif}
+          autoplay={autoplay}
+          loop={loop}
           className="w-full rounded-lg overflow-hidden"
         />
-        {alt && !alt.includes('autoplay') && !alt.includes('loop') && (
+        {/* Editor-only options toolbar (client renderer passes onMuxVideoChange). */}
+        {onMuxVideoChange && src && (
+          <MuxVideoOptions
+            src={src}
+            alt={alt}
+            poster={poster}
+            flags={{ gif, autoplay, loop, pin }}
+            onChange={onMuxVideoChange}
+          />
+        )}
+        {alt && !alt.includes('autoplay') && !alt.includes('loop') && !alt.includes('gif') && (
           <span className="block text-center text-sm text-muted-foreground mt-2">
             {alt}
           </span>

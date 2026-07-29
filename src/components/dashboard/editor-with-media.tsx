@@ -246,13 +246,17 @@ export function EditorWithMedia({
   }, [tabStorageKey])
 
   // Fetch files + videos. No-op when skriptId is missing (no file storage yet).
+  const loadedOnceRef = useRef(false)
   const refreshFileList = useCallback(async () => {
     if (!skriptId) {
       setFileList([])
       setVideoList([])
       return
     }
-    setFileListLoading(true)
+    // Only show the skeleton on the first load. Later refreshes (upload, delete,
+    // and the video browser's 5s status poll while Mux is processing) keep the
+    // current list on screen instead of flashing it away.
+    if (!loadedOnceRef.current) setFileListLoading(true)
     try {
       const response = await fetch(`/api/upload?skriptId=${skriptId}`)
       if (response.ok) {
@@ -263,6 +267,7 @@ export function EditorWithMedia({
     } catch (error) {
       console.error('Error fetching file list:', error)
     } finally {
+      loadedOnceRef.current = true
       setFileListLoading(false)
     }
   }, [skriptId])

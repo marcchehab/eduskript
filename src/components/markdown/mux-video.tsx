@@ -21,6 +21,13 @@ interface MuxVideoProps {
   className?: string
   /** Pin the player into a corner overlay once it scrolls off the top. */
   pin?: boolean
+  /** Start playing on load. Unmuted autoplay is blocked by browsers — the
+   *  player therefore autoplays muted (mux-player's autoplay="muted"). */
+  autoplay?: boolean
+  loop?: boolean
+  /** Play it like an animated GIF: muted autoplay, looping, no controls, not
+   *  clickable. Implies autoplay + loop. */
+  gif?: boolean
   // Files data for resolving video metadata (serializable)
   files?: SkriptFilesData
 }
@@ -49,7 +56,17 @@ function resolvePoster(value: string | undefined, files: SkriptFilesData | undef
   return files ? resolveUrl(files, value) : undefined
 }
 
-export function MuxVideo({ src, alt = '', poster: posterOverride, className, pin, files }: MuxVideoProps): ReactElement {
+export function MuxVideo({
+  src,
+  alt = '',
+  poster: posterOverride,
+  className,
+  pin,
+  autoplay: autoplayProp,
+  loop: loopProp,
+  gif: gifProp,
+  files,
+}: MuxVideoProps): ReactElement {
   // Coupled-video gating. next/dynamic doesn't reliably forward refs, so we
   // capture the underlying <mux-player> element (which implements the media
   // element API: currentTime, pause(), play()) from the media events instead.
@@ -88,7 +105,15 @@ export function MuxVideo({ src, alt = '', poster: posterOverride, className, pin
   // pause when Play is first clicked. The poster image still preloads, so
   // the player still looks ready. Pages that explicitly mark a video as
   // autoplay opt back into preloading by setting preload="auto".
-  const preloadStrategy = alt.includes('autoplay') ? 'auto' : 'none'
+  //
+  // Playback flags come from the tag (`<muxvideo src="x.mp4" gif />`). Before
+  // 2026-07-29 they were keywords in the alt text (`![gif loop](x.mp4)`); that
+  // spelling still works so existing pages don't change behaviour, but the
+  // attributes are the documented form.
+  const gif = gifProp || alt.includes('gif')
+  const autoplay = autoplayProp || alt.includes('autoplay')
+  const loop = loopProp || alt.includes('loop')
+  const preloadStrategy = gif || autoplay ? 'auto' : 'none'
 
   return (
     <span className="block">
@@ -99,9 +124,17 @@ export function MuxVideo({ src, alt = '', poster: posterOverride, className, pin
         placeholder={blurDataURL ?? ''}
         accentColor="hsl(var(--primary))"
         className={`rounded-lg overflow-hidden ${className ?? ''}`}
-        style={{ aspectRatio: aspectRatio ?? 16 / 9 }}
-        autoPlay={alt.includes('autoplay')}
-        loop={alt.includes('loop')}
+        style={{
+          aspectRatio: aspectRatio ?? 16 / 9,
+          // mux-player's own CSS var — hides the whole control bar incl. the
+          // centre play button.
+          ...(gif ? { '--controls': 'none', pointerEvents: 'none' as const } : {}),
+        }}
+        autoPlay={gif ? 'muted' : autoplay}
+        muted={gif}
+        playsInline={gif}
+        nohotkeys={gif}
+        loop={gif || loop}
         preload={preloadStrategy}
         disableTracking // Disable Mux analytics to avoid CORS issues
         onTimeUpdate={(e: Event) => {

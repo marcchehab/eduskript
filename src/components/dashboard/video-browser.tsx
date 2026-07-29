@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Film, Copy, Check, Search, Plus, X, Loader2, Link, Upload, AlertCircle, Trash2, Import } from 'lucide-react'
 import type { VideoInfo } from '@/lib/skript-files'
 import { VideoUploadModal } from './video-upload-modal'
@@ -18,6 +18,10 @@ interface VideoBrowserProps {
   // Skript to associate uploaded videos with via SkriptVideos.
   skriptId?: string
 }
+
+// Status polling while Mux is still processing an upload (see the effect below).
+const STATUS_POLL_MS = 5000
+const MAX_STATUS_POLLS = 60
 
 export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded, onUploadComplete, skriptId }: VideoBrowserProps) {
   const [query, setQuery] = useState('')
@@ -37,6 +41,32 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
   const filtered = query.trim()
     ? videos.filter(v => v.filename.toLowerCase().includes(query.toLowerCase()))
     : videos
+
+  // Mux processes uploads asynchronously and reports back through the webhook,
+  // which writes the DB row — nothing pushes that to this list. Without a poll
+  // the spinner sits at "waiting" until the user reloads the page. Re-fetch
+  // every 5s while at least one video is unfinished, and give up after
+  // MAX_STATUS_POLLS (~5 min) so a stuck/errored upload doesn't poll forever.
+  const pending = videos.some(v => v.metadata.status === 'waiting' || v.metadata.status === 'processing')
+  const pollsRef = useRef(0)
+  const onVideoAddedRef = useRef(onVideoAdded)
+  onVideoAddedRef.current = onVideoAdded
+
+  useEffect(() => {
+    if (!pending) {
+      pollsRef.current = 0
+      return
+    }
+    const timer = setInterval(() => {
+      if (pollsRef.current >= MAX_STATUS_POLLS) {
+        clearInterval(timer)
+        return
+      }
+      pollsRef.current += 1
+      onVideoAddedRef.current?.()
+    }, STATUS_POLL_MS)
+    return () => clearInterval(timer)
+  }, [pending])
 
   const handleCopyFilename = async (filename: string) => {
     try {

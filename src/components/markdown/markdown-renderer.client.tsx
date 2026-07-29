@@ -27,8 +27,11 @@ interface MarkdownRendererProps {
 function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId, onContentChange, onExcalidrawEdit, pageLanguage }: MarkdownRendererProps) {
   // Create SkriptFiles from the file list
   const files: SkriptFilesData = useMemo(() => {
-    if (fileList && fileList.length > 0) {
-      return createSkriptFiles(fileList, videoList)
+    // Videos live in their own list: a skript with a video but no files still
+    // has to resolve <muxvideo>, so don't gate on fileList alone (that made the
+    // preview show "Video not found" while the public page rendered fine).
+    if ((fileList && fileList.length > 0) || (videoList && videoList.length > 0)) {
+      return createSkriptFiles(fileList ?? [], videoList)
     }
     return createEmptySkriptFiles()
   }, [fileList, videoList])
@@ -114,6 +117,25 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
     }
   }, [])
 
+  // Stable callback: rewrite a video's tag when the options toolbar toggles a
+  // flag. Matches an existing <muxvideo …src="x"…> tag, or the image shorthand
+  // `![caption](x.mp4)` — the shorthand is replaced by a full tag, since the
+  // flags have no place in the bracket syntax.
+  const stableOnMuxVideoChange = useCallback((src: string, newMarkdown: string) => {
+    const currentContent = contentRef.current
+    const notify = onContentChangeRef.current
+    if (!notify || !currentContent || !src) return
+
+    const escapedSrc = src.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const tagPattern = new RegExp(`<muxvideo[^>]*\\bsrc="${escapedSrc}"[^>]*/?>`)
+    const shorthandPattern = new RegExp(`!\\[[^\\]]*\\]\\(${escapedSrc}\\)`)
+
+    const pattern = tagPattern.test(currentContent) ? tagPattern : shorthandPattern
+    if (!pattern.test(currentContent)) return
+    const newContent = currentContent.replace(pattern, newMarkdown)
+    if (newContent !== currentContent) notify(newContent)
+  }, [])
+
   // Memoize the components map — only recreated when files or pageId change.
   // Callbacks are stable (empty deps) so they don't bust the memo.
   // The callbacks read refs internally but only when invoked from event handlers,
@@ -126,8 +148,9 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
       onImageWidthChange: stableOnImageWidthChange,
       onExcalidrawEdit: stableOnExcalidrawEdit,
       onSpacerChange: stableOnSpacerChange,
+      onMuxVideoChange: stableOnMuxVideoChange,
     })
-  }, [files, pageId, skriptId, stableOnImageWidthChange, stableOnExcalidrawEdit, stableOnSpacerChange])
+  }, [files, pageId, skriptId, stableOnImageWidthChange, stableOnExcalidrawEdit, stableOnSpacerChange, stableOnMuxVideoChange])
 
   // Capture scroll position before any DOM changes
   useLayoutEffect(() => {
