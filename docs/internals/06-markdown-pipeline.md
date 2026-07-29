@@ -179,10 +179,18 @@ not rendered without blank lines; structure breaking). Two mechanisms make them 
 - **`rehype-plugins/markdown-children.ts`** (`rehypeMarkdownChildren`) runs after `rehype-raw`
   (and **before** `rehypeAlignTags`) and re-parses the literal-text children of registered
   containers as markdown. Registry: `stickme, tab-item, flex-item, fullwidth, left, center,
-  right`. It only touches `text` children, so content already parsed via blank lines is left
-  alone (blank / no-blank input converge). Nested containers are resolved by walking the
+  right, answer`. It only touches `text` children, so content already parsed via blank lines is
+  left alone (blank / no-blank input converge). Nested containers are resolved by walking the
   freshly-parsed subtree, capped by `MAX_REPARSE_GENERATIONS`. Pure wrappers (`flex`,
   `tabs-container`, `survey`) are NOT registered — their content lives in the inner tags.
+  `<answer>` unwraps a single wrapping `<p>` so option labels stay inline.
+
+  `<question>` has a **separate** path in the same plugin: its literal prompt text is re-parsed
+  and wrapped in a `<question-prompt>` element inserted before the answers. It cannot be spliced
+  in bare — an extra element sibling would be counted as an answer by the dense option indexing
+  below. `question-prompt` is allowlisted in `sanitizeSchema`; `quiz.tsx` renders it as the card
+  heading and excludes it via `isAnswerElement`. Both paths run before `rehypeKatex`, so `$math$`
+  inside a question or an answer renders.
 
 - **`markdown-compiler.ts` → `normalizeQuestionSpacing`** (a pre-parse string pass alongside
   `expandSelfClosingTags`) collapses blank lines adjacent to `<answer>`/`</question>` tags.
@@ -191,8 +199,9 @@ not rendered without blank lines; structure breaking). Two mechanisms make them 
   It deliberately leaves prompt-text and ```` ```expected ```` fence spacing untouched.
 
 Quiz option indices are **dense element-only** positions (0,1,2,…): `extractOptionsInfo` and the
-render map in `components/markdown/quiz.tsx` count only `<answer>` elements, skipping the prompt
-text and inter-answer whitespace text nodes.
+render map in `components/markdown/quiz.tsx` count only `<answer>` elements (shared predicate
+`isAnswerElement`), skipping the `<question-prompt>` wrapper and inter-answer whitespace text
+nodes.
 
 ## GFM footnotes
 

@@ -528,7 +528,7 @@ console.log("Hello");
   // Quiz
   sections.push(`## Quizzes
 
-Interactive multiple choice using \`<question>\` and \`<answer>\` HTML tags. An optional prompt line inside the question (before the answers) renders above the options:
+Interactive multiple choice using \`<question>\` and \`<answer>\` HTML tags. Put the question text inside the tag, on the line before the answers — it renders as the card's heading. Prompt and answers support markdown and \`$math$\`:
 
 \`\`\`markdown
 <question id="q1" type="single">
@@ -680,6 +680,7 @@ export function getCondensedSyntaxReference(): string {
   \`<tabs-container data-items='["Tab1", "Tab2"]'><tab-item>Content1</tab-item><tab-item>Content2</tab-item></tabs-container>\`
 
 **Quiz:** \`<question id="q1" type="single" points="1"><answer correct="true">Right</answer><answer feedback="Nope">Wrong</answer></question>\` — \`points\` (default 1) is the gradable max; choice questions auto-score full points on an exact match, teacher-overridable when grading.
+  - Put the question text inside the tag before the answers; it renders as the card heading. Markdown and \`$math$\` work in the prompt and in the answers.
   - Use \`correct="true"\` to mark the correct answer
   - If you see \`<Option>\` or \`<quiz-option>\`, convert to \`<answer>\`
   - Do NOT use \`:::quiz\` syntax — it is not implemented

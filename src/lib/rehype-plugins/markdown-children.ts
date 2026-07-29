@@ -33,7 +33,19 @@ const MARKDOWN_CHILDREN_ELEMENTS = new Set([
   'left',
   'center',
   'right',
+  'answer',
 ])
+
+/**
+ * `<question>` needs its own path. Its literal text child is the prompt, and
+ * splicing the re-parsed prompt in as a plain element would break the quiz:
+ * components/markdown/quiz.tsx indexes answers by DENSE element position, so an
+ * extra `<p>` sibling would be counted as an answer option and shift every
+ * stored `selected` index. So the prompt is wrapped in `<question-prompt>`,
+ * inserted first, and the quiz component renders that separately and skips it
+ * when indexing answers.
+ */
+const PROMPT_WRAPPER = 'question-prompt'
 
 /**
  * Safety valve on re-parse *chains* (a container whose re-parsed content yields
@@ -85,11 +97,54 @@ export function rehypeMarkdownChildren() {
       // editor lines. Dropping them makes source-line skip this content (clicks
       // fall back to the nearest positioned ancestor) — acceptable for
       // re-parsed inner content.
-      const parsed = hast.children as ElementContent[]
+      let parsed = hast.children as ElementContent[]
+      // `<answer>` labels are inline: drop the wrapping paragraph so the option
+      // text keeps sitting on the radio row instead of becoming a block.
+      if (
+        node.tagName.toLowerCase() === 'answer' &&
+        parsed.length === 1 &&
+        parsed[0].type === 'element' &&
+        parsed[0].tagName === 'p'
+      ) {
+        parsed = parsed[0].children as ElementContent[]
+      }
       parsed.forEach(stripPositions)
       node.children = node.children.filter((c) => c.type !== 'text')
       node.children.push(...parsed)
     }
+  }
+
+  // Re-parse the literal prompt text of a `<question>` and wrap it in a
+  // `<question-prompt>` element inserted before the answers. A single wrapping
+  // paragraph is unwrapped so the prompt stays inline (no block margins inside
+  // the question card).
+  async function reparseQuestionPrompt(node: Element): Promise<void> {
+    const textContent = node.children
+      .filter((c): c is Text => c.type === 'text')
+      .map((c) => c.value)
+      .join('')
+      .trim()
+
+    if (!textContent) return
+
+    const hast = (await processor.run(
+      processor.parse(textContent) as MdastRoot
+    )) as Root
+
+    let parsed = (hast.children ?? []) as ElementContent[]
+    if (parsed.length === 0) return
+    if (parsed.length === 1 && parsed[0].type === 'element' && parsed[0].tagName === 'p') {
+      parsed = parsed[0].children as ElementContent[]
+    }
+    parsed.forEach(stripPositions)
+
+    const prompt: Element = {
+      type: 'element',
+      tagName: PROMPT_WRAPPER,
+      properties: {},
+      children: parsed,
+    }
+    node.children = [prompt, ...node.children.filter((c) => c.type !== 'text')]
   }
 
   function stripPositions(node: any): void {
@@ -103,11 +158,22 @@ export function rehypeMarkdownChildren() {
   // `node` is loosely typed: hast child unions include Doctype/Comment/Raw,
   // which don't all share a `children` field — we guard structurally instead.
   async function walk(node: any, generation: number): Promise<void> {
-    if (
+    const tag = node.type === 'element' ? node.tagName.toLowerCase() : ''
+    const hasText =
       node.type === 'element' &&
-      MARKDOWN_CHILDREN_ELEMENTS.has(node.tagName.toLowerCase()) &&
       node.children.some((c: any) => c.type === 'text' && c.value.trim() !== '')
-    ) {
+
+    if (tag === 'question' && hasText) {
+      if (generation >= MAX_REPARSE_GENERATIONS) return
+      await reparseQuestionPrompt(node)
+      // Recurse so the answers' own text children re-parse too.
+      for (const child of node.children) {
+        await walk(child, generation + 1)
+      }
+      return
+    }
+
+    if (MARKDOWN_CHILDREN_ELEMENTS.has(tag) && hasText) {
       if (generation >= MAX_REPARSE_GENERATIONS) return
       await reparseTextChildren(node)
       // Recurse into the freshly-parsed children at the next generation so

@@ -87,6 +87,7 @@ export const sanitizeSchema = {
     'muxvideo',
     'excalidraw-image',
     'question',
+    'question-prompt', // Inserted by rehypeMarkdownChildren around a question's re-parsed prompt text
     'quiz-option',
     'answer',
     'survey', // <Survey> region marker — wraps <Question>s for anonymous-submission flow

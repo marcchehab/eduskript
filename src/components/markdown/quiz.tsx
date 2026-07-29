@@ -60,6 +60,35 @@ interface OptionProps {
 // Parse correct prop to boolean
 const isCorrect = (value: 'true' | 'false' | undefined): boolean => value === 'true'
 
+// The question prompt reads as the heading of the card: full-size foreground
+// text, not the muted small type used for helper text.
+const PROMPT_CLASS = 'text-base font-medium text-foreground'
+
+// True for the `<answer>` children the option indices are built from. Everything
+// else a <question> can contain — the <question-prompt> wrapper, whitespace text
+// nodes, an ```expected block — must NOT be counted, or the dense 0..N-1 indices
+// stop matching stored answers.
+function isAnswerElement(child: ReactNode): child is ReactElement<OptionProps> {
+  if (!child || typeof child !== 'object' || !('props' in child)) return false
+  const el = child as ReactElement<OptionProps>
+  if (!el.props) return false
+  return typeof el.type === 'string' ? el.type === 'answer' : true
+}
+
+// Pull the prompt out of a question's children: the <question-prompt> element
+// rehypeMarkdownChildren produces (markdown, so math renders), falling back to
+// bare text children for content compiled without that plugin.
+function extractPrompt(children: ReactNode): ReactNode {
+  const parts = Children.toArray(children)
+  const wrapper = parts.find(
+    (c): c is ReactElement<{ children?: ReactNode }> =>
+      !!c && typeof c === 'object' && 'type' in c && (c as ReactElement).type === 'question-prompt'
+  )
+  if (wrapper) return wrapper.props.children ?? null
+  const text = parts.filter((c) => typeof c === 'string').join('').trim()
+  return text || null
+}
+
 // Idle delay before an edited answer is autosaved. Text gets a longer window
 // because it's typed continuously — for text the primary save is the textarea's
 // blur (focus loss), and this idle value is just a safety net for a long pause
@@ -283,33 +312,24 @@ function QuestionInner({
   // current answer; matches the persisted score when the answer is unedited).
   const textResult = autoCheck ? compareOutput(textAnswer, expected as string, compareOpts) : null
 
-  // For single/multiple choice, the inline prompt is the question's text
-  // children (the answers are element children). Render it above the options in
-  // the same muted style as the text-question prompt. Empty when the author put
-  // the question text in surrounding markdown instead.
-  const choicePrompt =
-    type === 'single' || type === 'multiple'
-      ? Children.toArray(children)
-          .filter((c) => typeof c === 'string')
-          .join('')
-          .trim()
-      : ''
+  // The question prompt written inside the tag. rehypeMarkdownChildren re-parses
+  // it and wraps it in <question-prompt>, so it arrives as markdown (math, bold,
+  // links) rather than literal text. Plain strings are the fallback for content
+  // that never went through that plugin. Empty when the author put the question
+  // text in surrounding markdown instead.
+  const prompt = extractPrompt(children)
 
   return (
     <div className="space-y-4 border rounded-lg p-4 shadow-xs bg-card my-4" data-source-line-start={sourceLineStart} data-source-line-end={sourceLineEnd}>
       {/* Single/Multiple Choice */}
       {(type === 'single' || type === 'multiple') && (
         <div className="space-y-2">
-          {choicePrompt && (
-            <div className="text-muted-foreground text-sm">{choicePrompt}</div>
-          )}
-          {/* Filter to element (answer) children first so `index` is the dense
-              0..N-1 option position that matches extractOptionsInfo / stored
-              `selected`. Skips the prompt text node and inter-answer whitespace. */}
+          {prompt && <div className={PROMPT_CLASS}>{prompt}</div>}
+          {/* Filter to <answer> children first so `index` is the dense 0..N-1
+              option position that matches extractOptionsInfo / stored
+              `selected`. Skips the prompt element and inter-answer whitespace. */}
           {Children.toArray(children)
-            .filter((child): child is ReactElement<OptionProps> =>
-              !!child && typeof child === 'object' && 'props' in child && !!(child as ReactElement<OptionProps>).props
-            )
+            .filter(isAnswerElement)
             .map((element, index) => {
             const optionProps = element.props
             const isSelected = selected.includes(index)
@@ -381,8 +401,8 @@ function QuestionInner({
       {type === 'text' && (
         <div className="space-y-2">
           {/* Prompt above the textarea — reads as a question label */}
-          <div className="text-muted-foreground text-sm">
-            {children}
+          <div className={PROMPT_CLASS}>
+            {prompt}
           </div>
           <textarea
             value={textAnswer}
@@ -483,8 +503,8 @@ function QuestionInner({
               </div>
             )}
           </div>
-          <div className="text-muted-foreground text-sm">
-            {children}
+          <div className={PROMPT_CLASS}>
+            {prompt}
           </div>
         </div>
       )}
@@ -566,8 +586,8 @@ function QuestionInner({
               />
             </div>
           </div>
-          <div className="text-muted-foreground text-sm">
-            {children}
+          <div className={PROMPT_CLASS}>
+            {prompt}
           </div>
         </div>
       )}
@@ -607,9 +627,9 @@ function extractTextFromChildren(node: ReactNode): string {
 // Build the option-label and correct-index arrays the teacher view consumes.
 //
 // Indices are DENSE element-only positions (0,1,2,…): we count only the
-// `<answer>` element children, skipping the prompt text and any whitespace text
-// nodes between answers. The rendering UI (the Children.toArray map below) and
-// `handleSelect` must filter to element children the same way so stored
+// `<answer>` element children, skipping the <question-prompt> wrapper and any
+// whitespace text nodes between answers. The rendering UI (the Children.toArray
+// map above) and `handleSelect` share isAnswerElement so stored
 // `selected`, `correctIndices`, and `options[i]` in quiz-progress-bar all align.
 function extractOptionsInfo(children: ReactNode, type: 'single' | 'multiple' | 'text' | 'number' | 'range') {
   const correctIndices: number[] = []
@@ -618,16 +638,14 @@ function extractOptionsInfo(children: ReactNode, type: 'single' | 'multiple' | '
   if (type === 'single' || type === 'multiple') {
     let i = 0
     Children.forEach(children, (child) => {
-      if (child && typeof child === 'object' && 'props' in child) {
-        const element = child as ReactElement<OptionProps>
-        if (element.props) {
-          if (element.props.correct === 'true') {
-            correctIndices.push(i)
-          }
-          const text = extractTextFromChildren(element.props.children).trim()
-          optionLabels[i] = text || `Option ${i + 1}`
-          i++
+      if (isAnswerElement(child)) {
+        const element = child
+        if (element.props.correct === 'true') {
+          correctIndices.push(i)
         }
+        const text = extractTextFromChildren(element.props.children).trim()
+        optionLabels[i] = text || `Option ${i + 1}`
+        i++
       }
     })
   }
