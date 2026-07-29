@@ -203,6 +203,13 @@ render map in `components/markdown/quiz.tsx` count only `<answer>` elements (sha
 `isAnswerElement`), skipping the `<question-prompt>` wrapper and inter-answer whitespace text
 nodes.
 
+`feedback="…"` is an attribute, so its markdown and `$math$` would never be parsed.
+`rehype-plugins/quiz-feedback.ts` parses each one into an `<answer-feedback>` **child** of the
+`<answer>` (before sanitize and before `rehypeKatex`, so the formulas render like any other).
+`quiz.tsx` splits that node off with `splitAnswerContent` and keeps the rest as the option label;
+the raw attribute stays as a fallback. A child of `<answer>` never disturbs the dense indexing —
+which is exactly why the parsed prompt needed its own `<question-prompt>` wrapper instead.
+
 ## Function plots (```plot)
 
 `remarkPlot` (`src/lib/remark-plugins/plot.ts`) rewrites a ```` ```plot ```` fence to

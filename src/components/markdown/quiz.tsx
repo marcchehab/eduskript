@@ -11,6 +11,13 @@ import { useSurvey, type SurveyContextValue, type SurveyAnswerType } from './sur
 import { useInSurveyRegion } from './survey'
 import { useCoupledVideo, useGate, parseTimecode } from './coupled-video-context'
 import { compareOutput, scoreFromRatio } from '@/lib/output-comparison'
+import {
+  defaultWindow,
+  numberRatio,
+  parseExpectedNumber,
+  parseExpectedRange,
+  rangeRatio,
+} from '@/lib/slider-scoring'
 import { useIsExamPage } from '@/contexts/exam-page-context'
 import { useStageLocked } from './stage-flow'
 import { useComponentReview } from '@/contexts/exam-review-context'
@@ -41,6 +48,13 @@ interface QuestionProps {
   // exact match counts as fully correct (green + gate). `ignoreCase` /
   // `ignoreWhitespace` relax the comparison.
   expected?: string
+  // Slider auto-check (type="number" | "range"): `expected` is a value ("-1")
+  // or an interval ("-1..1"). `tolerance` is the distance that still counts as
+  // fully correct (number only, default half a step); `window` is the distance
+  // beyond it over which the score fades to zero (default a quarter of the
+  // slider span). Range questions score by interval overlap and use neither.
+  tolerance?: number
+  window?: number
   points?: number
   ignoreCase?: boolean
   ignoreWhitespace?: boolean
@@ -55,6 +69,8 @@ interface OptionProps {
   children: ReactNode
   feedback?: string
   correct?: 'true' | 'false'
+  /** Slider feedback band: shown when the auto-check ratio reaches this value. */
+  from?: string
 }
 
 // Parse correct prop to boolean
@@ -73,6 +89,48 @@ function isAnswerElement(child: ReactNode): child is ReactElement<OptionProps> {
   const el = child as ReactElement<OptionProps>
   if (!el.props) return false
   return typeof el.type === 'string' ? el.type === 'answer' : true
+}
+
+/**
+ * Split an answer's children into its label and its rendered feedback.
+ *
+ * rehypeQuizFeedback parses the `feedback="…"` attribute into an
+ * <answer-feedback> child, which is how markdown and $math$ in a hint get
+ * rendered at all (an attribute never reaches the pipeline). Falls back to the
+ * raw attribute string when that plugin didn't run.
+ */
+function splitAnswerContent(
+  props: OptionProps
+): { label: ReactNode; feedback: ReactNode } {
+  const parts = Children.toArray(props.children)
+  const node = parts.find(
+    (c): c is ReactElement<{ children?: ReactNode }> =>
+      !!c && typeof c === 'object' && 'type' in c && (c as ReactElement).type === 'answer-feedback'
+  )
+  return {
+    label: node ? parts.filter((c) => c !== node) : parts,
+    feedback: node ? node.props.children : props.feedback ?? null,
+  }
+}
+
+/**
+ * Feedback bands for slider questions: `<answer from="0.7" feedback="…">`.
+ *
+ * Sorted by threshold descending, first match wins; a band without `from` is
+ * the catch-all. Bands only pick the wording — the score comes from the ratio,
+ * exactly like the text auto-check.
+ */
+function extractFeedbackBands(children: ReactNode): Array<{ from: number; feedback: ReactNode }> {
+  const bands: Array<{ from: number; feedback: ReactNode }> = []
+  Children.forEach(children, (child) => {
+    if (!isAnswerElement(child)) return
+    const props = child.props as OptionProps & { from?: string }
+    const { feedback } = splitAnswerContent(props)
+    if (!feedback) return
+    const parsed = props.from !== undefined ? Number(props.from) : NaN
+    bands.push({ from: Number.isFinite(parsed) ? parsed : -Infinity, feedback })
+  })
+  return bands.sort((a, b) => b.from - a.from)
 }
 
 // Pull the prompt out of a question's children: the <question-prompt> element
@@ -114,6 +172,9 @@ function QuestionInner({
   minLabel,
   maxLabel,
   expected,
+  tolerance,
+  // `window` is the browser global, so the prop is aliased here.
+  window: window_,
   points,
   ignoreCase,
   ignoreWhitespace,
@@ -158,6 +219,10 @@ function QuestionInner({
   const autoCheck = !surveyMode && type === 'text' && expected != null
   const compareOpts = { ignoreCase, ignoreWhitespace }
   const maxPoints = points ?? 1
+  // Slider auto-check: same idea as the text one — `expected` (a value for
+  // `number`, an interval for `range`) yields a ratio that buys partial credit
+  // and picks a feedback band.
+  const sliderCheck = !surveyMode && (type === 'number' || type === 'range') && expected != null
   // Initialize state from saved data
   const [selected, setSelected] = useState<number[]>(initialData?.selected ?? [])
   const [textAnswer, setTextAnswer] = useState(initialData?.textAnswer ?? '')
@@ -233,6 +298,27 @@ function QuestionInner({
     (type === 'number' && numberAnswer === undefined) ||
     (type === 'range' && rangeAnswer === undefined)
 
+  // Slider auto-check: how close is the current answer to the author's target?
+  // 1 = spot on, 0 = nothing to award. Null when the author set no `expected`,
+  // which is the old behaviour (teacher grades the slider by hand).
+  const sliderRatio = !sliderCheck
+    ? null
+    : type === 'number'
+      ? (() => {
+          const target = parseExpectedNumber(expected as string)
+          if (target == null) return null
+          return numberRatio(numberAnswer, {
+            expected: target,
+            tolerance: tolerance ?? Math.abs(step) / 2,
+            window: window_ ?? defaultWindow(minValue, maxValue),
+          })
+        })()
+      : (() => {
+          const target = parseExpectedRange(expected as string)
+          if (target == null) return null
+          return rangeRatio(rangeAnswer, target)
+        })()
+
   // Assemble a QuizData record from current widget state. Lifted out of the old
   // handleSubmit so autosave and the dedup baseline share one shape. The
   // text/choice auto-scores computed here are for LIVE teacher preview only —
@@ -261,11 +347,17 @@ function QuestionInner({
       }
     }
 
+    let sliderFields: Partial<QuizData> = {}
+    if (sliderCheck && sliderRatio != null) {
+      sliderFields = { sliderRatio, sliderScore: scoreFromRatio(sliderRatio, maxPoints) }
+    }
+
     return {
       isSubmitted: submitted,
       ...(type === 'single' || type === 'multiple' ? { selected } : {}),
       ...choiceFields,
       ...textFields,
+      ...sliderFields,
       ...(type === 'number' ? { numberAnswer } : {}),
       ...(type === 'range' ? { rangeAnswer } : {})
     }
@@ -312,12 +404,61 @@ function QuestionInner({
   // current answer; matches the persisted score when the answer is unedited).
   const textResult = autoCheck ? compareOutput(textAnswer, expected as string, compareOpts) : null
 
+  // Slider feedback: the band whose threshold the current ratio clears.
+  const sliderBand =
+    sliderRatio == null
+      ? null
+      : extractFeedbackBands(children).find((band) => sliderRatio >= band.from) ?? null
+
   // The question prompt written inside the tag. rehypeMarkdownChildren re-parses
   // it and wraps it in <question-prompt>, so it arrives as markdown (math, bold,
   // links) rather than literal text. Plain strings are the fallback for content
   // that never went through that plugin. Empty when the author put the question
   // text in surrounding markdown instead.
   const prompt = extractPrompt(children)
+
+  // Shared by both slider types: the graded hint under the track. Same gating as
+  // every other kind of feedback — only after an answer exists and only when the
+  // author opted in (or in the graded review view).
+  const sliderPanel =
+    sliderRatio == null || !isSubmitted || !showFeedback ? null : (
+      <div
+        className={cn(
+          'rounded-lg border p-3 text-sm',
+          sliderRatio >= 1
+            ? 'border-green-500/40 bg-green-500/10'
+            : sliderRatio > 0
+              ? 'border-amber-500/40 bg-amber-500/10'
+              : 'border-red-500/40 bg-red-500/10'
+        )}
+      >
+        <div className="flex items-center gap-1.5 font-medium">
+          {sliderRatio >= 1 ? (
+            <>
+              <Check className="w-4 h-4 text-green-500" />
+              <span className="text-green-600 dark:text-green-400">Correct</span>
+            </>
+          ) : (
+            <>
+              <X className={cn('w-4 h-4', sliderRatio > 0 ? 'text-amber-500' : 'text-red-500')} />
+              <span
+                className={
+                  sliderRatio > 0
+                    ? 'text-amber-600 dark:text-amber-400'
+                    : 'text-red-600 dark:text-red-400'
+                }
+              >
+                {sliderRatio > 0 ? 'Partially correct' : 'Incorrect'}
+              </span>
+            </>
+          )}
+          <span className="ml-auto tabular-nums text-muted-foreground">
+            {scoreFromRatio(sliderRatio, maxPoints)} / {maxPoints} pts · {Math.round(sliderRatio * 100)}%
+          </span>
+        </div>
+        {sliderBand && <div className="mt-2">{sliderBand.feedback}</div>}
+      </div>
+    )
 
   return (
     <div className="space-y-4 border rounded-lg p-4 shadow-xs bg-card my-4" data-source-line-start={sourceLineStart} data-source-line-end={sourceLineEnd}>
@@ -332,6 +473,7 @@ function QuestionInner({
             .filter(isAnswerElement)
             .map((element, index) => {
             const optionProps = element.props
+            const { label, feedback } = splitAnswerContent(optionProps)
             const isSelected = selected.includes(index)
             const optionIsCorrect = isCorrect(optionProps.correct)
             const showResult = isSubmitted && showFeedback
@@ -372,7 +514,7 @@ function QuestionInner({
                   {/* Option content */}
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
-                      {optionProps.children}
+                      {label}
                       {showResult && isSelected && (
                         optionIsCorrect
                           ? <Check className="w-4 h-4 text-green-600 dark:text-green-400" />
@@ -381,12 +523,12 @@ function QuestionInner({
                     </div>
 
                     {/* Feedback */}
-                    {showResult && optionProps.feedback && isSelected && (
+                    {showResult && feedback && isSelected && (
                       <div className="mt-2 p-2 rounded text-sm bg-muted/50">
                         <span className={optionIsCorrect ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
                           {optionIsCorrect ? '✓ ' : '✗ '}
                         </span>
-                        {optionProps.feedback}
+                        {feedback}
                       </div>
                     )}
                   </div>
@@ -506,6 +648,7 @@ function QuestionInner({
           <div className={PROMPT_CLASS}>
             {prompt}
           </div>
+          {sliderPanel}
         </div>
       )}
 
@@ -589,6 +732,7 @@ function QuestionInner({
           <div className={PROMPT_CLASS}>
             {prompt}
           </div>
+          {sliderPanel}
         </div>
       )}
 
@@ -868,6 +1012,25 @@ function SyncedQuestion({
         ignoreWhitespace: rest.ignoreWhitespace,
       })
       earned = scoreFromRatio(r.ratio, rest.points ?? 1)
+    } else if (type === 'number' && rest.expected != null) {
+      // Re-derived here on the TEACHER's device, like the text case — the
+      // client-stored sliderScore is never trusted for the grade.
+      const target = parseExpectedNumber(rest.expected)
+      const min = rest.minValue ?? 0
+      const max = rest.maxValue ?? 100
+      if (target != null && payload.numberAnswer != null) {
+        const ratio = numberRatio(payload.numberAnswer, {
+          expected: target,
+          tolerance: rest.tolerance ?? Math.abs(rest.step ?? 1) / 2,
+          window: rest.window ?? defaultWindow(min, max),
+        })
+        earned = scoreFromRatio(ratio, rest.points ?? 1)
+      }
+    } else if (type === 'range' && rest.expected != null) {
+      const target = parseExpectedRange(rest.expected)
+      if (target != null && payload.rangeAnswer) {
+        earned = scoreFromRatio(rangeRatio(payload.rangeAnswer, target), rest.points ?? 1)
+      }
     }
     if (earned == null) return
 
@@ -971,8 +1134,8 @@ function SyncedQuestion({
 }
 
 function Option({ children }: OptionProps) {
-  // This component is just a container for props
-  // The actual rendering happens in Question
+  // This component is just a container for props (correct / feedback / from).
+  // The actual rendering happens in Question.
   return <>{children}</>
 }
 

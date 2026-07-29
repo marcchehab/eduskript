@@ -113,6 +113,11 @@ export interface QuizData {
   // sparse Children.toArray indexing as `selected`), so the grading engine can
   // read it without re-deriving correctness server-side. Absent in surveys.
   choiceScore?: number
+  // Slider auto-check (number/range questions with an `expected` target), same
+  // shape as the text pair above: ratio 0–1 and the partial-credit points it
+  // buys. Absent when the author set no target, and in surveys.
+  sliderRatio?: number
+  sliderScore?: number
 }
 
 /**

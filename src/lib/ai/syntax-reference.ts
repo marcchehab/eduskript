@@ -583,7 +583,7 @@ What is 2 + 2?
 
 **question attributes:**
 - \`id="unique-id"\` — Optional, auto-generated if omitted
-- \`type="single"\` — Single choice (default). Other types: \`multiple\`, \`text\` (free-text answer), \`number\` (slider)
+- \`type="single"\` — Single choice (default). Other types: \`multiple\`, \`text\` (free-text answer), \`number\` (slider), \`range\` (two-handle slider)
 - \`showFeedback="true"\` — reveal correct/wrong feedback (and the auto-check score/diff) to the student during the attempt. **OFF by default for students** in both exams and practice (there's no Submit button, so default-on would leak the answer the moment they type). Teachers always see correctness when grading, and students see it on their returned/graded exam.
 - \`points="2"\` — max points for grading (default 1). Text questions get partial credit by similarity; single/multiple-choice score full points on an exact match of the correct set, else 0. Teachers can override any per-question score when grading an exam. For an explicit id (so the score is reliably attributed), set \`id="..."\`.
 
@@ -595,9 +595,27 @@ How relevant is Python for your work?
 </question>
 \`\`\`
 
+**Slider auto-check** — give a \`number\` or \`range\` question an \`expected\` target and it grades itself, with partial credit and graded hints:
+
+\`\`\`markdown
+<question id="hochpunkt" type="number" points="2" showFeedback="true"
+          minValue="-2" maxValue="2" step="0.1" expected="-1" tolerance="0.15">
+At which $x$ does $f$ have its maximum?
+<answer from="1" feedback="Correct — $f'(x) = x^2 - 1 = 0$ and $f''(-1) < 0$."></answer>
+<answer from="0.7" feedback="Close. Set $f'(x) = x^2 - 1$ to zero."></answer>
+<answer feedback="Not yet. Differentiate first, then solve $f'(x) = 0$."></answer>
+</question>
+\`\`\`
+
+- \`expected="-1"\` for \`type="number"\`, \`expected="-1..1"\` for \`type="range"\` (two handles).
+- \`tolerance\` — distance that still counts as fully correct (number only, default half a step). \`window\` — distance beyond the tolerance over which the score fades to zero (default a quarter of the slider span). Range questions score by interval overlap divided by union, so guessing too wide costs as much as too narrow.
+- \`<answer from="0.7" feedback="…">\` are feedback bands: the highest threshold the student's ratio reaches wins, a band without \`from\` is the catch-all. Bands only pick the wording — the points come from the ratio × \`points\`.
+- Without \`expected\` a slider stays ungraded and the teacher scores it by hand, as before.
+
 **answer attributes:**
 - \`correct="true"\` — Marks the correct answer
-- \`feedback="..."\` — Shown when this wrong option is selected
+- \`feedback="..."\` — Shown when this wrong option is selected. Markdown and \`$math$\` are rendered.
+- \`from="0.7"\` — Feedback band threshold for slider questions (see above)
 
 Spacing is forgiving: a prompt line and blank lines around the \`<answer>\` tags are optional — the question renders correctly either way.
 
@@ -722,7 +740,8 @@ export function getCondensedSyntaxReference(): string {
   \`<tabs-container data-items='["Tab1", "Tab2"]'><tab-item>Content1</tab-item><tab-item>Content2</tab-item></tabs-container>\`
 
 **Quiz:** \`<question id="q1" type="single" points="1"><answer correct="true">Right</answer><answer feedback="Nope">Wrong</answer></question>\` — \`points\` (default 1) is the gradable max; choice questions auto-score full points on an exact match, teacher-overridable when grading.
-  - Put the question text inside the tag before the answers; it renders as the card heading. Markdown and \`$math$\` work in the prompt and in the answers.
+  - Put the question text inside the tag before the answers; it renders as the card heading. Markdown and \`$math$\` work in the prompt, in the answers and in \`feedback="…"\`.
+  - Sliders auto-grade when given a target: \`<question type="number" expected="-1" tolerance="0.15">\` (or \`type="range" expected="-1..1"\`), with \`<answer from="0.7" feedback="…">\` bands from best to worst.
   - Use \`correct="true"\` to mark the correct answer
   - If you see \`<Option>\` or \`<quiz-option>\`, convert to \`<answer>\`
   - Do NOT use \`:::quiz\` syntax — it is not implemented

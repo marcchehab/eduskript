@@ -639,6 +639,12 @@ export function createMarkdownComponents(
         expected = expectedRaw
       }
     }
+    // Slider auto-check: `expected` is a plain attribute here (a value for
+    // number, an interval like "-1..1" for range), unlike the text variant which
+    // arrives encodeURIComponent'd in data-expected.
+    const plainExpected = props['expected'] as string | undefined
+    const tolerance = props['tolerance'] !== undefined ? Number(props['tolerance']) : undefined
+    const window_ = props['window'] !== undefined ? Number(props['window']) : undefined
     const points = props['points'] !== undefined ? Number(props['points']) : undefined
     const ignoreCase = props['ignore-case'] === 'true' || props['ignorecase'] === 'true'
     const ignoreWhitespace = props['ignore-whitespace'] === 'true' || props['ignorewhitespace'] === 'true'
@@ -664,7 +670,9 @@ export function createMarkdownComponents(
         minLabel={minLabel}
         maxLabel={maxLabel}
         gateAt={gateAt}
-        expected={expected}
+        expected={expected ?? plainExpected}
+        tolerance={tolerance}
+        window={window_}
         points={points}
         ignoreCase={ignoreCase}
         ignoreWhitespace={ignoreWhitespace}
@@ -678,8 +686,12 @@ export function createMarkdownComponents(
 
   // QuizOptionComponent - wrapper that preserves props for parent Question to read
   // Note: uses "correct" instead of "is" because "is" is a reserved React attribute
-  function QuizOptionComponent({ children, correct, feedback }: React.HTMLAttributes<HTMLElement> & { correct?: string; feedback?: string }) {
-    return <Option correct={correct as 'true' | 'false' | undefined} feedback={feedback}>{children}</Option>
+  function QuizOptionComponent({ children, correct, feedback, from }: React.HTMLAttributes<HTMLElement> & { correct?: string; feedback?: string; from?: string }) {
+    return (
+      <Option correct={correct as 'true' | 'false' | undefined} feedback={feedback} from={from}>
+        {children}
+      </Option>
+    )
   }
 
   // Anchor component - resolves relative file links to /api/files/{id} URLs

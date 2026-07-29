@@ -34,6 +34,7 @@ import { rehypeSourceLine } from './rehype-plugins/source-line'
 import { rehypeColorTitle } from './rehype-plugins/color-title'
 import { rehypeHeadingSectionIds } from './rehype-plugins/heading-section-ids'
 import { rehypeMarkdownChildren } from './rehype-plugins/markdown-children'
+import { rehypeQuizFeedback } from './rehype-plugins/quiz-feedback'
 import { rehypeAllowPluginAttrs } from './rehype-plugins/plugin-attrs'
 import { rehypeColorClasses } from './rehype-plugins/color-classes'
 import { rehypeExternalLinks } from './rehype-plugins/external-links'
@@ -90,6 +91,7 @@ export const sanitizeSchema = {
     'question-prompt', // Inserted by rehypeMarkdownChildren around a question's re-parsed prompt text
     'quiz-option',
     'answer',
+    'answer-feedback', // Parsed feedback="…" markdown, inserted by rehypeQuizFeedback
     'survey', // <Survey> region marker — wraps <Question>s for anonymous-submission flow
     'mermaid-diagram',
     'function-plot', // ```plot fence; body rides in data-spec
@@ -175,9 +177,9 @@ export const sanitizeSchema = {
     'login-codes': ['hook', 'interval'],
     // class="3a" arrives as className (allowed on *); these are the rest.
     'onlyfor': ['auth', 'anon', 'students', 'prompt', 'class'],
-    'question': ['id', 'type', 'showfeedback', 'minvalue', 'maxvalue', 'step', 'minlabel', 'maxlabel', 'gateat', 'gate-at', 'dataGateAt', 'data-gate-at', 'points', 'data-expected', 'dataExpected', 'ignore-case', 'ignorecase', 'ignore-whitespace', 'ignorewhitespace'],
+    'question': ['id', 'type', 'showfeedback', 'expected', 'tolerance', 'window', 'minvalue', 'maxvalue', 'step', 'minlabel', 'maxlabel', 'gateat', 'gate-at', 'dataGateAt', 'data-gate-at', 'points', 'data-expected', 'dataExpected', 'ignore-case', 'ignorecase', 'ignore-whitespace', 'ignorewhitespace'],
     'quiz-option': ['correct', 'is', 'feedback'],
-    'answer': ['correct', 'is', 'feedback'],
+    'answer': ['correct', 'is', 'feedback', 'from'],
     'yt': ['time', 'videoid', 'label'],
     'stickme': ['id'],
     'next-stage': ['label', 'title', 'confirm', 'cancel'],
@@ -497,6 +499,9 @@ export async function compileMarkdown(
     // <right> text children while they're still those tags, then align rewrites
     // the (now markdown-populated) tag to <div>.
     .use(rehypeMarkdownChildren)
+    // Turn feedback="…" attributes into <answer-feedback> children so their
+    // markdown and $math$ render (must precede sanitize + rehypeKatex).
+    .use(rehypeQuizFeedback)
     .use(rehypeAlignTags) // Rewrite <left>/<center>/<right> → <div class="es-align-*"> (before sanitize so it sees a plain div)
     .use(rehypeAllowPluginAttrs, schema) // Add this document's <plugin> attrs to the sanitize allowlist
     .use(rehypeExternalLinks) // Auto target=_blank for external links + title="_blank" opt-in
