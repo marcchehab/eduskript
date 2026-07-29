@@ -198,6 +198,7 @@ interface CreateMarkdownComponentsOptions {
   onExcalidrawEdit?: (filename: string, fileId: string) => void  // Callback to edit Excalidraw drawings
   onSpacerChange?: (id: string | undefined, newMarkdown: string) => void  // Stable callback for <spacer> resize/pattern/delete
   onMuxVideoChange?: (src: string, newMarkdown: string) => void  // Stable callback for the <muxvideo> options toolbar
+  onMoleculeChange?: (smiles: string, newMarkdown: string) => void  // Stable callback for the <molecule> resize/align gizmos
   optimizeImages?: boolean  // Enable Next.js Image optimization (only safe for public pages)
   isExam?: boolean  // Exam page: hide code-block copy buttons by default
 }
@@ -212,7 +213,7 @@ export function createMarkdownComponents(
   files: SkriptFilesData,
   options?: CreateMarkdownComponentsOptions
 ): Record<string, ComponentType<any>> {
-  const { pageId, ownerPageSlug, skriptId, onImageWidthChange, organizationSlug, onExcalidrawEdit, onSpacerChange, onMuxVideoChange, optimizeImages, isExam } = options ?? {}
+  const { pageId, ownerPageSlug, skriptId, onImageWidthChange, organizationSlug, onExcalidrawEdit, onSpacerChange, onMuxVideoChange, onMoleculeChange, optimizeImages, isExam } = options ?? {}
 
   // Img element handler - handles <img> elements from markdown with data-* attributes
   function ImgElementComponent({ src, alt, title, style, ...props }: React.ImgHTMLAttributes<HTMLImageElement>) {
@@ -768,12 +769,17 @@ export function createMarkdownComponents(
         const parsed = typeof raw === 'number' ? raw : parseInt(String(raw ?? ''), 10)
         return Number.isFinite(parsed) ? parsed : undefined
       }
+      const align = props['align']
       return (
         <MoleculeDiagram
           smiles={(props['smiles'] as string) ?? ''}
           name={props['name'] as string | undefined}
           width={num('width')}
           height={num('height')}
+          displayWidth={num('display-width') ?? num('displayWidth')}
+          align={align === 'left' || align === 'right' ? align : 'center'}
+          wrap={props['wrap'] === 'true' || props['wrap'] === ''}
+          onLayoutChange={onMoleculeChange}
         />
       )
     },

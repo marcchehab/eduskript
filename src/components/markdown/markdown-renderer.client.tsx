@@ -136,6 +136,22 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
     if (newContent !== currentContent) notify(newContent)
   }, [])
 
+  // Stable callback: rewrite a <molecule> tag after a resize/align gizmo drag.
+  // Keyed by the SMILES string, the same way image rewrites key on src — two
+  // identical molecules on one page would both match, which is the same
+  // trade-off images have lived with.
+  const stableOnMoleculeChange = useCallback((smiles: string, newMarkdown: string) => {
+    const currentContent = contentRef.current
+    const notify = onContentChangeRef.current
+    if (!notify || !currentContent || !smiles) return
+
+    const escaped = smiles.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const pattern = new RegExp(`<molecule[^>]*\\bsmiles="${escaped}"[^>]*/?>`)
+    if (!pattern.test(currentContent)) return
+    const newContent = currentContent.replace(pattern, newMarkdown)
+    if (newContent !== currentContent) notify(newContent)
+  }, [])
+
   // Memoize the components map — only recreated when files or pageId change.
   // Callbacks are stable (empty deps) so they don't bust the memo.
   // The callbacks read refs internally but only when invoked from event handlers,
@@ -149,8 +165,9 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
       onExcalidrawEdit: stableOnExcalidrawEdit,
       onSpacerChange: stableOnSpacerChange,
       onMuxVideoChange: stableOnMuxVideoChange,
+      onMoleculeChange: stableOnMoleculeChange,
     })
-  }, [files, pageId, skriptId, stableOnImageWidthChange, stableOnExcalidrawEdit, stableOnSpacerChange, stableOnMuxVideoChange])
+  }, [files, pageId, skriptId, stableOnImageWidthChange, stableOnExcalidrawEdit, stableOnSpacerChange, stableOnMuxVideoChange, stableOnMoleculeChange])
 
   // Capture scroll position before any DOM changes
   useLayoutEffect(() => {

@@ -235,7 +235,7 @@ Full supported-commands list: [katex.org/docs/supported](https://katex.org/docs/
 <molecule smiles="O" name="Wasser" width="240" height="180" />
 ```
 
-**Attributes:** `smiles` (required), `name` (caption under the drawing), `width` / `height` in px (default 420×300).
+**Attributes:** `smiles` (required), `name` (caption under the drawing), `width` / `height` in px (default 420×300). Layout works like an image: drag the handle in the editor preview to resize, use the buttons to align left/centre/right or let text wrap around it — that writes `display-width`, `align` and `wrap` back into the tag.
 
 SMILES is the standard text notation for molecules — `CCO` is ethanol, `c1ccccc1` benzene, `O` water. You don't have to write them from memory: PubChem lists a SMILES for every substance name, and structure editors export them.
 

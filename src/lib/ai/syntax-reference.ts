@@ -519,7 +519,7 @@ A fence with only a window and \`grid\` gives an empty coordinate system to draw
 <molecule smiles="O" name="Wasser" width="240" height="180" />
 \`\`\`
 
-**Attributes:** \`smiles\` (required — the standard molecule notation: \`CCO\` ethanol, \`c1ccccc1\` benzene, \`O\` water), \`name\` (caption below the drawing), \`width\` / \`height\` in px (default 420×300).
+**Attributes:** \`smiles\` (required — the standard molecule notation: \`CCO\` ethanol, \`c1ccccc1\` benzene, \`O\` water), \`name\` (caption below the drawing), \`width\` / \`height\` in px (default 420×300), plus the same layout attributes an image takes: \`display-width\` (percent of the column), \`align="left|center|right"\`, \`wrap="true"\`. In the editor these come from the drag handles, so they rarely need typing.
 
 Rendered server-side as an \`<img>\`, so students can draw on it with the annotation pens and an \`<ai-feedback>\` tag in the same section captures it. Element colours follow the usual convention; dark mode only lightens the black ink. A SMILES that cannot be parsed renders an image stating the problem — it never breaks the page.`)
 

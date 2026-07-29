@@ -98,3 +98,17 @@ describe('<molecule> in the pipeline', () => {
     expect(out).toContain('needs a smiles attribute')
   })
 })
+
+describe('layout attributes', () => {
+  it('carries display width, alignment and wrap through to the wrapper', async () => {
+    const out = await html('<molecule smiles="CCO" display-width="60" align="right" wrap="true" />')
+    // ResizableWrapper renders the width as a percentage on the container.
+    expect(out).toMatch(/width:\s*60%/)
+    expect(out).toContain('/api/render/molecule.svg?smiles=CCO')
+  })
+
+  it('defaults to full width and centred', async () => {
+    const out = await html('<molecule smiles="CCO" />')
+    expect(out).toMatch(/width:\s*100%/)
+  })
+})
