@@ -39,6 +39,7 @@ import { Geogebra } from '@/components/markdown/geogebra'
 import { PingTerminal } from '@/components/markdown/ping-terminal'
 import { MermaidDiagram } from '@/components/markdown/mermaid-diagram'
 import { FunctionPlot } from '@/components/markdown/function-plot'
+import { MoleculeDiagram } from '@/components/markdown/molecule'
 import { LoginCodes } from '@/components/markdown/login-codes'
 import { OnlyFor } from '@/components/markdown/only-for'
 import { AIFeedback } from '@/components/markdown/ai-feedback'
@@ -759,6 +760,23 @@ export function createMarkdownComponents(
     // ```plot fence. No decodeHtmlEntities here (unlike mermaid): parse5 has
     // already decoded the attribute, and a second pass would turn a literal
     // &lt; in a label into <.
+    // <molecule smiles="CCO" name="Ethanol" /> — the drawing itself comes from
+    // /api/render/molecule.svg, so openchemlib never enters a browser bundle.
+    'molecule': (props: Record<string, unknown>) => {
+      const num = (key: string): number | undefined => {
+        const raw = props[key]
+        const parsed = typeof raw === 'number' ? raw : parseInt(String(raw ?? ''), 10)
+        return Number.isFinite(parsed) ? parsed : undefined
+      }
+      return (
+        <MoleculeDiagram
+          smiles={(props['smiles'] as string) ?? ''}
+          name={props['name'] as string | undefined}
+          width={num('width')}
+          height={num('height')}
+        />
+      )
+    },
     'function-plot': (props: { 'data-spec'?: string; dataSpec?: string }) => (
       <FunctionPlot spec={props['data-spec'] ?? props.dataSpec ?? ''} />
     ),

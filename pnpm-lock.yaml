@@ -242,6 +242,9 @@ importers:
       openai:
         specifier: ^6.48.0
         version: 6.48.0(@aws-sdk/credential-provider-node@3.972.70)(@smithy/signature-v4@5.6.6)(ws@8.21.1)(zod@4.4.3)
+      openchemlib:
+        specifier: ^9.24.0
+        version: 9.24.0
       pdfjs-dist:
         specifier: ^6.1.200
         version: 6.1.200
@@ -5417,6 +5420,9 @@ packages:
         optional: true
       zod:
         optional: true
+
+  openchemlib@9.24.0:
+    resolution: {integrity: sha512-aIZc4wxcIq4d1RK32WAkGjjyFUKPcf2zdlklvzkmmo2HuHTojFUubeSxp0CQ6MZDGLiK18iQJwxA4/O9Db2bvA==}
 
   openid-client@5.7.1:
     resolution: {integrity: sha512-jDBPgSVfTnkIh71Hg9pRvtJc6wTwqjRkN88+gCFtYWrlP4Yx2Dsrow8uPi3qLr/aeymPF3o2+dS+wOpglK04ew==}
@@ -12419,6 +12425,8 @@ snapshots:
       '@smithy/signature-v4': 5.6.6
       ws: 8.21.1
       zod: 4.4.3
+
+  openchemlib@9.24.0: {}
 
   openid-client@5.7.1:
     dependencies:

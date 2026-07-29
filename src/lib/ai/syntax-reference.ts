@@ -509,6 +509,20 @@ vline x=-1 dashed
 
 A fence with only a window and \`grid\` gives an empty coordinate system to draw on.`)
 
+  // Structural formulas
+  sections.push(`## Structural Formulas (Chemistry)
+
+\`<molecule>\` draws a structural formula from a SMILES string. Self-closing, lowercase tag.
+
+\`\`\`html
+<molecule smiles="CC(=O)Oc1ccccc1C(=O)O" name="Aspirin" />
+<molecule smiles="O" name="Wasser" width="240" height="180" />
+\`\`\`
+
+**Attributes:** \`smiles\` (required — the standard molecule notation: \`CCO\` ethanol, \`c1ccccc1\` benzene, \`O\` water), \`name\` (caption below the drawing), \`width\` / \`height\` in px (default 420×300).
+
+Rendered server-side as an \`<img>\`, so students can draw on it with the annotation pens and an \`<ai-feedback>\` tag in the same section captures it. Element colours follow the usual convention; dark mode only lightens the black ink. A SMILES that cannot be parsed renders an image stating the problem — it never breaks the page.`)
+
   // Plugins
   const owner = BUILTIN_PLUGIN_OWNER
   sections.push(`## Built-in Plugins
@@ -769,6 +783,8 @@ export function getCondensedSyntaxReference(): string {
 **Ping:** \`<ping [host="wairualodge.co.nz"] [count="4"] [os="linux|macos|windows"] />\` — interactive terminal; students type \`ping [-c N] host\`. Server-side TCP connect (not ICMP; works where school wifi blocks ICMP). RTT/IP/loss are real; \`host\` auto-runs a demo; requires login; private addresses blocked; top-right button switches OS style.
 
 **Mermaid:** \`\`\`mermaid fenced code block — renders natively, theme-aware.
+
+**Structural formulas:** \`<molecule smiles="CC(=O)Oc1ccccc1C(=O)O" [name="Aspirin"] [width="420"] [height="300"] />\` — chemistry structural formula from SMILES (\`CCO\` ethanol, \`O\` water), server-rendered as an \`<img>\`, so pens and \`<ai-feedback>\` work on it.
 
 **Function plots:** \`\`\`plot fenced code block, one entry per line: \`f(x) = 1/3x^3 - x\` (curve, implicit multiplication allowed), \`x: -4..4\` / \`y: -3..3\` (window, y optional), \`A = (2, 1)\` (point), \`vline x=-1\` / \`hline y=2\`, flags \`grid\`/\`nogrid\`/\`aspect: equal\`/\`size: 640x400\`/\`caption: …\`, per-entry options after a comma (colour word, \`label="…"\`, \`dashed\`, \`thick\`). \`ln\` natural, \`log\` base 10. Renders as a static SVG \`<img>\`, so \`<ai-feedback>\` in the same section captures the graph — the way to build "draw the tangent" tasks.
 

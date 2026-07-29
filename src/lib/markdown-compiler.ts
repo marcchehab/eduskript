@@ -95,6 +95,7 @@ export const sanitizeSchema = {
     'survey', // <Survey> region marker — wraps <Question>s for anonymous-submission flow
     'mermaid-diagram',
     'function-plot', // ```plot fence; body rides in data-spec
+    'molecule', // SMILES structural formula, rendered by /api/render/molecule.svg
     'stickme',
     'demoeditor',
     'ourteachers',
@@ -144,6 +145,7 @@ export const sanitizeSchema = {
     'youtube-embed': ['dataId', 'dataPlaylist', 'dataStartTime', 'dataCaption', 'dataPin', 'data-id', 'data-playlist', 'data-start-time', 'data-caption', 'data-pin'],
     'mermaid-diagram': ['dataDefinition', 'data-definition'],
     'function-plot': ['dataSpec', 'data-spec'],
+    'molecule': ['smiles', 'name', 'width', 'height'],
     // autoplay/loop are known HTML media properties, so property-information
     // hands them over camelCased (autoPlay) and as booleans — allow both
     // spellings (cf. the bool() reader in markdown-components.tsx).

@@ -223,3 +223,25 @@ Full supported-commands list: [katex.org/docs/supported](https://katex.org/docs/
 | Text in math | `\text{word}` |
 | Themed color | `\textcolor{cyan}{x}` |
 | Small space | `\,` |
+
+---
+
+## Structural formulas (chemistry)
+
+`<molecule>` draws a structural formula from a SMILES string:
+
+```html
+<molecule smiles="CC(=O)Oc1ccccc1C(=O)O" name="Aspirin" />
+<molecule smiles="O" name="Wasser" width="240" height="180" />
+```
+
+**Attributes:** `smiles` (required), `name` (caption under the drawing), `width` / `height` in px (default 420×300).
+
+SMILES is the standard text notation for molecules — `CCO` is ethanol, `c1ccccc1` benzene, `O` water. You don't have to write them from memory: PubChem lists a SMILES for every substance name, and structure editors export them.
+
+The drawing is a normal image, so students can annotate it with the pens and an `<ai-feedback>` tag in the same section picks it up — the way to build "mark the functional group" tasks.
+
+> [!note] Why it looks slightly different from your textbook
+> The layout is generated, not drawn: bond angles and where a chain bends are the renderer's choice. Element colours follow the usual convention (O red, N blue), and in dark mode only the black ink is lightened.
+
+Broken SMILES don't break the page — the image itself shows what the parser objected to.

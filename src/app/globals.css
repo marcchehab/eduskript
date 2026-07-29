@@ -1066,6 +1066,27 @@ article.prose-theme > div > :first-child {
   display: block !important;
 }
 
+/* Structural formulas (<molecule>) — same theme switch as the plots above. */
+.prose-theme .molecule-light,
+.molecule-light {
+  display: block !important;
+}
+
+.prose-theme .molecule-dark,
+.molecule-dark {
+  display: none !important;
+}
+
+.dark .prose-theme .molecule-light,
+.dark .molecule-light {
+  display: none !important;
+}
+
+.dark .prose-theme .molecule-dark,
+.dark .molecule-dark {
+  display: block !important;
+}
+
 /* Straight-line edit handles: only visible on hover, so a page full of lines
  * doesn't look like a wireframe. Touch devices have no hover, so there the
  * handles stay faintly visible — otherwise they'd be undiscoverable. */
