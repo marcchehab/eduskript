@@ -112,3 +112,22 @@ describe('layout attributes', () => {
     expect(out).toMatch(/width:\s*100%/)
   })
 })
+
+describe('stereochemistry annotations', () => {
+  it('does not print a "?" at an unspecified stereocentre', () => {
+    // Ibuprofen without a configuration in the SMILES: openchemlib would
+    // otherwise label the stereocentre with a literal question mark.
+    const result = renderMolecule({
+      smiles: 'CC(C)Cc1ccc(cc1)C(C)C(=O)O',
+      width: 400,
+      height: 300,
+      theme: 'light',
+    })
+    if (!('svg' in result)) throw new Error('expected a drawing')
+    const texts = (result.svg.match(/<text[^>]*>([^<]*)<\/text>/g) ?? []).map((t) =>
+      t.replace(/<[^>]*>/g, '')
+    )
+    expect(texts).not.toContain('?')
+    expect(texts).toContain('O')
+  })
+})

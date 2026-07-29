@@ -65,6 +65,12 @@ function compute({ smiles, width, height, theme }: MoleculeRequest): MoleculeRes
       autoCrop: true,
       autoCropMargin: 6,
       suppressChiralText: true,
+      // Without this, a stereocentre whose configuration the SMILES leaves open
+      // is drawn with a literal "?" next to it (openchemlib's CIP annotation).
+      // On a teaching page that reads as a typo, and in a "find the stereocentre"
+      // task it would give the answer away. Authors who want the configuration
+      // shown write it into the SMILES: [C@@H] draws a proper wedge.
+      suppressCIPParity: true,
     })
   } catch (err) {
     // openchemlib's parser messages name the offending position, which is the
