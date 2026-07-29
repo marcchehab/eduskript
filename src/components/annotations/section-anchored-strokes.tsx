@@ -223,11 +223,23 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
     const paperCs = paperEl ? window.getComputedStyle(paperEl) : null
     const paperBorderLeft = paperCs ? parseFloat(paperCs.borderLeftWidth) || 0 : 0
     const paperBorderTop = paperCs ? parseFloat(paperCs.borderTopWidth) || 0 : 0
-    const zoom = getZoom() || 1
     const paperScale = parseFloat(
       window.getComputedStyle(document.documentElement).getPropertyValue('--paper-scale'),
     ) || 1
-    const combinedScale = zoom * paperScale
+    // Measure the total scale instead of composing it from the zoom state:
+    // paperRect is post-transform, paper.offsetWidth is the untransformed layout
+    // width, so their ratio IS zoom × paper-scale — and it comes from the same
+    // DOM snapshot as every rect below.
+    //
+    // Composing it from `getZoom()` (React state) desynchronised on Ctrl+wheel:
+    // that handler calls setZoom on every wheel event while the matching
+    // `transform: scale()` is still queued in a rAF, so this effect ran with the
+    // new zoom against the old geometry and every stroke landed off to the side
+    // — permanently, since nothing re-measures afterwards. Pinch-zoom only sets
+    // the state when the gesture ends, which is why a pinch "repaired" it.
+    const measuredScale =
+      paperRect && paperEl && paperEl.offsetWidth > 0 ? paperRect.width / paperEl.offsetWidth : 0
+    const combinedScale = measuredScale || (getZoom() || 1) * paperScale
     // Expose paperScale to the render path so the badge counter-scale can
     // factor it in too. setLiveScale is a no-op if value is unchanged so the
     // common case (no resize) doesn't re-render.
