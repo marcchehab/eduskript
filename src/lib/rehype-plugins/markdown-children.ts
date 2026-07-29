@@ -133,10 +133,24 @@ export function rehypeMarkdownChildren() {
     const answers: ElementContent[] = []
     let pendingText = ''
 
+    const space = (): void => {
+      // Only between parts — a leading space would indent the prompt.
+      if (promptParts.length > 0) promptParts.push({ type: 'text', value: ' ' })
+    }
+
     const flushText = async (): Promise<void> => {
-      const text = pendingText.trim()
+      const raw = pendingText
       pendingText = ''
-      if (!text) return
+      const text = raw.trim()
+
+      // Whitespace-only run between two elements: markdown would swallow it, but
+      // it is the word gap between "welchem" and the formula after it.
+      if (!text) {
+        if (raw) space()
+        return
+      }
+      if (/^\s/.test(raw)) space()
+
       const hast = (await processor.run(processor.parse(text) as MdastRoot)) as Root
       let parsed = (hast.children ?? []) as ElementContent[]
       if (parsed.length === 1 && parsed[0].type === 'element' && parsed[0].tagName === 'p') {
@@ -144,6 +158,8 @@ export function rehypeMarkdownChildren() {
       }
       parsed.forEach(stripPositions)
       promptParts.push(...parsed)
+
+      if (/\s$/.test(raw)) promptParts.push({ type: 'text', value: ' ' })
     }
 
     for (const child of node.children) {
@@ -159,6 +175,13 @@ export function rehypeMarkdownChildren() {
       promptParts.push(child as ElementContent)
     }
     await flushText()
+
+    // Drop a trailing gap (the newline before </question> or the first answer).
+    while (promptParts.length > 0) {
+      const last = promptParts[promptParts.length - 1]
+      if (last.type !== 'text' || last.value.trim() !== '') break
+      promptParts.pop()
+    }
 
     if (promptParts.length === 0) return
 

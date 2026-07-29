@@ -53,3 +53,22 @@ describe('question prompt + answer markdown', () => {
     expect((out.match(/<answer/g) || []).length).toBe(2)
   })
 })
+
+describe('prompt spacing around inline elements', () => {
+  it('keeps the word gaps when the opening tag spans several lines', async () => {
+    // A multi-line opening tag means remark parses the prompt itself, so the
+    // formula arrives as an element and the surrounding text as siblings.
+    const out = await html(
+      '<question id="q" type="number"\n          minValue="-2" maxValue="2">\nBei welchem $x$ liegt der Hochpunkt von $f(x)$?\n</question>'
+    )
+    const prompt = /<question-prompt>([\s\S]*?)<\/question-prompt>/.exec(out)?.[1] ?? ''
+    const text = prompt.replace(/<[^>]+>/g, '')
+    expect(text).toContain('Bei welchem ')
+    expect(text).toContain(' liegt der Hochpunkt von ')
+  })
+
+  it('does not indent a prompt that starts with whitespace', async () => {
+    const out = await html('<question id="q2" type="single">\n  Frage?\n<answer>a</answer>\n</question>')
+    expect(out).toContain('<question-prompt>Frage?')
+  })
+})
