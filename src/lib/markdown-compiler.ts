@@ -333,12 +333,29 @@ const HTML_VOID_ELEMENTS = new Set([
 ])
 
 /**
+ * An attribute run inside a tag, as a regex source fragment.
+ *
+ * The naive `[^>]*` is wrong: a `>` inside a quoted value ends the scan early.
+ * That is not exotic — `<ai-feedback prompt="C3H8 + 5 O2 -> 3 CO2" />` reads
+ * perfectly natural and used to break, because the tag was then never
+ * recognised as self-closing, parse5 treated it as an opening tag, and every
+ * following element became its child. The component doesn't render children,
+ * so the rest of the page silently vanished.
+ *
+ * The three alternatives are: an ordinary char, a double-quoted value, a
+ * single-quoted value.
+ */
+const TAG_ATTRS = `(?:[^>"']|"[^"]*"|'[^']*')*`
+
+/**
  * Expand self-closing custom element tags to explicit open+close pairs.
  * HTML only allows self-closing syntax for void elements (img, br, etc.).
  * Custom elements like <excali src="x" /> must become <excali src="x"></excali>.
  */
+const SELF_CLOSING_RE = new RegExp(`<([a-zA-Z][\\w-]*)(${TAG_ATTRS}?)/>`, 'g')
+
 function expandSelfClosingTags(markdown: string): string {
-  return markdown.replace(/<([a-zA-Z][\w-]*)((?:\s+[^>]*?)?)\/>/g, (match, tag, attrs) => {
+  return markdown.replace(SELF_CLOSING_RE, (match, tag, attrs) => {
     if (HTML_VOID_ELEMENTS.has(tag.toLowerCase())) return match
     return `<${tag}${attrs}></${tag}>`
   })
@@ -367,7 +384,7 @@ function expandSelfClosingTags(markdown: string): string {
  * blocks); questions rely on this collapse instead.
  */
 function normalizeQuestionSpacing(markdown: string): string {
-  return markdown.replace(/<question\b[^>]*>[\s\S]*?<\/question>/gi, (block) =>
+  return markdown.replace(new RegExp(`<question\\b${TAG_ATTRS}>[\\s\\S]*?</question>`, 'gi'), (block) =>
     block.replace(/\n[ \t]*(?:\n[ \t]*)+(<\/?(?:answer|question)\b)/gi, '\n$1')
   )
 }
@@ -436,7 +453,7 @@ function preprocessMarkdown(content: string): { text: string; lineMap: number[] 
 
 function delimitContainerTags(markdown: string): string {
   const tags = CONTAINER_TAGS.join('|')
-  const openRe = new RegExp(`^[ \\t]*<(?:${tags})\\b[^>]*>[ \\t]*$`, 'i')
+  const openRe = new RegExp(`^[ \\t]*<(?:${tags})\\b${TAG_ATTRS}>[ \\t]*$`, 'i')
   const closeRe = new RegExp(`^[ \\t]*</(?:${tags})>[ \\t]*$`, 'i')
   const fenceRe = /^[ \t]*(```|~~~)/
 
