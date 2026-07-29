@@ -36,6 +36,7 @@ import { getStroke } from 'perfect-freehand'
 import { getSvgPathFromStroke, getStrokeOptions, hasUniformPressure, smoothPoints } from '@/lib/annotations/svg-path'
 import type { AnimatedStroke } from '@/hooks/use-stroke-animation'
 import { useZoom } from '@/contexts/zoom-context'
+import { isEditableLine, moveEndpoint, moveLine, type EditPoint } from '@/lib/annotations/line-edit'
 
 type BadgeColor = 'purple' | 'blue' | 'orange' | 'green'
 
@@ -69,6 +70,13 @@ interface SectionAnchoredStrokesProps {
     icon: ReactNode
   }
   showBadge?: boolean
+  /** Active layer only: lets the user drag straightened lines (two-point
+   *  strokes) by an endpoint or as a whole. Omitted for reference layers, which
+   *  are read-only. */
+  onLineEdit?: (strokeId: string, points: EditPoint[]) => void
+  /** Handles are only interactive while no drawing tool is active — otherwise
+   *  they would swallow the first stroke of every new drawing. */
+  lineEditEnabled?: boolean
 }
 
 interface PathDatum {
@@ -76,6 +84,9 @@ interface PathDatum {
   d: string
   color: string
   sectionOffsetY: number
+  width: number
+  /** Set only for straightened lines (exactly two points) — the handle geometry. */
+  line?: [EditPoint, EditPoint]
 }
 
 interface SectionBounds {
@@ -100,6 +111,10 @@ function buildPath(stroke: AnimatedStroke): PathDatum {
     d: getSvgPathFromStroke(outline),
     color: stroke.color,
     sectionOffsetY: stroke.sectionOffsetY,
+    width: stroke.width,
+    line: isEditableLine(stroke)
+      ? [stroke.points[0] as EditPoint, stroke.points[1] as EditPoint]
+      : undefined,
   }
 }
 
@@ -115,7 +130,12 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
   zIndex,
   badge,
   showBadge = true,
+  onLineEdit,
+  lineEditEnabled = false,
 }: SectionAnchoredStrokesProps) {
+  // Live drag preview: the dragged line is hidden in the committed SVG and drawn
+  // by the handle overlay instead, so there is exactly one line on screen.
+  const [preview, setPreview] = useState<{ id: string; points: EditPoint[] } | null>(null)
   // Group renderable strokes by sectionId; build path data once per stroke.
   // Legacy 'unknown' strokes (drawn before paper-top existed, when the
   // capture fallback was the literal string 'unknown') are remapped to
@@ -345,7 +365,23 @@ export const SectionAnchoredStrokes = memo(function SectionAnchoredStrokes({
               markedForDeletion={markedForDeletion}
               opacity={opacity}
               zIndex={zIndex}
+              hiddenId={preview?.id}
             />
+            {lineEditEnabled && onLineEdit && (
+              <SectionLineHandles
+                paths={paths}
+                paperWidth={paperWidth}
+                paperHeight={paperHeight}
+                sectionLeftFromPaper={geom.leftFromPaper}
+                sectionTopFromPaper={geom.topFromPaper}
+                sectionBorderTop={geom.borderTop}
+                sectionBorderLeft={geom.borderLeft}
+                zIndex={zIndex}
+                preview={preview}
+                onPreview={setPreview}
+                onCommit={onLineEdit}
+              />
+            )}
             {badge && showBadge && (
               <SectionLayerBadge
                 layerId={badge.layerId}
@@ -431,6 +467,160 @@ function SectionLayerBadge({
   )
 }
 
+/**
+ * Drag handles for straightened lines.
+ *
+ * A second SVG on top of the committed one: `pointer-events: none` on the box,
+ * `auto`/`stroke` on the hit shapes only, so text selection and drawing
+ * elsewhere are untouched. Grabbing an endpoint moves that end, grabbing the
+ * line moves both.
+ *
+ * The screen→paper conversion measures the paper rect against its layout width,
+ * exactly like the geometry effect above — composing it from the zoom state
+ * would desynchronise during a Ctrl+wheel zoom.
+ */
+function SectionLineHandles({
+  paths,
+  paperWidth,
+  paperHeight,
+  sectionLeftFromPaper,
+  sectionTopFromPaper,
+  sectionBorderTop,
+  sectionBorderLeft,
+  zIndex,
+  preview,
+  onPreview,
+  onCommit,
+}: {
+  paths: PathDatum[]
+  paperWidth: number
+  paperHeight: number
+  sectionLeftFromPaper: number
+  sectionTopFromPaper: number
+  sectionBorderTop: number
+  sectionBorderLeft: number
+  zIndex?: number
+  preview: { id: string; points: EditPoint[] } | null
+  onPreview: (preview: { id: string; points: EditPoint[] } | null) => void
+  onCommit: (strokeId: string, points: EditPoint[]) => void
+}) {
+  const lines = useMemo(() => paths.filter((p) => p.line), [paths])
+
+  const startDrag = (
+    event: React.PointerEvent<SVGElement>,
+    datum: PathDatum,
+    grab: 'line' | 0 | 1,
+  ) => {
+    const original = datum.line
+    if (!original) return
+    event.preventDefault()
+    event.stopPropagation()
+
+    const paperEl = document.getElementById('paper')
+    const scale =
+      paperEl && paperEl.offsetWidth > 0
+        ? paperEl.getBoundingClientRect().width / paperEl.offsetWidth
+        : 1
+    const startX = event.clientX
+    const startY = event.clientY
+    const startPoints: EditPoint[] = [original[0], original[1]]
+    let latest = startPoints
+
+    const move = (e: PointerEvent) => {
+      const dx = (e.clientX - startX) / scale
+      const dy = (e.clientY - startY) / scale
+      latest =
+        grab === 'line'
+          ? moveLine(startPoints, dx, dy)
+          : moveEndpoint(startPoints, grab, startPoints[grab].x + dx, startPoints[grab].y + dy)
+      onPreview({ id: datum.id, points: latest })
+    }
+
+    const end = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', end)
+      window.removeEventListener('pointercancel', end)
+      onPreview(null)
+      if (latest !== startPoints) onCommit(datum.id, latest)
+    }
+
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', end)
+    window.addEventListener('pointercancel', end)
+  }
+
+  if (lines.length === 0) return null
+  const clippedHeight = Math.max(200, paperHeight - sectionTopFromPaper)
+
+  return (
+    <svg
+      className="annotation-line-handles"
+      viewBox={`0 0 ${paperWidth} ${clippedHeight}`}
+      preserveAspectRatio="none"
+      style={{
+        position: 'absolute',
+        top: -sectionBorderTop,
+        left: -sectionLeftFromPaper - sectionBorderLeft,
+        width: paperWidth,
+        height: clippedHeight,
+        pointerEvents: 'none',
+        overflow: 'visible',
+        zIndex: (zIndex ?? 0) + 1,
+      }}
+    >
+      {lines.map((datum) => {
+        const points = preview?.id === datum.id ? preview.points : datum.line!
+        const [a, b] = points
+        const color = datum.color === 'currentColor' ? 'hsl(var(--foreground))' : datum.color
+        return (
+          <g
+            key={datum.id}
+            className="line-handle-group"
+            transform={`translate(0, ${-datum.sectionOffsetY})`}
+          >
+            {/* Live preview of the dragged line — the committed path is hidden. */}
+            {preview?.id === datum.id && (
+              <line
+                x1={a.x}
+                y1={a.y}
+                x2={b.x}
+                y2={b.y}
+                stroke={color}
+                strokeWidth={datum.width * 2}
+                strokeLinecap="round"
+              />
+            )}
+            {/* Grab area for moving the whole line. */}
+            <line
+              x1={a.x}
+              y1={a.y}
+              x2={b.x}
+              y2={b.y}
+              stroke="transparent"
+              strokeWidth={14}
+              style={{ pointerEvents: 'stroke', cursor: 'move' }}
+              onPointerDown={(e) => startDrag(e, datum, 'line')}
+            />
+            {([0, 1] as const).map((index) => (
+              <circle
+                key={index}
+                cx={points[index].x}
+                cy={points[index].y}
+                r={7}
+                fill="hsl(var(--background))"
+                stroke={color}
+                strokeWidth={2}
+                style={{ pointerEvents: 'auto', cursor: 'grab' }}
+                onPointerDown={(e) => startDrag(e, datum, index)}
+              />
+            ))}
+          </g>
+        )
+      })}
+    </svg>
+  )
+}
+
 function SectionStrokeSvg({
   paths,
   paperWidth,
@@ -442,6 +632,7 @@ function SectionStrokeSvg({
   markedForDeletion,
   opacity,
   zIndex,
+  hiddenId,
 }: {
   paths: PathDatum[]
   paperWidth: number
@@ -456,6 +647,8 @@ function SectionStrokeSvg({
   markedForDeletion?: Set<string>
   opacity?: number
   zIndex?: number
+  /** Stroke currently being dragged — drawn by the handle overlay instead. */
+  hiddenId?: string
 }) {
   // Strokes drawn at different sectionOffsetY values (e.g. user drew, then layout
   // shifted, then drew again before saving) need their own translate so each lands
@@ -517,7 +710,7 @@ function SectionStrokeSvg({
               key={p.id}
               d={p.d}
               fill={p.color}
-              opacity={markedForDeletion?.has(p.id) ? 0.3 : 1}
+              opacity={p.id === hiddenId ? 0 : markedForDeletion?.has(p.id) ? 0.3 : 1}
             />
           ))}
         </g>

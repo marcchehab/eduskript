@@ -1066,6 +1066,24 @@ article.prose-theme > div > :first-child {
   display: block !important;
 }
 
+/* Straight-line edit handles: only visible on hover, so a page full of lines
+ * doesn't look like a wireframe. Touch devices have no hover, so there the
+ * handles stay faintly visible — otherwise they'd be undiscoverable. */
+.line-handle-group circle {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.line-handle-group:hover circle {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .line-handle-group circle {
+    opacity: 0.55;
+  }
+}
+
 /* Function plots (```plot) — same theme switch as excalidraw above, and for the
  * same reason: `dark:hidden` utilities lose against the prose image rules, so
  * both variants would render stacked. */

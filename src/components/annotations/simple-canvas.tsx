@@ -66,6 +66,12 @@ import { getStroke } from 'perfect-freehand'
 import type { StrokeOptions } from 'perfect-freehand'
 import { determineSectionFromY, liveSectionYShift, type HeadingPosition } from '@/lib/annotations/reposition-strokes'
 import { smoothPoints } from '@/lib/annotations/svg-path'
+import {
+  HOLD_SNAP_MS,
+  HOLD_SNAP_TOLERANCE_PX,
+  recognizeShape,
+  straightenPath,
+} from '@/lib/annotations/shape-snap'
 import type { StrokeTelemetry } from '@/lib/userdata/types'
 import { emitHighlightErase, emitHighlightEraseEnd } from '@/lib/text-highlights/erase-events'
 
@@ -209,6 +215,15 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       avgY?: number  // Average Y position of all points (for section detection)
     }>>([])
     const currentPathRef = useRef<Array<{ x: number; y: number; pressure: number }>>([])
+    // Straightening. `currentPathRef` always holds the raw hand path; when a
+    // straighten rule fires, the drawn AND committed geometry comes from
+    // `snappedPathRef` instead, so releasing the modifier restores freehand.
+    //   - Shift: straight line from the stroke's start to the live position
+    //     (Shift+Alt snaps the angle to a 15° grid)
+    //   - holding still for HOLD_SNAP_MS: recognise line / circle / rectangle
+    const snappedPathRef = useRef<Array<{ x: number; y: number; pressure: number }> | null>(null)
+    const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const holdAnchorRef = useRef<{ x: number; y: number } | null>(null)
     const strokeStartTimeRef = useRef<number>(0) // Track when current stroke started for telemetry
     const currentModeRef = useRef<DrawMode>('draw') // Track the effective mode for current stroke
     const strokesMarkedForDeletionRef = useRef<Set<number>>(new Set()) // Track strokes to delete when eraser lifts
@@ -535,6 +550,18 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [initialData])
 
+    // Drop a pending hold timer if the component goes away mid-stroke.
+    useEffect(() => () => {
+      if (holdTimerRef.current !== null) clearTimeout(holdTimerRef.current)
+    }, [])
+
+    const clearHoldTimer = useCallback(() => {
+      if (holdTimerRef.current !== null) {
+        clearTimeout(holdTimerRef.current)
+        holdTimerRef.current = null
+      }
+    }, [])
+
     const startDrawing = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
       // Record every pointer-down as a potential tap-through click. While a
       // pen is selected (or stylus mode is active) this canvas sits over the
@@ -651,7 +678,55 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       const pressure = e.pressure || 0.5 // Default to 0.5 for mouse
 
       currentPathRef.current = [{ x, y, pressure }]
-    }, [mode, stylusModeActive, onStylusDetected, onPenStateChange, onDrawStart, screenToPaper, updateEraserCursor, svgHandlesDisplay])
+      snappedPathRef.current = null
+      holdAnchorRef.current = { x, y }
+      clearHoldTimer()
+    }, [mode, clearHoldTimer, stylusModeActive, onStylusDetected, onPenStateChange, onDrawStart, screenToPaper, updateEraserCursor, svgHandlesDisplay])
+
+    // Paint the in-progress stroke: restore the snapshot, then draw either the
+    // raw hand path or, when a straighten rule fired, the snapped geometry.
+    // Extracted from draw() because the hold-to-snap timer has to repaint too —
+    // it fires while the pointer is stationary, i.e. with no move event coming.
+    const redrawInProgressStroke = useCallback(() => {
+      const canvas = canvasRef.current
+      const ctx = canvas?.getContext('2d')
+      if (!canvas || !ctx) return
+
+      if (snapshotCanvasRef.current) {
+        ctx.save()
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        ctx.drawImage(snapshotCanvasRef.current, 0, 0)
+        ctx.restore()
+      } else {
+        // Viewport mode: no snapshot, just clear
+        ctx.save()
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        ctx.restore()
+      }
+
+      // In viewport mode, offset points to canvas-local coordinates.
+      const vp = viewportRef.current
+      const livePoints = snappedPathRef.current ?? currentPathRef.current
+      if (livePoints.length === 0) return
+      const isUniform = hasUniformPressure(livePoints)
+      const sourcePoints = isUniform ? smoothPoints(livePoints) : livePoints
+      const inputPoints = vp
+        ? sourcePoints.map(p => [p.x - vp.x, p.y - vp.y, p.pressure])
+        : sourcePoints.map(p => [p.x, p.y, p.pressure])
+      // last: true matches the committed-stroke render in section-anchored-strokes.
+      // Without this, the canvas paints with a full-width round end while the SVG
+      // paints with the end taper enabled — the user sees the stroke "shrink"
+      // toward the end at the handoff (looks like a few-pixel drift, especially
+      // when the stroke ends going downward). Coordinate-wise the canvas and SVG
+      // already agree to subpixel precision; this just makes the visual handoff
+      // seamless.
+      const outline = getStroke(inputPoints, getStrokeOptions(strokeWidth, true, isUniform))
+      const pathObj = getPathFromStroke(outline)
+      ctx.fillStyle = resolveCanvasColor(strokeColor, ctx.canvas)
+      ctx.fill(pathObj)
+    }, [strokeColor, strokeWidth])
 
     const draw = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
       // Don't draw if multiple touch/mouse pointers are active (pinch gesture)
@@ -782,44 +857,47 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         }
       })
 
+      // Straightening rules, evaluated once per move (not per coalesced point).
+      if (currentModeRef.current === 'draw') {
+        const path = currentPathRef.current
+        const last = path[path.length - 1]
+
+        if (e.shiftKey && path.length > 1) {
+          // Shift: straight from the stroke's start to the live position. Alt
+          // additionally snaps the angle. Releasing Shift returns to freehand,
+          // because the raw path was never overwritten.
+          snappedPathRef.current = straightenPath(path, e.altKey)
+          clearHoldTimer()
+        } else if (last) {
+          if (snappedPathRef.current && snappedPathRef.current.length === 2) {
+            // Shift was released mid-stroke — drop the straight preview.
+            snappedPathRef.current = null
+          }
+          // Hold-to-snap: restart the timer whenever the pointer actually moves.
+          const anchor = holdAnchorRef.current
+          const moved =
+            !anchor || Math.hypot(last.x - anchor.x, last.y - anchor.y) > HOLD_SNAP_TOLERANCE_PX
+          if (moved) {
+            holdAnchorRef.current = { x: last.x, y: last.y }
+            snappedPathRef.current = null
+            clearHoldTimer()
+            holdTimerRef.current = setTimeout(() => {
+              holdTimerRef.current = null
+              if (!isDrawingRef.current) return
+              const shape = recognizeShape(currentPathRef.current)
+              if (!shape) return
+              snappedPathRef.current = shape.points
+              redrawInProgressStroke()
+            }, HOLD_SNAP_MS)
+          }
+        }
+      }
+
       // After processing all coalesced events, render in-progress stroke (draw mode only)
       if (currentModeRef.current !== 'erase') {
-        // Clear canvas (and restore snapshot if available)
-        if (snapshotCanvasRef.current) {
-          ctx.save()
-          ctx.setTransform(1, 0, 0, 1, 0, 0)
-          ctx.clearRect(0, 0, canvas.width, canvas.height)
-          ctx.drawImage(snapshotCanvasRef.current, 0, 0)
-          ctx.restore()
-        } else {
-          // Viewport mode: no snapshot, just clear
-          ctx.save()
-          ctx.setTransform(1, 0, 0, 1, 0, 0)
-          ctx.clearRect(0, 0, canvas.width, canvas.height)
-          ctx.restore()
-        }
-
-        // Draw current in-progress stroke with perfect-freehand.
-        // In viewport mode, offset points to canvas-local coordinates.
-        const vp = viewportRef.current
-        const isUniform = hasUniformPressure(currentPathRef.current)
-        const sourcePoints = isUniform ? smoothPoints(currentPathRef.current) : currentPathRef.current
-        const inputPoints = vp
-          ? sourcePoints.map(p => [p.x - vp.x, p.y - vp.y, p.pressure])
-          : sourcePoints.map(p => [p.x, p.y, p.pressure])
-        // last: true matches the committed-stroke render in section-anchored-strokes.
-        // Without this, the canvas paints with a full-width round end while the SVG
-        // paints with the end taper enabled — the user sees the stroke "shrink"
-        // toward the end at the handoff (looks like a few-pixel drift, especially
-        // when the stroke ends going downward). Coordinate-wise the canvas and SVG
-        // already agree to subpixel precision; this just makes the visual handoff
-        // seamless.
-        const outline = getStroke(inputPoints, getStrokeOptions(strokeWidth, true, isUniform))
-        const pathObj = getPathFromStroke(outline)
-        ctx.fillStyle = resolveCanvasColor(strokeColor, ctx.canvas)
-        ctx.fill(pathObj)
+        redrawInProgressStroke()
       }
-    }, [mode, strokeColor, strokeWidth, isPointNearStroke, scheduleEraserRedraw, updateEraserCursorPosition, updateEraserCursor, screenToPaper, onEraserMarksChange, svgHandlesDisplay])
+    }, [mode, isPointNearStroke, scheduleEraserRedraw, updateEraserCursorPosition, updateEraserCursor, screenToPaper, onEraserMarksChange, redrawInProgressStroke, clearHoldTimer, svgHandlesDisplay])
 
     const stopDrawing = useCallback((e?: React.PointerEvent<HTMLCanvasElement>) => {
       // Remove pointer from tracking
@@ -908,6 +986,15 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
       if (!isDrawingRef.current) return
 
       isDrawingRef.current = false
+
+      // A straightened stroke commits as its snapped geometry — from here on it
+      // is an ordinary stroke: same storage, eraser, undo, sync, section anchor.
+      clearHoldTimer()
+      holdAnchorRef.current = null
+      if (snappedPathRef.current && currentModeRef.current === 'draw') {
+        currentPathRef.current = snappedPathRef.current
+        snappedPathRef.current = null
+      }
 
       // If we just finished an eraser stroke, delete all marked strokes
       if (currentModeRef.current === 'erase') {
@@ -1046,7 +1133,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
         const data = JSON.stringify(pathsRef.current)
         onUpdate?.(data)
       }
-    }, [mode, strokeColor, strokeWidth, onUpdate, onPenStateChange, onTelemetry, headingPositions, redrawCanvas, updateEraserCursor, hideEraserCursor, onEraserMarksChange])
+    }, [mode, strokeColor, strokeWidth, onUpdate, onPenStateChange, onTelemetry, headingPositions, redrawCanvas, updateEraserCursor, hideEraserCursor, onEraserMarksChange, clearHoldTimer])
 
     const handlePointerCancel = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
       // Clean up when pointer is cancelled

@@ -89,6 +89,7 @@ import { AlertTriangle, User, Users, MessageSquare, Globe } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SimpleCanvas, type SimpleCanvasHandle, type DrawMode } from './simple-canvas'
 import { AnnotationSvgLayer } from './annotation-svg-layer'
+import { reanchorLine } from '@/lib/annotations/line-edit'
 import { SectionAnchoredStrokes } from './section-anchored-strokes'
 import { AnnotationToolbar, formatStudentLabel, type AnnotationMode } from './annotation-toolbar'
 import { getReverseMappingsForClass } from '@/lib/email-mapping-db'
@@ -2650,6 +2651,29 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     }, 2000)
   }, [performSave, ensureActiveLayerVisible, isTeacher, viewMode, selectedClass, selectedStudent])
 
+  /**
+   * Commit a dragged straight line. Runs through the same handleCanvasUpdate
+   * path a fresh stroke takes, so autosave, sync, undo and the teacher layers
+   * all behave identically — the only extra work is re-anchoring, because a
+   * line dragged into another section would otherwise keep the old sectionId
+   * and jump back on the next reflow (the trap sticky notes solve in
+   * `anchorForY`).
+   */
+  const handleLineEdit = useCallback((strokeId: string, points: Array<{ x: number; y: number; pressure: number }>) => {
+    let strokes: StrokeData[]
+    try {
+      strokes = JSON.parse(canvasDataRef.current || '[]') as StrokeData[]
+    } catch {
+      return
+    }
+    const index = strokes.findIndex(stroke => stroke.id === strokeId)
+    if (index === -1) return
+
+    const anchor = reanchorLine(points, headingPositionsRef.current)
+    strokes[index] = { ...strokes[index], points, ...anchor }
+    handleCanvasUpdate(JSON.stringify(strokes))
+  }, [handleCanvasUpdate])
+
   // Handle clear all annotations
   const handleClearAll = useCallback(async () => {
     try {
@@ -3423,6 +3447,10 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
           markedForDeletion={eraserMarkedIds}
           onOrphansChange={setDomOrphanedStrokes}
           headingPositions={headingPositions}
+          onLineEdit={handleLineEdit}
+          // Handles stay out of the way while a tool is active: in draw/erase
+          // mode the first click of a new stroke must reach the canvas.
+          lineEditEnabled={mode === 'view' && !stylusModeActive}
         />
       )}
 

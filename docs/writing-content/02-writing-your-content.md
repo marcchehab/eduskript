@@ -113,6 +113,22 @@ That said, this is a tool for teachers — most of the heavy lifting happens at 
 
 ---
 
+## Drawing straight lines and shapes
+
+Freehand is fine for notes, less so for axes, tangents and boxes. Two ways to get clean geometry, both available to anyone drawing on a page — teacher or student, mouse, stylus or finger:
+
+| | |
+|---|---|
+| **Hold Shift while drawing** | The stroke becomes a straight line from where you started to where the pointer is now. Let go of Shift and you are back to freehand. |
+| **Shift + Alt** | Same, but the angle snaps to 15° steps — horizontal, vertical and 45° come out exact. |
+| **Hold still for half a second, then lift** | The stroke is recognised and redrawn: a roughly straight one becomes a line, a closed round one a circle, a boxy one a rectangle. Anything that doesn't clearly fit is left exactly as drawn. |
+
+The result is an ordinary stroke — the eraser, undo, sharing with a class and the AI feedback all treat it like anything else you draw.
+
+**Straight lines stay editable.** With no pen or eraser selected, hover a straight line: a handle appears at each end. Drag a handle to move that end, drag the line itself to move the whole thing. Circles, rectangles and freehand strokes are not editable this way — for those, erase and redraw.
+
+---
+
 ## Productive habits
 
 > [!tip] Use the toolbar for what's hard to type
