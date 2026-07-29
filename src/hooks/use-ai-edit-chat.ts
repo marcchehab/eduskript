@@ -127,9 +127,12 @@ export function useAIEditChat({
   const stopRef = useRef(false)
   // Aborts the in-flight generate() fetch so Stop actually cancels it.
   const abortRef = useRef<AbortController | null>(null)
-  // Latest content of the focused/open page, threaded into follow-up plan
-  // requests so the model sees what's actually on the page now.
+  // Latest content of the focused/open page, threaded into plan requests so the
+  // model sees the editor buffer INCLUDING unsaved edits, not the saved row.
+  // Tracks the prop on every render: the modal stays mounted while the user
+  // types, so a mount-time snapshot would go stale immediately.
   const liveContentRef = useRef<string | undefined>(currentContent)
+  liveContentRef.current = currentContent
   // Conversation history sent to the agent endpoint (prose only — tool results
   // aren't fed back in v1). Grows as user/assistant turns are added.
   const historyRef = useRef<Array<{ role: 'user' | 'assistant'; content: string }>>([])
@@ -181,6 +184,7 @@ export function useAIEditChat({
             const d = await res.json().catch(() => ({}))
             throw new Error(d.error || `Failed to update page: ${card.pageTitle}`)
           }
+          onEditsApplied?.(undefined)
           return card.createdPageId
         }
         const res = await fetch('/api/pages', {
@@ -199,6 +203,10 @@ export function useAIEditChat({
           throw new Error(d.error || `Failed to create page: ${card.pageTitle}`)
         }
         const d = await res.json().catch(() => ({}))
+        // No content to hand up (the new page isn't the one open in the
+        // editor), but the parent still has to know: it refreshes the route so
+        // the page list picks the new page up without a manual reload.
+        onEditsApplied?.(undefined)
         return d.id ?? d.page?.id ?? null
       }
 
@@ -214,6 +222,10 @@ export function useAIEditChat({
       if (isFocusedCard(card)) {
         liveContentRef.current = card.proposedContent
         onEditsApplied?.(card.proposedContent)
+      } else {
+        // Another page changed: no content for the editor buffer, but the
+        // parent refreshes the route so its page list / versions catch up.
+        onEditsApplied?.(undefined)
       }
       return null
     },
@@ -237,6 +249,7 @@ export function useAIEditChat({
             const d = await res.json().catch(() => ({}))
             throw new Error(d.error || `Failed to remove page: ${card.pageTitle}`)
           }
+          onEditsApplied?.(undefined)
         }
         return
       }
@@ -254,6 +267,8 @@ export function useAIEditChat({
       if (isFocusedCard(card)) {
         liveContentRef.current = card.originalContent
         onEditsApplied?.(card.originalContent)
+      } else {
+        onEditsApplied?.(undefined)
       }
     },
     [target, onEditsApplied, isFocusedCard]
