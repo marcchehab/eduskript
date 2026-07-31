@@ -27,7 +27,7 @@
  */
 'use client'
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useSearchParams } from 'next/navigation'
 import { ExamStateStepper } from '@/components/exam/exam-state-stepper'
@@ -147,7 +147,22 @@ interface MergedRow {
   overrideState?: ExamLifecycleState
 }
 
-export function ClassToolbar({
+/**
+ * Suspense boundary, not decoration: ClassToolbarInner calls useSearchParams()
+ * (deep-link ?classId=&student=), and on a prerendered route that throws
+ * BAILOUT_TO_CLIENT_SIDE_RENDERING — the whole page 500s. Wrapping here rather
+ * than at each mount means a new caller cannot reintroduce the crash by
+ * forgetting it. (public-page-body.tsx also wraps its own mount; harmless.)
+ */
+export function ClassToolbar(props: ClassToolbarProps) {
+  return (
+    <Suspense fallback={null}>
+      <ClassToolbarInner {...props} />
+    </Suspense>
+  )
+}
+
+function ClassToolbarInner({
   pageId,
   pageType,
   unlockedClasses,
