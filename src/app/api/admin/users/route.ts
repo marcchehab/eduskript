@@ -4,6 +4,7 @@ import { requireAdmin } from '@/lib/admin-auth'
 import { prisma } from '@/lib/prisma'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { CACHE_TAGS } from '@/lib/cached-queries'
+import { createTrialSubscription } from '@/lib/trial'
 import bcrypt from 'bcryptjs'
 
 // GET /api/admin/users - List all users
@@ -42,6 +43,9 @@ export async function GET() {
           select: {
             status: true,
             currentPeriodEnd: true,
+            cancelledAt: true,
+            // The admin list labels the user from this, not billingPlan
+            plan: { select: { slug: true } },
           },
           orderBy: { createdAt: 'desc' },
           take: 1,
@@ -226,6 +230,13 @@ export async function POST(request: Request) {
       }
       return { ...u, pageSlug: siteSlug }
     })
+
+    // Admin-created teachers get the same trial as self-signups
+    // (/api/auth/register and the OAuth adapter both do this). No-op if no
+    // plan has isDefaultTrial=true.
+    if (!isStudent) {
+      await createTrialSubscription(createdRaw.id)
+    }
 
     // Bust any cached `null` for this pageSlug. If anything hit /<pageSlug>
     // before this admin-created teacher existed, getTeacherByPageSlug /

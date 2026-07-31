@@ -104,6 +104,24 @@ export async function PATCH(
       hashedPassword = await bcrypt.hash(newPassword, 12)
     }
 
+    // The admin UI takes the plan slug as free text. Validate before any write:
+    // an unknown slug used to be ignored further down, which left
+    // user.billingPlan set (e.g. "pro") with no subscription row at all — the
+    // user looked paid but had nothing.
+    let overridePlan: { id: string } | null = null
+    if (billingPlan !== undefined && billingPlan !== 'free') {
+      overridePlan = await prisma.plan.findUnique({
+        where: { slug: billingPlan },
+        select: { id: true },
+      })
+      if (!overridePlan) {
+        return NextResponse.json(
+          { error: `No plan with slug "${billingPlan}". Create it under Admin → Plans first.` },
+          { status: 400 }
+        )
+      }
+    }
+
     // Validate email format if provided
     if (email) {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -200,34 +218,34 @@ export async function PATCH(
     const updatedUser = updatedUserRaw
 
     // If billingPlan changed, create/update admin-granted subscription
-    if (billingPlan !== undefined && billingPlan !== 'free') {
-      const plan = await prisma.plan.findUnique({ where: { slug: billingPlan } })
-      if (plan) {
-        // Upsert: find existing active subscription or create new one
-        const existingSub = await prisma.subscription.findFirst({
-          where: { userId: id, status: 'active' },
-        })
+    if (overridePlan) {
+      const plan = overridePlan
+      // Upsert: find existing active subscription or create new one
+      const existingSub = await prisma.subscription.findFirst({
+        where: { userId: id, status: 'active' },
+      })
 
-        if (existingSub) {
-          await prisma.subscription.update({
-            where: { id: existingSub.id },
-            data: { planId: plan.id, status: 'active' },
-          })
-        } else {
-          await prisma.subscription.create({
-            data: {
-              userId: id,
-              planId: plan.id,
-              status: 'active',
-              // No payrexxSubId — admin-granted
-            },
-          })
-        }
+      if (existingSub) {
+        await prisma.subscription.update({
+          where: { id: existingSub.id },
+          data: { planId: plan.id, status: 'active' },
+        })
+      } else {
+        await prisma.subscription.create({
+          data: {
+            userId: id,
+            planId: plan.id,
+            status: 'active',
+            // No payrexxSubId — admin-granted
+          },
+        })
       }
     } else if (billingPlan === 'free') {
-      // Cancel any active subscriptions
+      // Cancel active AND trialing subscriptions. Trials used to survive this,
+      // leaving billingPlan='free' next to a live trial — the admin list then
+      // showed the contradictory label "free (trial)".
       await prisma.subscription.updateMany({
-        where: { userId: id, status: 'active' },
+        where: { userId: id, status: { in: ['active', 'trialing'] } },
         data: { status: 'cancelled', cancelledAt: new Date() },
       })
     }

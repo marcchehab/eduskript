@@ -29,6 +29,15 @@ export async function POST() {
       return NextResponse.json({ error: 'No active subscription found' }, { status: 404 })
     }
 
+    // Trials are not cancellable — they cost nothing and expire on their own.
+    // The UI has no cancel button during a trial; this guards direct POSTs.
+    if (subscription.status === 'trialing') {
+      return NextResponse.json(
+        { error: 'A trial cannot be cancelled. It ends automatically on its end date.' },
+        { status: 400 }
+      )
+    }
+
     // Cancel in Payrexx if we have a subscription ID
     if (subscription.payrexxSubId) {
       try {
@@ -41,8 +50,9 @@ export async function POST() {
 
     const now = new Date()
 
-    // Trials cancel immediately; paid subscriptions stay active until period end
-    if (subscription.status === 'trialing' || !subscription.currentPeriodEnd) {
+    // A subscription with no period end has nothing to run out — cancel it
+    // immediately. Everything else stays active until the period end.
+    if (!subscription.currentPeriodEnd) {
       await prisma.subscription.update({
         where: { id: subscription.id },
         data: { status: 'cancelled', cancelledAt: now },

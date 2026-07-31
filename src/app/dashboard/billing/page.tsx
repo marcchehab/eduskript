@@ -189,6 +189,9 @@ export default function BillingPage() {
             ) : null}
           </div>
 
+          {/* No cancel button during a trial: a trial costs nothing and ends
+              on its own. Cancelling it was irreversible for the user — nothing
+              re-grants a trial, so only an admin could restore access. */}
           {subscription.status === 'trialing' && (
             <div className="flex gap-2">
               <Button
@@ -197,14 +200,6 @@ export default function BillingPage() {
               >
                 {actionLoading === subscription.plan.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Upgrade to Paid
-              </Button>
-              <Button
-                variant="outline"
-                onClick={handleCancel}
-                disabled={actionLoading === 'cancel'}
-              >
-                {actionLoading === 'cancel' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Cancel Trial
               </Button>
             </div>
           )}

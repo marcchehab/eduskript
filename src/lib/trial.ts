@@ -33,25 +33,42 @@ export async function createTrialSubscription(
     ? await prisma.plan.findUnique({ where: { id: planId } })
     : await prisma.plan.findFirst({ where: { isDefaultTrial: true, isActive: true } })
 
-  if (!plan) return null
+  if (!plan) {
+    // Signups silently got no trial when this happened. console.warn, not the
+    // logger from @/lib/logger — its warn level is gated behind DEBUG, and
+    // this must be visible in the Koyeb logs by default.
+    console.warn(
+      `[trial] No trial created for user ${userId}: ` +
+        (planId
+          ? `plan ${planId} not found`
+          : 'no plan has isDefaultTrial=true and isActive=true')
+    )
+    return null
+  }
 
   const trialDays = overrideDays ?? plan.trialDays ?? 14
   const now = new Date()
   const end = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000)
 
-  const subscription = await prisma.subscription.create({
-    data: {
-      userId,
-      planId: plan.id,
-      status: 'trialing',
-      currentPeriodStart: now,
-      currentPeriodEnd: end,
-    },
-  })
-
-  await prisma.user.update({
-    where: { id: userId },
-    data: { billingPlan: plan.slug },
+  // One transaction: user.billingPlan is a denormalized copy of the
+  // subscription's plan and the admin panel / session token read it. Two
+  // separate writes could leave a trialing subscription next to
+  // billingPlan='free' if the second one failed.
+  const subscription = await prisma.$transaction(async (tx) => {
+    const sub = await tx.subscription.create({
+      data: {
+        userId,
+        planId: plan.id,
+        status: 'trialing',
+        currentPeriodStart: now,
+        currentPeriodEnd: end,
+      },
+    })
+    await tx.user.update({
+      where: { id: userId },
+      data: { billingPlan: plan.slug },
+    })
+    return sub
   })
 
   return { id: subscription.id }

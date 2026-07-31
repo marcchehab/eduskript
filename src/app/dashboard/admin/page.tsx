@@ -48,6 +48,34 @@ interface Plan {
   id: string
   name: string
   slug: string
+  trialDays: number | null
+  isDefaultTrial: boolean
+}
+
+/**
+ * The one badge a user gets in the list. Derived from the live subscription,
+ * not user.billingPlan — billingPlan is a denormalized copy and could go stale
+ * (an admin "set to free" left it at free next to a still-trialing
+ * subscription, which rendered as the nonsense label "free (trial)").
+ *
+ * States, in the order they are checked:
+ *   trial     — status 'trialing', free until the end date
+ *   past due  — status 'past_due', payment failed, still has access
+ *   <plan>    — status 'active', paying
+ *   ending    — status 'active' with cancelledAt, paid until the period end
+ *   free      — no active/trialing subscription (never had one, trial expired,
+ *               or cancelled). The API only returns active/trialing rows, so
+ *               an empty list is exactly this case.
+ */
+function planBadge(user: User): { label: string; variant: 'default' | 'secondary' | 'outline' } {
+  const sub = user.subscriptions?.[0]
+  if (!sub) return { label: 'free', variant: 'secondary' }
+
+  const slug = sub.plan?.slug || 'unknown plan'
+  if (sub.status === 'trialing') return { label: `trial · ${slug}`, variant: 'default' }
+  if (sub.status === 'past_due') return { label: `past due · ${slug}`, variant: 'outline' }
+  if (sub.cancelledAt) return { label: `${slug} · ending`, variant: 'outline' }
+  return { label: slug, variant: 'default' }
 }
 
 interface User {
@@ -67,7 +95,12 @@ interface User {
   updatedAt: Date
   lastLoginAt: string | null
   accounts: OAuthAccount[]
-  subscriptions: { status: string; currentPeriodEnd: string | null }[]
+  subscriptions: {
+    status: string
+    currentPeriodEnd: string | null
+    cancelledAt: string | null
+    plan?: { slug: string } | null
+  }[]
   _count?: { pageAuthors: number }
 }
 
@@ -111,7 +144,7 @@ export default function AdminPanelPage() {
     accountType: 'teacher' as 'teacher' | 'student',
     studentPseudonym: '',
     grantTrial: false,
-    trialDays: '30',
+    trialDays: '14', // overwritten by openEditDialog() with the default trial plan's trialDays
     organizationId: '',
     isTemporary: false,
     // Optional password change from the edit modal (email/non-OAuth users only).
@@ -327,7 +360,7 @@ export default function AdminPanelPage() {
         accountType: 'teacher',
         studentPseudonym: '',
         grantTrial: false,
-        trialDays: '30',
+        trialDays: '14', // overwritten by openEditDialog() with the default trial plan's trialDays
         organizationId: defaultOrgId,
         isTemporary: false,
         newPassword: '',
@@ -554,6 +587,12 @@ export default function AdminPanelPage() {
     setOrgFormData({ name, slug })
   }
 
+  // Length of an automatic signup trial — the default trial plan's trialDays.
+  // Falls back to 14, the same fallback createTrialSubscription() uses.
+  const defaultTrialDays = String(
+    availablePlans.find(p => p.isDefaultTrial)?.trialDays ?? 14
+  )
+
   // Open edit dialog
   const openEditDialog = (user: User) => {
     setSelectedUser(user)
@@ -569,7 +608,7 @@ export default function AdminPanelPage() {
       accountType: (user.accountType || 'teacher') as 'teacher' | 'student',
       studentPseudonym: user.studentPseudonym || '',
       grantTrial: false,
-      trialDays: '30',
+      trialDays: defaultTrialDays,
       organizationId: '',
       isTemporary: user.isTemporary ?? false,
       newPassword: '',
@@ -694,8 +733,8 @@ export default function AdminPanelPage() {
                   <div className="flex items-center gap-2">
                     <h3 className="font-medium">{user.name}</h3>
                     {user.isAdmin && <Badge variant="outline">Admin</Badge>}
-                    <Badge variant={user.billingPlan === 'free' ? 'secondary' : 'default'}>
-                      {user.billingPlan || 'free'}{user.subscriptions?.[0]?.status === 'trialing' ? ' (trial)' : ''}
+                    <Badge variant={planBadge(user).variant}>
+                      {planBadge(user).label}
                     </Badge>
                     {user.requirePasswordReset && <Badge variant="outline">Password Reset Required</Badge>}
                   </div>
