@@ -9,10 +9,11 @@ import { Label } from '@/components/ui/label'
 import { Card } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
-import { Globe, Plus, Trash2, CheckCircle, AlertCircle, Star, ChevronLeft, Copy, RefreshCw } from 'lucide-react'
+import { Globe, Plus, Trash2, CheckCircle, AlertCircle, Star, ChevronLeft, RefreshCw, Settings2 } from 'lucide-react'
 import Link from 'next/link'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
+import { DomainDnsInstructions, CUSTOM_DOMAIN_TARGET } from '@/components/dashboard/domain-dns-instructions'
 
 interface TeacherDomain {
   id: string
@@ -24,13 +25,6 @@ interface TeacherDomain {
   verifiedAt: string | null
   createdAt: string
   updatedAt: string
-}
-
-interface VerificationInstructions {
-  type: string
-  host: string
-  value: string
-  instructions: string
 }
 
 // Custom-domains manager, scoped to a single site. `siteId` pins the list and
@@ -55,7 +49,6 @@ export function TeacherDomainsManager({
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [showInstructionsDialog, setShowInstructionsDialog] = useState(false)
   const [selectedDomain, setSelectedDomain] = useState<TeacherDomain | null>(null)
-  const [verificationInstructions, setVerificationInstructions] = useState<VerificationInstructions | null>(null)
   const [verifying, setVerifying] = useState<string | null>(null)
   const [orgAllowsDomains, setOrgAllowsDomains] = useState<boolean | null>(null)
 
@@ -121,12 +114,11 @@ export function TeacherDomainsManager({
       }
 
       setDomains([...domains, data.domain])
-      setVerificationInstructions(data.verificationInstructions)
       setSelectedDomain(data.domain)
       setShowAddDialog(false)
       setShowInstructionsDialog(true)
       setNewDomain('')
-      setSuccess('Domain added. Please verify ownership by adding the DNS record.')
+      setSuccess('Domain added. Add the two DNS records below, then click Verify.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
@@ -157,11 +149,8 @@ export function TeacherDomainsManager({
         setSuccess(data.message)
       } else {
         setError(data.message || 'Verification failed')
-        if (data.instructions) {
-          setVerificationInstructions(data.instructions)
-          setSelectedDomain(domain)
-          setShowInstructionsDialog(true)
-        }
+        setSelectedDomain(domain)
+        setShowInstructionsDialog(true)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
@@ -227,13 +216,6 @@ export function TeacherDomainsManager({
     }
   }
 
-  // Copy to clipboard
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-    setSuccess('Copied to clipboard!')
-    setTimeout(() => setSuccess(''), 2000)
-  }
-
   if (loading) {
     return (
       <div className="flex min-h-[400px] items-center justify-center">
@@ -289,8 +271,10 @@ export function TeacherDomainsManager({
       </div>
 
       <p className="text-muted-foreground">
-        Add custom domains so visitors can access your page directly.
-        You&apos;ll need to verify ownership by adding a DNS TXT record.
+        Add custom domains so visitors can access your page directly. Each domain needs two DNS
+        records: a TXT record proving ownership, and a CNAME pointing to{' '}
+        <code className="font-mono text-xs">{CUSTOM_DOMAIN_TARGET}</code>. Use &quot;DNS setup&quot;
+        on a domain for the exact values.
       </p>
 
       {error && (
@@ -337,6 +321,18 @@ export function TeacherDomainsManager({
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSelectedDomain(domain)
+                    setShowInstructionsDialog(true)
+                  }}
+                  className="gap-1"
+                >
+                  <Settings2 className="h-4 w-4" />
+                  DNS setup
+                </Button>
                 {!domain.isVerified && (
                   <Button
                     variant="outline"
@@ -409,66 +405,13 @@ export function TeacherDomainsManager({
         </DialogContent>
       </Dialog>
 
-      {/* Verification Instructions Dialog */}
-      <Dialog open={showInstructionsDialog} onOpenChange={setShowInstructionsDialog}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Verify Domain Ownership</DialogTitle>
-            <DialogDescription>
-              Add this DNS TXT record to verify you own {selectedDomain?.domain}
-            </DialogDescription>
-          </DialogHeader>
-          {verificationInstructions && (
-            <div className="space-y-4">
-              <div className="bg-muted p-4 rounded-lg space-y-3">
-                <div>
-                  <Label className="text-xs text-muted-foreground">Record Type</Label>
-                  <div className="font-mono text-sm">{verificationInstructions.type}</div>
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Host / Name</Label>
-                  <div className="flex items-center gap-2">
-                    <code className="font-mono text-sm bg-background px-2 py-1 rounded flex-1 break-all">
-                      _eduskript-verify
-                    </code>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => copyToClipboard('_eduskript-verify')}
-                    >
-                      <Copy className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Value</Label>
-                  <div className="flex items-center gap-2">
-                    <code className="font-mono text-xs bg-background px-2 py-1 rounded flex-1 break-all">
-                      {verificationInstructions.value}
-                    </code>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => copyToClipboard(verificationInstructions.value)}
-                    >
-                      <Copy className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                DNS changes can take up to 48 hours to propagate. Once you&apos;ve added the record,
-                click &quot;Verify&quot; to check if it&apos;s been set up correctly.
-              </p>
-            </div>
-          )}
-          <DialogFooter>
-            <Button onClick={() => setShowInstructionsDialog(false)}>
-              Done
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DomainDnsInstructions
+        open={showInstructionsDialog}
+        onOpenChange={setShowInstructionsDialog}
+        domain={selectedDomain?.domain ?? null}
+        verificationToken={selectedDomain?.verificationToken ?? null}
+        diagnoseUrl={selectedDomain ? `/api/user/domains/${selectedDomain.id}/diagnose` : undefined}
+      />
 
       <AlertDialogModal
         open={dialog.open} onOpenChange={dialog.setOpen}
