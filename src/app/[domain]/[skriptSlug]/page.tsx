@@ -9,9 +9,8 @@ import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.
 import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
 import { ClassToolbar } from '@/components/teacher/class-toolbar'
 import { getPublicLayers, EMPTY_PUBLIC_LAYERS } from '@/lib/public-page-data'
-import { headers } from 'next/headers'
 
-// Force dynamic rendering - this page uses headers() for hostname detection
+// Force dynamic rendering — the page is session-dependent (author gating).
 export const dynamic = 'force-dynamic'
 export const dynamicParams = true
 
@@ -88,14 +87,6 @@ export default async function SkriptPreviewPage({ params }: SkriptPreviewProps) 
   }
 
   const session = await getServerSession(authOptions)
-
-  // Check request headers for proxy-stripped URLs on custom domains
-  const headersList = await headers()
-  const hostname = headersList.get('host') || ''
-  const hostWithoutPort = hostname.split(':')[0]
-  const parts = hostWithoutPort.split('.')
-  const hasSubdomain = (parts.length > 1 && parts[parts.length - 1] === 'localhost') ||
-                      (parts.length > 2 && parts[parts.length - 2] === 'eduskript')
 
   try {
     // Note: the parent layout at [domain]/[skriptSlug]/layout.tsx already
@@ -216,15 +207,11 @@ export default async function SkriptPreviewPage({ params }: SkriptPreviewProps) 
     const firstPage = skript.pages.find(page => isAuthor || page.isPublished)
 
     if (firstPage) {
-      const redirectUrl = hasSubdomain
-        ? `/${skriptSlug}/${firstPage.slug}`
-        : `/${domain}/${skriptSlug}/${firstPage.slug}`
-      return <SkriptRedirect redirectUrl={redirectUrl} />
+      return <SkriptRedirect redirectUrl={`/${domain}/${skriptSlug}/${firstPage.slug}`} />
     }
 
     // If no pages are available, redirect to teacher homepage
-    const redirectUrl = hasSubdomain ? `/` : `/${domain}`
-    return <SkriptRedirect redirectUrl={redirectUrl} />
+    return <SkriptRedirect redirectUrl={`/${domain}`} />
 
   } catch (error) {
     // Re-throw Next.js navigation errors (notFound, redirect) - these are expected
