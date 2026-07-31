@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { attachDomainToKoyeb } from '@/lib/koyeb'
 import dns from 'dns'
 import { promisify } from 'util'
 
@@ -107,9 +108,20 @@ export async function POST(
       },
     })
 
+    // Ownership alone does not route the domain — it also has to exist on the
+    // Koyeb side. Best effort: a failure here leaves the domain verified but
+    // unrouted, which the configuration check reports as an HTTPS problem.
+    const koyeb = await attachDomainToKoyeb(domain.domain)
+    if (koyeb.status === 'error' || koyeb.status === 'quota_exceeded') {
+      console.error('Koyeb attach failed for', domain.domain, koyeb)
+    }
+
     return NextResponse.json({
       success: true,
-      message: 'Domain verified successfully!',
+      message:
+        koyeb.status === 'quota_exceeded'
+          ? 'Domain verified, but activation is pending — we will finish it shortly.'
+          : 'Domain verified successfully! It can take a minute until it is reachable.',
       domain: updatedDomain,
     })
   } catch (error) {
