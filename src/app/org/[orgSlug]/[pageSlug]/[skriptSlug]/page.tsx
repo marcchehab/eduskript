@@ -1,4 +1,6 @@
 import { notFound } from 'next/navigation'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 import { PublicSiteLayout } from '@/components/public/layout'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
 import { ClassToolbar } from '@/components/teacher/class-toolbar'
@@ -16,15 +18,13 @@ interface PageProps {
   }>
 }
 
-// ISR. The route previously read the session to show unpublished skripts to
-// their author, which forced a dynamic render for every visitor. It now serves
-// published content only, so the response is identical for everyone and can be
-// cached. Note the failure mode this replaces: under `revalidate = false` +
-// generateStaticParams() the route is static-with-on-demand-generation, where
-// reading cookies throws DYNAMIC_SERVER_USAGE and returned 500 on every
-// eduskript.org/<teacher>/<skript> URL — so nothing here may read the session
-// or cookies, transitively included.
-export const revalidate = false
+// Dynamic, not ISR. The route reads the session below (to show unpublished
+// skripts to their author), and `revalidate = false` + generateStaticParams()
+// put it in static-with-on-demand-generation mode, where reading cookies
+// throws DYNAMIC_SERVER_USAGE — every eduskript.org/<teacher>/<skript> URL
+// returned 500 in production because of it. Matches the sibling content route.
+// The DB work is cached in getOrgTeacherSkript(), so dynamic costs no queries.
+export const dynamic = 'force-dynamic'
 export const dynamicParams = true
 
 export async function generateStaticParams() {
@@ -84,6 +84,8 @@ export default async function OrgTeacherSkriptPage({ params }: PageProps) {
   const collection = collectionSkript?.collection
 
   // Check if current user is an author (to show unpublished content in sidebar)
+  const session = await getServerSession(authOptions)
+  const isAuthor = session?.user?.id === teacher.id
 
   // Build site structure
   const siteStructure = collection
@@ -107,7 +109,7 @@ export default async function OrgTeacherSkriptPage({ params }: PageProps) {
             }))
           }
         }]
-      }], { onlyPublished: true })
+      }], { onlyPublished: !isAuthor })
     : [{
         id: 'standalone',
         title: skript.title,
@@ -147,16 +149,14 @@ export default async function OrgTeacherSkriptPage({ params }: PageProps) {
       typographyPreference={(teacherSite?.typographyPreference as 'modern' | 'classic') || 'modern'}
       routePrefix={`/org/${orgSlug}/${pageSlug}`}
     >
-      {/* Class toolbar (portals into the sidebar slot). The server-side
-          isAuthor gate is gone with the session read, so it self-gates on the
-          viewer's own site slug instead — the same ISR-friendly gate the
-          [domain] routes use. It still self-gates on paid + has-classes. */}
-      {skript.frontPage?.id && (
+      {/* Class toolbar (portals into the sidebar slot). Gated server-side on
+          isAuthor like the org content page; the toolbar still self-gates on
+          paid + has-classes. Needs the frontPage id as pageId. */}
+      {isAuthor && skript.frontPage?.id && (
         <ClassToolbar
           pageId={skript.frontPage.id}
           pageType="standard"
           unlockedClasses={[]}
-          requireOwnerSlug={teacherSite?.slug}
         />
       )}
       <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border">

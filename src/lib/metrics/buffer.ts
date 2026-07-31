@@ -46,14 +46,7 @@ let currentHourTimestamp: number = getHourTimestamp(new Date())
 
 // How often the pending delta may reach the DB. Also the worst-case data loss
 // on an unclean restart (a clean SIGTERM flushes — see src/instrumentation.ts).
-//
-// The managed Postgres sleeps after 5 minutes without a connection
-// (https://www.koyeb.com/docs/databases) and bills compute while awake, so this
-// interval is a floor on how long it can ever stay asleep: at 10 minutes it
-// woke the instance six times an hour to write a handful of rows. Completed
-// hours are still exact — the hour-boundary flush below is separate — and only
-// the current half-hour's partial delta is at risk on an unclean restart.
-const DB_FLUSH_INTERVAL_MS = 30 * 60 * 1000
+const DB_FLUSH_INTERVAL_MS = 10 * 60 * 1000
 let lastDbFlushAt: number = currentMinuteTimestamp
 
 // Flush interval handle

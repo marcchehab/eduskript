@@ -1,22 +1,18 @@
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
+import Link from 'next/link'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 import { PublicSiteLayout } from '@/components/public/layout'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
 import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
-import { FrontpageOwnerCta } from '@/components/public/frontpage-owner-cta'
 import { prisma } from '@/lib/prisma'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { getFullSiteStructure } from '@/lib/cached-queries'
 import { getPublicLayers, EMPTY_PUBLIC_LAYERS } from '@/lib/public-page-data'
 
-// ISR: published content only and no session read, so the response is the same
-// for every visitor. Next.js 16 needs generateStaticParams() — even empty — or
-// a dynamic route stays dynamic.
-export const revalidate = false
+export const dynamic = 'force-dynamic'
 export const dynamicParams = true
-export async function generateStaticParams() {
-  return []
-}
 
 interface OrgTeacherPageProps {
   params: Promise<{
@@ -153,11 +149,9 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
   }
   const teacherPageLayout = teacherSite?.pageLayout
 
-  // No session read: this route is ISR-cached, and reading cookies would turn
-  // every request back into a dynamic render (the state it was in before). It
-  // therefore serves published content only — the same HTML for every visitor.
-  // Authors preview unpublished work from the dashboard; owner-only
-  // affordances are rendered client-side.
+  // Check if current user is the owner of this page
+  const session = await getServerSession(authOptions)
+  const isOwner = session?.user?.id === teacher.id
 
   // Check for frontpage (published for visitors, any for owner). Scope to THIS
   // site (the requested pageSlug), not the user — a teacher may own several
@@ -174,8 +168,8 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
     ? await getPublicLayers(frontPage.id)
     : EMPTY_PUBLIC_LAYERS
 
-  // Authorship for the annotation toolbar is resolved client-side inside
-  // AnnotationLayer, so nothing per-visitor reaches the cached HTML.
+  // Owner can create public annotations on their own front page
+  const isPageAuthor = isOwner
 
   // Get page layout items
   const pageItems = teacherPageLayout?.items || []
@@ -208,12 +202,12 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
         },
         include: {
           collectionSkripts: {
-            where: { skript: { isPublished: true } },
+            where: isOwner ? {} : { skript: { isPublished: true } },
             include: {
               skript: {
                 include: {
                   pages: {
-                    where: { isPublished: true },
+                    where: isOwner ? {} : { isPublished: true },
                     orderBy: { order: 'asc' },
                     select: { id: true, title: true, slug: true }
                   }
@@ -244,7 +238,7 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
       const skript = await prisma.skript.findFirst({
         where: {
           id: item.contentId,
-          isPublished: true
+          ...(isOwner ? {} : { isPublished: true })
         },
         include: {
           collectionSkripts: {
@@ -256,7 +250,7 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
             }
           },
           pages: {
-            where: { isPublished: true },
+            where: isOwner ? {} : { isPublished: true },
             orderBy: { order: 'asc' },
             select: { id: true, title: true, slug: true }
           }
@@ -323,17 +317,28 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
         {/* Frontpage content or empty state for owners */}
         {frontPage?.content ? (
           <article className="prose-theme">
-            <AnnotationWrapper pageId={frontPage.id} content={frontPage.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes}>
+            <AnnotationWrapper pageId={frontPage.id} content={frontPage.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes} isPageAuthor={isPageAuthor}>
               <ServerMarkdownRenderer
                 content={frontPage.content}
                 pageId={frontPage.id}
               />
             </AnnotationWrapper>
           </article>
+        ) : isOwner ? (
+          <div className="text-center py-12">
+            <h1 className="text-3xl font-bold mb-4">Your Frontpage</h1>
+            <p className="text-muted-foreground mb-6">
+              You haven&apos;t created a frontpage yet.
+            </p>
+            <Link
+              href="/dashboard/frontpage"
+              className="inline-flex items-center px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+            >
+              Create Frontpage
+            </Link>
+          </div>
         ) : (
           <div className="text-center py-12">
-            {/* Owner-only prompt, client-side so this stays cacheable. */}
-            <FrontpageOwnerCta ownerId={teacher.id} href="/dashboard/frontpage" />
             <h1 className="text-3xl font-bold mb-4">
               {teacher.name}&apos;s Educational Platform
             </h1>

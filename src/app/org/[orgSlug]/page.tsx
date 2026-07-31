@@ -1,24 +1,22 @@
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
+import Link from 'next/link'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 import { PublicSiteLayout } from '@/components/public/layout'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
 import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
 import { ClassToolbar } from '@/components/teacher/class-toolbar'
 import { HtmlLangSetter } from '@/components/seo/html-lang-setter'
+import { getOrgMembership } from '@/lib/org-auth'
 import { getOrgWithLayout, getOrgHomepageContent, getOrgFullSiteStructure } from '@/lib/cached-queries'
 import { prisma } from '@/lib/prisma'
 import { canonicalUrl, canonicalBase } from '@/lib/seo/canonical'
 import { JsonLd, organizationSchema } from '@/lib/seo/json-ld'
 import { getPublicLayers, EMPTY_PUBLIC_LAYERS } from '@/lib/public-page-data'
 
-// ISR: published content only and no session read, so every visitor gets the
-// same HTML. Next.js 16 needs generateStaticParams() — even empty — or a
-// dynamic route stays dynamic.
-export const revalidate = false
+export const dynamic = 'force-dynamic'
 export const dynamicParams = true
-export async function generateStaticParams() {
-  return []
-}
 
 interface OrgPageProps {
   params: Promise<{
@@ -137,21 +135,28 @@ export default async function OrgPage({ params }: OrgPageProps) {
     notFound()
   }
 
-  // No session read: this route is ISR-cached and must render the same HTML
-  // for every visitor. It previously read the session (plus an org-membership
-  // query) so admins could preview an unpublished frontpage in place, which
-  // made every request — crawlers included — a dynamic render. Admins preview
-  // from /dashboard/org/<id>/frontpage instead.
+  // Check if current user is an admin/owner
+  const session = await getServerSession(authOptions)
+  const membership = session?.user?.id
+    ? await getOrgMembership(session.user.id, organization.id)
+    : null
+  const isAdmin =
+    session?.user?.isAdmin ||
+    membership?.role === 'owner' ||
+    membership?.role === 'admin'
+
+  // Determine if front page should be shown
   const frontPage = organization.frontPage
-  const showFrontPage = frontPage && frontPage.isPublished
+  const showFrontPage = frontPage && (frontPage.isPublished || isAdmin)
+  const isPreviewMode = isAdmin && frontPage && !frontPage.isPublished
 
   // Fetch public annotations, snaps, and sticky notes for this front page
   const { publicAnnotations, publicSnaps, publicStickyNotes } = frontPage
     ? await getPublicLayers(frontPage.id)
     : EMPTY_PUBLIC_LAYERS
 
-  // Authorship for the annotation toolbar is resolved client-side inside
-  // AnnotationLayer, so nothing per-visitor reaches the cached HTML.
+  // Org admins/owners can create public annotations on the org front page
+  const isPageAuthor = isAdmin
 
   // Get page layout items
   const pageItems = organization.pageLayout?.items || []
@@ -198,23 +203,31 @@ export default async function OrgPage({ params }: OrgPageProps) {
       homeUrl={`/org/${orgSlug}`}
       pageId={frontPage?.id}
     >
-      {/* Class toolbar (portals into the sidebar slot). The server-side isAdmin
-          gate went with the session read, so it self-gates client-side on page
-          authorship — the same mechanism the ISR org /c/ content route uses.
-          It still self-gates on paid + has-classes. */}
-      {frontPage?.id && (
+      {/* Class toolbar (portals into the sidebar slot). Gated server-side on
+          isAdmin like the org content page; the toolbar still self-gates on
+          paid + has-classes. Needs the frontPage id as pageId. */}
+      {isPageAuthor && frontPage?.id && (
         <ClassToolbar
           pageId={frontPage.id}
           pageType="standard"
           unlockedClasses={[]}
-          gateOnPageAuthor
         />
       )}
       <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border">
+        {/* Preview mode indicator for unpublished frontpage */}
+        {isPreviewMode && (
+          <div className="flex items-center gap-2 px-3 py-1.5 mb-4 text-sm rounded-md bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-800/50">
+            <svg className="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+            <span><span className="font-semibold">Preview:</span> Not published yet. Only admins can see this.</span>
+          </div>
+        )}
+
         {/* Frontpage content or empty state for admins */}
         {showFrontPage && frontPage.content ? (
           <article className="prose-theme">
-            <AnnotationWrapper pageId={frontPage.id} content={frontPage.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes}>
+            <AnnotationWrapper pageId={frontPage.id} content={frontPage.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes} isPageAuthor={isPageAuthor}>
               <ServerMarkdownRenderer
                 content={frontPage.content}
                 pageId={frontPage.id}
@@ -224,11 +237,23 @@ export default async function OrgPage({ params }: OrgPageProps) {
               />
             </AnnotationWrapper>
           </article>
-        ) : (
+        ) : isAdmin && !frontPage ? (
           <div className="text-center py-12">
-            {/* No owner CTA here: gating it client-side would need an
-                org-membership lookup, and admins create the frontpage from
-                /dashboard/org/<id>/frontpage anyway. */}
+            <h1 className="text-3xl font-bold mb-4">Your Organization&apos;s Frontpage</h1>
+            <p className="text-muted-foreground mb-6">
+              You haven&apos;t created a frontpage yet. Use the{' '}
+              <code className="px-1 py-0.5 bg-muted rounded text-sm">&lt;OurTeachers /&gt;</code>{' '}
+              component to display your organization&apos;s teachers.
+            </p>
+            <Link
+              href={`/dashboard/org/${organization.id}/frontpage`}
+              className="inline-flex items-center px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+            >
+              Create Frontpage
+            </Link>
+          </div>
+        ) : !showFrontPage && !isAdmin ? (
+          <div className="text-center py-12">
             <h1 className="text-3xl font-bold mb-4">
               Welcome to {organization.name}
             </h1>
@@ -236,7 +261,7 @@ export default async function OrgPage({ params }: OrgPageProps) {
               This organization is setting up their page. Check back soon!
             </p>
           </div>
-        )}
+        ) : null}
       </div>
     </PublicSiteLayout>
     </>
