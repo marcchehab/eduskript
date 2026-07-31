@@ -6,8 +6,10 @@
  *    read `currentHourTimestamp` after the caller had already advanced it.
  * 2. Samples recorded while a flush was in flight were cleared away.
  *
- * The DB write cadence (DB_FLUSH_INTERVAL_MS, 10 min) is why these tests jump
- * the clock by more than ten minutes rather than by one.
+ * The DB write cadence (DB_FLUSH_INTERVAL_MS, 30 min) is why these tests jump
+ * the clock by more than half an hour rather than by one minute. They stay
+ * inside a single hour so the separate hour-boundary flush does not fire and
+ * add writes the assertions do not expect.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -63,7 +65,7 @@ describe('metrics buffer', () => {
   })
 
   it('keeps samples recorded during an in-flight flush', async () => {
-    vi.setSystemTime(new Date('2026-07-27T10:30:00.000Z'))
+    vi.setSystemTime(new Date('2026-07-27T10:00:00.000Z'))
     const { recordMetric, stopMetricsFlush } = await freshBuffer()
 
     let release: (() => void) | undefined
@@ -74,7 +76,7 @@ describe('metrics buffer', () => {
     recordMetric('db_queries_total', 1)
 
     // Crossing the flush interval starts a write that has not resolved yet.
-    vi.setSystemTime(new Date('2026-07-27T10:41:00.000Z'))
+    vi.setSystemTime(new Date('2026-07-27T10:31:00.000Z'))
     recordMetric('db_queries_total', 1)
     await vi.waitFor(() => expect(executeRaw).toHaveBeenCalledTimes(1))
 
@@ -89,13 +91,13 @@ describe('metrics buffer', () => {
   })
 
   it('retries the delta when the write fails', async () => {
-    vi.setSystemTime(new Date('2026-07-27T10:30:00.000Z'))
+    vi.setSystemTime(new Date('2026-07-27T10:00:00.000Z'))
     const { recordMetric, stopMetricsFlush } = await freshBuffer()
 
     executeRaw.mockRejectedValueOnce(new Error('connection lost'))
 
     recordMetric('db_queries_total', 1)
-    vi.setSystemTime(new Date('2026-07-27T10:41:00.000Z'))
+    vi.setSystemTime(new Date('2026-07-27T10:31:00.000Z'))
     recordMetric('db_queries_total', 1)
     await vi.waitFor(() => expect(executeRaw).toHaveBeenCalledTimes(1))
 

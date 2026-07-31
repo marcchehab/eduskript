@@ -1,10 +1,8 @@
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
-import Link from 'next/link'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
 import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
+import { FrontpageOwnerCta } from '@/components/public/frontpage-owner-cta'
 import { ClassToolbar } from '@/components/teacher/class-toolbar'
 import { getTeacherByUsernameDeduped } from '@/lib/cached-queries'
 import { prisma } from '@/lib/prisma'
@@ -13,9 +11,15 @@ import { JsonLd, personSchema } from '@/lib/seo/json-ld'
 import { generateExcerpt } from '@/lib/markdown'
 import { getPublicLayers, EMPTY_PUBLIC_LAYERS } from '@/lib/public-page-data'
 
-// Enable ISR - pages are cached until explicitly invalidated
+// ISR: cached until explicitly invalidated. Next.js 16 requires
+// generateStaticParams() — even returning [] — for a dynamic route to use ISR
+// instead of rendering dynamically, matching the content route at
+// [domain]/[skriptSlug]/[pageSlug]/page.tsx.
 export const revalidate = false
 export const dynamicParams = true
+export async function generateStaticParams() {
+  return []
+}
 
 interface DomainIndexProps {
   params: Promise<{
@@ -104,8 +108,11 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
   const teacher = await getTeacherByUsernameDeduped(domain)
   if (!teacher) notFound()
 
-  const session = await getServerSession(authOptions)
-  const isOwner = session?.user?.id === teacher.id
+  // No session read here on purpose. `revalidate = false` above only takes
+  // effect while the route stays static; a getServerSession() call reads
+  // cookies and silently turns every request into a dynamic render — which is
+  // what it used to do, so crawlers re-rendered this page (and re-hit the DB)
+  // on every visit. Owner-only affordances are decided client-side instead.
 
   // Scope to THIS site (by its URL slug), not the user — a teacher may own
   // several sites, each with its own frontpage. Keying on userId returned the
@@ -129,8 +136,9 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
     ? await getPublicLayers(frontPage.id)
     : EMPTY_PUBLIC_LAYERS
 
-  // Owner can create public annotations on their own front page
-  const isPageAuthor = isOwner
+  // Authorship for the annotation toolbar is resolved client-side inside
+  // AnnotationLayer (src/components/annotations/annotation-layer.tsx), so the
+  // cached HTML carries no per-visitor state.
 
   // Person JSON-LD reinforces E-A-T (Expertise/Authority/Trust) — reuses the
   // same Person identity that LearningResource schemas on content pages name
@@ -185,7 +193,7 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
       />
       {frontPage?.content ? (
         <article className="prose-theme">
-          <AnnotationWrapper pageId={frontPage.id} content={frontPage.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes} isPageAuthor={isPageAuthor}>
+          <AnnotationWrapper pageId={frontPage.id} content={frontPage.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes}>
             <ServerMarkdownRenderer
               content={frontPage.content}
               pageId={frontPage.id}
@@ -195,21 +203,11 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
             />
           </AnnotationWrapper>
         </article>
-      ) : isOwner ? (
-        <div className="text-center py-12">
-          <h1 className="text-3xl font-bold mb-4">Your Frontpage</h1>
-          <p className="text-muted-foreground mb-6">
-            You haven&apos;t created a frontpage yet.
-          </p>
-          <Link
-            href="/dashboard/frontpage"
-            className="inline-flex items-center px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
-          >
-            Create Frontpage
-          </Link>
-        </div>
       ) : (
         <div className="text-center py-12">
+          {/* Owner-only prompt, rendered client-side so this stays cacheable.
+              The public heading below is what every visitor gets. */}
+          <FrontpageOwnerCta ownerId={teacher.id} href="/dashboard/frontpage" />
           <h1 className="text-3xl font-bold mb-4">
             {teacher.name}&apos;s Educational Platform
           </h1>

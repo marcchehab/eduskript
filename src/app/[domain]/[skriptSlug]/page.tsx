@@ -1,8 +1,5 @@
 import { notFound } from 'next/navigation'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
 import type { Metadata } from 'next'
-import Link from 'next/link'
 import { prisma } from '@/lib/prisma'
 import { SkriptRedirect } from '@/components/SkriptRedirect'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
@@ -11,8 +8,14 @@ import { ClassToolbar } from '@/components/teacher/class-toolbar'
 import { getPublicLayers, EMPTY_PUBLIC_LAYERS } from '@/lib/public-page-data'
 
 // Force dynamic rendering — the page is session-dependent (author gating).
-export const dynamic = 'force-dynamic'
+// ISR: the route renders published content only and reads no session, so every
+// visitor gets the same HTML and it can be cached until invalidated. Next.js 16
+// needs generateStaticParams() — even empty — or a dynamic route stays dynamic.
+export const revalidate = false
 export const dynamicParams = true
+export async function generateStaticParams() {
+  return []
+}
 
 interface SkriptPreviewProps {
   params: Promise<{
@@ -86,8 +89,6 @@ export default async function SkriptPreviewPage({ params }: SkriptPreviewProps) 
     notFound()
   }
 
-  const session = await getServerSession(authOptions)
-
   try {
     // Note: the parent layout at [domain]/[skriptSlug]/layout.tsx already
     // verifies teacher + skript existence and author-gates unpublished skripts.
@@ -103,8 +104,6 @@ export default async function SkriptPreviewPage({ params }: SkriptPreviewProps) 
     if (!teacher) {
       notFound()
     }
-
-    const isAuthor = session?.user?.email === teacher.email
 
     const skript = await prisma.skript.findFirst({
       where: {
@@ -134,12 +133,14 @@ export default async function SkriptPreviewPage({ params }: SkriptPreviewProps) 
       notFound()
     }
 
-    // Only published skripts are served from /[domain]/. An author visiting
-    // their own unpublished skript still sees its frontpage here, but the
-    // shared sidebar (fed from published-only fullSiteStructure in
-    // [domain]/layout.tsx) won't list it — acceptable trade-off for keeping
-    // /[domain]/ URLs uniformly "public-mode".
-    if (!skript.isPublished && !isAuthor) {
+    // Only published skripts are served from /[domain]/. This used to make an
+    // exception for the author, which required reading the session and so made
+    // the route dynamic for everyone — crawlers included. Published-only keeps
+    // the response identical for every visitor (a prerequisite for a shared
+    // cache) and matches the sidebar, which is fed from the published-only
+    // fullSiteStructure in [domain]/layout.tsx. Authors preview unpublished
+    // work from the dashboard.
+    if (!skript.isPublished) {
       notFound()
     }
 
@@ -155,10 +156,9 @@ export default async function SkriptPreviewPage({ params }: SkriptPreviewProps) 
       ? await getPublicLayers(frontPage.id)
       : EMPTY_PUBLIC_LAYERS
 
-    const isPageAuthor = isAuthor
-    const showFrontpage = frontPage?.content || isAuthor
-
-    if (showFrontpage) {
+    // Authorship for the annotation toolbar is resolved client-side inside
+    // AnnotationLayer, so nothing per-visitor reaches the cached HTML.
+    if (frontPage?.content) {
       return (
         <>
         {/* Class toolbar (portals into the sidebar slot). Self-gates on
@@ -172,39 +172,24 @@ export default async function SkriptPreviewPage({ params }: SkriptPreviewProps) 
           />
         )}
         <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border">
-          {frontPage?.content ? (
-            <article className="prose-theme">
-              <AnnotationWrapper pageId={frontPage.id} content={frontPage.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes} isPageAuthor={isPageAuthor}>
-                <ServerMarkdownRenderer
-                  content={frontPage.content}
-                  skriptId={skript.id}
-                  pageId={frontPage.id}
-                  ownerPageSlug={domain}
-                  pageLanguage={teacherSiteRow?.pageLanguage}
-                />
-              </AnnotationWrapper>
-            </article>
-          ) : isAuthor ? (
-            <div className="text-center py-12">
-              <h1 className="text-3xl font-bold mb-4">{skript.title}</h1>
-              <p className="text-muted-foreground mb-6">
-                This skript doesn&apos;t have a frontpage yet.
-              </p>
-              <Link
-                href={`/dashboard/skripts/${skriptSlug}/frontpage`}
-                className="inline-flex items-center px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
-              >
-                Create Frontpage
-              </Link>
-            </div>
-          ) : null}
+          <article className="prose-theme">
+            <AnnotationWrapper pageId={frontPage.id} content={frontPage.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes}>
+              <ServerMarkdownRenderer
+                content={frontPage.content}
+                skriptId={skript.id}
+                pageId={frontPage.id}
+                ownerPageSlug={domain}
+                pageLanguage={teacherSiteRow?.pageLanguage}
+              />
+            </AnnotationWrapper>
+          </article>
         </div>
         </>
       )
     }
 
-    // No frontpage - redirect to first available page
-    const firstPage = skript.pages.find(page => isAuthor || page.isPublished)
+    // No frontpage - redirect to first published page
+    const firstPage = skript.pages.find(page => page.isPublished)
 
     if (firstPage) {
       return <SkriptRedirect redirectUrl={`/${domain}/${skriptSlug}/${firstPage.slug}`} />
