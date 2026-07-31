@@ -129,8 +129,27 @@ export async function GET(request: NextRequest) {
   // Track if connection is still active
   let isActive = true
 
+  // Every subscription holds the event bus's dedicated LISTEN connection open
+  // (src/lib/events/postgres-bus.ts), and the managed Postgres only suspends
+  // while no client is connected — so a subscription that outlives its stream
+  // keeps the database awake and billing until the next deploy. Cleanup is
+  // therefore idempotent and wired to every path that can end a stream, not
+  // just to the abort signal, which does not reliably fire behind the proxy.
+  let pingInterval: ReturnType<typeof setInterval> | undefined
+  let maxLifetimeTimer: ReturnType<typeof setTimeout> | undefined
+  let unsubscribes: Array<() => void> = []
+
+  const cleanup = () => {
+    if (!isActive) return
+    isActive = false
+    clearInterval(pingInterval)
+    clearTimeout(maxLifetimeTimer)
+    unsubscribes.forEach(unsub => unsub())
+    writer.close().catch(() => { /* already closed */ })
+  }
+
   // Subscribe to all relevant channels
-  const unsubscribes = channels.map(channel =>
+  unsubscribes = channels.map(channel =>
     eventBus.subscribe(channel, async (event) => {
       if (!isActive) {
         return
@@ -139,34 +158,33 @@ export async function GET(request: NextRequest) {
         const data = `data: ${JSON.stringify(event)}\n\n`
         await writer.write(encoder.encode(data))
       } catch {
-        isActive = false
-        // Connection closed, unsubscribe
-        unsubscribes.forEach(unsub => unsub())
+        cleanup()
       }
     })
   )
 
   // Keep-alive ping every 30 seconds (prevents proxy timeouts)
-  const pingInterval = setInterval(async () => {
+  pingInterval = setInterval(async () => {
     try {
       await writer.write(encoder.encode(`: ping\n\n`))
     } catch {
-      // Connection closed
-      clearInterval(pingInterval)
+      cleanup()
     }
   }, 30000)
+
+  // Backstop: a dropped client does not always surface as an abort or a failed
+  // write — the stream can simply go quiet, and then nothing ever releases the
+  // subscription. Ending the stream on a timer bounds that leak; EventSource
+  // reconnects on its own, so clients only see a brief gap.
+  const MAX_STREAM_MS = 30 * 60 * 1000
+  maxLifetimeTimer = setTimeout(cleanup, MAX_STREAM_MS)
 
   // Send initial connected message
   writer.write(encoder.encode(`data: ${JSON.stringify({ type: 'connected', channels: channels.length })}\n\n`))
     .catch(() => { /* ignore */ })
 
   // Cleanup on client disconnect
-  request.signal.addEventListener('abort', () => {
-    isActive = false
-    clearInterval(pingInterval)
-    unsubscribes.forEach(unsub => unsub())
-    writer.close().catch(() => { /* ignore */ })
-  })
+  request.signal.addEventListener('abort', cleanup)
 
   return new Response(stream.readable, {
     headers: {

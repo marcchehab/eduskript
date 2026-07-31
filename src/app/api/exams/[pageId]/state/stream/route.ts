@@ -73,17 +73,34 @@ export async function GET(
 
   let isActive = true
 
+  // A live subscription holds the event bus's LISTEN connection open, which
+  // stops the managed Postgres from ever suspending — so cleanup runs from
+  // every path that can end the stream, not only from the abort signal (which
+  // does not reliably fire behind the proxy). See the same pattern in
+  // src/app/api/events/stream/route.ts.
+  let pingInterval: ReturnType<typeof setInterval> | undefined
+  let maxLifetimeTimer: ReturnType<typeof setTimeout> | undefined
+  let unsubscribe: (() => void) | undefined
+
+  const cleanup = () => {
+    if (!isActive) return
+    isActive = false
+    clearInterval(pingInterval)
+    clearTimeout(maxLifetimeTimer)
+    unsubscribe?.()
+    writer.close().catch(() => { /* already closed */ })
+  }
+
   // Subscribe to exam state changes
   const channel = `exam:${pageId}:${classId}`
-  const unsubscribe = eventBus.subscribe(channel, async (event) => {
+  unsubscribe = eventBus.subscribe(channel, async (event) => {
     if (!isActive) return
 
     try {
       const data = `data: ${JSON.stringify(event)}\n\n`
       await writer.write(encoder.encode(data))
     } catch {
-      isActive = false
-      unsubscribe()
+      cleanup()
     }
   })
 
@@ -102,21 +119,20 @@ export async function GET(
   })}\n\n`)).catch(() => { /* ignore */ })
 
   // Keep-alive ping every 30 seconds
-  const pingInterval = setInterval(async () => {
+  pingInterval = setInterval(async () => {
     try {
       await writer.write(encoder.encode(`: ping\n\n`))
     } catch {
-      clearInterval(pingInterval)
+      cleanup()
     }
   }, 30000)
 
+  // Backstop for a client that vanishes without an abort or a failed write.
+  // EventSource reconnects on its own, so an exam client only sees a gap.
+  maxLifetimeTimer = setTimeout(cleanup, 30 * 60 * 1000)
+
   // Cleanup on disconnect
-  request.signal.addEventListener('abort', () => {
-    isActive = false
-    clearInterval(pingInterval)
-    unsubscribe()
-    writer.close().catch(() => { /* ignore */ })
-  })
+  request.signal.addEventListener('abort', cleanup)
 
   return new Response(stream.readable, {
     headers: {

@@ -36,14 +36,31 @@ export async function GET(request: NextRequest) {
   const encoder = new TextEncoder()
   let isActive = true
 
-  const unsubscribers = memberships.map(({ classId }) =>
+  // A live subscription holds the event bus's LISTEN connection open, which
+  // stops the managed Postgres from suspending — so cleanup runs from every
+  // path that can end the stream, not only from the abort signal (which does
+  // not reliably fire behind the proxy). Same pattern as
+  // src/app/api/events/stream/route.ts.
+  let pingInterval: ReturnType<typeof setInterval> | undefined
+  let maxLifetimeTimer: ReturnType<typeof setTimeout> | undefined
+  let unsubscribers: Array<() => void> = []
+
+  const cleanup = () => {
+    if (!isActive) return
+    isActive = false
+    clearInterval(pingInterval)
+    clearTimeout(maxLifetimeTimer)
+    unsubscribers.forEach((u) => u())
+    writer.close().catch(() => { /* already closed */ })
+  }
+
+  unsubscribers = memberships.map(({ classId }) =>
     eventBus.subscribe(`lockdown:${classId}`, async (event) => {
       if (!isActive) return
       try {
         await writer.write(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
       } catch {
-        isActive = false
-        unsubscribers.forEach((u) => u())
+        cleanup()
       }
     })
   )
@@ -52,20 +69,19 @@ export async function GET(request: NextRequest) {
   writer.write(encoder.encode(`: connected\n\n`)).catch(() => { /* ignore */ })
 
   // Keep-alive ping every 30s.
-  const pingInterval = setInterval(async () => {
+  pingInterval = setInterval(async () => {
     try {
       await writer.write(encoder.encode(`: ping\n\n`))
     } catch {
-      clearInterval(pingInterval)
+      cleanup()
     }
   }, 30000)
 
-  request.signal.addEventListener('abort', () => {
-    isActive = false
-    clearInterval(pingInterval)
-    unsubscribers.forEach((u) => u())
-    writer.close().catch(() => { /* ignore */ })
-  })
+  // Backstop for a client that vanishes without an abort or a failed write.
+  // EventSource reconnects on its own, so students only see a brief gap.
+  maxLifetimeTimer = setTimeout(cleanup, 30 * 60 * 1000)
+
+  request.signal.addEventListener('abort', cleanup)
 
   return new Response(stream.readable, {
     headers: {
