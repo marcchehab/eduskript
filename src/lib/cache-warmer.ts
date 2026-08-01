@@ -1,4 +1,5 @@
 import 'server-only'
+import http from 'node:http'
 import { PATH_METRIC_PREFIX } from '@/lib/metrics/buffer'
 
 /**
@@ -41,28 +42,45 @@ async function getTopPaths(limit: number): Promise<string[]> {
 }
 
 /**
- * Request every path once against the local server so Next fills its ISR cache.
+ * Request one path against the local server so Next fills its ISR cache.
  *
- * Sends the recorded host as the Host header, because the proxy routes by it —
- * without that every tenant's URL would resolve to the default org and warm the
- * wrong page.
+ * Uses node:http rather than fetch because the proxy routes on the Host header
+ * (src/proxy.ts) and undici silently drops a `host` header as forbidden — with
+ * fetch every request arrived as localhost, resolved to the default org and
+ * 404ed, so the first production run warmed 1 of 4 paths.
+ *
+ * Counts 2xx and 3xx as warmed: a redirect (exam pages, legacy URLs) is itself
+ * the cached response we want.
  */
-async function warmPath(hostAndPath: string, port: string): Promise<boolean> {
+function warmPath(hostAndPath: string, port: string): Promise<{ ok: boolean; status: number | string }> {
   const slash = hostAndPath.indexOf('/')
-  if (slash <= 0) return false
+  if (slash <= 0) return Promise.resolve({ ok: false, status: 'malformed' })
   const host = hostAndPath.slice(0, slash)
   const path = hostAndPath.slice(slash)
 
-  try {
-    const res = await fetch(`http://localhost:${port}${path}`, {
-      headers: { host, 'user-agent': 'eduskript-cache-warmer' },
-      redirect: 'manual',
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  return new Promise(resolve => {
+    const req = http.request(
+      {
+        host: '127.0.0.1',
+        port: Number(port),
+        path,
+        method: 'GET',
+        headers: { host, 'user-agent': 'eduskript-cache-warmer' },
+        timeout: REQUEST_TIMEOUT_MS,
+      },
+      res => {
+        const status = res.statusCode ?? 0
+        res.resume() // drain, we only want the render to happen
+        res.on('end', () => resolve({ ok: status >= 200 && status < 400, status }))
+      }
+    )
+    req.on('timeout', () => {
+      req.destroy()
+      resolve({ ok: false, status: 'timeout' })
     })
-    return res.ok || (res.status >= 300 && res.status < 400)
-  } catch {
-    return false
-  }
+    req.on('error', err => resolve({ ok: false, status: err.message }))
+    req.end()
+  })
 }
 
 /**
@@ -91,10 +109,13 @@ export async function warmTopPaths(): Promise<void> {
   }
 
   let warmed = 0
+  const failures: string[] = []
   const queue = [...paths]
   const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
     for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
-      if (await warmPath(next, port)) warmed++
+      const result = await warmPath(next, port)
+      if (result.ok) warmed++
+      else failures.push(`${next} (${result.status})`)
     }
   })
   await Promise.all(workers)
@@ -102,4 +123,9 @@ export async function warmTopPaths(): Promise<void> {
   console.log(
     `[Warmer] Warmed ${warmed}/${paths.length} paths in ${Math.round((Date.now() - started) / 1000)}s`
   )
+  // Name the failures: "warmed 1/4" on its own gave no way to tell a 404 from a
+  // dropped Host header.
+  if (failures.length > 0) {
+    console.log(`[Warmer] Not warmed: ${failures.slice(0, 10).join(', ')}`)
+  }
 }
