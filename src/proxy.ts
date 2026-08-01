@@ -101,9 +101,16 @@ export async function proxy(request: NextRequest) {
 
   if (isHardNavigation || isSpaNavigation) {
     recordMetric('page_loads_total', 1)
-    // Which URLs are worth pre-rendering after a deploy. Counted here because
-    // this is the only place that sees every request: an ISR cache hit never
-    // reaches the page component. Keyed by host so tenants stay separate.
+  }
+
+  // Which URLs are worth pre-rendering after a deploy (src/lib/cache-warmer.ts).
+  // Counted here because this is the only place that sees every request — an ISR
+  // cache hit never reaches the page component — and deliberately NOT gated on
+  // the navigation check above: crawlers send no Sec-Fetch-Mode, and crawler
+  // traffic is precisely what pays for a cold cache. page_loads_total keeps that
+  // gate because it is meant to count humans. Keyed by host so tenants stay
+  // separate; MAX_TRACKED_PATHS bounds the cardinality.
+  if (!isStaticOrInternal) {
     recordPathHit(`${domain}${pathname}`)
   }
 
@@ -315,14 +322,23 @@ function shipMetricsIfDue(): void {
   if (payload.metrics.length === 0 && payload.paths.length === 0) return
 
   const port = process.env.PORT || '3000'
-  void fetch(`http://localhost:${port}/api/internal/metrics-ingest`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(payload),
-  }).catch(() => {
-    // The counters are already drained; losing a window of metrics is not
-    // worth retry machinery in the request path.
-  })
+  try {
+    // Promise.resolve() because this runs in the request path and must never
+    // throw: a stubbed fetch (tests) can return undefined, and a synchronous
+    // throw here would take the request down with it.
+    void Promise.resolve(
+      fetch(`http://localhost:${port}/api/internal/metrics-ingest`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+    ).catch(() => {
+      // The counters are already drained; losing a window of metrics is not
+      // worth retry machinery in the request path.
+    })
+  } catch {
+    // Same reasoning: metrics must not be able to break routing.
+  }
 }
 
 export const config = {

@@ -12,6 +12,28 @@ vi.mock('next/server', () => ({
 const mockFetch = vi.fn()
 global.fetch = mockFetch
 
+/**
+ * The proxy also ships buffered metrics to /api/internal/metrics-ingest, which
+ * is unrelated to routing. These assertions are about the DB lookup, so match
+ * on the resolve-domain call specifically rather than on "fetch at all".
+ */
+function resolveDomainCalls() {
+  return mockFetch.mock.calls.filter(call => String(call[0]).includes('resolve-domain'))
+}
+
+/**
+ * Answer only the resolve-domain lookup with `response`; anything else (the
+ * metrics-ingest POST) gets a benign reply. Ordered mocks would otherwise be
+ * consumed by whichever call happens to come first.
+ */
+function mockResolveDomain(response: unknown) {
+  mockFetch.mockImplementation(async (url: string) =>
+    String(url).includes('resolve-domain')
+      ? response
+      : { ok: true, json: async () => ({}) }
+  )
+}
+
 describe('proxy routing', () => {
   beforeEach(() => {
     vi.resetModules()
@@ -136,7 +158,7 @@ describe('proxy routing', () => {
       expect(NextResponse.rewrite).toHaveBeenCalled()
       const rewriteCall = (NextResponse.rewrite as any).mock.calls[0][0]
       expect(rewriteCall.pathname).toBe('/org/eduskript')
-      expect(mockFetch).not.toHaveBeenCalled()
+      expect(resolveDomainCalls()).toHaveLength(0)
     })
   })
 
@@ -151,7 +173,7 @@ describe('proxy routing', () => {
       expect(NextResponse.rewrite).toHaveBeenCalled()
       const rewriteCall = (NextResponse.rewrite as any).mock.calls[0][0]
       expect(rewriteCall.pathname).toBe('/org/eduskript')
-      expect(mockFetch).not.toHaveBeenCalled()
+      expect(resolveDomainCalls()).toHaveLength(0)
     })
 
     it('should pass through localhost sub-paths to let [domain] route handle them', async () => {
@@ -206,7 +228,7 @@ describe('proxy routing', () => {
 
   describe('custom domain resolution via API', () => {
     it('should rewrite to resolved org for unknown custom domain', async () => {
-      mockFetch.mockResolvedValueOnce({
+      mockResolveDomain({
         ok: true,
         json: async () => ({ type: 'org', orgSlug: 'school1' }),
       })
@@ -223,7 +245,7 @@ describe('proxy routing', () => {
     })
 
     it('should rewrite to teacher page for teacher custom domain', async () => {
-      mockFetch.mockResolvedValueOnce({
+      mockResolveDomain({
         ok: true,
         json: async () => ({ type: 'teacher', pageSlug: 'teacherpage' }),
       })
@@ -240,7 +262,7 @@ describe('proxy routing', () => {
     })
 
     it('should fall back to default org when custom domain not found', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false })
+      mockResolveDomain({ ok: false })
 
       const { proxy } = await import('@/proxy')
       const { NextResponse } = await import('next/server')
