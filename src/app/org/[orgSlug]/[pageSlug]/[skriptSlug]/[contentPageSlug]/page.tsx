@@ -3,28 +3,10 @@ import { PublicSiteLayout } from '@/components/public/layout'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
 import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
 import { getPublicLayers } from '@/lib/public-page-data'
-import { ExamSessionIndicator } from '@/components/exam/exam-session-indicator'
-import { ExamLockedPage } from '@/components/exam/exam-locked-page'
-import { SEBRequiredPage } from '@/components/exam/seb-required-page'
-import { ExamSubmittedPage } from '@/components/exam/exam-submitted-page'
-import { ExamLayout } from '@/components/exam/exam-layout'
-import { ExamWaitingRoom } from '@/components/exam/exam-waiting-room'
 import { ClassToolbar } from '@/components/teacher/class-toolbar'
-import { ExamDataSync } from '@/components/exam/exam-data-sync'
-import { isSEBRequest, type ExamSettings } from '@/lib/seb'
-import { validateExamToken, validateExamSession } from '@/lib/exam-tokens'
-import { getOrCreateActiveExamKey } from '@/lib/exam-keys'
-import { cookies } from 'next/headers'
 import type { Metadata } from 'next'
-import { prisma } from '@/lib/prisma'
-import { PRIMARY_SITE_ORDER } from '@/lib/sites'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { headers } from 'next/headers'
 import { getFullSiteStructure, getOrgTeacherContentPage } from '@/lib/cached-queries'
 import { buildSiteStructure } from '@/lib/site-structure'
-import { getExamClassesForTeacher } from '@/lib/scoring/auth'
-import { resolveExamState, type ExamLifecycleState } from '@/lib/exam-state'
 
 interface PageProps {
   params: Promise<{
@@ -33,10 +15,11 @@ interface PageProps {
     skriptSlug: string
     contentPageSlug: string
   }>
-  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }
 
-export const dynamic = 'force-dynamic'
+// ISR: published content only, no session/cookie/header reads. Exam pages —
+// the one part that genuinely needs the request — redirect to /exam/... below.
+export const revalidate = false
 export const dynamicParams = true
 
 export async function generateStaticParams() {
@@ -75,9 +58,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   }
 }
 
-export default async function OrgTeacherContentPage({ params, searchParams }: PageProps) {
+export default async function OrgTeacherContentPage({ params }: PageProps) {
   const { orgSlug, pageSlug, skriptSlug, contentPageSlug } = await params
-  const resolvedSearchParams = await searchParams
 
   // One cached lookup for org + teacher + page (shared with generateMetadata).
   const data = await getOrgTeacherContentPage(orgSlug, pageSlug, skriptSlug, contentPageSlug)
@@ -99,188 +81,21 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
   const collection = collectionSkript?.collection
   const allPages = skript.pages
 
-  // EXAM ACCESS CONTROL
-  let isInExamSession = false
-  let examSessionUserName: string | null = null
-  let examSessionUserEmail: string | null = null
-  let examState: ExamLifecycleState | null = null
-  let examClassId: string | null = null
-  let isTeacherViewingExam = false
-  let unlockedClassesForExam: { id: string; name: string }[] = []
-  let existingSubmission: { submittedAt: Date } | null = null
-  let examAuthenticatedUserId: string | null = null
-
+  // Exam pages go through /exam/<siteSlug>/<skript>/<page>, which reads
+  // headers() + cookies() for SEB detection and exam-session auth. That whole
+  // flow used to be inlined here, which forced a dynamic render for every
+  // visitor of every content page on eduskript.org. The custom-domain twin
+  // ([domain]/[skriptSlug]/[pageSlug]) has always redirected instead; this now
+  // matches it, and the redirect itself is part of the ISR output.
   if (page.pageType === 'exam') {
-    const headersList = await headers()
-    const cookieStore = await cookies()
-    const examSettings = page.examSettings as ExamSettings | null
-    const currentUrl = `/org/${orgSlug}/${pageSlug}/${skriptSlug}/${contentPageSlug}`
-    const loginUrl = `/auth/signin?callbackUrl=${encodeURIComponent(currentUrl)}`
-
-    let authenticatedUserId: string | null = null
-    let authenticatedViaToken = false
-    let authenticatedViaExamSession = false
-
-    const sebToken = typeof resolvedSearchParams.seb_token === 'string'
-      ? resolvedSearchParams.seb_token
-      : undefined
-
-    if (sebToken && isSEBRequest(headersList)) {
-      authenticatedUserId = await validateExamToken(sebToken, page.id)
-      if (authenticatedUserId) {
-        authenticatedViaToken = true
-        // Immediately create exam session so auth persists across refreshes.
-        // Redirect to start-session API (Server Components can't set cookies),
-        // which sets the cookie and redirects back here without seb_token.
-        const currentUrl = `/org/${orgSlug}/${pageSlug}/${skriptSlug}/${contentPageSlug}`
-        const startSessionUrl = `/api/exams/${page.id}/start-session?` +
-          `userId=${encodeURIComponent(authenticatedUserId)}&` +
-          `skriptId=${encodeURIComponent(skript.id)}&` +
-          `returnUrl=${encodeURIComponent(currentUrl)}`
-        redirect(startSessionUrl)
-      }
-    }
-
-    if (!authenticatedUserId && isSEBRequest(headersList)) {
-      const examSessionCookie = cookieStore.get('exam_session')?.value
-      if (examSessionCookie) {
-        authenticatedUserId = await validateExamSession(examSessionCookie, skript.id)
-        if (authenticatedUserId) {
-          authenticatedViaExamSession = true
-          isInExamSession = true
-          const examUser = await prisma.user.findUnique({
-            where: { id: authenticatedUserId },
-            select: { name: true, email: true }
-          })
-          examSessionUserName = examUser?.name || null
-          examSessionUserEmail = examUser?.email || null
-        }
-      }
-    }
-
-    if (!authenticatedUserId) {
-      const session = await getServerSession(authOptions)
-      authenticatedUserId = session?.user?.id || null
-    }
-
-    if (!authenticatedUserId) {
-      return (
-        <ExamLockedPage
-          pageTitle={page.title}
-          teacherName={teacher.name || teacher.sites[0]?.pageName || 'Unknown'}
-          isLoggedIn={false}
-          loginUrl={loginUrl}
-        />
-      )
-    }
-
-    const studentId = authenticatedUserId
-    examAuthenticatedUserId = authenticatedUserId
-
-    // Skip the lifecycle check entirely if the exam is unlocked for all.
-    const hasUnlockForAll = examSettings?.unlockForAll === true
-
-    const skriptAuthorRecord = await prisma.skriptAuthor.findFirst({
-      where: { skriptId: skript.id, userId: studentId, permission: 'author' }
-    })
-    let isSiteOwner = false
-    if (!skriptAuthorRecord && collection) {
-      const collectionWithSite = await prisma.collection.findUnique({
-        where: { id: collection.id },
-        select: { site: { select: { userId: true, organizationId: true } } },
-      })
-      if (collectionWithSite?.site) {
-        if (collectionWithSite.site.userId === studentId) {
-          isSiteOwner = true
-        } else if (collectionWithSite.site.organizationId) {
-          const membership = await prisma.organizationMember.findFirst({
-            where: {
-              organizationId: collectionWithSite.site.organizationId,
-              userId: studentId,
-              role: { in: ['owner', 'admin'] },
-            },
-            select: { id: true },
-          })
-          if (membership) isSiteOwner = true
-        }
-      }
-    }
-    const isTeacherAuthor = !!skriptAuthorRecord || isSiteOwner
-
-    if (isTeacherAuthor) {
-      isTeacherViewingExam = true
-      // Assigned (has an ExamState row) OR has a submitted answer. See getExamClassesForTeacher.
-      unlockedClassesForExam = await getExamClassesForTeacher(page.id, studentId)
-    }
-
-    if (!isTeacherAuthor) {
-      // Effective lifecycle state (single source of truth — see lib/exam-state);
-      // unlockForAll bypasses to 'open'. examClassId is the class-level row that
-      // governs this student, used for the lobby waiting-room stream below.
-      examState = hasUnlockForAll ? 'open' : await resolveExamState(page.id, studentId)
-      const classRow = await prisma.examState.findFirst({
-        where: { pageId: page.id, studentId: null, class: { memberships: { some: { studentId } } } },
-        select: { classId: true }
-      })
-      examClassId = classRow?.classId ?? null
-
-      const submission = await prisma.examSubmission.findUnique({
-        where: { pageId_studentId: { pageId: page.id, studentId } },
-        select: { submittedAt: true }
-      })
-      if (submission) {
-        existingSubmission = { submittedAt: submission.submittedAt }
-      }
-    }
-
-    // Submitted → submitted page, before the access gate (a student who submitted
-    // then had the exam closed/hidden still sees "submitted", not "locked").
-    if (!isTeacherAuthor && existingSubmission) {
-      return (
-        <ExamSubmittedPage
-          pageTitle={page.title}
-          pageId={page.id}
-          submittedAt={existingSubmission.submittedAt}
-        />
-      )
-    }
-
-    if (examSettings?.requireSEB && !isTeacherAuthor && !authenticatedViaToken && !authenticatedViaExamSession) {
-      if (!isSEBRequest(headersList)) {
-        return (
-          <SEBRequiredPage
-            pageTitle={page.title}
-            pageId={page.id}
-          />
-        )
-      }
-    }
-
-    // Access gate: not assigned ('hidden') or not yet enterable ('closed') blocks
-    // students. 'lobby'/'open' fall through; lobby renders the waiting room below.
-    if (!isTeacherAuthor && (examState === 'hidden' || examState === 'closed')) {
-      return (
-        <ExamLockedPage
-          pageTitle={page.title}
-          teacherName={teacher.name || teacher.sites[0]?.pageName || 'Unknown'}
-          isLoggedIn={true}
-          loginUrl={`/auth/signin?callbackUrl=${encodeURIComponent(`/org/${orgSlug}/${pageSlug}/${skriptSlug}/${contentPageSlug}`)}`}
-        />
-      )
-    }
-
+    redirect(`/exam/${pageSlug}/${skriptSlug}/${contentPageSlug}`)
   }
 
   const { publicAnnotations, publicSnaps, publicStickyNotes } = await getPublicLayers(page.id)
 
-  let isPageAuthor = false
-  const session = await getServerSession(authOptions)
-  if (session?.user?.id) {
-    const skriptAuthor = await prisma.skriptAuthor.findFirst({
-      where: { skriptId: skript.id, userId: session.user.id, permission: 'author' }
-    })
-    isPageAuthor = !!skriptAuthor
-  }
+  // Authorship is resolved client-side (AnnotationLayer for the toolbar,
+  // ClassToolbar's own gateOnPageAuthor); reading the session here would opt
+  // the route out of static rendering again.
 
   // Build site structure
   const siteStructure = collection
@@ -298,7 +113,7 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
             pages: allPages
           }
         }]
-      }], { onlyPublished: !isPageAuthor })
+      }], { onlyPublished: true })
     : [{
         id: 'standalone',
         title: skript.title,
@@ -328,12 +143,10 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
 
   const currentPath = `/${skriptSlug}/${contentPageSlug}`
 
-  const isExamStudent = isInExamSession && !isTeacherViewingExam
-
-  const examContent = (
+  const body = (
     <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border">
       <article className="prose-theme">
-        <AnnotationWrapper pageId={page.id} content={page.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes} isPageAuthor={isPageAuthor} isExamStudent={isExamStudent}>
+        <AnnotationWrapper pageId={page.id} content={page.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes}>
           <ServerMarkdownRenderer
             content={page.content}
             skriptId={skript.id}
@@ -346,71 +159,6 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
     </div>
   )
 
-  if (isInExamSession && !isTeacherViewingExam && examAuthenticatedUserId) {
-    // Lazy-load (or fetch) the page-owning teacher's active exam encryption
-    // key. Embedded in the page render so the student's browser can encrypt
-    // an offline backup at any time, including after a hand-in failure. The
-    // private half stays server-side; the recovery endpoint uses it to
-    // decrypt uploaded .examfile blobs.
-    const backupKey = await getOrCreateActiveExamKey(teacher.id)
-
-    if (examState === 'lobby' && examClassId) {
-      return (
-        <ExamDataSync
-          userId={examAuthenticatedUserId}
-          userName={examSessionUserName}
-          userEmail={examSessionUserEmail}
-          pageId={page.id}
-        >
-          <ExamLayout
-            pageId={page.id}
-            pageTitle={page.title}
-            studentName={examSessionUserName}
-            studentEmail={examSessionUserEmail}
-            typographyPreference={(teacher.sites[0]?.typographyPreference as 'modern' | 'classic') || 'modern'}
-            backupPublicKeyJwk={backupKey.publicKeyJwk}
-            backupKeyId={backupKey.keyId}
-            studentId={examAuthenticatedUserId}
-            skriptId={skript.id}
-          >
-            <ExamWaitingRoom
-              pageId={page.id}
-              classId={examClassId}
-              examTitle={page.title}
-              backupPublicKeyJwk={backupKey.publicKeyJwk}
-              backupKeyId={backupKey.keyId}
-              studentId={examAuthenticatedUserId}
-              skriptId={skript.id}
-            />
-          </ExamLayout>
-        </ExamDataSync>
-      )
-    }
-
-    return (
-      <ExamDataSync
-        userId={examAuthenticatedUserId}
-        userName={examSessionUserName}
-        userEmail={examSessionUserEmail}
-        pageId={page.id}
-      >
-        <ExamLayout
-          pageId={page.id}
-          pageTitle={page.title}
-          studentName={examSessionUserName}
-          studentEmail={examSessionUserEmail}
-          typographyPreference={(teacher.sites[0]?.typographyPreference as 'modern' | 'classic') || 'modern'}
-          backupPublicKeyJwk={backupKey.publicKeyJwk}
-          backupKeyId={backupKey.keyId}
-          studentId={examAuthenticatedUserId}
-          skriptId={skript.id}
-        >
-          {examContent}
-        </ExamLayout>
-      </ExamDataSync>
-    )
-  }
-
   return (
     <PublicSiteLayout
       teacher={teacherData}
@@ -421,23 +169,19 @@ export default async function OrgTeacherContentPage({ params, searchParams }: Pa
       typographyPreference={(teacher.sites[0]?.typographyPreference as 'modern' | 'classic') || 'modern'}
       routePrefix={`/org/${orgSlug}/${pageSlug}`}
       pageId={page.id}
-      hideSidebar={page.pageType === 'exam'}
     >
-      {/* Toolbar shows for teachers on their own page. On exam pages it carries
-          the full exam controls (state, reopen) + the submissions list; on
-          non-exam pages it's the submissions list alone. Suppressed when an
-          exam student is actively in-session on this page. */}
-      {(isTeacherViewingExam || (isPageAuthor && !isInExamSession)) && (
-        <ClassToolbar
-          pageId={page.id}
-          pageType={page.pageType ?? 'standard'}
-          unlockedClasses={unlockedClassesForExam}
-        />
-      )}
+      {/* Submissions list for the page's author. The server-side gate went with
+          the session read, so the toolbar self-gates client-side on page
+          authorship — same as the org /c/ content route. Exam controls are not
+          needed here: exam pages redirect to /exam/... above. */}
+      <ClassToolbar
+        pageId={page.id}
+        pageType={page.pageType ?? 'standard'}
+        unlockedClasses={[]}
+        gateOnPageAuthor
+      />
 
-      {examContent}
-
-      {isInExamSession && <ExamSessionIndicator userName={examSessionUserName} />}
+      {body}
     </PublicSiteLayout>
   )
 }

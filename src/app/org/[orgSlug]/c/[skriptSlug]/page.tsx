@@ -1,20 +1,22 @@
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
-import Link from 'next/link'
 import { prisma } from '@/lib/prisma'
 import { SkriptRedirect } from '@/components/SkriptRedirect'
 import { PublicSiteLayout } from '@/components/public/layout'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
 import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { getOrgMembership } from '@/lib/org-auth'
 import { getOrgFullSiteStructure } from '@/lib/cached-queries'
 import { buildSiteStructure } from '@/lib/site-structure'
 import { getPublicLayers, EMPTY_PUBLIC_LAYERS } from '@/lib/public-page-data'
 
-export const dynamic = 'force-dynamic'
+// ISR: published content only and no session read, so every visitor gets the
+// same HTML. Next.js 16 needs generateStaticParams() — even empty — or a
+// dynamic route stays dynamic.
+export const revalidate = false
 export const dynamicParams = true
+export async function generateStaticParams() {
+  return []
+}
 
 interface SkriptPageProps {
   params: Promise<{
@@ -98,14 +100,9 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
   }
 
   // Check if user is org admin
-  const session = await getServerSession(authOptions)
-  const membership = session?.user?.id
-    ? await getOrgMembership(session.user.id, organization.id)
-    : null
-  const isAdmin =
-    session?.user?.isAdmin ||
-    membership?.role === 'owner' ||
-    membership?.role === 'admin'
+  // No session read: reading cookies would opt this route out of static
+  // rendering (and an org-membership query per request with it). Admins
+  // preview unpublished skripts from the dashboard.
 
   // Get org admins for content lookup
   const adminMembers = await prisma.organizationMember.findMany({
@@ -152,8 +149,9 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
     notFound()
   }
 
-  // Authorization: Only admins can view unpublished skripts
-  if (!skript.isPublished && !isAdmin) {
+  // Only published skripts are served here; the admin exception moved to the
+  // dashboard so this response can be shared by every visitor.
+  if (!skript.isPublished) {
     notFound()
   }
 
@@ -161,7 +159,7 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
   const frontPage = await prisma.frontPage.findFirst({
     where: {
       skriptId: skript.id,
-      ...(isAdmin ? {} : { isPublished: true })
+      isPublished: true
     }
   })
 
@@ -170,17 +168,16 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
     ? await getPublicLayers(frontPage.id)
     : EMPTY_PUBLIC_LAYERS
 
-  const isPageAuthor = isAdmin
-  const showFrontpage = frontPage?.content || isAdmin
+  // Authorship for the annotation toolbar is resolved client-side inside
+  // AnnotationLayer, so nothing per-visitor reaches the cached HTML.
+  const showFrontpage = Boolean(frontPage?.content)
 
   const collectionSkript = skript.collectionSkripts[0]
   const collection = collectionSkript?.collection
 
   if (showFrontpage) {
-    const isPreviewMode = isAdmin && frontPage && !frontPage.isPublished
-
     // Build site structure
-    const availablePages = skript.pages.filter(page => isAdmin || page.isPublished)
+    const availablePages = skript.pages.filter(page => page.isPublished)
     const siteStructure = collection
       ? buildSiteStructure([{
           id: collection.id,
@@ -193,7 +190,7 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
               pages: availablePages
             }
           }]
-        }], { onlyPublished: !isAdmin })
+        }], { onlyPublished: true })
       : [{
           id: 'standalone',
           title: skript.title,
@@ -232,18 +229,9 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
         homeUrl={`/org/${orgSlug}`}
       >
         <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border">
-          {isPreviewMode && (
-            <div className="flex items-center gap-2 px-3 py-1.5 mb-4 text-sm rounded-md bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-800/50">
-              <svg className="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-              </svg>
-              <span><span className="font-semibold">Preview:</span> Not published yet. Only admins can see this.</span>
-            </div>
-          )}
-
           {frontPage?.content ? (
             <article className="prose-theme">
-              <AnnotationWrapper pageId={frontPage.id} content={frontPage.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes} isPageAuthor={isPageAuthor}>
+              <AnnotationWrapper pageId={frontPage.id} content={frontPage.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes}>
                 <ServerMarkdownRenderer
                   content={frontPage.content}
                   skriptId={skript.id}
@@ -252,19 +240,6 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
                 />
               </AnnotationWrapper>
             </article>
-          ) : isAdmin ? (
-            <div className="text-center py-12">
-              <h1 className="text-3xl font-bold mb-4">{skript.title}</h1>
-              <p className="text-muted-foreground mb-6">
-                This skript doesn&apos;t have a frontpage yet.
-              </p>
-              <Link
-                href={`/dashboard/skripts/${skriptSlug}/frontpage`}
-                className="inline-flex items-center px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
-              >
-                Create Frontpage
-              </Link>
-            </div>
           ) : null}
         </div>
       </PublicSiteLayout>
@@ -272,7 +247,7 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
   }
 
   // No frontpage - redirect to first available page
-  const firstPage = skript.pages.find(page => isAdmin || page.isPublished)
+  const firstPage = skript.pages.find(page => page.isPublished)
 
   if (firstPage) {
     return <SkriptRedirect redirectUrl={`/org/${orgSlug}/c/${skriptSlug}/${firstPage.slug}`} />
