@@ -1,5 +1,5 @@
 import 'server-only'
-import { unstable_cache } from 'next/cache'
+import { revalidateTag, unstable_cache } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { CACHE_TAGS } from '@/lib/cached-queries'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
@@ -63,16 +63,31 @@ export async function resolveStableLinks(ids: string[]): Promise<Map<string, Res
 }
 
 /**
+ * Coarse tag for every cached stable-link entry.
+ *
+ * A page's canonical URL is built from three slugs (site / skript / page), so
+ * renaming a skript or a site invalidates every child page's redirect at once.
+ * Firing per-page tags for that would mean fetching the page ids first; this
+ * tag drops the lot instead, which is cheap because the entries rebuild from a
+ * single indexed query. Page-level changes use CACHE_TAGS.page(id) — see
+ * src/lib/services/pages.ts.
+ */
+export const STABLE_LINK_TAG = 'stable-links'
+
+/** Drop every cached stable-link redirect. */
+export function invalidateStableLinks(): void {
+  revalidateTag(STABLE_LINK_TAG, { expire: 0 })
+}
+
+/**
  * Convenience: resolve a single id — cached.
  *
  * The /p/{id} route hits this on every request, and an uncached query there
  * wakes the managed Postgres (it sleeps only after 5 minutes without a
- * connection). The mapping changes only when the page or its skript is
- * renamed, moved or unpublished, so it is tagged on the page and given a
- * one-hour ceiling as a backstop for mutations that do not revalidate that tag.
- *
- * Caveat: for up to an hour after a page is unpublished, /p/{id} can still
- * redirect to a URL that then 404s, instead of 404ing here.
+ * connection). Invalidation is explicit rather than time-based:
+ * CACHE_TAGS.page(id) covers publishing, unpublishing, renaming and deleting
+ * the page itself; STABLE_LINK_TAG covers skript and site renames, which
+ * change the URL of every page beneath them.
  */
 export async function resolveStableLink(id: string): Promise<ResolvedPage | null> {
   return unstable_cache(
@@ -81,6 +96,6 @@ export async function resolveStableLink(id: string): Promise<ResolvedPage | null
       return map.get(id) ?? null
     },
     [`stable-link-${id}`],
-    { tags: [CACHE_TAGS.page(id)], revalidate: 3600 }
+    { tags: [CACHE_TAGS.page(id), STABLE_LINK_TAG], revalidate: false }
   )()
 }

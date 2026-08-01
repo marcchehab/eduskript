@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { CACHE_TAGS } from '@/lib/cached-queries'
 import {
   ConflictError,
   NotFoundError,
@@ -89,6 +90,9 @@ export async function DELETE(
 
     await prisma.page.delete({ where: { id } })
 
+    // /p/{id} caches this page's canonical URL (page-stable-link.server.ts);
+    // without this it would keep redirecting to a now-dead URL.
+    revalidateTag(CACHE_TAGS.page(id), { expire: 0 })
     revalidatePath('/dashboard/page-builder')
 
     return NextResponse.json({ success: true })

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { revalidateTag, revalidatePath } from 'next/cache'
+import { invalidateStableLinks } from '@/lib/page-stable-link.server'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { resolveOwnedSite } from '@/lib/sites'
@@ -282,6 +283,9 @@ export async function PATCH(request: NextRequest) {
       revalidateTag(CACHE_TAGS.user(newPageSlug), { expire: 0 })
       revalidateTag(CACHE_TAGS.teacherContent(newPageSlug), { expire: 0 })
       revalidatePath(`/${newPageSlug}`)
+      // The site slug is the first segment of every page's canonical URL,
+      // which /p/{id} caches.
+      invalidateStableLinks()
     }
 
     return NextResponse.json(result)

@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { revalidatePath } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { invalidateStableLinks } from '@/lib/page-stable-link.server'
 import { extractReferencedFilenames } from '@/lib/extract-file-references'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 
@@ -191,6 +192,9 @@ export async function POST(request: NextRequest) {
     })
 
     if (userSite?.slug) {
+      // Moving a page between skripts changes its canonical URL, which
+      // /p/{id} caches.
+      invalidateStableLinks()
       revalidatePath(`/${userSite.slug}`)
       revalidatePath('/dashboard')
     }

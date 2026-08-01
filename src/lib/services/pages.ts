@@ -374,6 +374,12 @@ export async function updatePageForUser(
 
     revalidateTag(CACHE_TAGS.teacherContent(pageSlug), { expire: 0 })
 
+    // Keyed on the page id rather than its slugs: the /p/{id} stable-link
+    // redirect caches this page's canonical URL, and publishing, unpublishing
+    // or renaming it all change what that redirect should do (or whether it
+    // should 404 at all). See resolveStableLink in page-stable-link.server.ts.
+    revalidateTag(CACHE_TAGS.page(updatedPage.id), { expire: 0 })
+
     revalidatePath('/dashboard')
 
     const orgMemberships = await prisma.organizationMember.findMany({

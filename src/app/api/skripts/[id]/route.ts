@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { revalidatePath, revalidateTag } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { invalidateStableLinks } from '@/lib/page-stable-link.server'
 import { checkSkriptPermissions } from '@/lib/permissions'
 import { CACHE_TAGS } from '@/lib/cached-queries'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
@@ -163,6 +164,9 @@ export async function PATCH(
       const pageSlug = userSite.slug
       revalidateTag(CACHE_TAGS.skriptBySlug(pageSlug, updatedSkript.slug), { expire: 0 })
       revalidateTag(CACHE_TAGS.teacherContent(pageSlug), { expire: 0 })
+      // A renamed or unpublished skript changes the canonical URL of every
+      // page under it, which /p/{id} caches.
+      invalidateStableLinks()
       revalidatePath(`/${pageSlug}/${updatedSkript.slug}`)
       revalidatePath('/dashboard')
     }
