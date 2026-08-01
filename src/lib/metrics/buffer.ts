@@ -36,6 +36,24 @@ const currentMinuteBuffer = new Map<MetricName, MetricAccumulator>()
 // delta that still has to be merged into the current hour's row.
 const pendingDbBuffer = new Map<MetricName, MetricAccumulator>()
 
+// Deltas for hours that have already ended but were never written, because no
+// DB connection happened to be open when they closed. Each carries its own
+// hour timestamp so it still merges into the right row whenever it does get
+// flushed — the reason the old code had to write synchronously at the hour
+// boundary.
+const carriedHours: Array<{ timestamp: number; entries: Map<MetricName, MetricAccumulator> }> = []
+const MAX_CARRIED_HOURS = 48
+
+// Request counts per public path, used to pick what the boot-time cache warmer
+// renders (src/lib/cache-warmer.ts). Stored in metric_points under a `path:`
+// name so it needs no table of its own, but rounded to the DAY rather than the
+// hour: ~500 public URLs would otherwise add ~12k rows a day, and the warmer
+// only ever reads a 7-day sum.
+const pendingPathHits = new Map<string, number>()
+export const PATH_METRIC_PREFIX = 'path:'
+// Bounds the memory a hostile crawler can make us hold by requesting junk URLs.
+const MAX_TRACKED_PATHS = 2000
+
 // Ring buffer of last 60 minutes for admin panel live view
 const recentMinutes: MinuteSnapshot[] = []
 const MAX_RECENT_MINUTES = 60
@@ -44,17 +62,21 @@ const MAX_RECENT_MINUTES = 60
 let currentMinuteTimestamp: number = getMinuteTimestamp(new Date())
 let currentHourTimestamp: number = getHourTimestamp(new Date())
 
-// How often the pending delta may reach the DB. Also the worst-case data loss
-// on an unclean restart (a clean SIGTERM flushes — see src/instrumentation.ts).
+// Persistence is opportunistic: the delta is written only when something else
+// has already opened a DB connection (see maybeFlushOnDbActivity, called from
+// the Prisma extension in src/lib/prisma.ts) or on shutdown. The managed
+// Postgres sleeps after 5 minutes without a connection and bills compute while
+// awake, so a timer-driven flush was itself the thing keeping it awake — six
+// wakes an hour to store a handful of counters nobody was reading. Riding an
+// existing connection costs nothing.
 //
-// The managed Postgres sleeps after 5 minutes without a connection
-// (https://www.koyeb.com/docs/databases) and bills compute while awake, so this
-// interval is a floor on how long it can ever stay asleep: at 10 minutes it
-// woke the instance six times an hour to write a handful of rows. Completed
-// hours are still exact — the hour-boundary flush below is separate — and only
-// the current half-hour's partial delta is at risk on an unclean restart.
-const DB_FLUSH_INTERVAL_MS = 30 * 60 * 1000
-let lastDbFlushAt: number = currentMinuteTimestamp
+// Consequence: with no DB traffic at all, nothing is persisted until SIGTERM,
+// and a hard kill (OOM, crash) loses the window. Acceptable for metrics.
+//
+// A minimum spacing still applies so a burst of queries does not turn into a
+// burst of writes.
+const MIN_FLUSH_SPACING_MS = 60 * 1000
+let lastDbFlushAt = 0
 
 // Flush interval handle
 let flushIntervalId: NodeJS.Timeout | null = null
@@ -100,10 +122,57 @@ export function recordMetric(name: MetricName, value: number): void {
 }
 
 /**
- * Advance minute/hour boundaries and flush what is due.
+ * Count one request for `path`.
  *
- * Runs from recordMetric (so the proxy runtime, which has no interval timer,
- * still flushes while traffic exists) and from the interval timer.
+ * Called from the proxy, which is the only place that sees every request —
+ * an ISR cache hit never reaches the page component. Cheap and synchronous;
+ * persistence happens on the usual opportunistic triggers.
+ */
+export function recordPathHit(path: string): void {
+  if (pendingPathHits.size >= MAX_TRACKED_PATHS && !pendingPathHits.has(path)) return
+  pendingPathHits.set(path, (pendingPathHits.get(path) ?? 0) + 1)
+}
+
+/** Snapshot and clear the local buffers, for shipping to another runtime. */
+export function drainForShipping(): { metrics: Array<[string, MetricAccumulator]>; paths: Array<[string, number]> } {
+  const metrics = Array.from(pendingDbBuffer.entries())
+  const paths = Array.from(pendingPathHits.entries())
+  pendingDbBuffer.clear()
+  pendingPathHits.clear()
+  return { metrics, paths }
+}
+
+/**
+ * Merge counts recorded in another Next.js bundle into this one.
+ *
+ * The proxy runs as a separate module instance with its own buffers and never
+ * touches Prisma, so it has no DB connection to ride and would only ever
+ * persist at shutdown. It ships its buffer here instead (see
+ * /api/internal/metrics-ingest), and this runtime writes it out on the next
+ * query that happens anyway.
+ */
+export function mergeShipped(payload: {
+  metrics?: Array<[string, MetricAccumulator]>
+  paths?: Array<[string, number]>
+}): void {
+  for (const [name, acc] of payload.metrics ?? []) {
+    if (!isValidMetricName(name)) continue
+    const existing = pendingDbBuffer.get(name) ?? { sum: 0, count: 0 }
+    existing.sum += acc.sum
+    existing.count += acc.count
+    pendingDbBuffer.set(name, existing)
+  }
+  for (const [path, hits] of payload.paths ?? []) {
+    if (pendingPathHits.size >= MAX_TRACKED_PATHS && !pendingPathHits.has(path)) continue
+    pendingPathHits.set(path, (pendingPathHits.get(path) ?? 0) + hits)
+  }
+}
+
+/**
+ * Advance minute/hour boundaries and roll the live-view ring buffer.
+ *
+ * Runs from recordMetric and from the 10s interval timer. DB writes are NOT
+ * driven from here any more — see maybeFlushOnDbActivity.
  */
 function rollBuffers(): void {
   const now = new Date()
@@ -111,26 +180,18 @@ function rollBuffers(): void {
   const nowHour = getHourTimestamp(now)
 
   if (nowHour !== currentHourTimestamp) {
-    // Drains synchronously against the OLD hour timestamp; only the DB write
-    // is async. Reassigning right after is therefore safe.
-    void flushPendingToDb()
+    // Crossing an hour is the one case where the pending delta MUST be drained
+    // synchronously against the old hour, or its samples would be merged into
+    // the wrong hourly row. The write itself still only happens if the DB is
+    // reachable; if it fails the delta is put back (see flushPendingToDb) and
+    // lands in the wrong hour — totals stay correct, the split does not.
+    drainToCarry()
     currentHourTimestamp = nowHour
   }
 
   if (nowMinute !== currentMinuteTimestamp) {
     flushMinuteToRingBuffer()
     currentMinuteTimestamp = nowMinute
-
-    // Bound the DB write rate. The managed Postgres bills compute-hours and
-    // suspends after ~5 minutes without a connection, so a write every minute
-    // holds it awake for as long as anyone is browsing — and now that page
-    // renders are cached and issue no queries, this flush is often the only
-    // thing touching the DB at all. Ten minutes keeps restart loss small while
-    // letting the instance suspend between bursts of traffic.
-    if (nowMinute - lastDbFlushAt >= DB_FLUSH_INTERVAL_MS) {
-      lastDbFlushAt = nowMinute
-      void flushPendingToDb()
-    }
   }
 }
 
@@ -161,69 +222,130 @@ function flushMinuteToRingBuffer(): void {
 }
 
 /**
- * Merge the pending delta into the current hour's DB rows.
+ * Move the current delta into the carry list, stamped with the hour it belongs
+ * to. Called when the hour rolls over, so a later flush still merges the
+ * samples into the right row instead of the hour it happens to run in.
+ */
+function drainToCarry(): void {
+  if (pendingDbBuffer.size === 0) return
+  carriedHours.push({ timestamp: currentHourTimestamp, entries: new Map(pendingDbBuffer) })
+  pendingDbBuffer.clear()
+  // Two days of unwritten hours means the DB has been unreachable that long;
+  // dropping the oldest keeps a stuck instance from growing without bound.
+  while (carriedHours.length > MAX_CARRIED_HOURS) carriedHours.shift()
+}
+
+/**
+ * Write everything outstanding: carried hours first, then the current delta.
  *
- * The buffer is drained synchronously before the first `await`, so callers may
- * advance `currentHourTimestamp` immediately after the call and samples
+ * Both buffers are drained synchronously before the first `await`, so samples
  * recorded during the write land in the next delta instead of being dropped.
  *
  * Writes go through `prismaBase` (the unextended client) on purpose: the
- * extended client records db_queries_total/db_query_time_ms, so flushing via
- * it would count its own writes.
+ * extended client records db_queries_total/db_query_time_ms, so flushing via it
+ * would count its own writes — and, now that the flush is triggered from that
+ * same extension, would recurse.
  *
  * Uses dynamic import to avoid pulling Prisma into the Edge Runtime.
  */
 async function flushPendingToDb(): Promise<void> {
-  // Persistence is off by default: every write is a connection, and a
-  // connection resets the managed Postgres's 5-minute sleep timer, so storing
-  // metrics costs more in compute-hours than the history is currently worth
-  // (nobody reads it). The in-memory buffer and the live view at /api/metrics
-  // are unaffected — only history across restarts is lost. Set
-  // METRICS_DB_FLUSH=1 to turn persistence back on, e.g. to check whether the
-  // writes are what is holding the database awake.
-  if (process.env.METRICS_DB_FLUSH !== '1') {
+  const batches: Array<{ timestamp: number; entries: Array<[MetricName, MetricAccumulator]> }> = []
+
+  for (const carried of carriedHours.splice(0)) {
+    batches.push({ timestamp: carried.timestamp, entries: Array.from(carried.entries) })
+  }
+  if (pendingDbBuffer.size > 0) {
+    batches.push({ timestamp: currentHourTimestamp, entries: Array.from(pendingDbBuffer) })
     pendingDbBuffer.clear()
-    return
   }
 
-  if (pendingDbBuffer.size === 0) return
+  // Path counts share the table but are stamped to the day (see the comment on
+  // pendingPathHits). `avg` is meaningless for them; only `count` is read.
+  const pathEntries = Array.from(pendingPathHits.entries())
+  pendingPathHits.clear()
+  const dayTimestamp = new Date(Math.floor(Date.now() / 86400000) * 86400000)
 
-  // Synchronous drain — nothing awaited above this point.
-  const timestamp = new Date(currentHourTimestamp)
-  const entries = Array.from(pendingDbBuffer.entries())
-  pendingDbBuffer.clear()
+  if (batches.length === 0 && pathEntries.length === 0) return
+
+  lastDbFlushAt = Date.now()
 
   try {
     const { prismaBase } = await import('@/lib/prisma')
 
-    for (const [name, acc] of entries) {
-      const avg = acc.count > 0 ? acc.sum / acc.count : 0
+    for (const batch of batches) {
+      const timestamp = new Date(batch.timestamp)
+      for (const [name, acc] of batch.entries) {
+        const avg = acc.count > 0 ? acc.sum / acc.count : 0
 
-      // Weighted merge in SQL so concurrent writers (proxy runtime, app
-      // server, several instances) accumulate instead of clobbering.
+        // Weighted merge in SQL so concurrent writers (proxy runtime, app
+        // server, several instances) accumulate instead of clobbering.
+        await prismaBase.$executeRaw`
+          INSERT INTO metric_points (id, name, timestamp, avg, count, created_at)
+          VALUES (${globalThis.crypto.randomUUID()}, ${name}, ${timestamp}, ${avg}, ${acc.count}, NOW())
+          ON CONFLICT (name, timestamp) DO UPDATE SET
+            avg = (metric_points.avg * metric_points.count + EXCLUDED.avg * EXCLUDED.count)
+                  / NULLIF(metric_points.count + EXCLUDED.count, 0),
+            count = metric_points.count + EXCLUDED.count
+        `
+      }
+    }
+    for (const [path, hits] of pathEntries) {
       await prismaBase.$executeRaw`
         INSERT INTO metric_points (id, name, timestamp, avg, count, created_at)
-        VALUES (${globalThis.crypto.randomUUID()}, ${name}, ${timestamp}, ${avg}, ${acc.count}, NOW())
+        VALUES (${globalThis.crypto.randomUUID()}, ${PATH_METRIC_PREFIX + path}, ${dayTimestamp}, ${0}, ${hits}, NOW())
         ON CONFLICT (name, timestamp) DO UPDATE SET
-          avg = (metric_points.avg * metric_points.count + EXCLUDED.avg * EXCLUDED.count)
-                / NULLIF(metric_points.count + EXCLUDED.count, 0),
           count = metric_points.count + EXCLUDED.count
       `
     }
   } catch (error) {
-    // Put the delta back so the next flush retries it, merged with anything
-    // recorded meanwhile. Caveat: the retry is stamped with whatever hour is
-    // current then, so a write that fails across an hour boundary lands in the
-    // wrong hour. Totals stay correct; the hourly split does not.
-    for (const [name, acc] of entries) {
-      const existing = pendingDbBuffer.get(name) ?? { sum: 0, count: 0 }
-      existing.sum += acc.sum
-      existing.count += acc.count
-      pendingDbBuffer.set(name, existing)
+    // Put every batch back with its own hour intact, so a failed write no
+    // longer corrupts the hourly split the way the old single-buffer retry did.
+    for (const batch of batches) {
+      if (batch.timestamp === currentHourTimestamp) {
+        for (const [name, acc] of batch.entries) {
+          const existing = pendingDbBuffer.get(name) ?? { sum: 0, count: 0 }
+          existing.sum += acc.sum
+          existing.count += acc.count
+          pendingDbBuffer.set(name, existing)
+        }
+      } else {
+        carriedHours.unshift({ timestamp: batch.timestamp, entries: new Map(batch.entries) })
+      }
+    }
+    while (carriedHours.length > MAX_CARRIED_HOURS) carriedHours.shift()
+    for (const [path, hits] of pathEntries) {
+      pendingPathHits.set(path, (pendingPathHits.get(path) ?? 0) + hits)
     }
     console.error('[Metrics] Failed to flush to DB:', error)
   }
 }
+
+/**
+ * Persist if something else already has the DB open.
+ *
+ * Called from the Prisma extension on every query through the extended client
+ * (src/lib/prisma.ts). The connection is already established at that point, so
+ * the write rides it instead of waking the instance on its own — which is the
+ * whole point: a timer-driven flush was itself holding the database awake.
+ *
+ * Fire-and-forget and never awaited by the caller, so a slow write cannot add
+ * latency to the query that triggered it. Re-entrancy is guarded by
+ * `flushInFlight`; `MIN_FLUSH_SPACING_MS` keeps a burst of queries from turning
+ * into a burst of writes.
+ */
+let flushInFlight = false
+
+export function maybeFlushOnDbActivity(): void {
+  if (flushInFlight) return
+  if (pendingDbBuffer.size === 0 && carriedHours.length === 0 && pendingPathHits.size === 0) return
+  if (Date.now() - lastDbFlushAt < MIN_FLUSH_SPACING_MS) return
+
+  flushInFlight = true
+  void flushPendingToDb().finally(() => {
+    flushInFlight = false
+  })
+}
+
 
 /**
  * Get recent in-memory minutes for admin panel live view
@@ -257,7 +379,10 @@ export function getRecentMinutes(): Array<{
 }
 
 /**
- * Start the flush interval (call once on server startup)
+ * Start the roll-over timer (call once on server startup).
+ *
+ * Only advances the minute/hour buffers for the live view — it no longer
+ * writes to the DB; see maybeFlushOnDbActivity.
  */
 export function startMetricsFlush(): void {
   if (flushIntervalId) return
@@ -268,11 +393,15 @@ export function startMetricsFlush(): void {
   // Don't prevent Node from exiting
   flushIntervalId.unref()
 
-  console.log('[Metrics] Flush interval started')
+  console.log('[Metrics] Roll-over interval started')
 }
 
 /**
- * Stop the flush interval and flush remaining data
+ * Stop the timer and write whatever is outstanding.
+ *
+ * The shutdown path is the one flush that does not wait for a DB connection to
+ * already exist: it is the last chance to persist the window, and the instance
+ * is going away anyway.
  */
 export async function stopMetricsFlush(): Promise<void> {
   if (flushIntervalId) {

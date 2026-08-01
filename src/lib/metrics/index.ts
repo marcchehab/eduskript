@@ -14,9 +14,17 @@
  * Add new metrics by updating registry.ts
  *
  * Storage: samples accumulate in memory and merge into one DB row per metric
- * per hour, flushed every minute. See buffer.ts for the process-boundary
- * caveat (page_loads_total is recorded in the proxy bundle, so it never shows
- * in the live view).
+ * per hour. Writes are opportunistic — they happen when some other query
+ * already has a DB connection open, or at shutdown, never on a timer. The
+ * managed Postgres bills awake-time, so a timed flush was itself what kept it
+ * from sleeping. See buffer.ts.
+ *
+ * The proxy bundle has its own module instance and no Prisma, so it ships its
+ * counters to the app runtime via /api/internal/metrics-ingest. That is also
+ * why page_loads_total never shows in the live view.
+ *
+ * Request counts per URL ride the same table under a `path:` name (day-rounded)
+ * and feed the boot-time cache warmer in src/lib/cache-warmer.ts.
  */
 
 export { recordMetric, getRecentMinutes, startMetricsFlush, stopMetricsFlush, getActiveMetricNames } from './buffer'

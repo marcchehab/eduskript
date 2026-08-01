@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { recordMetric } from '@/lib/metrics/buffer'
+import { recordMetric, recordPathHit, drainForShipping } from '@/lib/metrics/buffer'
 import { isSEBRequest } from '@/lib/seb'
 import { DEMO_EMAIL } from '@/lib/demo-account'
 
@@ -101,7 +101,15 @@ export async function proxy(request: NextRequest) {
 
   if (isHardNavigation || isSpaNavigation) {
     recordMetric('page_loads_total', 1)
+    // Which URLs are worth pre-rendering after a deploy. Counted here because
+    // this is the only place that sees every request: an ISR cache hit never
+    // reaches the page component. Keyed by host so tenants stay separate.
+    recordPathHit(`${domain}${pathname}`)
   }
+
+  // Hand the buffer to the app runtime, which has DB access. Fire-and-forget
+  // and rate-limited internally, so it adds nothing to this request's latency.
+  shipMetricsIfDue()
 
   // Skip for static files and internal routes
   if (
@@ -291,6 +299,30 @@ function rewriteToTeacher(request: NextRequest, pageSlug: string) {
   url.pathname = `/${pageSlug}${path === '/' ? '' : path}`
 
   return NextResponse.rewrite(url)
+}
+
+// How often the proxy hands its counters to the app runtime. Not a DB write —
+// just an internal HTTP call — so the interval is about keeping the payload
+// small, not about waking the database.
+const SHIP_INTERVAL_MS = 60 * 1000
+let lastShippedAt = 0
+
+function shipMetricsIfDue(): void {
+  if (Date.now() - lastShippedAt < SHIP_INTERVAL_MS) return
+  lastShippedAt = Date.now()
+
+  const payload = drainForShipping()
+  if (payload.metrics.length === 0 && payload.paths.length === 0) return
+
+  const port = process.env.PORT || '3000'
+  void fetch(`http://localhost:${port}/api/internal/metrics-ingest`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).catch(() => {
+    // The counters are already drained; losing a window of metrics is not
+    // worth retry machinery in the request path.
+  })
 }
 
 export const config = {

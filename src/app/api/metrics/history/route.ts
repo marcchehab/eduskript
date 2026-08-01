@@ -13,6 +13,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getMetricDailyAggregates } from '@/lib/metrics/aggregation'
+import { PATH_METRIC_PREFIX } from '@/lib/metrics/buffer'
 
 export async function GET(request: NextRequest) {
   // Check authentication and admin status
@@ -39,6 +40,10 @@ export async function GET(request: NextRequest) {
     const points = await prisma.metricPoint.findMany({
       where: {
         timestamp: { gte: since },
+        // Per-URL request counts share this table (see PATH_METRIC_PREFIX in
+        // metrics/buffer.ts) but are not metrics — they feed the cache warmer,
+        // and there are hundreds of them.
+        NOT: { name: { startsWith: PATH_METRIC_PREFIX } },
       },
       orderBy: { timestamp: 'asc' },
       select: {

@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { Pool } from 'pg'
-import { recordMetric } from '@/lib/metrics/buffer'
+import { recordMetric, maybeFlushOnDbActivity } from '@/lib/metrics/buffer'
 import { logQuery, queryLogEnabled } from '@/lib/query-log'
 
 const globalForPrisma = globalThis as unknown as {
@@ -52,6 +52,12 @@ export const prisma = basePrisma.$extends({
         const duration = performance.now() - start
         recordMetric('db_query_time_ms', duration)
         recordMetric('db_queries_total', 1)
+        // The connection is open right now, so persisting the buffered metrics
+        // costs no extra wake — the managed Postgres bills awake-time and
+        // sleeps 5 minutes after the last connection. Fire-and-forget: it is
+        // never awaited, so it cannot slow this query down. Writes go through
+        // the unextended client, so they do not re-enter here.
+        maybeFlushOnDbActivity()
         // No-op unless QUERY_LOG=1 (see src/lib/query-log.ts — never set it in
         // a deployment).
         if (queryLogEnabled) {
