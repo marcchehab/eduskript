@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { invalidateDomainCache } from '@/lib/domain-cache'
 import { requireOrgAdmin } from '@/lib/org-auth'
 
 // DELETE - Remove a teacher's custom domain (org admin only)
@@ -48,6 +49,7 @@ export async function DELETE(
     await prisma.teacherCustomDomain.delete({
       where: { id: domainId },
     })
+    invalidateDomainCache(domain.domain)
 
     return NextResponse.json({
       success: true,

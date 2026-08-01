@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { PRIMARY_SITE_ORDER } from '@/lib/sites'
+import { resolveCustomDomain } from '@/lib/cached-queries'
 
 // GET - Resolve a custom domain to organization or teacher
 // This is an internal API used by middleware for domain resolution
 // Returns either:
 //   { type: 'org', orgId, orgSlug, orgName, isPrimary }
-//   { type: 'teacher', userId, pageSlug, userName }
+//   { type: 'teacher', userId, pageSlug, userName, isPrimary }
+//
+// The lookup lives in resolveCustomDomain() so it can be cached and tagged per
+// domain: the proxy's in-process map expires every 15 minutes (src/proxy.ts),
+// and two uncached Prisma queries per expiry were enough to keep the managed
+// Postgres awake — it sleeps only after 5 minutes without a connection.
+// Invalidation is explicit, via invalidateDomainCache().
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
@@ -16,67 +21,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Domain parameter required' }, { status: 400 })
     }
 
-    // Normalize domain
     const normalizedDomain = domain.toLowerCase().trim()
+    const resolved = await resolveCustomDomain(normalizedDomain)
 
-    // Check organization custom domains first (slug lives on Site).
-    const customDomain = await prisma.customDomain.findFirst({
-      where: {
-        domain: normalizedDomain,
-        isVerified: true,
-      },
-      include: {
-        organization: {
-          select: {
-            id: true,
-            name: true,
-            site: { select: { slug: true } },
-          },
-        },
-      },
-    })
-
-    if (customDomain) {
-      return NextResponse.json({
-        type: 'org',
-        orgId: customDomain.organization.id,
-        orgSlug: customDomain.organization.site?.slug ?? '',
-        orgName: customDomain.organization.name,
-        isPrimary: customDomain.isPrimary,
-      })
+    if (!resolved) {
+      return NextResponse.json({ error: 'Domain not found' }, { status: 404 })
     }
 
-    // Check teacher custom domains. A domain points to a specific Site
-    // (`site.slug`). Legacy rows have no siteId → fall back to the user's
-    // primary site, matching pre-multi-site behavior.
-    const teacherDomain = await prisma.teacherCustomDomain.findFirst({
-      where: {
-        domain: normalizedDomain,
-        isVerified: true,
-      },
-      include: {
-        site: { select: { slug: true } },
-        user: {
-          select: {
-            id: true,
-            name: true,
-            sites: { orderBy: PRIMARY_SITE_ORDER, take: 1, select: { slug: true } },
-          },
-        },
-      },
-    })
-
-    if (teacherDomain) {
-      return NextResponse.json({
-        type: 'teacher',
-        userId: teacherDomain.user.id,
-        pageSlug: teacherDomain.site?.slug ?? teacherDomain.user.sites[0]?.slug ?? null,
-        userName: teacherDomain.user.name,
-        isPrimary: teacherDomain.isPrimary,
-      })
-    }
-
-    return NextResponse.json({ error: 'Domain not found' }, { status: 404 })
+    return NextResponse.json(resolved)
   } catch (error) {
     console.error('Error resolving domain:', error)
     return NextResponse.json({ error: 'Failed to resolve domain' }, { status: 500 })

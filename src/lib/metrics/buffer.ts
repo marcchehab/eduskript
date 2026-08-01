@@ -174,6 +174,18 @@ function flushMinuteToRingBuffer(): void {
  * Uses dynamic import to avoid pulling Prisma into the Edge Runtime.
  */
 async function flushPendingToDb(): Promise<void> {
+  // Persistence is off by default: every write is a connection, and a
+  // connection resets the managed Postgres's 5-minute sleep timer, so storing
+  // metrics costs more in compute-hours than the history is currently worth
+  // (nobody reads it). The in-memory buffer and the live view at /api/metrics
+  // are unaffected — only history across restarts is lost. Set
+  // METRICS_DB_FLUSH=1 to turn persistence back on, e.g. to check whether the
+  // writes are what is holding the database awake.
+  if (process.env.METRICS_DB_FLUSH !== '1') {
+    pendingDbBuffer.clear()
+    return
+  }
+
   if (pendingDbBuffer.size === 0) return
 
   // Synchronous drain — nothing awaited above this point.

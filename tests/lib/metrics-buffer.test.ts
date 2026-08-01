@@ -37,10 +37,14 @@ function callValues(call: unknown[]) {
 
 beforeEach(() => {
   executeRaw.mockClear()
+  // Persistence is opt-in (see flushPendingToDb) — these tests are about what
+  // reaches the DB when it is on.
+  vi.stubEnv('METRICS_DB_FLUSH', '1')
   vi.useFakeTimers()
 })
 
 afterEach(() => {
+  vi.unstubAllEnvs()
   vi.useRealTimers()
 })
 

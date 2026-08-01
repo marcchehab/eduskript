@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { invalidateDomainCache } from '@/lib/domain-cache'
 
 // DELETE - Remove a custom domain
 export async function DELETE(
@@ -33,6 +34,7 @@ export async function DELETE(
     await prisma.teacherCustomDomain.delete({
       where: { id: domainId },
     })
+    invalidateDomainCache(domain.domain)
 
     return NextResponse.json({ success: true })
   } catch (error) {
@@ -99,6 +101,7 @@ export async function PATCH(
       where: { id: domainId },
       data: { isPrimary: isPrimary ?? domain.isPrimary },
     })
+    invalidateDomainCache(domain.domain)
 
     return NextResponse.json({ domain: updatedDomain })
   } catch (error) {

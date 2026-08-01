@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireOrgAdmin } from '@/lib/org-auth'
 import { attachDomainToKoyeb } from '@/lib/koyeb'
+import { invalidateDomainCache } from '@/lib/domain-cache'
 import dns from 'dns'
 import { promisify } from 'util'
 
@@ -106,6 +107,10 @@ export async function POST(
     })
 
     // Ownership alone does not route the domain — see src/lib/koyeb.ts.
+    // The domain only starts resolving once isVerified flips, so drop the
+    // cached (null) mapping before anyone can hit it.
+    invalidateDomainCache(domain.domain)
+
     const koyeb = await attachDomainToKoyeb(domain.domain)
     if (koyeb.status === 'error' || koyeb.status === 'quota_exceeded') {
       console.error('Koyeb attach failed for', domain.domain, koyeb)

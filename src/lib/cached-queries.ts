@@ -3,6 +3,7 @@ import { cache } from 'react'
 import { prisma } from './prisma'
 import { buildSiteStructure, type SiteStructure } from './site-structure'
 import { createLogger } from './logger'
+import { PRIMARY_SITE_ORDER } from './sites'
 
 const log = createLogger('cache:queries')
 
@@ -20,6 +21,7 @@ export const CACHE_TAGS = {
   teacherContent: (pageSlug: string) => `teacher-content:${pageSlug}`,
   organization: (slug: string) => `org:${slug}`,
   orgContent: (slug: string) => `org-content:${slug}`,
+  customDomain: (domain: string) => `custom-domain:${domain.toLowerCase()}`,
 } as const
 
 /** The public-page fields that live on Site but get read off the user object. */
@@ -1171,6 +1173,84 @@ export const getOrgTeacherSkript = (
         CACHE_TAGS.teacherContent(pageSlug),
         CACHE_TAGS.skriptBySlug(pageSlug, skriptSlug),
       ],
+      revalidate: false,
+    }
+  )()
+
+/**
+ * Resolve a custom domain to the org or teacher site it serves — cached.
+ *
+ * Called by /api/internal/resolve-domain, which the proxy hits whenever its
+ * own 15-minute in-process map misses (src/proxy.ts). Uncached, that was two
+ * Prisma queries per miss, and since the managed Postgres sleeps only after 5
+ * minutes without a connection, a domain with steady traffic re-woke it every
+ * quarter of an hour. Cached and tagged per domain it costs nothing until the
+ * domain actually changes.
+ *
+ * Invalidate with revalidateTag(CACHE_TAGS.customDomain(domain)) wherever a
+ * domain row is verified, deleted or re-pointed (see src/lib/domain-cache.ts).
+ */
+export type ResolvedDomain =
+  | { type: 'org'; orgId: string; orgSlug: string; orgName: string; isPrimary: boolean }
+  | { type: 'teacher'; userId: string; pageSlug: string | null; userName: string | null; isPrimary: boolean }
+  | null
+
+export const resolveCustomDomain = (domain: string) =>
+  unstable_cache(
+    async (): Promise<ResolvedDomain> => {
+      log('MISS resolveCustomDomain', { domain })
+
+      // Organization domains win over teacher domains, as before.
+      const orgDomain = await prisma.customDomain.findFirst({
+        where: { domain, isVerified: true },
+        include: {
+          organization: {
+            select: { id: true, name: true, site: { select: { slug: true } } },
+          },
+        },
+      })
+
+      if (orgDomain) {
+        return {
+          type: 'org',
+          orgId: orgDomain.organization.id,
+          orgSlug: orgDomain.organization.site?.slug ?? '',
+          orgName: orgDomain.organization.name,
+          isPrimary: orgDomain.isPrimary,
+        }
+      }
+
+      // Teacher domains point at a specific Site; legacy rows without a siteId
+      // fall back to the user's primary site.
+      const teacherDomain = await prisma.teacherCustomDomain.findFirst({
+        where: { domain, isVerified: true },
+        include: {
+          site: { select: { slug: true } },
+          user: {
+            select: {
+              id: true,
+              name: true,
+              sites: { orderBy: PRIMARY_SITE_ORDER, take: 1, select: { slug: true } },
+            },
+          },
+        },
+      })
+
+      if (teacherDomain) {
+        return {
+          type: 'teacher',
+          userId: teacherDomain.user.id,
+          pageSlug: teacherDomain.site?.slug ?? teacherDomain.user.sites[0]?.slug ?? null,
+          userName: teacherDomain.user.name,
+          isPrimary: teacherDomain.isPrimary,
+        }
+      }
+
+      return null
+    },
+    [`resolve-domain-${domain}`],
+    {
+      tags: [CACHE_TAGS.customDomain(domain), 'custom-domains'],
       revalidate: false,
     }
   )()

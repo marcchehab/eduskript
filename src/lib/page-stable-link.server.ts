@@ -1,5 +1,7 @@
 import 'server-only'
+import { unstable_cache } from 'next/cache'
 import { prisma } from '@/lib/prisma'
+import { CACHE_TAGS } from '@/lib/cached-queries'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import type { ResolvedPage } from './page-stable-link'
 
@@ -60,8 +62,25 @@ export async function resolveStableLinks(ids: string[]): Promise<Map<string, Res
   return map
 }
 
-/** Convenience: resolve a single id. */
+/**
+ * Convenience: resolve a single id — cached.
+ *
+ * The /p/{id} route hits this on every request, and an uncached query there
+ * wakes the managed Postgres (it sleeps only after 5 minutes without a
+ * connection). The mapping changes only when the page or its skript is
+ * renamed, moved or unpublished, so it is tagged on the page and given a
+ * one-hour ceiling as a backstop for mutations that do not revalidate that tag.
+ *
+ * Caveat: for up to an hour after a page is unpublished, /p/{id} can still
+ * redirect to a URL that then 404s, instead of 404ing here.
+ */
 export async function resolveStableLink(id: string): Promise<ResolvedPage | null> {
-  const map = await resolveStableLinks([id])
-  return map.get(id) ?? null
+  return unstable_cache(
+    async () => {
+      const map = await resolveStableLinks([id])
+      return map.get(id) ?? null
+    },
+    [`stable-link-${id}`],
+    { tags: [CACHE_TAGS.page(id)], revalidate: 3600 }
+  )()
 }
