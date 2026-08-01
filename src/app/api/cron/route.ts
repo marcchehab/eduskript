@@ -7,11 +7,13 @@
  * Tasks:
  * - Expire trials and cancelled subscriptions past their end date
  * - Reset demo user content from demo-content/ files
+ * - Prune old metric_points rows
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { resetDemoUser } from '@/lib/seed-demo-content'
+import { PATH_METRIC_PREFIX } from '@/lib/metrics/buffer'
 
 
 export async function POST(request: NextRequest) {
@@ -68,6 +70,36 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('[cron] reset-demo error:', error)
     results.demoReset = 'error'
+  }
+
+  // --- Task 3: Prune old metric_points rows ---
+  // Two retentions, because the table holds two different things:
+  //
+  // `path:` rows are one per distinct URL per day (vulnerability scanners
+  // included) and the only reader — the cache warmer — looks back 7 days, so
+  // 10 days is already slack. The real metrics are three names at ~72 rows a
+  // day and /api/metrics/history accepts up to 365 days, so they keep a year.
+  //
+  // Runs here because this job already has the database awake; a job of its own
+  // would cost an extra wake window on an instance that bills awake-time.
+  try {
+    const now = Date.now()
+    const pathCutoff = new Date(now - 10 * 86400000)
+    const metricCutoff = new Date(now - 365 * 86400000)
+
+    const [prunedPaths, prunedMetrics] = await Promise.all([
+      prisma.metricPoint.deleteMany({
+        where: { name: { startsWith: PATH_METRIC_PREFIX }, timestamp: { lt: pathCutoff } },
+      }),
+      prisma.metricPoint.deleteMany({
+        where: { NOT: { name: { startsWith: PATH_METRIC_PREFIX } }, timestamp: { lt: metricCutoff } },
+      }),
+    ])
+
+    results.prunedMetricPoints = { paths: prunedPaths.count, metrics: prunedMetrics.count }
+  } catch (error) {
+    console.error('[cron] prune-metrics error:', error)
+    results.prunedMetricPoints = 'error'
   }
 
   return NextResponse.json({ success: true, results })
