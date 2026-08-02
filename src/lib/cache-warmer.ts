@@ -28,12 +28,18 @@ import { PATH_METRIC_PREFIX } from '@/lib/metrics/buffer'
  * into cache hits that never touch the database.
  */
 
-// High enough to cover the whole public surface (~500 URLs across all hosts),
-// not a popularity cut-off any more. Lower it with WARM_TOP_N if a boot burst
-// ever gets too long.
-const DEFAULT_TOP_N = 1000
+// Warming 1000 URLs at concurrency 4 took production down: renders are heavy
+// (markdown, KaTeX, plugins) and the instance is small, so the burst starved
+// real requests and every host started returning 504. The warm-up is a
+// background nicety and must never compete with serving — hence a modest cap,
+// one request at a time, a pause between them, a total time budget, and a
+// breaker that gives up if the server starts failing.
+const DEFAULT_TOP_N = 100
 const LOOKBACK_DAYS = 7
-const CONCURRENCY = 4
+const CONCURRENCY = 1
+const DELAY_BETWEEN_MS = 400
+const MAX_TOTAL_MS = 4 * 60_000
+const MAX_CONSECUTIVE_FAILURES = 5
 const REQUEST_TIMEOUT_MS = 15_000
 
 /** Busiest `host/path` strings over the lookback window, most-hit first. */
@@ -206,13 +212,36 @@ export async function warmTopPaths(): Promise<void> {
   }
 
   let warmed = 0
+  let consecutiveFailures = 0
+  let stoppedEarly = ''
   const failures: string[] = []
   const queue = [...paths]
+
   const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
     for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
+      if (Date.now() - started > MAX_TOTAL_MS) {
+        stoppedEarly = 'time budget'
+        return
+      }
+
       const result = await warmPath(next, port)
-      if (result.ok) warmed++
-      else failures.push(`${next} (${result.status})`)
+      if (result.ok) {
+        warmed++
+        consecutiveFailures = 0
+      } else {
+        failures.push(`${next} (${result.status})`)
+        // A run of timeouts or connection errors means the server is
+        // struggling — exactly the situation where warming must back off
+        // rather than pile on.
+        if (typeof result.status !== 'number') consecutiveFailures++
+        if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+          stoppedEarly = `${consecutiveFailures} consecutive failures`
+          return
+        }
+      }
+
+      // Breathe, so real requests get the instance back between renders.
+      await new Promise(r => setTimeout(r, DELAY_BETWEEN_MS))
     }
   })
   await Promise.all(workers)
@@ -220,7 +249,8 @@ export async function warmTopPaths(): Promise<void> {
   console.log(
     `[Warmer] Warmed ${warmed}/${paths.length} paths ` +
       `(${requested.length} requested, ${paths.length - requested.length} from sitemaps) ` +
-      `in ${Math.round((Date.now() - started) / 1000)}s`
+      `in ${Math.round((Date.now() - started) / 1000)}s` +
+      (stoppedEarly ? ` — stopped early: ${stoppedEarly}` : '')
   )
   // Name the failures: "warmed 1/4" on its own gave no way to tell a 404 from a
   // dropped Host header.

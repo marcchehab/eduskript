@@ -24,14 +24,15 @@ export async function register() {
 
     // Re-render the busiest URLs so the first real visitor after a deploy does
     // not pay for a cold ISR cache. Deliberately not awaited — startup must not
-    // block on it — and delayed so the server is actually accepting requests
-    // (the warmer calls back in over localhost).
+    // block on it — and delayed well past readiness: the warmer calls back in
+    // over localhost, and an aggressive one already took production down once
+    // by competing with real traffic during startup.
     if (process.env.WARM_ON_BOOT !== '0') {
       setTimeout(() => {
         void import('@/lib/cache-warmer')
           .then(({ warmTopPaths }) => warmTopPaths())
           .catch(error => console.error('[Warmer] Failed to start:', error))
-      }, 10_000).unref()
+      }, 30_000).unref()
     }
   }
 }
