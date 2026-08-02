@@ -20,8 +20,11 @@ import { PATH_METRIC_PREFIX } from '@/lib/metrics/buffer'
  *     we record are vulnerability scans, which were taking warm slots from real
  *     pages. Deleting those rows would not have helped, since the scanners
  *     return within the hour.
- *   - recorded request counts (recordPathHit) decide the ORDER, so the pages
- *     people actually open are cached first when a run is cut short.
+ *   - recorded request counts (recordPathHit) decide the ORDER. With the cap
+ *     currently above the sitemap size this changes nothing about *what* gets
+ *     warmed, but it still decides what is warm first if the budget or the
+ *     breaker cuts a run short, and it becomes load-bearing again as soon as
+ *     the sitemap outgrows the cap.
  *
  * A URL absent from the sitemap is never warmed — unlisted pages and /p/{id}
  * links stay cold until something requests them.
@@ -36,14 +39,19 @@ import { PATH_METRIC_PREFIX } from '@/lib/metrics/buffer'
 // Warming 1000 URLs at concurrency 4 took production down: renders are heavy
 // (markdown, KaTeX, plugins) and the instance is small, so the burst starved
 // real requests and every host started returning 504. The warm-up is a
-// background nicety and must never compete with serving — hence a modest cap,
-// one request at a time, a pause between them, a total time budget, and a
-// breaker that gives up if the server starts failing.
-const DEFAULT_TOP_N = 100
+// background nicety and must never compete with serving — hence one request at
+// a time, a pause between them, a total time budget, and a breaker that gives
+// up if the server starts failing.
+//
+// The cap covers the whole public surface (497 sitemap URLs as of 2026-08-02).
+// Measured at ~0.57 s per URL including the pause, so a full pass is roughly
+// five minutes and the budget leaves room for growth. Pacing is what makes this
+// safe, not the size of the list — the failure was concurrency, not count.
+const DEFAULT_TOP_N = 500
 const LOOKBACK_DAYS = 7
 const CONCURRENCY = 1
 const DELAY_BETWEEN_MS = 400
-const MAX_TOTAL_MS = 4 * 60_000
+const MAX_TOTAL_MS = 10 * 60_000
 const MAX_CONSECUTIVE_FAILURES = 5
 const REQUEST_TIMEOUT_MS = 15_000
 
