@@ -13,13 +13,18 @@ import { PATH_METRIC_PREFIX } from '@/lib/metrics/buffer'
  * burst while the instance is already awake, after which the endpoint can sleep
  * through the crawler traffic that follows.
  *
- * The list is the union of two sources, and the distinction matters:
+ * Two sources with strictly separate jobs:
  *
- *   - recorded request counts (recordPathHit) decide the ORDER, because they
- *     are the only real popularity signal we have;
- *   - each host's sitemap decides the COVERAGE, because a URL nobody has
- *     requested yet is precisely the one that will cost a cold render when a
- *     crawler reaches it.
+ *   - each host's sitemap decides WHAT is warmed. It is the authoritative list
+ *     of public URLs, and it excludes junk for free: about a fifth of the paths
+ *     we record are vulnerability scans, which were taking warm slots from real
+ *     pages. Deleting those rows would not have helped, since the scanners
+ *     return within the hour.
+ *   - recorded request counts (recordPathHit) decide the ORDER, so the pages
+ *     people actually open are cached first when a run is cut short.
+ *
+ * A URL absent from the sitemap is never warmed — unlisted pages and /p/{id}
+ * links stay cold until something requests them.
  *
  * Warming only the top 50 was measured to be far too little: crawlers walk the
  * long tail and rarely repeat a URL, so 393 distinct paths were requested in
@@ -42,22 +47,33 @@ const MAX_TOTAL_MS = 4 * 60_000
 const MAX_CONSECUTIVE_FAILURES = 5
 const REQUEST_TIMEOUT_MS = 15_000
 
-/** Busiest `host/path` strings over the lookback window, most-hit first. */
-async function getTopPaths(limit: number): Promise<string[]> {
+/**
+ * Request counts per `host/path` over the lookback window.
+ *
+ * Used only to ORDER the sitemap URLs, never to choose them: roughly a fifth of
+ * the recorded paths are vulnerability scans (/wp-admin, /wp-includes, random
+ * probes) which would otherwise take warm slots from real pages. Deleting those
+ * rows would not help — the scanners come back within the hour — but they never
+ * appear in a sitemap, so intersecting is self-maintaining.
+ */
+async function getHitCounts(): Promise<Map<string, number>> {
   const { prismaBase } = await import('@/lib/prisma')
   const since = new Date(Date.now() - LOOKBACK_DAYS * 86400000)
 
-  const rows = await prismaBase.$queryRaw<Array<{ name: string }>>`
-    SELECT name
+  const rows = await prismaBase.$queryRaw<Array<{ name: string; hits: bigint }>>`
+    SELECT name, SUM(count) AS hits
       FROM metric_points
      WHERE name LIKE ${PATH_METRIC_PREFIX + '%'}
        AND timestamp >= ${since}
      GROUP BY name
-     ORDER BY SUM(count) DESC
-     LIMIT ${limit}
   `
 
-  return rows.map(r => r.name.slice(PATH_METRIC_PREFIX.length)).filter(Boolean)
+  const counts = new Map<string, number>()
+  for (const row of rows) {
+    const path = row.name.slice(PATH_METRIC_PREFIX.length)
+    if (path) counts.set(path, Number(row.hits))
+  }
+  return counts
 }
 
 /** Every host we serve: verified custom domains plus the app's own hostnames. */
@@ -183,33 +199,35 @@ export async function warmTopPaths(): Promise<void> {
   const port = process.env.PORT || '3000'
   const started = Date.now()
 
-  // Requested paths first, in popularity order, so the URLs people actually
-  // use are cached earliest even if the burst is cut short.
-  let requested: string[] = []
-  try {
-    requested = await getTopPaths(limit)
-  } catch (error) {
-    console.error('[Warmer] Could not read the path history:', error)
-  }
-
-  // Then everything else the sitemaps advertise. This is the part that stops a
-  // crawler from finding cold URLs all day; the hit counts alone only ever
-  // cover what has already been paid for once.
+  // The sitemaps decide WHAT may be warmed — they are the authoritative list of
+  // public URLs, and scanner probes never appear in one.
   let advertised: string[] = []
   try {
     const hosts = await getKnownHosts()
     const perHost = await Promise.all(hosts.map(host => getSitemapPaths(host, port)))
-    advertised = perHost.flat()
+    advertised = [...new Set(perHost.flat())]
   } catch (error) {
     console.error('[Warmer] Could not read the sitemaps:', error)
   }
 
-  const paths = [...new Set([...requested, ...advertised])].slice(0, limit)
-
-  if (paths.length === 0) {
-    console.log('[Warmer] Nothing to warm (no path history and no sitemap URLs)')
+  if (advertised.length === 0) {
+    console.log('[Warmer] No sitemap URLs, nothing to warm')
     return
   }
+
+  // Recorded hits decide the ORDER, so the pages people actually open are
+  // cached first if the run is cut short by the time budget or the breaker.
+  let hits = new Map<string, number>()
+  try {
+    hits = await getHitCounts()
+  } catch (error) {
+    console.error('[Warmer] Could not read the path history, warming in sitemap order:', error)
+  }
+
+  const paths = advertised
+    .sort((a, b) => (hits.get(b) ?? 0) - (hits.get(a) ?? 0))
+    .slice(0, limit)
+  const requestedCount = paths.filter(p => hits.has(p)).length
 
   let warmed = 0
   let consecutiveFailures = 0
@@ -248,7 +266,7 @@ export async function warmTopPaths(): Promise<void> {
 
   console.log(
     `[Warmer] Warmed ${warmed}/${paths.length} paths ` +
-      `(${requested.length} requested, ${paths.length - requested.length} from sitemaps) ` +
+      `(${requestedCount} of them previously requested, ${advertised.length} advertised in total) ` +
       `in ${Math.round((Date.now() - started) / 1000)}s` +
       (stoppedEarly ? ` — stopped early: ${stoppedEarly}` : '')
   )
