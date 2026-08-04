@@ -9,6 +9,7 @@ import JSZip from 'jszip'
 import { createHash } from 'crypto'
 import { uploadTeacherFile, isTeacherS3Configured, teacherFileExists } from '@/lib/s3'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
+import { invalidateSkriptFiles } from '@/lib/skript-files.server'
 
 interface ExportManifest {
   version: number
@@ -871,6 +872,10 @@ export async function processImportZip(
     revalidatePath(`/${userSite.slug}`)
     revalidatePath('/dashboard')
   }
+
+  // An import writes File rows across several skripts; one sweep covers them
+  // all. getSkriptFiles caches until this tag is dropped.
+  invalidateSkriptFiles()
 
   return {
     success: true,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { invalidateSkriptFiles } from '@/lib/skript-files.server'
 
 /**
  * POST /api/files/import
@@ -151,6 +152,8 @@ export async function POST(request: NextRequest) {
       skriptId: true,
     },
   })
+
+  invalidateSkriptFiles(targetSkriptId)
 
   return NextResponse.json({
     file: {

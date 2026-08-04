@@ -10,6 +10,7 @@ import Busboy from 'busboy'
 import { startImportProcessing, getJobStatus, cancelImportJob } from '@/lib/import-job-manager'
 import { uploadTeacherFile, isTeacherS3Configured, teacherFileExists } from '@/lib/s3'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
+import { invalidateSkriptFiles } from '@/lib/skript-files.server'
 
 /**
  * Parse multipart form data using busboy (streaming, bypasses body size limits)
@@ -693,6 +694,10 @@ async function performImport(
       }
     }
   }
+
+  // One sweep at the end rather than per file: an import writes many File rows
+  // across several skripts, and getSkriptFiles caches until the tag is dropped.
+  invalidateSkriptFiles()
 
   return result
 }

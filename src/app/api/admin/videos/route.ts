@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/admin-auth'
 import { prisma } from '@/lib/prisma'
+import { invalidateSkriptFiles } from '@/lib/skript-files.server'
 
 export async function POST(request: NextRequest) {
   const { error, session } = await requireAdmin()
@@ -31,6 +32,9 @@ export async function POST(request: NextRequest) {
       uploadedById: session!.user.id,
     },
   })
+
+  // No skript to name here — an admin-created video is linked later.
+  invalidateSkriptFiles()
 
   return NextResponse.json(video, { status: 201 })
 }

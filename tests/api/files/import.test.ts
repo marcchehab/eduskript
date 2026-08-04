@@ -3,6 +3,9 @@ import { NextRequest } from 'next/server'
 import type { Session } from 'next-auth'
 
 vi.mock('next-auth', () => ({ getServerSession: vi.fn() }))
+// The route drops the getSkriptFiles cache tag on success; revalidateTag needs
+// a Next request context, which calling the handler directly does not provide.
+vi.mock('next/cache', () => ({ revalidateTag: vi.fn(), unstable_cache: (fn: unknown) => fn }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {

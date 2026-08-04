@@ -75,6 +75,7 @@ import {
   getTeacherFileUrl,
   teacherFileExists,
 } from './s3'
+import { invalidateSkriptFiles } from './skript-files.server'
 
 // File storage configuration - exported for pre-validation in upload handlers
 // 500MB default for direct S3 uploads (large videos/databases)
@@ -269,6 +270,10 @@ export async function saveFile({
     })
   }
 
+  // Markdown renders read the file list through getSkriptFiles, which caches
+  // until this tag is dropped.
+  invalidateSkriptFiles(skriptId)
+
   return {
     id: file.id,
     hash,
@@ -364,6 +369,8 @@ export async function createDirectory({
     }
   })
 
+  invalidateSkriptFiles(skriptId)
+
   return { id: directory.id }
 }
 
@@ -450,6 +457,8 @@ export async function deleteFile(fileId: string, userId: string): Promise<void> 
   await prisma.file.delete({
     where: { id: fileId }
   })
+
+  invalidateSkriptFiles(file.skriptId)
 }
 
 /**

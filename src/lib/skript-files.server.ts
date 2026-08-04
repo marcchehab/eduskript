@@ -5,8 +5,9 @@
  * in server components or API routes.
  */
 
-import { unstable_cache } from 'next/cache'
+import { revalidateTag, unstable_cache } from 'next/cache'
 import { prisma } from './prisma'
+import { CACHE_TAGS } from './cached-queries'
 import { getS3Key } from './file-storage'
 import { getTeacherFileUrl } from './s3'
 import type { SkriptFilesData, SkriptFile, VideoInfo } from './skript-files'
@@ -82,20 +83,46 @@ async function fetchSkriptFiles(skriptId: string): Promise<SkriptFilesData> {
 }
 
 /**
+ * Coarse tag for callers that cannot name the affected skript — the Mux webhook
+ * and the admin video tools work from an asset or video id, and a video is M2M
+ * with skripts. Dropping every skript's file cache is fine there: both are rare,
+ * manual events, and the entries rebuild from two indexed queries.
+ */
+export const SKRIPT_FILES_TAG = 'skript-files'
+
+/**
+ * Drop the cached file/video listing after a write.
+ *
+ * Call with the skript id where it is known, without it where it is not. Every
+ * writer of File or Video rows must call this — see the list in the callers:
+ * upload confirm, file delete, files/import, import, import-actions,
+ * file-storage, videos upload-url, videos import, video delete, admin videos,
+ * Mux webhook.
+ */
+export function invalidateSkriptFiles(skriptId?: string | null): void {
+  revalidateTag(SKRIPT_FILES_TAG, { expire: 0 })
+  if (skriptId) revalidateTag(CACHE_TAGS.skript(skriptId), { expire: 0 })
+}
+
+/**
  * Cached wrapper — 2 queries on every markdown render otherwise.
  *
- * Time-based (60s), not tag-based, on purpose: files and videos are written
- * from seven places (upload confirm, file import, video upload-url, admin
- * videos, import-actions, file-storage, files/import) and none of them
- * invalidate a cache tag today. A tagged forever-cache would therefore show a
- * teacher's freshly uploaded image as missing until the next deploy. A minute
- * of staleness that heals itself is the safer trade; if a tag is ever wired
- * into all seven writers, switch to `tags: [CACHE_TAGS.skript(skriptId)]`.
+ * Tag-based and never time-expiring. It used to be `revalidate: 60`, which was
+ * a defensible trade on its own (files are written from a dozen places, none of
+ * which invalidated anything, so a forever-cache would have hidden a teacher's
+ * fresh upload until the next deploy) — but it was not local in effect. A
+ * route's revalidation is the MINIMUM of its segment config and every cached
+ * source used during the render, and this one is reached from
+ * ServerMarkdownRenderer, i.e. from every public page. So one 60-second data
+ * cache silently overrode `export const revalidate = false` across the whole
+ * site: measured, a homepage went stale ~2 minutes after being warmed, which is
+ * why the database never got its 5-minute idle window no matter how much else
+ * was cached.
  */
 export async function getSkriptFiles(skriptId: string): Promise<SkriptFilesData> {
   return unstable_cache(
     () => fetchSkriptFiles(skriptId),
     ['skript-files', skriptId],
-    { revalidate: 60 }
+    { tags: [SKRIPT_FILES_TAG, CACHE_TAGS.skript(skriptId)], revalidate: false }
   )()
 }

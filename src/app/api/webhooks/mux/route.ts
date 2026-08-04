@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import crypto from 'crypto'
+import { invalidateSkriptFiles } from '@/lib/skript-files.server'
 
 // Mux webhook signature verification
 function verifyWebhookSignature(body: string, signature: string | null, secret: string): boolean {
@@ -101,6 +102,11 @@ export async function POST(request: NextRequest) {
         })
       }
     }
+
+    // Playback ids and status live in Video.metadata, which markdown renders
+    // read through getSkriptFiles. The webhook only knows an upload/asset id,
+    // and a video is M2M with skripts, so drop the whole file cache.
+    invalidateSkriptFiles()
 
     return NextResponse.json({ received: true })
   } catch (error) {

@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getFileById, sanitizeFilename } from '@/lib/file-storage'
 import { prisma } from '@/lib/prisma'
+import { invalidateSkriptFiles } from '@/lib/skript-files.server'
 
 function getPlaceholderUrl(request: NextRequest): string {
   const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || 'localhost'
@@ -146,6 +147,9 @@ export async function PATCH(
         updatedAt: new Date()
       }
     })
+
+    // Renaming changes the key markdown looks the file up by.
+    invalidateSkriptFiles(fileRecord.skriptId)
 
     return NextResponse.json({
       success: true,

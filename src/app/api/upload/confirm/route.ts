@@ -11,6 +11,7 @@ import {
   getTeacherFileUrl
 } from '@/lib/s3'
 import { createHash } from 'crypto'
+import { invalidateSkriptFiles } from '@/lib/skript-files.server'
 
 /**
  * Confirm a direct S3 upload and create the database record
@@ -140,6 +141,8 @@ export async function POST(request: NextRequest) {
         }
       })
 
+      invalidateSkriptFiles(skriptId)
+
       return NextResponse.json({
         id: existingFile.id,
         name: filename,
@@ -166,6 +169,8 @@ export async function POST(request: NextRequest) {
         createdBy: session.user.id
       }
     })
+
+    invalidateSkriptFiles(skriptId)
 
     return NextResponse.json({
       id: savedFile.id,

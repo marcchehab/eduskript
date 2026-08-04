@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import Mux from '@mux/mux-node'
+import { invalidateSkriptFiles } from '@/lib/skript-files.server'
 
 const mux = new Mux({
   tokenId: process.env.MUX_TOKEN_ID!,
@@ -82,6 +83,8 @@ export async function POST(request: NextRequest) {
         ...(skriptId ? { skripts: { connect: { id: skriptId } } } : {}),
       },
     })
+
+    invalidateSkriptFiles(skriptId)
 
     return NextResponse.json({
       uploadUrl: upload.url,

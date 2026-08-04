@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { invalidateSkriptFiles } from '@/lib/skript-files.server'
 
 export async function DELETE(
   _request: NextRequest,
@@ -27,6 +28,8 @@ export async function DELETE(
   // TODO: Also delete the asset on Mux (via Mux API) to avoid orphaned assets and billing.
   // For now this only removes the database entry.
   await prisma.video.delete({ where: { id } })
+  // A video is M2M with skripts, so drop every skript's file cache.
+  invalidateSkriptFiles()
 
   return NextResponse.json({ ok: true })
 }

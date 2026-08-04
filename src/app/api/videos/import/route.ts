@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { invalidateSkriptFiles } from '@/lib/skript-files.server'
 
 /**
  * POST /api/videos/import
@@ -89,6 +90,8 @@ export async function POST(request: NextRequest) {
     where: { id: sourceVideoId },
     data: { skripts: { connect: { id: targetSkriptId } } },
   })
+
+  invalidateSkriptFiles(targetSkriptId)
 
   const metadata = video.metadata as Record<string, unknown> | null
   return NextResponse.json({
