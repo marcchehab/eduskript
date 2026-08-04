@@ -4,6 +4,7 @@ import { revalidatePath, revalidateTag } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { CACHE_TAGS } from '@/lib/cached-queries'
+import { invalidateSitemaps } from '@/lib/sitemap-cache'
 import {
   ConflictError,
   NotFoundError,
@@ -93,6 +94,7 @@ export async function DELETE(
     // /p/{id} caches this page's canonical URL (page-stable-link.server.ts);
     // without this it would keep redirecting to a now-dead URL.
     revalidateTag(CACHE_TAGS.page(id), { expire: 0 })
+    invalidateSitemaps()
     revalidatePath('/dashboard/page-builder')
 
     return NextResponse.json({ success: true })

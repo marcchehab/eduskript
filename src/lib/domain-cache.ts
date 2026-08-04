@@ -1,5 +1,6 @@
 import { revalidateTag } from 'next/cache'
 import { CACHE_TAGS } from '@/lib/cached-queries'
+import { invalidateTenantConfig } from '@/lib/tenant'
 
 /**
  * Drop the cached domain→site mapping for `domain`.
@@ -16,4 +17,7 @@ export function invalidateDomainCache(domain: string): void {
   // `expire: 0` — the cached entry uses `revalidate: false`, so without an
   // explicit expiry the tag sweep would leave it serving stale forever.
   revalidateTag(CACHE_TAGS.customDomain(domain), { expire: 0 })
+  // The same write changes which site a host resolves to, and with it the
+  // language served for that host (src/lib/tenant.ts).
+  invalidateTenantConfig()
 }

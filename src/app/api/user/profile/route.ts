@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { revalidateTag, revalidatePath } from 'next/cache'
 import { invalidateStableLinks } from '@/lib/page-stable-link.server'
+import { invalidateSitemaps } from '@/lib/sitemap-cache'
+import { invalidateTenantConfig } from '@/lib/tenant'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { resolveOwnedSite } from '@/lib/sites'
@@ -286,7 +288,12 @@ export async function PATCH(request: NextRequest) {
       // The site slug is the first segment of every page's canonical URL,
       // which /p/{id} caches.
       invalidateStableLinks()
+      invalidateSitemaps()
     }
+
+    // pageLanguage lives on Site and is cached per host (src/lib/tenant.ts);
+    // it can change without the slug changing, so this is unconditional.
+    invalidateTenantConfig()
 
     return NextResponse.json(result)
   } catch (error) {

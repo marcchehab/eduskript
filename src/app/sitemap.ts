@@ -3,6 +3,7 @@ import { unstable_cache } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { getCurrentTenant } from '@/lib/tenant'
+import { SITEMAP_TAG } from '@/lib/sitemap-cache'
 
 // Per-host sitemap. Both eduskript.org and informatikgarten.ch run the same
 // Next.js app, so URLs must be tagged with the request host or each tenant's
@@ -198,7 +199,7 @@ const getTenantEntries = (host: string, baseUrl: string) =>
       return []
     },
     ['sitemap', host],
-    { revalidate: 3600 }
+    { tags: [SITEMAP_TAG], revalidate: false }
   )()
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {

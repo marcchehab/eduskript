@@ -13,7 +13,7 @@
  */
 
 import { headers } from 'next/headers'
-import { unstable_cache } from 'next/cache'
+import { revalidateTag, unstable_cache } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 
@@ -44,11 +44,20 @@ export async function getRequestHost(): Promise<string> {
 
 /**
  * Resolve a custom-domain host to its configured language.
- * Cached so the root layout's per-request lookup doesn't hit the DB on
- * every page load. Cache busts after 5 minutes; explicit invalidation can
- * be added via the `tenant-config` tag if dashboard edits need to be
- * reflected immediately.
+ *
+ * Tag-based and never time-expiring. It used to be `revalidate: 300`, which
+ * looked harmless but was a steady wake-up call: robots.txt and sitemap.xml are
+ * dynamic and crawlers hit them constantly, so with one entry per host the
+ * cache expired roughly every 100 seconds across three hosts — and the managed
+ * Postgres only sleeps after 5 uninterrupted minutes without a connection.
+ * Query volume was never the issue; a fixed-interval lookup is the one shape
+ * that reliably prevents sleep.
+ *
+ * A host's language changes only when someone edits it or re-points a domain,
+ * so `invalidateTenantConfig()` is called from those writers instead.
  */
+export const TENANT_CONFIG_TAG = 'tenant-config'
+
 const lookupTenantLang = unstable_cache(
   async (host: string): Promise<string> => {
     // pageLanguage now lives on Site (org's Site, teacher's Site).
@@ -75,8 +84,13 @@ const lookupTenantLang = unstable_cache(
     return DEFAULT_LANG
   },
   ['tenant-lang-by-host'],
-  { revalidate: 300, tags: ['tenant-config'] },
+  { revalidate: false, tags: [TENANT_CONFIG_TAG] },
 )
+
+/** Drop the cached host→language mapping. */
+export function invalidateTenantConfig(): void {
+  revalidateTag(TENANT_CONFIG_TAG, { expire: 0 })
+}
 
 /** Resolve the current request's canonical host and language. */
 export async function getCurrentTenant(): Promise<TenantInfo> {

@@ -4,6 +4,7 @@ import { revalidatePath, revalidateTag } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { invalidateStableLinks } from '@/lib/page-stable-link.server'
+import { invalidateSitemaps } from '@/lib/sitemap-cache'
 import { checkSkriptPermissions } from '@/lib/permissions'
 import { CACHE_TAGS } from '@/lib/cached-queries'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
@@ -167,6 +168,7 @@ export async function PATCH(
       // A renamed or unpublished skript changes the canonical URL of every
       // page under it, which /p/{id} caches.
       invalidateStableLinks()
+      invalidateSitemaps()
       revalidatePath(`/${pageSlug}/${updatedSkript.slug}`)
       revalidatePath('/dashboard')
     }

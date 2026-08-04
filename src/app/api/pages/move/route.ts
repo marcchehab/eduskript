@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { invalidateStableLinks } from '@/lib/page-stable-link.server'
+import { invalidateSitemaps } from '@/lib/sitemap-cache'
 import { extractReferencedFilenames } from '@/lib/extract-file-references'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 
@@ -195,6 +196,7 @@ export async function POST(request: NextRequest) {
       // Moving a page between skripts changes its canonical URL, which
       // /p/{id} caches.
       invalidateStableLinks()
+      invalidateSitemaps()
       revalidatePath(`/${userSite.slug}`)
       revalidatePath('/dashboard')
     }

@@ -6,8 +6,9 @@
  * must remain green — it's the contract the service is expected to preserve.
  *
  * Side effects under test (PATCH content update):
- *   - 4 static revalidateTag: pageBySlug, skriptBySlug, teacherContent, page(id)
- *     (the last one invalidates the /p/{id} stable-link redirect)
+ *   - 5 static revalidateTag: pageBySlug, skriptBySlug, teacherContent, page(id)
+ *     (which invalidates the /p/{id} stable-link redirect) and sitemaps
+ *     (publishing or renaming changes what the per-host sitemap lists)
  *   - 1 per-org loop: revalidateTag(orgContent) for each OrganizationMember row
  *   - 2 revalidatePath: public page route + /dashboard
  *   - 1 PageVersion.create on content change (none on metadata-only)
@@ -123,7 +124,7 @@ describe('PATCH /api/pages/[id] — cache invalidation contract', () => {
     vi.mocked(prisma.organizationMember.findMany).mockResolvedValue([])
   })
 
-  it('fires the 4 static revalidateTag calls + 2 revalidatePath on content change', async () => {
+  it('fires the 5 static revalidateTag calls + 2 revalidatePath on content change', async () => {
     const response = await PATCH(buildPatchRequest({ content: '# New content' }), {
       params: Promise.resolve({ id: 'page-123' }),
     })
@@ -135,7 +136,8 @@ describe('PATCH /api/pages/[id] — cache invalidation contract', () => {
     expect(tagCalls).toContain('teacher-content:teacher')
     // Keyed on the id, not the slugs: /p/{id} caches this page's canonical URL.
     expect(tagCalls).toContain('page:page-123')
-    expect(tagCalls).toHaveLength(4)
+    expect(tagCalls).toContain('sitemaps')
+    expect(tagCalls).toHaveLength(5)
 
     const pathCalls = vi.mocked(revalidatePath).mock.calls.map((c) => c[0])
     expect(pathCalls).toEqual(['/teacher/algebra-1/old-slug', '/dashboard'])
@@ -154,7 +156,7 @@ describe('PATCH /api/pages/[id] — cache invalidation contract', () => {
     const tagCalls = vi.mocked(revalidateTag).mock.calls.map((c) => c[0])
     expect(tagCalls).toContain('org-content:school-a')
     expect(tagCalls).toContain('org-content:school-b')
-    expect(tagCalls).toHaveLength(6) // 4 static + 2 per-org
+    expect(tagCalls).toHaveLength(7) // 5 static + 2 per-org
   })
 
   it('creates a PageVersion when content changes', async () => {

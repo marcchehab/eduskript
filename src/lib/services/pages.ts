@@ -19,6 +19,7 @@
 import { revalidatePath, revalidateTag } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { CACHE_TAGS } from '@/lib/cached-queries'
+import { invalidateSitemaps } from '@/lib/sitemap-cache'
 import { checkPagePermissions } from '@/lib/permissions'
 import { generateSlug } from '@/lib/markdown'
 import { createLogger } from '@/lib/logger'
@@ -379,6 +380,9 @@ export async function updatePageForUser(
     // or renaming it all change what that redirect should do (or whether it
     // should 404 at all). See resolveStableLink in page-stable-link.server.ts.
     revalidateTag(CACHE_TAGS.page(updatedPage.id), { expire: 0 })
+
+    // Publishing, unpublishing or renaming changes what the sitemaps list.
+    invalidateSitemaps()
 
     revalidatePath('/dashboard')
 
