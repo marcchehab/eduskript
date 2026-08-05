@@ -24,8 +24,15 @@
  *
  * Data sources:
  *   - scripts/data/ai-model-intelligence.json (model slug -> Artificial Analysis slug map)
- *   - https://artificialanalysis.ai/api/v2/data/llms/models (intelligence, speed AND cost;
+ *   - https://artificialanalysis.ai/api/v2/language/models/free (intelligence, speed AND cost;
  *     live, needs ARTIFICIAL_ANALYSIS_API_KEY in .env)
+ *
+ * AA sunset the legacy /api/v2/data/llms/models endpoint (removal 2026-11-04).
+ * We now call the /free replacement: our key is free-tier, and the Pro list
+ * endpoint (/api/v2/language/models) answers 403 for it. The free response
+ * omits reasoning_model, quartile/percentile performance, context window and
+ * parameters — none of which this script uses. It is also paginated
+ * (page_size 200), so we walk pages until has_more is false.
  *
  * All three axes now come from Artificial Analysis. We previously sourced speed
  * from OpenRouter's undocumented frontend stats endpoint and cost from its
@@ -75,10 +82,10 @@ const opts = {
 /**
  * Fetch the full Artificial Analysis model dataset, keyed by AA slug. Each
  * entry carries all three ranking axes so AA is our single live source:
- *   - intelligence: artificial_analysis_intelligence_index
- *   - throughput:   median_output_tokens_per_second (tok/s)
- *   - latency:      median_time_to_first_answer_token (seconds). We use the
- *                   first-*answer*-token field, NOT median_time_to_first_token,
+ *   - intelligence: evaluations.artificial_analysis_intelligence_index
+ *   - throughput:   performance.median_output_tokens_per_second (tok/s)
+ *   - latency:      performance.median_time_to_first_answer_token_seconds. We
+ *                   use the first-*answer*-token field, NOT time_to_first_token,
  *                   because for reasoning variants the latter is inconsistent
  *                   across models (some count visible reasoning tokens at ~1s,
  *                   others only the answer token at ~100s). Time-to-first-answer
@@ -101,23 +108,31 @@ async function fetchArtificialAnalysis() {
     return null
   }
   try {
-    const res = await fetch('https://artificialanalysis.ai/api/v2/data/llms/models', {
-      headers: { 'x-api-key': key },
-    })
-    if (!res.ok) throw new Error(`${res.status}`)
-    const json = await res.json()
     const map = new Map()
-    for (const m of json.data ?? []) {
-      const intelligence = m.evaluations?.artificial_analysis_intelligence_index
-      if (intelligence == null) continue
-      map.set(m.slug, {
-        intelligence,
-        throughput: m.median_output_tokens_per_second,
-        // Seconds; time to first ANSWER token (includes reasoning). See doc above.
-        ttft: m.median_time_to_first_answer_token,
-        cost: m.pricing?.price_1m_output_tokens,
-        provider: m.model_creator?.name ?? '—',
-      })
+    // Paginated since the V2 migration: 200 models per page, ~3 pages today.
+    // MAX_PAGES is a runaway guard, not a real limit — raise it if AA grows.
+    const MAX_PAGES = 25
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      const res = await fetch(
+        `https://artificialanalysis.ai/api/v2/language/models/free?page=${page}`,
+        { headers: { 'x-api-key': key } }
+      )
+      if (!res.ok) throw new Error(`${res.status} on page ${page}`)
+      const json = await res.json()
+      for (const m of json.data ?? []) {
+        const intelligence = m.evaluations?.artificial_analysis_intelligence_index
+        if (intelligence == null) continue
+        map.set(m.slug, {
+          intelligence,
+          throughput: m.performance?.median_output_tokens_per_second,
+          // Seconds; time to first ANSWER token (includes reasoning). See doc above.
+          ttft: m.performance?.median_time_to_first_answer_token_seconds,
+          cost: m.pricing?.price_1m_output_tokens,
+          provider: m.model_creator?.name ?? '—',
+        })
+      }
+      if (!json.pagination?.has_more) break
+      if (page === MAX_PAGES) console.error(`AA pagination hit the ${MAX_PAGES}-page guard — data may be truncated.`)
     }
     return map
   } catch (e) {

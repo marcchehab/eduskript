@@ -1,14 +1,16 @@
 {
-  "_source": "Artificial Analysis Intelligence Index — https://artificialanalysis.ai (API: /api/v2/data/llms/models). Attribution to artificialanalysis.ai is required.",
+  "_source": "Artificial Analysis Intelligence Index — https://artificialanalysis.ai (API: /api/v2/language/models/free). Attribution to artificialanalysis.ai is required.",
   "_note": "Maps model slugs -> Artificial Analysis model slugs. The ranker (scripts/rank-ai-models.mjs) fetches all three ranking axes (intelligence, speed, cost) per AA slug via the AA API (needs ARTIFICIAL_ANALYSIS_API_KEY in .env). AA lists multiple variants per model (reasoning / non-reasoning / effort levels like -high/-medium/-low); the `aa` slug below pins the flagship reasoning variant we compare — we deliberately skip the effort-suffixed and -non-reasoning duplicates. Keys are vendor/model display ids (no longer used for lookups; AA is the sole live source). Curated to current-generation flagships across mainstream API-available providers; refresh with the NEW rows from: node -e listing intel>=40 not-yet-mapped (see git history).",
   "models": {
     "anthropic/claude-fable-5": { "aa": "claude-fable-5" },
+    "anthropic/claude-opus-5": { "aa": "claude-opus-5" },
     "anthropic/claude-opus-4.8": { "aa": "claude-opus-4-8" },
     "anthropic/claude-sonnet-5": { "aa": "claude-sonnet-5" },
     "openai/gpt-5.6-sol": { "aa": "gpt-5-6-sol" },
     "openai/gpt-5.6-terra": { "aa": "gpt-5-6-terra" },
     "openai/gpt-5.6-luna": { "aa": "gpt-5-6-luna" },
     "openai/gpt-5.4-mini": { "aa": "gpt-5-4-mini" },
+    "google/gemini-3.6-flash": { "aa": "gemini-3-6-flash" },
     "google/gemini-3.5-flash": { "aa": "gemini-3-5-flash" },
     "google/gemini-3.5-flash-lite": { "aa": "gemini-3-5-flash-lite" },
     "google/gemini-3.1-pro-preview": { "aa": "gemini-3-1-pro-preview" },
@@ -19,6 +21,11 @@
     "deepseek/deepseek-v4-flash": { "aa": "deepseek-v4-flash" },
     "minimax/minimax-m3": { "aa": "minimax-m3" },
     "qwen/qwen3.7-max": { "aa": "qwen3-7-max" },
-    "meta/muse-spark-1.1": { "aa": "muse-spark-1-1" }
+    "meta/muse-spark-1.1": { "aa": "muse-spark-1-1" },
+    "thinkingmachines/inkling": { "aa": "inkling" },
+    "thinkingmachines/inkling-small": { "aa": "inkling-small" },
+    "tencent/hy3": { "aa": "hy3" },
+    "xiaomi/mimo-v2.5-pro": { "aa": "mimo-v2-5-pro" },
+    "nex-agi/nex-n2-pro": { "aa": "nex-n2-pro" }
   }
 }
