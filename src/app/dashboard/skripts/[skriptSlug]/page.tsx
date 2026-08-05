@@ -58,7 +58,13 @@ export default async function SkriptPage({ params }: SkriptPageProps) {
       title: 'Introduction',
       slug: 'introduction',
       content: `# Introduction\n\nThis is your first page. Start writing here!\n`,
-      isPublished: true,
+      // Draft, like the skript it lives in. Publishing this page by default
+      // produced the one state nobody can act on: a published page inside an
+      // unpublished skript, which is invisible to everyone and gave no signal
+      // beyond a tooltip on a disabled icon. Both start as drafts now, so the
+      // teacher publishes deliberately — and the banner in page-editor.tsx
+      // still covers skripts that ended up mismatched before this change.
+      isPublished: false,
       skriptId: skript.id,
       order: 0,
       authors: {

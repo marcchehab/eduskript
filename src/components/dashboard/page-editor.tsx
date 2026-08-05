@@ -14,7 +14,7 @@ import { EditModal } from '@/components/dashboard/edit-modal'
 import { CreatePageModal } from '@/components/dashboard/create-page-modal'
 import { SkriptAccessManager } from '@/components/permissions/SkriptAccessManager'
 import { EditorWithMedia, type ExtraManageTab } from '@/components/dashboard/editor-with-media'
-import { ArrowLeft, ArrowRightLeft, Save, History, Eye, EyeOff, ClipboardCopy, Check, Shield, Globe, Maximize2, Minimize2, BookA, BookOpen, FileText, FilePenLine, GripVertical, Trash2, Users, Loader2, CircleCheckBig, CircleMinus, Presentation, Link2, GraduationCap } from 'lucide-react'
+import { AlertCircle, ArrowLeft, ArrowRightLeft, Save, History, Eye, EyeOff, ClipboardCopy, Check, Shield, Globe, Maximize2, Minimize2, BookA, BookOpen, FileText, FilePenLine, GripVertical, Trash2, Users, Loader2, CircleCheckBig, CircleMinus, Presentation, Link2, GraduationCap } from 'lucide-react'
 import { ExamStateStepper } from '@/components/exam/exam-state-stepper'
 import type { ExamLifecycleState } from '@/lib/exam-state'
 import {
@@ -714,6 +714,32 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
               </div>
             )}
           </div>
+
+          {/* A new skript starts unpublished but its first page is created
+              published (dashboard/skripts/[skriptSlug]/page.tsx), so this is
+              the state every teacher lands in — not an edge case. The only
+              previous signal was a tooltip on a disabled eye icon, which
+              nobody sees. */}
+          {page.isPublished && !skript.isPublished && (
+            <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
+              <AlertCircle className="h-4 w-4 shrink-0 text-amber-600" />
+              <span>
+                This page is published, but the skript <strong>{skript.title}</strong> is not —
+                so nobody can see it yet.
+              </span>
+              {canEdit && (
+                <PublishToggle
+                  type="skript"
+                  itemId={skript.id}
+                  isPublished={skript.isPublished}
+                  isUnlisted={skript.isUnlisted}
+                  onToggle={() => router.refresh()}
+                  showText
+                  size="sm"
+                />
+              )}
+            </div>
+          )}
         </section>
       )}
 
