@@ -95,6 +95,11 @@ When working in these areas, read the corresponding doc:
 
 Vitest 4 + React Testing Library. v8 coverage, 80%+ target. Husky pre-push runs: type-check, lint, full tests, build. `pnpm validate` for quick check (skips build).
 
+## Work queue
+
+`QUEUE.md` (repo root, gitignored) is the user's task queue for Claude. Do the
+top item first; delete an item from the file once it's done.
+
 ## Conventions
 
 - Don't mark tasks as complete unless the user says so.

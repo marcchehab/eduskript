@@ -87,3 +87,9 @@ prompts.md
 
 # dev query log (QUERY_LOG=1 pnpm dev)
 .querylog.jsonl
+
+# queue for claude
+QUEUE.md
+
+# raw OpenRouter API dump (scratch, regenerate on demand)
+or.json
