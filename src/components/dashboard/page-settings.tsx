@@ -12,6 +12,7 @@ import { Save, Loader2, FileText, Upload, X, ExternalLink, Globe, Wand2 } from '
 import Link from 'next/link'
 import Image from 'next/image'
 import { InlineMarkdown } from '@/components/ui/inline-markdown'
+import { appHostUrl } from '@/lib/custom-domain'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 
@@ -492,7 +493,10 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
                   asChild
                   title="View your public page"
                 >
-                  <a href={`/${session.user.pageSlug}`} target="_blank" rel="noopener noreferrer">
+                  {/* On the teacher's own custom domain this slug is not a
+                      valid path — the proxy already prefixes it — so pin the
+                      link to the app host. */}
+                  <a href={appHostUrl(`/${session.user.pageSlug}`)} target="_blank" rel="noopener noreferrer">
                     <ExternalLink className="h-4 w-4" />
                   </a>
                 </Button>

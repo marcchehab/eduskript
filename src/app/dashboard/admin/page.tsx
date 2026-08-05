@@ -14,6 +14,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Pencil, Trash2, RotateCw, Search, ChevronDown, Plus, Users } from 'lucide-react'
+import { appHostUrl } from '@/lib/custom-domain'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 
@@ -743,7 +744,9 @@ export default function AdminPanelPage() {
                     Page Slug:{' '}
                     {user.pageSlug ? (
                       <Link
-                        href={`/${user.pageSlug}`}
+                        // Another user's page — always on the app host, never
+                        // on whatever custom domain the admin arrived through.
+                        href={appHostUrl(`/${user.pageSlug}`)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="underline hover:text-foreground"
