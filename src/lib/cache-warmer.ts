@@ -43,15 +43,16 @@ import { PATH_METRIC_PREFIX } from '@/lib/metrics/buffer'
 // a time, a pause between them, a total time budget, and a breaker that gives
 // up if the server starts failing.
 //
-// The cap covers the whole public surface (497 sitemap URLs as of 2026-08-02).
-// Measured at ~0.57 s per URL including the pause, so a full pass is roughly
-// five minutes and the budget leaves room for growth. Pacing is what makes this
-// safe, not the size of the list — the failure was concurrency, not count.
-const DEFAULT_TOP_N = 500
+// The cap covers the whole public surface: ~500 sitemap URLs plus the app-host
+// copy of each teacher page (see appHostVariant), so roughly 1000 today.
+// Measured at ~0.57 s per URL including the pause, so a full pass is about ten
+// minutes and the budget leaves room for growth. Pacing is what makes this safe,
+// not the size of the list — the outage was concurrency 4, not count.
+const DEFAULT_TOP_N = 1200
 const LOOKBACK_DAYS = 7
 const CONCURRENCY = 1
 const DELAY_BETWEEN_MS = 400
-const MAX_TOTAL_MS = 10 * 60_000
+const MAX_TOTAL_MS = 20 * 60_000
 const MAX_CONSECUTIVE_FAILURES = 5
 const REQUEST_TIMEOUT_MS = 15_000
 
@@ -84,14 +85,40 @@ async function getHitCounts(): Promise<Map<string, number>> {
   return counts
 }
 
-/** Every host we serve: verified custom domains plus the app's own hostnames. */
-async function getKnownHosts(): Promise<string[]> {
+// Keep in sync with APP_DOMAINS in src/proxy.ts — hardcoded there so a bad DB
+// row cannot take the site offline, so there is nothing to read it from.
+const APP_HOST = 'eduskript.org'
+
+/** Served by the app itself on every host, so they have no per-tenant variant. */
+const APP_LEVEL_PATHS = new Set(['/impressum', '/terms'])
+
+interface KnownHost {
+  host: string
+  /**
+   * Site slug for a teacher custom domain, i.e. the first path segment the same
+   * content is served under on the app host. Null for the app host itself and
+   * for org domains, whose content the app host's own sitemap already lists.
+   */
+  siteSlug: string | null
+}
+
+/** Every host we serve: verified custom domains plus the app's own hostname. */
+async function getKnownHosts(): Promise<KnownHost[]> {
   const { prismaBase } = await import('@/lib/prisma')
+  const { PRIMARY_SITE_ORDER } = await import('@/lib/sites')
 
   const [teacherDomains, orgDomains] = await Promise.all([
     prismaBase.teacherCustomDomain.findMany({
       where: { isVerified: true },
-      select: { domain: true },
+      select: {
+        domain: true,
+        site: { select: { slug: true } },
+        // Legacy rows have no siteId and fall back to the primary site, the
+        // same rule the proxy uses to resolve them.
+        user: {
+          select: { sites: { orderBy: PRIMARY_SITE_ORDER, take: 1, select: { slug: true } } },
+        },
+      },
     }),
     prismaBase.customDomain.findMany({
       where: { isVerified: true },
@@ -99,11 +126,45 @@ async function getKnownHosts(): Promise<string[]> {
     }),
   ])
 
-  // Keep in sync with APP_DOMAINS in src/proxy.ts — hardcoded there so a bad DB
-  // row cannot take the site offline, so there is nothing to read it from.
-  const appHosts = ['eduskript.org']
+  const hosts = new Map<string, KnownHost>()
+  hosts.set(APP_HOST, { host: APP_HOST, siteSlug: null })
+  for (const d of orgDomains) {
+    if (!hosts.has(d.domain)) hosts.set(d.domain, { host: d.domain, siteSlug: null })
+  }
+  for (const d of teacherDomains) {
+    hosts.set(d.domain, {
+      host: d.domain,
+      siteSlug: d.site?.slug ?? d.user?.sites[0]?.slug ?? null,
+    })
+  }
 
-  return [...new Set([...appHosts, ...teacherDomains.map(d => d.domain), ...orgDomains.map(d => d.domain)])]
+  return [...hosts.values()]
+}
+
+/**
+ * The app-host URL serving the same page as `hostAndPath`.
+ *
+ * Every teacher page is reachable twice — on the custom domain and at
+ * eduskript.org/<siteSlug>/… — and the two are separate ISR entries. Only the
+ * custom domain is in a sitemap (deliberately: rel=canonical points there, so
+ * that is what crawlers should index), which left the app-host copies cold and
+ * re-rendered on every crawl. Measured: 623 distinct eduskript.org paths
+ * requested against 49 advertised.
+ *
+ * Both paths stay live on purpose — the app host is the fallback when a custom
+ * domain breaks, which has happened twice — so both need warming.
+ */
+function appHostVariant(hostAndPath: string, siteSlug: string | null): string | null {
+  if (!siteSlug) return null
+  const slash = hostAndPath.indexOf('/')
+  if (slash <= 0) return null
+  const path = hostAndPath.slice(slash)
+
+  // App-level pages appear in every tenant's sitemap but are not tenant
+  // content: eduskript.org/<slug>/impressum does not exist and 404s.
+  if (APP_LEVEL_PATHS.has(path)) return null
+
+  return path === '/' ? `${APP_HOST}/${siteSlug}` : `${APP_HOST}/${siteSlug}${path}`
 }
 
 /**
@@ -212,7 +273,17 @@ export async function warmTopPaths(): Promise<void> {
   let advertised: string[] = []
   try {
     const hosts = await getKnownHosts()
-    const perHost = await Promise.all(hosts.map(host => getSitemapPaths(host, port)))
+    const perHost = await Promise.all(
+      hosts.map(async ({ host, siteSlug }) => {
+        const paths = await getSitemapPaths(host, port)
+        // Warm the app-host copy of each page as well; it is not advertised
+        // anywhere but is served and crawled just the same.
+        const variants = paths
+          .map(p => appHostVariant(p, siteSlug))
+          .filter((p): p is string => p !== null)
+        return [...paths, ...variants]
+      })
+    )
     advertised = [...new Set(perHost.flat())]
   } catch (error) {
     console.error('[Warmer] Could not read the sitemaps:', error)
