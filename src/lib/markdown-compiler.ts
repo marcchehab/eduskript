@@ -28,6 +28,7 @@ const production = {
 import type { ComponentType, ReactNode } from 'react'
 import type { PluggableList } from 'unified'
 import rehypeKatex from 'rehype-katex'
+import 'katex/contrib/mhchem' // registers \ce{} / \pu{} macros on the shared KaTeX instance
 import rehypeSlug from 'rehype-slug'
 import { remarkPlugins } from './markdown-plugins'
 import { rehypeSourceLine } from './rehype-plugins/source-line'
