@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { Pool } from 'pg'
-import { recordMetric, maybeFlushOnDbActivity } from '@/lib/metrics/buffer'
+import { recordMetric, recordDbActivity, maybeFlushOnDbActivity } from '@/lib/metrics/buffer'
 import { logQuery, queryLogEnabled } from '@/lib/query-log'
 
 const globalForPrisma = globalThis as unknown as {
@@ -27,6 +27,26 @@ const pool = globalForPrisma.pool ?? new Pool({
   // the managed-Postgres connection cap.
   max: 20,
 })
+
+// The managed Postgres scales to zero: after ~5 minutes without activity Neon
+// suspends the compute and kills every connection with 57P01 ("terminating
+// connection due to administrator command"). pg surfaces that on an idle
+// pooled client, and an 'error' event with no listener terminates the Node
+// process — so this handler is what stands between an ordinary suspend and a
+// container restart. It only has to log: pg already discards the dead client,
+// and the next query opens a fresh one.
+//
+// In practice the window is narrow, because pg's default idleTimeoutMillis of
+// 10s usually empties the pool long before Neon suspends. Narrow is not zero,
+// and the failure mode is the whole process.
+pool.on('error', (error: Error & { code?: string }) => {
+  if (error.code === '57P01') {
+    console.warn('[DB] Connection dropped by the server suspending; will reconnect on demand.')
+    return
+  }
+  console.error('[DB] Idle pool connection error:', error)
+})
+
 if (process.env.NODE_ENV !== 'production') globalForPrisma.pool = pool
 
 // Create Prisma adapter
@@ -52,6 +72,11 @@ export const prisma = basePrisma.$extends({
         const duration = performance.now() - start
         recordMetric('db_query_time_ms', duration)
         recordMetric('db_queries_total', 1)
+        // Mark this minute as active. The counters above say how much work the
+        // database did; this says when, which is what actually drives the bill
+        // — the instance suspends on a five-minute gap, so spacing costs more
+        // than volume.
+        recordDbActivity()
         // The connection is open right now, so persisting the buffered metrics
         // costs no extra wake — the managed Postgres bills awake-time and
         // sleeps 5 minutes after the last connection. Fire-and-forget: it is

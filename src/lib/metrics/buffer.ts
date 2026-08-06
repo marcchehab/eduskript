@@ -54,6 +54,16 @@ export const PATH_METRIC_PREFIX = 'path:'
 // Bounds the memory a hostile crawler can make us hold by requesting junk URLs.
 const MAX_TRACKED_PATHS = 2000
 
+// Which minutes of which hour saw a DB query, as a 60-bit mask per hour. Read
+// by the awake-time report (src/lib/metrics/db-awake.ts); see the DbActivityHour
+// model for why the resolution is stored rather than a precomputed total.
+//
+// Keyed by hour timestamp so an hour that ends before any flush still lands in
+// its own row, the same carry trick pendingDbBuffer needs.
+const pendingActiveMinutes = new Map<number, bigint>()
+// Two days of unflushed hours means the DB has been unreachable that long.
+const MAX_PENDING_ACTIVITY_HOURS = 48
+
 // Ring buffer of last 60 minutes for admin panel live view
 const recentMinutes: MinuteSnapshot[] = []
 const MAX_RECENT_MINUTES = 60
@@ -131,6 +141,34 @@ export function recordMetric(name: MetricName, value: number): void {
 export function recordPathHit(path: string): void {
   if (pendingPathHits.size >= MAX_TRACKED_PATHS && !pendingPathHits.has(path)) return
   pendingPathHits.set(path, (pendingPathHits.get(path) ?? 0) + 1)
+}
+
+/**
+ * Mark the current minute as one in which the database was queried.
+ *
+ * Called from the Prisma extension alongside the query counters. Deliberately
+ * separate from recordMetric: the counters answer "how much", this answers
+ * "when", and only the latter can reconstruct awake-time, because the instance
+ * suspends on a gap rather than on a volume.
+ *
+ * O(1) and allocation-free in the common case — the hour's mask already exists
+ * and the bit is already set.
+ */
+export function recordDbActivity(): void {
+  const now = Date.now()
+  const hour = Math.floor(now / 3600000) * 3600000
+  const minuteOfHour = Math.floor((now - hour) / 60000)
+  const bit = 1n << BigInt(minuteOfHour)
+
+  const mask = pendingActiveMinutes.get(hour) ?? 0n
+  if (mask & bit) return
+  pendingActiveMinutes.set(hour, mask | bit)
+
+  while (pendingActiveMinutes.size > MAX_PENDING_ACTIVITY_HOURS) {
+    const oldest = pendingActiveMinutes.keys().next().value
+    if (oldest === undefined) break
+    pendingActiveMinutes.delete(oldest)
+  }
 }
 
 /** Snapshot and clear the local buffers, for shipping to another runtime. */
@@ -265,7 +303,10 @@ async function flushPendingToDb(): Promise<void> {
   pendingPathHits.clear()
   const dayTimestamp = new Date(Math.floor(Date.now() / 86400000) * 86400000)
 
-  if (batches.length === 0 && pathEntries.length === 0) return
+  const activityEntries = Array.from(pendingActiveMinutes.entries())
+  pendingActiveMinutes.clear()
+
+  if (batches.length === 0 && pathEntries.length === 0 && activityEntries.length === 0) return
 
   lastDbFlushAt = Date.now()
 
@@ -297,6 +338,17 @@ async function flushPendingToDb(): Promise<void> {
           count = metric_points.count + EXCLUDED.count
       `
     }
+    for (const [hour, mask] of activityEntries) {
+      // Bitwise OR, not addition: two instances active in the same minute must
+      // union to one active minute, or the awake-time would exceed wall-clock.
+      await prismaBase.$executeRaw`
+        INSERT INTO db_activity_hours (hour, minutes, updated_at)
+        VALUES (${new Date(hour)}, ${mask}, NOW())
+        ON CONFLICT (hour) DO UPDATE SET
+          minutes = db_activity_hours.minutes | EXCLUDED.minutes,
+          updated_at = NOW()
+      `
+    }
   } catch (error) {
     // Put every batch back with its own hour intact, so a failed write no
     // longer corrupts the hourly split the way the old single-buffer retry did.
@@ -315,6 +367,14 @@ async function flushPendingToDb(): Promise<void> {
     while (carriedHours.length > MAX_CARRIED_HOURS) carriedHours.shift()
     for (const [path, hits] of pathEntries) {
       pendingPathHits.set(path, (pendingPathHits.get(path) ?? 0) + hits)
+    }
+    for (const [hour, mask] of activityEntries) {
+      pendingActiveMinutes.set(hour, (pendingActiveMinutes.get(hour) ?? 0n) | mask)
+    }
+    while (pendingActiveMinutes.size > MAX_PENDING_ACTIVITY_HOURS) {
+      const oldest = pendingActiveMinutes.keys().next().value
+      if (oldest === undefined) break
+      pendingActiveMinutes.delete(oldest)
     }
     console.error('[Metrics] Failed to flush to DB:', error)
   }
@@ -337,7 +397,12 @@ let flushInFlight = false
 
 export function maybeFlushOnDbActivity(): void {
   if (flushInFlight) return
-  if (pendingDbBuffer.size === 0 && carriedHours.length === 0 && pendingPathHits.size === 0) return
+  if (
+    pendingDbBuffer.size === 0 &&
+    carriedHours.length === 0 &&
+    pendingPathHits.size === 0 &&
+    pendingActiveMinutes.size === 0
+  ) return
   if (Date.now() - lastDbFlushAt < MIN_FLUSH_SPACING_MS) return
 
   flushInFlight = true

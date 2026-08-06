@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { RefreshCw, TrendingUp, Clock, Database } from 'lucide-react'
 import { formatMetricName, getMetricUnit, getMetricDisplay, METRICS, CALCULATED_METRICS, type MetricName } from '@/lib/metrics/registry'
+import { DbAwakeCard } from '@/components/dashboard/db-awake-card'
 
 interface MetricData {
   avg: number
@@ -191,6 +192,10 @@ export default function MetricsAdminPage() {
           {error}
         </div>
       )}
+
+      {/* Awake time first: it is the only number on this page that maps to a
+          bill, and it answers a question the query counters cannot. */}
+      <DbAwakeCard />
 
       {/* Metric Cards Overview */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

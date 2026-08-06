@@ -7,7 +7,7 @@
  * Tasks:
  * - Expire trials and cancelled subscriptions past their end date
  * - Reset demo user content from demo-content/ files
- * - Prune old metric_points rows
+ * - Prune old metric_points and db_activity_hours rows
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -87,16 +87,23 @@ export async function POST(request: NextRequest) {
     const pathCutoff = new Date(now - 10 * 86400000)
     const metricCutoff = new Date(now - 365 * 86400000)
 
-    const [prunedPaths, prunedMetrics] = await Promise.all([
+    const [prunedPaths, prunedMetrics, prunedActivity] = await Promise.all([
       prisma.metricPoint.deleteMany({
         where: { name: { startsWith: PATH_METRIC_PREFIX }, timestamp: { lt: pathCutoff } },
       }),
       prisma.metricPoint.deleteMany({
         where: { NOT: { name: { startsWith: PATH_METRIC_PREFIX } }, timestamp: { lt: metricCutoff } },
       }),
+      // 24 rows a day, so a year is under 9k rows; same retention as the
+      // metrics it sits beside.
+      prisma.dbActivityHour.deleteMany({ where: { hour: { lt: metricCutoff } } }),
     ])
 
-    results.prunedMetricPoints = { paths: prunedPaths.count, metrics: prunedMetrics.count }
+    results.prunedMetricPoints = {
+      paths: prunedPaths.count,
+      metrics: prunedMetrics.count,
+      activityHours: prunedActivity.count,
+    }
   } catch (error) {
     console.error('[cron] prune-metrics error:', error)
     results.prunedMetricPoints = 'error'

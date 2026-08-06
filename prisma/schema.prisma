@@ -1319,6 +1319,31 @@ model MetricPoint {
   @@map("metric_points")
 }
 
+// One row per hour, recording WHICH minutes of that hour saw a database query.
+//
+// The managed Postgres bills awake-time and suspends ~5 minutes after the last
+// activity, so the cost driver is how the queries are SPREAD, not how many
+// there are: one query every five minutes costs a full hour, while a thousand
+// in one burst costs five minutes. metric_points counts queries per hour and
+// therefore cannot distinguish those two cases at all.
+//
+// `minutes` is a 60-bit mask, bit N set = minute N of the hour had at least one
+// query. Storing the resolution instead of a precomputed total lets the awake
+// time be summed over any window at read time, and lets the 5-minute
+// suspend delay carry correctly across hour boundaries. Merging is a bitwise
+// OR, so several instances writing the same hour union rather than double-count
+// (a plain sum would).
+//
+// Only queries through the extended Prisma client are seen; cron jobs, Prisma
+// Studio and psql keep the instance awake without appearing here.
+model DbActivityHour {
+  hour      DateTime @id // Rounded to the hour
+  minutes   BigInt   @default(0) // Bitmask: bit N = minute N had a query
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("db_activity_hours")
+}
+
 // Subscription plans available for purchase
 model Plan {
   id             String   @id @default(cuid())
