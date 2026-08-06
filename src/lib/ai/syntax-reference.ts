@@ -241,6 +241,13 @@ Examples:
 $$
 \\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}
 $$
+\`\`\`
+
+**Chemistry (mhchem):** \`\\ce{...}\` inside \`$...$\`/\`$$...$$\` for reaction equations — auto-subscripts numbers, \`<=>\` for equilibrium arrows, \`^2+\`/\`^-\` for charges. Prefer this over hand-rolled \`\\mathrm{}\`.
+\`\`\`markdown
+$$
+\\ce{N2(g) + 3 H2(g) <=> 2 NH3(g)}
+$$
 \`\`\``)
 
   // Images
@@ -742,7 +749,7 @@ export function getCondensedSyntaxReference(): string {
   - Optional: \`points="10"\`, \`max-checks="5"\`. Check block is never rendered, only runs on "Check".
   - **Turtle exercises:** \`turtle_solution_matches(solution_code, match_colors=False)\` (preferred), \`turtle_matches(expected_segments)\`, \`turtle_path_matches(expected_path)\`. The first runs a teacher-supplied reference solution through the same recording stub; the runner compares the set of drawn segments. Translation- and rotation-tolerant. Pass \`match_colors=True\` to also require matching pen colours per segment. Put long solution strings as a setup variable, then \`assert turtle_solution_matches(solution), "..."\`.
 
-**Math:** \`$inline$\` and \`$$display$$\` (KaTeX)
+**Math:** \`$inline$\` and \`$$display$$\` (KaTeX). Chemistry: \`\\ce{N2(g) + 3 H2(g) <=> 2 NH3(g)}\` (mhchem) — prefer over hand-rolled \`\\mathrm{}\`.
 
 **Images:** \`![alt](img.png)\` or \`<img src="img.png" alt="alt" style="width: 50%" align="left" wrap="true" />\`
 
