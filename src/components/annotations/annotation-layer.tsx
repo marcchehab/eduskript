@@ -2583,6 +2583,25 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     }
   }, [performSave])
 
+  // Flush the 2s autosave debounce on demand. <ai-feedback> reads strokes from
+  // the persisted record, so a student who writes and clicks within 2s would
+  // otherwise be told nothing was written. Listeners push their save promise
+  // into `detail.waitFor` so the caller can await the flush.
+  // @see src/components/markdown/ai-feedback.tsx
+  useEffect(() => {
+    const onFlush = (e: Event) => {
+      const detail = (e as CustomEvent<{ waitFor?: Promise<void>[] }>).detail
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+        saveTimeoutRef.current = null
+      }
+      const done = performSave()
+      detail?.waitFor?.push(done)
+    }
+    window.addEventListener('eduskript:flush-annotations', onFlush)
+    return () => window.removeEventListener('eduskript:flush-annotations', onFlush)
+  }, [performSave])
+
   // Handle canvas annotation update with debounced save
   const handleCanvasUpdate = useCallback((data: string) => {
     log('handleCanvasUpdate called', {

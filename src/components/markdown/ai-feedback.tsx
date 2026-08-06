@@ -216,6 +216,14 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
         if (top > componentTop && top < yBottom) yBottom = top
       }
 
+      // The annotation layer autosaves 2s after the last stroke; without this
+      // flush a student who writes and clicks immediately reads a stale record
+      // and gets the misleading "nothing written here yet" error.
+      // @see src/components/annotations/annotation-layer.tsx (eduskript:flush-annotations)
+      const flush: { waitFor: Promise<void>[] } = { waitFor: [] }
+      window.dispatchEvent(new CustomEvent('eduskript:flush-annotations', { detail: flush }))
+      await Promise.allSettled(flush.waitFor)
+
       const record = await userDataService.get<AnnotationData>(pageId, 'annotations')
       const strokes = parseStrokes(record?.data?.canvasData)
 
