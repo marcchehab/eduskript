@@ -1334,8 +1334,10 @@ model MetricPoint {
 // OR, so several instances writing the same hour union rather than double-count
 // (a plain sum would).
 //
-// Only queries through the extended Prisma client are seen; cron jobs, Prisma
-// Studio and psql keep the instance awake without appearing here.
+// Only queries through the extended Prisma client are seen. The cron route uses
+// it and is counted; the boot cache warmer, the NextAuth adapter and psql go
+// through prismaBase or bypass the app entirely and keep the instance awake
+// without appearing here.
 model DbActivityHour {
   hour      DateTime @id // Rounded to the hour
   minutes   BigInt   @default(0) // Bitmask: bit N = minute N had a query

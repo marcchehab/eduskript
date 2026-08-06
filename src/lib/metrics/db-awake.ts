@@ -12,8 +12,10 @@
  * are not double-counted and a query at 10:59 correctly keeps 11:00–11:03 awake.
  *
  * Caveats worth knowing before trusting the number:
- *   - only queries through the extended Prisma client are recorded; the cron,
- *     psql and Prisma Studio keep the instance awake invisibly.
+ *   - only queries through the extended Prisma client are recorded. The cron
+ *     route uses it and is counted; the NextAuth adapter, the boot cache warmer
+ *     and the metrics flush itself go through prismaBase and are not, as do
+ *     psql and Prisma Studio. So the estimate reads low right after a boot.
  *   - minute resolution means each event is placed within ±1 minute.
  *   - SUSPEND_MINUTES is Koyeb's undocumented Neon setting, observed at ~5 and
  *     not configurable, so treat the result as a close estimate, not a bill.
