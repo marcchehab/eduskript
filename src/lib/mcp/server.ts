@@ -27,6 +27,10 @@ import {
 } from '@/lib/mcp/tools/get-eduskript-context'
 import { listMySkripts, listMySkriptsConfig } from '@/lib/mcp/tools/list-my-skripts'
 import { readPage, readPageConfig } from '@/lib/mcp/tools/read-page'
+import {
+  resolvePageUrl,
+  resolvePageUrlConfig,
+} from '@/lib/mcp/tools/resolve-page-url'
 import { searchMyContent, searchMyContentConfig } from '@/lib/mcp/tools/search-my-content'
 import { updatePage, updatePageConfig } from '@/lib/mcp/tools/update-page'
 import {
@@ -144,7 +148,7 @@ function buildServerInstructions(userPrompt?: string | null): string {
     getCondensedSyntaxReference(),
     '',
     '## MCP-specific guidance',
-    'You are connected to a teacher\'s Eduskript account via MCP. Use the available tools to discover, read, and edit their content. Page-level: list_my_skripts, search_my_content, read_page, create_page, update_page_metadata (title/slug/description/publish), update_page_content (markdown body — destructive, creates a new version each time), list_page_versions + restore_page_version (audit & undo). The legacy update_page is deprecated; prefer the metadata/content split. Skript-level: read_skript, update_skript, read_skript_frontpage, update_skript_frontpage. Sites: list_my_sites (a teacher may own several public pages; primary first). Site-level landing page: read_site_frontpage, update_site_frontpage (no organizationId = the teacher\'s own landing page under their pageSlug — pass siteId to target a specific one of your sites, else the primary is used; pass organizationId for an org landing page, owner/admin only). Collection-level: read_collection, update_collection. Structure & sidebar: create_collection (new sidebar section), create_skript (new skript, placed in the sidebar — published by default; add pages with create_page), place_skript (move an existing skript into a collection or to the sidebar root), reorder_collection_skripts (order skripts within a collection). Creating a skript this way makes it appear in the public sidebar immediately; the dashboard page-builder is only needed for drag-and-drop tweaks. Bulk SEO scan: audit_skript_seo (returns excerpts + issue flags for every page in a skript — call this before sweeping descriptions). The teacher only sees the natural-language reply — show edits in human-readable form rather than raw markdown dumps.',
+    'You are connected to a teacher\'s Eduskript account via MCP. Use the available tools to discover, read, and edit their content. Page-level: list_my_skripts, search_my_content, read_page, resolve_page_url (turn a pasted dashboard/public/org URL into a page — prefer this over search_my_content when given a URL), create_page, update_page_metadata (title/slug/description/publish), update_page_content (markdown body — destructive, creates a new version each time), list_page_versions + restore_page_version (audit & undo). The legacy update_page is deprecated; prefer the metadata/content split. Skript-level: read_skript, update_skript, read_skript_frontpage, update_skript_frontpage. Sites: list_my_sites (a teacher may own several public pages; primary first). Site-level landing page: read_site_frontpage, update_site_frontpage (no organizationId = the teacher\'s own landing page under their pageSlug — pass siteId to target a specific one of your sites, else the primary is used; pass organizationId for an org landing page, owner/admin only). Collection-level: read_collection, update_collection. Structure & sidebar: create_collection (new sidebar section), create_skript (new skript, placed in the sidebar — published by default; add pages with create_page), place_skript (move an existing skript into a collection or to the sidebar root), reorder_collection_skripts (order skripts within a collection). Creating a skript this way makes it appear in the public sidebar immediately; the dashboard page-builder is only needed for drag-and-drop tweaks. Bulk SEO scan: audit_skript_seo (returns excerpts + issue flags for every page in a skript — call this before sweeping descriptions). The teacher only sees the natural-language reply — show edits in human-readable form rather than raw markdown dumps.',
     '- Prefer interactive code editors (`editor` keyword) when an example is meant to be run by students.',
   ]
   if (userPrompt && userPrompt.trim()) {
@@ -170,6 +174,9 @@ export function buildMcpServer(opts: { userPrompt?: string | null } = {}): McpSe
   )
   server.registerTool('read_page', readPageConfig, async (args) =>
     safe('read_page', () => readPage(args)) as never
+  )
+  server.registerTool('resolve_page_url', resolvePageUrlConfig, async (args) =>
+    safe('resolve_page_url', () => resolvePageUrl(args)) as never
   )
   server.registerTool('create_page', createPageConfig, async (args) =>
     safe('create_page', () => createPage(args)) as never

@@ -30,6 +30,7 @@ vi.mock('@/lib/services/pages', async () => {
     createPageForUser: vi.fn(),
     updatePageForUser: vi.fn(),
     searchPagesForUser: vi.fn(),
+    resolvePageUrlForUser: vi.fn(),
   }
 })
 
@@ -55,6 +56,7 @@ import { runWithMcpContext } from '@/lib/mcp/context'
 import {
   getPageForUser,
   PermissionDeniedError,
+  resolvePageUrlForUser,
   searchPagesForUser,
   updatePageForUser,
 } from '@/lib/services/pages'
@@ -67,6 +69,7 @@ import { upsertSkriptFrontPageForUser } from '@/lib/services/skript-frontpages'
 import { updateCollectionForUser } from '@/lib/services/collections'
 import { listMySkripts } from '@/lib/mcp/tools/list-my-skripts'
 import { readPage } from '@/lib/mcp/tools/read-page'
+import { resolvePageUrl } from '@/lib/mcp/tools/resolve-page-url'
 import { searchMyContent } from '@/lib/mcp/tools/search-my-content'
 import { updatePage } from '@/lib/mcp/tools/update-page'
 import { updateSkript } from '@/lib/mcp/tools/update-skript'
@@ -204,6 +207,27 @@ describe('Tool isolation — account A vs account B', () => {
       await searchMyContent({ query: 'foo' })
     })
     expect(vi.mocked(searchPagesForUser).mock.calls[0][0]).toBe('user-A')
+  })
+
+  it('resolve_page_url passes the actor userId, not args', async () => {
+    vi.mocked(resolvePageUrlForUser).mockResolvedValue({
+      id: 'page-1',
+      title: 'x',
+      slug: 'x',
+      description: null,
+      isPublished: true,
+      content: '# x',
+      updatedAt: new Date(),
+      skript: { id: 'sk-1', title: 'Sk', slug: 'sk' },
+    } as never)
+
+    await runWithMcpContext(ctxA, async () => {
+      await resolvePageUrl({ url: 'https://host/dashboard/skripts/sk/pages/x/edit' })
+    })
+
+    const call = vi.mocked(resolvePageUrlForUser).mock.calls[0]
+    expect(call[0]).toBe('user-A')
+    expect(call[1]).toBe('https://host/dashboard/skripts/sk/pages/x/edit')
   })
 
   it('update_skript passes the actor userId, not args', async () => {

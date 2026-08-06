@@ -448,6 +448,93 @@ export async function searchPagesForUser(
 }
 
 /**
+ * Extract {skriptSlug, pageSlug} from a pasted Eduskript URL. Every URL shape
+ * a teacher actually pastes ends in that slug pair:
+ *   - dashboard editor:  /dashboard/skripts/{skriptSlug}/pages/{pageSlug}[/edit]
+ *   - public custom domain: https://host/{skriptSlug}/{pageSlug}
+ *   - public org shorthand: https://eduskript.org/c/{skriptSlug}/{pageSlug}
+ *   - public org full path: https://eduskript.org/{teacherPageSlug}/{skriptSlug}/{pageSlug}
+ * A bare "/path" (no scheme) is accepted too. Returns null if no pair can be
+ * found (e.g. a frontpage URL, which has no page slug).
+ */
+export function parseSkriptAndPageSlugs(
+  url: string
+): { skriptSlug: string; pageSlug: string } | null {
+  let pathname: string
+  try {
+    pathname = new URL(url).pathname
+  } catch {
+    pathname = url
+  }
+
+  const segments = pathname.split('/').filter(Boolean).map(decodeURIComponent)
+
+  if (segments[0] === 'dashboard' && segments[1] === 'skripts') {
+    const skriptSlug = segments[2]
+    const pagesIdx = segments.indexOf('pages', 3)
+    const pageSlug = pagesIdx !== -1 ? segments[pagesIdx + 1] : undefined
+    if (!skriptSlug || !pageSlug) return null
+    return { skriptSlug, pageSlug }
+  }
+
+  if (segments.length < 2) return null
+  const skriptSlug = segments[segments.length - 2]
+  const pageSlug = segments[segments.length - 1]
+  return { skriptSlug, pageSlug }
+}
+
+/**
+ * Resolve a pasted Eduskript URL (dashboard editor, public page, or the /c/
+ * org shorthand) to the page it points at, scoped to the same authorship
+ * check as searchPagesForUser (direct, skript-level, or collection/site
+ * authorship). Unpublished pages resolve fine — only the dashboard editor
+ * URL is expected to point at drafts, and it carries no publish filter.
+ */
+export async function resolvePageUrlForUser(
+  userId: string,
+  url: string,
+  ctx: ActorContext = {}
+) {
+  const parsed = parseSkriptAndPageSlugs(url)
+  if (!parsed) {
+    throw new ValidationError(
+      'Could not find a skript/page slug pair in this URL. Expected a dashboard editor URL ' +
+        '(/dashboard/skripts/{skript}/pages/{page}), a public page URL, or an eduskript.org/c/... URL.'
+    )
+  }
+
+  const skript = await prisma.skript.findFirst({
+    where: {
+      slug: parsed.skriptSlug,
+      ...(ctx.isAdmin
+        ? {}
+        : {
+            OR: [
+              { authors: { some: { userId } } },
+              { collectionSkripts: { some: { collection: { site: { userId } } } } },
+            ],
+          }),
+    },
+    select: { id: true },
+  })
+  if (!skript) {
+    throw new NotFoundError(`No skript with slug "${parsed.skriptSlug}" found for this account`)
+  }
+
+  const page = await prisma.page.findFirst({
+    where: { slug: parsed.pageSlug, skriptId: skript.id },
+    select: { id: true },
+  })
+  if (!page) {
+    throw new NotFoundError(
+      `No page with slug "${parsed.pageSlug}" in skript "${parsed.skriptSlug}"`
+    )
+  }
+
+  return getPageForUser(userId, page.id, ctx)
+}
+
+/**
  * List PageVersion rows for a page the actor authors. Newest first.
  * Returned shape mirrors the GET /api/pages/[id]/versions REST route, plus a
  * `contentLength` field so MCP callers can spot a wipe without fetching every
