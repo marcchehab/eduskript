@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
+import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 
 export default async function PageBuilderPage() {
   const session = await getServerSession(authOptions)
@@ -41,6 +42,24 @@ export default async function PageBuilderPage() {
     )
   }
 
+  // Primary site (lowest `order`), including its verified primary custom
+  // domain if set — see PageBuilderContext.customDomain.
+  const primarySite = session?.user?.id
+    ? await prisma.site.findFirst({
+        where: { userId: session.user.id },
+        orderBy: PRIMARY_SITE_ORDER,
+        select: {
+          id: true,
+          slug: true,
+          teacherCustomDomains: {
+            where: { isVerified: true, isPrimary: true },
+            select: { domain: true },
+            take: 1,
+          },
+        },
+      })
+    : null
+
   return (
     <div className="space-y-6">
       <div>
@@ -52,7 +71,18 @@ export default async function PageBuilderPage() {
         </p>
       </div>
 
-      <PageBuilderInterface />
+      <PageBuilderInterface
+        context={
+          primarySite
+            ? {
+                type: 'user',
+                siteId: primarySite.id,
+                siteSlug: primarySite.slug,
+                customDomain: primarySite.teacherCustomDomains[0]?.domain ?? null,
+              }
+            : undefined
+        }
+      />
     </div>
   )
 }

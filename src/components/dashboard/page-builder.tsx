@@ -46,6 +46,9 @@ interface PageBuilderProps {
   items: PageItem[]
   onItemsChange?: (items: PageItem[], changedCollectionIds?: Set<string>) => void
   onPreview?: () => void
+  // Display string for the public page (e.g. "eduskript.org/my-page"), shown
+  // in the View button. Null/undefined when no page URL is set yet.
+  previewUrl?: string | null
   expandedCollections?: string[]
   onToggleCollection?: (collectionId: string) => void
   // Called when the user saves the collection edit modal (rename + colour).
@@ -69,6 +72,7 @@ export function PageBuilder({
   items,
   onItemsChange,
   onPreview,
+  previewUrl,
   expandedCollections = [],
   onToggleCollection,
   onCollectionUpdate,
@@ -89,6 +93,9 @@ export function PageBuilder({
   const [createCollectionOpen, setCreateCollectionOpen] = useState(false)
   const [newCollectionTitle, setNewCollectionTitle] = useState('')
   const [creatingCollection, setCreatingCollection] = useState(false)
+  const [createSkriptOpen, setCreateSkriptOpen] = useState(false)
+  const [newSkriptTitle, setNewSkriptTitle] = useState('')
+  const [creatingSkript, setCreatingSkript] = useState(false)
 
   const handleSeedData = async () => {
     setSeeding(true)
@@ -144,6 +151,55 @@ export function PageBuilder({
     }
   }
 
+
+  const generateSlug = (title: string) => {
+    return title
+      .toLowerCase()
+      .replace(/[^\w\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .trim()
+  }
+
+  // "Start from scratch" — create a root-level skript (no collection) and
+  // place it straight onto the empty page, instead of the old
+  // create-a-collection flow.
+  const handleCreateSkript = async () => {
+    const title = newSkriptTitle.trim()
+    if (!title) return
+    setCreatingSkript(true)
+    try {
+      const res = await fetch('/api/skripts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, slug: generateSlug(title), description: '' }),
+      })
+      if (res.ok) {
+        const skript = await res.json()
+        setCreateSkriptOpen(false)
+        setNewSkriptTitle('')
+        onItemsChange?.([{
+          id: skript.id,
+          type: 'skript',
+          title: skript.title,
+          description: skript.description ?? undefined,
+          order: 0,
+          slug: skript.slug,
+          isPublished: skript.isPublished,
+          isUnlisted: skript.isUnlisted,
+          permissions: { canEdit: true, canView: true },
+        }])
+        onRefresh?.()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        dialog.showError(data.error || 'Failed to create skript')
+      }
+    } catch {
+      dialog.showError('Failed to create skript')
+    } finally {
+      setCreatingSkript(false)
+    }
+  }
 
   const handleRemoveItem = (id: string, parentId?: string) => {
     if (parentId) {
@@ -207,12 +263,16 @@ export function PageBuilder({
               className="flex items-center gap-2"
             >
               <Eye className="w-4 h-4" />
-              View
+              {previewUrl ? (
+                <span>View Public Page at <strong>{previewUrl}</strong></span>
+              ) : (
+                'View'
+              )}
             </Button>
           </div>
         </div>
         <p className="text-sm text-muted-foreground">
-          Drag collections or skripts from the library to build your page. Skripts can sit at the top level or inside a collection.
+          Drag collections or skripts from the library to build your page.
         </p>
       </CardHeader>
       <CardContent>
@@ -237,7 +297,7 @@ export function PageBuilder({
               )}
             >
               {items.length === 0 ? (
-                <div className="text-center max-w-lg mx-auto">
+                <div id="page-builder-empty-drop-zone" className="text-center max-w-lg mx-auto">
                   {seedError && (
                     <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive mb-4">
                       {seedError}
@@ -278,7 +338,7 @@ export function PageBuilder({
 
                     {/* Start from scratch */}
                     <button
-                      onClick={() => setCreateCollectionOpen(true)}
+                      onClick={() => setCreateSkriptOpen(true)}
                       className={cn(
                         "flex flex-col items-center gap-3 p-6 rounded-lg border-2 border-dashed",
                         "hover:border-primary hover:bg-primary/5 transition-colors text-left"
@@ -288,7 +348,7 @@ export function PageBuilder({
                       <div className="text-center">
                         <p className="font-medium text-sm">Start from scratch</p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          Create an empty collection and build your content step by step
+                          Create a skript and build your content step by step
                         </p>
                       </div>
                     </button>
@@ -365,6 +425,45 @@ export function PageBuilder({
             disabled={creatingCollection || !newCollectionTitle.trim()}
           >
             {creatingCollection ? 'Creating…' : 'Create'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    {/* New-skript prompt for the empty-state "Start from scratch" option.
+        Creates a root-level skript (no collection) and drops it straight
+        onto the page. */}
+    <Dialog open={createSkriptOpen} onOpenChange={setCreateSkriptOpen}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>New skript</DialogTitle>
+        </DialogHeader>
+        <Input
+          autoFocus
+          placeholder="Skript name"
+          value={newSkriptTitle}
+          onChange={(e) => setNewSkriptTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              handleCreateSkript()
+            }
+          }}
+          disabled={creatingSkript}
+        />
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => setCreateSkriptOpen(false)}
+            disabled={creatingSkript}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleCreateSkript}
+            disabled={creatingSkript || !newSkriptTitle.trim()}
+          >
+            {creatingSkript ? 'Creating…' : 'Create'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -551,6 +650,7 @@ function PageBuilderItem({ item, index, onRemove, expandedCollections, onToggleC
                   <Link
                     href={`/dashboard/skripts/${item.slug}`}
                     className="font-medium text-sm truncate hover:underline flex items-center gap-1 w-fit"
+                    title="Edit skript"
                   >
                     {item.title}
                     <Edit className="w-3 h-3 shrink-0" />
@@ -719,6 +819,7 @@ function SimpleSkriptItem({ item, index, parentId, parentCanEdit = true, parentA
                           "font-medium text-xs truncate hover:underline flex items-center gap-1 w-fit",
                           !item.permissions?.canEdit ? "text-muted-foreground" : "text-foreground"
                         )}
+                        title="Edit skript"
                       >
                         {item.title}
                         <Edit className="w-2.5 h-2.5 shrink-0" />
@@ -790,7 +891,7 @@ const PRESET_ACCENT_COLORS = [
   '#ec4899', // pink
 ]
 
-interface CollectionUpdate {
+export interface CollectionUpdate {
   id: string
   title: string
   accentColor?: string | null
@@ -800,7 +901,7 @@ interface CollectionUpdate {
 // title) → input replaces text, autofocus, save on Enter / blur, cancel on
 // Escape. PATCHes the API itself, then notifies the parent so local state
 // can refresh.
-function CollectionTitleInlineEditor({
+export function CollectionTitleInlineEditor({
   collectionId,
   title,
   onUpdated,

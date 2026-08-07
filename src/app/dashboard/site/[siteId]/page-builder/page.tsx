@@ -22,7 +22,17 @@ export default async function SitePageBuilderPage({
   // Ownership gate: the site must belong to this user.
   const site = await prisma.site.findFirst({
     where: { id: siteId, userId: session.user.id },
-    select: { id: true, slug: true, pageName: true },
+    select: {
+      id: true,
+      slug: true,
+      pageName: true,
+      // Canonical host for this site: its own verified primary domain, if set.
+      teacherCustomDomains: {
+        where: { isVerified: true, isPrimary: true },
+        select: { domain: true },
+        take: 1,
+      },
+    },
   })
   if (!site) notFound()
 
@@ -35,7 +45,14 @@ export default async function SitePageBuilderPage({
         </p>
       </div>
 
-      <PageBuilderInterface context={{ type: 'user', siteId: site.id, siteSlug: site.slug }} />
+      <PageBuilderInterface
+        context={{
+          type: 'user',
+          siteId: site.id,
+          siteSlug: site.slug,
+          customDomain: site.teacherCustomDomains[0]?.domain ?? null,
+        }}
+      />
     </div>
   )
 }

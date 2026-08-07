@@ -10,6 +10,7 @@ interface Organization {
   id: string
   name: string
   slug: string
+  customDomain: string | null
 }
 
 export default function OrgPageBuilderPage({
@@ -88,6 +89,7 @@ export default function OrgPageBuilderPage({
           type: 'organization',
           organizationId: orgId,
           organizationSlug: organization.slug,
+          customDomain: organization.customDomain,
         }}
       />
     </div>

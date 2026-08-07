@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { ChevronRight, NotebookPen, ShieldCheck } from 'lucide-react'
+import { Mail, NotebookPen, ShieldCheck } from 'lucide-react'
 
 interface SignInFormProps {
   context: {
@@ -224,14 +224,15 @@ export function SignInForm({ context, callbackUrl = '/dashboard' }: SignInFormPr
 
             {/* Collapsed: Teacher credentials login */}
             {!showCredentialsForm ? (
-              <button
+              <Button
                 type="button"
+                variant="outline"
+                className="w-full"
                 onClick={() => setShowCredentialsForm(true)}
-                className="w-full text-sm text-muted-foreground hover:text-foreground flex items-center justify-center gap-1 py-2"
               >
+                <Mail className="w-5 h-5 mr-2" />
                 Sign in with email (page editors)
-                <ChevronRight className="w-4 h-4" />
-              </button>
+              </Button>
             ) : (
               <>
                 <div className="relative mb-6">
@@ -299,16 +300,15 @@ export function SignInForm({ context, callbackUrl = '/dashboard' }: SignInFormPr
 
               {/* Expandable credentials form */}
               {!showCredentialsForm ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setShowCredentialsForm(true)}
-                    className="w-full text-sm text-muted-foreground hover:text-foreground flex items-center justify-center gap-1 py-1"
-                  >
-                    Sign in with email
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                </>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setShowCredentialsForm(true)}
+                >
+                  <Mail className="w-5 h-5 mr-2" />
+                  Sign in with email
+                </Button>
               ) : (
                 <>
                   <div className="relative">

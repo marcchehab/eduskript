@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
-import { Download, Upload, Loader2, FileArchive, AlertTriangle, CheckCircle, Package, XCircle, Cloud, Clock } from 'lucide-react'
+import { Upload, Loader2, FileArchive, AlertTriangle, CheckCircle, Package, XCircle, Cloud, Clock } from 'lucide-react'
 
 // Files larger than 10MB use S3 upload flow
 const LARGE_FILE_THRESHOLD = 10 * 1024 * 1024
@@ -33,7 +33,6 @@ interface ImportJob {
 }
 
 export function ImportExportSettings() {
-  const [isExporting, setIsExporting] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
   const [preview, setPreview] = useState<ImportPreview | null>(null)
@@ -123,39 +122,6 @@ export function ImportExportSettings() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // Only run once on mount
-
-  const handleExport = async () => {
-    setIsExporting(true)
-    try {
-      const response = await fetch('/api/export')
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Export failed')
-      }
-
-      // Get filename from Content-Disposition header
-      const contentDisposition = response.headers.get('Content-Disposition')
-      const filenameMatch = contentDisposition?.match(/filename="(.+)"/)
-      const filename = filenameMatch?.[1] || 'eduskript-export.zip'
-
-      // Download the file
-      const blob = await response.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = filename
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-    } catch (error) {
-      console.error('Export error:', error)
-      alert.showError(error instanceof Error ? error.message : 'Export failed')
-    } finally {
-      setIsExporting(false)
-    }
-  }
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -388,39 +354,14 @@ export function ImportExportSettings() {
       <CardHeader>
         <div className="flex items-center gap-2">
           <Package className="w-5 h-5" />
-          <CardTitle>Import / Export</CardTitle>
+          <CardTitle>Import</CardTitle>
         </div>
         <CardDescription>
-          Export your content as a zip file or import from another Eduskript instance
+          Import content from another Eduskript instance
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Export Section */}
-        <div className="space-y-3">
-          <h3 className="text-sm font-medium">Export Content</h3>
-          <p className="text-sm text-muted-foreground">
-            Download all your collections, skripts, pages, and attachments as a zip file.
-          </p>
-          <Button
-            onClick={handleExport}
-            disabled={isExporting}
-            variant="outline"
-          >
-            {isExporting ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Exporting...
-              </>
-            ) : (
-              <>
-                <Download className="w-4 h-4 mr-2" />
-                Export All Content
-              </>
-            )}
-          </Button>
-        </div>
-
-        <div className="border-t pt-6">
+        <div>
           {/* Import Section */}
           <div className="space-y-3">
             <h3 className="text-sm font-medium">Import Content</h3>

@@ -35,6 +35,12 @@ export async function GET(
               aiSystemPrompt: true,
             },
           },
+          // Canonical host for this org: its own verified primary domain, if set.
+          customDomains: {
+            where: { isVerified: true, isPrimary: true },
+            select: { domain: true },
+            take: 1,
+          },
           _count: {
             select: { members: true },
           },
@@ -68,7 +74,9 @@ export async function GET(
       iconUrl: organization.site?.pageIcon ?? null,
       sidebarBehavior: organization.site?.sidebarBehavior ?? 'contextual',
       aiSystemPrompt: organization.site?.aiSystemPrompt ?? null,
+      customDomain: organization.customDomains[0]?.domain ?? null,
       site: undefined,
+      customDomains: undefined,
     }
     return NextResponse.json({ organization: orgWithSlug, teacherCount, studentCount })
   } catch (error) {

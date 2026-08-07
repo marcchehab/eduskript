@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react'
 import { ContentLibrary } from './content-library'
 import { PageBuilder } from './page-builder'
 import { ImportExportSettings } from './import-export-settings'
+import { EmptyPageDragHint } from './empty-page-drag-hint'
 import { useSession } from 'next-auth/react'
 import { checkSkriptPermissions } from '@/lib/permissions'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
@@ -60,6 +61,11 @@ export interface PageBuilderContext {
   // sites; when set, authoring targets this site instead of the primary one.
   siteId?: string
   siteSlug?: string
+  // This site's verified + primary custom domain (e.g. "informatikgarten.ch"),
+  // if one is set — the proxy serves the site at that domain's root, with no
+  // slug in the URL (see src/proxy.ts). Null/undefined falls back to the
+  // eduskript.org/<slug> (or /org/<slug>) address.
+  customDomain?: string | null
 }
 
 interface PageBuilderInterfaceProps {
@@ -757,7 +763,44 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
     }
   }
 
+  // Display string for the View button — the public page address without
+  // protocol. A verified primary custom domain (e.g. "informatikgarten.ch")
+  // takes over the site's URL entirely (see PageBuilderContext.customDomain);
+  // otherwise falls back to "eduskript.org/org/my-org" or "eduskript.org/my-page".
+  // Mirrors the URL handlePreview() actually opens.
+  const publicUrlPath =
+    context.type === 'organization' && context.organizationSlug
+      ? `/org/${context.organizationSlug}`
+      : context.siteSlug
+        ? `/${context.siteSlug}`
+        : session?.user?.pageSlug
+          ? `/${session.user.pageSlug}`
+          : null
+  const previewUrl = context.customDomain
+    ? context.customDomain
+    : publicUrlPath ? `${process.env.NEXT_PUBLIC_APP_HOSTNAME}${publicUrlPath}` : null
+
+  // Syncs a collection rename/recolour (from the page builder's inline
+  // editor or the library's) into both places without a full reload.
+  const handleCollectionUpdate = (updated: { id: string; title: string; accentColor?: string | null }) => {
+    setPageItems(items =>
+      items.map(it =>
+        it.id === updated.id && it.type === 'collection'
+          ? { ...it, title: updated.title, accentColor: updated.accentColor ?? null }
+          : it
+      )
+    )
+    setLibraryCollectionUpdate(updated)
+  }
+
   const handlePreview = () => {
+    // A verified primary custom domain serves the site at its own root (no
+    // slug in the path — see src/proxy.ts's rewriteToTeacher/rewriteToOrg),
+    // so it takes priority over the eduskript.org/<slug> fallbacks below.
+    if (context.customDomain) {
+      window.open(`https://${context.customDomain}`, '_blank')
+      return
+    }
     // Open the public page in a new tab
     if (context.type === 'organization' && context.organizationSlug) {
       window.open(`${window.location.origin}/org/${context.organizationSlug}`, '_blank')
@@ -815,6 +858,7 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
             items={pageItems}
             onItemsChange={handleItemsChange}
             onPreview={handlePreview}
+            previewUrl={previewUrl}
             expandedCollections={expandedCollections}
             onToggleCollection={(collectionId) => {
               setExpandedCollections(prev =>
@@ -823,19 +867,7 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
                   : [...prev, collectionId]
               )
             }}
-            onCollectionUpdate={(updated) => {
-              // Modal handles the API call itself; we just sync local state
-              // so the title + accentColor refresh without a full reload.
-              setPageItems(items =>
-                items.map(it =>
-                  it.id === updated.id && it.type === 'collection'
-                    ? { ...it, title: updated.title, accentColor: updated.accentColor ?? null }
-                    : it
-                )
-              )
-              // Mirror the edit into the content library card.
-              setLibraryCollectionUpdate(updated)
-            }}
+            onCollectionUpdate={handleCollectionUpdate}
             draggedItem={activeItem}
             onRefresh={() => setRefreshTrigger(prev => prev + 1)}
             context={context}
@@ -851,10 +883,15 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
             onDataLoad={setLibraryData}
             refreshTrigger={refreshTrigger}
             collectionUpdate={libraryCollectionUpdate}
+            onCollectionRenamed={handleCollectionUpdate}
             onRefresh={() => setRefreshTrigger(prev => prev + 1)}
             context={context}
           />
         </div>
+
+        {pageItems.length === 0 && libraryData.skripts.length > 0 && (
+          <EmptyPageDragHint watch={libraryData.skripts.length} />
+        )}
       </div>
 
       <AlertDialogModal

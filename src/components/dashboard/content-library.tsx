@@ -6,7 +6,7 @@ import { Droppable } from '@hello-pangea/dnd'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { DraggableCollection, DraggableSkript } from './draggable-content'
-import { Search, BookOpen, FileText } from 'lucide-react'
+import { Search, BookOpen, FileText, ChevronDown, ChevronRight } from 'lucide-react'
 import { SkriptAuthor, User, Collection, Skript } from '@prisma/client'
 import { checkSkriptPermissions } from '@/lib/permissions'
 import { api, handleJsonResponse } from '@/lib/api-error-handler'
@@ -44,15 +44,21 @@ interface ContentLibraryProps {
   // builder. Used after a destructive action (e.g. deleting a collection that
   // may also be pinned in the layout). Falls back to a library-only refetch.
   onRefresh?: () => void
+  // Renamed a collection from the library's own inline editor. The parent
+  // mirrors it into the page builder (in case the collection is also placed
+  // there) and back into `collectionUpdate` for this component's own merge.
+  onCollectionRenamed?: (collection: { id: string; title: string; accentColor?: string | null }) => void
 }
 
-export function ContentLibrary({ onDataLoad, refreshTrigger, context = { type: 'user' }, collectionUpdate, onRefresh }: ContentLibraryProps = {}) {
+export function ContentLibrary({ onDataLoad, refreshTrigger, context = { type: 'user' }, collectionUpdate, onRefresh, onCollectionRenamed }: ContentLibraryProps = {}) {
   const { data: session } = useSession()
   const router = useRouter()
   const [collections, setCollections] = useState<LibraryCollection[]>([])
   const [skripts, setSkripts] = useState<SkriptWithAuthors[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [loading, setLoading] = useState(true)
+  const [skriptsExpanded, setSkriptsExpanded] = useState(true)
+  const [collectionsExpanded, setCollectionsExpanded] = useState(true)
   const alertDialog = useAlertDialog()
 
   const fetchContent = useCallback(async () => {
@@ -171,6 +177,7 @@ export function ContentLibrary({ onDataLoad, refreshTrigger, context = { type: '
           <BookOpen className="w-5 h-5" />
           Content Library
         </CardTitle>
+        <p className="text-xs text-muted-foreground">All your content, ready to place</p>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
@@ -187,84 +194,112 @@ export function ContentLibrary({ onDataLoad, refreshTrigger, context = { type: '
         />
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Collections Section */}
-        {filteredCollections.length > 0 && (
-          <div>
-            <h3 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
-              <BookOpen className="w-4 h-4" />
-              Collections ({filteredCollections.length})
-            </h3>
-            <Droppable droppableId="library-collections" isDropDisabled={true}>
-              {(provided) => (
-                <div 
-                  {...provided.droppableProps}
-                  ref={provided.innerRef}
-                  className="space-y-2"
-                >
-                  {filteredCollections.map((collection, index) => {
-                    return (
-                      <DraggableCollection
-                        key={collection.id}
-                        type="collection"
-                        id={collection.id}
-                        title={collection.title}
-                        skriptCount={collection.collectionSkripts.length}
-                        accentColor={collection.accentColor}
-                        isViewOnly={false}
-                        index={index}
-                        onDelete={handleDeleteCollection}
-                      />
-                    )
-                  })}
-                  {provided.placeholder}
-                </div>
-              )}
-            </Droppable>
-          </div>
-        )}
-
         {/* Skripts Section */}
         {filteredSkripts.length > 0 && (
           <div>
-            <h3 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
-              <FileText className="w-4 h-4" />
-              Skripts ({filteredSkripts.length})
-            </h3>
-            <Droppable droppableId="library-skripts" isDropDisabled={true}>
-              {(provided) => (
-                <div 
-                  {...provided.droppableProps}
-                  ref={provided.innerRef}
-                  className="space-y-2"
-                >
-                  {filteredSkripts.map((skript, index) => {
-                    const permissions = checkSkriptPermissions(
-                      session.user.id,
-                      skript.authors,
-                      session.user.isAdmin
-                    )
-                    const isViewOnly = !permissions.canEdit
-
-                    return (
-                      <DraggableSkript
-                        key={skript.id}
-                        type="skript"
-                        id={skript.id}
-                        title={skript.title}
-                        description={skript.description || undefined}
-                        pageCount={skript.pages.length}
-                        authors={skript.authors}
-                        currentUserId={session.user.id}
-                        isViewOnly={isViewOnly}
-                        index={index}
-                        slug={skript.slug}
-                      />
-                    )
-                  })}
-                  {provided.placeholder}
-                </div>
+            <button
+              type="button"
+              onClick={() => setSkriptsExpanded(v => !v)}
+              className="w-full flex items-center justify-between text-sm font-medium text-muted-foreground mb-3 hover:text-foreground"
+            >
+              <span className="flex items-center gap-2">
+                <FileText className="w-4 h-4" />
+                Skripts ({filteredSkripts.length})
+              </span>
+              {skriptsExpanded ? (
+                <ChevronDown className="w-4 h-4" />
+              ) : (
+                <ChevronRight className="w-4 h-4" />
               )}
-            </Droppable>
+            </button>
+            {skriptsExpanded && (
+              <Droppable droppableId="library-skripts" isDropDisabled={true}>
+                {(provided) => (
+                  <div
+                    {...provided.droppableProps}
+                    ref={provided.innerRef}
+                    className="space-y-2"
+                  >
+                    {filteredSkripts.map((skript, index) => {
+                      const permissions = checkSkriptPermissions(
+                        session.user.id,
+                        skript.authors,
+                        session.user.isAdmin
+                      )
+                      const isViewOnly = !permissions.canEdit
+
+                      return (
+                        <DraggableSkript
+                          key={skript.id}
+                          type="skript"
+                          id={skript.id}
+                          title={skript.title}
+                          description={skript.description || undefined}
+                          pageCount={skript.pages.length}
+                          authors={skript.authors}
+                          currentUserId={session.user.id}
+                          isViewOnly={isViewOnly}
+                          index={index}
+                          slug={skript.slug}
+                          dragHandleId={index === 0 ? 'content-library-first-skript-hint' : undefined}
+                        />
+                      )
+                    })}
+                    {provided.placeholder}
+                  </div>
+                )}
+              </Droppable>
+            )}
+          </div>
+        )}
+
+        {/* Collections Section */}
+        {filteredCollections.length > 0 && (
+          <div>
+            <button
+              type="button"
+              onClick={() => setCollectionsExpanded(v => !v)}
+              className="w-full flex items-center justify-between text-sm font-medium text-muted-foreground mb-3 hover:text-foreground"
+            >
+              <span className="flex items-center gap-2">
+                <BookOpen className="w-4 h-4" />
+                Collections ({filteredCollections.length})
+              </span>
+              {collectionsExpanded ? (
+                <ChevronDown className="w-4 h-4" />
+              ) : (
+                <ChevronRight className="w-4 h-4" />
+              )}
+            </button>
+            {collectionsExpanded && (
+              <Droppable droppableId="library-collections" isDropDisabled={true}>
+                {(provided) => (
+                  <div
+                    {...provided.droppableProps}
+                    ref={provided.innerRef}
+                    className="space-y-2"
+                  >
+                    {filteredCollections.map((collection, index) => {
+                      return (
+                        <DraggableCollection
+                          key={collection.id}
+                          type="collection"
+                          id={collection.id}
+                          title={collection.title}
+                          skriptCount={collection.collectionSkripts.length}
+                          accentColor={collection.accentColor}
+                          isViewOnly={false}
+                          index={index}
+                          onDelete={handleDeleteCollection}
+                          onUpdated={onCollectionRenamed}
+                        />
+                      )
+                    })}
+                    {provided.placeholder}
+                  </div>
+                )}
+              </Droppable>
+            )}
           </div>
         )}
 
