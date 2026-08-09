@@ -95,7 +95,9 @@ function client(): OpenAI {
 }
 
 export function scoringModel(): string {
-  return process.env.OPENROUTER_MODEL ?? 'qwen/qwen3.7-max'
+  // deepseek-v4-flash: 13-50x cheaper than qwen3.8-max, no measured criterion
+  // "bleeding" difference on adversarial rubric tests (see docs/ai-model-selection-eval.md).
+  return process.env.OPENROUTER_MODEL ?? 'deepseek/deepseek-v4-flash'
 }
 
 /** Append the teacher/org custom guidance (language, style, terminology) so the

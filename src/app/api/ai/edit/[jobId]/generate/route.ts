@@ -199,16 +199,12 @@ export async function POST(
     defaultHeaders: { 'HTTP-Referer': 'https://eduskript.org', 'X-Title': 'Eduskript' },
   })
 
-  // Provider routing for GLM: OPENROUTER_PROVIDERS env WINS if set (so clients
-  // who run this code can override), otherwise fall back to the code-pinned
-  // order below. Order picked from a delivered-latency probe on a typical short
-  // edit (2026-07-24): Together ~1.5s total / 0.9s TTFC and stable; Parasail /
-  // BaseTen as fallbacks. Friendli dropped — swung 48→410 t/s and errored
-  // mid-stream. Bare `:nitro` kept routing to Friendli, hence the explicit list.
+  // Provider routing: OPENROUTER_PROVIDERS env wins if set, otherwise let
+  // OpenRouter auto-route among deepseek-v4-flash's many cheap providers.
+  // Unlike glm-5.2, no single flaky-latency provider needing a pinned order
+  // (see docs/ai-model-selection-eval.md for the deepseek vs glm/qwen comparison).
   const envRouting = openrouterProviderRouting()
-  const glmRouting = ('provider' in envRouting
-    ? envRouting
-    : { provider: { order: ['Together', 'Parasail', 'BaseTen'], allow_fallbacks: true } }) as Record<string, unknown>
+  const modelRouting = ('provider' in envRouting ? envRouting : {}) as Record<string, unknown>
 
   // Fetch user and organization custom AI prompts (both live on Site).
   let orgPrompt: string | undefined
@@ -255,13 +251,13 @@ export async function POST(
       })
 
       const newPageMessage = await openai.chat.completions.create({
-        model: 'z-ai/glm-5.2',
+        model: 'deepseek/deepseek-v4-flash',
         max_tokens: 8192,
         messages: [
           { role: 'system', content: newPagePrompt },
           { role: 'user', content: `Create the content for the new page "${plannedEdit.pageTitle}". ${plannedEdit.summary}` },
         ],
-        ...glmRouting,
+        ...modelRouting,
       })
 
       proposedContent = (newPageMessage.choices[0]?.message?.content ?? '').trim()
@@ -282,13 +278,13 @@ export async function POST(
       })
 
       const editMessage = await openai.chat.completions.create({
-        model: 'z-ai/glm-5.2',
+        model: 'deepseek/deepseek-v4-flash',
         max_tokens: 8192,
         messages: [
           { role: 'system', content: editPrompt },
           { role: 'user', content: `Apply the following change to the page "${originalPage?.title || plannedEdit.pageTitle}": ${plannedEdit.summary}` },
         ],
-        ...glmRouting,
+        ...modelRouting,
       })
 
       proposedContent = (editMessage.choices[0]?.message?.content ?? '').trim()

@@ -128,8 +128,9 @@ export async function POST(request: NextRequest) {
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       const response = await openai.chat.completions.create({
-        // glm-5.2 :nitro = fastest provider (Friendli); strong+cheap on code gen (see docs/ai-model-selection-eval.md)
-        model: 'z-ai/glm-5.2:nitro',
+        // deepseek-v4-flash: ~15x cheaper than glm-5.2:nitro at comparable/better
+        // German quality, no dedicated-fast-provider tier needed (see docs/ai-model-selection-eval.md)
+        model: 'deepseek/deepseek-v4-flash',
         max_tokens: 16384,
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },

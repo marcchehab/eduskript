@@ -88,8 +88,9 @@ export async function POST(request: Request) {
         : buildUserPrompt(prompt, language)
 
     const completion = await openai.chat.completions.create({
-      // glm-5.2 :nitro = fastest provider (Friendli); strong+cheap on structured diagram gen (see docs/ai-model-selection-eval.md)
-      model: 'z-ai/glm-5.2:nitro',
+      // deepseek-v4-flash: ~15x cheaper than glm-5.2:nitro at comparable/better
+      // German quality, no dedicated-fast-provider tier needed (see docs/ai-model-selection-eval.md)
+      model: 'deepseek/deepseek-v4-flash',
       max_tokens: 1024,
       messages: [
         { role: 'system', content: EXCALIDRAW_SYSTEM_PROMPT },
