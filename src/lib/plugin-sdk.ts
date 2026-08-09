@@ -268,10 +268,24 @@ ${entryHtml}
  * Reserved query params: `theme` (light|dark, overrides prefers-color-scheme) and
  * `id` (instance id used to namespace localStorage). Everything else flows into
  * the plugin's `config`.
+ *
+ * Theme resolution, in priority order:
+ *   1. Manual toggle choice (only offered/read when top-level — see isTopLevel below)
+ *   2. `?theme=` query param (set by whoever embeds this page, e.g. cross-site iframe)
+ *   3. prefers-color-scheme
+ * When top-level (accessed directly, not inside any iframe — including eduskript's
+ * own <plugin> embed) a floating toggle button is injected so the visitor can pick a
+ * theme independent of their OS setting. Non-top-level (embedded anywhere, including
+ * eduskript.org) never shows the toggle: an eduskript embed drives theme itself via
+ * postMessage (see PLUGIN_SDK_SOURCE), a third-party embed drives it via ?theme=.
  */
 export const PLUGIN_STANDALONE_SDK_SOURCE = `
 (function() {
   'use strict';
+
+  var isTopLevel = (function() {
+    try { return window.top === window.self; } catch (e) { return true; }
+  })();
 
   var url = new URL(window.location.href);
   var config = {};
@@ -287,11 +301,26 @@ export const PLUGIN_STANDALONE_SDK_SOURCE = `
     }
   });
 
+  var THEME_STORAGE_KEY = 'eduskript-embed-theme';
+  var manualTheme = null;
+  if (isTopLevel) {
+    try {
+      var storedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+      if (storedTheme === 'dark' || storedTheme === 'light') manualTheme = storedTheme;
+    } catch (e) { /* localStorage unavailable */ }
+  }
+
   function currentTheme() {
+    if (manualTheme) return manualTheme;
     if (explicitTheme) return explicitTheme;
     if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
     return 'light';
   }
+
+  function applyColorScheme() {
+    document.documentElement.style.colorScheme = currentTheme();
+  }
+  applyColorScheme();
 
   var storageKey = 'eduskript-plugin:' + window.location.pathname + ':' + instanceId;
   var data = null;
@@ -304,11 +333,50 @@ export const PLUGIN_STANDALONE_SDK_SOURCE = `
   var _dataChangedCallback = null;
   var _fullscreenCallback = null;
 
-  // Track prefers-color-scheme changes when theme isn't pinned via URL.
+  function setManualTheme(theme) {
+    manualTheme = theme;
+    try { localStorage.setItem(THEME_STORAGE_KEY, theme); } catch (e) { /* quota / private mode */ }
+    applyColorScheme();
+    if (_themeCallback) _themeCallback(theme);
+    updateToggleButton();
+  }
+
+  var toggleButton = null;
+  function updateToggleButton() {
+    if (!toggleButton) return;
+    var theme = currentTheme();
+    toggleButton.textContent = theme === 'dark' ? '\\u2600\\uFE0F' : '\\u{1F319}';
+    toggleButton.setAttribute('aria-label', theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme');
+    toggleButton.title = toggleButton.getAttribute('aria-label');
+  }
+
+  function mountToggleButton() {
+    toggleButton = document.createElement('button');
+    toggleButton.className = 'eduskript-theme-toggle';
+    toggleButton.type = 'button';
+    toggleButton.addEventListener('click', function() {
+      setManualTheme(currentTheme() === 'dark' ? 'light' : 'dark');
+    });
+    updateToggleButton();
+    document.body.appendChild(toggleButton);
+  }
+
+  if (isTopLevel) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', mountToggleButton);
+    } else {
+      mountToggleButton();
+    }
+  }
+
+  // Track prefers-color-scheme changes when theme isn't pinned manually or via URL.
   if (window.matchMedia) {
     var mq = window.matchMedia('(prefers-color-scheme: dark)');
     var mqHandler = function() {
-      if (!explicitTheme && _themeCallback) _themeCallback(currentTheme());
+      if (!manualTheme && !explicitTheme) {
+        applyColorScheme();
+        if (_themeCallback) _themeCallback(currentTheme());
+      }
     };
     if (mq.addEventListener) mq.addEventListener('change', mqHandler);
     else if (mq.addListener) mq.addListener(mqHandler);
@@ -386,7 +454,11 @@ export function buildStandaloneEmbedHtml(entryHtml: string, name: string): strin
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>${escapeHtml(name)}</title>
-<style>html,body{margin:0;padding:0;width:100%;height:100%;}</style>
+<style>
+html,body{margin:0;padding:0;width:100%;height:100%;}
+.eduskript-theme-toggle{position:fixed;bottom:12px;right:12px;z-index:2147483647;width:36px;height:36px;border-radius:50%;border:1px solid rgba(128,128,128,0.4);background:canvas;color:canvastext;font-size:16px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,0.3);}
+.eduskript-theme-toggle:hover{filter:brightness(1.1);}
+</style>
 <script>${PLUGIN_STANDALONE_SDK_SOURCE}</script>
 </head>
 <body>
