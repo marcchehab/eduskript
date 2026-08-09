@@ -46,22 +46,38 @@
   td.num { text-align: right; }
   .pareto-yes { color: var(--accent); font-weight: 600; }
   .footer { color: var(--muted); font-size: 0.75rem; text-align: center; margin-top: 2rem; }
+  .weights { display: flex; gap: 2rem; flex-wrap: wrap; }
+  .weights label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.875rem; color: var(--muted); flex: 1; min-width: 180px; }
+  .weights input[type="range"] { accent-color: var(--accent); }
+  .weights span { color: var(--fg); font-variant-numeric: tabular-nums; }
 </style>
 </head>
 <body>
 
 <h1>AI Model Ranking for Eduskript AI Edit</h1>
 <p class="meta">
-  <strong>Last updated: 2026-08-04 18:14 UTC</strong><br>
+  <strong>Last updated: 2026-08-09 16:39 UTC</strong><br>
   Weights: <code>50% intelligence + 30% speed + 20% cost</code>;
   speed sub-score <code>70% throughput + 30% time-to-first-answer</code>;
   intelligence floor <code>≥ 40</code>.<br>
-  Intelligence, speed &amp; cost: live via Artificial Analysis API, all data by <a href="https://artificialanalysis.ai" target="_blank" rel="noopener">Artificial Analysis</a> (2026-08-04 18:14 UTC).
+  Intelligence, speed &amp; cost: live via Artificial Analysis API, all data by <a href="https://artificialanalysis.ai" target="_blank" rel="noopener">Artificial Analysis</a> (2026-08-09 16:39 UTC).
 </p>
 
 <div class="panel">
   <h2>3D scatter — Intelligence × Throughput × 1/Cost</h2>
+  <p class="meta">Good corner: top-right-front — smart, fast, cheap.</p>
   <div id="plot3d" style="height:580px"></div>
+</div>
+
+<div class="panel">
+  <h2>Re-weight the ranking</h2>
+  <p class="meta">Drag to change how much each axis counts toward the score. Normalised to 100% automatically. Pareto flags are weight-independent.</p>
+  <div class="weights">
+    <label>Intelligence <span id="wIntelVal"></span><input type="range" id="wIntel" min="0" max="100" value="50"></label>
+    <label>Throughput <span id="wThroughputVal"></span><input type="range" id="wThroughput" min="0" max="100" value="21"></label>
+    <label>Time to answer <span id="wTtftVal"></span><input type="range" id="wTtft" min="0" max="100" value="9"></label>
+    <label>Cost <span id="wCostVal"></span><input type="range" id="wCost" min="0" max="100" value="20"></label>
+  </div>
 </div>
 
 <div class="panel">
@@ -93,18 +109,32 @@
 Intelligence, speed and cost data by <a href="https://artificialanalysis.ai" target="_blank" rel="noopener">Artificial Analysis</a>. Provider column is the model creator; AA measures one reference deployment per model.</p>
 
 <script>
-const data = [{"slug":"meta/muse-spark-1.1","intelligence":50.6,"provider":"Meta","throughput":216.43,"ttft":11.92,"cost":4.25,"score":0.7384806524686058,"pareto":true},{"slug":"z-ai/glm-5.2","intelligence":51.1,"provider":"Z AI","throughput":185.72,"ttft":12.31,"cost":4.29,"score":0.7144772852892322,"pareto":true},{"slug":"google/gemini-3.6-flash","intelligence":50.1,"provider":"Google","throughput":213.5,"ttft":16.09,"cost":7.5,"score":0.7079664510954097,"pareto":false},{"slug":"anthropic/claude-opus-5","intelligence":60.7,"provider":"Anthropic","throughput":55.66,"ttft":63.43,"cost":25,"score":0.6877499290790611,"pareto":true},{"slug":"google/gemini-3.5-flash","intelligence":50.2,"provider":"Google","throughput":186.93,"ttft":21.66,"cost":9,"score":0.6708186816758193,"pareto":false},{"slug":"openai/gpt-5.6-luna","intelligence":51.2,"provider":"OpenAI","throughput":180.51,"ttft":132.75,"cost":1.2,"score":0.6668208976750138,"pareto":true},{"slug":"openai/gpt-5.6-terra","intelligence":55,"provider":"OpenAI","throughput":142.56,"ttft":158.23,"cost":12,"score":0.6590628949683378,"pareto":true},{"slug":"x-ai/grok-4.5","intelligence":53.8,"provider":"SpaceXAI","throughput":61.26,"ttft":10.38,"cost":6,"score":0.6288873577225437,"pareto":true},{"slug":"deepseek/deepseek-v4-flash","intelligence":49.9,"provider":"DeepSeek","throughput":123.55,"ttft":17.5,"cost":0.28,"score":0.626843274956439,"pareto":true},{"slug":"moonshotai/kimi-k3","intelligence":57.1,"provider":"Kimi","throughput":35.97,"ttft":58.35,"cost":15,"score":0.6204860639572642,"pareto":true},{"slug":"openai/gpt-5.6-sol","intelligence":58.9,"provider":"OpenAI","throughput":70.6,"ttft":131.39,"cost":30,"score":0.6096983096549956,"pareto":false},{"slug":"qwen/qwen3.7-max","intelligence":46,"provider":"Alibaba","throughput":205.19,"ttft":14.07,"cost":7.5,"score":0.6002089268200704,"pareto":false},{"slug":"anthropic/claude-opus-4.8","intelligence":55.7,"provider":"Anthropic","throughput":57.77,"ttft":22.68,"cost":25,"score":0.5885279691222516,"pareto":true},{"slug":"anthropic/claude-fable-5","intelligence":59.9,"provider":"Anthropic","throughput":72.62,"ttft":83.3,"cost":50,"score":0.5782881807915928,"pareto":true},{"slug":"anthropic/claude-sonnet-5","intelligence":53.4,"provider":"Anthropic","throughput":80.91,"ttft":200.59,"cost":10,"score":0.5368688972039457,"pareto":false},{"slug":"google/gemini-3.1-pro-preview","intelligence":46.5,"provider":"Google","throughput":128.66,"ttft":34.21,"cost":12,"score":0.49568976927677033,"pareto":false},{"slug":"openai/gpt-5.4-mini","intelligence":40,"provider":"OpenAI","throughput":189.57,"ttft":8.53,"cost":4.5,"score":0.4517681514541947,"pareto":false},{"slug":"minimax/minimax-m3","intelligence":44.4,"provider":"MiniMax","throughput":92.43,"ttft":23.04,"cost":1.2,"score":0.4514821261532954,"pareto":false},{"slug":"nex-agi/nex-n2-pro","intelligence":41,"provider":"Nex AGI","throughput":130.44,"ttft":16.75,"cost":2.5,"score":0.41130671746117076,"pareto":false},{"slug":"deepseek/deepseek-v4-pro","intelligence":44.3,"provider":"DeepSeek","throughput":66.46,"ttft":67.38,"cost":0.87,"score":0.3993951173033435,"pareto":false},{"slug":"thinkingmachines/inkling-small","intelligence":40.2,"provider":"Thinking Machines","throughput":131.96,"ttft":16.8,"cost":1.2,"score":0.39895771280922204,"pareto":false},{"slug":"tencent/hy3","intelligence":41.2,"provider":"Tencent","throughput":69.88,"ttft":31.36,"cost":0.56,"score":0.34662180296181405,"pareto":false},{"slug":"thinkingmachines/inkling","intelligence":40.7,"provider":"Thinking Machines","throughput":85.23,"ttft":25.24,"cost":4.05,"score":0.34123643007186455,"pareto":false},{"slug":"xiaomi/mimo-v2.5-pro","intelligence":42.2,"provider":"Xiaomi","throughput":48.39,"ttft":44.11,"cost":0.87,"score":0.3385469558688188,"pareto":false}];
+const data = [{"slug":"google/gemini-3.6-flash","intelligence":51.6,"provider":"Google","throughput":217.49,"ttft":17.27,"cost":7.5,"score":0.707446920156981,"pareto":true},{"slug":"anthropic/claude-opus-5","intelligence":63.1,"provider":"Anthropic","throughput":53.32,"ttft":51.13,"cost":25,"score":0.6870167336566481,"pareto":true},{"slug":"openai/gpt-5.6-luna","intelligence":52.3,"provider":"OpenAI","throughput":188.57,"ttft":87.51,"cost":1.2,"score":0.6810475311630605,"pareto":true},{"slug":"qwen/qwen3.8-max","intelligence":58.1,"provider":"Alibaba","throughput":70.47,"ttft":31,"cost":6,"score":0.6805905983291711,"pareto":true},{"slug":"google/gemini-3.5-flash","intelligence":52,"provider":"Google","throughput":168.19,"ttft":17.06,"cost":9,"score":0.6526002624091296,"pareto":true},{"slug":"moonshotai/kimi-k3","intelligence":59.7,"provider":"Kimi","throughput":38.75,"ttft":54.88,"cost":15,"score":0.6317571870152905,"pareto":true},{"slug":"x-ai/grok-4.5","intelligence":55.8,"provider":"SpaceXAI","throughput":56.67,"ttft":7.84,"cost":6,"score":0.6236307810096008,"pareto":false},{"slug":"openai/gpt-5.6-terra","intelligence":56.6,"provider":"OpenAI","throughput":124.88,"ttft":166.27,"cost":12,"score":0.6220260279729524,"pareto":false},{"slug":"z-ai/glm-5.2","intelligence":52.6,"provider":"Z AI","throughput":109.47,"ttft":19.75,"cost":4.29,"score":0.6147862025995453,"pareto":true},{"slug":"deepseek/deepseek-v4-flash","intelligence":51.8,"provider":"DeepSeek","throughput":102.38,"ttft":20.73,"cost":0.28,"score":0.604100732686222,"pareto":true},{"slug":"openai/gpt-5.6-sol","intelligence":60.9,"provider":"OpenAI","throughput":57.38,"ttft":132.01,"cost":30,"score":0.583516357550495,"pareto":false},{"slug":"anthropic/claude-opus-4.8","intelligence":57.3,"provider":"Anthropic","throughput":57.25,"ttft":18.9,"cost":25,"score":0.5763884884521215,"pareto":false},{"slug":"anthropic/claude-fable-5","intelligence":62.1,"provider":"Anthropic","throughput":66.6,"ttft":94.09,"cost":50,"score":0.5590265544592978,"pareto":false},{"slug":"anthropic/claude-sonnet-5","intelligence":55.3,"provider":"Anthropic","throughput":69.15,"ttft":196.38,"cost":10,"score":0.5209420536319447,"pareto":false},{"slug":"google/gemini-3.1-pro-preview","intelligence":47.7,"provider":"Google","throughput":127.8,"ttft":27.92,"cost":12,"score":0.4910479477255352,"pareto":false},{"slug":"minimax/minimax-m3","intelligence":45.4,"provider":"MiniMax","throughput":108.93,"ttft":19.85,"cost":1.2,"score":0.4643714699136088,"pareto":false},{"slug":"openai/gpt-5.4-mini","intelligence":40.9,"provider":"OpenAI","throughput":168.6,"ttft":7.94,"cost":4.5,"score":0.42553678818644625,"pareto":true},{"slug":"thinkingmachines/inkling-small","intelligence":41.2,"provider":"Thinking Machines","throughput":138.02,"ttft":16.08,"cost":1.2,"score":0.4057540698050942,"pareto":false},{"slug":"nex-agi/nex-n2-pro","intelligence":41.7,"provider":"Nex AGI","throughput":128.68,"ttft":17.19,"cost":2.5,"score":0.40028270500465984,"pareto":false},{"slug":"deepseek/deepseek-v4-pro","intelligence":45.3,"provider":"DeepSeek","throughput":63,"ttft":71.16,"cost":0.87,"score":0.38499096632145957,"pareto":false},{"slug":"xiaomi/mimo-v2.5-pro","intelligence":42.9,"provider":"Xiaomi","throughput":69.16,"ttft":31.72,"cost":0.87,"score":0.35700101438913867,"pareto":false},{"slug":"thinkingmachines/inkling","intelligence":42.3,"provider":"Thinking Machines","throughput":79.97,"ttft":26.82,"cost":4.05,"score":0.34573546459264193,"pareto":false},{"slug":"tencent/hy3","intelligence":42.2,"provider":"Tencent","throughput":66.66,"ttft":32.79,"cost":0.56,"score":0.33903423752528805,"pareto":false}];
+
+// Re-weighting: mirrors the server-side minmax + composite-score formula
+// (scripts/rank-ai-models.mjs) so slider changes reproduce what a re-run of
+// the script with those weights would produce. Pareto flags are baked in at
+// generation time and don't depend on weights (dominance is weight-free).
+function minmax(values, invert) {
+  const min = Math.min(...values), max = Math.max(...values), span = max - min;
+  return values.map(v => span === 0 ? 0.5 : (invert ? 1 - (v - min) / span : (v - min) / span));
+}
+const intelNorm = minmax(data.map(d => d.intelligence));
+const throughputNorm = minmax(data.map(d => d.throughput));
+const ttftNorm = minmax(data.map(d => d.ttft), true);
+const costNorm = minmax(data.map(d => d.cost), true);
 
 // Build hover text shared by both plots — keeps tooltip layout consistent.
-const hovers = data.map(d =>
-  '<b>' + d.slug + '</b><br>' +
-  'Provider: ' + d.provider + '<br>' +
-  'Intelligence: ' + d.intelligence.toFixed(1) + '<br>' +
-  'Throughput: ' + Math.round(d.throughput) + ' tok/s<br>' +
-  'Time to first answer: ' + d.ttft.toFixed(1) + ' s<br>' +
-  'Cost: $' + d.cost.toFixed(2) + ' / Mtok<br>' +
-  'Score: ' + d.score.toFixed(3) + (d.pareto ? '<br>★ Pareto-optimal' : '')
-);
+function hoverFor(d) {
+  return '<b>' + d.slug + '</b><br>' +
+    'Provider: ' + d.provider + '<br>' +
+    'Intelligence: ' + d.intelligence.toFixed(1) + '<br>' +
+    'Throughput: ' + Math.round(d.throughput) + ' tok/s<br>' +
+    'Time to first answer: ' + d.ttft.toFixed(1) + ' s<br>' +
+    'Cost: $' + d.cost.toFixed(2) + ' / Mtok<br>' +
+    'Score: ' + d.score.toFixed(3) + (d.pareto ? '<br>★ Pareto-optimal' : '');
+}
+let hovers = data.map(hoverFor);
 
 // Inverse-latency marker size for the 3D plot: faster time-to-first-answer
 // (lower seconds) → bigger marker. Clamped so very-slow models still appear.
@@ -139,6 +169,14 @@ Plotly.newPlot('plot3d', [{
     yaxis: { title: 'Throughput (tok/s)' },
     zaxis: { title: 'Cost ($/Mtok, lower is better)', range: [0, 5] },
     camera: { eye: { x: 1.6, y: 1.6, z: 1.0 } },
+    annotations: [{
+      x: Math.max(...data.map(d => d.intelligence)),
+      y: Math.max(...data.map(d => d.throughput)),
+      z: 0,
+      text: '★ good corner',
+      showarrow: false,
+      font: { size: 12, color: '#2ca02c' },
+    }],
   },
   margin: { l: 0, r: 0, t: 0, b: 0 },
   paper_bgcolor: 'rgba(0,0,0,0)',
@@ -174,14 +212,14 @@ Plotly.newPlot('plot2d', [{
   font: { color: getComputedStyle(document.body).color, family: 'system-ui' },
 }, { displayModeBar: false, responsive: true });
 
-// Sortable table.
+// Sortable, re-weightable table. data objects are mutated in place by
+// applyWeights() (score + rank), so render() always reads current values.
 const tbody = document.querySelector('#ranking tbody');
-const ranked = data.map((d, i) => ({ ...d, rank: i + 1 }));
 let sortKey = 'rank';
 let sortAsc = true;
 
 function render() {
-  const sorted = [...ranked].sort((a, b) => {
+  const sorted = [...data].sort((a, b) => {
     const av = a[sortKey], bv = b[sortKey];
     if (typeof av === 'number') return sortAsc ? av - bv : bv - av;
     return sortAsc ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av));
@@ -206,7 +244,40 @@ document.querySelectorAll('#ranking thead th').forEach(th => {
     render();
   });
 });
-render();
+
+// Weight sliders — recompute score/rank client-side using the same minmax
+// formula the generator script uses, then refresh the table and the 3D
+// scatter's color axis (hover text and marker color both depend on score).
+const wIntel = document.getElementById('wIntel');
+const wThroughput = document.getElementById('wThroughput');
+const wTtft = document.getElementById('wTtft');
+const wCost = document.getElementById('wCost');
+const wIntelVal = document.getElementById('wIntelVal');
+const wThroughputVal = document.getElementById('wThroughputVal');
+const wTtftVal = document.getElementById('wTtftVal');
+const wCostVal = document.getElementById('wCostVal');
+
+function applyWeights() {
+  const wI = +wIntel.value, wTh = +wThroughput.value, wTt = +wTtft.value, wC = +wCost.value;
+  const total = (wI + wTh + wTt + wC) || 1;
+  wIntelVal.textContent = Math.round(wI / total * 100) + '%';
+  wThroughputVal.textContent = Math.round(wTh / total * 100) + '%';
+  wTtftVal.textContent = Math.round(wTt / total * 100) + '%';
+  wCostVal.textContent = Math.round(wC / total * 100) + '%';
+
+  data.forEach((d, i) => {
+    d.score = (wI / total) * intelNorm[i] + (wTh / total) * throughputNorm[i] +
+      (wTt / total) * ttftNorm[i] + (wC / total) * costNorm[i];
+  });
+  [...data].sort((a, b) => b.score - a.score).forEach((d, i) => { d.rank = i + 1; });
+  hovers = data.map(hoverFor);
+
+  render();
+  Plotly.restyle('plot3d', { 'marker.color': [data.map(d => d.score)], hovertext: [hovers] });
+  Plotly.restyle('plot2d', { hovertext: [hovers] });
+}
+[wIntel, wThroughput, wTtft, wCost].forEach(el => el.addEventListener('input', applyWeights));
+applyWeights();
 </script>
 </body>
 </html>

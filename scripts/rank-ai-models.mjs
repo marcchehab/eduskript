@@ -220,6 +220,10 @@ function renderHtml(rows, meta) {
   td.num { text-align: right; }
   .pareto-yes { color: var(--accent); font-weight: 600; }
   .footer { color: var(--muted); font-size: 0.75rem; text-align: center; margin-top: 2rem; }
+  .weights { display: flex; gap: 2rem; flex-wrap: wrap; }
+  .weights label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.875rem; color: var(--muted); flex: 1; min-width: 180px; }
+  .weights input[type="range"] { accent-color: var(--accent); }
+  .weights span { color: var(--fg); font-variant-numeric: tabular-nums; }
 </style>
 </head>
 <body>
@@ -235,7 +239,19 @@ function renderHtml(rows, meta) {
 
 <div class="panel">
   <h2>3D scatter — Intelligence × Throughput × 1/Cost</h2>
+  <p class="meta">Good corner: top-right-front — smart, fast, cheap.</p>
   <div id="plot3d" style="height:580px"></div>
+</div>
+
+<div class="panel">
+  <h2>Re-weight the ranking</h2>
+  <p class="meta">Drag to change how much each axis counts toward the score. Normalised to 100% automatically. Pareto flags are weight-independent.</p>
+  <div class="weights">
+    <label>Intelligence <span id="wIntelVal"></span><input type="range" id="wIntel" min="0" max="100" value="50"></label>
+    <label>Throughput <span id="wThroughputVal"></span><input type="range" id="wThroughput" min="0" max="100" value="21"></label>
+    <label>Time to answer <span id="wTtftVal"></span><input type="range" id="wTtft" min="0" max="100" value="9"></label>
+    <label>Cost <span id="wCostVal"></span><input type="range" id="wCost" min="0" max="100" value="20"></label>
+  </div>
 </div>
 
 <div class="panel">
@@ -269,16 +285,30 @@ Intelligence, speed and cost data by <a href="https://artificialanalysis.ai" tar
 <script>
 const data = ${JSON.stringify(data)};
 
+// Re-weighting: mirrors the server-side minmax + composite-score formula
+// (scripts/rank-ai-models.mjs) so slider changes reproduce what a re-run of
+// the script with those weights would produce. Pareto flags are baked in at
+// generation time and don't depend on weights (dominance is weight-free).
+function minmax(values, invert) {
+  const min = Math.min(...values), max = Math.max(...values), span = max - min;
+  return values.map(v => span === 0 ? 0.5 : (invert ? 1 - (v - min) / span : (v - min) / span));
+}
+const intelNorm = minmax(data.map(d => d.intelligence));
+const throughputNorm = minmax(data.map(d => d.throughput));
+const ttftNorm = minmax(data.map(d => d.ttft), true);
+const costNorm = minmax(data.map(d => d.cost), true);
+
 // Build hover text shared by both plots — keeps tooltip layout consistent.
-const hovers = data.map(d =>
-  '<b>' + d.slug + '</b><br>' +
-  'Provider: ' + d.provider + '<br>' +
-  'Intelligence: ' + d.intelligence.toFixed(1) + '<br>' +
-  'Throughput: ' + Math.round(d.throughput) + ' tok/s<br>' +
-  'Time to first answer: ' + d.ttft.toFixed(1) + ' s<br>' +
-  'Cost: $' + d.cost.toFixed(2) + ' / Mtok<br>' +
-  'Score: ' + d.score.toFixed(3) + (d.pareto ? '<br>★ Pareto-optimal' : '')
-);
+function hoverFor(d) {
+  return '<b>' + d.slug + '</b><br>' +
+    'Provider: ' + d.provider + '<br>' +
+    'Intelligence: ' + d.intelligence.toFixed(1) + '<br>' +
+    'Throughput: ' + Math.round(d.throughput) + ' tok/s<br>' +
+    'Time to first answer: ' + d.ttft.toFixed(1) + ' s<br>' +
+    'Cost: $' + d.cost.toFixed(2) + ' / Mtok<br>' +
+    'Score: ' + d.score.toFixed(3) + (d.pareto ? '<br>★ Pareto-optimal' : '');
+}
+let hovers = data.map(hoverFor);
 
 // Inverse-latency marker size for the 3D plot: faster time-to-first-answer
 // (lower seconds) → bigger marker. Clamped so very-slow models still appear.
@@ -313,6 +343,14 @@ Plotly.newPlot('plot3d', [{
     yaxis: { title: 'Throughput (tok/s)' },
     zaxis: { title: 'Cost ($/Mtok, lower is better)', range: [0, 5] },
     camera: { eye: { x: 1.6, y: 1.6, z: 1.0 } },
+    annotations: [{
+      x: Math.max(...data.map(d => d.intelligence)),
+      y: Math.max(...data.map(d => d.throughput)),
+      z: 0,
+      text: '★ good corner',
+      showarrow: false,
+      font: { size: 12, color: '#2ca02c' },
+    }],
   },
   margin: { l: 0, r: 0, t: 0, b: 0 },
   paper_bgcolor: 'rgba(0,0,0,0)',
@@ -348,14 +386,14 @@ Plotly.newPlot('plot2d', [{
   font: { color: getComputedStyle(document.body).color, family: 'system-ui' },
 }, { displayModeBar: false, responsive: true });
 
-// Sortable table.
+// Sortable, re-weightable table. data objects are mutated in place by
+// applyWeights() (score + rank), so render() always reads current values.
 const tbody = document.querySelector('#ranking tbody');
-const ranked = data.map((d, i) => ({ ...d, rank: i + 1 }));
 let sortKey = 'rank';
 let sortAsc = true;
 
 function render() {
-  const sorted = [...ranked].sort((a, b) => {
+  const sorted = [...data].sort((a, b) => {
     const av = a[sortKey], bv = b[sortKey];
     if (typeof av === 'number') return sortAsc ? av - bv : bv - av;
     return sortAsc ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av));
@@ -380,7 +418,40 @@ document.querySelectorAll('#ranking thead th').forEach(th => {
     render();
   });
 });
-render();
+
+// Weight sliders — recompute score/rank client-side using the same minmax
+// formula the generator script uses, then refresh the table and the 3D
+// scatter's color axis (hover text and marker color both depend on score).
+const wIntel = document.getElementById('wIntel');
+const wThroughput = document.getElementById('wThroughput');
+const wTtft = document.getElementById('wTtft');
+const wCost = document.getElementById('wCost');
+const wIntelVal = document.getElementById('wIntelVal');
+const wThroughputVal = document.getElementById('wThroughputVal');
+const wTtftVal = document.getElementById('wTtftVal');
+const wCostVal = document.getElementById('wCostVal');
+
+function applyWeights() {
+  const wI = +wIntel.value, wTh = +wThroughput.value, wTt = +wTtft.value, wC = +wCost.value;
+  const total = (wI + wTh + wTt + wC) || 1;
+  wIntelVal.textContent = Math.round(wI / total * 100) + '%';
+  wThroughputVal.textContent = Math.round(wTh / total * 100) + '%';
+  wTtftVal.textContent = Math.round(wTt / total * 100) + '%';
+  wCostVal.textContent = Math.round(wC / total * 100) + '%';
+
+  data.forEach((d, i) => {
+    d.score = (wI / total) * intelNorm[i] + (wTh / total) * throughputNorm[i] +
+      (wTt / total) * ttftNorm[i] + (wC / total) * costNorm[i];
+  });
+  [...data].sort((a, b) => b.score - a.score).forEach((d, i) => { d.rank = i + 1; });
+  hovers = data.map(hoverFor);
+
+  render();
+  Plotly.restyle('plot3d', { 'marker.color': [data.map(d => d.score)], hovertext: [hovers] });
+  Plotly.restyle('plot2d', { hovertext: [hovers] });
+}
+[wIntel, wThroughput, wTtft, wCost].forEach(el => el.addEventListener('input', applyWeights));
+applyWeights();
 </script>
 </body>
 </html>`;
