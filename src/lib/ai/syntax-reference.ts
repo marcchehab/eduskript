@@ -228,6 +228,17 @@ assert turtle_solution_matches(solution), "Draw a 2-step stairs of two 30×30 sq
 - Pyodide's turtle is a recording stub, not a renderer. Style methods (\`fillcolor\`, \`pensize\`, \`hideturtle\`, \`speed\`, \`tracer\`, …) are accepted but no-ops. \`color\`/\`pencolor\` are recorded per segment so \`turtle_solution_matches(..., match_colors=True)\` can grade colours; everything else is figure-only. The Skulpt run the student sees on Run renders all style methods correctly; only the auto-grader ignores the no-op ones.
 - Multi-line \`assert\` with backslash continuations works (the parser handles it), but multi-line strings inside an assert (triple-quoted) confuse the splitter. Put long solution strings as a setup-line assignment first, then assert on the variable.`)
 
+  // Inline code language highlighting
+  sections.push(`## Inline Code Language Highlighting
+
+Append \`{:lang}\` right after the closing backtick of inline code to color it like a fenced code block, without breaking it out into its own block:
+
+\`\`\`markdown
+The expression \`[x**2 for x in range(10)]\`{:python} is a list comprehension.
+\`\`\`
+
+Same language set as \`editor\`/fenced code blocks: python, javascript/js, typescript/ts, sql, php, java, cpp, rust, go, html, css, json, xml, yaml. No marker → plain, uncolored inline code (the default).`)
+
   // Math
   sections.push(`## Math (KaTeX)
 
@@ -774,6 +785,8 @@ export function getCondensedSyntaxReference(): string {
 **Slide presentations:** any page can be presented full-screen as slides, split from the markdown itself (same source reads as a page OR a deck). A new slide starts at each \`#\`/\`##\` heading, each \`---\` (also a horizontal rule on the page), or \`---/\` (invisible break — splits slides, draws no rule). A \`---x\` line drops the following content from the deck until the next break/heading (still shown on the page) — for background prose you don't want projected. Markers go on their own line outside code blocks; empty slides are dropped; exam pages aren't presentable.
 
 **Code-block copy button:** plain \`\`\`lang code blocks show a copy button; add \`copy=false\` (or \`no-copy\`) to the info string to hide it, \`copy\`/\`copy=true\` to force it. Hidden by default on exam pages.
+
+**Inline code with a language:** \`code\`{:python} — a language marker right after the closing backtick of inline code gets the same per-token color highlighting as a fenced block, without breaking it out of the sentence. Same language set as code editors/blocks (python, javascript/js, typescript/ts, sql, php, java, cpp, rust, go, html, css, json, xml, yaml). No marker → plain, uncolored inline code (the default).
 
 **YouTube:** \`![caption](https://youtu.be/VIDEO_ID?t=120)\` is the simplest form (alt becomes caption). Or \`<youtube id="VIDEO_ID" startTime={120} caption="..." />\`, or the underlying \`<youtube-embed data-id="VIDEO_ID" data-start-time="120" data-caption="..."></youtube-embed>\`. Use \`playlist\`/\`data-playlist\` for playlists.
 
