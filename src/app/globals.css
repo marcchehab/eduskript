@@ -2263,7 +2263,7 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
    in src/lib/ai/syntax-reference.ts. */
 .prose-theme strong,
 .prose-theme b {
-  font-weight: 700;
+  font-weight: 600;
 }
 
 /* Prevent OS dark-mode color-scheme from leaking into the editor.

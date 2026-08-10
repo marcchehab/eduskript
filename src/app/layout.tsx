@@ -13,7 +13,7 @@ const inter = Inter({
 // Modern typography (informatikgarten style)
 const modernBody = Roboto_Slab({
   subsets: ['latin'],
-  weight: '300',
+  weight: ['300', '600'], // 300 = body text, 600 = bold/strong
   variable: '--font-modern-body',
   preload: false, // Only used when user selects "modern" typography
 });
@@ -21,7 +21,7 @@ const modernBody = Roboto_Slab({
 // Classic typography (luz style)
 const classicBody = EB_Garamond({
   subsets: ['latin'],
-  weight: ['400', '500', '600'],
+  weight: ['400', '500', '600'], // 600 = bold/strong (already loaded)
   variable: '--font-classic-body',
   preload: false, // Only used when user selects "classic" typography
 });
