@@ -42,9 +42,9 @@ async function main() {
   // with the User row; see resetDemoUser().
   const result = await resetDemoUser(prisma)
 
-  console.log(`   ✓ Seeded ${result.pageCount} pages`)
+  console.log(`   ✓ Seeded ${result.pageCount} pages across ${result.skriptIds.length} skripts`)
   console.log(`   Collection: ${result.collectionId}`)
-  console.log(`   Skript: ${result.skriptId}`)
+  console.log(`   Skripts: ${result.skriptIds.join(', ')}`)
   console.log('\n✅ Demo user reset complete!')
   console.log(`   Login: ${DEMO_EMAIL} / ${DEMO_PASSWORD}`)
   console.log(`   Public page: /${DEMO_SITE_SLUG}`)

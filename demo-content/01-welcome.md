@@ -54,4 +54,4 @@ Each page is independent — pick what interests you:
 - **AI co-pilot** — an assistant that knows your skript inside and out
 - **Exams & classes** — real digital exams with Safe Exam Browser lockdown
 
-The full user manual is at [the docs site](/) — this is the whirlwind tour.
+That's everything — this tour is the whole manual. Click **Edit** on any page and start replacing it with your own content.

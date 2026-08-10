@@ -35,7 +35,7 @@ export async function POST() {
       success: true,
       data: {
         collectionId: result.collectionId,
-        skriptId: result.skriptId,
+        skriptIds: result.skriptIds,
         layoutId: result.layoutId,
       },
     })

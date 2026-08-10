@@ -37,7 +37,9 @@ All custom tags and attributes must be **lowercase** with **string values**. Thi
 \`\`\`html
 <Question id="q1" type="single">          <!-- PascalCase tag -->
 <plugin src="eduadmin/mod-calc" formula={rsa}>  <!-- JSX expression -->
-\`\`\``)
+\`\`\`
+
+PascalCase/camelCase doesn't error — the parser silently lowercases both tag AND attribute names before anything else runs. So \`<Question>\` becomes \`<question>\` (harmless), but an attribute like \`startTime\` silently becomes \`starttime\` and the component receives nothing — a much quieter failure than an error. Always author tags and attributes lowercase (kebab-case for multi-word attributes) to begin with.`)
 
   // Callouts
   const baseTypes = Object.entries(calloutTypes)
@@ -100,9 +102,13 @@ Other language identifiers (java, cpp, go, rust, php, css, json, yaml, xml, …)
 - \`single\` - Hide file tabs for simple examples
 - \`exam\` - Exam mode: pair with a \`python-check\` block to grade silently. The student runs the code but does NOT see whether checks passed (no green/red feedback, no solution reveal). Use for graded assessments; use plain \`python editor\` (no \`exam\`) for practice exercises where students should see immediate feedback.
 - \`id="unique-id"\` - Persistent state across page loads. **Required** when pairing with \`python-check\` (the check uses \`for="<id>"\`).
+- \`file="name.py"\` - Multi-file editor: repeat the fence with the same \`id\` and a different \`file=\` to add a tab. \`\`\`python editor id="ex1" file="main.py"\`\`\` followed by \`\`\`python editor id="ex1" file="helper.py"\`\`\` merges into one two-tab editor. Not wired up for \`html\` yet (one file per HTML editor).
+- \`assets="a.csv,b.png"\` - Teacher-attached read-only files (resolved from skript file storage) the student's code can open, e.g. \`pd.read_csv('a.csv')\`. Python only.
+- \`allow-upload\` / \`accept="image/*,.csv"\` - Lets the student upload their own file into the editor (in-browser only, never sent to the server); \`accept\` restricts the file picker by MIME type/extension. Python only.
 - \`db="database.db"\` - For SQL: specify database file
 - \`solution="SELECT ..."\` - For SQL: expected solution query. Enables automatic pass/fail verification after each run. Multi-line solutions use \`\\n\` literals: \`solution="SELECT a, b\\nFROM t"\`
-- \`height="500"\` - For HTML: total pixel height of editor + preview (default 400)
+- \`schema-image="name"\` - For SQL: override the auto-generated ER diagram with a specific Excalidraw/image asset instead of deriving it from \`db\`
+- \`height="500"\` - Pixel height of the editor. For HTML, this is the total height of the editor + preview pane (default 400).
 - \`output-only\` - Auto-runs once on load and starts with the code panel collapsed, so only the output/plot shows. Ideal for displaying a matplotlib figure without the reader running anything. The reader can click "Show code" to reveal, edit, and rerun. Works with \`python\`; combine with \`height="..."\` to size the plot area.
 
 Both the code panel and the plot panel can be collapsed and re-opened live (buttons on each panel); the Run button stays reachable while the code panel is collapsed.
@@ -187,15 +193,21 @@ assert fibonacci(5) == 5, "fibonacci(5) should return 5."
 
 If you omit \`for\` or the editor \`id\`, the check block is silently dropped.
 
+**Multi-stage checks:** several \`python-check for="x"\` blocks targeting the same editor become ordered stages (document order = stage order) instead of one flat check — the student clears one stage before the next unlocks. Each stage can add \`gate-at="<points>"\` (minimum score to unlock the next stage) and \`label="..."\` (stage name shown to the student).
+
+### Copy button (plain, non-\`editor\` code blocks)
+
+A fenced block WITHOUT \`editor\` (just \`\`\`python \`\`\`) is not interactive — it's a read-only, syntax-highlighted display block (see the "Code Blocks" reference for plain blocks and inline code). It shows a copy button on hover; add \`copy=false\` (or \`no-copy\`) to the info string to hide it, \`copy\`/\`copy=true\` to force it on. Hidden by default on exam pages.
+
 ### Turtle auto-grading
 
 Turtle exercises are gradeable through the same \`python-check\` mechanism. Pyodide's stdlib doesn't ship turtle, so the runner installs a recording stub that captures every move into a global \`turtle_path\` list (tuples of \`(x, y, pen_down)\`). Three helper functions are then available inside any \`python-check\`:
 
-- **\`turtle_solution_matches(solution_code, match_colors=False)\`** — preferred. Pass a string of teacher-written turtle code; the runner exec's it through the same recording stub and compares the figures. No need to enumerate vertices by hand. Set \`match_colors=True\` to also require each segment to have the same pen color in solution and student (call \`t.color("red")\` etc. consistently on both sides — strings are compared lowercased).
-- **\`turtle_matches(expected_segments)\`** — comparison against a hand-written list of segments \`[((x1,y1),(x2,y2)), …]\`. Use when the figure is short enough to type out.
-- **\`turtle_path_matches(expected_path, tolerance=1.0)\`** — strict vertex-order comparison. Use only when the order of moves is part of the exercise; for "did the student draw the right figure?" use \`turtle_solution_matches\` or \`turtle_matches\`.
+- **\`turtle_solution_matches(solution_code, tolerate_rotation=True, match_colors=False)\`** — preferred. Pass a string of teacher-written turtle code; the runner exec's it through the same recording stub and compares the figures. No need to enumerate vertices by hand. Set \`match_colors=True\` to also require each segment to have the same pen color in solution and student (call \`t.color("red")\` etc. consistently on both sides — strings are compared lowercased).
+- **\`turtle_matches(expected, tolerate_rotation=True)\`** — comparison against a hand-written list of segments \`[((x1,y1),(x2,y2)), …]\`. Use when the figure is short enough to type out.
+- **\`turtle_path_matches(expected, tolerance=1.0, tolerate_rotation=True)\`** — strict vertex-order comparison. Use only when the order of moves is part of the exercise; for "did the student draw the right figure?" use \`turtle_solution_matches\` or \`turtle_matches\`.
 
-All three are translation-invariant (bounding-box origin) and try the four cardinal rotations. \`turtle_matches\` and \`turtle_solution_matches\` compare the **set of drawn segments** — direction of strokes, order of strokes, and retracing don't matter; only the figure matters. So a student drawing a square CW vs CCW vs starting from a different corner all match.
+All three are translation-invariant (bounding-box origin) and, by default (\`tolerate_rotation=True\`), try the four cardinal rotations — pass \`tolerate_rotation=False\` if orientation is part of what you're grading. \`turtle_matches\` and \`turtle_solution_matches\` compare the **set of drawn segments** — direction of strokes, order of strokes, and retracing don't matter; only the figure matters. So a student drawing a square CW vs CCW vs starting from a different corner all match.
 
 Example using a reference solution:
 
@@ -290,7 +302,7 @@ $$
 - \`invert="dark|light|always"\` — Invert colors (useful for diagrams)
 - \`saturate="70"\` — Saturation adjustment when inverted
 
-**Do NOT use** the \`{width=;align=}\` attribute syntax — it is not implemented.
+A \`{key=value;key2}\` attribute block right after the image (e.g. \`{invert}\`, \`{invert=light;saturate=70}\`) IS implemented, but only for \`invert\`/\`saturate\` — \`{width=...}\` is parsed but silently has no effect (use \`style="width: X%"\` instead).
 
 Excalidraw diagrams: Reference \`.excalidraw\` files directly. The system auto-detects light/dark SVG variants.`)
 
@@ -326,7 +338,7 @@ Side-by-side columns that stack on mobile (\`flex-col\` below md, \`flex-row\` a
 
 **\`<flex>\` attributes** (all optional):
 - \`gap="none|small|medium|large"\` (default \`medium\`)
-- \`direction="row|column"\` (default \`row\`; note: mobile always stacks)
+- \`direction="row|column"\` — currently has no visible effect (a CSS-merge bug always forces column-on-mobile/row-on-desktop regardless of this attribute); don't rely on it to force a row on mobile.
 - \`justify="start|center|end|between|around|evenly"\`
 - \`align="start|center|end|stretch|baseline"\`
 - \`wrap="true|false"\` (default \`true\`)
@@ -524,9 +536,9 @@ vline x=-1 dashed
 - \`A = (a, b)\` — a point. \`vline x=-1\` / \`hline y=2\` — a guide line.
 - \`x: -4..4\`, \`y: -3..3\` — the window. Leave \`y:\` out and it is derived from the curve.
 - Flags: \`grid\` / \`nogrid\`, \`axes\` / \`noaxes\`, \`legend\` / \`nolegend\`, \`aspect: equal\`, \`size: 640x400\`, \`caption: …\`.
-- Options after a comma: a colour word (\`red\`, \`blue\`, \`green\`, \`orange\`, \`purple\`, \`teal\`, \`pink\`, \`brown\`, \`gray\`) or \`color=#2563eb\`, \`label="…"\`, \`dashed\`, \`dotted\`, \`thick\`.
+- Options after a comma: a colour word (\`red\`, \`blue\`, \`green\`, \`orange\`, \`purple\`, \`teal\`, \`pink\`, \`brown\`, \`gray\`, \`grey\`, \`black\`) or \`color=#2563eb\`, \`label="…"\`, \`dashed\`, \`dotted\`, \`thick\`.
 
-**Terms:** implicit multiplication works the way it is written on paper (\`2x\`, \`2sin(x)\`, \`1/3x^3\`). Functions: \`sin cos tan asin acos atan sinh cosh tanh exp ln log log2 sqrt abs sign floor ceil round min max mod\` — \`ln\` is the natural logarithm, \`log\` is base 10. Constants \`pi\` and \`e\`. Poles (\`1/x\`, \`tan\`) are detected, so no vertical line is drawn through an asymptote.
+**Terms:** implicit multiplication works the way it is written on paper (\`2x\`, \`2sin(x)\`, \`1/3x^3\`). Functions: \`sin cos tan asin acos atan sinh cosh tanh exp ln log log2 sqrt abs sign floor ceil round min max mod\` — \`ln\` is the natural logarithm, \`log\`/\`lg\` are both base 10. Constants \`pi\` and \`e\`. Poles (\`1/x\`, \`tan\`) are detected, so no vertical line is drawn through an asymptote.
 
 \`x: -4..4\` sets the window; \`x = 3\` draws a vertical line. Colon versus equals is the difference.
 
@@ -564,7 +576,7 @@ Embed interactive plugins with \`<plugin src="<author>/<slug>" [attrs]></plugin>
 - \`${owner}/diffie-hellman\` — DH key exchange simulator
   - \`p\` (default 23), \`g\` (default 5), \`a\` (default 4), \`b\` (default 3), \`lang\`
 - \`${owner}/dijkstra-visualizer\` — Dijkstra's algorithm on a draggable graph
-  - \`initialnodecount\` (default 7), \`initialdirected\` (default false), \`lang\`
+  - \`initialnodecount\` (default 7), \`initialdirected\` (default false), \`initialspeed\` (100–2000, higher = faster; default 1300), \`lang\`
 - \`${owner}/data-cube-visualizer\` — 3D RGB data cube for image quantization
   - \`lang="en|de"\`
 
@@ -620,7 +632,7 @@ What is 2 + 2?
 
 **question attributes:**
 - \`id="unique-id"\` — Optional, auto-generated if omitted
-- \`type="single"\` — Single choice (default). Other types: \`multiple\`, \`text\` (free-text answer), \`number\` (slider), \`range\` (two-handle slider)
+- \`type="multiple"\` — Multiple choice / checkboxes (the default if \`type\` is omitted). **Always set \`type\` explicitly** — omitting it silently gives checkboxes, not a single-select radio group. Other types: \`single\` (radio, one answer), \`text\` (free-text answer), \`number\` (slider), \`range\` (two-handle slider)
 - \`showFeedback="true"\` — reveal correct/wrong feedback (and the auto-check score/diff) to the student during the attempt. **OFF by default for students** in both exams and practice (there's no Submit button, so default-on would leak the answer the moment they type). Teachers always see correctness when grading, and students see it on their returned/graded exam.
 - \`points="2"\` — max points for grading (default 1). Text questions get partial credit by similarity; single/multiple-choice score full points on an exact match of the correct set, else 0. Teachers can override any per-question score when grading an exam. For an explicit id (so the score is reliably attributed), set \`id="..."\`.
 
@@ -656,7 +668,7 @@ At which $x$ does $f$ have its maximum?
 
 Spacing is forgiving: a prompt line and blank lines around the \`<answer>\` tags are optional — the question renders correctly either way.
 
-**Free-text auto-check (predict-the-output):** a \`type="text"\` question can be auto-graded against an expected output written as an \`\`\`expected fenced block inside the question (leave a blank line before it). The typed answer gets **partial credit** by text similarity (× \`points\`, default 1, rounded to 0.1 pts) with a diff; an exact match (after normalizing: each line trimmed, surrounding blank lines dropped; comparison is strictly line-by-line) is fully correct. Optional flags: \`ignore-case="true"\`, \`ignore-whitespace="true"\`. Example:
+**Free-text auto-check (predict-the-output):** a \`type="text"\` question can be auto-graded against an expected output written as an \`\`\`expected fenced block inside the question (leave a blank line before it). The typed answer gets **partial credit** by a line-exact-match ratio (× \`points\`, default 1, rounded to 0.1 pts) with a diff — the fraction of expected lines matched exactly (LCS-based), not fuzzy character similarity, so a one-character typo loses that whole line's credit. An exact match (after normalizing: each line trimmed, surrounding blank lines dropped; comparison is strictly line-by-line) is fully correct. Optional flags: \`ignore-case="true"\`, \`ignore-whitespace="true"\`. Example:
 
 <question id="predict1" type="text" points="2">
 Predict the output:
@@ -744,7 +756,7 @@ export function getCondensedSyntaxReference(): string {
 **HTML component rules:** All custom tags and attributes must be lowercase with string values. No PascalCase, no JSX expressions.
   - Use self-closing tags for components without children: \`<plugin src="eduadmin/mod-calc" />\`
   - Correct: \`<plugin src="eduadmin/mod-calc" />\`, \`<question id="q1" type="single">\`
-  - Wrong: \`<Question initialCount={7}>\` (PascalCase, JSX)
+  - Wrong: \`<Question initialCount={7}>\` (PascalCase, JSX) — doesn't error, silently lowercases to \`<question initialcount="{7}">\`, so the attribute is just lost
 
 **Callouts:** \`> [!type] Title on same line\` - CRITICAL: title MUST be on same line as [!type]
   - Types: ${baseTypes.join(', ')}
@@ -752,22 +764,29 @@ export function getCondensedSyntaxReference(): string {
   - Collapsible: \`> [!type]-\` (closed) or \`> [!type]+\` (open)
   - WRONG: \`> [!tip]\\n> **Title**\` - NEVER put title on new line!
 
-**Code Editors:** \`\`\`language editor [single] [exam] [output-only] [id="x"] [db="file.db"] [solution="SELECT ..."] [height="500"]\`\`\` — \`output-only\` auto-runs on load and shows just the output/plot (collapsed code, expandable); great for matplotlib figures.
+**Code Editors:** \`\`\`language editor [single] [exam] [output-only] [id="x"] [file="name.py"] [assets="a.csv,b.png"] [allow-upload] [accept="..."] [db="file.db"] [solution="SELECT ..."] [schema-image="name"] [height="500"]\`\`\` — \`output-only\` auto-runs on load and shows just the output/plot (collapsed code, expandable); great for matplotlib figures.
   - Executable: python, javascript, sql, html. Other language IDs only get syntax highlighting.
   - \`html editor\` is special: split view with a sandboxed iframe live-preview (\`allow-scripts allow-modals allow-forms\`, no \`allow-same-origin\`). No exam/python-check pairing.
   - \`single\`: hides file tabs (single-file mode).
   - \`exam\`: silent grading — pair with python-check; student runs code but never sees pass/fail feedback. Use for assessments, NOT practice. Default (no \`exam\`) shows feedback after each "Check" click.
-  - \`solution="SELECT ..."\`: SQL only — shows pass/fail after each run. Multi-line: use \`\\n\` literals inside the quotes.
-  - \`height="500"\`: HTML editor only — pixel height of the editor + preview pane (default 400).
+  - \`file="name.py"\`: repeat the fence with the same \`id\` and a different \`file=\` to merge into one multi-tab editor (Python/JS/SQL only, not HTML yet).
+  - \`assets="a.csv,b.png"\` / \`allow-upload\` + \`accept="..."\`: teacher-attached read-only files, or let the student upload their own (Python only).
+  - \`solution="SELECT ..."\`: SQL only — shows pass/fail after each run. Multi-line: use \`\\n\` literals inside the quotes. \`schema-image="name"\` overrides the auto-generated ER diagram.
+  - \`height="500"\`: pixel height of the editor (any language); for HTML this is the editor + preview pane total (default 400).
 
 **Python Checks:** pair \`\`\`python editor id="x"\`\`\` with \`\`\`python-check for="x"\`\`\` containing \`assert\` statements.
   - \`for="<id>"\` is REQUIRED and must match the editor's \`id\` — otherwise the check block is silently dropped.
   - Optional: \`points="10"\`, \`max-checks="5"\`. Check block is never rendered, only runs on "Check".
-  - **Turtle exercises:** \`turtle_solution_matches(solution_code, match_colors=False)\` (preferred), \`turtle_matches(expected_segments)\`, \`turtle_path_matches(expected_path)\`. The first runs a teacher-supplied reference solution through the same recording stub; the runner compares the set of drawn segments. Translation- and rotation-tolerant. Pass \`match_colors=True\` to also require matching pen colours per segment. Put long solution strings as a setup variable, then \`assert turtle_solution_matches(solution), "..."\`.
+  - Several \`python-check for="x"\` blocks targeting the same editor become ordered stages (document order) instead of one flat check; each stage can add \`gate-at="<points>"\` and \`label="..."\`.
+  - **Turtle exercises:** \`turtle_solution_matches(solution_code, tolerate_rotation=True, match_colors=False)\` (preferred), \`turtle_matches(expected, tolerate_rotation=True)\`, \`turtle_path_matches(expected, tolerance=1.0, tolerate_rotation=True)\`. The first runs a teacher-supplied reference solution through the same recording stub; the runner compares the set of drawn segments. Translation-invariant and, by default, rotation-tolerant. Pass \`match_colors=True\` to also require matching pen colours per segment. Put long solution strings as a setup variable, then \`assert turtle_solution_matches(solution), "..."\`.
 
 **Math:** \`$inline$\` and \`$$display$$\` (KaTeX). Chemistry: \`\\ce{N2(g) + 3 H2(g) <=> 2 NH3(g)}\` (mhchem) — prefer over hand-rolled \`\\mathrm{}\`.
 
 **Images:** \`![alt](img.png)\` or \`<img src="img.png" alt="alt" style="width: 50%" align="left" wrap="true" />\`
+
+**Text alignment:** wrap content in \`<left>\`, \`<center>\`, or \`<right>\` — markdown parses inside with or without surrounding blank lines. Closing tag required.
+
+**Videos (Mux):** \`![caption](lecture.mp4)\` — the alt text becomes the caption. Playback options via \`<muxvideo>\`: \`<muxvideo src="intro.mp4" gif />\` (muted autoplay loop, GIF-style), \`autoplay\` (muted), \`loop\`, \`pin\` (corner overlay when scrolled past), \`poster="cover.png"\`, \`alt="caption"\`.
 
 **Custom CSS:** \`<style>.my-class { ... }</style>\` — scoped CSS blocks are supported. Inline \`style="..."\` also works on any element.
 
@@ -777,13 +796,14 @@ export function getCondensedSyntaxReference(): string {
   \`<tabs-container data-items='["Tab1", "Tab2"]'><tab-item>Content1</tab-item><tab-item>Content2</tab-item></tabs-container>\`
 
 **Quiz:** \`<question id="q1" type="single" points="1"><answer correct="true">Right</answer><answer feedback="Nope">Wrong</answer></question>\` — \`points\` (default 1) is the gradable max; choice questions auto-score full points on an exact match, teacher-overridable when grading.
+  - \`type\` defaults to \`multiple\` (checkboxes) if omitted — **always set \`type="single"\` explicitly** for a one-answer radio group.
   - Put the question text inside the tag before the answers; it renders as the card heading. Markdown and \`$math$\` work in the prompt, in the answers and in \`feedback="…"\`.
   - Sliders auto-grade when given a target: \`<question type="number" expected="-1" tolerance="0.15">\` (or \`type="range" expected="-1..1"\`), with \`<answer from="0.7" feedback="…">\` bands from best to worst.
   - Use \`correct="true"\` to mark the correct answer
   - If you see \`<Option>\` or \`<quiz-option>\`, convert to \`<answer>\`
   - Do NOT use \`:::quiz\` syntax — it is not implemented
 
-**Free-text auto-check (predict-output):** \`<question id="x" type="text" points="2">\` with an \`\`\`expected fenced block inside (blank line before it) → partial-credit grading of a predicted output, with a diff. Flags: \`ignore-case\`, \`ignore-whitespace\`. Feedback is hidden from students by default (exams AND practice) — set \`showFeedback="true"\` to reveal it during the attempt; teachers see it when grading.
+**Free-text auto-check (predict-output):** \`<question id="x" type="text" points="2">\` with an \`\`\`expected fenced block inside (blank line before it) → partial-credit grading by line-exact-match ratio (not fuzzy similarity) of a predicted output, with a diff. Flags: \`ignore-case\`, \`ignore-whitespace\`. Feedback is hidden from students by default (exams AND practice) — set \`showFeedback="true"\` to reveal it during the attempt; teachers see it when grading.
 
 **Staged pages:** \`<next-stage label="..." title="..." confirm="..." cancel="...">\` on its own line splits a document into one-way, hand-in-locked stages (only stages up to the current one render; advancing locks the previous one read-only). Ideal for exams: predict-output questions in stage 1, runnable editors in stage 2. All strings optional/localizable.
 

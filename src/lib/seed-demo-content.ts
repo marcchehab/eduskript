@@ -1,14 +1,15 @@
 /**
- * Seeds demo content for a given user by cloning the pages of a template
- * skript owned by eduadmin (see scripts/promote-welcome-skript.ts).
+ * Seeds demo content for a given user by cloning the User Manual collection
+ * (4 skripts each, EN + DE, owned by Marc/informatikgarten — see the
+ * dashboard collections "User Manual" / "Benutzerhandbuch").
  *
  * Used by:
  * - /api/seed-example-content (new user "Explore with examples" button)
  * - scripts/reset-demo-user.ts (nightly demo account reset)
  *
- * Picks the English or German template based on the user's Site.pageLanguage
- * (BCP-47, null/non-"de" = English). Creates one collection + one skript +
- * pages, all owned by the given user.
+ * Picks the English or German template skripts based on the user's
+ * Site.pageLanguage (BCP-47, null/non-"de" = English). Creates one
+ * collection + one skript per template + pages, all owned by the given user.
  */
 
 // Mirrors PRIMARY_SITE_ORDER in src/lib/sites.ts. Inlined rather than imported:
@@ -20,14 +21,15 @@ const PRIMARY_SITE_ORDER = [{ order: 'asc' as const }, { createdAt: 'asc' as con
 // Accept any Prisma-like client (the app uses an extended client, scripts use plain).
 type PrismaLike = any
 
-// Slugs of the eduadmin-owned template skripts created by
-// scripts/promote-welcome-skript.ts. Edit their content via the dashboard
-// (Marc is a co-author on both) — this file only clones them.
-const TEMPLATE_SKRIPT_SLUG_EN = 'welcome-to-eduskript'
-const TEMPLATE_SKRIPT_SLUG_DE = 'willkommen-bei-eduskript'
+// Slugs of the template skripts, in display order, that make up the
+// "User Manual" / "Benutzerhandbuch" collection (owned by Marc/
+// informatikgarten). Edit their content via the dashboard — this file only
+// clones them.
+const TEMPLATE_SKRIPT_SLUGS_EN = ['welcome', 'writing-content', 'components', 'classes-and-exams']
+const TEMPLATE_SKRIPT_SLUGS_DE = ['willkommen', 'inhalte-schreiben', 'komponenten', 'klassen-und-pruefungen']
 
-const COLLECTION_TITLE = 'Getting Started with Eduskript'
-// COLLECTION_DESCRIPTION removed — collections no longer have a description.
+const COLLECTION_TITLE_EN = 'User Manual'
+const COLLECTION_TITLE_DE = 'Benutzerhandbuch'
 
 interface SeedDemoContentOptions {
   userId: string
@@ -36,7 +38,7 @@ interface SeedDemoContentOptions {
 
 export interface SeedResult {
   collectionId: string
-  skriptId: string
+  skriptIds: string[]
   layoutId: string
   pageCount: number
 }
@@ -52,8 +54,8 @@ function slugSuffix(userId: string): string {
   return userId.slice(-8)
 }
 
-function skriptSlug(userId: string): string {
-  return `demo-welcome-${slugSuffix(userId)}`
+function skriptSlug(templateSlug: string, userId: string): string {
+  return `${templateSlug}-${slugSuffix(userId)}`
 }
 
 export { DEMO_EMAIL, DEMO_PASSWORD, DEMO_SITE_SLUG } from './demo-account'
@@ -197,8 +199,9 @@ export async function resetDemoUser(prisma: PrismaLike): Promise<SeedResult & { 
 }
 
 /**
- * Read the template skript's metadata + pages from the DB (see
- * scripts/promote-welcome-skript.ts for how these were created).
+ * Read a template skript's metadata + pages from the DB. The templates are
+ * the 8 skripts (4 English + 4 German) in Marc's "User Manual" /
+ * "Benutzerhandbuch" collections, editable via the dashboard.
  */
 async function readTemplateSkript(
   prisma: PrismaLike,
@@ -242,57 +245,62 @@ export async function seedDemoContent(options: SeedDemoContentOptions): Promise<
     )
   }
 
-  const templateSlug = site.pageLanguage?.toLowerCase().startsWith('de')
-    ? TEMPLATE_SKRIPT_SLUG_DE
-    : TEMPLATE_SKRIPT_SLUG_EN
-  const skriptMeta = await readTemplateSkript(prisma, templateSlug)
-  const pages = skriptMeta.pages
+  const isGerman = site.pageLanguage?.toLowerCase().startsWith('de') ?? false
+  const templateSlugs = isGerman ? TEMPLATE_SKRIPT_SLUGS_DE : TEMPLATE_SKRIPT_SLUGS_EN
 
   const collection = await prisma.collection.create({
     data: {
-      title: COLLECTION_TITLE,
+      title: isGerman ? COLLECTION_TITLE_DE : COLLECTION_TITLE_EN,
       siteId: site.id,
     },
   })
 
-  // Create skript
-  const skript = await prisma.skript.create({
-    data: {
-      title: skriptMeta.title,
-      slug: skriptSlug(userId),
-      description: skriptMeta.description || null,
-      isPublished: true,
-      authors: {
-        create: { userId, permission: 'author' },
-      },
-    },
-  })
+  let pageCount = 0
+  const skriptIds: string[] = []
 
-  // Link skript to collection
-  await prisma.collectionSkript.create({
-    data: {
-      collectionId: collection.id,
-      skriptId: skript.id,
-      order: 0,
-    },
-  })
+  for (let skriptOrder = 0; skriptOrder < templateSlugs.length; skriptOrder++) {
+    const templateSlug = templateSlugs[skriptOrder]
+    const skriptMeta = await readTemplateSkript(prisma, templateSlug)
+    const pages = skriptMeta.pages
 
-  // Create pages
-  for (let i = 0; i < pages.length; i++) {
-    const page = pages[i]
-    await prisma.page.create({
+    const skript = await prisma.skript.create({
       data: {
-        title: page.title,
-        slug: page.slug,
-        content: page.content,
-        order: i,
+        title: skriptMeta.title,
+        slug: skriptSlug(templateSlug, userId),
+        description: skriptMeta.description || null,
         isPublished: true,
-        skriptId: skript.id,
         authors: {
           create: { userId, permission: 'author' },
         },
       },
     })
+    skriptIds.push(skript.id)
+
+    await prisma.collectionSkript.create({
+      data: {
+        collectionId: collection.id,
+        skriptId: skript.id,
+        order: skriptOrder,
+      },
+    })
+
+    for (let i = 0; i < pages.length; i++) {
+      const page = pages[i]
+      await prisma.page.create({
+        data: {
+          title: page.title,
+          slug: page.slug,
+          content: page.content,
+          order: i,
+          isPublished: true,
+          skriptId: skript.id,
+          authors: {
+            create: { userId, permission: 'author' },
+          },
+        },
+      })
+    }
+    pageCount += pages.length
   }
 
   // Add collection to the user's site-level page layout. `site` was fetched
@@ -322,8 +330,8 @@ export async function seedDemoContent(options: SeedDemoContentOptions): Promise<
 
   return {
     collectionId: collection.id,
-    skriptId: skript.id,
+    skriptIds,
     layoutId: layout.id,
-    pageCount: pages.length,
+    pageCount,
   }
 }
