@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { requireOrgAdmin, requireOrgMember } from '@/lib/org-auth'
 import { prisma } from '@/lib/prisma'
+import { CACHE_TAGS } from '@/lib/cached-queries'
 
 // GET /api/organizations/[orgId] - Get organization details
 export async function GET(
@@ -175,6 +177,18 @@ export async function PATCH(
         },
       },
     })
+
+    // Same gap as /api/user/sidebar-preference: /org/[orgSlug]/[pageSlug] (the
+    // eduskript.org/<slug> routing — gatedOrg() in proxy.ts) is a plain
+    // revalidate:false ISR page with no unstable_cache tags, so it never sees
+    // the CACHE_TAGS revalidation below. Bust the whole org path subtree
+    // directly, and the [domain]-route tags for teachers/orgs on a custom
+    // domain pointed at this same site.
+    if (organization.site?.slug) {
+      revalidatePath(`/org/${organization.site.slug}`, 'layout')
+      revalidateTag(CACHE_TAGS.user(organization.site.slug), { expire: 0 })
+      revalidateTag(CACHE_TAGS.teacherContent(organization.site.slug), { expire: 0 })
+    }
 
     const orgWithSlug = {
       ...organization,

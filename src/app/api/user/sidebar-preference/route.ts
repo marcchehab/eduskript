@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
-import { revalidateTag } from 'next/cache'
+import { revalidateTag, revalidatePath } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { resolveOwnedSite } from '@/lib/sites'
@@ -77,6 +77,22 @@ export async function POST(request: Request) {
     // non-primary site's toggle appeared not to "take".
     revalidateTag(CACHE_TAGS.user(site.slug), { expire: 0 })
     revalidateTag(CACHE_TAGS.teacherContent(site.slug), { expire: 0 })
+
+    // This teacher's site is also reachable at eduskript.org/<pageSlug> via
+    // /org/[orgSlug]/[pageSlug] for every org they belong to (gatedOrg() in
+    // proxy.ts). That route is a plain revalidate:false ISR page with no
+    // unstable_cache tags of its own — the revalidateTag calls above never
+    // reach it — so it needs an explicit path bust or it serves the old
+    // sidebarBehavior indefinitely.
+    const orgSlugs = await prisma.organizationMember.findMany({
+      where: { userId: session.user.id },
+      select: { organization: { select: { site: { select: { slug: true } } } } },
+    })
+    for (const { organization } of orgSlugs) {
+      if (organization.site?.slug) {
+        revalidatePath(`/org/${organization.site.slug}/${site.slug}`, 'layout')
+      }
+    }
 
     return NextResponse.json({
       success: true,
