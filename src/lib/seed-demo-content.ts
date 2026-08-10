@@ -1,16 +1,15 @@
 /**
- * Seeds demo content from demo-content/ markdown files for a given user.
+ * Seeds demo content for a given user by cloning the pages of a template
+ * skript owned by eduadmin (see scripts/promote-welcome-skript.ts).
  *
  * Used by:
  * - /api/seed-example-content (new user "Explore with examples" button)
  * - scripts/reset-demo-user.ts (nightly demo account reset)
  *
- * Reads markdown files from the demo-content/ directory at project root.
- * Creates one collection + one skript + pages, all owned by the given user.
+ * Picks the English or German template based on the user's Site.pageLanguage
+ * (BCP-47, null/non-"de" = English). Creates one collection + one skript +
+ * pages, all owned by the given user.
  */
-
-import { readFileSync, readdirSync, existsSync } from 'fs'
-import { join } from 'path'
 
 // Mirrors PRIMARY_SITE_ORDER in src/lib/sites.ts. Inlined rather than imported:
 // that module pulls in @/lib/prisma, which throws at import time when
@@ -21,7 +20,11 @@ const PRIMARY_SITE_ORDER = [{ order: 'asc' as const }, { createdAt: 'asc' as con
 // Accept any Prisma-like client (the app uses an extended client, scripts use plain).
 type PrismaLike = any
 
-const DEMO_CONTENT_DIR = join(process.cwd(), 'demo-content')
+// Slugs of the eduadmin-owned template skripts created by
+// scripts/promote-welcome-skript.ts. Edit their content via the dashboard
+// (Marc is a co-author on both) — this file only clones them.
+const TEMPLATE_SKRIPT_SLUG_EN = 'welcome-to-eduskript'
+const TEMPLATE_SKRIPT_SLUG_DE = 'willkommen-bei-eduskript'
 
 const COLLECTION_TITLE = 'Getting Started with Eduskript'
 // COLLECTION_DESCRIPTION removed — collections no longer have a description.
@@ -194,64 +197,32 @@ export async function resetDemoUser(prisma: PrismaLike): Promise<SeedResult & { 
 }
 
 /**
- * Read and parse all markdown pages from demo-content/ directory.
- * Reuses the same filename pattern as sync-docs.ts: NN-slug.md
+ * Read the template skript's metadata + pages from the DB (see
+ * scripts/promote-welcome-skript.ts for how these were created).
  */
-function readDemoPages(): PageData[] {
-  if (!existsSync(DEMO_CONTENT_DIR)) {
-    throw new Error(`Demo content directory not found: ${DEMO_CONTENT_DIR}`)
-  }
-
-  const entries = readdirSync(DEMO_CONTENT_DIR)
-  const mdFiles = entries.filter(
-    f => f.endsWith('.md') && !f.startsWith('_')
-  )
-
-  const pages: PageData[] = mdFiles.map(filename => {
-    const content = readFileSync(join(DEMO_CONTENT_DIR, filename), 'utf-8')
-    const match = filename.match(/^(\d+)-(.+)\.md$/)
-
-    let order: number
-    let slug: string
-
-    if (match) {
-      order = parseInt(match[1], 10)
-      slug = match[2]
-    } else {
-      order = 999
-      slug = filename.replace('.md', '')
-    }
-
-    // Extract title from first # heading
-    let title = slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
-    const h1Match = content.match(/^#\s+(.+)$/m)
-    if (h1Match) {
-      title = h1Match[1].trim()
-    }
-
-    return { slug, title, content, order }
+async function readTemplateSkript(
+  prisma: PrismaLike,
+  slug: string
+): Promise<{ title: string; description?: string; pages: PageData[] }> {
+  const skript = await prisma.skript.findUnique({
+    where: { slug },
+    select: {
+      title: true,
+      description: true,
+      pages: {
+        orderBy: { order: 'asc' },
+        select: { slug: true, title: true, content: true, order: true },
+      },
+    },
   })
-
-  pages.sort((a, b) => a.order - b.order)
-  return pages
-}
-
-/**
- * Read skript metadata from _skript.json
- */
-function readSkriptMeta(): { title: string; description?: string } {
-  const metaPath = join(DEMO_CONTENT_DIR, '_skript.json')
-  if (existsSync(metaPath)) {
-    return JSON.parse(readFileSync(metaPath, 'utf-8'))
+  if (!skript) {
+    throw new Error(`Template skript not found: ${slug}`)
   }
-  return { title: 'Welcome to Eduskript' }
+  return skript
 }
 
 export async function seedDemoContent(options: SeedDemoContentOptions): Promise<SeedResult> {
   const { userId, prisma } = options
-
-  const skriptMeta = readSkriptMeta()
-  const pages = readDemoPages()
 
   // Create collection. Ownership goes through the user's Site, not via a
   // CollectionAuthor row — the demo seeder requires the user to already have
@@ -261,13 +232,20 @@ export async function seedDemoContent(options: SeedDemoContentOptions): Promise<
   const site = await prisma.site.findFirst({
     where: { userId },
     orderBy: PRIMARY_SITE_ORDER,
-    select: { id: true },
+    select: { id: true, pageLanguage: true },
   })
   if (!site) {
     throw new Error(
       `Cannot seed demo content for user ${userId}: no Site exists. Set a pageSlug first.`
     )
   }
+
+  const templateSlug = site.pageLanguage?.toLowerCase().startsWith('de')
+    ? TEMPLATE_SKRIPT_SLUG_DE
+    : TEMPLATE_SKRIPT_SLUG_EN
+  const skriptMeta = await readTemplateSkript(prisma, templateSlug)
+  const pages = skriptMeta.pages
+
   const collection = await prisma.collection.create({
     data: {
       title: COLLECTION_TITLE,

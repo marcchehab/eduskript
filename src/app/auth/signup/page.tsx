@@ -8,7 +8,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Check, X } from 'lucide-react'
+
+const PAGE_LANGUAGES = [
+  { value: 'de-CH', label: 'Deutsch (Schweiz)', flag: '/flags/de-ch.png' },
+  { value: 'en-GB', label: 'English (UK)', flag: '/flags/en-gb.svg' },
+]
 
 export default function SignUpPage() {
   const [formData, setFormData] = useState({
@@ -16,7 +22,8 @@ export default function SignUpPage() {
     email: '',
     password: '',
     confirmPassword: '',
-    pageSlug: ''
+    pageSlug: '',
+    pageLanguage: 'en-GB'
   })
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
@@ -66,7 +73,8 @@ export default function SignUpPage() {
           name: formData.name,
           email: formData.email,
           password: formData.password,
-          pageSlug: formData.pageSlug
+          pageSlug: formData.pageSlug,
+          pageLanguage: formData.pageLanguage
         })
       })
 
@@ -240,6 +248,31 @@ export default function SignUpPage() {
                 />
                 <p className="text-sm text-gray-500">
                   Your page URL: eduskript.org/{formData.pageSlug || 'your-page-name'}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="pageLanguage">Page Language</Label>
+                <Select
+                  value={formData.pageLanguage}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, pageLanguage: value }))}
+                >
+                  <SelectTrigger id="pageLanguage">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAGE_LANGUAGES.map(lang => (
+                      <SelectItem key={lang.value} value={lang.value}>
+                        <span className="flex items-center gap-2">
+                          {/* eslint-disable-next-line @next/next/no-img-element -- tiny static SVG/PNG flag icon; Next's image optimizer refuses local SVGs without dangerouslyAllowSVG */}
+                          <img src={lang.flag} alt="" width={20} height={14} className="rounded-xs object-cover" />
+                          {lang.label}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-sm text-gray-500">
+                  Language of your page and the example content you start with.
                 </p>
               </div>
               <div className="space-y-2">

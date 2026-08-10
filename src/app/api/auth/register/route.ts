@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { name, email, password, pageSlug: requestedPageSlug } = await request.json()
+    const { name, email, password, pageSlug: requestedPageSlug, pageLanguage: requestedPageLanguage } = await request.json()
 
     // Validate input
     if (!name || !email || !password) {
@@ -97,6 +97,14 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    // BCP-47 tag from the signup language dropdown (e.g. "de-CH", "en-GB").
+    // Same loose validation as the profile PATCH route — anything not
+    // matching is silently dropped rather than blocking signup.
+    const pageLanguage: string | null =
+      typeof requestedPageLanguage === 'string' && /^[a-zA-Z][a-zA-Z0-9-]{1,34}$/.test(requestedPageLanguage)
+        ? requestedPageLanguage
+        : null
 
     // Validate password strength
     const passwordValidation = validatePassword(password)
@@ -162,7 +170,7 @@ export async function POST(request: NextRequest) {
         },
       })
       await tx.site.create({
-        data: { slug: pageSlug, userId: u.id },
+        data: { slug: pageSlug, userId: u.id, pageLanguage },
       })
       return u
     })

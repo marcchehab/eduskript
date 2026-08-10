@@ -15,7 +15,7 @@ Sandboxed by default: a strict CSP prevents network access, DOM escape, or data 
 Pass config as attributes:
 
 ```markdown
-<plugin src="informatikgarten/mod-clock" mod="7" font="14" lang="de" />
+<plugin src="eduadmin/mod-clock" mod="7" font="14" lang="de" />
 ```
 
 The plugin author defines which attributes matter. Browse plugins at **Dashboard → Plugins → Browse**.
@@ -98,8 +98,8 @@ No `fetch()` to arbitrary URLs. No access to cookies, storage, or the parent pag
 
 ## See in the wild
 
-- `marcchehab/mod-clock` — modular arithmetic visualizer
-- `marcchehab/dijkstra` — interactive Dijkstra on a graph
-- `marcchehab/excalidraw` — Excalidraw as a plugin (yes, plugins can host plugins)
+- `eduadmin/mod-clock` — modular arithmetic visualizer
+- `eduadmin/dijkstra-visualizer` — interactive Dijkstra on a graph
+- `eduadmin/cipher-lab` — classic ciphers, encode and decode interactively
 
 Full plugin-building guide is in the developer docs.

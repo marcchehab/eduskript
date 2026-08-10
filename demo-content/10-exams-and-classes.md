@@ -64,8 +64,9 @@ Each exam attempt creates a **submission** — a snapshot of code, answers, and 
 - Run their code yourself
 - Add a numeric score + rich-text feedback
 - Comment on individual code blocks
+- **AI scoring** — write a rubric once per exercise, then AI-score every submission against it in one pass. Awards points + feedback only; your manual overrides always win.
 
-Auto-graded `python-check` results sit alongside your manual grading — so you can see who passed all checks vs who needs a closer look at a glance.
+Auto-graded `python-check` results, AI scores, and your own overrides sit side by side in a priority table — so you can see who passed all checks vs who needs a closer look at a glance.
 
 ---
 
