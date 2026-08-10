@@ -204,7 +204,9 @@ async function readTemplateSkript(
   prisma: PrismaLike,
   slug: string
 ): Promise<{ title: string; description?: string; pages: PageData[] }> {
-  const skript = await prisma.skript.findUnique({
+  // findFirst, not findUnique — Skript.slug has no @unique constraint at the
+  // schema level (only [skriptId, slug] on Page is unique).
+  const skript = await prisma.skript.findFirst({
     where: { slug },
     select: {
       title: true,
