@@ -19,6 +19,7 @@ import { remarkCallouts } from './remark-plugins/callouts'
 import { remarkMuxVideo } from './remark-plugins/mux-video'
 import { remarkYoutube } from './remark-plugins/youtube'
 import { remarkYoutubeImage } from './remark-plugins/youtube-image'
+import { remarkFlagIcon } from './remark-plugins/flag-icon'
 import { remarkQuiz } from './remark-plugins/quiz'
 import { remarkSurvey } from './remark-plugins/survey'
 import { remarkFileLinkResolver } from './remark-plugins/file-link-resolver'
@@ -35,6 +36,7 @@ export const remarkPlugins: PluggableList = [
   remarkGfm,
   remarkMath,
   remarkYoutubeImage,
+  remarkFlagIcon,
   remarkImageAttrs,
   remarkImageResolver,
   remarkExcalidraw,

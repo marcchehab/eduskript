@@ -239,6 +239,11 @@ The expression \`[x**2 for x in range(10)]\`{:python} is a list comprehension.
 
 Same language set as \`editor\`/fenced code blocks: python, javascript/js, typescript/ts, sql, php, java, cpp, rust, go, html, css, json, xml, yaml. No marker → plain, uncolored inline code (the default).`)
 
+  // Flag icons
+  sections.push(`## Flag Icons
+
+\`:flag-en-gb:\` or \`:flag-de-ch:\` drops an inline flag icon anywhere in text, e.g. a heading: \`## User Manual :flag-en-gb:\`. Only these two codes exist (matching the signup page's language picker); any other code is left as literal text.`)
+
   // Math
   sections.push(`## Math (KaTeX)
 
@@ -789,6 +794,8 @@ export function getCondensedSyntaxReference(): string {
 **Inline code with a language:** \`code\`{:python} — a language marker right after the closing backtick of inline code gets the same per-token color highlighting as a fenced block, without breaking it out of the sentence. Same language set as code editors/blocks (python, javascript/js, typescript/ts, sql, php, java, cpp, rust, go, html, css, json, xml, yaml). No marker → plain, uncolored inline code (the default).
 
 **YouTube:** \`![caption](https://youtu.be/VIDEO_ID?t=120)\` is the simplest form (alt becomes caption). Or \`<youtube id="VIDEO_ID" startTime={120} caption="..." />\`, or the underlying \`<youtube-embed data-id="VIDEO_ID" data-start-time="120" data-caption="..."></youtube-embed>\`. Use \`playlist\`/\`data-playlist\` for playlists.
+
+**Flag icons:** \`:flag-en-gb:\` / \`:flag-de-ch:\` inline anywhere in text, e.g. \`## User Manual :flag-en-gb:\`. Only these two codes exist.
 
 **GeoGebra:** \`<geogebra material-id="dNPHaqgb" [show-toolbar="true"] [correct-when="correct"] />\` — embeds an interactive GeoGebra applet by material id (from a geogebra.org share link); auto-fits height by default (add \`height="450"\` to pin). \`correct-when\` captures per-student correctness for the teacher's class tally.
 

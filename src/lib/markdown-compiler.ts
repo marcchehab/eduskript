@@ -86,6 +86,7 @@ export const sanitizeSchema = {
     'tabs-container',
     'tab-item',
     'youtube-embed',
+    'flag-icon', // :flag-en-gb: / :flag-de-ch: inline icon (remarkFlagIcon)
     'muxvideo',
     'excalidraw-image',
     'question',
@@ -144,6 +145,7 @@ export const sanitizeSchema = {
     'code-editor': ['dataLanguage', 'dataCode', 'dataFiles', 'dataId', 'dataDb', 'dataSchemaImage', 'dataSingle', 'dataShowCanvas', 'dataSolution', 'dataExam', 'dataCheckCode', 'dataCheckStages', 'dataCheckPoints', 'dataMaxChecks', 'dataAssets', 'dataAllowUpload', 'dataAccept', 'dataHeight', 'dataOutputOnly', 'data-language', 'data-code', 'data-files', 'data-id', 'data-db', 'data-schema-image', 'data-single', 'data-show-canvas', 'data-solution', 'data-exam', 'data-check-code', 'data-check-stages', 'data-check-points', 'data-max-checks', 'data-assets', 'data-allow-upload', 'data-accept', 'data-height', 'data-output-only'],
     'tabs-container': ['dataItems', 'data-items'],
     'youtube-embed': ['dataId', 'dataPlaylist', 'dataStartTime', 'dataCaption', 'dataPin', 'data-id', 'data-playlist', 'data-start-time', 'data-caption', 'data-pin'],
+    'flag-icon': ['dataCode', 'data-code'],
     'mermaid-diagram': ['dataDefinition', 'data-definition'],
     'function-plot': ['dataSpec', 'data-spec'],
     'molecule': ['smiles', 'name', 'width', 'height', 'display-width', 'displayWidth', 'align', 'wrap'],

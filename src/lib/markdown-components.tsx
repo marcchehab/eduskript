@@ -585,6 +585,19 @@ export function createMarkdownComponents(
     )
   }
 
+  // Flag icon component - :flag-en-gb: / :flag-de-ch:, extension hardcoded
+  // per code since only these two files exist in /public/flags/ (see
+  // src/app/auth/signup/page.tsx, the FLAG_CODES source of truth).
+  const FLAG_ICON_EXT: Record<string, string> = { 'de-ch': 'png', 'en-gb': 'svg' }
+  function FlagIconComponent({ ...props }: React.HTMLAttributes<HTMLElement> & Record<string, unknown>) {
+    const code = (props['data-code'] as string) || (props['dataCode'] as string) || ''
+    const ext = FLAG_ICON_EXT[code]
+    if (!ext) return null
+
+    // eslint-disable-next-line @next/next/no-img-element -- tiny static SVG/PNG flag icon; Next's image optimizer refuses local SVGs without dangerouslyAllowSVG
+    return <img src={`/flags/${code}.${ext}`} alt="" width={20} height={14} className="inline-block align-[-0.15em] rounded-xs object-cover" />
+  }
+
   // Tabs container component - renders tabs UI directly from HTML children
   // We can't use the Tabs component here because element.type comparison fails
   // between server and client bundles
@@ -765,6 +778,7 @@ export function createMarkdownComponents(
     'tabs-container': TabsContainerComponent,
     'tab-item': TabItem,
     'youtube-embed': YoutubeEmbedComponent,
+    'flag-icon': FlagIconComponent,
     'mermaid-diagram': (props: { 'data-definition'?: string }) => {
       const encoded = props['data-definition'] ?? ''
       return <MermaidDiagram definition={decodeHtmlEntities(encoded)} />
