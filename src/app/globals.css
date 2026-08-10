@@ -2257,22 +2257,13 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
   border-left: 3px solid rgb(34, 197, 94);
 }
 
-/* Sober bold: heavier weight + an orange accent instead of an
-   underline/highlight decoration. Flat, static, no rainbow, no animation.
-   Own tuned shade (not --es-color-orange, whose orange-700 light value reads
-   brown on white) so bold's tone can be adjusted independent of the
-   teacher-facing highlighted-text color. Teachers who want flashier emphasis
-   can add their own <style> block (scoped CSS is supported in page content)
-   — see the "Custom CSS" section in src/lib/ai/syntax-reference.ts. */
+/* Plain bold: heavier weight only, no color/underline/highlight decoration.
+   Teachers who want flashier emphasis can add their own <style> block
+   (scoped CSS is supported in page content) — see the "Custom CSS" section
+   in src/lib/ai/syntax-reference.ts. */
 .prose-theme strong,
 .prose-theme b {
   font-weight: 700;
-  color: #ea580c; /* orange-600 */
-}
-
-.dark .prose-theme strong,
-.dark .prose-theme b {
-  color: #fdba74; /* orange-300 */
 }
 
 /* Prevent OS dark-mode color-scheme from leaking into the editor.
