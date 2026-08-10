@@ -14,6 +14,7 @@ import { remarkImageAttrs } from './remark-plugins/image-attrs'
 import { remarkExcalidraw } from './remark-plugins/excalidraw'
 import { remarkCodeEditor } from './remark-plugins/code-editor'
 import { remarkCodeCopy } from './remark-plugins/code-copy'
+import { remarkInlineCodeLang } from './remark-plugins/inline-code-lang'
 import { remarkCallouts } from './remark-plugins/callouts'
 import { remarkMuxVideo } from './remark-plugins/mux-video'
 import { remarkYoutube } from './remark-plugins/youtube'
@@ -42,6 +43,7 @@ export const remarkPlugins: PluggableList = [
   remarkPlot, // before remarkCodeEditor/remarkCodeCopy: they claim every remaining fence
   remarkCodeEditor,
   remarkCodeCopy, // after remarkCodeEditor: only plain code blocks remain
+  remarkInlineCodeLang,
   remarkCallouts,
   remarkYoutube,
   remarkFileLinkResolver,

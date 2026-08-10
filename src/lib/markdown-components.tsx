@@ -24,6 +24,7 @@ import { Question, Option } from '@/components/markdown/quiz'
 import { Survey } from '@/components/markdown/survey'
 import { Callout } from '@/components/markdown/callout'
 import { CodeBlock } from '@/components/markdown/code-block'
+import { InlineCodeHighlighted } from '@/components/markdown/inline-code-highlighted'
 import { OurTeachers } from '@/components/markdown/our-teachers'
 import { DemoEditor } from '@/components/demo/demo-editor'
 import { StickMe } from '@/components/markdown/stick-me'
@@ -96,6 +97,16 @@ function PreComponent({ children, ...props }: React.HTMLAttributes<HTMLPreElemen
 function CodeComponent({ children, className, isExam, ...props }: React.HTMLAttributes<HTMLElement> & { className?: string; isExam?: boolean }) {
   const match = /language-(\w+)/.exec(className || '')
   const language = match ? match[1] : undefined
+
+  // `` `code`{:python} `` — remarkInlineCodeLang carries the language through
+  // as data-lang (rehype-react keys it either way depending on renderer).
+  const inlineLangProps = props as Record<string, unknown>
+  const inlineLang = (inlineLangProps['data-lang'] ?? inlineLangProps['dataLang']) as string | undefined
+
+  if (!language && inlineLang) {
+    const code = typeof children === 'string' ? children : String(children ?? '')
+    return <InlineCodeHighlighted code={code} lang={inlineLang} />
+  }
 
   if (!language) {
     // Inline code
