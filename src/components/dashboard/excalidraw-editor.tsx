@@ -207,13 +207,16 @@ export function ExcalidrawEditor({
       // Export to SVG for both light and dark themes
       const { exportToSvg } = await import('@excalidraw/excalidraw')
 
-      // Light theme SVG
+      // Light theme SVG. exportEmbedScene embeds the full editable scene
+      // data in the SVG itself, so it can be dragged back into Excalidraw
+      // to recover the drawing even if the .excalidraw JSON is ever lost.
       const lightSvgElement = await exportToSvg({
         elements: elements,
         appState: {
           ...appState,
           exportBackground: false,
           exportWithDarkMode: false,
+          exportEmbedScene: true,
         },
         files: excalidrawAPI.getFiles(),
       })
@@ -226,6 +229,7 @@ export function ExcalidrawEditor({
           ...appState,
           exportBackground: false,
           exportWithDarkMode: true,
+          exportEmbedScene: true,
         },
         files: excalidrawAPI.getFiles(),
       })

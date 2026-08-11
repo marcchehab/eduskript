@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react'
 import { HardDriveDownload, Folder, FileArchive, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -39,17 +40,18 @@ export function ExportSkriptModal({ skriptId, skriptTitle }: ExportSkriptModalPr
   const [progress, setProgress] = useState<ExportProgress | null>(null)
   const [errors, setErrors] = useState<string[]>([])
   const [failure, setFailure] = useState<string | null>(null)
+  const [includeVideos, setIncludeVideos] = useState(false)
 
   const directoryPickerSupported = typeof window !== 'undefined' && !!window.showDirectoryPicker
   const busy = progress !== null && progress.stage !== 'done'
 
-  async function run(fn: (id: string, onProgress: (p: ExportProgress) => void, exportedBy: { userId: string; name: string | null } | null) => Promise<{ errors: string[] }>) {
+  async function run(fn: (id: string, onProgress: (p: ExportProgress) => void, exportedBy: { userId: string; name: string | null } | null, includeVideos: boolean) => Promise<{ errors: string[] }>) {
     setErrors([])
     setFailure(null)
     setProgress({ stage: 'fetching', current: 0, total: 1 })
     const exportedBy = session?.user?.id ? { userId: session.user.id, name: session.user.name ?? null } : null
     try {
-      const result = await fn(skriptId, setProgress, exportedBy)
+      const result = await fn(skriptId, setProgress, exportedBy, includeVideos)
       setErrors(result.errors)
     } catch (err) {
       setFailure(err instanceof Error ? err.message : 'Export failed')
@@ -75,31 +77,41 @@ export function ExportSkriptModal({ skriptId, skriptTitle }: ExportSkriptModalPr
         <DialogHeader>
           <DialogTitle>Export &ldquo;{skriptTitle}&rdquo;</DialogTitle>
           <DialogDescription>
-            Pages as markdown, attachments, and videos are downloaded and packed directly in your
-            browser — the server isn&rsquo;t involved.
+            Pages as markdown and attachments are downloaded and packed directly in your browser —
+            the server isn&rsquo;t involved.
           </DialogDescription>
         </DialogHeader>
 
         {!busy && progress?.stage !== 'done' && (
-          <div className="grid grid-cols-2 gap-3">
-            <Button
-              variant="outline"
-              className="h-auto flex-col gap-2 py-4"
-              disabled={!directoryPickerSupported}
-              title={directoryPickerSupported ? undefined : 'Only available in Chrome/Edge'}
-              onClick={() => run(exportSkriptToDirectory)}
-            >
-              <Folder className="h-6 w-6" />
-              Choose folder
-            </Button>
-            <Button
-              variant="outline"
-              className="h-auto flex-col gap-2 py-4"
-              onClick={() => run(exportSkriptAsZip)}
-            >
-              <FileArchive className="h-6 w-6" />
-              As zip
-            </Button>
+          <div className="space-y-3">
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox checked={includeVideos} onCheckedChange={v => setIncludeVideos(v === true)} />
+              Also export videos (takes a while)
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                variant="outline"
+                className="h-auto flex-col gap-2 py-4"
+                disabled={!directoryPickerSupported}
+                onClick={() => run(exportSkriptToDirectory)}
+              >
+                <Folder className="h-6 w-6" />
+                Choose folder
+              </Button>
+              <Button
+                variant="outline"
+                className="h-auto flex-col gap-2 py-4"
+                onClick={() => run(exportSkriptAsZip)}
+              >
+                <FileArchive className="h-6 w-6" />
+                As zip
+              </Button>
+            </div>
+            {!directoryPickerSupported && (
+              <p className="text-xs text-muted-foreground text-center">
+                Folder export is only supported in Chrome-based browsers.
+              </p>
+            )}
           </div>
         )}
 

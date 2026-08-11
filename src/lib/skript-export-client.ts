@@ -235,7 +235,8 @@ async function resolveVideoUrl(video: ExportVideo): Promise<string> {
 export async function exportSkriptAsZip(
   skriptId: string,
   onProgress: (p: ExportProgress) => void,
-  exportedBy: ExportedBy | null = null
+  exportedBy: ExportedBy | null = null,
+  includeVideos = false
 ): Promise<ExportOutcome> {
   onProgress({ stage: 'fetching', current: 0, total: 1 })
   const { skript, files, videos, authors, forkedPages } = await fetchExportData(skriptId)
@@ -260,7 +261,7 @@ export async function exportSkriptAsZip(
     }
   }
 
-  if (videos.length > 0) {
+  if (includeVideos && videos.length > 0) {
     const videosFolder = root.folder('videos')!
     for (let i = 0; i < videos.length; i++) {
       onProgress({ stage: 'videos', current: i, total: videos.length, label: videos[i].filename })
@@ -292,7 +293,8 @@ export async function exportSkriptAsZip(
 export async function exportSkriptToDirectory(
   skriptId: string,
   onProgress: (p: ExportProgress) => void,
-  exportedBy: ExportedBy | null = null
+  exportedBy: ExportedBy | null = null,
+  includeVideos = false
 ): Promise<ExportOutcome> {
   if (!window.showDirectoryPicker) {
     throw new Error('This browser does not support folder selection')
@@ -329,7 +331,7 @@ export async function exportSkriptToDirectory(
     }
   }
 
-  if (videos.length > 0) {
+  if (includeVideos && videos.length > 0) {
     const videosDir = await skriptDir.getDirectoryHandle('videos', { create: true })
     for (let i = 0; i < videos.length; i++) {
       onProgress({ stage: 'videos', current: i, total: videos.length, label: videos[i].filename })
