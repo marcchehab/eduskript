@@ -11,6 +11,7 @@ import { CollapsibleDrawer } from '@/components/ui/collapsible-drawer'
 import { PublishToggle } from '@/components/dashboard/publish-toggle'
 import { VersionHistory } from '@/components/dashboard/version-history'
 import { EditModal } from '@/components/dashboard/edit-modal'
+import { ExportSkriptModal } from '@/components/dashboard/export-skript-modal'
 import { CreatePageModal } from '@/components/dashboard/create-page-modal'
 import { SkriptAccessManager } from '@/components/permissions/SkriptAccessManager'
 import { EditorWithMedia, type ExtraManageTab } from '@/components/dashboard/editor-with-media'
@@ -701,6 +702,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                     <BookA className="w-4 h-4" />
                   </Button>
                 </Link>
+                <ExportSkriptModal skriptId={skript.id} skriptTitle={skript.title} />
                 <Button
                   variant="ghost"
                   size="sm"

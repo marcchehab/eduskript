@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
-import { Upload, Loader2, FileArchive, AlertTriangle, CheckCircle, Package, XCircle, Cloud, Clock } from 'lucide-react'
+import { HardDriveUpload, Loader2, FileArchive, AlertTriangle, CheckCircle, Package, XCircle, Cloud, Clock } from 'lucide-react'
 
 // Files larger than 10MB use S3 upload flow
 const LARGE_FILE_THRESHOLD = 10 * 1024 * 1024
@@ -539,7 +539,7 @@ export function ImportExportSettings() {
                     </>
                   ) : (
                     <>
-                      <Upload className="w-4 h-4 mr-2" />
+                      <HardDriveUpload className="w-4 h-4 mr-2" />
                       Select File
                     </>
                   )}
@@ -667,7 +667,7 @@ export function ImportExportSettings() {
                       </>
                     ) : (
                       <>
-                        <Upload className="w-4 h-4 mr-2" />
+                        <HardDriveUpload className="w-4 h-4 mr-2" />
                         Import Content
                       </>
                     )}

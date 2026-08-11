@@ -61,6 +61,7 @@ export async function POST(request: NextRequest) {
     const upload = await mux.video.uploads.create({
       new_asset_settings: {
         playback_policy: ['public'],
+        static_renditions: [{ resolution: 'highest' }],
         inputs: [
           {
             generated_subtitles: [
