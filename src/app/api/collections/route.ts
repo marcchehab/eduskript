@@ -84,8 +84,11 @@ export async function GET(request: NextRequest) {
     // a member of. Both branches collapse to the same query.
     void new URL(request.url).searchParams.get('includeShared')
 
+    // Only orgs where this user can actually edit content (owner/admin) —
+    // plain membership (e.g. every teacher auto-joins the default org at
+    // signup) must not leak that org's collections into a personal library.
     const memberships = await prisma.organizationMember.findMany({
-      where: { userId: session.user.id },
+      where: { userId: session.user.id, role: { in: ['owner', 'admin'] } },
       select: { organizationId: true },
     })
     const orgIds = memberships.map(m => m.organizationId)
