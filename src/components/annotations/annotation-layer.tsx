@@ -147,6 +147,16 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
   // Client-side check for page author permission (ISR pages can't compute this server-side)
   const [isPageAuthor, setIsPageAuthor] = useState(isPageAuthorProp)
 
+  // Gates the dev-only zoom-readout portal below. `typeof document !==
+  // 'undefined'` is true during the client's hydration pass too (not just
+  // after), so SSR renders nothing there while the client's first render
+  // renders the portal — a hydration mismatch. Flipping this via an effect
+  // means the first client render matches SSR (both skip it); the portal
+  // appears one tick later, which is a normal post-hydration update, not a
+  // mismatch.
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+
   // State for classes and students lists (for toolbar broadcast controls)
   const [teacherClasses, setTeacherClasses] = useState<Array<{ id: string; name: string; hasAnnotationsOnPage?: boolean }>>([])
   const [classStudents, setClassStudents] = useState<Array<{ id: string; displayName: string; pseudonym?: string; revealedEmail?: string | null; hasAnnotationsOnPage?: boolean }>>([])
@@ -3342,7 +3352,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     <ZoomProvider zoomRef={zoomRef}>
       {/* Dev-only zoom readout. Portaled to body so the transform on <main> doesn't
           composite it (otherwise the indicator would scale with the page). */}
-      {process.env.NODE_ENV === 'development' && typeof document !== 'undefined' && createPortal(
+      {mounted && process.env.NODE_ENV === 'development' && createPortal(
         <div
           className="fixed bottom-4 right-4 bg-black/80 text-white text-xs font-mono px-2 py-1 rounded pointer-events-none"
           style={{ zIndex: 99999 }}
