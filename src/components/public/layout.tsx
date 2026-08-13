@@ -58,7 +58,7 @@ interface RootSkript {
   slug: string
   hasFrontpage?: boolean
   collection: { title: string }
-  pages: Array<{ id: string, title: string, slug: string }>
+  pages: Array<{ id: string, title: string, slug: string, pageType?: string | null }>
 }
 
 export type SidebarItem =
@@ -170,8 +170,17 @@ export function PublicSiteLayout({
         if (found) return found
       }
     }
+    // Root-level skripts (placed directly, not inside a collection) were
+    // missing here — currentPage/pageId silently stayed undefined for them,
+    // which meant AuthButton never fetched can-edit and never showed the
+    // "Edit this page" affordance for their author.
+    for (const skript of rootSkripts) {
+      if (skript.slug !== paramSkriptSlug) continue
+      const found = skript.pages.find(p => p.slug === paramPageSlug)
+      if (found) return found
+    }
     return undefined
-  }, [siteStructure, paramSkriptSlug, paramPageSlug])
+  }, [siteStructure, rootSkripts, paramSkriptSlug, paramPageSlug])
 
   const pageId = pageIdProp ?? currentPage?.id
   const hideSidebar = hideSidebarProp ?? currentPage?.pageType === 'exam'
