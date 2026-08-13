@@ -76,6 +76,7 @@ import { revalidateTag, revalidatePath } from 'next/cache'
 import { generatePseudonym, getStableStudentNickname } from './privacy/pseudonym'
 import { createLogger } from '@/lib/logger'
 import { createTrialSubscription } from '@/lib/trial'
+import { seedOnboardingSkript } from '@/lib/seed-demo-content'
 import { CACHE_TAGS } from './cached-queries'
 import { notifyAdminsOfNewTeacher } from '@/lib/email'
 
@@ -399,6 +400,15 @@ export function PrivacyAdapter(options: PrivacyAdapterOptions): Adapter {
           revalidateTag(CACHE_TAGS.user(pageSlug), { expire: 0 })
           revalidateTag(CACHE_TAGS.teacherContent(pageSlug), { expire: 0 })
           revalidatePath(`/${pageSlug}`)
+
+          // Seed the starter skript into the new teacher's library. Requires
+          // a Site to pick a language from, so skip when pageSlug creation
+          // was deferred. Non-fatal — account creation should still succeed.
+          try {
+            await seedOnboardingSkript({ userId: createdUser.id, prisma })
+          } catch (error) {
+            console.error('Failed to seed onboarding skript:', error)
+          }
         }
 
         log.info(`Teacher account created: id=${createdUser.id}, pageSlug="${pageSlug}", email=${maskedEmail}`)

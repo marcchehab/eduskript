@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { CACHE_TAGS } from '@/lib/cached-queries'
 import { createTrialSubscription } from '@/lib/trial'
+import { seedOnboardingSkript } from '@/lib/seed-demo-content'
 import bcrypt from 'bcryptjs'
 
 // GET /api/admin/users - List all users
@@ -236,6 +237,16 @@ export async function POST(request: Request) {
     // plan has isDefaultTrial=true.
     if (!isStudent) {
       await createTrialSubscription(createdRaw.id)
+    }
+
+    // Seed the starter skript, same as self-signup. Requires the Site
+    // created above, so only when one exists. Non-fatal.
+    if (!isStudent && createdRaw.pageSlug) {
+      try {
+        await seedOnboardingSkript({ userId: createdRaw.id, prisma })
+      } catch (error) {
+        console.error('Failed to seed onboarding skript:', error)
+      }
     }
 
     // Bust any cached `null` for this pageSlug. If anything hit /<pageSlug>

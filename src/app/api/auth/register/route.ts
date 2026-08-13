@@ -8,6 +8,7 @@ import { randomBytes } from 'crypto'
 import { registrationRateLimiter, getClientIdentifier } from '@/lib/rate-limit'
 import { validatePassword } from '@/lib/password-validation'
 import { createTrialSubscription } from '@/lib/trial'
+import { seedOnboardingSkript } from '@/lib/seed-demo-content'
 import { CACHE_TAGS } from '@/lib/cached-queries'
 
 /**
@@ -205,6 +206,14 @@ export async function POST(request: NextRequest) {
 
     // Auto-start trial for teacher accounts (no-op if no default trial plan configured)
     await createTrialSubscription(user.id)
+
+    // Seed the starter skript into the new teacher's library. Non-fatal —
+    // registration should still succeed if this fails.
+    try {
+      await seedOnboardingSkript({ userId: user.id, prisma })
+    } catch (error) {
+      console.error('Failed to seed onboarding skript:', error)
+    }
 
     // Generate verification token
     const token = randomBytes(32).toString('hex')

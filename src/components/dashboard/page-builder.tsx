@@ -86,41 +86,10 @@ export function PageBuilder({
     : context.siteId
       ? `/dashboard/site/${context.siteId}/frontpage`
       : '/dashboard/frontpage'
-  const [seeding, setSeeding] = useState(false)
-  const [seedError, setSeedError] = useState('')
-  const [seedSuccess, setSeedSuccess] = useState('')
   const dialog = useAlertDialog()
   const [createCollectionOpen, setCreateCollectionOpen] = useState(false)
   const [newCollectionTitle, setNewCollectionTitle] = useState('')
   const [creatingCollection, setCreatingCollection] = useState(false)
-  const [createSkriptOpen, setCreateSkriptOpen] = useState(false)
-  const [newSkriptTitle, setNewSkriptTitle] = useState('')
-  const [creatingSkript, setCreatingSkript] = useState(false)
-
-  const handleSeedData = async () => {
-    setSeeding(true)
-    setSeedError('')
-    setSeedSuccess('')
-
-    try {
-      const response = await fetch('/api/seed-example-content', {
-        method: 'POST',
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to create example content')
-      }
-
-      setSeedSuccess('Example content created!')
-      onRefresh?.()
-    } catch (err) {
-      setSeedError(err instanceof Error ? err.message : 'An error occurred')
-    } finally {
-      setSeeding(false)
-    }
-  }
 
   // Create a collection from the "New Collection" / "Start from scratch"
   // dialog, then refresh so it shows up in the builder + library.
@@ -151,55 +120,6 @@ export function PageBuilder({
     }
   }
 
-
-  const generateSlug = (title: string) => {
-    return title
-      .toLowerCase()
-      .replace(/[^\w\s-]/g, '')
-      .replace(/\s+/g, '-')
-      .replace(/-+/g, '-')
-      .trim()
-  }
-
-  // "Start from scratch" — create a root-level skript (no collection) and
-  // place it straight onto the empty page, instead of the old
-  // create-a-collection flow.
-  const handleCreateSkript = async () => {
-    const title = newSkriptTitle.trim()
-    if (!title) return
-    setCreatingSkript(true)
-    try {
-      const res = await fetch('/api/skripts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, slug: generateSlug(title), description: '' }),
-      })
-      if (res.ok) {
-        const skript = await res.json()
-        setCreateSkriptOpen(false)
-        setNewSkriptTitle('')
-        onItemsChange?.([{
-          id: skript.id,
-          type: 'skript',
-          title: skript.title,
-          description: skript.description ?? undefined,
-          order: 0,
-          slug: skript.slug,
-          isPublished: skript.isPublished,
-          isUnlisted: skript.isUnlisted,
-          permissions: { canEdit: true, canView: true },
-        }])
-        onRefresh?.()
-      } else {
-        const data = await res.json().catch(() => ({}))
-        dialog.showError(data.error || 'Failed to create skript')
-      }
-    } catch {
-      dialog.showError('Failed to create skript')
-    } finally {
-      setCreatingSkript(false)
-    }
-  }
 
   const handleRemoveItem = (id: string, parentId?: string) => {
     if (parentId) {
@@ -298,62 +218,9 @@ export function PageBuilder({
             >
               {items.length === 0 ? (
                 <div id="page-builder-empty-drop-zone" className="text-center max-w-lg mx-auto">
-                  {seedError && (
-                    <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive mb-4">
-                      {seedError}
-                    </div>
-                  )}
-
-                  {seedSuccess && (
-                    <div className="rounded-md bg-green-500/10 p-3 text-sm text-green-600 mb-4">
-                      {seedSuccess}
-                    </div>
-                  )}
-
-                  <h3 className="text-lg font-medium text-muted-foreground mb-6">
-                    How would you like to start?
+                  <h3 className="text-lg font-medium text-muted-foreground">
+                    Drag a skript or collection from the library to add it to your page
                   </h3>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    {/* Explore with examples */}
-                    <button
-                      onClick={handleSeedData}
-                      disabled={seeding}
-                      className={cn(
-                        "flex flex-col items-center gap-3 p-6 rounded-lg border-2 border-dashed",
-                        "hover:border-primary hover:bg-primary/5 transition-colors text-left",
-                        "disabled:opacity-50 disabled:cursor-not-allowed"
-                      )}
-                    >
-                      <BookOpen className="w-8 h-8 text-primary" />
-                      <div className="text-center">
-                        <p className="font-medium text-sm">
-                          {seeding ? 'Creating...' : 'Explore with examples'}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Get a sample collection with pages showcasing markdown, math, callouts, and interactive code
-                        </p>
-                      </div>
-                    </button>
-
-                    {/* Start from scratch */}
-                    <button
-                      onClick={() => setCreateSkriptOpen(true)}
-                      className={cn(
-                        "flex flex-col items-center gap-3 p-6 rounded-lg border-2 border-dashed",
-                        "hover:border-primary hover:bg-primary/5 transition-colors text-left"
-                      )}
-                    >
-                      <Plus className="w-8 h-8 text-primary" />
-                      <div className="text-center">
-                        <p className="font-medium text-sm">Start from scratch</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Create a skript and build your content step by step
-                        </p>
-                      </div>
-                    </button>
-                  </div>
-
                   {provided.placeholder}
                 </div>
               ) : (
@@ -425,45 +292,6 @@ export function PageBuilder({
             disabled={creatingCollection || !newCollectionTitle.trim()}
           >
             {creatingCollection ? 'Creating…' : 'Create'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-
-    {/* New-skript prompt for the empty-state "Start from scratch" option.
-        Creates a root-level skript (no collection) and drops it straight
-        onto the page. */}
-    <Dialog open={createSkriptOpen} onOpenChange={setCreateSkriptOpen}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>New skript</DialogTitle>
-        </DialogHeader>
-        <Input
-          autoFocus
-          placeholder="Skript name"
-          value={newSkriptTitle}
-          onChange={(e) => setNewSkriptTitle(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              handleCreateSkript()
-            }
-          }}
-          disabled={creatingSkript}
-        />
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => setCreateSkriptOpen(false)}
-            disabled={creatingSkript}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={handleCreateSkript}
-            disabled={creatingSkript || !newSkriptTitle.trim()}
-          >
-            {creatingSkript ? 'Creating…' : 'Create'}
           </Button>
         </DialogFooter>
       </DialogContent>

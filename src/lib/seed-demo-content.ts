@@ -1,15 +1,16 @@
 /**
- * Seeds demo content for a given user by cloning the User Manual collection
- * (4 skripts each, EN + DE, owned by Marc/informatikgarten — see the
- * dashboard collections "User Manual" / "Benutzerhandbuch").
+ * Two seeders, both cloning skripts owned by Marc/informatikgarten, picking
+ * English or German by the user's Site.pageLanguage (BCP-47, null/non-"de" =
+ * English):
  *
- * Used by:
- * - /api/seed-example-content (new user "Explore with examples" button)
- * - scripts/reset-demo-user.ts (nightly demo account reset)
- *
- * Picks the English or German template skripts based on the user's
- * Site.pageLanguage (BCP-47, null/non-"de" = English). Creates one
- * collection + one skript per template + pages, all owned by the given user.
+ * - seedDemoContent: the full "User Manual" / "Benutzerhandbuch" collection
+ *   (4 skripts + pages), placed straight onto the page layout. Used only by
+ *   scripts/reset-demo-user.ts (nightly demo account reset) — the demo
+ *   account is a showcase, not a new-signup onboarding flow.
+ * - seedOnboardingSkript: a single starter skript, left unplaced in the
+ *   user's library. Called at signup (see src/app/api/auth/register/route.ts
+ *   and src/lib/privacy-adapter.ts) — the onboarding quest's first step is
+ *   having the user drag it onto their page themselves.
  */
 
 // Mirrors PRIMARY_SITE_ORDER in src/lib/sites.ts. Inlined rather than imported:
@@ -30,6 +31,12 @@ const TEMPLATE_SKRIPT_SLUGS_DE = ['willkommen', 'inhalte-schreiben', 'komponente
 
 const COLLECTION_TITLE_EN = 'User Manual'
 const COLLECTION_TITLE_DE = 'Benutzerhandbuch'
+
+// The single starter skript seeded at signup (see seedOnboardingSkript).
+// Marc is actively adapting these two skripts' content — if he renames
+// either skript's slug via the dashboard, update these to match.
+const ONBOARDING_SKRIPT_SLUG_EN = 'welcome'
+const ONBOARDING_SKRIPT_SLUG_DE = 'erste-schritte'
 
 interface SeedDemoContentOptions {
   userId: string
@@ -226,6 +233,79 @@ async function readTemplateSkript(
   return skript
 }
 
+/**
+ * Clone one template skript + its pages into a new Skript owned by userId.
+ * Shared by seedDemoContent's collection loop and seedOnboardingSkript.
+ */
+async function cloneTemplateSkript(
+  prisma: PrismaLike,
+  templateSlug: string,
+  userId: string
+): Promise<{ skriptId: string; pageCount: number }> {
+  const skriptMeta = await readTemplateSkript(prisma, templateSlug)
+
+  const skript = await prisma.skript.create({
+    data: {
+      title: skriptMeta.title,
+      slug: skriptSlug(templateSlug, userId),
+      description: skriptMeta.description || null,
+      isPublished: true,
+      authors: {
+        create: { userId, permission: 'author' },
+      },
+    },
+  })
+
+  for (let i = 0; i < skriptMeta.pages.length; i++) {
+    const page = skriptMeta.pages[i]
+    await prisma.page.create({
+      data: {
+        title: page.title,
+        slug: page.slug,
+        content: page.content,
+        order: i,
+        isPublished: true,
+        skriptId: skript.id,
+        authors: {
+          create: { userId, permission: 'author' },
+        },
+      },
+    })
+  }
+
+  return { skriptId: skript.id, pageCount: skriptMeta.pages.length }
+}
+
+export interface OnboardingSeedResult {
+  skriptId: string
+  pageCount: number
+}
+
+/**
+ * Seed the single language-matched starter skript into a new user's library.
+ * Deliberately NOT added to a collection or the page layout — the onboarding
+ * quest's first step is having the user place it themselves.
+ */
+export async function seedOnboardingSkript(
+  options: SeedDemoContentOptions
+): Promise<OnboardingSeedResult> {
+  const { userId, prisma } = options
+
+  const site = await prisma.site.findFirst({
+    where: { userId },
+    orderBy: PRIMARY_SITE_ORDER,
+    select: { id: true, pageLanguage: true },
+  })
+  if (!site) {
+    throw new Error(`Cannot seed onboarding skript for user ${userId}: no Site exists.`)
+  }
+
+  const isGerman = site.pageLanguage?.toLowerCase().startsWith('de') ?? false
+  const templateSlug = isGerman ? ONBOARDING_SKRIPT_SLUG_DE : ONBOARDING_SKRIPT_SLUG_EN
+
+  return cloneTemplateSkript(prisma, templateSlug, userId)
+}
+
 export async function seedDemoContent(options: SeedDemoContentOptions): Promise<SeedResult> {
   const { userId, prisma } = options
 
@@ -260,47 +340,18 @@ export async function seedDemoContent(options: SeedDemoContentOptions): Promise<
 
   for (let skriptOrder = 0; skriptOrder < templateSlugs.length; skriptOrder++) {
     const templateSlug = templateSlugs[skriptOrder]
-    const skriptMeta = await readTemplateSkript(prisma, templateSlug)
-    const pages = skriptMeta.pages
-
-    const skript = await prisma.skript.create({
-      data: {
-        title: skriptMeta.title,
-        slug: skriptSlug(templateSlug, userId),
-        description: skriptMeta.description || null,
-        isPublished: true,
-        authors: {
-          create: { userId, permission: 'author' },
-        },
-      },
-    })
-    skriptIds.push(skript.id)
+    const { skriptId, pageCount: clonedPageCount } = await cloneTemplateSkript(prisma, templateSlug, userId)
+    skriptIds.push(skriptId)
 
     await prisma.collectionSkript.create({
       data: {
         collectionId: collection.id,
-        skriptId: skript.id,
+        skriptId,
         order: skriptOrder,
       },
     })
 
-    for (let i = 0; i < pages.length; i++) {
-      const page = pages[i]
-      await prisma.page.create({
-        data: {
-          title: page.title,
-          slug: page.slug,
-          content: page.content,
-          order: i,
-          isPublished: true,
-          skriptId: skript.id,
-          authors: {
-            create: { userId, permission: 'author' },
-          },
-        },
-      })
-    }
-    pageCount += pages.length
+    pageCount += clonedPageCount
   }
 
   // Add collection to the user's site-level page layout. `site` was fetched
