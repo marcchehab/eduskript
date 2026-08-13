@@ -127,7 +127,7 @@ export default async function OrgTeacherContentPage({ params }: PageProps) {
       }]
 
   const teacherSite = teacher.sites[0]
-  const fullSiteStructure = teacherSite?.sidebarBehavior === 'full'
+  const fullSiteStructure = (teacherSite?.sidebarBehavior || 'full') === 'full'
     ? await getFullSiteStructure(teacher.id, teacherSite.slug)
     : undefined
 
@@ -165,7 +165,7 @@ export default async function OrgTeacherContentPage({ params }: PageProps) {
       siteStructure={siteStructure}
       fullSiteStructure={fullSiteStructure}
       currentPath={currentPath}
-      sidebarBehavior={(teacherSite?.sidebarBehavior as 'contextual' | 'full') || 'contextual'}
+      sidebarBehavior={(teacherSite?.sidebarBehavior as 'contextual' | 'full') || 'full'}
       typographyPreference={(teacher.sites[0]?.typographyPreference as 'modern' | 'classic') || 'modern'}
       routePrefix={`/org/${orgSlug}/${pageSlug}`}
       pageId={page.id}
