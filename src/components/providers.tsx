@@ -6,6 +6,7 @@ import { LayoutProvider } from '@/contexts/layout-context'
 import { UserDataProvider } from '@/lib/userdata/provider'
 import { ClassInvitationModal } from '@/components/class-invitation-modal'
 import { NicknameModalGate } from '@/components/onboarding/nickname-modal-gate'
+import { OnboardingQuestGate } from '@/components/onboarding/quest-gate'
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -22,6 +23,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
           <LayoutProvider>
             <ClassInvitationModal />
             <NicknameModalGate />
+            <OnboardingQuestGate />
             {children}
           </LayoutProvider>
         </UserDataProvider>

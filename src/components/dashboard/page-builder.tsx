@@ -15,6 +15,7 @@ import { PublishToggle } from './publish-toggle'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
 import { useState } from 'react'
+import { QuestSpotlight } from '@/components/onboarding/quest-spotlight'
 
 interface PageItem {
   id: string
@@ -176,19 +177,21 @@ export function PageBuilder({
               <Plus className="w-4 h-4" />
               New Collection
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onPreview}
-              className="flex items-center gap-2"
-            >
-              <Eye className="w-4 h-4" />
-              {previewUrl ? (
-                <span>View Public Page at <strong>{previewUrl}</strong></span>
-              ) : (
-                'View'
-              )}
-            </Button>
+            <QuestSpotlight step="visit_public_page" label="Try this!">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onPreview}
+                className="flex items-center gap-2"
+              >
+                <Eye className="w-4 h-4" />
+                {previewUrl ? (
+                  <span>View Public Page at <strong>{previewUrl}</strong></span>
+                ) : (
+                  'View'
+                )}
+              </Button>
+            </QuestSpotlight>
           </div>
         </div>
         <p className="text-sm text-muted-foreground">
@@ -475,14 +478,16 @@ function PageBuilderItem({ item, index, onRemove, expandedCollections, onToggleC
                     />
                   </div>
                 ) : item.permissions?.canEdit && item.slug ? (
-                  <Link
-                    href={`/dashboard/skripts/${item.slug}`}
-                    className="font-medium text-sm truncate hover:underline flex items-center gap-1 w-fit"
-                    title="Edit skript"
-                  >
-                    {item.title}
-                    <Edit className="w-3 h-3 shrink-0" />
-                  </Link>
+                  <QuestSpotlight step="open_page_editor" label="Try this!">
+                    <Link
+                      href={`/dashboard/skripts/${item.slug}`}
+                      className="font-medium text-sm truncate hover:underline flex items-center gap-1 w-fit"
+                      title="Edit skript"
+                    >
+                      {item.title}
+                      <Edit className="w-3 h-3 shrink-0" />
+                    </Link>
+                  </QuestSpotlight>
                 ) : (
                   <h4 className="font-medium text-sm truncate">{item.title}</h4>
                 )}
@@ -641,17 +646,19 @@ function SimpleSkriptItem({ item, index, parentId, parentCanEdit = true, parentA
                 <>
                   <div className="flex items-center gap-2">
                     {item.permissions?.canEdit && item.slug ? (
-                      <Link
-                        href={`/dashboard/skripts/${item.slug}`}
-                        className={cn(
-                          "font-medium text-xs truncate hover:underline flex items-center gap-1 w-fit",
-                          !item.permissions?.canEdit ? "text-muted-foreground" : "text-foreground"
-                        )}
-                        title="Edit skript"
-                      >
-                        {item.title}
-                        <Edit className="w-2.5 h-2.5 shrink-0" />
-                      </Link>
+                      <QuestSpotlight step="open_page_editor" label="Try this!">
+                        <Link
+                          href={`/dashboard/skripts/${item.slug}`}
+                          className={cn(
+                            "font-medium text-xs truncate hover:underline flex items-center gap-1 w-fit",
+                            !item.permissions?.canEdit ? "text-muted-foreground" : "text-foreground"
+                          )}
+                          title="Edit skript"
+                        >
+                          {item.title}
+                          <Edit className="w-2.5 h-2.5 shrink-0" />
+                        </Link>
+                      </QuestSpotlight>
                     ) : (
                       <h5 className={cn(
                         "font-medium text-xs truncate",

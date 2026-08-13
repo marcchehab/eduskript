@@ -164,7 +164,7 @@ export function DraggableSkript({
     author.permission === 'author' && author.userId !== currentUserId
   ).map(author => author.user)
 
-  const viewableBy = authors.filter(author => 
+  const viewableBy = authors.filter(author =>
     author.permission === 'viewer' && author.userId !== currentUserId
   ).map(author => author.user)
 

@@ -37,6 +37,8 @@ import {
 } from '@/components/ui/select'
 import { useSession } from 'next-auth/react'
 import { usePublicUrl } from '@/hooks/use-public-url'
+import { useQuestStep } from '@/lib/onboarding-quest/use-quest-step'
+import { QuestSpotlight } from '@/components/onboarding/quest-spotlight'
 import type { Skript, SkriptAuthor, User, Collection, CollectionSkript } from '@prisma/client'
 import type { UserPermissions } from '@/types'
 
@@ -121,6 +123,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
   // to a valid public URL for the skript via checkSkriptPermissions.
   const { buildPageUrl } = usePublicUrl(sessionPageSlug)
   const alert = useAlertDialog()
+  const { completeStep } = useQuestStep()
 
   // Exam settings state
   const [pageType, setPageType] = useState(page.pageType || 'normal')
@@ -185,6 +188,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
 
   // Skript-level handlers
   const handleSkriptUpdated = (newSlug?: string) => {
+    completeStep('rename_skript')
     if (newSlug) {
       router.push(`/dashboard/skripts/${newSlug}/pages/${page.slug}/edit`)
     } else {
@@ -433,6 +437,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
       if (response.ok) {
         setLastSaved(new Date())
         setHasUnsavedChanges(false)
+        completeStep('edit_page_content')
         // Reload versions to show the new version
         loadVersions()
         // Update URL if slug changed
@@ -450,7 +455,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
       alert.showError('Failed to save page')
     }
     setIsSaving(false)
-  }, [title, slug, description, pageType, examSettings, presentationPublic, page.id, page.slug, skript.slug, router, loadVersions, alert])
+  }, [title, slug, description, pageType, examSettings, presentationPublic, page.id, page.slug, skript.slug, router, loadVersions, alert, completeStep])
 
   // Handle version restoration
   const handleRestoreVersion = async (versionId: string, versionContent: string) => {
@@ -692,11 +697,13 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                   showText={false}
                   size="sm"
                 />
-                <EditModal
-                  type="skript"
-                  item={skript}
-                  onItemUpdated={handleSkriptUpdated}
-                />
+                <QuestSpotlight step="rename_skript" label="Try this!">
+                  <EditModal
+                    type="skript"
+                    item={skript}
+                    onItemUpdated={handleSkriptUpdated}
+                  />
+                </QuestSpotlight>
                 <Link href={`/dashboard/skripts/${skript.slug}/frontpage`}>
                   <Button variant="ghost" size="sm" title="Front Page">
                     <BookA className="w-4 h-4" />
@@ -764,6 +771,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
           targetSubtitle: skript.title,
         }}
         onAIEditApplied={async (newContent) => {
+          completeStep('use_ai_edit')
           if (newContent !== undefined) {
             setContent(newContent)
             setHasUnsavedChanges(false)
@@ -820,20 +828,23 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                   />
                   {sessionPageSlug && (
                     page.isPublished && skript.isPublished ? (
-                      <Link
-                        href={buildPageUrl(skript.slug, page.slug)}
-                        prefetch={false}
-                      >
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          title={page.isUnlisted || skript.isUnlisted
-                            ? 'View public page (unlisted — URL works but hidden from sidebar/search)'
-                            : 'View public page'}
+                      <QuestSpotlight step="view_via_eye_icon" label="Try this!">
+                        <Link
+                          href={buildPageUrl(skript.slug, page.slug)}
+                          prefetch={false}
+                          onClick={() => completeStep('view_via_eye_icon')}
                         >
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                      </Link>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            title={page.isUnlisted || skript.isUnlisted
+                              ? 'View public page (unlisted — URL works but hidden from sidebar/search)'
+                              : 'View public page'}
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                        </Link>
+                      </QuestSpotlight>
                     ) : (
                       <Button
                         variant="ghost"
@@ -868,19 +879,21 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   )}
-                  <Button
-                    onClick={handleSave}
-                    disabled={isSaving}
-                    size="sm"
-                    className="relative"
-                    title={isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save changes (Ctrl+S)' : 'No changes to save'}
-                  >
-                    <Save className="w-4 h-4 mr-2" />
-                    {isSaving ? 'Saving...' : 'Save'}
-                    {hasUnsavedChanges && (
-                      <div className="absolute top-1 right-1 w-2 h-2 bg-warning rounded-full" />
-                    )}
-                  </Button>
+                  <QuestSpotlight step="edit_page_content" label="Try this!">
+                    <Button
+                      onClick={handleSave}
+                      disabled={isSaving}
+                      size="sm"
+                      className="relative"
+                      title={isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save changes (Ctrl+S)' : 'No changes to save'}
+                    >
+                      <Save className="w-4 h-4 mr-2" />
+                      {isSaving ? 'Saving...' : 'Save'}
+                      {hasUnsavedChanges && (
+                        <div className="absolute top-1 right-1 w-2 h-2 bg-warning rounded-full" />
+                      )}
+                    </Button>
+                  </QuestSpotlight>
                   <Button
                     variant="ghost"
                     size="sm"

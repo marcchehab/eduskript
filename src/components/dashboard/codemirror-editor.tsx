@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { useTheme } from 'next-themes'
 import { useSession } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
+import { QuestSpotlight } from '@/components/onboarding/quest-spotlight'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { Eye, EyeOff, Pencil, Code, Bold, Italic, Heading, Heading1, Heading2, Heading3, List, ListOrdered, Link, Palette, Highlighter, Circle, Wand2, ChevronDown, FilePen, Minus, Plus, CircleHelp, TextQuote, Puzzle, Sigma, AlignLeft, AlignCenter, AlignRight, MessageSquare, Compass, SeparatorHorizontal, ChartSpline } from 'lucide-react'
@@ -1852,15 +1853,29 @@ const CodeMirrorEditor = function CodeMirrorEditor({
           {/* AI Edit button - leftmost. Grayed with an upgrade tooltip for
               free teachers; the click routes to billing via onAIEdit. */}
           {onAIEdit && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onAIEdit}
-              title={aiEditLocked ? 'AI Edit is a paid feature — click to upgrade' : 'AI Edit'}
-              className={`w-8 h-8 p-0 border rounded-md${aiEditLocked ? ' opacity-50' : ''}`}
-            >
-              <Wand2 className="w-4 h-4" />
-            </Button>
+            aiEditLocked ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onAIEdit}
+                title="AI Edit is a paid feature — click to upgrade"
+                className="w-8 h-8 p-0 border rounded-md opacity-50"
+              >
+                <Wand2 className="w-4 h-4" />
+              </Button>
+            ) : (
+              <QuestSpotlight step="use_ai_edit" label="Try this!">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onAIEdit}
+                  title="AI Edit"
+                  className="w-8 h-8 p-0 border rounded-md"
+                >
+                  <Wand2 className="w-4 h-4" />
+                </Button>
+              </QuestSpotlight>
+            )
           )}
           {/* Formatting buttons */}
           {!useSimpleEditor && (

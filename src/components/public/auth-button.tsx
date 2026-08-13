@@ -12,6 +12,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { QuestSpotlight } from '@/components/onboarding/quest-spotlight'
+import { useQuestStep } from '@/lib/onboarding-quest/use-quest-step'
 
 interface AuthButtonProps {
   pageId?: string // Page ID to check edit permissions (lazy loaded)
@@ -24,6 +26,7 @@ interface AuthButtonProps {
 export function AuthButton({ pageId, teacherPageSlug, teacherBillingPlan, isOrgPage, orgSlug }: AuthButtonProps) {
   const pathname = usePathname() ?? '/'
   const { data: session, status } = useSession()
+  const { completeStep } = useQuestStep()
   const [editUrl, setEditUrl] = useState<string | null>(null)
   const [canCopy, setCanCopy] = useState(false)
   const [copyDialogOpen, setCopyDialogOpen] = useState(false)
@@ -136,27 +139,30 @@ export function AuthButton({ pageId, teacherPageSlug, teacherBillingPlan, isOrgP
   // If user can edit this page, show profile picture with edit overlay
   if (editUrl && !isStudent) {
     return (
-      <Link
-        href={editUrl}
-        title="Edit this page"
-        className="relative h-8 w-8 rounded-md border border-border bg-card hover:bg-muted transition-colors overflow-hidden inline-flex items-center justify-center"
-      >
-        {session.user?.image ? (
-          <>
-            <Image
-              src={session.user.image}
-              alt={userName}
-              fill
-              className="object-cover"
-            />
-            <div className="absolute inset-0 flex items-center justify-center bg-primary/70">
-              <FilePen className="h-4 w-4 text-primary-foreground" />
-            </div>
-          </>
-        ) : (
-          <FilePen className="h-4 w-4 text-primary" />
-        )}
-      </Link>
+      <QuestSpotlight step="return_via_edit_link" label="Try this!">
+        <Link
+          href={editUrl}
+          title="Edit this page"
+          onClick={() => completeStep('return_via_edit_link')}
+          className="relative h-8 w-8 rounded-md border border-border bg-card hover:bg-muted transition-colors overflow-hidden inline-flex items-center justify-center"
+        >
+          {session.user?.image ? (
+            <>
+              <Image
+                src={session.user.image}
+                alt={userName}
+                fill
+                className="object-cover"
+              />
+              <div className="absolute inset-0 flex items-center justify-center bg-primary/70">
+                <FilePen className="h-4 w-4 text-primary-foreground" />
+              </div>
+            </>
+          ) : (
+            <FilePen className="h-4 w-4 text-primary" />
+          )}
+        </Link>
+      </QuestSpotlight>
     )
   }
 

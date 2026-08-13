@@ -10,6 +10,7 @@ import { useSession } from 'next-auth/react'
 import { checkSkriptPermissions } from '@/lib/permissions'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
+import { useQuestStep } from '@/lib/onboarding-quest/use-quest-step'
 
 interface PageItem {
   id: string
@@ -94,6 +95,7 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
     { id: string; title: string; accentColor?: string | null } | null
   >(null)
   const alert = useAlertDialog()
+  const { completeStep } = useQuestStep()
 
   // Load existing page layout on component mount
   useEffect(() => {
@@ -760,6 +762,7 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
     if (hasChanges) {
       setPageItems(updatedItems)
       handleItemsChange(updatedItems, changedCollectionIds)
+      if (dragData.type === 'skript' && dragData.fromLibrary) completeStep('place_skript')
     }
   }
 

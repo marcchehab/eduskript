@@ -113,5 +113,33 @@ export async function expireSubscriptionIfNeeded(userId: string): Promise<boolea
   return true
 }
 
+/**
+ * Extend a user's active trial by one more plan.trialDays, as an onboarding
+ * quest reward. Flat addition to currentPeriodEnd, not a recomputed "from
+ * signup" doubling — doesn't need to be precise.
+ *
+ * No-op (not an error) if the user has no trialing subscription — already
+ * converted to paid, already expired, or never got a trial (e.g. an
+ * org-invited account). The caller still marks the reward granted either way;
+ * the checklist itself is the value, the trial bump is a bonus.
+ */
+export async function extendTrialByPlanDays(
+  userId: string
+): Promise<{ extended: boolean; newEnd?: Date }> {
+  const sub = await prisma.subscription.findFirst({
+    where: { userId, status: 'trialing' },
+    include: { plan: true },
+  })
+  if (!sub || !sub.currentPeriodEnd) return { extended: false }
+
+  const trialDays = sub.plan.trialDays ?? 14
+  const newEnd = new Date(sub.currentPeriodEnd.getTime() + trialDays * 24 * 60 * 60 * 1000)
+  await prisma.subscription.update({
+    where: { id: sub.id },
+    data: { currentPeriodEnd: newEnd },
+  })
+  return { extended: true, newEnd }
+}
+
 /** @deprecated Use expireSubscriptionIfNeeded instead */
 export const expireTrialIfNeeded = expireSubscriptionIfNeeded

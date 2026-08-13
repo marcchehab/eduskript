@@ -22,6 +22,8 @@ import { ExcalidrawEditor } from '@/components/dashboard/excalidraw-editor'
 import { AIEditChatModal } from '@/components/ai'
 import type { AIEditTarget } from '@/hooks/use-ai-edit'
 import { useIsFreeTeacher } from '@/hooks/use-billing'
+import { QuestSpotlight } from '@/components/onboarding/quest-spotlight'
+import { useQuestStep } from '@/lib/onboarding-quest/use-quest-step'
 import { useRouter } from 'next/navigation'
 import type { VideoInfo } from '@/lib/skript-files'
 import { extractAndUploadPdfPages } from '@/lib/pdf-extract'
@@ -161,6 +163,7 @@ export function EditorWithMedia({
     if (typeof window === 'undefined') return null
     return localStorage.getItem(tabStorageKey) || null
   })
+  const { completeStep } = useQuestStep()
 
   const [insertionMenuFile, setInsertionMenuFile] = useState<{
     id: string
@@ -524,20 +527,32 @@ export function EditorWithMedia({
       <section className="border rounded-lg">
         <div className="flex items-center">
           <span className="px-3 text-xs text-muted-foreground whitespace-nowrap">{manageLabel}</span>
-          {allTabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => handleTabClick(tab.id)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${
-                activeTab === tab.id
-                  ? 'bg-background text-foreground shadow-xs border-b-2 border-primary'
-                  : 'text-muted-foreground hover:text-foreground bg-muted/50'
-              }`}
-            >
-              {tab.icon}
-              {tab.label}
-            </button>
-          ))}
+          {allTabs.map((tab) => {
+            const button = (
+              <button
+                key={tab.id}
+                onClick={() => {
+                  handleTabClick(tab.id)
+                  if (tab.id === 'pages') completeStep('view_pages')
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${
+                  activeTab === tab.id
+                    ? 'bg-background text-foreground shadow-xs border-b-2 border-primary'
+                    : 'text-muted-foreground hover:text-foreground bg-muted/50'
+                }`}
+              >
+                {tab.icon}
+                {tab.label}
+              </button>
+            )
+            return tab.id === 'pages' ? (
+              <QuestSpotlight key={tab.id} step="view_pages" label="Try this!">
+                {button}
+              </QuestSpotlight>
+            ) : (
+              button
+            )
+          })}
         </div>
 
         {/* Tab content — built-in panels rendered here, extras render their own JSX */}
