@@ -845,18 +845,19 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                       </Button>
                     )
                   )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleCopyStableLink(page.id)}
-                    title="Copy stable link (survives slug renames)"
-                  >
-                    {stableLinkCopiedFor === page.id ? (
-                      <Check className="w-4 h-4 text-green-600" />
-                    ) : (
-                      <ClipboardCopy className="w-4 h-4" />
-                    )}
-                  </Button>
+                  {pageType !== 'exam' && !isFullscreen && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setPresentationPublic(!presentationPublic)
+                        setHasUnsavedChanges(true)
+                      }}
+                      title={presentationPublic ? 'Anyone can present this page as slides (click to restrict to teachers)' : 'Let anyone present this page as slides'}
+                    >
+                      <Presentation className={`w-4 h-4 ${presentationPublic ? 'text-primary' : ''}`} />
+                    </Button>
+                  )}
                   {canEdit && !isFullscreen && (
                     <Button
                       variant="ghost"
@@ -904,6 +905,18 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                     placeholder="Description (optional)"
                     className="flex-1 min-w-0 text-sm border-transparent hover:border-border focus:border-border"
                   />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleCopyStableLink(page.id)}
+                    title="Copy stable link (survives slug renames)"
+                  >
+                    {stableLinkCopiedFor === page.id ? (
+                      <Check className="w-4 h-4 text-green-600" />
+                    ) : (
+                      <ClipboardCopy className="w-4 h-4" />
+                    )}
+                  </Button>
                   <Input
                     type="text"
                     value={slug}
@@ -1019,24 +1032,6 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
               </div>
             )}
 
-            {/* Slide presentation: the "Present" button is teacher-only by
-                default; this opts the page into a public Present button. */}
-            {pageType !== 'exam' && !isFullscreen && (
-              <div className="flex items-center gap-2 p-4 border rounded-lg bg-muted/30">
-                <Checkbox
-                  id="presentation-public"
-                  checked={presentationPublic}
-                  onCheckedChange={(checked) => {
-                    setPresentationPublic(!!checked)
-                    setHasUnsavedChanges(true)
-                  }}
-                />
-                <Label htmlFor="presentation-public" className="text-sm flex items-center gap-1.5 cursor-pointer">
-                  <Presentation className="w-4 h-4 text-muted-foreground" />
-                  Let anyone present this page as slides
-                </Label>
-              </div>
-            )}
           </div>
         }
       />
