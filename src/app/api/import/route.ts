@@ -4,11 +4,11 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import JSZip from 'jszip'
-import { createHash } from 'crypto'
 import { Readable } from 'stream'
 import Busboy from 'busboy'
 import { startImportProcessing, getJobStatus, cancelImportJob } from '@/lib/import-job-manager'
-import { uploadTeacherFile, isTeacherS3Configured, teacherFileExists } from '@/lib/s3'
+import { isTeacherS3Configured } from '@/lib/s3'
+import { importAttachmentFile } from '@/lib/import-actions'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { invalidateSkriptFiles } from '@/lib/skript-files.server'
 
@@ -297,12 +297,12 @@ export async function POST(request: Request) {
     }
 
     // Perform import
-    const result = await performImport(zip, manifest, userId)
+    const { errors: importErrors, ...imported } = await performImport(zip, manifest, userId)
 
     return NextResponse.json({
       success: true,
-      imported: result,
-      warnings: errors.filter(e => e.type === 'warning')
+      imported,
+      warnings: [...errors.filter(e => e.type === 'warning'), ...importErrors]
     })
   } catch (error) {
     console.error('[import] Error:', error)
@@ -426,13 +426,14 @@ async function performImport(
   zip: JSZip,
   manifest: ExportManifest,
   userId: string
-): Promise<{ collections: number; skripts: number; pages: number; files: number }> {
+): Promise<{ collections: number; skripts: number; pages: number; files: number; errors: ImportError[] }> {
   // Check S3 configuration
   if (!isTeacherS3Configured()) {
     throw new Error('File storage not configured. Set SCW_TEACHER_BUCKET environment variable.')
   }
 
   const result = { collections: 0, skripts: 0, pages: 0, files: 0 }
+  const errors: ImportError[] = []
   // Map keyed by manifest's collection title (the stable identifier post-slug-removal)
   const collectionIdMap = new Map<string, string>()
   const skriptIdMap = new Map<string, string>() // slug -> id
@@ -587,37 +588,9 @@ async function performImport(
       // Rename from .excalidraw.md to .excalidraw
       const newName = excalidrawMdFile.replace(/\.excalidraw\.md$/, '.excalidraw')
 
-      const existingFile = await prisma.file.findFirst({
-        where: {
-          name: newName,
-          skriptId: skript.id
-        }
-      })
-
-      if (!existingFile) {
-        const buffer = Buffer.from(await file.async('arraybuffer'))
-        const hash = createHash('sha256').update(buffer).digest('hex')
-
-        // Upload to S3 if not already there (deduplication)
-        const fileExistsInS3 = await teacherFileExists(hash, 'excalidraw')
-        if (!fileExistsInS3) {
-          await uploadTeacherFile(hash, 'excalidraw', buffer, 'application/json')
-        }
-
-        await prisma.file.create({
-          data: {
-            name: newName,
-            isDirectory: false,
-            skriptId: skript.id,
-            hash,
-            contentType: 'application/json',
-            size: BigInt(buffer.length),
-            createdBy: userId
-          }
-        })
-
-        result.files++
-      }
+      const imported = await importAttachmentFile(file, newName, skript.id, userId, `${skriptSlug}/${newName}`)
+      if (imported.status === 'created') result.files++
+      else if (imported.status === 'error') errors.push(imported.error)
     }
 
     // Process attachments
@@ -637,60 +610,9 @@ async function performImport(
           ? attachmentName.replace(/\.excalidraw\.md$/, '.excalidraw')
           : attachmentName
 
-        // Check if file already exists
-        const existingFile = await prisma.file.findFirst({
-          where: {
-            name: finalName,
-            skriptId: skript.id
-          }
-        })
-
-        if (!existingFile) {
-          const buffer = Buffer.from(await file.async('arraybuffer'))
-          const hash = createHash('sha256').update(buffer).digest('hex')
-          // For .excalidraw files, use excalidraw extension; otherwise use original extension
-          const ext = finalName.endsWith('.excalidraw')
-            ? 'excalidraw'
-            : (finalName.split('.').pop() || 'bin')
-
-          // Determine content type
-          const contentTypeMap: Record<string, string> = {
-            'png': 'image/png',
-            'jpg': 'image/jpeg',
-            'jpeg': 'image/jpeg',
-            'svg': 'image/svg+xml',
-            'webp': 'image/webp',
-            'gif': 'image/gif',
-            'pdf': 'application/pdf',
-            'mp4': 'video/mp4',
-            'webm': 'video/webm',
-            'json': 'application/json',
-            'excalidraw': 'application/json',
-            'db': 'application/x-sqlite3',
-            'sqlite': 'application/x-sqlite3'
-          }
-          const contentType = contentTypeMap[ext.toLowerCase()] || 'application/octet-stream'
-
-          // Upload to S3 if not already there (deduplication)
-          const fileExistsInS3 = await teacherFileExists(hash, ext)
-          if (!fileExistsInS3) {
-            await uploadTeacherFile(hash, ext, buffer, contentType)
-          }
-
-          await prisma.file.create({
-            data: {
-              name: finalName,
-              isDirectory: false,
-              skriptId: skript.id,
-              hash,
-              contentType,
-              size: BigInt(buffer.length),
-              createdBy: userId
-            }
-          })
-
-          result.files++
-        }
+        const imported = await importAttachmentFile(file, finalName, skript.id, userId, `${skriptSlug}/attachments/${finalName}`)
+        if (imported.status === 'created') result.files++
+        else if (imported.status === 'error') errors.push(imported.error)
       }
     }
   }
@@ -699,7 +621,7 @@ async function performImport(
   // across several skripts, and getSkriptFiles caches until the tag is dropped.
   invalidateSkriptFiles()
 
-  return result
+  return { ...result, errors }
 }
 
 /**
