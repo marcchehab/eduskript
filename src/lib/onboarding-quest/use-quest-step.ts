@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
-import { QUEST_STEPS, type QuestState, type QuestStep } from './types'
+import { DEFAULT_QUEST_STATE, QUEST_STEPS, type QuestState, type QuestStep } from './types'
 
 export interface QuestUpdate {
   state: QuestState
@@ -39,7 +39,12 @@ export function fetchQuestState(): Promise<QuestState | null> {
   inFlightFetch = fetch('/api/user-data/onboarding-quest/global')
     .then((res) => (res.ok ? res.json() : null))
     .then((body) => {
-      cachedState = (body?.data as QuestState) ?? null
+      // body is null only on a failed/erroring request — a successful response
+      // always has a `data` key (possibly null, meaning no row yet: a brand-new
+      // teacher who hasn't completed a step). Only that latter case falls back
+      // to DEFAULT_QUEST_STATE, so the widget renders for a fresh teacher
+      // instead of staying permanently unmounted while `state` sits at null.
+      cachedState = body ? ((body.data as QuestState | null) ?? DEFAULT_QUEST_STATE) : null
       cachedStateLoaded = true
       return cachedState
     })
@@ -63,7 +68,7 @@ export function refreshQuestState(): Promise<QuestState | null> {
   return fetch('/api/user-data/onboarding-quest/global')
     .then((res) => (res.ok ? res.json() : null))
     .then((body) => {
-      const state = (body?.data as QuestState) ?? null
+      const state = body ? ((body.data as QuestState | null) ?? DEFAULT_QUEST_STATE) : null
       cachedState = state
       cachedStateLoaded = true
       if (state) listeners.forEach((listener) => listener({ state, justGranted: false }))
