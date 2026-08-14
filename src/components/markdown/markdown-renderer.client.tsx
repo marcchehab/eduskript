@@ -23,6 +23,50 @@ interface MarkdownRendererProps {
   pageLanguage?: string | null
 }
 
+const FENCE_RE = /^[ \t]*(```|~~~)/
+
+/** Char ranges (incl. the fence lines themselves) covered by ``` / ~~~ fenced blocks. */
+function fencedRanges(content: string): Array<[number, number]> {
+  const ranges: Array<[number, number]> = []
+  let inFence = false
+  let fenceStart = 0
+  let offset = 0
+  for (const line of content.split('\n')) {
+    if (FENCE_RE.test(line)) {
+      if (!inFence) {
+        inFence = true
+        fenceStart = offset
+      } else {
+        inFence = false
+        ranges.push([fenceStart, offset + line.length])
+      }
+    }
+    offset += line.length + 1 // +1 for the '\n' split away
+  }
+  return ranges
+}
+
+/**
+ * Replace the first match of `pattern` that is NOT inside a fenced code
+ * block. Gizmo-driven rewrites (resize/align on an image, molecule, spacer,
+ * video) key on a tag's own attributes (src/smiles/id), not a real source
+ * position — a first-match-in-whole-string replace happily rewrites a
+ * literal example shown inside a ``` fence instead of the live tag below it
+ * when both share the same attribute value. Returns null when no match
+ * exists outside a fence (caller treats that as a no-op, same as a failed
+ * `.test()` before).
+ */
+function replaceOutsideFences(content: string, pattern: RegExp, replacement: string): string | null {
+  const globalPattern = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g')
+  const fences = fencedRanges(content)
+  for (const match of content.matchAll(globalPattern)) {
+    const start = match.index
+    if (fences.some(([fs, fe]) => start >= fs && start < fe)) continue
+    return content.slice(0, start) + replacement + content.slice(start + match[0].length)
+  }
+  return null
+}
+
 // Inner component that does the actual rendering
 function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId, onContentChange, onExcalidrawEdit, pageLanguage }: MarkdownRendererProps) {
   // Create SkriptFiles from the file list
@@ -69,20 +113,16 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
     const baseName = srcForMatching.replace(/\.excalidraw$/, '')
     const escapedBaseName = baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
-    const imageComponentPattern = new RegExp(`<img[^>]*src="${escapedSrc}"[^>]*/?>`, 'g')
-    const excaliPattern = new RegExp(`<excali[^>]*src="${escapedBaseName}"[^>]*/?>`, 'g')
-    const markdownPattern = new RegExp(`!\\[([^\\]]*)\\]\\(${escapedSrc}\\)(\\{[^}]*\\})?`, 'g')
+    const imageComponentPattern = new RegExp(`<img[^>]*src="${escapedSrc}"[^>]*/?>`)
+    const excaliPattern = new RegExp(`<excali[^>]*src="${escapedBaseName}"[^>]*/?>`)
+    const markdownPattern = new RegExp(`!\\[([^\\]]*)\\]\\(${escapedSrc}\\)(\\{[^}]*\\})?`)
 
-    let newContent = currentContent
-    if (excaliPattern.test(currentContent)) {
-      newContent = currentContent.replace(excaliPattern, newMarkdown)
-    } else if (imageComponentPattern.test(currentContent)) {
-      newContent = currentContent.replace(imageComponentPattern, newMarkdown)
-    } else {
-      newContent = currentContent.replace(markdownPattern, newMarkdown)
-    }
+    const newContent =
+      replaceOutsideFences(currentContent, excaliPattern, newMarkdown) ??
+      replaceOutsideFences(currentContent, imageComponentPattern, newMarkdown) ??
+      replaceOutsideFences(currentContent, markdownPattern, newMarkdown)
 
-    if (newContent !== currentContent) {
+    if (newContent !== null && newContent !== currentContent) {
       notify(newContent)
     }
   }, [])
@@ -108,11 +148,10 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
       pattern = /<spacer(?![^>]*\bid=)[^>]*\/?>/
     }
 
-    if (!pattern.test(currentContent)) return
     // On delete, also swallow a trailing newline so no blank line is left behind.
     const matcher = newMarkdown === '' ? new RegExp(pattern.source + '\\n?') : pattern
-    const newContent = currentContent.replace(matcher, newMarkdown)
-    if (newContent !== currentContent) {
+    const newContent = replaceOutsideFences(currentContent, matcher, newMarkdown)
+    if (newContent !== null && newContent !== currentContent) {
       notify(newContent)
     }
   }, [])
@@ -130,16 +169,17 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
     const tagPattern = new RegExp(`<muxvideo[^>]*\\bsrc="${escapedSrc}"[^>]*/?>`)
     const shorthandPattern = new RegExp(`!\\[[^\\]]*\\]\\(${escapedSrc}\\)`)
 
-    const pattern = tagPattern.test(currentContent) ? tagPattern : shorthandPattern
-    if (!pattern.test(currentContent)) return
-    const newContent = currentContent.replace(pattern, newMarkdown)
-    if (newContent !== currentContent) notify(newContent)
+    const newContent =
+      replaceOutsideFences(currentContent, tagPattern, newMarkdown) ??
+      replaceOutsideFences(currentContent, shorthandPattern, newMarkdown)
+    if (newContent !== null && newContent !== currentContent) notify(newContent)
   }, [])
 
   // Stable callback: rewrite a <molecule> tag after a resize/align gizmo drag.
   // Keyed by the SMILES string, the same way image rewrites key on src — two
-  // identical molecules on one page would both match, which is the same
-  // trade-off images have lived with.
+  // identical LIVE molecules on one page would both match the first-occurrence
+  // pick, which is the same trade-off images have lived with. A fenced code
+  // example showing the same tag is excluded by replaceOutsideFences below.
   const stableOnMoleculeChange = useCallback((smiles: string, newMarkdown: string) => {
     const currentContent = contentRef.current
     const notify = onContentChangeRef.current
@@ -147,9 +187,8 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
 
     const escaped = smiles.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     const pattern = new RegExp(`<molecule[^>]*\\bsmiles="${escaped}"[^>]*/?>`)
-    if (!pattern.test(currentContent)) return
-    const newContent = currentContent.replace(pattern, newMarkdown)
-    if (newContent !== currentContent) notify(newContent)
+    const newContent = replaceOutsideFences(currentContent, pattern, newMarkdown)
+    if (newContent !== null && newContent !== currentContent) notify(newContent)
   }, [])
 
   // Memoize the components map — only recreated when files or pageId change.
