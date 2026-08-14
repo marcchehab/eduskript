@@ -878,6 +878,18 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
 
           {/* Import/Export - under page builder */}
           <ImportExportSettings />
+
+          <p className="text-xs text-muted-foreground">
+            💡 New to Eduskript?{' '}
+            <a
+              href="https://eduskript.org/c/welcome/welcome-to-eduskript"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline underline-offset-2 hover:text-foreground"
+            >
+              Read the User Manual
+            </a>
+          </p>
         </div>
 
         {/* Content Library - Right Side */}

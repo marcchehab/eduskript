@@ -1013,7 +1013,19 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
 
       {/* Version History (hidden in fullscreen) */}
       {!isFullscreen && (
-        <CollapsibleDrawer
+        <>
+          <p className="text-xs text-muted-foreground mb-2">
+            💡 New to Eduskript?{' '}
+            <a
+              href="https://eduskript.org/c/welcome/welcome-to-eduskript"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline underline-offset-2 hover:text-foreground"
+            >
+              Read the User Manual
+            </a>
+          </p>
+          <CollapsibleDrawer
           title={
             <div className="flex items-center gap-2">
               <span>Version history</span>
@@ -1034,6 +1046,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
             onRestoreVersion={handleRestoreVersion}
           />
         </CollapsibleDrawer>
+        </>
       )}
 
       <AlertDialogModal

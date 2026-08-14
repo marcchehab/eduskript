@@ -175,6 +175,14 @@ export function OnboardingQuestWidget() {
             Congratulations! You now understand the basic idea of Eduskript and we doubled your access to pro
             features like AI edit.
           </p>
+          <a
+            href="https://eduskript.org/c/welcome/welcome-to-eduskript"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+          >
+            Want to go deeper? Read the User Manual
+          </a>
           <Button
             size="sm"
             onClick={() => {
