@@ -148,6 +148,38 @@ export async function PATCH(
       }
     })
 
+    // Excalidraw SVGs are located purely by filename convention off the
+    // .excalidraw base name (see resolveExcalidraw in skript-files.ts and
+    // the matching cleanup in deleteFile, file-storage.ts) — rename them
+    // in lockstep or the drawing renders broken until it's re-saved.
+    if (fileRecord.name.endsWith('.excalidraw')) {
+      const oldLightName = `${fileRecord.name}.light.svg`
+      const oldDarkName = `${fileRecord.name}.dark.svg`
+      const newLightName = `${sanitizedFilename}.light.svg`
+      const newDarkName = `${sanitizedFilename}.dark.svg`
+
+      const svgFiles = await prisma.file.findMany({
+        where: {
+          skriptId: fileRecord.skriptId,
+          parentId: fileRecord.parentId,
+          name: { in: [oldLightName, oldDarkName] }
+        }
+      })
+
+      for (const svgFile of svgFiles) {
+        const newSvgName = svgFile.name === oldLightName ? newLightName : newDarkName
+        try {
+          await prisma.file.update({
+            where: { id: svgFile.id },
+            data: { name: newSvgName, updatedAt: new Date() }
+          })
+        } catch {
+          // Name collision with an unrelated file — leave this SVG behind
+          // rather than fail the whole rename.
+        }
+      }
+    }
+
     // Renaming changes the key markdown looks the file up by.
     invalidateSkriptFiles(fileRecord.skriptId)
 
