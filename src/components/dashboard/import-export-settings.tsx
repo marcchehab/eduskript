@@ -1,353 +1,93 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Progress } from '@/components/ui/progress'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
-import { HardDriveUpload, Loader2, FileArchive, AlertTriangle, CheckCircle, Package, XCircle, Cloud, Clock } from 'lucide-react'
+import { HardDriveUpload, Loader2, FileArchive, AlertTriangle, CheckCircle, Package, XCircle } from 'lucide-react'
+import {
+  parseImportZip,
+  previewImport,
+  importParsedZip,
+  type ParsedImport,
+  type ImportPreview,
+  type ImportProgress,
+  type ImportOutcome
+} from '@/lib/skript-import-client'
 
-// Files larger than 10MB use S3 upload flow
-const LARGE_FILE_THRESHOLD = 10 * 1024 * 1024
-
-interface ImportPreview {
-  collections: { title: string; isNew: boolean }[]
-  skripts: { slug: string; title: string; pageCount: number; isNew: boolean }[]
-  attachments: number
-  errors: { type: 'error' | 'warning'; location: string; message: string }[]
-}
-
-interface ImportJob {
-  id: string
-  status: 'pending' | 'uploading' | 'processing' | 'completed' | 'failed' | 'cancelled'
-  progress: number
-  message: string | null
-  fileName: string | null
-  result?: {
-    collectionsCreated?: number
-    skriptsCreated?: number
-    pagesCreated?: number
-    filesImported?: number
-  }
-  error?: string
+const STAGE_LABELS: Record<ImportProgress['stage'], string> = {
+  structure: 'Creating collections, skripts and pages…',
+  attachments: 'Uploading attachments…',
+  videos: 'Uploading videos…',
+  done: 'Done'
 }
 
 export function ImportExportSettings() {
-  const [isUploading, setIsUploading] = useState(false)
-  const [isImporting, setIsImporting] = useState(false)
+  const [file, setFile] = useState<File | null>(null)
+  const [parsed, setParsed] = useState<ParsedImport | null>(null)
   const [preview, setPreview] = useState<ImportPreview | null>(null)
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null)
-  const [currentJob, setCurrentJob] = useState<ImportJob | null>(null)
-  const [uploadProgress, setUploadProgress] = useState(0)
-  const [s3Configured, setS3Configured] = useState<boolean | null>(null)
+  const [parsing, setParsing] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [progress, setProgress] = useState<ImportProgress | null>(null)
+  const [outcome, setOutcome] = useState<ImportOutcome | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const alert = useAlertDialog()
-  const pollingRef = useRef<NodeJS.Timeout | null>(null)
-  const isUploadingRef = useRef(false) // Track if we're currently uploading (to prevent state overwrites)
 
-  // Define startPolling before the useEffect that uses it
-  const startPolling = useCallback((jobId: string) => {
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current)
-    }
-
-    const poll = async () => {
-      try {
-        const response = await fetch(`/api/import?action=status&jobId=${jobId}`)
-        if (response.ok) {
-          const job = await response.json()
-          setCurrentJob(job)
-
-          if (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') {
-            if (pollingRef.current) {
-              clearInterval(pollingRef.current)
-              pollingRef.current = null
-            }
-
-            if (job.status === 'completed') {
-              const r = job.result
-              alert.showSuccess(
-                `Import completed: ${r?.collectionsCreated || 0} collections, ` +
-                `${r?.skriptsCreated || 0} skripts, ${r?.pagesCreated || 0} pages, ` +
-                `${r?.filesImported || 0} files`
-              )
-            } else if (job.status === 'failed') {
-              alert.showError(job.error || 'Import failed')
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Failed to poll job status:', error)
-      }
-    }
-
-    pollingRef.current = setInterval(poll, 1000)
-    poll() // Initial poll
-  }, [alert])
-
-  // Check if S3 is configured and if there's an active job - only on mount
-  useEffect(() => {
-    let mounted = true
-
-    const checkStatus = async () => {
-      // Skip if we're actively uploading
-      if (isUploadingRef.current) return
-
-      try {
-        const response = await fetch('/api/import/prepare')
-        if (response.ok && mounted) {
-          const data = await response.json()
-          setS3Configured(data.s3Configured)
-
-          // Only set currentJob if we're not actively uploading
-          if (data.activeJob && !isUploadingRef.current) {
-            setCurrentJob(data.activeJob)
-            // Only start polling if job is already processing (not pending/uploading from browser)
-            if (data.activeJob.status === 'processing') {
-              startPolling(data.activeJob.id)
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Failed to check import status:', error)
-      }
-    }
-    checkStatus()
-
-    return () => {
-      mounted = false
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current)
-      }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // Only run once on mount
+  const reset = () => {
+    setFile(null)
+    setParsed(null)
+    setPreview(null)
+    setProgress(null)
+    setOutcome(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const selected = e.target.files?.[0]
+    if (!selected) return
 
-    // Check if file is too large for direct upload
-    if (file.size > LARGE_FILE_THRESHOLD) {
-      if (!s3Configured) {
-        alert.showError(
-          `File is too large (${(file.size / 1024 / 1024).toFixed(1)}MB). ` +
-          `Files over 10MB require S3 storage to be configured. ` +
-          `Please contact your administrator or use a smaller export file.`
-        )
-        // Reset file input
-        if (fileInputRef.current) {
-          fileInputRef.current.value = ''
-        }
-        return
-      }
-    }
-
-    setIsUploading(true)
-    setUploadedFile(file)
-    setPreview(null)
-
-    // Check if we need to use the large file flow
-    if (file.size > LARGE_FILE_THRESHOLD && s3Configured) {
-      await handleLargeFileUpload(file)
-    } else {
-      await handleSmallFileUpload(file)
-    }
-  }
-
-  const handleSmallFileUpload = async (file: File) => {
+    reset()
+    setFile(selected)
+    setParsing(true)
     try {
-      const formData = new FormData()
-      formData.append('file', file)
-
-      const response = await fetch('/api/import?action=preview', {
-        method: 'POST',
-        body: formData,
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to process file')
-      }
-
-      const previewData = await response.json()
-      setPreview(previewData)
+      const parsedZip = await parseImportZip(selected)
+      setParsed(parsedZip)
+      setPreview(await previewImport(parsedZip))
     } catch (error) {
-      console.error('Upload error:', error)
-      alert.showError(error instanceof Error ? error.message : 'Failed to process file')
-      setUploadedFile(null)
+      alert.showError(error instanceof Error ? error.message : 'Could not read this file')
+      reset()
     } finally {
-      setIsUploading(false)
+      setParsing(false)
     }
-  }
-
-  const handleLargeFileUpload = async (file: File) => {
-    isUploadingRef.current = true // Prevent status polling from overwriting our state
-    try {
-      // Step 1: Prepare upload
-      setUploadProgress(0)
-      const prepareResponse = await fetch('/api/import/prepare', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileName: file.name, fileSize: file.size })
-      })
-
-      if (!prepareResponse.ok) {
-        const error = await prepareResponse.json()
-        throw new Error(error.error || 'Failed to prepare upload')
-      }
-
-      const { jobId, uploadUrl } = await prepareResponse.json()
-      setCurrentJob({ id: jobId, status: 'uploading', progress: 0, message: null, fileName: file.name })
-
-      // Step 2: Upload directly to S3 with progress
-      await uploadToS3WithProgress(uploadUrl, file, (progress) => {
-        setUploadProgress(progress)
-      })
-
-      // Step 3: Start processing
-      const startResponse = await fetch(`/api/import?action=start&jobId=${jobId}`, {
-        method: 'POST'
-      })
-
-      if (!startResponse.ok) {
-        const error = await startResponse.json()
-        throw new Error(error.error || 'Failed to start import')
-      }
-
-      // Step 4: Start polling for status (now safe because upload is done)
-      isUploadingRef.current = false
-      startPolling(jobId)
-    } catch (error) {
-      console.error('Large file upload error:', error)
-      alert.showError(error instanceof Error ? error.message : 'Upload failed')
-      setCurrentJob(null)
-      setUploadedFile(null)
-      isUploadingRef.current = false
-    } finally {
-      setIsUploading(false)
-    }
-  }
-
-  const uploadToS3WithProgress = async (
-    uploadUrl: string,
-    file: File,
-    onProgress: (progress: number) => void
-  ): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest()
-
-      // Set a long timeout for large files (30 minutes)
-      xhr.timeout = 30 * 60 * 1000
-
-      xhr.upload.addEventListener('progress', (event) => {
-        if (event.lengthComputable) {
-          const progress = (event.loaded / event.total) * 100
-          onProgress(progress)
-        }
-      })
-
-      xhr.addEventListener('load', () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          resolve()
-        } else {
-          console.error('[S3 Upload] Failed:', { status: xhr.status, statusText: xhr.statusText, response: xhr.responseText })
-          reject(new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`))
-        }
-      })
-
-      xhr.addEventListener('error', (event) => {
-        console.error('[S3 Upload] Network error:', event)
-        reject(new Error('Upload failed: Network error. Check browser console for details.'))
-      })
-
-      xhr.addEventListener('abort', () => {
-        console.error('[S3 Upload] Aborted')
-        reject(new Error('Upload was aborted'))
-      })
-
-      xhr.addEventListener('timeout', () => {
-        console.error('[S3 Upload] Timeout after 30 minutes')
-        reject(new Error('Upload timed out after 30 minutes'))
-      })
-
-      xhr.open('PUT', uploadUrl)
-      xhr.setRequestHeader('Content-Type', 'application/zip')
-      xhr.send(file)
-    })
   }
 
   const handleImport = async () => {
-    if (!uploadedFile) return
+    if (!parsed) return
 
-    setIsImporting(true)
-
+    setImporting(true)
     try {
-      const formData = new FormData()
-      formData.append('file', uploadedFile)
-
-      const response = await fetch('/api/import?action=import', {
-        method: 'POST',
-        body: formData,
-      })
-
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Import failed')
-      }
-
-      alert.showSuccess(
-        `Successfully imported ${result.imported.collections} collections, ` +
-        `${result.imported.skripts} skripts, ${result.imported.pages} pages, ` +
-        `and ${result.imported.files} files.`
-      )
-
-      // Reset state
-      setPreview(null)
-      setUploadedFile(null)
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ''
+      const result = await importParsedZip(parsed, setProgress)
+      setOutcome(result)
+      const failed = result.errors.filter(e => e.type === 'error').length
+      if (failed > 0) {
+        alert.showError(`Imported with ${failed} error(s) — see details below.`)
+      } else {
+        alert.showSuccess(
+          `Imported ${result.collectionsCreated} collections, ${result.skriptsCreated} skripts, ` +
+          `${result.pagesCreated} pages, ${result.filesImported} attachments, ${result.videosImported} videos.`
+        )
       }
     } catch (error) {
-      console.error('Import error:', error)
       alert.showError(error instanceof Error ? error.message : 'Import failed')
+      setProgress(null)
     } finally {
-      setIsImporting(false)
-    }
-  }
-
-  const handleCancelImport = async () => {
-    if (currentJob && ['pending', 'uploading', 'processing'].includes(currentJob.status)) {
-      try {
-        // Always use force=true so we can cancel stuck jobs
-        await fetch(`/api/import?jobId=${currentJob.id}&force=true`, { method: 'DELETE' })
-      } catch (error) {
-        console.error('Failed to cancel job:', error)
-      }
-    }
-
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current)
-      pollingRef.current = null
-    }
-
-    setPreview(null)
-    setUploadedFile(null)
-    setCurrentJob(null)
-    setUploadProgress(0)
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
+      setImporting(false)
     }
   }
 
   const hasBlockingErrors = preview?.errors.some(e => e.type === 'error') ?? false
-  const isLargeFile = uploadedFile && uploadedFile.size > LARGE_FILE_THRESHOLD
-  // Show progress for uploading, processing, OR if we're actively uploading (isUploading with a job)
-  const showJobProgress = currentJob && (
-    ['uploading', 'processing'].includes(currentJob.status) ||
-    (currentJob.status === 'pending' && isUploading)
-  )
 
   return (
     <Card>
@@ -357,332 +97,198 @@ export function ImportExportSettings() {
           <CardTitle>Import</CardTitle>
         </div>
         <CardDescription>
-          Import content from another Eduskript instance
+          Import content from another Eduskript instance. The zip is read and uploaded directly from
+          your browser — the server isn&rsquo;t involved.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div>
-          {/* Import Section */}
-          <div className="space-y-3">
-            <h3 className="text-sm font-medium">Import Content</h3>
-            <p className="text-sm text-muted-foreground">
-              Upload a zip file exported from Eduskript to import content. Existing content with the same slug will be skipped.
-              {s3Configured && (
-                <span className="block mt-1 text-xs">
-                  <Cloud className="w-3 h-3 inline mr-1" />
-                  Large file support enabled (files &gt;10MB upload via cloud storage)
-                </span>
-              )}
-            </p>
+        <div className="space-y-3">
+          <h3 className="text-sm font-medium">Import Content</h3>
+          <p className="text-sm text-muted-foreground">
+            Upload a zip file exported from Eduskript to import content. Existing content with the same slug will be skipped.
+          </p>
 
-            {/* Job Progress Display */}
-            {showJobProgress && (
-              <div className="border rounded-lg p-4 space-y-4 bg-muted/30">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">{currentJob.fileName}</span>
+          {!file && (
+            <div className="flex items-center gap-4">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".zip"
+                onChange={handleFileSelect}
+                className="hidden"
+                id="import-file"
+              />
+              <Button onClick={() => fileInputRef.current?.click()} disabled={parsing} variant="outline">
+                {parsing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Reading…
+                  </>
+                ) : (
+                  <>
+                    <HardDriveUpload className="w-4 h-4 mr-2" />
+                    Select File
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
+
+          {/* Progress */}
+          {importing && progress && (
+            <div className="border rounded-lg p-4 space-y-2 bg-muted/30">
+              <div className="flex items-center gap-2 text-sm">
+                <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                {STAGE_LABELS[progress.stage]}
+                {progress.label ? ` — ${progress.label}` : ''}
+              </div>
+              {progress.total > 1 && <Progress value={(progress.current / progress.total) * 100} />}
+            </div>
+          )}
+
+          {/* Preview */}
+          {preview && file && !importing && !outcome && (
+            <div className="border rounded-lg p-4 space-y-4">
+              <div className="flex items-center gap-2">
+                <FileArchive className="w-5 h-5" />
+                <span className="font-medium">{file.name}</span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Collections:</span>{' '}
+                  <span className="font-medium">{preview.collections.length}</span>
+                  {preview.collections.filter(c => c.isNew).length > 0 && (
+                    <span className="text-green-600 ml-1">
+                      ({preview.collections.filter(c => c.isNew).length} new)
+                    </span>
+                  )}
                 </div>
+                <div>
+                  <span className="text-muted-foreground">Skripts:</span>{' '}
+                  <span className="font-medium">{preview.skripts.length}</span>
+                  {preview.skripts.filter(s => s.isNew).length > 0 && (
+                    <span className="text-green-600 ml-1">
+                      ({preview.skripts.filter(s => s.isNew).length} new)
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Pages:</span>{' '}
+                  <span className="font-medium">{preview.skripts.reduce((sum, s) => sum + s.pageCount, 0)}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Attachments:</span>{' '}
+                  <span className="font-medium">{preview.skripts.reduce((sum, s) => sum + s.attachments, 0)}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Videos:</span>{' '}
+                  <span className="font-medium">{preview.skripts.reduce((sum, s) => sum + s.videos, 0)}</span>
+                </div>
+              </div>
 
-                {/* Checklist */}
-                <div className="space-y-3">
-                  {/* Step 1: Upload */}
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-2">
-                      {currentJob.status === 'uploading' ? (
-                        <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
-                      ) : uploadProgress >= 100 || currentJob.status === 'processing' ? (
-                        <CheckCircle className="w-4 h-4 text-green-500" />
-                      ) : (
-                        <div className="w-4 h-4 rounded-full border-2 border-muted-foreground/30" />
-                      )}
-                      <span className={currentJob.status === 'uploading' ? 'font-medium' : 'text-muted-foreground'}>
-                        Uploading to our bucket
-                      </span>
-                      {currentJob.status === 'uploading' && (
-                        <span className="ml-auto font-mono text-sm">{Math.round(uploadProgress)}%</span>
-                      )}
-                    </div>
-                    {currentJob.status === 'uploading' && (
-                      <div className="h-1.5 bg-muted rounded-full overflow-hidden ml-6">
-                        <div
-                          className="h-full bg-blue-500 transition-all duration-300"
-                          style={{ width: `${uploadProgress}%` }}
-                        />
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Step 2: Import */}
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-2">
-                      {currentJob.status === 'processing' ? (
-                        <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
-                      ) : currentJob.status === 'completed' ? (
-                        <CheckCircle className="w-4 h-4 text-green-500" />
-                      ) : (
-                        <div className="w-4 h-4 rounded-full border-2 border-muted-foreground/30" />
-                      )}
-                      <span className={currentJob.status === 'processing' ? 'font-medium' : 'text-muted-foreground'}>
-                        Importing to Eduskript
-                      </span>
-                      {currentJob.status === 'processing' && (
-                        <span className="ml-auto font-mono text-sm">{Math.max(0, Math.round(((currentJob.progress - 5) / 95) * 100))}%</span>
-                      )}
-                    </div>
-                    {currentJob.status === 'processing' && (
-                      <>
-                        <div className="h-1.5 bg-muted rounded-full overflow-hidden ml-6">
-                          <div
-                            className="h-full bg-blue-500 transition-all duration-300"
-                            style={{ width: `${Math.max(0, Math.min(100, ((currentJob.progress - 5) / 95) * 100))}%` }}
-                          />
-                        </div>
-                        {currentJob.message && (
-                          <p className="text-xs text-muted-foreground ml-6">{currentJob.message}</p>
+              {preview.skripts.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-medium">Skripts to import:</h4>
+                  <div className="max-h-40 overflow-y-auto space-y-1">
+                    {preview.skripts.map(skript => (
+                      <div key={skript.slug} className="text-sm flex items-center gap-2 py-1 px-2 rounded bg-muted/50">
+                        {skript.isNew ? (
+                          <CheckCircle className="w-3.5 h-3.5 text-green-600" />
+                        ) : (
+                          <span className="w-3.5 h-3.5 text-muted-foreground">-</span>
                         )}
-                      </>
-                    )}
+                        <span className={skript.isNew ? '' : 'text-muted-foreground'}>{skript.title}</span>
+                        <span className="text-xs text-muted-foreground">({skript.pageCount} pages)</span>
+                        {!skript.isNew && <span className="text-xs text-muted-foreground ml-auto">exists</span>}
+                      </div>
+                    ))}
                   </div>
                 </div>
+              )}
 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleCancelImport}
-                >
-                  Cancel
-                </Button>
-              </div>
-            )}
+              {preview.errors.length > 0 && (
+                <div className="space-y-2">
+                  {preview.errors.filter(e => e.type === 'error').length > 0 && (
+                    <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+                      <div className="flex items-center gap-2 text-destructive font-medium text-sm mb-2">
+                        <AlertTriangle className="w-4 h-4" />
+                        Errors (must be fixed before import)
+                      </div>
+                      <ul className="text-sm space-y-1">
+                        {preview.errors.filter(e => e.type === 'error').map((error, i) => (
+                          <li key={i} className="text-destructive">
+                            <span className="font-mono text-xs">{error.location}</span>: {error.message}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
 
-            {/* Completed/Failed Job Display */}
-            {currentJob && currentJob.status === 'completed' && (
-              <div className="border rounded-lg p-4 bg-green-500/10 border-green-500/20">
-                <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
-                  <CheckCircle className="w-5 h-5" />
-                  <span className="font-medium">Import Completed</span>
+                  {preview.errors.filter(e => e.type === 'warning').length > 0 && (
+                    <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+                      <div className="flex items-center gap-2 text-yellow-600 dark:text-yellow-400 font-medium text-sm mb-2">
+                        <AlertTriangle className="w-4 h-4" />
+                        Warnings
+                      </div>
+                      <ul className="text-sm space-y-1">
+                        {preview.errors.filter(e => e.type === 'warning').map((warning, i) => (
+                          <li key={i} className="text-yellow-600 dark:text-yellow-400">
+                            <span className="font-mono text-xs">{warning.location}</span>: {warning.message}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
-                <p className="text-sm mt-2">
-                  Imported {currentJob.result?.collectionsCreated || 0} collections,{' '}
-                  {currentJob.result?.skriptsCreated || 0} skripts,{' '}
-                  {currentJob.result?.pagesCreated || 0} pages,{' '}
-                  {currentJob.result?.filesImported || 0} files.
-                </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-3"
-                  onClick={handleCancelImport}
-                >
-                  Dismiss
-                </Button>
-              </div>
-            )}
+              )}
 
-            {currentJob && currentJob.status === 'failed' && (
-              <div className="border rounded-lg p-4 bg-destructive/10 border-destructive/20">
-                <div className="flex items-center gap-2 text-destructive">
-                  <XCircle className="w-5 h-5" />
-                  <span className="font-medium">Import Failed</span>
-                </div>
-                <p className="text-sm mt-2 text-destructive">{currentJob.error || 'Unknown error'}</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-3"
-                  onClick={handleCancelImport}
-                >
-                  Dismiss
-                </Button>
-              </div>
-            )}
-
-            {/* Pending job - can be cancelled */}
-            {currentJob && currentJob.status === 'pending' && (
-              <div className="border rounded-lg p-4 bg-yellow-500/10 border-yellow-500/20">
-                <div className="flex items-center gap-2 text-yellow-600 dark:text-yellow-400">
-                  <Clock className="w-5 h-5" />
-                  <span className="font-medium">Pending Upload: {currentJob.fileName}</span>
-                </div>
-                <p className="text-sm mt-2 text-muted-foreground">
-                  A previous import was started but not completed. Cancel it to start a new one.
-                </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-3"
-                  onClick={handleCancelImport}
-                >
-                  Cancel &amp; Start New
-                </Button>
-              </div>
-            )}
-
-            {!preview && !showJobProgress && (!currentJob || currentJob.status === 'cancelled') && (
-              <div className="flex items-center gap-4">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".zip"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                  id="import-file"
-                />
-                <Button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isUploading}
-                  variant="outline"
-                >
-                  {isUploading ? (
+              <div className="flex gap-3 pt-2">
+                <Button onClick={handleImport} disabled={importing || hasBlockingErrors}>
+                  {importing ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Processing...
+                      Importing…
                     </>
                   ) : (
                     <>
                       <HardDriveUpload className="w-4 h-4 mr-2" />
-                      Select File
+                      Import Content
                     </>
                   )}
                 </Button>
+                <Button variant="outline" onClick={reset} disabled={importing}>
+                  Cancel
+                </Button>
               </div>
-            )}
+            </div>
+          )}
 
-            {/* Preview (for small files) */}
-            {preview && !isLargeFile && (
-              <div className="border rounded-lg p-4 space-y-4">
-                <div className="flex items-center gap-2">
-                  <FileArchive className="w-5 h-5" />
-                  <span className="font-medium">{uploadedFile?.name}</span>
-                </div>
-
-                {/* Summary */}
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-muted-foreground">Collections:</span>{' '}
-                    <span className="font-medium">{preview.collections.length}</span>
-                    {preview.collections.filter(c => c.isNew).length > 0 && (
-                      <span className="text-green-600 ml-1">
-                        ({preview.collections.filter(c => c.isNew).length} new)
-                      </span>
-                    )}
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Skripts:</span>{' '}
-                    <span className="font-medium">{preview.skripts.length}</span>
-                    {preview.skripts.filter(s => s.isNew).length > 0 && (
-                      <span className="text-green-600 ml-1">
-                        ({preview.skripts.filter(s => s.isNew).length} new)
-                      </span>
-                    )}
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Pages:</span>{' '}
-                    <span className="font-medium">
-                      {preview.skripts.reduce((sum, s) => sum + s.pageCount, 0)}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Attachments:</span>{' '}
-                    <span className="font-medium">{preview.attachments}</span>
-                  </div>
-                </div>
-
-                {/* Skript List */}
-                {preview.skripts.length > 0 && (
-                  <div className="space-y-2">
-                    <h4 className="text-sm font-medium">Skripts to import:</h4>
-                    <div className="max-h-40 overflow-y-auto space-y-1">
-                      {preview.skripts.map(skript => (
-                        <div
-                          key={skript.slug}
-                          className="text-sm flex items-center gap-2 py-1 px-2 rounded bg-muted/50"
-                        >
-                          {skript.isNew ? (
-                            <CheckCircle className="w-3.5 h-3.5 text-green-600" />
-                          ) : (
-                            <span className="w-3.5 h-3.5 text-muted-foreground">-</span>
-                          )}
-                          <span className={skript.isNew ? '' : 'text-muted-foreground'}>
-                            {skript.title}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            ({skript.pageCount} pages)
-                          </span>
-                          {!skript.isNew && (
-                            <span className="text-xs text-muted-foreground ml-auto">exists</span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Errors and Warnings */}
-                {preview.errors.length > 0 && (
-                  <div className="space-y-2">
-                    {preview.errors.filter(e => e.type === 'error').length > 0 && (
-                      <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
-                        <div className="flex items-center gap-2 text-destructive font-medium text-sm mb-2">
-                          <AlertTriangle className="w-4 h-4" />
-                          Errors (must be fixed before import)
-                        </div>
-                        <ul className="text-sm space-y-1">
-                          {preview.errors.filter(e => e.type === 'error').map((error, i) => (
-                            <li key={i} className="text-destructive">
-                              <span className="font-mono text-xs">{error.location}</span>: {error.message}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {preview.errors.filter(e => e.type === 'warning').length > 0 && (
-                      <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
-                        <div className="flex items-center gap-2 text-yellow-600 dark:text-yellow-400 font-medium text-sm mb-2">
-                          <AlertTriangle className="w-4 h-4" />
-                          Warnings
-                        </div>
-                        <ul className="text-sm space-y-1">
-                          {preview.errors.filter(e => e.type === 'warning').map((warning, i) => (
-                            <li key={i} className="text-yellow-600 dark:text-yellow-400">
-                              <span className="font-mono text-xs">{warning.location}</span>: {warning.message}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Actions */}
-                <div className="flex gap-3 pt-2">
-                  <Button
-                    onClick={handleImport}
-                    disabled={isImporting || hasBlockingErrors}
-                  >
-                    {isImporting ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Importing...
-                      </>
-                    ) : (
-                      <>
-                        <HardDriveUpload className="w-4 h-4 mr-2" />
-                        Import Content
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={handleCancelImport}
-                    disabled={isImporting}
-                  >
-                    Cancel
-                  </Button>
-                </div>
+          {/* Result */}
+          {outcome && (
+            <div className={`border rounded-lg p-4 ${outcome.errors.some(e => e.type === 'error') ? 'bg-destructive/10 border-destructive/20' : 'bg-green-500/10 border-green-500/20'}`}>
+              <div className={`flex items-center gap-2 ${outcome.errors.some(e => e.type === 'error') ? 'text-destructive' : 'text-green-600 dark:text-green-400'}`}>
+                {outcome.errors.some(e => e.type === 'error') ? <XCircle className="w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
+                <span className="font-medium">Import Finished</span>
               </div>
-            )}
-          </div>
+              <p className="text-sm mt-2">
+                {outcome.collectionsCreated} collections, {outcome.skriptsCreated} skripts,{' '}
+                {outcome.pagesCreated} pages, {outcome.filesImported} attachments, {outcome.videosImported} videos.
+              </p>
+              {outcome.errors.length > 0 && (
+                <ul className="text-sm space-y-1 mt-2">
+                  {outcome.errors.map((e, i) => (
+                    <li key={i} className={e.type === 'error' ? 'text-destructive' : 'text-yellow-600 dark:text-yellow-400'}>
+                      <span className="font-mono text-xs">{e.location}</span>: {e.message}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <Button variant="outline" size="sm" className="mt-3" onClick={reset}>
+                Dismiss
+              </Button>
+            </div>
+          )}
         </div>
       </CardContent>
       <AlertDialogModal

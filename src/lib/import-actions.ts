@@ -10,29 +10,13 @@ import { isTeacherS3Configured } from '@/lib/s3'
 import { saveFile } from '@/lib/file-storage'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { invalidateSkriptFiles } from '@/lib/skript-files.server'
-
-interface ExportManifest {
-  version: number
-  exportedAt: string
-  collections: {
-    title: string
-    description: string | null
-    skripts: string[] // skript slugs in this collection
-  }[]
-  skripts: {
-    [slug: string]: {
-      title: string
-      description: string | null
-      pages: string[]
-    }
-  }
-}
-
-interface ImportError {
-  type: 'error' | 'warning'
-  location: string
-  message: string
-}
+import {
+  type ExportManifest,
+  type ImportError,
+  validateMarkdownSyntax,
+  parseFrontmatter,
+  attachmentContentType
+} from '@/lib/import-shared'
 
 interface ImportPreview {
   collections: { title: string; isNew: boolean }[]
@@ -205,119 +189,6 @@ export async function importContent(formData: FormData, action: 'preview' | 'imp
   }
 }
 
-function validateMarkdownSyntax(content: string, location: string): ImportError[] {
-  const errors: ImportError[] = []
-
-  // Check for unclosed code blocks
-  const codeBlockMatches = content.match(/```/g) || []
-  if (codeBlockMatches.length % 2 !== 0) {
-    errors.push({
-      type: 'error',
-      location,
-      message: 'Unclosed code block (odd number of ```)'
-    })
-  }
-
-  // Check for broken image/link syntax
-  const brokenImageLinks = content.match(/!\[[^\]]*\]\([^)]*$/gm)
-  if (brokenImageLinks) {
-    errors.push({
-      type: 'error',
-      location,
-      message: 'Broken image/link syntax (unclosed parenthesis)'
-    })
-  }
-
-  // Check for old wiki-link syntax that wasn't converted
-  const wikiLinks = content.match(/\[\[[^\]]+\]\]/g)
-  if (wikiLinks) {
-    errors.push({
-      type: 'warning',
-      location,
-      message: `Found ${wikiLinks.length} wiki-links that may need conversion: ${wikiLinks.slice(0, 3).join(', ')}${wikiLinks.length > 3 ? '...' : ''}`
-    })
-  }
-
-  // Check for unclosed callouts
-  const calloutStart = content.match(/>\s*\[![\w-]+\]/g) || []
-  if (calloutStart.length > 10) {
-    errors.push({
-      type: 'warning',
-      location,
-      message: `Found ${calloutStart.length} callouts - verify they render correctly`
-    })
-  }
-
-  // Check for broken table syntax
-  const tableRows = content.match(/^\|.*\|$/gm) || []
-  if (tableRows.length > 0) {
-    const separatorRows = content.match(/^\|[-:| ]+\|$/gm) || []
-    if (separatorRows.length === 0 && tableRows.length > 1) {
-      errors.push({
-        type: 'warning',
-        location,
-        message: 'Table may be missing separator row (|---|---|)'
-      })
-    }
-  }
-
-  // Check for potential YAML frontmatter issues
-  if (content.startsWith('---')) {
-    const frontmatterEnd = content.indexOf('---', 4)
-    if (frontmatterEnd === -1) {
-      errors.push({
-        type: 'error',
-        location,
-        message: 'Unclosed YAML frontmatter'
-      })
-    }
-  }
-
-  return errors
-}
-
-function parseFrontmatter(content: string): { frontmatter: Record<string, string>; body: string } {
-  const match = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/)
-
-  if (!match) {
-    return { frontmatter: {}, body: content }
-  }
-
-  const [, frontmatterStr, body] = match
-  const frontmatter: Record<string, string> = {}
-
-  frontmatterStr.split('\n').forEach(line => {
-    const colonIndex = line.indexOf(':')
-    if (colonIndex > 0) {
-      const key = line.slice(0, colonIndex).trim()
-      let value = line.slice(colonIndex + 1).trim()
-      if ((value.startsWith('"') && value.endsWith('"')) ||
-          (value.startsWith("'") && value.endsWith("'"))) {
-        value = value.slice(1, -1)
-      }
-      frontmatter[key] = value
-    }
-  })
-
-  return { frontmatter, body }
-}
-
-const ATTACHMENT_CONTENT_TYPES: Record<string, string> = {
-  'png': 'image/png',
-  'jpg': 'image/jpeg',
-  'jpeg': 'image/jpeg',
-  'svg': 'image/svg+xml',
-  'webp': 'image/webp',
-  'gif': 'image/gif',
-  'pdf': 'application/pdf',
-  'mp4': 'video/mp4',
-  'webm': 'video/webm',
-  'json': 'application/json',
-  'excalidraw': 'application/json',
-  'db': 'application/x-sqlite3',
-  'sqlite': 'application/x-sqlite3'
-}
-
 /**
  * Imports a single attachment (or converted .excalidraw.md → .excalidraw
  * file) through the shared saveFile() helper, instead of hand-rolling
@@ -348,17 +219,13 @@ export async function importAttachmentFile(
     }
 
     const buffer = Buffer.from(await file.async('arraybuffer'))
-    const ext = finalName.endsWith('.excalidraw')
-      ? 'excalidraw'
-      : (finalName.split('.').pop() || 'bin')
-    const contentType = ATTACHMENT_CONTENT_TYPES[ext.toLowerCase()] || 'application/octet-stream'
 
     await saveFile({
       buffer,
       filename: finalName,
       skriptId,
       userId,
-      contentType
+      contentType: attachmentContentType(finalName)
     })
 
     return { status: 'created' }
@@ -802,4 +669,167 @@ export async function processImportZip(
     ...result,
     warnings: errors
   }
+}
+
+export interface ImportTargetsCheck {
+  existingCollectionTitles: string[]
+  existingSkriptSlugs: string[]
+}
+
+/**
+ * Read-only dedupe check for the client-side importer's preview step.
+ * Attachments/videos aren't checked here — those go straight through
+ * saveFile()'s / the Mux upload route's own existence checks per-file.
+ */
+export async function checkImportTargets(collectionTitles: string[], skriptSlugs: string[]): Promise<ImportTargetsCheck> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.id) {
+    return { existingCollectionTitles: [], existingSkriptSlugs: [] }
+  }
+  const userId = session.user.id
+
+  const [existingCollections, existingSkripts] = await Promise.all([
+    collectionTitles.length > 0
+      ? prisma.collection.findMany({
+          where: { title: { in: collectionTitles }, site: { userId } },
+          select: { title: true }
+        })
+      : Promise.resolve([]),
+    skriptSlugs.length > 0
+      ? prisma.skript.findMany({
+          where: { slug: { in: skriptSlugs }, authors: { some: { userId } } },
+          select: { slug: true }
+        })
+      : Promise.resolve([])
+  ])
+
+  return {
+    existingCollectionTitles: existingCollections.map(c => c.title),
+    existingSkriptSlugs: existingSkripts.map(s => s.slug)
+  }
+}
+
+export interface ImportStructurePayload {
+  collections: { title: string; skripts: string[] }[]
+  skripts: {
+    slug: string
+    title: string
+    description: string | null
+    pages: { slug: string; title: string; content: string; order: number }[]
+  }[]
+}
+
+export interface ImportStructureResult {
+  success: boolean
+  error?: string
+  skriptIds?: Record<string, string>
+  collectionsCreated?: number
+  skriptsCreated?: number
+  pagesCreated?: number
+}
+
+/**
+ * Client-side importer's write step for collections/skripts/pages — text
+ * only, no binary. Attachments and videos are uploaded separately by the
+ * browser directly to S3/Mux (see skript-import-client.ts) once this
+ * returns the new skript ids to attach them to.
+ */
+export async function createImportStructure(payload: ImportStructurePayload): Promise<ImportStructureResult> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.id) {
+    return { success: false, error: 'Unauthorized' }
+  }
+  const userId = session.user.id
+
+  const result = { collectionsCreated: 0, skriptsCreated: 0, pagesCreated: 0 }
+  const skriptIds: Record<string, string> = {}
+  const collectionIdMap = new Map<string, string>()
+
+  const userSite = await prisma.site.findFirst({
+    where: { userId },
+    orderBy: PRIMARY_SITE_ORDER,
+    select: { id: true, slug: true }
+  })
+  if (!userSite) {
+    return { success: false, error: `User ${userId} has no Site — set up a public page before importing` }
+  }
+
+  for (const collectionData of payload.collections) {
+    let collection = await prisma.collection.findFirst({
+      where: { title: collectionData.title, siteId: userSite.id }
+    })
+    if (!collection) {
+      collection = await prisma.collection.create({
+        data: { title: collectionData.title, siteId: userSite.id }
+      })
+      result.collectionsCreated++
+    }
+    collectionIdMap.set(collectionData.title, collection.id)
+  }
+
+  for (const skriptData of payload.skripts) {
+    let skript = await prisma.skript.findFirst({
+      where: { slug: skriptData.slug, authors: { some: { userId } } }
+    })
+
+    if (!skript) {
+      const owningCollection = payload.collections.find(c => c.skripts.includes(skriptData.slug))
+      const collectionId = owningCollection ? collectionIdMap.get(owningCollection.title) : null
+
+      skript = await prisma.skript.create({
+        data: {
+          title: skriptData.title,
+          description: skriptData.description,
+          slug: skriptData.slug,
+          isPublished: false,
+          authors: { create: { userId, permission: 'author' } },
+          ...(collectionId && {
+            collectionSkripts: { create: { collectionId, order: 0 } }
+          })
+        }
+      })
+      result.skriptsCreated++
+    }
+
+    skriptIds[skriptData.slug] = skript.id
+
+    for (const p of skriptData.pages) {
+      const existingPage = await prisma.page.findFirst({
+        where: { slug: p.slug, skriptId: skript.id }
+      })
+      if (existingPage) continue
+
+      const page = await prisma.page.create({
+        data: {
+          title: p.title,
+          content: p.content,
+          slug: p.slug,
+          order: p.order,
+          isPublished: false,
+          skriptId: skript.id,
+          authors: { create: { userId, permission: 'author' } }
+        }
+      })
+
+      await prisma.pageVersion.create({
+        data: {
+          pageId: page.id,
+          content: p.content,
+          version: 1,
+          authorId: userId,
+          changeLog: 'Imported'
+        }
+      })
+
+      result.pagesCreated++
+    }
+  }
+
+  if (userSite.slug) {
+    revalidateTag(CACHE_TAGS.teacherContent(userSite.slug), { expire: 0 })
+    revalidatePath(`/${userSite.slug}`)
+    revalidatePath('/dashboard')
+  }
+
+  return { success: true, skriptIds, ...result }
 }
