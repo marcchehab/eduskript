@@ -123,6 +123,7 @@ const TAG_ATTRS: Record<string, AttrDef[]> = {
     { label: 'playlist', info: 'YouTube playlist ID (e.g. PLxyz...)' },
     { label: 'startTime', info: 'Start time in seconds' },
     { label: 'caption', info: 'Caption shown beneath the video' },
+    { label: 'thumbnail', info: 'Custom teaser image (uploaded filename or URL), overrides the YouTube thumbnail' },
   ],
   'stickme': [],
   'fullwidth': [],

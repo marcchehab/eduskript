@@ -8,7 +8,7 @@
 import React, { type ComponentType, type CSSProperties, type ReactNode, Children, isValidElement } from 'react'
 import Image from 'next/image'
 import type { SkriptFilesData } from './skript-files'
-import { resolveFile, resolveExcalidraw } from './skript-files'
+import { resolveFile, resolveUrl, resolveExcalidraw } from './skript-files'
 import { CodeEditor } from '@/components/public/code-editor'
 import { HtmlPreviewEditor } from '@/components/public/code-editor/html-preview-editor'
 import { DeferredMount } from '@/components/public/code-editor/deferred-mount'
@@ -572,7 +572,13 @@ export function createMarkdownComponents(
     const startTimeStr = (props['data-start-time'] as string) || (props['dataStartTime'] as string) || ''
     const startTime = startTimeStr ? parseInt(startTimeStr, 10) : undefined
     const caption = (props['data-caption'] as string) || (props['dataCaption'] as string) || ''
+    const thumbnail = (props['data-thumbnail'] as string) || (props['dataThumbnail'] as string) || ''
     const pin = (props['data-pin'] as string) === 'true' || (props['dataPin'] as string) === 'true'
+
+    // thumbnail may be a bare filename (resolve via SkriptFiles) or an absolute URL
+    const resolvedThumbnail = thumbnail
+      ? thumbnail.startsWith('http') ? thumbnail : resolveUrl(files, thumbnail)
+      : undefined
 
     return (
       <Youtube
@@ -580,6 +586,7 @@ export function createMarkdownComponents(
         playlist={playlist || undefined}
         startTime={startTime}
         caption={caption || undefined}
+        thumbnail={resolvedThumbnail}
         pin={pin}
       />
     )

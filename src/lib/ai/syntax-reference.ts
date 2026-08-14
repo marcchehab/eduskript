@@ -412,7 +412,10 @@ Three equivalent forms — all render the same player. Pick whichever reads best
 <youtube id="dQw4w9WgXcQ" />
 <youtube id="dQw4w9WgXcQ" startTime={120} caption="Caption" />
 <youtube playlist="PLxyz..." />
+<youtube id="dQw4w9WgXcQ" thumbnail="custom-teaser.png" />
 \`\`\`
+
+\`thumbnail\` overrides the default YouTube-hosted teaser image (auto maxresdefault/hqdefault) with a custom one. Accepts an uploaded filename, resolved via the skript's files, or an absolute URL.
 
 **Custom element** (the underlying form, data-prefixed attributes):
 
@@ -420,6 +423,7 @@ Three equivalent forms — all render the same player. Pick whichever reads best
 <youtube-embed data-id="dQw4w9WgXcQ"></youtube-embed>
 <youtube-embed data-id="dQw4w9WgXcQ" data-start-time="120" data-caption="Caption"></youtube-embed>
 <youtube-embed data-playlist="PLxyz..."></youtube-embed>
+<youtube-embed data-id="dQw4w9WgXcQ" data-thumbnail="custom-teaser.png"></youtube-embed>
 \`\`\`
 
 **Attributes:** \`id\`/\`data-id\` (video ID) OR \`playlist\`/\`data-playlist\` — one is required. \`startTime\`/\`data-start-time\` (seconds) and \`caption\`/\`data-caption\` are optional.`)
@@ -813,7 +817,7 @@ export function getCondensedSyntaxReference(): string {
 
 **Inline code with a language:** \`code\`{:python} — a language marker right after the closing backtick of inline code gets the same per-token color highlighting as a fenced block, without breaking it out of the sentence. Same language set as code editors/blocks (python, javascript/js, typescript/ts, sql, php, java, cpp, rust, go, html, css, json, xml, yaml). No marker → plain, uncolored inline code (the default).
 
-**YouTube:** \`![caption](https://youtu.be/VIDEO_ID?t=120)\` is the simplest form (alt becomes caption). Or \`<youtube id="VIDEO_ID" startTime={120} caption="..." />\`, or the underlying \`<youtube-embed data-id="VIDEO_ID" data-start-time="120" data-caption="..."></youtube-embed>\`. Use \`playlist\`/\`data-playlist\` for playlists.
+**YouTube:** \`![caption](https://youtu.be/VIDEO_ID?t=120)\` is the simplest form (alt becomes caption). Or \`<youtube id="VIDEO_ID" startTime={120} caption="..." />\`, or the underlying \`<youtube-embed data-id="VIDEO_ID" data-start-time="120" data-caption="..."></youtube-embed>\`. Use \`playlist\`/\`data-playlist\` for playlists, \`thumbnail\`/\`data-thumbnail\` (filename or URL) for a custom teaser image.
 
 **Flag icons:** \`:flag-en-gb:\` / \`:flag-de-ch:\` inline anywhere in text, e.g. \`## User Manual :flag-en-gb:\`. Only these two codes exist.
 

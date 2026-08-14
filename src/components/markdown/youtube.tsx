@@ -11,6 +11,8 @@ interface YoutubeProps {
   playlist?: string
   startTime?: number
   caption?: string
+  /** Custom teaser image, pre-resolved to a URL by the caller (SkriptFiles or absolute). Overrides the YouTube-hosted thumbnail. */
+  thumbnail?: string
   /** Stick the video to the top of the viewport while scrolling. */
   pin?: boolean
 }
@@ -20,17 +22,17 @@ const maxResThumb = (id: string) => `https://img.youtube.com/vi/${id}/maxresdefa
 /** 480x360. YouTube generates this for every video. */
 const fallbackThumb = (id: string) => `https://img.youtube.com/vi/${id}/hqdefault.jpg`
 
-export function Youtube({ id, playlist, startTime, caption, pin }: YoutubeProps) {
+export function Youtube({ id, playlist, startTime, caption, thumbnail, pin }: YoutubeProps) {
   const [isOpen, setIsOpen] = useState(false)
   // Derived from the id, not fetched: the <img> is then part of the server-
   // rendered HTML and starts downloading with everything else on the page.
-  // State only so onError can fall back; `thumbFor` tracks which id it belongs
-  // to, so a changed id resets it during render rather than in an effect.
-  const [thumbnailUrl, setThumbnailUrl] = useState(() => (id ? maxResThumb(id) : null))
-  const [thumbFor, setThumbFor] = useState(id)
-  if (thumbFor !== id) {
-    setThumbFor(id)
-    setThumbnailUrl(id ? maxResThumb(id) : null)
+  // State only so onError can fall back; `thumbFor` tracks which id/thumbnail
+  // it belongs to, so a change resets it during render rather than in an effect.
+  const [thumbnailUrl, setThumbnailUrl] = useState(() => thumbnail || (id ? maxResThumb(id) : null))
+  const [thumbFor, setThumbFor] = useState({ id, thumbnail })
+  if (thumbFor.id !== id || thumbFor.thumbnail !== thumbnail) {
+    setThumbFor({ id, thumbnail })
+    setThumbnailUrl(thumbnail || (id ? maxResThumb(id) : null))
   }
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const pathname = usePathname()
@@ -165,8 +167,11 @@ export function Youtube({ id, playlist, startTime, caption, pin }: YoutubeProps)
           // JPEG that is already small and edge-cached.
           unoptimized
           onError={() => {
+            if (!id) return
+            // Custom teaser failed to load — fall back to YouTube's own thumbnail.
+            if (thumbnailUrl === thumbnail && thumbnail) { setThumbnailUrl(maxResThumb(id)); return }
             // maxresdefault does not exist for every video; hqdefault always does.
-            if (id && thumbnailUrl !== fallbackThumb(id)) setThumbnailUrl(fallbackThumb(id))
+            if (thumbnailUrl !== fallbackThumb(id)) setThumbnailUrl(fallbackThumb(id))
           }}
         />
       </span>

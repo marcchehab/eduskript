@@ -9,6 +9,7 @@ import type { Root, Html, Paragraph, Text } from 'mdast'
  * <youtube id="dQw4w9WgXcQ" />
  * <Youtube id="dQw4w9WgXcQ" startTime={120} />
  * <youtube playlist="PLxyz..." />
+ * <youtube id="dQw4w9WgXcQ" thumbnail="custom-teaser.png" />
  * ```
  *
  * Into <youtube-embed> custom elements rendered by the React Youtube component.
@@ -97,6 +98,9 @@ function parseYoutubeAttrs(attrs: string): string {
   const captionMatch = attrs.match(/\bcaption=["']([^"']*)["']/)
   const caption = captionMatch ? captionMatch[1] : ''
 
+  const thumbnailMatch = attrs.match(/\bthumbnail=["']([^"']*)["']/)
+  const thumbnail = thumbnailMatch ? thumbnailMatch[1] : ''
+
   // pin: keep the video stuck to the top of the viewport while scrolling
   // (useful for the coupled-video format so checks stay reachable below).
   const pin = /\bpin(=["']?true["']?)?(\s|$)/.test(attrs) && !/\bpin=["']?false/.test(attrs)
@@ -106,6 +110,7 @@ function parseYoutubeAttrs(attrs: string): string {
   if (playlist) element += ` data-playlist="${playlist}"`
   if (startTime) element += ` data-start-time="${startTime}"`
   if (caption) element += ` data-caption="${caption}"`
+  if (thumbnail) element += ` data-thumbnail="${thumbnail}"`
   if (pin) element += ` data-pin="true"`
   element += '></youtube-embed>'
 

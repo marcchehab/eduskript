@@ -144,7 +144,7 @@ export const sanitizeSchema = {
     // Custom component attributes (camelCase for HAST, kebab-case for raw HTML)
     'code-editor': ['dataLanguage', 'dataCode', 'dataFiles', 'dataId', 'dataDb', 'dataSchemaImage', 'dataSingle', 'dataShowCanvas', 'dataSolution', 'dataExam', 'dataCheckCode', 'dataCheckStages', 'dataCheckPoints', 'dataMaxChecks', 'dataAssets', 'dataAllowUpload', 'dataAccept', 'dataHeight', 'dataOutputOnly', 'data-language', 'data-code', 'data-files', 'data-id', 'data-db', 'data-schema-image', 'data-single', 'data-show-canvas', 'data-solution', 'data-exam', 'data-check-code', 'data-check-stages', 'data-check-points', 'data-max-checks', 'data-assets', 'data-allow-upload', 'data-accept', 'data-height', 'data-output-only'],
     'tabs-container': ['dataItems', 'data-items'],
-    'youtube-embed': ['dataId', 'dataPlaylist', 'dataStartTime', 'dataCaption', 'dataPin', 'data-id', 'data-playlist', 'data-start-time', 'data-caption', 'data-pin'],
+    'youtube-embed': ['dataId', 'dataPlaylist', 'dataStartTime', 'dataCaption', 'dataThumbnail', 'dataPin', 'data-id', 'data-playlist', 'data-start-time', 'data-caption', 'data-thumbnail', 'data-pin'],
     'flag-icon': ['dataCode', 'data-code'],
     'mermaid-diagram': ['dataDefinition', 'data-definition'],
     'function-plot': ['dataSpec', 'data-spec'],

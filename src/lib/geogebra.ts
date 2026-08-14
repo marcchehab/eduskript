@@ -21,24 +21,25 @@ const APP_SEGMENTS = new Set([
 ])
 
 /**
- * Returns the GeoGebra material id from a pasted share URL, embed-iframe
- * snippet, or a bare id — or `null` if the input isn't a recognizable
- * GeoGebra material reference.
+ * Returns the GeoGebra material id from a pasted share URL or embed-iframe
+ * snippet — or `null` if the input isn't a recognizable GeoGebra material
+ * reference. Does NOT accept a bare id: any 6-12 char alphanumeric token
+ * (a YouTube video id, a git hash, a random word) would match, so this is
+ * unsafe for general clipboard-paste classification. Use `parseGeogebraUrl`
+ * for that convenience, restricted to the GeoGebra toolbar dialog where the
+ * field's purpose disambiguates a bare id.
  */
-export function parseGeogebraUrl(input: string): string | null {
+export function parseGeogebraLink(input: string): string | null {
   if (!input) return null
   const text = input.trim()
 
-  // 1. Bare material id pasted directly (toolbar dialog convenience).
-  if (ID_RE.test(text)) return text
-
-  // 2. Full <iframe ... src="..."> embed snippet — pull the src and recurse.
+  // 1. Full <iframe ... src="..."> embed snippet — pull the src and recurse.
   if (/<iframe/i.test(text)) {
     const m = text.match(/\bsrc\s*=\s*["']([^"']+)["']/i)
-    return m ? parseGeogebraUrl(m[1]) : null
+    return m ? parseGeogebraLink(m[1]) : null
   }
 
-  // 3. A URL on geogebra.org.
+  // 2. A URL on geogebra.org.
   let url: URL
   try {
     url = new URL(text)
@@ -61,4 +62,17 @@ export function parseGeogebraUrl(input: string): string | null {
   }
 
   return candidate && ID_RE.test(candidate) ? candidate : null
+}
+
+/**
+ * Same as `parseGeogebraLink`, plus a bare material id typed/pasted directly
+ * (toolbar dialog convenience, where the field is unambiguously for GeoGebra).
+ */
+export function parseGeogebraUrl(input: string): string | null {
+  if (!input) return null
+  const text = input.trim()
+
+  if (ID_RE.test(text)) return text
+
+  return parseGeogebraLink(text)
 }
