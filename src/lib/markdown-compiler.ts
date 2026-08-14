@@ -356,14 +356,31 @@ const TAG_ATTRS = `(?:[^>"']|"[^"]*"|'[^']*')*`
  * Expand self-closing custom element tags to explicit open+close pairs.
  * HTML only allows self-closing syntax for void elements (img, br, etc.).
  * Custom elements like <excali src="x" /> must become <excali src="x"></excali>.
+ *
+ * Skips lines inside fenced code blocks (same fence-tracking as
+ * delimitContainerTags below) — otherwise a tag shown as a literal example
+ * inside a ```-fence gets rewritten too, and rehypeRaw then renders the now
+ * non-self-closing tag as a live component instead of code text.
  */
 const SELF_CLOSING_RE = new RegExp(`<([a-zA-Z][\\w-]*)(${TAG_ATTRS}?)/>`, 'g')
+const FENCE_RE = /^[ \t]*(```|~~~)/
 
 function expandSelfClosingTags(markdown: string): string {
-  return markdown.replace(SELF_CLOSING_RE, (match, tag, attrs) => {
-    if (HTML_VOID_ELEMENTS.has(tag.toLowerCase())) return match
-    return `<${tag}${attrs}></${tag}>`
-  })
+  let inFence = false
+  return markdown
+    .split('\n')
+    .map((line) => {
+      if (FENCE_RE.test(line)) {
+        inFence = !inFence
+        return line
+      }
+      if (inFence) return line
+      return line.replace(SELF_CLOSING_RE, (match, tag, attrs) => {
+        if (HTML_VOID_ELEMENTS.has(tag.toLowerCase())) return match
+        return `<${tag}${attrs}></${tag}>`
+      })
+    })
+    .join('\n')
 }
 
 /**
