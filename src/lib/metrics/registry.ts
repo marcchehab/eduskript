@@ -15,6 +15,13 @@ export const METRICS = {
   page_loads_total: { unit: 'loads', source: 'server' as const, display: 'count' as const, live: false },
   db_queries_total: { unit: 'queries', source: 'server' as const, display: 'count' as const, live: true },
   db_query_time_ms: { unit: 'ms', source: 'server' as const, display: 'avg' as const, live: true },
+  // One count per path the deploy-time cache warmer (re-)requested (see
+  // src/lib/cache-warmer.ts). Warmer requests never increment page_loads_total
+  // (no Sec-Fetch-Mode/Next-Url header, so proxy.ts doesn't count them as a
+  // visit) but do fire the same DB queries as a cold visitor render — this is
+  // what lets a db_queries_total spike be told apart from a warmer run after
+  // the fact, without depending on the platform's ~24-48h log retention.
+  warmer_requests_total: { unit: 'requests', source: 'server' as const, display: 'count' as const, live: true },
 } as const
 
 /**

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { RefreshCw, TrendingUp, Clock, Database, ChevronDown, ChevronRight } from 'lucide-react'
 import { formatMetricName, getMetricUnit, getMetricDisplay, METRICS, CALCULATED_METRICS, type MetricName } from '@/lib/metrics/registry'
 import { DbAwakeCard } from '@/components/dashboard/db-awake-card'
+import { MetricsHoverProvider, useMetricsHover, findNearestBucket, formatHoverTime } from '@/components/dashboard/metrics-hover-context'
 
 interface MetricData {
   avg: number
@@ -122,13 +123,22 @@ export default function MetricsAdminPage() {
     const queries = historyData['db_queries_total'] || []
     const loads = historyData['page_loads_total'] || []
     const loadsByHour = new Map(loads.map(p => [p.timestamp, p.count]))
-    return queries
-      .map(p => {
-        const load = loadsByHour.get(p.timestamp)
-        return load ? p.count / load : null
-      })
-      .filter((v): v is number => v !== null)
+    const timestamps: string[] = []
+    const values: number[] = []
+    for (const p of queries) {
+      const load = loadsByHour.get(p.timestamp)
+      if (!load) continue
+      timestamps.push(p.timestamp)
+      values.push(p.count / load)
+    }
+    return { timestamps, values }
   }
+
+  // Hours the deploy-time cache warmer was active — shaded onto the
+  // db_queries_total and db_queries_per_page_load charts (see MetricChart's
+  // highlightTimestamps) so a spike caused by the warmer is visible in the
+  // chart itself instead of requiring a side-by-side comparison.
+  const warmerHours = new Set((historyData['warmer_requests_total'] || []).map(p => p.timestamp))
 
   // Calculate summary stats for a metric from history data
   const getHistorySummary = (metricName: MetricName) => {
@@ -152,7 +162,28 @@ export default function MetricsAdminPage() {
   // dashed line marks the average of whatever series is plotted (per-hour
   // count for count metrics, weighted avg for avg metrics) so individual
   // hours can be judged against it at a glance instead of comparing bare sums.
-  const MetricChart = ({ data, height = 60 }: { data: number[]; height?: number }) => {
+  //
+  // Hovering sets the shared hoveredTime (src/components/dashboard/metrics-
+  // hover-context.tsx); the crosshair below is drawn from that shared value,
+  // not local hover state, so it mirrors across every chart on the page —
+  // including DbAwakeCard, a separate component reading the same context.
+  const MetricChart = ({
+    data,
+    timestamps,
+    height = 60,
+    highlightTimestamps,
+  }: {
+    data: number[]
+    timestamps: string[]
+    height?: number
+    /** Hours to shade behind the line — currently used to mark deploy-time
+     *  cache-warmer activity, so a spike caused by the warmer is visually
+     *  obvious in the chart itself rather than requiring a side-by-side
+     *  comparison with the Warmer Requests Total card. */
+    highlightTimestamps?: Set<string>
+  }) => {
+    const { hoveredTime, setHoveredTime } = useMetricsHover()
+
     if (data.length === 0) {
       return (
         <div className="text-muted-foreground text-sm flex items-center justify-center h-full">
@@ -167,6 +198,12 @@ export default function MetricsAdminPage() {
     const avg = data.reduce((sum, v) => sum + v, 0) / data.length
     const avgY = height - ((avg - min) / range) * height
 
+    const step = 100 / (data.length - 1 || 1)
+    const halfStep = step / 2
+    const highlightIndices = highlightTimestamps
+      ? timestamps.flatMap((ts, i) => (highlightTimestamps.has(ts) ? [i] : []))
+      : []
+
     const points = data
       .map((value, i) => {
         const x = (i / (data.length - 1 || 1)) * 100
@@ -175,9 +212,34 @@ export default function MetricsAdminPage() {
       })
       .join(' ')
 
+    const hoverIndex = hoveredTime !== null ? findNearestBucket(timestamps, hoveredTime) : null
+    const hoverX = hoverIndex !== null ? (hoverIndex / (data.length - 1 || 1)) * 100 : null
+
+    const handleMove = (e: React.MouseEvent<HTMLDivElement>) => {
+      const rect = e.currentTarget.getBoundingClientRect()
+      const fraction = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width))
+      const index = Math.round(fraction * (timestamps.length - 1))
+      const ts = timestamps[index]
+      if (ts) setHoveredTime(new Date(ts).getTime())
+    }
+
     return (
-      <div className="relative h-full">
+      <div
+        className="relative h-full"
+        onMouseMove={handleMove}
+        onMouseLeave={() => setHoveredTime(null)}
+      >
         <svg width="100%" height={height} viewBox={`0 0 100 ${height}`} preserveAspectRatio="none" className="overflow-visible">
+          {highlightIndices.map(i => (
+            <rect
+              key={i}
+              x={Math.max(0, i / (data.length - 1 || 1) * 100 - halfStep)}
+              width={halfStep * 2}
+              y={0}
+              height={height}
+              className="fill-amber-500/15"
+            />
+          ))}
           <line
             x1="0"
             x2="100"
@@ -188,6 +250,19 @@ export default function MetricsAdminPage() {
             strokeDasharray="3 2"
             vectorEffect="non-scaling-stroke"
           />
+          {hoverX !== null && (
+            <line
+              x1={hoverX}
+              x2={hoverX}
+              y1={0}
+              y2={height}
+              stroke="currentColor"
+              strokeWidth={1}
+              strokeDasharray="2 2"
+              vectorEffect="non-scaling-stroke"
+              className="text-muted-foreground/60"
+            />
+          )}
           <polyline
             points={points}
             fill="none"
@@ -203,6 +278,18 @@ export default function MetricsAdminPage() {
         >
           avg {avg.toFixed(1)}
         </span>
+        {hoverX !== null && hoveredTime !== null && (
+          <span
+            className="absolute text-[10px] font-medium text-muted-foreground bg-background/90 px-1 rounded-sm leading-none py-0.5 pointer-events-none whitespace-nowrap"
+            style={{
+              left: `${hoverX}%`,
+              top: 0,
+              transform: `translateX(${hoverX < 15 ? '0%' : hoverX > 85 ? '-100%' : '-50%'})`,
+            }}
+          >
+            {formatHoverTime(hoveredTime)}
+          </span>
+        )}
       </div>
     )
   }
@@ -216,6 +303,7 @@ export default function MetricsAdminPage() {
   }
 
   return (
+    <MetricsHoverProvider>
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
@@ -257,7 +345,9 @@ export default function MetricsAdminPage() {
           const displayMode = METRICS[name as MetricName]?.display || 'avg'
           const isCountMetric = displayMode === 'count'
 
-          const chartData = (historyData[name] || []).map(p => isCountMetric ? p.count : p.avg)
+          const points = historyData[name] || []
+          const chartData = points.map(p => isCountMetric ? p.count : p.avg)
+          const chartTimestamps = points.map(p => p.timestamp)
 
           return (
             <Card
@@ -284,7 +374,12 @@ export default function MetricsAdminPage() {
               {summary ? (
                 <>
                   <div className="h-36 mb-2">
-                    <MetricChart data={chartData} height={144} />
+                    <MetricChart
+                      data={chartData}
+                      timestamps={chartTimestamps}
+                      height={144}
+                      highlightTimestamps={name === 'db_queries_total' ? warmerHours : undefined}
+                    />
                   </div>
                   <div className="flex justify-between text-xs text-muted-foreground">
                     {isCountMetric ? (
@@ -319,7 +414,8 @@ export default function MetricsAdminPage() {
             const series = key === 'db_queries_per_page_load' ? getDbQueriesPerLoadSeries() : null
 
             if (series) {
-              const avg = series.length ? series.reduce((sum, v) => sum + v, 0) / series.length : 0
+              const { timestamps, values } = series
+              const avg = values.length ? values.reduce((sum, v) => sum + v, 0) / values.length : 0
               return (
                 <Card key={key} className="p-4 bg-muted/30">
                   <div className="flex items-start justify-between mb-3">
@@ -329,9 +425,9 @@ export default function MetricsAdminPage() {
                     </div>
                     <TrendingUp className="h-4 w-4 text-muted-foreground" />
                   </div>
-                  {series.length > 0 ? (
+                  {values.length > 0 ? (
                     <div className="h-36 mb-2">
-                      <MetricChart data={series} height={144} />
+                      <MetricChart data={values} timestamps={timestamps} height={144} highlightTimestamps={warmerHours} />
                     </div>
                   ) : (
                     <div className="text-muted-foreground text-sm py-4">No data yet</div>
@@ -397,7 +493,9 @@ export default function MetricsAdminPage() {
               <div className="h-48 border rounded-md p-4">
                 <MetricChart
                   data={points.map(p => isCountMetric ? p.count : p.avg)}
+                  timestamps={points.map(p => p.timestamp)}
                   height={160}
+                  highlightTimestamps={selectedMetric === 'db_queries_total' ? warmerHours : undefined}
                 />
               </div>
 
@@ -513,5 +611,6 @@ export default function MetricsAdminPage() {
         )}
       </Card>
     </div>
+    </MetricsHoverProvider>
   )
 }

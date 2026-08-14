@@ -11,9 +11,11 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
+import type { MouseEvent } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Moon } from 'lucide-react'
+import { useMetricsHover, findNearestBucket, formatHoverTime } from '@/components/dashboard/metrics-hover-context'
 
 interface AwakeResponse {
   hours: number
@@ -54,9 +56,25 @@ export function DbAwakeCard() {
     fetchData()
   }, [fetchData])
 
+  const { hoveredTime, setHoveredTime } = useMetricsHover()
+
   const percent = data ? Math.round(data.window.fraction * 100) : null
   const awakeHours = data ? data.window.awakeMinutes / 60 : 0
   const totalHours = data ? data.window.totalMinutes / 60 : 0
+
+  const hourTimestamps = data?.byHour.map(h => h.hour) ?? []
+  const hoverIndex = data && hoveredTime !== null ? findNearestBucket(hourTimestamps, hoveredTime) : null
+  // Bars are bins, not points — center the line in the bar rather than at its
+  // left edge, matching (index + 0.5) instead of the line charts' index/(n-1).
+  const hoverX = hoverIndex !== null ? ((hoverIndex + 0.5) / hourTimestamps.length) * 100 : null
+
+  const handleBarsMove = (e: MouseEvent<HTMLDivElement>) => {
+    if (!data || hourTimestamps.length === 0) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const fraction = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width))
+    const index = Math.min(hourTimestamps.length - 1, Math.floor(fraction * hourTimestamps.length))
+    setHoveredTime(new Date(hourTimestamps[index]).getTime())
+  }
 
   return (
     <Card className="p-4">
@@ -98,7 +116,12 @@ export function DbAwakeCard() {
           </p>
 
           {/* One bar per hour, full height = awake the whole hour. */}
-          <div className="flex items-end gap-px h-12" title="Awake minutes per hour">
+          <div
+            className="relative flex items-end gap-px h-12"
+            title="Awake minutes per hour"
+            onMouseMove={handleBarsMove}
+            onMouseLeave={() => setHoveredTime(null)}
+          >
             {data.byHour.map(h => (
               <div
                 key={h.hour}
@@ -111,6 +134,23 @@ export function DbAwakeCard() {
                 />
               </div>
             ))}
+            {hoverX !== null && (
+              <div
+                className="absolute top-0 bottom-0 border-l border-dashed border-muted-foreground/60 pointer-events-none"
+                style={{ left: `${hoverX}%` }}
+              />
+            )}
+            {hoverX !== null && hoveredTime !== null && (
+              <span
+                className="absolute -top-5 text-[10px] font-medium text-muted-foreground bg-background/90 px-1 rounded-sm leading-none py-0.5 pointer-events-none whitespace-nowrap"
+                style={{
+                  left: `${hoverX}%`,
+                  transform: `translateX(${hoverX < 15 ? '0%' : hoverX > 85 ? '-100%' : '-50%'})`,
+                }}
+              >
+                {formatHoverTime(hoveredTime)}
+              </span>
+            )}
           </div>
           <div className="flex justify-between text-xs text-muted-foreground mt-1">
             <span>{new Date(data.window.from).toLocaleString()}</span>

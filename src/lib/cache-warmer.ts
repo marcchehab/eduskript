@@ -1,6 +1,6 @@
 import 'server-only'
 import http from 'node:http'
-import { PATH_METRIC_PREFIX } from '@/lib/metrics/buffer'
+import { PATH_METRIC_PREFIX, recordMetric } from '@/lib/metrics/buffer'
 
 /**
  * Re-render the busiest public URLs once, right after a deploy.
@@ -322,6 +322,10 @@ export async function warmTopPaths(): Promise<void> {
       }
 
       const result = await warmPath(next, port)
+      // Recorded regardless of ok/failure: even a failed render (404, timeout)
+      // typically still fired queries before it failed, and this metric only
+      // needs to say "the warmer was active here", not "successfully".
+      recordMetric('warmer_requests_total', 1)
       if (result.ok) {
         warmed++
         consecutiveFailures = 0
