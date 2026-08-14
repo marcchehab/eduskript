@@ -6,7 +6,9 @@
  * 2. Tag-specific attributes (inside an open tag)
  * 3. Known attribute values (inside quotes)
  * 4. Callout types (after `> [!`)
- * 5. Pandoc fenced-div directives (after `:::`)
+ *
+ * Keep this in sync with src/lib/ai/syntax-reference.ts — that file is the
+ * canonical list of supported components/attributes.
  */
 
 import type { CompletionContext, CompletionResult, Completion } from '@codemirror/autocomplete'
@@ -33,14 +35,26 @@ const TAG_COMPLETIONS: TagDef[] = [
   { label: 'img', info: 'Image with layout and invert support', apply: '<img src="" alt="" />', cursorOffset: 10 },
   { label: 'stickme', info: 'Pins wrapped content (image, schema, video) to the margin as you scroll; resizable', apply: '<stickme>\n\n</stickme>' },
   { label: 'plugin', info: 'User-created plugin in a sandboxed iframe', apply: '<plugin src="" height="400"></plugin>', cursorOffset: 13 },
-  { label: 'question', info: 'Quiz question with multiple-choice or text answer', apply: '<question type="multiple-choice">\n\n<answer correct>Answer</answer>\n<answer>Wrong</answer>\n</question>' },
+  { label: 'question', info: 'Quiz question: multiple/single choice, text, number, or range', apply: '<question type="multiple">\n\n<answer correct>Answer</answer>\n<answer>Wrong</answer>\n</question>' },
   { label: 'answer', info: 'Answer option inside a <question>', apply: '<answer>Text</answer>' },
   { label: 'mark', info: 'Highlight text', apply: '<mark></mark>' },
   { label: 'style', info: 'Scoped CSS block', apply: '<style>\n\n</style>' },
-  { label: 'tabs-container', info: 'Tabbed content sections', apply: '<tabs-container>\n<tab-item label="Tab 1">\n\n</tab-item>\n<tab-item label="Tab 2">\n\n</tab-item>\n</tabs-container>' },
-  { label: 'tab-item', info: 'Tab inside a <tabs-container>', apply: '<tab-item label="">\n\n</tab-item>' },
+  { label: 'tabs-container', info: 'Tabbed content sections', apply: '<tabs-container data-items=\'["Tab 1","Tab 2"]\'>\n<tab-item>\n\n</tab-item>\n<tab-item>\n\n</tab-item>\n</tabs-container>' },
+  { label: 'tab-item', info: 'Tab inside a <tabs-container> (label comes from the container\'s data-items)', apply: '<tab-item>\n\n</tab-item>' },
   { label: 'yt', info: 'YouTube timestamp link', apply: '<yt time="" label="" />' },
   { label: 'youtube', info: 'Embed a YouTube video (also works as ![caption](youtube-url))', apply: '<youtube id="" />', cursorOffset: 13 },
+  { label: 'molecule', info: 'Structural formula from a SMILES string', apply: '<molecule smiles="" />', cursorOffset: 18 },
+  { label: 'geogebra', info: 'Embed an interactive GeoGebra applet by material id', apply: '<geogebra material-id="" />', cursorOffset: 23 },
+  { label: 'spacer', info: 'Blank writing area for students to solve on by hand', apply: '<spacer pattern="checkered" height="200" />' },
+  { label: 'cta', info: 'Call-to-action link styled as a button', apply: '<cta href="">Text</cta>', cursorOffset: 11 },
+  { label: 'newsletter', info: 'Email signup box (Brevo list)', apply: '<newsletter />' },
+  { label: 'ai-feedback', info: 'Button: send pen strokes/section content to a vision model for feedback', apply: '<ai-feedback prompt="" />', cursorOffset: 21 },
+  { label: 'ping', info: 'Interactive ping terminal', apply: '<ping />' },
+  { label: 'next-stage', info: 'One-way divider that hands in the previous stage and reveals the next', apply: '<next-stage label="" />', cursorOffset: 19 },
+  { label: 'muxvideo', info: 'Mux video with playback options (gif, autoplay, loop, pin, poster)', apply: '<muxvideo src="" />', cursorOffset: 15 },
+  { label: 'left', info: 'Left-align block content', apply: '<left>\n\n</left>' },
+  { label: 'center', info: 'Center-align block content', apply: '<center>\n\n</center>' },
+  { label: 'right', info: 'Right-align block content', apply: '<right>\n\n</right>' },
 ]
 
 // ── Attribute definitions per tag ────────────────────────────────────
@@ -63,15 +77,6 @@ const TAG_ATTRS: Record<string, AttrDef[]> = {
     { label: 'wrap', info: 'Float with text wrap (true)' },
     { label: 'invert', info: 'Invert colors: dark | light | always' },
     { label: 'saturate', info: 'Saturation % when inverted (e.g. 70)' },
-  ],
-  'image': [
-    { label: 'src', info: 'Image filename or URL' },
-    { label: 'alt', info: 'Alt text' },
-    { label: 'width', info: 'Width (e.g. 50%)' },
-    { label: 'align', info: 'left | center | right' },
-    { label: 'wrap', info: 'Float with text wrap (true)' },
-    { label: 'invert', info: 'Invert colors: dark | light | always' },
-    { label: 'saturate', info: 'Saturation % when inverted' },
   ],
   'pdf': [
     { label: 'src', info: 'PDF filename' },
@@ -99,20 +104,31 @@ const TAG_ATTRS: Record<string, AttrDef[]> = {
     { label: 'src', info: 'Plugin source path' },
     { label: 'id', info: 'Unique plugin instance ID' },
     { label: 'height', info: 'Iframe height (e.g. 400)' },
-    { label: 'width', info: 'Iframe width' },
-    { label: 'name', info: 'Plugin name' },
   ],
   'question': [
     { label: 'id', info: 'Unique question ID' },
-    { label: 'type', info: 'multiple-choice | single-choice | text' },
+    { label: 'type', info: 'single | multiple | text | number | range (default: multiple)' },
+    { label: 'showFeedback', info: 'Show per-answer feedback after submitting' },
+    { label: 'points', info: 'Points awarded for a correct answer' },
+    { label: 'minValue', info: 'Range: minimum value' },
+    { label: 'maxValue', info: 'Range: maximum value' },
+    { label: 'step', info: 'Range: step size' },
+    { label: 'minLabel', info: 'Range: label at the minimum end' },
+    { label: 'maxLabel', info: 'Range: label at the maximum end' },
+    { label: 'expected', info: 'Text/number: the expected answer' },
+    { label: 'tolerance', info: 'Number: allowed +/- tolerance' },
+    { label: 'ignore-case', info: 'Text: ignore letter casing when checking' },
+    { label: 'ignore-whitespace', info: 'Text: ignore whitespace differences when checking' },
   ],
   'answer': [
     { label: 'correct', info: 'Mark as the correct answer' },
     { label: 'feedback', info: 'Feedback shown after answering' },
+    { label: 'from', info: 'Range: threshold (0-1) this feedback band starts at' },
   ],
-  'tab-item': [
-    { label: 'label', info: 'Tab label text' },
+  'tabs-container': [
+    { label: 'data-items', info: 'JSON array of tab labels, e.g. \'["Tab 1","Tab 2"]\'' },
   ],
+  'tab-item': [],
   'yt': [
     { label: 'time', info: 'Timestamp (e.g. 1:23)' },
     { label: 'videoid', info: 'YouTube video ID' },
@@ -129,6 +145,70 @@ const TAG_ATTRS: Record<string, AttrDef[]> = {
   'fullwidth': [],
   'mark': [],
   'style': [],
+  'molecule': [
+    { label: 'smiles', info: 'Molecule in SMILES notation (e.g. CCO ethanol, O water)' },
+    { label: 'name', info: 'Caption below the drawing' },
+    { label: 'width', info: 'Width in px (default: 420)' },
+    { label: 'height', info: 'Height in px (default: 300)' },
+    { label: 'display-width', info: 'Percent of the column' },
+    { label: 'align', info: 'left | center | right' },
+    { label: 'wrap', info: 'Float with text wrap (true)' },
+  ],
+  'geogebra': [
+    { label: 'material-id', info: 'GeoGebra material id (from a geogebra.org share link)' },
+    { label: 'height', info: 'Pin a fixed height in px (default: auto-fit)' },
+    { label: 'width', info: 'Width' },
+    { label: 'show-toolbar', info: 'Show the GeoGebra toolbar (true)' },
+    { label: 'show-algebra-input', info: 'Show the algebra input bar (true)' },
+    { label: 'correct-when', info: 'Captures per-student correctness for the teacher\'s class tally' },
+  ],
+  'spacer': [
+    { label: 'pattern', info: 'checkered | lines | dots | blank' },
+    { label: 'height', info: 'Height in px (e.g. 200)' },
+    { label: 'id', info: 'Unique spacer ID' },
+  ],
+  'cta': [
+    { label: 'href', info: 'Link target' },
+    { label: 'label', info: 'Button text (alternative to children when self-closing)' },
+    { label: 'variant', info: 'default | secondary | outline | ghost' },
+    { label: 'size', info: 'lg | default | sm' },
+    { label: 'align', info: 'center | left | right' },
+    { label: 'external', info: 'Open in a new tab' },
+  ],
+  'newsletter': [
+    { label: 'title', info: 'Heading text' },
+    { label: 'description', info: 'Description text' },
+    { label: 'button', info: 'Button text' },
+    { label: 'list-id', info: 'Brevo list id' },
+  ],
+  'ai-feedback': [
+    { label: 'prompt', info: 'Teacher instructions for the AI' },
+    { label: 'id', info: 'Unique feedback instance ID (optional)' },
+    { label: 'label', info: 'Button text (default: Check my solution)' },
+  ],
+  'ping': [
+    { label: 'host', info: 'Auto-runs a demo ping to this host' },
+    { label: 'count', info: 'Ping count (e.g. 4)' },
+    { label: 'os', info: 'linux | macos | windows' },
+  ],
+  'next-stage': [
+    { label: 'label', info: 'Advance/confirm button text' },
+    { label: 'title', info: 'Confirm modal heading' },
+    { label: 'confirm', info: 'Confirm modal body text' },
+    { label: 'cancel', info: 'Cancel button text' },
+  ],
+  'muxvideo': [
+    { label: 'src', info: 'Video filename' },
+    { label: 'gif', info: 'Muted autoplay loop, GIF-style' },
+    { label: 'autoplay', info: 'Autoplay (muted)' },
+    { label: 'loop', info: 'Loop playback' },
+    { label: 'pin', info: 'Corner overlay when scrolled past' },
+    { label: 'poster', info: 'Poster image filename' },
+    { label: 'alt', info: 'Caption text' },
+  ],
+  'left': [],
+  'center': [],
+  'right': [],
 }
 
 // ── Per-plugin attribute definitions (keyed by `<plugin src="…">`) ───
@@ -183,18 +263,14 @@ const ATTR_VALUES: Record<string, string[]> = {
   'direction': ['row', 'column'],
   'justify': ['start', 'center', 'end', 'between', 'around', 'evenly'],
   'gap': ['none', 'small', 'medium', 'large'],
-  'type': ['multiple-choice', 'single-choice', 'text'],
+  'type': ['single', 'multiple', 'text', 'number', 'range'],
   'grow': ['true', 'false'],
   'class': ['invert-dark'],
+  'pattern': ['checkered', 'lines', 'dots', 'blank'],
+  'variant': ['default', 'secondary', 'outline', 'ghost'],
+  'size': ['lg', 'default', 'sm'],
+  'os': ['linux', 'macos', 'windows'],
 }
-
-// ── Block directive completions ──────────────────────────────────────
-
-const DIRECTIVE_COMPLETIONS: Array<{ name: 'center' | 'left' | 'right'; info: string }> = [
-  { name: 'center', info: 'Center-align block content (Pandoc fenced div)' },
-  { name: 'left', info: 'Left-align block content (Pandoc fenced div)' },
-  { name: 'right', info: 'Right-align block content (Pandoc fenced div)' },
-]
 
 // ── Callout completions ──────────────────────────────────────────────
 
@@ -211,7 +287,6 @@ const CALLOUT_COMPLETIONS: Completion[] = Object.entries(calloutTypes).map(([nam
 const SRC_FILE_EXTENSIONS: Record<string, string[]> = {
   'excali': ['.excalidraw'],
   'img': ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.avif'],
-  'image': ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.avif'],
   'pdf': ['.pdf'],
   'muxvideo': ['.mp4', '.mov'],
 }
@@ -243,31 +318,6 @@ export function createMarkdownCompletions(getFileList: () => FileListItem[]) {
     return {
       from: context.pos - calloutMatch[1].length,
       options: CALLOUT_COMPLETIONS,
-      validFor: /^\w*$/,
-    }
-  }
-
-  // 5. Block directives: :::nam… at start of line. Auto-expands the chosen
-  // name into `:::name\n\n:::` and parks the cursor on the empty middle
-  // line so the author can type content immediately. Mirrors how the
-  // toolbar's alignment button wraps content.
-  const directiveMatch = textBefore.match(/^:::(\w*)$/)
-  if (directiveMatch) {
-    const typed = directiveMatch[1]
-    return {
-      from: context.pos - typed.length,
-      options: DIRECTIVE_COMPLETIONS.map(({ name, info }) => ({
-        label: name,
-        type: 'keyword',
-        info,
-        apply: (view: import('@codemirror/view').EditorView, _completion: Completion, fromPos: number, toPos: number) => {
-          const insert = `${name}\n\n:::`
-          view.dispatch({
-            changes: { from: fromPos, to: toPos, insert },
-            selection: { anchor: fromPos + name.length + 1 },
-          })
-        },
-      })),
       validFor: /^\w*$/,
     }
   }
