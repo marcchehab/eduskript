@@ -178,16 +178,15 @@ export async function PATCH(
       },
     })
 
-    // Same gap as /api/user/sidebar-preference: /org/[orgSlug]/[pageSlug] (the
-    // eduskript.org/<slug> routing — gatedOrg() in proxy.ts) is a plain
-    // revalidate:false ISR page with no unstable_cache tags, so it never sees
-    // the CACHE_TAGS revalidation below. Bust the whole org path subtree
-    // directly, and the [domain]-route tags for teachers/orgs on a custom
-    // domain pointed at this same site.
+    // org/[orgSlug]/page.tsx and org/[orgSlug]/c/[skriptSlug]* read this Site
+    // via getOrgWithLayout/getOrgFullSiteStructure, both unstable_cache'd
+    // under CACHE_TAGS.organization/orgContent — bust those or the org-path
+    // sidebar keeps rendering the previous sidebarBehavior. revalidatePath
+    // additionally covers that route's own Full Route Cache entry.
     if (organization.site?.slug) {
       revalidatePath(`/org/${organization.site.slug}`, 'layout')
-      revalidateTag(CACHE_TAGS.user(organization.site.slug), { expire: 0 })
-      revalidateTag(CACHE_TAGS.teacherContent(organization.site.slug), { expire: 0 })
+      revalidateTag(CACHE_TAGS.organization(organization.site.slug), { expire: 0 })
+      revalidateTag(CACHE_TAGS.orgContent(organization.site.slug), { expire: 0 })
     }
 
     const orgWithSlug = {
