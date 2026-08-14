@@ -412,75 +412,88 @@ export const getTeacherHomepageContent = (teacherId: string, pageSlug: string, p
         pages: Array<{ id: string; title: string; slug: string }>
       }> = []
 
-      for (const item of pageLayoutItems) {
-        if (item.type === 'collection') {
-          const collection = await prisma.collection.findFirst({
-            where: {
-              id: item.contentId,
-              site: { userId: teacherId }
-            },
-            include: {
-              collectionSkripts: {
-                where: { skript: { isPublished: true, isUnlisted: false } },
-                include: {
-                  skript: {
-                    include: {
-                      frontPage: { select: { id: true } },
-                      pages: {
-                        where: { isPublished: true, isUnlisted: false },
-                        orderBy: { order: 'asc' },
-                        select: { id: true, title: true, slug: true }
+      const collectionIds = pageLayoutItems.filter(i => i.type === 'collection').map(i => i.contentId)
+      const skriptIds = pageLayoutItems.filter(i => i.type === 'skript').map(i => i.contentId)
+
+      const [fetchedCollections, fetchedSkripts] = await Promise.all([
+        collectionIds.length
+          ? prisma.collection.findMany({
+              where: {
+                id: { in: collectionIds },
+                site: { userId: teacherId }
+              },
+              include: {
+                collectionSkripts: {
+                  where: { skript: { isPublished: true, isUnlisted: false } },
+                  include: {
+                    skript: {
+                      include: {
+                        frontPage: { select: { id: true } },
+                        pages: {
+                          where: { isPublished: true, isUnlisted: false },
+                          orderBy: { order: 'asc' },
+                          select: { id: true, title: true, slug: true }
+                        }
                       }
                     }
-                  }
-                },
-                orderBy: { order: 'asc' }
+                  },
+                  orderBy: { order: 'asc' }
+                }
               }
-            }
-          })
-          if (collection) {
-            collections.push({
-              id: collection.id,
-              title: collection.title,
-              accentColor: collection.accentColor,
-              skripts: collection.collectionSkripts.map((cs, index) => ({
-                id: cs.skript.id,
-                title: cs.skript.title,
-                slug: cs.skript.slug,
-                order: cs.order ?? index,
-                pages: cs.skript.pages
-              }))
             })
-          }
+          : [],
+        skriptIds.length
+          ? prisma.skript.findMany({
+              where: {
+                id: { in: skriptIds },
+                isPublished: true,
+                authors: { some: { userId: teacherId } }
+              },
+              include: {
+                collectionSkripts: { include: { collection: true } },
+                pages: {
+                  where: { isPublished: true, isUnlisted: false },
+                  orderBy: { order: 'asc' },
+                  select: { id: true, title: true, slug: true }
+                }
+              }
+            })
+          : [],
+      ])
+
+      const collectionById = new Map(fetchedCollections.map(c => [c.id, c]))
+      const skriptById = new Map(fetchedSkripts.map(s => [s.id, s]))
+
+      for (const item of pageLayoutItems) {
+        if (item.type === 'collection') {
+          const collection = collectionById.get(item.contentId)
+          if (!collection) continue
+          collections.push({
+            id: collection.id,
+            title: collection.title,
+            accentColor: collection.accentColor,
+            skripts: collection.collectionSkripts.map((cs, index) => ({
+              id: cs.skript.id,
+              title: cs.skript.title,
+              slug: cs.skript.slug,
+              order: cs.order ?? index,
+              pages: cs.skript.pages
+            }))
+          })
         } else if (item.type === 'skript') {
-          const skript = await prisma.skript.findFirst({
-            where: {
-              id: item.contentId,
-              isPublished: true,
-              authors: { some: { userId: teacherId } }
-            },
-            include: {
-              collectionSkripts: { include: { collection: true } },
-              pages: {
-                where: { isPublished: true, isUnlisted: false },
-                orderBy: { order: 'asc' },
-                select: { id: true, title: true, slug: true }
-              }
-            }
+          const skript = skriptById.get(item.contentId)
+          if (!skript) continue
+          const firstCollection = skript.collectionSkripts[0]?.collection
+          rootSkripts.push({
+            id: skript.id,
+            title: skript.title,
+            description: skript.description,
+            slug: skript.slug,
+            collection: firstCollection
+              ? { title: firstCollection.title }
+              : { title: 'Uncategorized' },
+            pages: skript.pages
           })
-          if (skript) {
-            const firstCollection = skript.collectionSkripts[0]?.collection
-            rootSkripts.push({
-              id: skript.id,
-              title: skript.title,
-              description: skript.description,
-              slug: skript.slug,
-              collection: firstCollection
-                ? { title: firstCollection.title }
-                : { title: 'Uncategorized' },
-              pages: skript.pages
-            })
-          }
         }
       }
 
@@ -863,81 +876,94 @@ export const getOrgHomepageContent = (
         pages: Array<{ id: string; title: string; slug: string }>
       }> = []
 
-      for (const item of pageLayoutItems) {
-        if (item.type === 'collection') {
-          const collection = await prisma.collection.findFirst({
-            where: {
-              id: item.contentId,
-              OR: [
-                { site: { organizationId: orgId } },
-                { site: { userId: { in: adminUserIds } } },
-              ],
-            },
-            include: {
-              collectionSkripts: {
-                where: { skript: { isPublished: true, isUnlisted: false } },
-                include: {
-                  skript: {
-                    include: {
-                      frontPage: { select: { id: true } },
-                      pages: {
-                        where: { isPublished: true, isUnlisted: false },
-                        orderBy: { order: 'asc' },
-                        select: { id: true, title: true, slug: true }
+      const collectionIds = pageLayoutItems.filter(i => i.type === 'collection').map(i => i.contentId)
+      const skriptIds = pageLayoutItems.filter(i => i.type === 'skript').map(i => i.contentId)
+
+      const [fetchedCollections, fetchedSkripts] = await Promise.all([
+        collectionIds.length
+          ? prisma.collection.findMany({
+              where: {
+                id: { in: collectionIds },
+                OR: [
+                  { site: { organizationId: orgId } },
+                  { site: { userId: { in: adminUserIds } } },
+                ],
+              },
+              include: {
+                collectionSkripts: {
+                  where: { skript: { isPublished: true, isUnlisted: false } },
+                  include: {
+                    skript: {
+                      include: {
+                        frontPage: { select: { id: true } },
+                        pages: {
+                          where: { isPublished: true, isUnlisted: false },
+                          orderBy: { order: 'asc' },
+                          select: { id: true, title: true, slug: true }
+                        }
                       }
                     }
-                  }
-                },
-                orderBy: { order: 'asc' }
+                  },
+                  orderBy: { order: 'asc' }
+                }
               }
-            }
-          })
-          if (collection) {
-            collections.push({
-              id: collection.id,
-              title: collection.title,
-              accentColor: collection.accentColor,
-              skripts: collection.collectionSkripts.map((cs, index) => ({
-                id: cs.skript.id,
-                title: cs.skript.title,
-                slug: cs.skript.slug,
-                order: cs.order ?? index,
-                pages: cs.skript.pages
-              }))
             })
-          }
+          : [],
+        skriptIds.length
+          ? prisma.skript.findMany({
+              where: {
+                id: { in: skriptIds },
+                isPublished: true,
+                OR: [
+                  { authors: { some: { userId: { in: adminUserIds } } } },
+                  { collectionSkripts: { some: { collection: { site: { organizationId: orgId } } } } },
+                ],
+              },
+              include: {
+                collectionSkripts: { include: { collection: true } },
+                pages: {
+                  where: { isPublished: true, isUnlisted: false },
+                  orderBy: { order: 'asc' },
+                  select: { id: true, title: true, slug: true }
+                }
+              }
+            })
+          : [],
+      ])
+
+      const collectionById = new Map(fetchedCollections.map(c => [c.id, c]))
+      const skriptById = new Map(fetchedSkripts.map(s => [s.id, s]))
+
+      for (const item of pageLayoutItems) {
+        if (item.type === 'collection') {
+          const collection = collectionById.get(item.contentId)
+          if (!collection) continue
+          collections.push({
+            id: collection.id,
+            title: collection.title,
+            accentColor: collection.accentColor,
+            skripts: collection.collectionSkripts.map((cs, index) => ({
+              id: cs.skript.id,
+              title: cs.skript.title,
+              slug: cs.skript.slug,
+              order: cs.order ?? index,
+              pages: cs.skript.pages
+            }))
+          })
         } else if (item.type === 'skript') {
-          const skript = await prisma.skript.findFirst({
-            where: {
-              id: item.contentId,
-              isPublished: true,
-              OR: [
-                { authors: { some: { userId: { in: adminUserIds } } } },
-                { collectionSkripts: { some: { collection: { site: { organizationId: orgId } } } } },
-              ],
-            },
-            include: {
-              collectionSkripts: { include: { collection: true } },
-              pages: {
-                where: { isPublished: true, isUnlisted: false },
-                orderBy: { order: 'asc' },
-                select: { id: true, title: true, slug: true }
-              }
-            }
+          const skript = skriptById.get(item.contentId)
+          if (!skript) continue
+          const firstCollection = skript.collectionSkripts[0]?.collection
+          rootSkripts.push({
+            id: skript.id,
+            title: skript.title,
+            description: skript.description,
+            slug: skript.slug,
+            collection: firstCollection
+              ? { title: firstCollection.title }
+              : { title: 'Uncategorized' },
+            pages: skript.pages
           })
-          if (skript) {
-            const firstCollection = skript.collectionSkripts[0]?.collection
-            rootSkripts.push({
-              id: skript.id,
-              title: skript.title,
-              description: skript.description,
-              slug: skript.slug,
-              collection: firstCollection
-                ? { title: firstCollection.title }
-                : { title: 'Uncategorized' },
-              pages: skript.pages
-            })
-          }
         }
       }
 
