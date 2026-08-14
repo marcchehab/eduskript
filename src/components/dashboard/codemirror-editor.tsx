@@ -59,6 +59,20 @@ interface CodeMirrorEditorProps {
   aiEditLocked?: boolean
 }
 
+/**
+ * First "drawing"/"drawing-2"/"drawing-3"/... name not already taken by a
+ * File in this skript. File.name is unique per (parentId, name, skriptId),
+ * so a second drawing left on the default name hits a 409 on save — this
+ * pre-fills a free one instead of making the teacher rename it by hand.
+ */
+function nextExcalidrawName(fileList: Array<{ name: string }> | undefined): string {
+  const taken = new Set((fileList ?? []).map(f => f.name))
+  if (!taken.has('drawing.excalidraw')) return 'drawing'
+  let i = 2
+  while (taken.has(`drawing-${i}.excalidraw`)) i++
+  return `drawing-${i}`
+}
+
 const CodeMirrorEditor = function CodeMirrorEditor({
   content,
   onChange,
@@ -2451,6 +2465,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
           onSave={handleExcalidrawSave}
           skriptId={skriptId}
           initialData={excalidrawInitialData}
+          suggestedName={isEditingExistingExcalidraw ? undefined : nextExcalidrawName(fileList)}
         />
       )}
       {/* Custom Text Color Picker */}

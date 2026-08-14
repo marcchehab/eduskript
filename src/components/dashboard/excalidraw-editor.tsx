@@ -56,15 +56,18 @@ interface ExcalidrawEditorProps {
     appState?: unknown
     files?: Record<string, unknown>  // Embedded images/files
   }
+  /** Pre-filled name for a brand-new drawing (ignored once initialData is set — editing an existing drawing keeps its own name). */
+  suggestedName?: string
 }
 
 export function ExcalidrawEditor({
   open,
   onClose,
   onSave,
-  initialData
+  initialData,
+  suggestedName
 }: ExcalidrawEditorProps) {
-  const [drawingName, setDrawingName] = useState(initialData?.name || '')
+  const [drawingName, setDrawingName] = useState(initialData?.name || suggestedName || '')
   const [excalidrawAPI, setExcalidrawAPI] = useState<ExcalidrawImperativeAPI | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const { theme, systemTheme } = useTheme()
@@ -89,12 +92,12 @@ export function ExcalidrawEditor({
   useEffect(() => {
     if (open) {
       setEditorKey(Date.now())
-      setDrawingName(initialData?.name || '')
+      setDrawingName(initialData?.name || suggestedName || '')
       setExcalidrawAPI(null) // Clear old API reference to prevent using stale API
       setShowAIPanel(false)
       setAIPrompt('')
     }
-  }, [open, initialData])
+  }, [open, initialData, suggestedName])
 
   const runGenerate = useCallback(async () => {
     const prompt = aiPrompt.trim()
