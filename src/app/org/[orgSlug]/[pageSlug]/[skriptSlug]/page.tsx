@@ -140,7 +140,7 @@ export default async function OrgTeacherSkriptPage({ params }: PageProps) {
   return (
     <PublicSiteLayout
       teacher={teacherData}
-      siteStructure={siteStructure}
+      siteStructure={fullSiteStructure ?? siteStructure}
       fullSiteStructure={fullSiteStructure}
       currentPath={currentPath}
       sidebarBehavior={(teacherSite?.sidebarBehavior as 'contextual' | 'full') || 'full'}

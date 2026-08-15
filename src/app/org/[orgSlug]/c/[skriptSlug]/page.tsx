@@ -220,7 +220,7 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
     return (
       <PublicSiteLayout
         teacher={orgAsTeacher}
-        siteStructure={siteStructure}
+        siteStructure={fullSiteStructure ?? siteStructure}
         rootSkripts={[]}
         fullSiteStructure={fullSiteStructure}
         sidebarBehavior={organization.sidebarBehavior as 'contextual' | 'full' || 'contextual'}

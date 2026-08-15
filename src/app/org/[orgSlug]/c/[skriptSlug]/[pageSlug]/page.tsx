@@ -250,7 +250,7 @@ export default async function OrgPublicPage({ params }: PageProps) {
     <JsonLd schema={ldSchemas} />
     <PublicSiteLayout
       teacher={orgAsTeacher}
-      siteStructure={siteStructure}
+      siteStructure={fullSiteStructure ?? siteStructure}
       currentPath={currentPath}
       fullSiteStructure={fullSiteStructure}
       sidebarBehavior={organization.sidebarBehavior as 'contextual' | 'full' || 'contextual'}
