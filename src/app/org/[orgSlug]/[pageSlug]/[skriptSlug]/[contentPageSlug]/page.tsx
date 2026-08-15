@@ -6,6 +6,7 @@ import { getPublicLayers } from '@/lib/public-page-data'
 import { ClassToolbar } from '@/components/teacher/class-toolbar'
 import type { Metadata } from 'next'
 import { getFullSiteStructure, getOrgTeacherContentPage } from '@/lib/cached-queries'
+import { CurrentSiteProvider } from '@/contexts/current-site-context'
 import { buildSiteStructure } from '@/lib/site-structure'
 import { readExtraSettings } from '@/lib/settings'
 
@@ -164,6 +165,7 @@ export default async function OrgTeacherContentPage({ params }: PageProps) {
   )
 
   return (
+    <CurrentSiteProvider siteId={teacherSite?.id ?? null} organizationId={organization.id}>
     <PublicSiteLayout
       teacher={teacherData}
       siteStructure={siteStructure}
@@ -187,5 +189,6 @@ export default async function OrgTeacherContentPage({ params }: PageProps) {
 
       {body}
     </PublicSiteLayout>
+    </CurrentSiteProvider>
   )
 }

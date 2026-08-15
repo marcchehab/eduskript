@@ -6,6 +6,7 @@ import type { Metadata } from 'next'
 import { prisma } from '@/lib/prisma'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { getFullSiteStructure, getOrgTeacherSkript } from '@/lib/cached-queries'
+import { CurrentSiteProvider } from '@/contexts/current-site-context'
 import { buildSiteStructure } from '@/lib/site-structure'
 import { readExtraSettings } from '@/lib/settings'
 
@@ -142,6 +143,7 @@ export default async function OrgTeacherSkriptPage({ params }: PageProps) {
   const currentPath = `/${skriptSlug}`
 
   return (
+    <CurrentSiteProvider siteId={teacherSite?.id ?? null} organizationId={organization.id}>
     <PublicSiteLayout
       teacher={teacherData}
       siteStructure={fullSiteStructure ?? siteStructure}
@@ -187,5 +189,6 @@ export default async function OrgTeacherSkriptPage({ params }: PageProps) {
         )}
       </div>
     </PublicSiteLayout>
+    </CurrentSiteProvider>
   )
 }

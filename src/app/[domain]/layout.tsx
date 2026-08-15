@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { PublicSiteLayout, type SidebarItem } from '@/components/public/layout'
 import { HtmlLangSetter } from '@/components/seo/html-lang-setter'
+import { CurrentSiteProvider } from '@/contexts/current-site-context'
 import {
   getTeacherWithLayout,
   getFullSiteStructure,
@@ -86,7 +87,7 @@ export default async function DomainLayout({ params, children }: DomainLayoutPro
   }
 
   return (
-    <>
+    <CurrentSiteProvider siteId={teacher.siteId}>
       <HtmlLangSetter lang={teacher.pageLanguage} />
       <PublicSiteLayout
         teacher={teacherForLayout}
@@ -98,6 +99,6 @@ export default async function DomainLayout({ params, children }: DomainLayoutPro
       >
         {children}
       </PublicSiteLayout>
-    </>
+    </CurrentSiteProvider>
   )
 }

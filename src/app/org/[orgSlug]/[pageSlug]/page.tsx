@@ -7,6 +7,7 @@ import { FrontpageOwnerCta } from '@/components/public/frontpage-owner-cta'
 import { prisma } from '@/lib/prisma'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { getFullSiteStructure } from '@/lib/cached-queries'
+import { CurrentSiteProvider } from '@/contexts/current-site-context'
 import { getPublicLayers, EMPTY_PUBLIC_LAYERS } from '@/lib/public-page-data'
 import { readExtraSettings } from '@/lib/settings'
 
@@ -315,6 +316,7 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
   }
 
   return (
+    <CurrentSiteProvider siteId={teacherSite?.id ?? null} organizationId={organization.id}>
     <PublicSiteLayout
       teacher={teacherData}
       siteStructure={collections}
@@ -351,5 +353,6 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
         )}
       </div>
     </PublicSiteLayout>
+    </CurrentSiteProvider>
   )
 }

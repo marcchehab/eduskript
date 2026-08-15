@@ -27,6 +27,7 @@ export const CACHE_TAGS = {
 
 /** The public-page fields that live on Site but get read off the user object. */
 type SitePageFields = {
+  id: string
   slug: string
   pageName: string | null
   pageDescription: string | null
@@ -49,6 +50,7 @@ type SitePageFields = {
 function graftSitePageFields<U extends object>(user: U, site: SitePageFields) {
   const extra = readExtraSettings(site)
   return Object.assign(user, {
+    siteId: site.id,
     pageSlug: site.slug,
     pageName: site.pageName,
     pageDescription: site.pageDescription,
@@ -77,6 +79,7 @@ export const getTeacherByPageSlug = (pageSlug: string) =>
       const site = await prisma.site.findUnique({
         where: { slug: pageSlug },
         select: {
+          id: true,
           slug: true,
           pageName: true,
           pageDescription: true,
@@ -594,6 +597,7 @@ export const getOrgWithLayout = (slug: string) =>
       // → org.description for the legacy field names.
       const extra = readExtraSettings(site)
       return Object.assign(site.organization, {
+        siteId: site.id,
         slug: site.slug,
         description: site.pageDescription,
         iconUrl: site.pageIcon,
@@ -829,6 +833,7 @@ export const getOrgPublishedPage = (
           id: collection.id,
           title: collection.title,
           accentColor: collection.accentColor,
+          siteId: collection.siteId,
         } : null,
         skript: {
           id: skript.id,
@@ -1041,6 +1046,7 @@ export const getOrgTeacherContentPage = (
             where: { slug: pageSlug },
             take: 1,
             select: {
+              id: true,
               slug: true,
               pageName: true,
               pageDescription: true,
@@ -1155,6 +1161,7 @@ export const getOrgTeacherSkript = (
             where: { slug: pageSlug },
             take: 1,
             select: {
+              id: true,
               slug: true,
               pageName: true,
               pageDescription: true,

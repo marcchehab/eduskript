@@ -6,6 +6,7 @@ import { PublicSiteLayout } from '@/components/public/layout'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
 import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
 import { getOrgFullSiteStructure } from '@/lib/cached-queries'
+import { CurrentSiteProvider } from '@/contexts/current-site-context'
 import { buildSiteStructure } from '@/lib/site-structure'
 import { getPublicLayers, EMPTY_PUBLIC_LAYERS } from '@/lib/public-page-data'
 import { readExtraSettings } from '@/lib/settings'
@@ -225,6 +226,7 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
       : undefined
 
     return (
+      <CurrentSiteProvider siteId={collection?.siteId ?? null} organizationId={organization.id}>
       <PublicSiteLayout
         teacher={orgAsTeacher}
         siteStructure={fullSiteStructure ?? siteStructure}
@@ -250,6 +252,7 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
           ) : null}
         </div>
       </PublicSiteLayout>
+      </CurrentSiteProvider>
     )
   }
 

@@ -7,6 +7,7 @@ import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
 import type { Metadata } from 'next'
 import { prisma } from '@/lib/prisma'
 import { getOrgPublishedPage, getOrgFullSiteStructure } from '@/lib/cached-queries'
+import { CurrentSiteProvider } from '@/contexts/current-site-context'
 import { buildSiteStructure } from '@/lib/site-structure'
 import { canonicalUrl, canonicalBase } from '@/lib/seo/canonical'
 import { generateExcerpt } from '@/lib/markdown'
@@ -253,7 +254,7 @@ export default async function OrgPublicPage({ params }: PageProps) {
   ]
 
   return (
-    <>
+    <CurrentSiteProvider siteId={collection?.siteId ?? null} organizationId={organization.id}>
     <JsonLd schema={ldSchemas} />
     <PublicSiteLayout
       teacher={orgAsTeacher}
@@ -297,6 +298,6 @@ export default async function OrgPublicPage({ params }: PageProps) {
         </article>
       </div>
     </PublicSiteLayout>
-    </>
+    </CurrentSiteProvider>
   )
 }

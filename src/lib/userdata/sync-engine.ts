@@ -12,6 +12,10 @@
 import { db } from './schema'
 import { getAdapter } from './adapters'
 
+// Must stay <= MAX_ITEMS in src/app/api/user-data/bulk-fetch/route.ts, which
+// 400s any request over that cap.
+const BULK_FETCH_CHUNK_SIZE = 500
+
 export interface SyncOperation {
   id: string
   type: 'sync' | 'fetch' | 'merge' | 'conflict' | 'error'
@@ -66,6 +70,12 @@ export class SyncEngine {
   private static instance: SyncEngine | null = null
 
   private userId: string | null = null
+  // Set by CurrentSiteProvider's bridge (src/contexts/current-site-context.tsx)
+  // when mounted under a site/org route. Scopes initialSync's manifest fetch
+  // to that site instead of the whole account. Null on routes with no site
+  // context (dashboard, auth) — initialSync then falls back to unscoped, as
+  // before this existed.
+  private siteId: string | null = null
   private syncQueue: Map<string, SyncItem> = new Map()
   private syncTimeout: ReturnType<typeof setTimeout> | null = null
   private retryTimeout: ReturnType<typeof setTimeout> | null = null
@@ -126,6 +136,15 @@ export class SyncEngine {
       this.syncQueue.clear()
       this.updateStatus({ pending: 0 })
     }
+  }
+
+  /**
+   * Set the current site ID (call from CurrentSiteProvider's bridge when the
+   * resolved site/org route mounts or unmounts). Read by initialSync only —
+   * doesn't retroactively rescope a sync already in flight or already run.
+   */
+  public setSiteId(siteId: string | null): void {
+    this.siteId = siteId
   }
 
   /**
@@ -355,8 +374,11 @@ export class SyncEngine {
     if (!this.userId) return
 
     try {
-      // Get server manifest
-      const response = await fetch('/api/user-data/manifest')
+      // Get server manifest, scoped to the current site when known.
+      const manifestUrl = this.siteId
+        ? `/api/user-data/manifest?siteId=${encodeURIComponent(this.siteId)}`
+        : '/api/user-data/manifest'
+      const response = await fetch(manifestUrl)
       if (!response.ok) {
         if (response.status === 401) {
           // Not authenticated - skip sync
@@ -432,12 +454,18 @@ export class SyncEngine {
   }
 
   /**
-   * Bulk-fetch every server-newer item in one POST and merge each into local.
+   * Bulk-fetch every server-newer item, chunked, and merge each into local.
    *
    * Replaces the old per-item fetchAndMerge loop, which produced N HTTP
    * requests when initialSync had N items to reconcile. The /bulk-fetch
-   * endpoint groups by adapter and serves the whole batch from one userData
-   * query; merge logic is unchanged and runs locally per item.
+   * endpoint groups by adapter and serves each batch from one userData
+   * query per adapter; merge logic is unchanged and runs locally per item.
+   *
+   * Chunked at BULK_FETCH_CHUNK_SIZE to match the server's MAX_ITEMS cap
+   * (src/app/api/user-data/bulk-fetch/route.ts) — an active user can easily
+   * accumulate thousands of UserData rows (one per code editor/annotation
+   * set/etc. per page, across every skript), and the manifest reconciliation
+   * on login has no upper bound, so a single unchunked POST 400s outright.
    */
   private async bulkFetchAndMerge(serverItems: ManifestItem[]): Promise<void> {
     if (serverItems.length === 0) return
@@ -454,93 +482,119 @@ export class SyncEngine {
       opItems,
     )
 
-    try {
-      const response = await fetch('/api/user-data/bulk-fetch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          items: serverItems.map((s) => ({ adapter: s.adapter, itemId: s.itemId })),
-        }),
-      })
+    let mergeCount = 0
+    let fetchCount = 0
+    let missingCount = 0
+    let failedChunks = 0
+    let lastError: string | null = null
 
-      if (!response.ok) {
-        throw new Error(`Bulk fetch failed: ${response.status}`)
+    for (let i = 0; i < serverItems.length; i += BULK_FETCH_CHUNK_SIZE) {
+      const chunk = serverItems.slice(i, i + BULK_FETCH_CHUNK_SIZE)
+      try {
+        const counts = await this.fetchAndMergeChunk(chunk)
+        mergeCount += counts.mergeCount
+        fetchCount += counts.fetchCount
+        missingCount += counts.missingCount
+      } catch (error) {
+        failedChunks++
+        lastError = error instanceof Error ? error.message : 'Fetch failed'
+        console.error('[SyncEngine] Bulk fetch chunk failed:', error)
+      }
+    }
+
+    if (failedChunks > 0) {
+      this.updateOperation(opId, 'failed', lastError ?? 'Fetch failed')
+      return
+    }
+
+    const parts: string[] = []
+    if (fetchCount) parts.push(`${fetchCount} fetched`)
+    if (mergeCount) parts.push(`${mergeCount} merged`)
+    if (missingCount) parts.push(`${missingCount} missing`)
+    this.updateOperation(opId, 'success', parts.join(', ') || 'No changes')
+  }
+
+  private async fetchAndMergeChunk(
+    serverItems: ManifestItem[]
+  ): Promise<{ mergeCount: number; fetchCount: number; missingCount: number }> {
+    const response = await fetch('/api/user-data/bulk-fetch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        items: serverItems.map((s) => ({ adapter: s.adapter, itemId: s.itemId })),
+      }),
+    })
+
+    if (!response.ok) {
+      throw new Error(`Bulk fetch failed: ${response.status}`)
+    }
+
+    const result = (await response.json()) as {
+      items: Array<{ adapter: string; itemId: string; data: unknown; version: number; updatedAt: number }>
+    }
+
+    // Index server items so we can iterate the manifest order and pair up.
+    const byKey = new Map<string, (typeof result.items)[number]>()
+    for (const it of result.items) {
+      byKey.set(`${it.adapter}:${it.itemId}`, it)
+    }
+
+    let mergeCount = 0
+    let fetchCount = 0
+    let missingCount = 0
+
+    for (const serverItem of serverItems) {
+      const serverData = byKey.get(`${serverItem.adapter}:${serverItem.itemId}`)
+      // Manifest told us the row exists — if bulk-fetch didn't return it,
+      // the row was deleted between manifest and fetch. Just skip.
+      if (!serverData) {
+        missingCount++
+        continue
       }
 
-      const result = (await response.json()) as {
-        items: Array<{ adapter: string; itemId: string; data: unknown; version: number; updatedAt: number }>
-      }
+      const localRecord = await db.userData.get([
+        this.userId!,
+        serverItem.itemId,
+        serverItem.adapter,
+        '',
+        '',
+      ])
 
-      // Index server items so we can iterate the manifest order and pair up.
-      const byKey = new Map<string, (typeof result.items)[number]>()
-      for (const it of result.items) {
-        byKey.set(`${it.adapter}:${it.itemId}`, it)
-      }
+      let mergedData: unknown = serverData.data
+      let didMerge = false
 
-      let mergeCount = 0
-      let fetchCount = 0
-      let missingCount = 0
-
-      for (const serverItem of serverItems) {
-        const serverData = byKey.get(`${serverItem.adapter}:${serverItem.itemId}`)
-        // Manifest told us the row exists — if bulk-fetch didn't return it,
-        // the row was deleted between manifest and fetch. Just skip.
-        if (!serverData) {
-          missingCount++
-          continue
-        }
-
-        const localRecord = await db.userData.get([
-          this.userId,
-          serverItem.itemId,
-          serverItem.adapter,
-          '',
-          '',
-        ])
-
-        let mergedData: unknown = serverData.data
-        let didMerge = false
-
-        if (localRecord && localRecord.data) {
-          const adapter = getAdapter(serverItem.adapter)
-          if (adapter?.merge) {
-            try {
-              const localData = adapter.deserialize(JSON.stringify(localRecord.data))
-              const remoteData = adapter.deserialize(JSON.stringify(serverData.data))
-              mergedData = adapter.merge(localData, remoteData)
-              didMerge = true
-            } catch {
-              mergedData = serverData.data
-            }
+      if (localRecord && localRecord.data) {
+        const adapter = getAdapter(serverItem.adapter)
+        if (adapter?.merge) {
+          try {
+            const localData = adapter.deserialize(JSON.stringify(localRecord.data))
+            const remoteData = adapter.deserialize(JSON.stringify(serverData.data))
+            mergedData = adapter.merge(localData, remoteData)
+            didMerge = true
+          } catch {
+            mergedData = serverData.data
           }
         }
-
-        await db.userData.put({
-          userId: this.userId,
-          pageId: serverItem.itemId,
-          componentId: serverItem.adapter,
-          data: mergedData,
-          updatedAt: serverData.updatedAt,
-          savedToRemote: true,
-          version: serverData.version,
-          createdAt: localRecord?.createdAt || new Date().toISOString(),
-          targetType: localRecord?.targetType ?? '',
-          targetId: localRecord?.targetId ?? '',
-        })
-
-        if (didMerge) mergeCount++
-        else fetchCount++
       }
 
-      const parts: string[] = []
-      if (fetchCount) parts.push(`${fetchCount} fetched`)
-      if (mergeCount) parts.push(`${mergeCount} merged`)
-      if (missingCount) parts.push(`${missingCount} missing`)
-      this.updateOperation(opId, 'success', parts.join(', ') || 'No changes')
-    } catch (error) {
-      console.error('[SyncEngine] Bulk fetch failed:', error)
-      this.updateOperation(opId, 'failed', error instanceof Error ? error.message : 'Fetch failed')
+      await db.userData.put({
+        userId: this.userId!,
+        pageId: serverItem.itemId,
+        componentId: serverItem.adapter,
+        data: mergedData,
+        updatedAt: serverData.updatedAt,
+        savedToRemote: true,
+        version: serverData.version,
+        createdAt: localRecord?.createdAt || new Date().toISOString(),
+        targetType: localRecord?.targetType ?? '',
+        targetId: localRecord?.targetId ?? '',
+      })
+
+      if (didMerge) mergeCount++
+      else fetchCount++
     }
+
+    return { mergeCount, fetchCount, missingCount }
   }
 
   /**

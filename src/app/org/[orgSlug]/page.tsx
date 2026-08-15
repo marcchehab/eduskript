@@ -6,6 +6,7 @@ import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
 import { ClassToolbar } from '@/components/teacher/class-toolbar'
 import { HtmlLangSetter } from '@/components/seo/html-lang-setter'
 import { getOrgWithLayout, getOrgHomepageContent, getOrgFullSiteStructure } from '@/lib/cached-queries'
+import { CurrentSiteProvider } from '@/contexts/current-site-context'
 import { prisma } from '@/lib/prisma'
 import { canonicalUrl, canonicalBase } from '@/lib/seo/canonical'
 import { JsonLd, organizationSchema } from '@/lib/seo/json-ld'
@@ -186,7 +187,7 @@ export default async function OrgPage({ params }: OrgPageProps) {
     : undefined
 
   return (
-    <>
+    <CurrentSiteProvider siteId={organization.siteId} organizationId={organization.id}>
       <HtmlLangSetter lang={organization.pageLanguage} />
       {orgSlug === 'eduskript' && <JsonLd schema={organizationSchema()} />}
     <PublicSiteLayout
@@ -241,6 +242,6 @@ export default async function OrgPage({ params }: OrgPageProps) {
         )}
       </div>
     </PublicSiteLayout>
-    </>
+    </CurrentSiteProvider>
   )
 }
