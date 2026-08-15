@@ -62,6 +62,40 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
   })
   const [uploadingIcon, setUploadingIcon] = useState(false)
   const [uploadingLogo, setUploadingLogo] = useState(false)
+  const [iconDragOver, setIconDragOver] = useState(false)
+  const [logoDragOver, setLogoDragOver] = useState(false)
+
+  // Shared by the icon and logo upload widgets (both post to the same
+  // content-addressed org-icons endpoint) and by their drag-and-drop handlers.
+  const uploadOrgFile = async (
+    file: File,
+    target: 'iconUrl' | 'logoUrl',
+    setUploading: (loading: boolean) => void
+  ) => {
+    setUploading(true)
+    try {
+      const formDataUpload = new FormData()
+      formDataUpload.append('file', file)
+      formDataUpload.append('orgId', orgId)
+
+      const res = await fetch('/api/upload/org-icon', {
+        method: 'POST',
+        body: formDataUpload,
+      })
+
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Upload failed')
+      }
+
+      const { url } = await res.json()
+      setFormData(prev => ({ ...prev, [target]: url }))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to upload image')
+    } finally {
+      setUploading(false)
+    }
+  }
 
   // Fetch organization
   useEffect(() => {
@@ -221,7 +255,19 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
             {formData.showIcon && (
               <div className="space-y-3">
                 <Label>Organization Icon</Label>
-                <div className="flex items-center gap-4">
+                <div
+                  className={`flex items-center gap-4 rounded-lg border border-dashed p-2 transition-colors ${
+                    iconDragOver ? 'border-primary bg-primary/5' : 'border-transparent'
+                  }`}
+                  onDragOver={(e) => { e.preventDefault(); setIconDragOver(true) }}
+                  onDragLeave={() => setIconDragOver(false)}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    setIconDragOver(false)
+                    const file = e.dataTransfer.files?.[0]
+                    if (file) uploadOrgFile(file, 'iconUrl', setUploadingIcon)
+                  }}
+                >
                   <div className="flex h-16 w-16 items-center justify-center rounded-lg border bg-muted">
                     <OrgIcon
                       org={{ showIcon: true, iconUrl: formData.iconUrl || null, name: formData.name }}
@@ -253,34 +299,10 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
                         id="iconUpload"
                         accept="image/*"
                         className="hidden"
-                        onChange={async (e) => {
+                        onChange={(e) => {
                           const file = e.target.files?.[0]
-                          if (!file) return
-
-                          setUploadingIcon(true)
-                          try {
-                            const formDataUpload = new FormData()
-                            formDataUpload.append('file', file)
-                            formDataUpload.append('orgId', orgId)
-
-                            const res = await fetch('/api/upload/org-icon', {
-                              method: 'POST',
-                              body: formDataUpload,
-                            })
-
-                            if (!res.ok) {
-                              const data = await res.json()
-                              throw new Error(data.error || 'Upload failed')
-                            }
-
-                            const { url } = await res.json()
-                            setFormData({ ...formData, iconUrl: url })
-                          } catch (err) {
-                            setError(err instanceof Error ? err.message : 'Failed to upload icon')
-                          } finally {
-                            setUploadingIcon(false)
-                            e.target.value = ''
-                          }
+                          if (file) uploadOrgFile(file, 'iconUrl', setUploadingIcon)
+                          e.target.value = ''
                         }}
                       />
                       <Button
@@ -293,6 +315,7 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
                         {uploadingIcon ? 'Uploading...' : 'Upload custom icon'}
                       </Button>
                     </div>
+                    <p className="text-xs text-muted-foreground">Drag and drop onto the icon, or click to browse.</p>
                   </div>
                 </div>
               </div>
@@ -345,7 +368,20 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
                   />
                   <span className="font-medium text-sm">Logo</span>
                 </div>
-                <div className="relative flex h-9 w-full items-center rounded border bg-muted/30 p-2">
+                <div
+                  className={`relative flex h-9 w-full items-center rounded border border-dashed p-2 transition-colors ${
+                    logoDragOver ? 'border-primary bg-primary/10' : 'bg-muted/30'
+                  }`}
+                  onDragOver={(e) => { e.preventDefault(); setLogoDragOver(true) }}
+                  onDragLeave={() => setLogoDragOver(false)}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    setLogoDragOver(false)
+                    setFormData(prev => ({ ...prev, titleStyle: 'logo' }))
+                    const file = e.dataTransfer.files?.[0]
+                    if (file) uploadOrgFile(file, 'logoUrl', setUploadingLogo)
+                  }}
+                >
                   {formData.logoUrl ? (
                     <Image src={formData.logoUrl} alt="Logo preview" fill className="object-contain object-left" />
                   ) : (
@@ -356,7 +392,19 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
             </div>
 
             {formData.titleStyle === 'logo' && (
-              <div className="flex items-center gap-3">
+              <div
+                className={`flex items-center gap-3 rounded-lg border border-dashed p-2 transition-colors ${
+                  logoDragOver ? 'border-primary bg-primary/5' : 'border-transparent'
+                }`}
+                onDragOver={(e) => { e.preventDefault(); setLogoDragOver(true) }}
+                onDragLeave={() => setLogoDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  setLogoDragOver(false)
+                  const file = e.dataTransfer.files?.[0]
+                  if (file) uploadOrgFile(file, 'logoUrl', setUploadingLogo)
+                }}
+              >
                 {formData.logoUrl && (
                   <Button
                     type="button"
@@ -374,34 +422,10 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
                   id="logoUpload"
                   accept="image/*"
                   className="hidden"
-                  onChange={async (e) => {
+                  onChange={(e) => {
                     const file = e.target.files?.[0]
-                    if (!file) return
-
-                    setUploadingLogo(true)
-                    try {
-                      const formDataUpload = new FormData()
-                      formDataUpload.append('file', file)
-                      formDataUpload.append('orgId', orgId)
-
-                      const res = await fetch('/api/upload/org-icon', {
-                        method: 'POST',
-                        body: formDataUpload,
-                      })
-
-                      if (!res.ok) {
-                        const data = await res.json()
-                        throw new Error(data.error || 'Upload failed')
-                      }
-
-                      const { url } = await res.json()
-                      setFormData({ ...formData, logoUrl: url })
-                    } catch (err) {
-                      setError(err instanceof Error ? err.message : 'Failed to upload logo')
-                    } finally {
-                      setUploadingLogo(false)
-                      e.target.value = ''
-                    }
+                    if (file) uploadOrgFile(file, 'logoUrl', setUploadingLogo)
+                    e.target.value = ''
                   }}
                 />
                 <Button
@@ -413,7 +437,7 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
                 >
                   {uploadingLogo ? 'Uploading...' : formData.logoUrl ? 'Replace logo' : 'Upload logo'}
                 </Button>
-                <p className="text-xs text-muted-foreground">Wide image, transparent background recommended. Max 2MB.</p>
+                <p className="text-xs text-muted-foreground">Wide image, transparent background recommended. Max 2MB. Drag and drop, or click to browse.</p>
               </div>
             )}
           </div>

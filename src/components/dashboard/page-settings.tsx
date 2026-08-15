@@ -293,28 +293,31 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
   // Check if slug is valid for saving
   const slugIsValid = pageSlug.length >= minSlugLength && slugAvailable !== false
 
-  // Handle icon file upload
-  const handleIconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    // Validate file type
+  // Shared by the icon and logo upload widgets and their drag-and-drop
+  // handlers — same endpoint, same validation, differing only in `type` and
+  // where the resulting URL lands.
+  const uploadPageImage = async (
+    file: File,
+    type: 'page-icon' | 'page-logo',
+    setUrl: (url: string) => void,
+    setLoading: (loading: boolean) => void,
+    errorLabel: string
+  ) => {
     if (!file.type.startsWith('image/')) {
       dialog.showError('Please select an image file')
       return
     }
 
-    // Validate file size (max 2MB)
     if (file.size > 2 * 1024 * 1024) {
       dialog.showError('Image must be less than 2MB')
       return
     }
 
-    setIconUploadLoading(true)
+    setLoading(true)
     try {
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('type', 'page-icon')
+      formData.append('type', type)
 
       const response = await fetch('/api/upload/image', {
         method: 'POST',
@@ -323,62 +326,55 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
 
       if (response.ok) {
         const data = await response.json()
-        setPageIcon(data.url)
+        setUrl(data.url)
       } else {
         const data = await response.json()
         dialog.showError(`Upload failed: ${data.error || 'Unknown error'}`)
       }
     } catch (error) {
-      console.error('Failed to upload icon:', error)
-      dialog.showError('Failed to upload icon. Please try again.')
+      console.error(`Failed to upload ${errorLabel}:`, error)
+      dialog.showError(`Failed to upload ${errorLabel}. Please try again.`)
     } finally {
-      setIconUploadLoading(false)
+      setLoading(false)
     }
+  }
+
+  const uploadIconFile = (file: File) =>
+    uploadPageImage(file, 'page-icon', setPageIcon, setIconUploadLoading, 'icon')
+
+  const handleIconUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) uploadIconFile(file)
+    e.target.value = ''
   }
 
   const handleRemoveIcon = () => {
     setPageIcon('')
   }
 
-  // Handle logo file upload
-  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const [iconDragOver, setIconDragOver] = useState(false)
+  const handleIconDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    setIconDragOver(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file) uploadIconFile(file)
+  }
+
+  const uploadLogoFile = (file: File) =>
+    uploadPageImage(file, 'page-logo', setLogoUrl, setLogoUploadLoading, 'logo')
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file) return
+    if (file) uploadLogoFile(file)
+    e.target.value = ''
+  }
 
-    if (!file.type.startsWith('image/')) {
-      dialog.showError('Please select an image file')
-      return
-    }
-
-    if (file.size > 2 * 1024 * 1024) {
-      dialog.showError('Image must be less than 2MB')
-      return
-    }
-
-    setLogoUploadLoading(true)
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
-      formData.append('type', 'page-logo')
-
-      const response = await fetch('/api/upload/image', {
-        method: 'POST',
-        body: formData,
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setLogoUrl(data.url)
-      } else {
-        const data = await response.json()
-        dialog.showError(`Upload failed: ${data.error || 'Unknown error'}`)
-      }
-    } catch (error) {
-      console.error('Failed to upload logo:', error)
-      dialog.showError('Failed to upload logo. Please try again.')
-    } finally {
-      setLogoUploadLoading(false)
-    }
+  const [logoDragOver, setLogoDragOver] = useState(false)
+  const handleLogoDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    setLogoDragOver(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file) uploadLogoFile(file)
   }
 
   const handleRemoveLogo = () => {
@@ -466,7 +462,14 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
           {/* Page Icon */}
           <div className="space-y-2">
             <Label className="text-sm font-medium">Page Icon</Label>
-            <div className="flex items-center gap-4">
+            <div
+              className={`flex items-center gap-4 rounded-lg border border-dashed p-2 transition-colors ${
+                iconDragOver ? 'border-primary bg-primary/5' : 'border-transparent'
+              }`}
+              onDragOver={(e) => { e.preventDefault(); setIconDragOver(true) }}
+              onDragLeave={() => setIconDragOver(false)}
+              onDrop={handleIconDrop}
+            >
               {/* Current icon or placeholder */}
               {pageIcon ? (
                 <div className="relative w-16 h-16">
@@ -529,7 +532,7 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
               </div>
             </div>
             <p className="text-sm text-muted-foreground">
-              Square image recommended. Max 2MB.
+              Square image recommended. Max 2MB. Drag and drop onto the icon, or click to browse.
             </p>
           </div>
 
@@ -588,7 +591,14 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
                   />
                   <span className="font-medium text-sm">Logo</span>
                 </div>
-                <div className="relative flex h-9 w-full items-center rounded border bg-muted/30 p-2">
+                <div
+                  className={`relative flex h-9 w-full items-center rounded border border-dashed p-2 transition-colors ${
+                    logoDragOver ? 'border-primary bg-primary/10' : 'bg-muted/30'
+                  }`}
+                  onDragOver={(e) => { e.preventDefault(); setLogoDragOver(true) }}
+                  onDragLeave={() => setLogoDragOver(false)}
+                  onDrop={(e) => { setTitleStyle('logo'); handleLogoDrop(e) }}
+                >
                   {logoUrl ? (
                     <Image src={logoUrl} alt="Logo preview" fill className="object-contain object-left" />
                   ) : (
@@ -599,7 +609,14 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
             </div>
 
             {titleStyle === 'logo' && (
-              <div className="flex items-center gap-3">
+              <div
+                className={`flex items-center gap-3 rounded-lg border border-dashed p-2 transition-colors ${
+                  logoDragOver ? 'border-primary bg-primary/5' : 'border-transparent'
+                }`}
+                onDragOver={(e) => { e.preventDefault(); setLogoDragOver(true) }}
+                onDragLeave={() => setLogoDragOver(false)}
+                onDrop={handleLogoDrop}
+              >
                 {logoUrl && (
                   <Button
                     type="button"
@@ -643,7 +660,7 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
                   onChange={handleLogoUpload}
                   className="hidden"
                 />
-                <p className="text-sm text-muted-foreground">Wide image, transparent background recommended. Max 2MB.</p>
+                <p className="text-sm text-muted-foreground">Wide image, transparent background recommended. Max 2MB. Drag and drop, or click to browse.</p>
               </div>
             )}
           </div>
