@@ -453,6 +453,7 @@ export const getTeacherHomepageContent = (teacherId: string, pageSlug: string, p
               where: {
                 id: { in: skriptIds },
                 isPublished: true,
+                isUnlisted: false,
                 authors: { some: { userId: teacherId } }
               },
               include: {
@@ -923,6 +924,7 @@ export const getOrgHomepageContent = (
               where: {
                 id: { in: skriptIds },
                 isPublished: true,
+                isUnlisted: false,
                 OR: [
                   { authors: { some: { userId: { in: adminUserIds } } } },
                   { collectionSkripts: { some: { collection: { site: { organizationId: orgId } } } } },

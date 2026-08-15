@@ -209,12 +209,12 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
         },
         include: {
           collectionSkripts: {
-            where: { skript: { isPublished: true } },
+            where: { skript: { isPublished: true, isUnlisted: false } },
             include: {
               skript: {
                 include: {
                   pages: {
-                    where: { isPublished: true },
+                    where: { isPublished: true, isUnlisted: false },
                     orderBy: { order: 'asc' },
                     select: { id: true, title: true, slug: true }
                   }
@@ -245,7 +245,8 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
       const skript = await prisma.skript.findFirst({
         where: {
           id: item.contentId,
-          isPublished: true
+          isPublished: true,
+          isUnlisted: false
         },
         include: {
           collectionSkripts: {
@@ -257,7 +258,7 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
             }
           },
           pages: {
-            where: { isPublished: true },
+            where: { isPublished: true, isUnlisted: false },
             orderBy: { order: 'asc' },
             select: { id: true, title: true, slug: true }
           }
