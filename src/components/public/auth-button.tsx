@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog'
 import { QuestSpotlight } from '@/components/onboarding/quest-spotlight'
 import { useQuestStep } from '@/lib/onboarding-quest/use-quest-step'
+import { useCurrentSite } from '@/contexts/current-site-context'
 
 interface AuthButtonProps {
   pageId?: string // Page ID to check edit permissions (lazy loaded)
@@ -27,6 +28,7 @@ export function AuthButton({ pageId, teacherPageSlug, teacherBillingPlan, isOrgP
   const pathname = usePathname() ?? '/'
   const { data: session, status } = useSession()
   const { completeStep } = useQuestStep()
+  const { siteId } = useCurrentSite()
   const [editUrl, setEditUrl] = useState<string | null>(null)
   const [canCopy, setCanCopy] = useState(false)
   const [copyDialogOpen, setCopyDialogOpen] = useState(false)
@@ -267,9 +269,18 @@ export function AuthButton({ pageId, teacherPageSlug, teacherBillingPlan, isOrgP
     )
   }
 
+  // Teachers land on the page builder for the site they're actually viewing
+  // (falls back to /dashboard's own primary-site default when unknown) —
+  // without this, a teacher with multiple sites (or viewing via an org page)
+  // always got dropped on their primary site's builder regardless of which
+  // site they clicked from. Students never resolve editUrl/canCopy (skipped
+  // above by account type) and always reach this branch, so they must keep
+  // the generic /dashboard — a site-scoped link would 404 for them.
+  const dashboardHref = !isStudent && siteId ? `/dashboard/site/${siteId}/page-builder` : '/dashboard'
+
   return (
     <Link
-      href="/dashboard"
+      href={dashboardHref}
       title={`Go to dashboard (${userName})`}
       className="relative h-8 w-8 rounded-md border border-border bg-card hover:bg-muted transition-colors inline-flex items-center justify-center"
     >
