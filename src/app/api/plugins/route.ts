@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
+import { createPluginForUser } from '@/lib/services/plugins'
+import { ConflictError, ValidationError } from '@/lib/services/pages'
 
 /**
  * GET /api/plugins — List all plugins, optionally filtered by author.
@@ -58,62 +60,16 @@ export async function POST(request: NextRequest) {
 
     const { slug, name, description, manifest, entryHtml } = await request.json()
 
-    if (!slug || !name || !entryHtml) {
-      return NextResponse.json(
-        { error: 'slug, name, and entryHtml are required' },
-        { status: 400 },
-      )
-    }
-
-    // Validate slug format: lowercase alphanumeric + hyphens
-    const slugRegex = /^[a-z0-9][a-z0-9-]*[a-z0-9]$/
-    if (slug.length < 2 || slug.length > 64 || !slugRegex.test(slug)) {
-      return NextResponse.json(
-        { error: 'Slug must be 2-64 characters, lowercase alphanumeric with hyphens' },
-        { status: 400 },
-      )
-    }
-
-    // Check uniqueness for this author
-    const existing = await prisma.plugin.findUnique({
-      where: { authorId_slug: { authorId: session.user.id, slug } },
-    })
-    if (existing) {
-      return NextResponse.json(
-        { error: `You already have a plugin with slug "${slug}"` },
-        { status: 409 },
-      )
-    }
-
-    const pluginRaw = await prisma.plugin.create({
-      data: {
-        slug,
-        name,
-        description: description || null,
-        manifest: manifest || {},
-        entryHtml,
-        authorId: session.user.id,
-      },
-      include: {
-        author: {
-          select: { id: true, name: true, image: true, sites: { orderBy: PRIMARY_SITE_ORDER, take: 1, select: { slug: true, pageName: true } } },
-        },
-      },
-    })
-
-    const plugin = {
-      ...pluginRaw,
-      author: {
-        id: pluginRaw.author.id,
-        name: pluginRaw.author.name,
-        image: pluginRaw.author.image,
-        pageSlug: pluginRaw.author.sites[0]?.slug ?? null,
-        pageName: pluginRaw.author.sites[0]?.pageName ?? null,
-      },
-    }
+    const plugin = await createPluginForUser(session.user.id, { slug, name, description, manifest, entryHtml })
 
     return NextResponse.json({ plugin }, { status: 201 })
   } catch (error) {
+    if (error instanceof ValidationError) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
+    if (error instanceof ConflictError) {
+      return NextResponse.json({ error: error.message }, { status: 409 })
+    }
     console.error('Failed to create plugin:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
