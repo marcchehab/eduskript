@@ -25,6 +25,8 @@ interface Teacher {
   pageName?: string | null
   pageDescription?: string | null
   pageIcon?: string | null
+  titleStyle?: string | null
+  logoUrl?: string | null
   bio?: string | null
   title?: string | null
   // Used by AuthButton to suppress the login affordance on free teacher pages
@@ -542,7 +544,7 @@ export function PublicSiteLayout({
             ) : (
               /* Expanded sidebar header */
               <>
-                {/* Row 1: Icon + Page name - clickable as home link */}
+                {/* Row 1: wide logo, or Icon + Page name - clickable as home link */}
                 <button
                   onClick={() => {
                     router.push(getHomeUrl())
@@ -551,30 +553,43 @@ export function PublicSiteLayout({
                   className="flex items-center justify-center gap-3 cursor-pointer w-full"
                   title="Go to homepage"
                 >
-                  {/* Icon: custom URL, default NotebookPen, or letter placeholder */}
-                  {teacher.pageIcon === 'default' ? (
-                    <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
-                      <NotebookPen className="w-6 h-6 text-muted-foreground" />
-                    </div>
-                  ) : teacher.pageIcon ? (
-                    <div className="relative w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-background">
+                  {teacher.titleStyle === 'logo' && teacher.logoUrl ? (
+                    <div className="relative h-10 w-full">
                       <Image
-                        src={teacher.pageIcon}
-                        alt="Page icon"
+                        src={teacher.logoUrl}
+                        alt={teacher.pageName || teacher.name || 'Logo'}
                         fill
-                        className="object-cover"
+                        className="object-contain object-left"
                       />
                     </div>
                   ) : (
-                    <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
-                      <span className="text-muted-foreground text-lg font-heading">
-                        {(teacher.pageName || teacher.name || 'P').charAt(0).toUpperCase()}
-                      </span>
-                    </div>
+                    <>
+                      {/* Icon: custom URL, default NotebookPen, or letter placeholder */}
+                      {teacher.pageIcon === 'default' ? (
+                        <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                          <NotebookPen className="w-6 h-6 text-muted-foreground" />
+                        </div>
+                      ) : teacher.pageIcon ? (
+                        <div className="relative w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-background">
+                          <Image
+                            src={teacher.pageIcon}
+                            alt="Page icon"
+                            fill
+                            className="object-cover"
+                          />
+                        </div>
+                      ) : (
+                        <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                          <span className="text-muted-foreground text-lg font-heading">
+                            {(teacher.pageName || teacher.name || 'P').charAt(0).toUpperCase()}
+                          </span>
+                        </div>
+                      )}
+                      <div className="text-2xl font-bold text-foreground truncate font-heading">
+                        {teacher.pageName || teacher.name || 'Untitled Page'}
+                      </div>
+                    </>
                   )}
-                  <div className="text-2xl font-bold text-foreground truncate font-heading">
-                    {teacher.pageName || teacher.name || 'Untitled Page'}
-                  </div>
                 </button>
 
                 {/* Row 2: Description (if exists) - supports markdown links */}

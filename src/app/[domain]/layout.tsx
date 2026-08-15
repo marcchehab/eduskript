@@ -78,6 +78,8 @@ export default async function DomainLayout({ params, children }: DomainLayoutPro
     pageName: teacher.pageName || null,
     pageDescription: teacher.pageDescription || null,
     pageIcon: teacher.pageIcon || null,
+    titleStyle: teacher.titleStyle || null,
+    logoUrl: teacher.logoUrl || null,
     bio: teacher.bio || null,
     title: teacher.title || null,
     billingPlan: teacher.billingPlan,

@@ -174,6 +174,8 @@ export default async function OrgPage({ params }: OrgPageProps) {
     pageName: organization.name,
     pageDescription: organization.description,
     pageIcon: organization.showIcon ? (organization.iconUrl || 'default') : null,
+    titleStyle: organization.titleStyle,
+    logoUrl: organization.logoUrl,
     bio: null,
     title: null
   }

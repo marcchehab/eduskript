@@ -12,6 +12,7 @@ import { canonicalUrl, canonicalBase } from '@/lib/seo/canonical'
 import { generateExcerpt } from '@/lib/markdown'
 import { JsonLd, learningResourceSchema, breadcrumbSchema } from '@/lib/seo/json-ld'
 import { getPublicLayers } from '@/lib/public-page-data'
+import { readExtraSettings } from '@/lib/settings'
 
 interface PageProps {
   params: Promise<{
@@ -124,6 +125,7 @@ export default async function OrgPublicPage({ params }: PageProps) {
       pageLanguage: true,
       showIcon: true,
       sidebarBehavior: true,
+      extraSettings: true,
       organization: {
         select: {
           id: true,
@@ -137,6 +139,7 @@ export default async function OrgPublicPage({ params }: PageProps) {
       }
     }
   })
+  const orgRowExtra = readExtraSettings(orgSiteRow)
   const organization = orgSiteRow?.organization
     ? {
         ...orgSiteRow.organization,
@@ -145,6 +148,8 @@ export default async function OrgPublicPage({ params }: PageProps) {
         pageLanguage: orgSiteRow.pageLanguage,
         showIcon: orgSiteRow.showIcon,
         sidebarBehavior: orgSiteRow.sidebarBehavior,
+        titleStyle: orgRowExtra.titleStyle ?? 'icon',
+        logoUrl: orgRowExtra.logoUrl ?? null,
       }
     : null
 
@@ -203,6 +208,8 @@ export default async function OrgPublicPage({ params }: PageProps) {
     pageName: organization.name,
     pageDescription: organization.description,
     pageIcon: organization.showIcon ? (organization.iconUrl || 'default') : null,
+    titleStyle: organization.titleStyle,
+    logoUrl: organization.logoUrl,
     bio: null,
     title: null
   }

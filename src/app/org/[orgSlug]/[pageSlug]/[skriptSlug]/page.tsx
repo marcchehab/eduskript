@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { getFullSiteStructure, getOrgTeacherSkript } from '@/lib/cached-queries'
 import { buildSiteStructure } from '@/lib/site-structure'
+import { readExtraSettings } from '@/lib/settings'
 
 interface PageProps {
   params: Promise<{
@@ -125,12 +126,15 @@ export default async function OrgTeacherSkriptPage({ params }: PageProps) {
     ? await getFullSiteStructure(teacher.id, teacherSite.slug)
     : undefined
 
+  const teacherSiteExtra = readExtraSettings(teacherSite)
   const teacherData = {
     name: teacher.name || 'Teacher',
     pageSlug: teacherSite?.slug || pageSlug,
     pageName: teacherSite?.pageName || null,
     pageDescription: teacherSite?.pageDescription || null,
     pageIcon: teacherSite?.pageIcon || null,
+    titleStyle: teacherSiteExtra.titleStyle ?? 'icon',
+    logoUrl: teacherSiteExtra.logoUrl ?? null,
     bio: teacher.bio || null,
     title: teacher.title || null
   }

@@ -8,6 +8,7 @@ import { prisma } from '@/lib/prisma'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { getFullSiteStructure } from '@/lib/cached-queries'
 import { getPublicLayers, EMPTY_PUBLIC_LAYERS } from '@/lib/public-page-data'
+import { readExtraSettings } from '@/lib/settings'
 
 // ISR: published content only and no session read, so the response is the same
 // for every visitor. Next.js 16 needs generateStaticParams() — even empty — or
@@ -299,12 +300,15 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
     ? await getFullSiteStructure(teacher.id, teacherSlug)
     : undefined
 
+  const teacherSiteExtra = readExtraSettings(teacherSite)
   const teacherData = {
     name: teacher.name || 'Teacher',
     pageSlug: teacherSlug,
     pageName: teacherSite?.pageName ?? null,
     pageDescription: teacherSite?.pageDescription ?? null,
     pageIcon: teacherSite?.pageIcon ?? null,
+    titleStyle: teacherSiteExtra.titleStyle ?? 'icon',
+    logoUrl: teacherSiteExtra.logoUrl ?? null,
     bio: teacher.bio || null,
     title: teacher.title || null
   }

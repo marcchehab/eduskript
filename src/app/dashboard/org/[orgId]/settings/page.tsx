@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Building2, X, Wand2 } from 'lucide-react'
 import { OrgIcon } from '@/components/org-icon'
 import Link from 'next/link'
+import Image from 'next/image'
 
 interface Organization {
   id: string
@@ -20,6 +21,8 @@ interface Organization {
   description: string | null
   showIcon: boolean
   iconUrl: string | null
+  titleStyle: string
+  logoUrl: string | null
   requireEmailDomain: string | null
   allowTeacherCustomDomains: boolean
   sidebarBehavior: string | null
@@ -50,12 +53,15 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
     description: '',
     showIcon: true,
     iconUrl: '',
+    titleStyle: 'icon' as 'icon' | 'logo',
+    logoUrl: '',
     requireEmailDomain: '',
     allowTeacherCustomDomains: false,
     sidebarBehavior: 'contextual' as string,
     aiSystemPrompt: '',
   })
   const [uploadingIcon, setUploadingIcon] = useState(false)
+  const [uploadingLogo, setUploadingLogo] = useState(false)
 
   // Fetch organization
   useEffect(() => {
@@ -81,6 +87,8 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
           description: data.organization.description || '',
           showIcon: data.organization.showIcon ?? true,
           iconUrl: data.organization.iconUrl || '',
+          titleStyle: data.organization.titleStyle === 'logo' ? 'logo' : 'icon',
+          logoUrl: data.organization.logoUrl || '',
           requireEmailDomain: data.organization.requireEmailDomain || '',
           allowTeacherCustomDomains: data.organization.allowTeacherCustomDomains || false,
           sidebarBehavior: data.organization.sidebarBehavior || 'contextual',
@@ -114,6 +122,8 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
           description: formData.description || null,
           showIcon: formData.showIcon,
           iconUrl: formData.iconUrl || null,
+          titleStyle: formData.titleStyle,
+          logoUrl: formData.logoUrl || null,
           requireEmailDomain: formData.requireEmailDomain || null,
           allowTeacherCustomDomains: formData.allowTeacherCustomDomains,
           sidebarBehavior: formData.sidebarBehavior,
@@ -285,6 +295,125 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
                     </div>
                   </div>
                 </div>
+              </div>
+            )}
+          </div>
+
+          <div className="border-t pt-6 space-y-3">
+            <Label>Sidebar Title</Label>
+            <p className="text-xs text-muted-foreground">
+              How your organization&apos;s name appears at the top of the sidebar on public pages.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <label
+                className={`flex cursor-pointer flex-col gap-2 rounded-lg border p-3 ${
+                  formData.titleStyle === 'icon' ? 'border-primary bg-primary/5' : 'border-input'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="titleStyle"
+                    value="icon"
+                    checked={formData.titleStyle === 'icon'}
+                    onChange={() => setFormData({ ...formData, titleStyle: 'icon' })}
+                  />
+                  <span className="font-medium text-sm">Icon + Name</span>
+                </div>
+                <div className="flex items-center gap-2 rounded border bg-muted/30 p-2">
+                  <OrgIcon
+                    org={{ showIcon: formData.showIcon, iconUrl: formData.iconUrl || null, name: formData.name }}
+                    size={20}
+                    className="text-muted-foreground shrink-0"
+                  />
+                  <span className="truncate text-sm font-semibold">{formData.name || 'Organization'}</span>
+                </div>
+              </label>
+
+              <label
+                className={`flex cursor-pointer flex-col gap-2 rounded-lg border p-3 ${
+                  formData.titleStyle === 'logo' ? 'border-primary bg-primary/5' : 'border-input'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="titleStyle"
+                    value="logo"
+                    checked={formData.titleStyle === 'logo'}
+                    onChange={() => setFormData({ ...formData, titleStyle: 'logo' })}
+                  />
+                  <span className="font-medium text-sm">Logo</span>
+                </div>
+                <div className="relative flex h-9 w-full items-center rounded border bg-muted/30 p-2">
+                  {formData.logoUrl ? (
+                    <Image src={formData.logoUrl} alt="Logo preview" fill className="object-contain object-left" />
+                  ) : (
+                    <span className="text-xs text-muted-foreground">No logo uploaded</span>
+                  )}
+                </div>
+              </label>
+            </div>
+
+            {formData.titleStyle === 'logo' && (
+              <div className="flex items-center gap-3">
+                {formData.logoUrl && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setFormData({ ...formData, logoUrl: '' })}
+                    className="h-8 px-2 text-destructive hover:text-destructive"
+                  >
+                    <X className="h-3 w-3 mr-1" />
+                    Remove
+                  </Button>
+                )}
+                <input
+                  type="file"
+                  id="logoUpload"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0]
+                    if (!file) return
+
+                    setUploadingLogo(true)
+                    try {
+                      const formDataUpload = new FormData()
+                      formDataUpload.append('file', file)
+                      formDataUpload.append('orgId', orgId)
+
+                      const res = await fetch('/api/upload/org-icon', {
+                        method: 'POST',
+                        body: formDataUpload,
+                      })
+
+                      if (!res.ok) {
+                        const data = await res.json()
+                        throw new Error(data.error || 'Upload failed')
+                      }
+
+                      const { url } = await res.json()
+                      setFormData({ ...formData, logoUrl: url })
+                    } catch (err) {
+                      setError(err instanceof Error ? err.message : 'Failed to upload logo')
+                    } finally {
+                      setUploadingLogo(false)
+                      e.target.value = ''
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={uploadingLogo}
+                  onClick={() => document.getElementById('logoUpload')?.click()}
+                >
+                  {uploadingLogo ? 'Uploading...' : formData.logoUrl ? 'Replace logo' : 'Upload logo'}
+                </Button>
+                <p className="text-xs text-muted-foreground">Wide image, transparent background recommended. Max 2MB.</p>
               </div>
             )}
           </div>

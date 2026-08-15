@@ -9,6 +9,7 @@ import { prisma } from '@/lib/prisma'
 import { resolveOwnedSite } from '@/lib/sites'
 import { withDatabaseConnection } from '@/lib/db-connection'
 import { CACHE_TAGS } from '@/lib/cached-queries'
+import { readExtraSettings, mergeExtraSettings } from '@/lib/settings'
 import { z } from 'zod'
 
 // Base schema for non-admin users
@@ -26,6 +27,8 @@ const updateProfileSchema = z.object({
   pageName: z.string().optional(),
   pageDescription: z.string().optional(),
   pageIcon: z.string().url().optional().or(z.literal('')),
+  titleStyle: z.enum(['icon', 'logo']).optional(),
+  logoUrl: z.string().url().optional().or(z.literal('')),
   // BCP-47 tag (e.g. "de-CH", "fr", "en"). Empty string clears the column.
   // Loose validation — any non-empty 2–35 char string passes; we'd rather
   // accept the teacher's input than block on a strict tag check.
@@ -54,6 +57,8 @@ const adminUpdateProfileSchema = z.object({
   pageName: z.string().optional(),
   pageDescription: z.string().optional(),
   pageIcon: z.string().url().optional().or(z.literal('')),
+  titleStyle: z.enum(['icon', 'logo']).optional(),
+  logoUrl: z.string().url().optional().or(z.literal('')),
   // BCP-47 tag (e.g. "de-CH", "fr", "en"). Empty string clears the column.
   // Loose validation — any non-empty 2–35 char string passes; we'd rather
   // accept the teacher's input than block on a strict tag check.
@@ -105,9 +110,11 @@ export async function GET(request: NextRequest) {
           pageDescription: true,
           pageIcon: true,
           pageLanguage: true,
+          extraSettings: true,
         },
       })
     : null
+  const extra = readExtraSettings(siteRow)
 
   // Flatten Site fields onto the response under their legacy names so the
   // dashboard UI doesn't need to be touched. Source of truth is Site.
@@ -122,6 +129,8 @@ export async function GET(request: NextRequest) {
     pageDescription: siteRow?.pageDescription ?? null,
     pageIcon: siteRow?.pageIcon ?? null,
     pageLanguage: siteRow?.pageLanguage ?? null,
+    titleStyle: extra.titleStyle ?? 'icon',
+    logoUrl: extra.logoUrl ?? null,
   })
 }
 
@@ -213,6 +222,17 @@ export async function PATCH(request: NextRequest) {
       // site's id rather than upserting by userId.
       const primarySiteId = targetSite?.id ?? null
       let newSlug = targetSite?.slug ?? null
+
+      if ('titleStyle' in body || 'logoUrl' in body) {
+        const current = primarySiteId
+          ? await prisma.site.findUnique({ where: { id: primarySiteId }, select: { extraSettings: true } })
+          : null
+        siteUpdate.extraSettings = mergeExtraSettings(current?.extraSettings, {
+          titleStyle: validatedData.titleStyle || undefined,
+          logoUrl: validatedData.logoUrl || undefined,
+        })
+      }
+
       // Write the Site row if there's a slug change or any site-field change to
       // apply. Creating-on-demand keeps OAuth-signup teachers who haven't
       // claimed a slug yet from getting silently dropped here.
@@ -224,8 +244,9 @@ export async function PATCH(request: NextRequest) {
         pageDescription: true,
         pageIcon: true,
         pageLanguage: true,
+        extraSettings: true,
       } as const
-      let siteRow: { slug: string; pageName: string | null; pageDescription: string | null; pageIcon: string | null; pageLanguage: string | null } | null = null
+      let siteRow: { slug: string; pageName: string | null; pageDescription: string | null; pageIcon: string | null; pageLanguage: string | null; extraSettings: unknown } | null = null
       if (hasNewSlug || hasSiteFields) {
         // Without an existing slug we can't create a Site (slug is required).
         // Fall back to keeping whatever's there if no slug was provided.
@@ -261,6 +282,7 @@ export async function PATCH(request: NextRequest) {
         })
       }
 
+      const resultExtra = readExtraSettings(siteRow)
       return {
         ...updatedUser,
         pageSlug: newSlug,
@@ -268,6 +290,8 @@ export async function PATCH(request: NextRequest) {
         pageDescription: siteRow?.pageDescription ?? null,
         pageIcon: siteRow?.pageIcon ?? null,
         pageLanguage: siteRow?.pageLanguage ?? null,
+        titleStyle: resultExtra.titleStyle ?? 'icon',
+        logoUrl: resultExtra.logoUrl ?? null,
       }
     })
 

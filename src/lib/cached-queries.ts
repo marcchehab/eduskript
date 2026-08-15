@@ -4,6 +4,7 @@ import { prisma } from './prisma'
 import { buildSiteStructure, type SiteStructure } from './site-structure'
 import { createLogger } from './logger'
 import { PRIMARY_SITE_ORDER } from './sites'
+import { readExtraSettings } from './settings'
 
 const log = createLogger('cache:queries')
 
@@ -34,6 +35,7 @@ type SitePageFields = {
   pageTagline: string | null
   sidebarBehavior: string
   typographyPreference: string | null
+  extraSettings: unknown
 }
 
 /**
@@ -45,6 +47,7 @@ type SitePageFields = {
  * Site fields under different names (description, iconUrl).
  */
 function graftSitePageFields<U extends object>(user: U, site: SitePageFields) {
+  const extra = readExtraSettings(site)
   return Object.assign(user, {
     pageSlug: site.slug,
     pageName: site.pageName,
@@ -54,6 +57,8 @@ function graftSitePageFields<U extends object>(user: U, site: SitePageFields) {
     pageTagline: site.pageTagline,
     sidebarBehavior: site.sidebarBehavior,
     typographyPreference: site.typographyPreference,
+    titleStyle: extra.titleStyle ?? 'icon',
+    logoUrl: extra.logoUrl ?? null,
   })
 }
 
@@ -80,6 +85,7 @@ export const getTeacherByPageSlug = (pageSlug: string) =>
           pageTagline: true,
           sidebarBehavior: true,
           typographyPreference: true,
+          extraSettings: true,
           // Canonical host for THIS site: its own verified primary domain (a
           // teacher may own several sites, each with its own custom domain).
           // Reads via the site→domain back-relation, so a non-primary site no
@@ -585,6 +591,7 @@ export const getOrgWithLayout = (slug: string) =>
       // can keep reading `org.description`, `org.iconUrl`, etc. without
       // a sweep. Map Site.pageIcon → org.iconUrl / Site.pageDescription
       // → org.description for the legacy field names.
+      const extra = readExtraSettings(site)
       return Object.assign(site.organization, {
         slug: site.slug,
         description: site.pageDescription,
@@ -594,6 +601,8 @@ export const getOrgWithLayout = (slug: string) =>
         pageTagline: site.pageTagline,
         sidebarBehavior: site.sidebarBehavior,
         aiSystemPrompt: site.aiSystemPrompt,
+        titleStyle: extra.titleStyle ?? 'icon',
+        logoUrl: extra.logoUrl ?? null,
         pageLayout: site.pageLayout ?? null,
         frontPage: site.frontPage ?? null,
       })
@@ -1036,6 +1045,7 @@ export const getOrgTeacherContentPage = (
               pageIcon: true,
               sidebarBehavior: true,
               typographyPreference: true,
+              extraSettings: true,
             },
           },
         },
@@ -1149,6 +1159,7 @@ export const getOrgTeacherSkript = (
               pageIcon: true,
               sidebarBehavior: true,
               typographyPreference: true,
+              extraSettings: true,
             },
           },
         },

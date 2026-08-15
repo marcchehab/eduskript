@@ -34,6 +34,8 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
   const [pageName, setPageName] = useState(session?.user?.pageName || '')
   const [pageDescription, setPageDescription] = useState(session?.user?.pageDescription || '')
   const [pageIcon, setPageIcon] = useState(session?.user?.pageIcon || '')
+  const [titleStyle, setTitleStyle] = useState<'icon' | 'logo'>('icon')
+  const [logoUrl, setLogoUrl] = useState('')
   const [pageLanguage, setPageLanguage] = useState('')
   // Original DB values (loaded on mount via /api/user/profile GET, not from
   // session). Used to compute `hasPageInfoChanges` so the Save button only
@@ -44,8 +46,11 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
   const [originalPageName, setOriginalPageName] = useState(session?.user?.pageName || '')
   const [originalPageDescription, setOriginalPageDescription] = useState(session?.user?.pageDescription || '')
   const [originalPageIcon, setOriginalPageIcon] = useState(session?.user?.pageIcon || '')
+  const [originalTitleStyle, setOriginalTitleStyle] = useState<'icon' | 'logo'>('icon')
+  const [originalLogoUrl, setOriginalLogoUrl] = useState('')
   const [originalPageLanguage, setOriginalPageLanguage] = useState('')
   const [iconUploadLoading, setIconUploadLoading] = useState(false)
+  const [logoUploadLoading, setLogoUploadLoading] = useState(false)
   const [hostnamePrefix, setHostnamePrefix] = useState('eduskript.org/')
   const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null)
   const [checkingSlug, setCheckingSlug] = useState(false)
@@ -104,16 +109,22 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
           const name = data.pageName || ''
           const desc = data.pageDescription || ''
           const icon = data.pageIcon || ''
+          const style = data.titleStyle === 'logo' ? 'logo' : 'icon'
+          const logo = data.logoUrl || ''
           const lang = data.pageLanguage || ''
           setPageSlug(slug)
           setPageName(name)
           setPageDescription(desc)
           setPageIcon(icon)
+          setTitleStyle(style)
+          setLogoUrl(logo)
           setPageLanguage(lang)
           setOriginalPageSlug(slug)
           setOriginalPageName(name)
           setOriginalPageDescription(desc)
           setOriginalPageIcon(icon)
+          setOriginalTitleStyle(style)
+          setOriginalLogoUrl(logo)
           setOriginalPageLanguage(lang)
         }
       } catch (error) {
@@ -234,6 +245,8 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
           pageName,
           pageDescription,
           pageIcon,
+          titleStyle,
+          logoUrl,
           pageLanguage,
           name: session?.user?.name || 'User', // Include name as it's required by the API
           siteId,
@@ -248,6 +261,8 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
         setOriginalPageName(data.pageName || '')
         setOriginalPageDescription(data.pageDescription || '')
         setOriginalPageIcon(data.pageIcon || '')
+        setOriginalTitleStyle(data.titleStyle === 'logo' ? 'logo' : 'icon')
+        setOriginalLogoUrl(data.logoUrl || '')
         setOriginalPageLanguage(data.pageLanguage || '')
         await update() // Update session (best-effort — JWT may still lag)
         router.refresh() // Refresh page
@@ -271,6 +286,8 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
     pageName !== originalPageName ||
     pageDescription !== originalPageDescription ||
     pageIcon !== originalPageIcon ||
+    titleStyle !== originalTitleStyle ||
+    logoUrl !== originalLogoUrl ||
     pageLanguage !== originalPageLanguage
 
   // Check if slug is valid for saving
@@ -323,6 +340,51 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
     setPageIcon('')
   }
 
+  // Handle logo file upload
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (!file.type.startsWith('image/')) {
+      dialog.showError('Please select an image file')
+      return
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      dialog.showError('Image must be less than 2MB')
+      return
+    }
+
+    setLogoUploadLoading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('type', 'page-logo')
+
+      const response = await fetch('/api/upload/image', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setLogoUrl(data.url)
+      } else {
+        const data = await response.json()
+        dialog.showError(`Upload failed: ${data.error || 'Unknown error'}`)
+      }
+    } catch (error) {
+      console.error('Failed to upload logo:', error)
+      dialog.showError('Failed to upload logo. Please try again.')
+    } finally {
+      setLogoUploadLoading(false)
+    }
+  }
+
+  const handleRemoveLogo = () => {
+    setLogoUrl('')
+  }
+
   const handleAiPromptSave = async () => {
     setAiPromptLoading(true)
     setAiPromptSaved(false)
@@ -359,36 +421,40 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
         <div className="space-y-3">
           <Label className="text-sm font-medium">Sidebar Preview</Label>
           <div className="border rounded-lg p-4 bg-muted/30">
-            <div className="flex items-start gap-3">
-              {/* Icon */}
-              {pageIcon ? (
-                <div className="relative w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-background">
-                  <Image
-                    src={pageIcon}
-                    alt="Page icon"
-                    fill
-                    className="object-cover"
-                  />
-                </div>
-              ) : (
-                <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
-                  <span className="text-muted-foreground text-lg font-heading">
-                    {(pageName || session?.user?.name || 'P').charAt(0).toUpperCase()}
-                  </span>
-                </div>
-              )}
-              {/* Name and Description */}
-              <div className="min-w-0 flex-1">
-                <h3 className="font-semibold text-sm truncate">
+            {titleStyle === 'logo' && logoUrl ? (
+              <div className="relative h-10 w-full mb-2">
+                <Image src={logoUrl} alt="Logo preview" fill className="object-contain object-left" />
+              </div>
+            ) : (
+              <div className="flex items-start gap-3">
+                {/* Icon */}
+                {pageIcon ? (
+                  <div className="relative w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-background">
+                    <Image
+                      src={pageIcon}
+                      alt="Page icon"
+                      fill
+                      className="object-cover"
+                    />
+                  </div>
+                ) : (
+                  <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                    <span className="text-muted-foreground text-lg font-heading">
+                      {(pageName || session?.user?.name || 'P').charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                )}
+                {/* Name */}
+                <h3 className="font-semibold text-sm truncate self-center">
                   {pageName || session?.user?.name || 'Your Page Name'}
                 </h3>
-                {pageDescription && (
-                  <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-                    <InlineMarkdown>{pageDescription}</InlineMarkdown>
-                  </p>
-                )}
               </div>
-            </div>
+            )}
+            {pageDescription && (
+              <p className="text-xs text-muted-foreground mt-2 line-clamp-2">
+                <InlineMarkdown>{pageDescription}</InlineMarkdown>
+              </p>
+            )}
           </div>
           <p className="text-sm text-muted-foreground">
             This is how your page header will appear in the sidebar on your public page.
@@ -465,6 +531,121 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
             <p className="text-sm text-muted-foreground">
               Square image recommended. Max 2MB.
             </p>
+          </div>
+
+          {/* Sidebar Title Style */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Sidebar Title</Label>
+            <p className="text-sm text-muted-foreground">
+              How your page name appears at the top of the sidebar.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <label
+                className={`flex cursor-pointer flex-col gap-2 rounded-lg border p-3 ${
+                  titleStyle === 'icon' ? 'border-primary bg-primary/5' : 'border-input'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="titleStyle"
+                    value="icon"
+                    checked={titleStyle === 'icon'}
+                    onChange={() => setTitleStyle('icon')}
+                  />
+                  <span className="font-medium text-sm">Icon + Name</span>
+                </div>
+                <div className="flex items-center gap-2 rounded border bg-muted/30 p-2">
+                  {pageIcon ? (
+                    <div className="relative w-5 h-5 rounded overflow-hidden shrink-0 bg-background">
+                      <Image src={pageIcon} alt="" fill className="object-cover" />
+                    </div>
+                  ) : (
+                    <div className="w-5 h-5 rounded bg-muted flex items-center justify-center shrink-0">
+                      <span className="text-muted-foreground text-[10px] font-heading">
+                        {(pageName || session?.user?.name || 'P').charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                  )}
+                  <span className="truncate text-sm font-semibold">
+                    {pageName || session?.user?.name || 'Your Page'}
+                  </span>
+                </div>
+              </label>
+
+              <label
+                className={`flex cursor-pointer flex-col gap-2 rounded-lg border p-3 ${
+                  titleStyle === 'logo' ? 'border-primary bg-primary/5' : 'border-input'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="titleStyle"
+                    value="logo"
+                    checked={titleStyle === 'logo'}
+                    onChange={() => setTitleStyle('logo')}
+                  />
+                  <span className="font-medium text-sm">Logo</span>
+                </div>
+                <div className="relative flex h-9 w-full items-center rounded border bg-muted/30 p-2">
+                  {logoUrl ? (
+                    <Image src={logoUrl} alt="Logo preview" fill className="object-contain object-left" />
+                  ) : (
+                    <span className="text-xs text-muted-foreground">No logo uploaded</span>
+                  )}
+                </div>
+              </label>
+            </div>
+
+            {titleStyle === 'logo' && (
+              <div className="flex items-center gap-3">
+                {logoUrl && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleRemoveLogo}
+                    className="h-8 px-2 text-destructive hover:text-destructive"
+                  >
+                    <X className="h-3 w-3 mr-1" />
+                    Remove
+                  </Button>
+                )}
+                <label htmlFor="logo-upload">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={logoUploadLoading}
+                    className="cursor-pointer"
+                    asChild
+                  >
+                    <span>
+                      {logoUploadLoading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Uploading...
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4 mr-2" />
+                          {logoUrl ? 'Replace logo' : 'Upload logo'}
+                        </>
+                      )}
+                    </span>
+                  </Button>
+                </label>
+                <input
+                  id="logo-upload"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleLogoUpload}
+                  className="hidden"
+                />
+                <p className="text-sm text-muted-foreground">Wide image, transparent background recommended. Max 2MB.</p>
+              </div>
+            )}
           </div>
 
           {/* Page URL */}

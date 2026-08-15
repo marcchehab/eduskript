@@ -3,6 +3,7 @@ import { revalidatePath, revalidateTag } from 'next/cache'
 import { requireOrgAdmin, requireOrgMember } from '@/lib/org-auth'
 import { prisma } from '@/lib/prisma'
 import { CACHE_TAGS } from '@/lib/cached-queries'
+import { readExtraSettings, mergeExtraSettings } from '@/lib/settings'
 
 // GET /api/organizations/[orgId] - Get organization details
 export async function GET(
@@ -35,6 +36,7 @@ export async function GET(
               pageIcon: true,
               sidebarBehavior: true,
               aiSystemPrompt: true,
+              extraSettings: true,
             },
           },
           // Canonical host for this org: its own verified primary domain, if set.
@@ -76,6 +78,8 @@ export async function GET(
       iconUrl: organization.site?.pageIcon ?? null,
       sidebarBehavior: organization.site?.sidebarBehavior ?? 'contextual',
       aiSystemPrompt: organization.site?.aiSystemPrompt ?? null,
+      titleStyle: readExtraSettings(organization.site).titleStyle ?? 'icon',
+      logoUrl: readExtraSettings(organization.site).logoUrl ?? null,
       customDomain: organization.customDomains[0]?.domain ?? null,
       site: undefined,
       customDomains: undefined,
@@ -98,7 +102,11 @@ export async function PATCH(
 
   try {
     const body = await request.json()
-    const { name, description, showIcon, iconUrl, allowMemberPages, allowTeacherCustomDomains, requireEmailDomain, sidebarBehavior, aiSystemPrompt } = body
+    const { name, description, showIcon, iconUrl, allowMemberPages, allowTeacherCustomDomains, requireEmailDomain, sidebarBehavior, aiSystemPrompt, titleStyle, logoUrl } = body
+
+    if (titleStyle !== undefined && titleStyle !== null && !['icon', 'logo'].includes(titleStyle)) {
+      return NextResponse.json({ error: 'Invalid title style' }, { status: 400 })
+    }
 
     // Validate name if provided
     if (name !== undefined && (!name || typeof name !== 'string' || name.trim().length === 0)) {
@@ -142,6 +150,16 @@ export async function PATCH(
     if (aiSystemPrompt !== undefined) {
       siteUpdate.aiSystemPrompt = aiSystemPrompt || null
     }
+    if (titleStyle !== undefined || logoUrl !== undefined) {
+      const currentSite = await prisma.site.findUnique({
+        where: { organizationId: orgId },
+        select: { extraSettings: true },
+      })
+      siteUpdate.extraSettings = mergeExtraSettings(currentSite?.extraSettings, {
+        titleStyle: titleStyle || undefined,
+        logoUrl: logoUrl || undefined,
+      })
+    }
 
     if (Object.keys(siteUpdate).length > 0) {
       await prisma.site.update({
@@ -170,6 +188,7 @@ export async function PATCH(
             pageIcon: true,
             sidebarBehavior: true,
             aiSystemPrompt: true,
+            extraSettings: true,
           },
         },
         _count: {
@@ -221,6 +240,8 @@ export async function PATCH(
       iconUrl: organization.site?.pageIcon ?? null,
       sidebarBehavior: organization.site?.sidebarBehavior ?? 'contextual',
       aiSystemPrompt: organization.site?.aiSystemPrompt ?? null,
+      titleStyle: readExtraSettings(organization.site).titleStyle ?? 'icon',
+      logoUrl: readExtraSettings(organization.site).logoUrl ?? null,
       site: undefined,
     }
     return NextResponse.json({ organization: orgWithSlug })

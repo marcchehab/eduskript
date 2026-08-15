@@ -7,6 +7,7 @@ import { ClassToolbar } from '@/components/teacher/class-toolbar'
 import type { Metadata } from 'next'
 import { getFullSiteStructure, getOrgTeacherContentPage } from '@/lib/cached-queries'
 import { buildSiteStructure } from '@/lib/site-structure'
+import { readExtraSettings } from '@/lib/settings'
 
 interface PageProps {
   params: Promise<{
@@ -131,12 +132,15 @@ export default async function OrgTeacherContentPage({ params }: PageProps) {
     ? await getFullSiteStructure(teacher.id, teacherSite.slug)
     : undefined
 
+  const teacherSiteExtra = readExtraSettings(teacherSite)
   const teacherData = {
     name: teacher.name || 'Teacher',
     pageSlug: teacherSite?.slug || pageSlug,
     pageName: teacherSite?.pageName || null,
     pageDescription: teacherSite?.pageDescription || null,
     pageIcon: teacherSite?.pageIcon || null,
+    titleStyle: teacherSiteExtra.titleStyle ?? 'icon',
+    logoUrl: teacherSiteExtra.logoUrl ?? null,
     bio: teacher.bio || null,
     title: teacher.title || null
   }

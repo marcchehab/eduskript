@@ -24,6 +24,14 @@ export interface SiteExtraSettings {
    * identifiers, so a slug rename would otherwise orphan the subscribers.
    */
   newsletterListId?: number
+
+  /**
+   * Sidebar title-row style: the default icon+pageName row, or a wide logo
+   * image in its place. 'logo' with no logoUrl set falls back to 'icon'.
+   */
+  titleStyle?: 'icon' | 'logo'
+  /** Wide logo image URL, shown when titleStyle is 'logo'. */
+  logoUrl?: string
 }
 
 /** Everything storable in Organization.extraSettings. */
@@ -51,6 +59,9 @@ export function readExtraSettings(source: { extraSettings?: unknown } | unknown)
 
   const listId = toPositiveInt(bag.newsletterListId)
   if (listId !== undefined) out.newsletterListId = listId
+
+  if (bag.titleStyle === 'icon' || bag.titleStyle === 'logo') out.titleStyle = bag.titleStyle
+  if (typeof bag.logoUrl === 'string' && bag.logoUrl) out.logoUrl = bag.logoUrl
 
   return out
 }

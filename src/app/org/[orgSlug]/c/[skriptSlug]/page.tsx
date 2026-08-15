@@ -8,6 +8,7 @@ import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
 import { getOrgFullSiteStructure } from '@/lib/cached-queries'
 import { buildSiteStructure } from '@/lib/site-structure'
 import { getPublicLayers, EMPTY_PUBLIC_LAYERS } from '@/lib/public-page-data'
+import { readExtraSettings } from '@/lib/settings'
 
 // ISR: published content only and no session read, so every visitor gets the
 // same HTML. Next.js 16 needs generateStaticParams() — even empty — or a
@@ -82,9 +83,11 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
       pageIcon: true,
       showIcon: true,
       sidebarBehavior: true,
+      extraSettings: true,
       organization: { select: { id: true, name: true } },
     }
   })
+  const orgExtra = readExtraSettings(orgSite)
   const organization = orgSite?.organization
     ? {
         ...orgSite.organization,
@@ -92,6 +95,8 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
         iconUrl: orgSite.pageIcon,
         showIcon: orgSite.showIcon,
         sidebarBehavior: orgSite.sidebarBehavior,
+        titleStyle: orgExtra.titleStyle ?? 'icon',
+        logoUrl: orgExtra.logoUrl ?? null,
       }
     : null
 
@@ -209,6 +214,8 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
       pageName: organization.name,
       pageDescription: organization.description,
       pageIcon: organization.showIcon ? (organization.iconUrl || 'default') : null,
+      titleStyle: organization.titleStyle,
+      logoUrl: organization.logoUrl,
       bio: null,
       title: null
     }

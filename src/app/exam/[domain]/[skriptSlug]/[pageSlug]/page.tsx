@@ -246,6 +246,8 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
     pageName: layoutTeacher.pageName || null,
     pageDescription: layoutTeacher.pageDescription || null,
     pageIcon: layoutTeacher.pageIcon || null,
+    titleStyle: layoutTeacher.titleStyle || null,
+    logoUrl: layoutTeacher.logoUrl || null,
     bio: layoutTeacher.bio || null,
     title: layoutTeacher.title || null,
   }
