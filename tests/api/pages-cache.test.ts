@@ -47,6 +47,9 @@ vi.mock('@/lib/prisma', () => ({
       create: vi.fn(),
       update: vi.fn(),
     },
+    pageLayoutItem: {
+      findFirst: vi.fn(),
+    },
     pageVersion: {
       create: vi.fn(),
     },
@@ -89,7 +92,7 @@ const existingPage = {
   skript: {
     id: 'skript-123',
     slug: 'algebra-1',
-    collectionSkripts: [{ collection: { slug: 'math' } }],
+    collectionSkripts: [{ collection: { slug: 'math', siteId: 'site-1' } }],
   },
   versions: [{ version: 3, content: '# Old content' }],
 }
@@ -118,7 +121,9 @@ describe('PATCH /api/pages/[id] — cache invalidation contract', () => {
       ...existingPage,
       content: '# New content',
     } as never)
-    vi.mocked(prisma.site.findFirst).mockResolvedValue({
+    // Resolves via the page's actual owning site (Collection.siteId), not the
+    // caller's primary site — see resolveOwningSiteSlug in src/lib/services/pages.ts.
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({
       slug: 'teacher',
     } as never)
     vi.mocked(prisma.organizationMember.findMany).mockResolvedValue([])

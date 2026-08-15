@@ -119,6 +119,48 @@ async function loadPageForActor(pageId: string, userId: string, isAdmin: boolean
 }
 
 /**
+ * Resolve the slug of the Site that actually owns this page's skript, for
+ * cache-invalidation purposes. A teacher can own multiple Sites (schema
+ * comment on Site: "extra sites are provisioned by a superadmin only"), so
+ * falling back to the caller's PRIMARY site — the old behavior — silently
+ * revalidates the wrong site's cache tags/paths whenever the edited page
+ * lives on a non-primary site (e.g. a secondary site carrying a custom
+ * domain). The real public page then stays stale until something else
+ * happens to bust it.
+ *
+ * Preference order: the skript's collection's site (most skripts have
+ * exactly one collection membership) → the site whose PageLayout pins this
+ * skript as a root item → the caller's primary site as a last-resort
+ * fallback (orphaned skripts not yet placed anywhere).
+ */
+async function resolveOwningSiteSlug(
+  existingPage: NonNullable<Awaited<ReturnType<typeof loadPageForActor>>>,
+  userId: string
+): Promise<string | null> {
+  const collectionSiteId = existingPage.skript.collectionSkripts[0]?.collection?.siteId
+  if (collectionSiteId) {
+    const site = await prisma.site.findUnique({
+      where: { id: collectionSiteId },
+      select: { slug: true },
+    })
+    if (site) return site.slug
+  }
+
+  const layoutItem = await prisma.pageLayoutItem.findFirst({
+    where: { type: 'skript', contentId: existingPage.skriptId },
+    select: { pageLayout: { select: { site: { select: { slug: true } } } } },
+  })
+  if (layoutItem?.pageLayout.site?.slug) return layoutItem.pageLayout.site.slug
+
+  const primarySite = await prisma.site.findFirst({
+    where: { userId },
+    orderBy: PRIMARY_SITE_ORDER,
+    select: { slug: true },
+  })
+  return primarySite?.slug ?? null
+}
+
+/**
  * Read a page if the user has view permission. Throws on miss / denial.
  */
 export async function getPageForUser(
@@ -345,16 +387,11 @@ export async function updatePageForUser(
   }
 
   // Revalidate the public page cache using tags. The whole block is gated
-  // on the author having a Site (URL slug lives on Site now); users without
-  // a public page have nothing to invalidate.
-  const userSite = await prisma.site.findFirst({
-    where: { userId },
-    orderBy: PRIMARY_SITE_ORDER,
-    select: { slug: true },
-  })
+  // on the page's owning site existing (URL slug lives on Site now); pages
+  // with no resolvable site have nothing to invalidate.
+  const pageSlug = await resolveOwningSiteSlug(existingPage, userId)
 
-  if (userSite?.slug) {
-    const pageSlug = userSite.slug
+  if (pageSlug) {
     log('Invalidating cache tags', {
       pageSlug,
       skriptSlug: existingPage.skript.slug,
@@ -626,16 +663,12 @@ export async function restorePageVersionForUser(
     },
   })
 
-  // Same cache fan-out as updatePageForUser. Gated on the user having a Site
-  // (URL slug lives on Site); users without one have nothing to invalidate.
-  const userSite = await prisma.site.findFirst({
-    where: { userId },
-    orderBy: PRIMARY_SITE_ORDER,
-    select: { slug: true },
-  })
+  // Same cache fan-out as updatePageForUser. Gated on the page's owning site
+  // existing (URL slug lives on Site); pages with no resolvable site have
+  // nothing to invalidate.
+  const pageSlug = await resolveOwningSiteSlug(existingPage, userId)
 
-  if (userSite?.slug) {
-    const pageSlug = userSite.slug
+  if (pageSlug) {
     revalidateTag(
       CACHE_TAGS.pageBySlug(pageSlug, existingPage.skript.slug, updatedPage.slug),
       { expire: 0 },

@@ -20,6 +20,7 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     page: { findFirst: vi.fn(), update: vi.fn() },
     pageVersion: { create: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
+    pageLayoutItem: { findFirst: vi.fn() },
     user: { findUnique: vi.fn() },
     site: { findUnique: vi.fn(), findFirst: vi.fn() },
     organizationMember: { findMany: vi.fn() },
