@@ -245,7 +245,7 @@ export const PLUGIN_CSP = [
 export function buildPluginSrcdoc(entryHtml: string, theme?: string): string {
   const isDark = theme === 'dark'
   return `<!DOCTYPE html>
-<html style="color-scheme:${isDark ? 'dark' : 'light'}">
+<html style="color-scheme:${isDark ? 'dark' : 'light'}" data-theme="${isDark ? 'dark' : 'light'}">
 <head>
 <meta http-equiv="Content-Security-Policy" content="${PLUGIN_CSP}">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -318,7 +318,9 @@ export const PLUGIN_STANDALONE_SDK_SOURCE = `
   }
 
   function applyColorScheme() {
-    document.documentElement.style.colorScheme = currentTheme();
+    var theme = currentTheme();
+    document.documentElement.style.colorScheme = theme;
+    document.documentElement.setAttribute('data-theme', theme);
   }
   applyColorScheme();
 

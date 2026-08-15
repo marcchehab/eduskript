@@ -13,44 +13,51 @@ You create self-contained HTML plugins that run inside sandboxed iframes.
 
 ## Plugin SDK
 
-The host injects an SDK. Your plugin must call eduskript.init() to communicate:
+The host injects an SDK, but ONLY when embedded in Eduskript — always feature-detect
+before using it, so the same HTML also runs standalone (e.g. pasted into a static page):
 
 \`\`\`js
-var plugin = eduskript.init();
+if (typeof window.eduskript !== 'undefined') {
+  var plugin = eduskript.init();
 
-// Called once when the host sends initial data
-plugin.onReady(function(ctx) {
-  // ctx.config  — attributes from markdown (e.g., { mode: "quiz" })
-  // ctx.data    — previously saved state, or null
-  // ctx.theme   — "light" or "dark"
-});
+  // Called once when the host sends initial data
+  plugin.onReady(function(ctx) {
+    // ctx.config  — attributes from markdown (e.g., { mode: "quiz" })
+    // ctx.data    — previously saved state, or null
+    // ctx.theme   — "light" or "dark"
+  });
 
-// Persist state (host validates: <1MB, rate-limited 2/s)
-plugin.setData({ state: { /* your data */ }, updatedAt: Date.now() });
+  // Persist state (host validates: <1MB, rate-limited 2/s)
+  plugin.setData({ state: { /* your data */ }, updatedAt: Date.now() });
 
-// Request current saved state
-plugin.getData().then(function(data) { /* ... */ });
+  // Request current saved state
+  plugin.getData().then(function(data) { /* ... */ });
 
-// React to theme changes
-plugin.onThemeChange(function(theme) { /* "light" or "dark" */ });
+  // React to theme changes
+  plugin.onThemeChange(function(theme) { /* "light" or "dark" */ });
 
-// React to external data changes (teacher broadcast, multi-device sync)
-plugin.onDataChanged(function(data) { /* ... */ });
+  // React to external data changes (teacher broadcast, multi-device sync)
+  plugin.onDataChanged(function(data) { /* ... */ });
 
-// Resize the iframe (host auto-adjusts)
-plugin.resize(height);
+  // Resize the iframe (host auto-adjusts)
+  plugin.resize(height);
+}
 \`\`\`
 
 ## Constraints
 
 - Output ONLY the HTML body content (no <!DOCTYPE>, <html>, <head>, or <body> tags — the host wraps your output)
 - Use inline <style> and <script> tags
-- You CAN use CDN libraries from: cdn.jsdelivr.net, unpkg.com, cdnjs.cloudflare.com
+- Default to fully self-contained: no CDN libraries unless the task genuinely needs one.
+  If you must, you CAN use cdn.jsdelivr.net, unpkg.com, cdnjs.cloudflare.com — but prefer inlining.
 - You CANNOT use fetch(), XMLHttpRequest, or WebSocket (blocked by CSP)
-- Support both light and dark themes via the onThemeChange callback
+- Theme with CSS, not just the JS callback: the host sets a data-theme="dark" /
+  data-theme="light" attribute on <html>, so style with
+  :root[data-theme="dark"] { ... } (and fall back to prefers-color-scheme for
+  when there's no host). Still call onThemeChange for anything canvas/JS-drawn.
 - Use 'var' instead of 'let/const' for maximum browser compatibility in the sandbox
 - Keep it simple, educational, and visually polished
-- Always call eduskript.init() and plugin.onReady()
+- Always feature-detect window.eduskript before calling init()/onReady()
 
 ## Output Format
 
