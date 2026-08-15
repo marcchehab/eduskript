@@ -87,6 +87,7 @@ import {
   reorderCollectionSkripts,
   reorderCollectionSkriptsConfig,
 } from '@/lib/mcp/tools/reorder-collection-skripts'
+import { uploadAsset, uploadAssetConfig } from '@/lib/mcp/tools/upload-asset'
 
 type ToolResult = Awaited<ReturnType<typeof readPage>>
 
@@ -148,7 +149,7 @@ function buildServerInstructions(userPrompt?: string | null): string {
     getCondensedSyntaxReference(),
     '',
     '## MCP-specific guidance',
-    'You are connected to a teacher\'s Eduskript account via MCP. Use the available tools to discover, read, and edit their content. Page-level: list_my_skripts, search_my_content, read_page, resolve_page_url (turn a pasted dashboard/public/org URL into a page — prefer this over search_my_content when given a URL), create_page, update_page_metadata (title/slug/description/publish), update_page_content (markdown body — destructive, creates a new version each time), list_page_versions + restore_page_version (audit & undo). The legacy update_page is deprecated; prefer the metadata/content split. Skript-level: read_skript, update_skript, read_skript_frontpage, update_skript_frontpage. Sites: list_my_sites (a teacher may own several public pages; primary first). Site-level landing page: read_site_frontpage, update_site_frontpage (no organizationId = the teacher\'s own landing page under their pageSlug — pass siteId to target a specific one of your sites, else the primary is used; pass organizationId for an org landing page, owner/admin only). Collection-level: read_collection, update_collection. Structure & sidebar: create_collection (new sidebar section), create_skript (new skript, placed in the sidebar — published by default; add pages with create_page), place_skript (move an existing skript into a collection or to the sidebar root), reorder_collection_skripts (order skripts within a collection). Creating a skript this way makes it appear in the public sidebar immediately; the dashboard page-builder is only needed for drag-and-drop tweaks. Bulk SEO scan: audit_skript_seo (returns excerpts + issue flags for every page in a skript — call this before sweeping descriptions). The teacher only sees the natural-language reply — show edits in human-readable form rather than raw markdown dumps.',
+    'You are connected to a teacher\'s Eduskript account via MCP. Use the available tools to discover, read, and edit their content. Page-level: list_my_skripts, search_my_content, read_page, resolve_page_url (turn a pasted dashboard/public/org URL into a page — prefer this over search_my_content when given a URL), create_page, update_page_metadata (title/slug/description/publish), update_page_content (markdown body — destructive, creates a new version each time), list_page_versions + restore_page_version (audit & undo). The legacy update_page is deprecated; prefer the metadata/content split. Skript-level: read_skript, update_skript, read_skript_frontpage, update_skript_frontpage. Sites: list_my_sites (a teacher may own several public pages; primary first). Site-level landing page: read_site_frontpage, update_site_frontpage (no organizationId = the teacher\'s own landing page under their pageSlug — pass siteId to target a specific one of your sites, else the primary is used; pass organizationId for an org landing page, owner/admin only). Collection-level: read_collection, update_collection. Structure & sidebar: create_collection (new sidebar section), create_skript (new skript, placed in the sidebar — published by default; add pages with create_page), place_skript (move an existing skript into a collection or to the sidebar root), reorder_collection_skripts (order skripts within a collection). Creating a skript this way makes it appear in the public sidebar immediately; the dashboard page-builder is only needed for drag-and-drop tweaks. Bulk SEO scan: audit_skript_seo (returns excerpts + issue flags for every page in a skript — call this before sweeping descriptions). Files: upload_asset (base64 content, capped at 8MB — larger files need the dashboard) uploads an image/CSV/etc. into a skript\'s file storage so it can be referenced from markdown (`![](name.png)`) or a code editor\'s `assets="name.csv"`. The teacher only sees the natural-language reply — show edits in human-readable form rather than raw markdown dumps.',
     '- Prefer interactive code editors (`editor` keyword) when an example is meant to be run by students.',
   ]
   if (userPrompt && userPrompt.trim()) {
@@ -254,6 +255,9 @@ export function buildMcpServer(opts: { userPrompt?: string | null } = {}): McpSe
     'reorder_collection_skripts',
     reorderCollectionSkriptsConfig,
     async (args) => safe('reorder_collection_skripts', () => reorderCollectionSkripts(args)) as never
+  )
+  server.registerTool('upload_asset', uploadAssetConfig, async (args) =>
+    safe('upload_asset', () => uploadAsset(args)) as never
   )
 
   return server
