@@ -184,9 +184,33 @@ export async function PATCH(
     // sidebar keeps rendering the previous sidebarBehavior. revalidatePath
     // additionally covers that route's own Full Route Cache entry.
     if (organization.site?.slug) {
-      revalidatePath(`/org/${organization.site.slug}`, 'layout')
-      revalidateTag(CACHE_TAGS.organization(organization.site.slug), { expire: 0 })
-      revalidateTag(CACHE_TAGS.orgContent(organization.site.slug), { expire: 0 })
+      const orgSlug = organization.site.slug
+      revalidatePath(`/org/${orgSlug}`, 'layout')
+      revalidateTag(CACHE_TAGS.organization(orgSlug), { expire: 0 })
+      revalidateTag(CACHE_TAGS.orgContent(orgSlug), { expire: 0 })
+
+      // org/[orgSlug]/c/[skriptSlug]* read sidebarBehavior via a plain
+      // prisma call (no unstable_cache tag), and revalidatePath(..., 'layout')
+      // above doesn't cascade into these deeper statically-generated
+      // (revalidate = false) routes since there's no shared layout.tsx.
+      // Bust each org skript/page route explicitly, same pattern as
+      // src/app/api/user-data/sync/route.ts.
+      const orgSkripts = await prisma.pageLayoutItem.findMany({
+        where: { type: 'skript', pageLayout: { site: { organizationId: orgId } } },
+        select: { contentId: true },
+      })
+      if (orgSkripts.length > 0) {
+        const skripts = await prisma.skript.findMany({
+          where: { id: { in: orgSkripts.map((item) => item.contentId) } },
+          select: { slug: true, pages: { select: { slug: true } } },
+        })
+        for (const skript of skripts) {
+          revalidatePath(`/org/${orgSlug}/c/${skript.slug}`)
+          for (const page of skript.pages) {
+            revalidatePath(`/org/${orgSlug}/c/${skript.slug}/${page.slug}`)
+          }
+        }
+      }
     }
 
     const orgWithSlug = {
