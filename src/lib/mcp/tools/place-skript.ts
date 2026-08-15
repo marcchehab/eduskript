@@ -13,7 +13,7 @@ import { placeSkriptForUser } from '@/lib/services/skripts'
 export const placeSkriptConfig = {
   title: 'Place skript in sidebar',
   description:
-    'Place an existing skript in the sidebar: pass a collectionId to nest it under a collection (optionally at a given position), or omit it to add the skript as a top-level sidebar item. Idempotent — re-placing a skript already in the collection changes nothing. Does not remove the skript from other collections. Use `create_skript` to make a new one.',
+    'Place an existing skript in the sidebar: pass a collectionId to nest it under a collection (optionally at a given position), or omit it to add the skript as a top-level sidebar item. For a top-level item, pass siteId to target a specific site — the caller may own several; omitting it defaults to the primary site, which is easy to get wrong when placing content for a non-primary site. Use `list_my_sites` to find a siteId. Idempotent — re-placing a skript already in the collection changes nothing. Does not remove the skript from other collections. Use `create_skript` to make a new one.',
   inputSchema: {
     skriptId: z.string().min(1).describe('ID of the skript to place.'),
     collectionId: z
@@ -26,6 +26,10 @@ export const placeSkriptConfig = {
       .min(0)
       .optional()
       .describe('0-based insert index within the collection. Defaults to the end.'),
+    siteId: z
+      .string()
+      .optional()
+      .describe('Root placement only (ignored when collectionId is set): target site ID, must be owned by the caller. Omit for the primary site.'),
   },
 }
 
@@ -33,10 +37,11 @@ export async function placeSkript(args: {
   skriptId: string
   collectionId?: string
   position?: number
+  siteId?: string
 }) {
   requireScope('content:write')
   const ctx = getMcpContext()
-  console.log(`[mcp:place_skript] userId=${ctx.userId} skriptId=${args.skriptId} collectionId=${args.collectionId ?? '(root)'} client=${ctx.clientName}`)
+  console.log(`[mcp:place_skript] userId=${ctx.userId} skriptId=${args.skriptId} collectionId=${args.collectionId ?? '(root)'} siteId=${args.siteId ?? '(primary)'} client=${ctx.clientName}`)
   const result = await placeSkriptForUser(ctx.userId, args, {
     editSource: 'mcp',
     editClient: ctx.clientName,

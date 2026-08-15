@@ -347,6 +347,8 @@ export interface PlaceSkriptInput {
   collectionId?: string
   /** 0-based insert index within the collection; defaults to the end. */
   position?: number
+  /** Root placement only: target site (must be owned by the caller). Omit for the primary site. Ignored when collectionId is set — the collection's own site is used. */
+  siteId?: string
 }
 
 /**
@@ -364,7 +366,7 @@ export async function placeSkriptForUser(
   input: PlaceSkriptInput,
   ctx: ActorContext = {}
 ) {
-  const { skriptId, collectionId, position } = input
+  const { skriptId, collectionId, position, siteId } = input
 
   const skript = await prisma.skript.findUnique({
     where: { id: skriptId },
@@ -411,16 +413,21 @@ export async function placeSkriptForUser(
     return { skriptId, collectionId, alreadyMember }
   }
 
-  // Root placement on the user's primary site.
-  const site = await prisma.site.findFirst({
-    where: { userId },
-    orderBy: PRIMARY_SITE_ORDER,
-    select: { id: true, slug: true },
-  })
-  if (!site) throw new ValidationError('You need to set up your public page first')
+  // Root placement on the target site, or the user's primary site if none given.
+  const site = siteId
+    ? await prisma.site.findFirst({ where: { id: siteId, userId }, select: { id: true, slug: true } })
+    : await prisma.site.findFirst({
+        where: { userId },
+        orderBy: PRIMARY_SITE_ORDER,
+        select: { id: true, slug: true },
+      })
+  if (!site) {
+    if (siteId) throw new PermissionDeniedError('Cannot place skripts on this site')
+    throw new ValidationError('You need to set up your public page first')
+  }
   await ensurePageLayoutItem(site.id, 'skript', skriptId)
   revalidateSiteContent(site.slug)
-  return { skriptId, root: true }
+  return { skriptId, root: true, siteId: site.id, siteSlug: site.slug }
 }
 
 /**
