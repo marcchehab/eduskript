@@ -15,6 +15,7 @@ import { FontSizeControls } from './font-size-controls'
 import { SyncStatusButton } from '@/components/ui/sync-status'
 import { InlineMarkdown } from '@/components/ui/inline-markdown'
 import { useLayout } from '@/contexts/layout-context'
+import { useCurrentSite } from '@/contexts/current-site-context'
 import { TeacherClassProvider } from '@/contexts/teacher-class-context'
 import { AdminToolbox } from './admin-toolbox'
 import { LockdownWatcher } from './lockdown-watcher'
@@ -184,7 +185,8 @@ export function PublicSiteLayout({
     return undefined
   }, [siteStructure, rootSkripts, paramSkriptSlug, paramPageSlug])
 
-  const pageId = pageIdProp ?? currentPage?.id
+  const { pageId: reportedPageId } = useCurrentSite()
+  const pageId = pageIdProp ?? currentPage?.id ?? reportedPageId ?? undefined
   const hideSidebar = hideSidebarProp ?? currentPage?.pageType === 'exam'
 
   // Unified, page-builder-ordered sidebar list. When the server provides

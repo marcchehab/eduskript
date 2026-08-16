@@ -10,6 +10,7 @@ import { canonicalUrl, canonicalBase } from '@/lib/seo/canonical'
 import { generateExcerpt } from '@/lib/markdown'
 import { JsonLd, learningResourceSchema, breadcrumbSchema } from '@/lib/seo/json-ld'
 import { getPublicLayers, EMPTY_PUBLIC_LAYERS } from '@/lib/public-page-data'
+import { ReportCurrentPageId } from '@/contexts/current-site-context'
 
 interface PageProps {
   params: Promise<{
@@ -203,6 +204,7 @@ export default async function PublicPage({ params }: PageProps) {
   return (
     <>
       <JsonLd schema={ldSchemas} />
+      <ReportCurrentPageId pageId={page.id} />
       <PublicPageBody
         page={page}
         skriptId={skript.id}

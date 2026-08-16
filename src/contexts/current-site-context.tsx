@@ -15,15 +15,22 @@
  * that as "no site scoping applies" rather than an error.
  */
 
-import { createContext, useContext, useEffect } from 'react'
+import { createContext, useContext, useEffect, useState } from 'react'
 import { syncEngine } from '@/lib/userdata/sync-engine'
 
 export interface CurrentSite {
   siteId: string | null
   organizationId: string | null
+  pageId: string | null
+  setPageId: (id: string | null) => void
 }
 
-const CurrentSiteContext = createContext<CurrentSite>({ siteId: null, organizationId: null })
+const CurrentSiteContext = createContext<CurrentSite>({
+  siteId: null,
+  organizationId: null,
+  pageId: null,
+  setPageId: () => {},
+})
 
 export function CurrentSiteProvider({
   siteId,
@@ -34,12 +41,30 @@ export function CurrentSiteProvider({
   organizationId?: string | null
   children: React.ReactNode
 }) {
+  const [pageId, setPageId] = useState<string | null>(null)
   return (
-    <CurrentSiteContext.Provider value={{ siteId, organizationId }}>
+    <CurrentSiteContext.Provider value={{ siteId, organizationId, pageId, setPageId }}>
       <SyncEngineSiteBridge siteId={siteId} />
       {children}
     </CurrentSiteContext.Provider>
   )
+}
+
+/**
+ * Reports the current content page's id up into CurrentSiteContext. Needed
+ * because [domain]/layout.tsx mounts PublicSiteLayout/CurrentSiteProvider
+ * once for the whole site — it has no access to page-specific route params —
+ * so PublicSiteLayout's own siteStructure-based pageId lookup silently misses
+ * unlisted pages (excluded from getFullSiteStructure's query). The content
+ * page itself already has the real page id, so it reports it upward.
+ */
+export function ReportCurrentPageId({ pageId }: { pageId: string }) {
+  const { setPageId } = useContext(CurrentSiteContext)
+  useEffect(() => {
+    setPageId(pageId)
+    return () => setPageId(null)
+  }, [pageId, setPageId])
+  return null
 }
 
 /** Feeds the resolved siteId into the sync engine singleton — a plain
