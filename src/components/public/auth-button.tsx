@@ -28,7 +28,7 @@ export function AuthButton({ pageId, teacherPageSlug, teacherBillingPlan, isOrgP
   const pathname = usePathname() ?? '/'
   const { data: session, status } = useSession()
   const { completeStep } = useQuestStep()
-  const { siteId } = useCurrentSite()
+  const { siteId, organizationId } = useCurrentSite()
   const [editUrl, setEditUrl] = useState<string | null>(null)
   const [canCopy, setCanCopy] = useState(false)
   const [copyDialogOpen, setCopyDialogOpen] = useState(false)
@@ -276,7 +276,12 @@ export function AuthButton({ pageId, teacherPageSlug, teacherBillingPlan, isOrgP
   // site they clicked from. Students never resolve editUrl/canCopy (skipped
   // above by account type) and always reach this branch, so they must keep
   // the generic /dashboard — a site-scoped link would 404 for them.
-  const dashboardHref = !isStudent && siteId ? `/dashboard/site/${siteId}/page-builder` : '/dashboard'
+  const dashboardHref =
+    !isStudent && organizationId
+      ? `/dashboard/org/${organizationId}/page-builder`
+      : !isStudent && siteId
+        ? `/dashboard/site/${siteId}/page-builder`
+        : '/dashboard'
 
   return (
     <Link
