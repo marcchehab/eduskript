@@ -32,7 +32,9 @@ export function ExcalidrawImage({ src, alt, style, onWidthChange, onEdit, align 
   const caption = alt || ''
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [forceLight, setForceLight] = useState(lightonly)
-  useEffect(() => setForceLight(lightonly), [lightonly])
+  useEffect(() => {
+    setForceLight(lightonly)
+  }, [lightonly])
 
   // Resolve light/dark URLs and the original file ID
   const resolved = files ? resolveExcalidraw(files, src) : undefined
