@@ -78,6 +78,22 @@ class PostgresEventBus implements EventBus {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private retryMs = INITIAL_RETRY_MS
   private isReconnecting = false
+  // pg.Client (unlike Pool) has no protection against overlapping queries on
+  // one connection — two concurrent subscribe() calls issuing unawaited
+  // LISTEN queries on the same client can desync its query/response matching
+  // and hang the connection forever (this is what pg's "client.query() when
+  // already executing" deprecation warns about). Chaining every LISTEN/UNLISTEN
+  // through this promise serializes them onto the single connection.
+  private listenQueryChain: Promise<unknown> = Promise.resolve()
+
+  private queueListenerQuery(sql: string): void {
+    const client = this.listenerClient
+    if (!client) return
+    this.listenQueryChain = this.listenQueryChain
+      .catch(() => {})
+      .then(() => client.query(sql))
+      .catch(err => console.error(`[PostgresEventBus] ${sql} failed:`, err))
+  }
 
   constructor() {
     const sslConfig = getSSLConfig()
@@ -114,6 +130,10 @@ class PostgresEventBus implements EventBus {
       const sslConfig = getSSLConfig()
       const client = new Client({
         connectionString: process.env.DATABASE_URL,
+        // A query that never gets a response (e.g. a desynced connection)
+        // must error out and trigger reconnect, not hang forever — this
+        // client has no Pool-level protection against that.
+        query_timeout: 10_000,
         ...(sslConfig && { ssl: sslConfig }),
       })
 
@@ -122,6 +142,9 @@ class PostgresEventBus implements EventBus {
       // Connection succeeded — reset backoff
       this.retryMs = INITIAL_RETRY_MS
       this.listenerClient = client
+      // A stuck query on the previous client must not block LISTEN calls on
+      // this fresh connection.
+      this.listenQueryChain = Promise.resolve()
 
       // Handle incoming notifications
       client.on('notification', (msg) => {
@@ -223,8 +246,7 @@ class PostgresEventBus implements EventBus {
 
     // Start LISTEN on the channel if we have a connection
     if (this.listenerClient) {
-      this.listenerClient.query(`LISTEN ${pgChannel}`)
-        .catch((err) => console.error(`[PostgresEventBus] LISTEN ${pgChannel} failed:`, err))
+      this.queueListenerQuery(`LISTEN ${pgChannel}`)
     } else {
       // First subscriber (or reconnecting) — connect() re-LISTENs every
       // channel in `subscribers`, which now includes this one.
@@ -240,9 +262,7 @@ class PostgresEventBus implements EventBus {
         this.subscribers.delete(channel)
 
         if (this.listenerClient) {
-          this.listenerClient.query(`UNLISTEN ${pgChannel}`).catch(() => {
-            // Silently handle UNLISTEN failures
-          })
+          this.queueListenerQuery(`UNLISTEN ${pgChannel}`)
         }
       }
 
