@@ -155,7 +155,7 @@ export const sanitizeSchema = {
     'muxvideo': ['src', 'alt', 'poster', 'pin', 'gif', 'autoplay', 'autoPlay', 'loop'],
     'excalidraw-image': ['src', 'alt', 'dataAlign', 'dataWrap', 'data-align', 'data-wrap'],
     // <excali> component - shorthand for excalidraw (src without .excalidraw extension)
-    'excali': ['src', 'alt', 'width', 'align', 'wrap'],
+    'excali': ['src', 'alt', 'width', 'align', 'wrap', 'lightonly'],
     // <spacer> writing area. id keys the round-trip find/replace on edit.
     'spacer': ['id', 'height', 'pattern'],
     // <image> component attributes (src, alt, width, align, wrap, invert, saturate)

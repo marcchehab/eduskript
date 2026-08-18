@@ -88,6 +88,7 @@ const TAG_ATTRS: Record<string, AttrDef[]> = {
     { label: 'width', info: 'Width (e.g. 80%)' },
     { label: 'align', info: 'left | center | right' },
     { label: 'wrap', info: 'Float with text wrap (true)' },
+    { label: 'lightonly', info: 'Always show the light theme, ignore viewer theme (true)' },
   ],
   'flex': [
     { label: 'gap', info: 'none | small | medium | large' },

@@ -1,7 +1,7 @@
 'use client'
 
-import { useCallback, useState } from 'react'
-import { Pencil, Maximize2 } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { Pencil, Maximize2, Sun } from 'lucide-react'
 import type { SkriptFilesData } from '@/lib/skript-files'
 import { resolveExcalidraw, resolveFile } from '@/lib/skript-files'
 import { ResizableWrapper } from './resizable-wrapper'
@@ -15,6 +15,11 @@ interface ExcalidrawImageProps {
   onEdit?: (filename: string, fileId: string) => void  // Callback to open Excalidraw editor
   align?: 'left' | 'center' | 'right'
   wrap?: boolean
+  // Force the light SVG regardless of viewer theme (author override for
+  // drawings that don't have a meaningful dark variant, or where the author
+  // just prefers the light look). Previously done by hand-renaming the file
+  // to drop the dark export; this is the same effect via markdown, not files.
+  lightonly?: boolean
   // Files data for resolving URLs (serializable)
   files?: SkriptFilesData
   // Source line tracking for editor sync
@@ -22,10 +27,12 @@ interface ExcalidrawImageProps {
   sourceLineEnd?: string
 }
 
-export function ExcalidrawImage({ src, alt, style, onWidthChange, onEdit, align = 'center', wrap = false, files, sourceLineStart, sourceLineEnd }: ExcalidrawImageProps) {
+export function ExcalidrawImage({ src, alt, style, onWidthChange, onEdit, align = 'center', wrap = false, lightonly = false, files, sourceLineStart, sourceLineEnd }: ExcalidrawImageProps) {
   const filename = src
   const caption = alt || ''
   const [lightboxOpen, setLightboxOpen] = useState(false)
+  const [forceLight, setForceLight] = useState(lightonly)
+  useEffect(() => setForceLight(lightonly), [lightonly])
 
   // Resolve light/dark URLs and the original file ID
   const resolved = files ? resolveExcalidraw(files, src) : undefined
@@ -47,26 +54,49 @@ export function ExcalidrawImage({ src, alt, style, onWidthChange, onEdit, align 
     ? parseFloat(style.width)
     : 100
 
-  // Handle layout changes from the wrapper
-  const handleLayoutChange = useCallback((layout: { width: number; align: 'left' | 'center' | 'right'; wrap: boolean }) => {
-    if (!onWidthChange) return
-
-    // Use <excali> component - strip .excalidraw extension (component adds it back)
+  // Rebuilds the <excali> markdown tag from current attributes, with overrides
+  // for whichever gizmo just changed. Width/align/wrap fall back to the props
+  // (the last-saved values) since only the layout gizmo tracks them live.
+  const buildExcaliTag = useCallback((overrides: {
+    width?: number
+    align?: 'left' | 'center' | 'right'
+    wrap?: boolean
+    lightonly?: boolean
+  }) => {
     const baseName = filename.replace(/\.excalidraw$/, '')
+    const nextAlign = overrides.align ?? align
+    const nextWrap = overrides.wrap ?? wrap
+    const nextLightonly = overrides.lightonly ?? forceLight
+
     let props = `src="${baseName}"`
     if (alt) {
       props += ` alt="${alt}"`
     }
-    props += ` width="${Math.round(layout.width)}%"`
-    if (layout.align !== 'center') {
-      props += ` align="${layout.align}"`
+    props += ` width="${Math.round(overrides.width ?? initialWidth)}%"`
+    if (nextAlign !== 'center') {
+      props += ` align="${nextAlign}"`
     }
-    if (layout.wrap) {
+    if (nextWrap) {
       props += ` wrap`
     }
+    if (nextLightonly) {
+      props += ` lightonly`
+    }
 
-    onWidthChange(`<excali ${props} />`)
-  }, [alt, filename, onWidthChange])
+    return `<excali ${props} />`
+  }, [alt, filename, align, wrap, forceLight, initialWidth])
+
+  // Handle layout changes from the wrapper
+  const handleLayoutChange = useCallback((layout: { width: number; align: 'left' | 'center' | 'right'; wrap: boolean }) => {
+    if (!onWidthChange) return
+    onWidthChange(buildExcaliTag(layout))
+  }, [onWidthChange, buildExcaliTag])
+
+  const handleLightOnlyToggle = useCallback(() => {
+    const next = !forceLight
+    setForceLight(next)
+    onWidthChange?.(buildExcaliTag({ lightonly: next }))
+  }, [forceLight, onWidthChange, buildExcaliTag])
 
   // Early return if file can't be resolved
   if (!lightSrc && !darkSrc) {
@@ -106,6 +136,22 @@ export function ExcalidrawImage({ src, alt, style, onWidthChange, onEdit, align 
         </button>
       )}
 
+      {/* Force-light-theme toggle - only shown in editor mode */}
+      {onWidthChange && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            handleLightOnlyToggle()
+          }}
+          className={`absolute top-2 right-11 z-20 p-1.5 rounded-md border border-border shadow-xs opacity-0 group-hover/excalidraw:opacity-100 transition-opacity hover:bg-accent ${
+            forceLight ? 'bg-accent text-accent-foreground' : 'bg-background/80 backdrop-blur-xs'
+          }`}
+          title={forceLight ? 'Always showing light theme — click to follow viewer theme' : 'Always show light theme, ignore viewer theme'}
+        >
+          <Sun className="w-3.5 h-3.5" />
+        </button>
+      )}
+
       {/* Fullscreen button */}
       <button
         onClick={() => setLightboxOpen(true)}
@@ -132,10 +178,10 @@ export function ExcalidrawImage({ src, alt, style, onWidthChange, onEdit, align 
           width={imgWidth}
           height={imgHeight}
           decoding="async"
-          className="excalidraw-light w-full h-auto rounded-md dark:hidden"
+          className={`excalidraw-light w-full h-auto rounded-md ${forceLight ? '' : 'dark:hidden'}`}
         />
       )}
-      {darkSrc && (
+      {darkSrc && !forceLight && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={darkSrc}
@@ -161,10 +207,10 @@ export function ExcalidrawImage({ src, alt, style, onWidthChange, onEdit, align 
             src={lightSrc}
             alt={caption}
             style={{ width: '95vw', height: '90vh' }}
-            className="max-w-[95vw] max-h-[90vh] w-auto h-auto object-contain rounded-md dark:hidden"
+            className={`max-w-[95vw] max-h-[90vh] w-auto h-auto object-contain rounded-md ${forceLight ? '' : 'dark:hidden'}`}
           />
         )}
-        {darkSrc && (
+        {darkSrc && !forceLight && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={darkSrc}

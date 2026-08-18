@@ -869,8 +869,14 @@ export function createMarkdownComponents(
       width?: string
       align?: 'left' | 'center' | 'right'
       wrap?: boolean
+      lightonly?: boolean
     }) {
-      const { src, alt = '', width, align = 'center', wrap = false } = props
+      const { src, alt = '', width, align = 'center' } = props
+      // Bare boolean attrs (`<excali wrap />`) parse as the empty string —
+      // HTML boolean-attribute presence, but falsy in JS — so a plain
+      // truthy check would treat every hand-written `wrap`/`lightonly` as off.
+      const wrap = props.wrap !== undefined && props.wrap !== false && (props.wrap as unknown) !== 'false'
+      const lightonly = props.lightonly !== undefined && props.lightonly !== false && (props.lightonly as unknown) !== 'false'
       // Ensure src has .excalidraw extension
       const filename = src.endsWith('.excalidraw') ? src : `${src}.excalidraw`
 
@@ -881,6 +887,7 @@ export function createMarkdownComponents(
           style={width ? { width } : undefined}
           align={align}
           wrap={wrap}
+          lightonly={lightonly}
           files={files}
           onWidthChange={onImageWidthChange ? (markdown) => onImageWidthChange(filename, markdown) : undefined}
           onEdit={onExcalidrawEdit}

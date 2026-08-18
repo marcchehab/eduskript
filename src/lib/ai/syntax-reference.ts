@@ -304,7 +304,7 @@ $$
 
 A \`{key=value;key2}\` attribute block right after the image (e.g. \`{invert}\`, \`{invert=light;saturate=70}\`) IS implemented, but only for \`invert\`/\`saturate\` — \`{width=...}\` is parsed but silently has no effect (use \`style="width: X%"\` instead).
 
-Excalidraw diagrams: Reference \`.excalidraw\` files directly. The system auto-detects light/dark SVG variants.`)
+Excalidraw diagrams: Reference \`.excalidraw\` files directly. The system auto-detects light/dark SVG variants. Use \`<excali src="name" lightonly />\` (or the \`lightonly\` attribute on the shorthand) to always show the light variant regardless of viewer theme, e.g. for diagrams without a meaningful dark version.`)
 
   // Text alignment
   sections.push(`## Text alignment
