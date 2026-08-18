@@ -91,7 +91,16 @@ class PostgresEventBus implements EventBus {
     if (!client) return
     this.listenQueryChain = this.listenQueryChain
       .catch(() => {})
-      .then(() => client.query(sql))
+      .then(() => {
+        // A mass-unsubscribe (e.g. every SSE client reconnecting away from an
+        // old instance at once) can empty `subscribers` mid-chain and torch
+        // this client via disconnectListener() before earlier-queued UNLISTENs
+        // for other channels run. The connection closing already drops those
+        // registrations, so skip rather than log an "error" for an outcome
+        // that already happened.
+        if (this.listenerClient !== client) return
+        return client.query(sql)
+      })
       .catch(err => console.error(`[PostgresEventBus] ${sql} failed:`, err))
   }
 
