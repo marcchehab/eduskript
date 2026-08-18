@@ -14,6 +14,11 @@ const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_APP_HOSTNAME: appHostname,
   },
+  // Dev-mode blocks cross-origin requests for _next assets/RSC by default.
+  // Without this, tunneling `pnpm dev` through ngrok (or similar) serves the
+  // SSR HTML fine but the client never hydrates — the page looks normal but
+  // nothing is interactive.
+  allowedDevOrigins: ['*.ngrok-free.dev'],
   output: 'standalone',
   // Enable source maps in production for easier debugging
   productionBrowserSourceMaps: true,
