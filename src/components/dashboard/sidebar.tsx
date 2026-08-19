@@ -152,7 +152,7 @@ export function DashboardSidebar() {
       "bg-card border-r border-border h-full transition-all duration-300 flex flex-col",
       isCollapsed ? "w-16 min-w-16" : "w-64"
     )}>
-      <div className="p-4 flex-1 flex flex-col">
+      <div className="p-4 flex-1 min-h-0 flex flex-col">
         {/* Top bar: back link (students) + collapse toggle.
             Expanded: row with back link left, chevron right.
             Collapsed (with back link): column with chevron on top, back icon below. */}
@@ -195,7 +195,7 @@ export function DashboardSidebar() {
           </Button>
         </div>
 
-        <nav className="space-y-1 flex-1">
+        <nav className="space-y-1 flex-1 min-h-0 overflow-y-auto">
           {/* Student Navigation */}
           {isStudent && (
             <>
