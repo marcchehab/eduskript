@@ -276,7 +276,13 @@ $$
 $$
 \\ce{N2(g) + 3 H2(g) <=> 2 NH3(g)}
 $$
-\`\`\``)
+\`\`\`
+
+**Colored terms:** use \`\\textcolor{color}{...}\` (scoped to its argument), NEVER \`\\color{color}\` (a switch that colors everything until the end of the math group or the next \`\\color\`). \`\\color\` requires a \`\\color{black}\`-style "reset" to stop coloring the rest of the expression — but \`black\` is hardcoded and breaks in dark mode (invisible text on a dark background). \`\\textcolor\` needs no reset; text outside its braces just inherits the page's normal (theme-aware) color.
+\`\`\`markdown
+$\\textcolor{orange}{8 \\cdot 1} + \\textcolor{blue}{4 \\cdot 1} + \\textcolor{green}{2 \\cdot 0} + \\textcolor{red}{1 \\cdot 1} = 13_{10}$
+\`\`\`
+Wrong: \`$\\color{orange}8 \\cdot 1 + \\color{blue}4 \\cdot 1 \\color{black} = ...$\` — the trailing \`\\color{black}\` is unreadable in dark mode.`)
 
   // Images
   sections.push(`## Images
@@ -784,7 +790,7 @@ export function getCondensedSyntaxReference(): string {
   - Several \`python-check for="x"\` blocks targeting the same editor become ordered stages (document order) instead of one flat check; each stage can add \`gate-at="<points>"\` and \`label="..."\`.
   - **Turtle exercises:** \`turtle_solution_matches(solution_code, tolerate_rotation=True, match_colors=False)\` (preferred), \`turtle_matches(expected, tolerate_rotation=True)\`, \`turtle_path_matches(expected, tolerance=1.0, tolerate_rotation=True)\`. The first runs a teacher-supplied reference solution through the same recording stub; the runner compares the set of drawn segments. Translation-invariant and, by default, rotation-tolerant. Pass \`match_colors=True\` to also require matching pen colours per segment. Put long solution strings as a setup variable, then \`assert turtle_solution_matches(solution), "..."\`.
 
-**Math:** \`$inline$\` and \`$$display$$\` (KaTeX). Chemistry: \`\\ce{N2(g) + 3 H2(g) <=> 2 NH3(g)}\` (mhchem) — prefer over hand-rolled \`\\mathrm{}\`.
+**Math:** \`$inline$\` and \`$$display$$\` (KaTeX). Chemistry: \`\\ce{N2(g) + 3 H2(g) <=> 2 NH3(g)}\` (mhchem) — prefer over hand-rolled \`\\mathrm{}\`. Colored terms: \`\\textcolor{orange}{8 \\cdot 1}\`, NEVER \`\\color{orange}...\` — \`\\color\` is an unscoped switch needing a \`\\color{black}\` reset that breaks dark mode (black text invisible on dark background); \`\\textcolor{}{}\` is scoped, so text outside it just stays the normal theme-aware color.
 
 **Images:** \`![alt](img.png)\` or \`<img src="img.png" alt="alt" style="width: 50%" align="left" wrap="true" />\`
 
