@@ -12,7 +12,7 @@ interface FlexProps {
   gap?: 'none' | 'small' | 'medium' | 'large'
   className?: string
   style?: CSSProperties
-  wrap?: boolean
+  wrap?: boolean | string
   direction?: 'row' | 'column'
   justify?: 'start' | 'center' | 'end' | 'between' | 'around' | 'evenly'
   align?: 'start' | 'center' | 'end' | 'stretch' | 'baseline'
@@ -25,7 +25,7 @@ interface FlexItemProps {
   className?: string
   style?: CSSProperties
   width?: string
-  grow?: boolean
+  grow?: boolean | string
   // Editor preview cursor-sync + section attrs survive component substitution.
   'data-source-line-start'?: string
   'data-source-line-end'?: string
@@ -40,12 +40,15 @@ interface FlexItemProps {
  * intrinsic content width first and you get lopsided columns).
  */
 export function FlexItem({ children, className, style, width, grow = true, ...dataAttrs }: FlexItemProps) {
+  // Markdown passes attributes as raw strings (e.g. grow="false"), which is
+  // truthy in JS — coerce before using as a boolean.
+  const doesGrow = typeof grow === 'string' ? grow !== 'false' : grow
   return (
     <div
       className={cn(
         'min-w-0 [&>*:first-child]:mt-0!',
-        grow ? 'grow' : 'grow-0',
-        grow && !width && 'basis-0',
+        doesGrow ? 'grow' : 'grow-0',
+        doesGrow && !width && 'basis-0',
         className
       )}
       style={{ ...(width ? { width } : {}), ...style }}
@@ -95,12 +98,14 @@ export function Flex({
     baseline: 'items-baseline'
   }
 
+  const doesWrap = typeof wrap === 'string' ? wrap !== 'false' : wrap
+
   return (
     <div
       className={cn(
         'flex',
         direction === 'row' ? 'flex-row' : 'flex-col',
-        wrap ? 'flex-wrap' : 'flex-nowrap',
+        doesWrap ? 'flex-wrap' : 'flex-nowrap',
         gapMap[gap],
         justifyMap[justify],
         alignMap[align],
