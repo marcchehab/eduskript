@@ -14,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { MergeEditor, SimpleEditor } from './merge-editor'
-import { useAIEditChat, type ChangeCard, type ChatMode } from '@/hooks/use-ai-edit-chat'
+import { useAIEditChat, type ChangeCard, type ChatMode, type ContentModel } from '@/hooks/use-ai-edit-chat'
 import type { AIEditTarget } from '@/hooks/use-ai-edit'
 import {
   Loader2,
@@ -26,7 +26,21 @@ import {
   Sparkles,
   FilePlus2,
   RotateCcw,
+  Zap,
+  BrainCircuit,
 } from 'lucide-react'
+
+const CONTENT_MODEL_STORAGE_KEY = 'eduskript:ai-edit-content-model'
+
+function loadContentModel(): ContentModel {
+  if (typeof window === 'undefined') return 'flash'
+  try {
+    const saved = localStorage.getItem(CONTENT_MODEL_STORAGE_KEY)
+    return saved === 'thinking' ? 'thinking' : 'flash'
+  } catch {
+    return 'flash'
+  }
+}
 
 interface AIEditChatModalProps {
   open: boolean
@@ -48,7 +62,17 @@ export function AIEditChatModal({
   onEditsApplied,
 }: AIEditChatModalProps) {
   const [mode, setMode] = useState<ChatMode>('ask')
+  const [contentModel, setContentModelState] = useState<ContentModel>(loadContentModel)
   const [input, setInput] = useState('')
+
+  const setContentModel = useCallback((m: ContentModel) => {
+    setContentModelState(m)
+    try {
+      localStorage.setItem(CONTENT_MODEL_STORAGE_KEY, m)
+    } catch {
+      // Private mode / storage disabled — the toggle still works for this session.
+    }
+  }, [])
   const scrollRef = useRef<HTMLDivElement>(null)
   // Tracks which assistant turn we've already auto-scrolled to, so we jump to
   // the first change of a new turn exactly once (not on every card update).
@@ -65,7 +89,7 @@ export function AIEditChatModal({
     respondToCard,
     updateCardContent,
     stop,
-  } = useAIEditChat({ target, currentContent, mode, onEditsApplied })
+  } = useAIEditChat({ target, currentContent, mode, contentModel, onEditsApplied })
 
   // The conversation persists across close/open for the session — the modal
   // component stays mounted, so hook state survives. (A fresh page load or
@@ -125,7 +149,10 @@ export function AIEditChatModal({
                 {targetSubtitle || 'Chat to edit this content. Each change is reviewed on its own.'}
               </DialogDescription>
             </div>
-            <ModeToggle mode={mode} onChange={setMode} />
+            <div className="flex items-center gap-2 shrink-0">
+              <ContentModelToggle model={contentModel} onChange={setContentModel} />
+              <ModeToggle mode={mode} onChange={setMode} />
+            </div>
           </div>
         </DialogHeader>
 
@@ -260,6 +287,27 @@ function ModeToggle({ mode, onChange }: { mode: ChatMode; onChange: (m: ChatMode
           </button>
         )
       })}
+    </div>
+  )
+}
+
+function ContentModelToggle({ model, onChange }: { model: ContentModel; onChange: (m: ContentModel) => void }) {
+  return (
+    <div className="inline-flex shrink-0 items-stretch overflow-hidden rounded-full border bg-muted/40 text-xs">
+      {(['flash', 'thinking'] as const).map((m, i) => (
+        <button
+          key={m}
+          type="button"
+          onClick={() => onChange(m)}
+          title={m === 'flash' ? 'Flash: fast, less depth' : 'Thinking: slower, more depth'}
+          className={`flex items-center gap-1 px-3 py-1 font-medium capitalize transition-colors duration-200 ${
+            i > 0 ? 'border-l' : ''
+          } ${model === m ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'}`}
+        >
+          {m === 'flash' ? <Zap className="h-3 w-3" /> : <BrainCircuit className="h-3 w-3" />}
+          {m}
+        </button>
+      ))}
     </div>
   )
 }

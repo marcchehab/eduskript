@@ -66,11 +66,18 @@ export async function POST(
     return Response.json({ error: 'AI service not configured' }, { status: 503 })
   }
 
-  const body = (await request.json()) as { pageIndex: number; feedback?: string }
+  const body = (await request.json()) as { pageIndex: number; feedback?: string; contentModel?: string }
   const { pageIndex } = body
   // Optional per-card revision request from the chat UI's "respond" action.
   // Appended to the job instruction so the model refines its previous attempt.
   const feedback = typeof body.feedback === 'string' ? body.feedback.trim() : ''
+  // User-facing speed/quality toggle (default 'thinking' if omitted, matching
+  // pre-toggle behavior). 'flash' reuses the fast plan-step model instead of
+  // the slower dedicated content model.
+  const contentModel =
+    body.contentModel === 'flash'
+      ? (process.env.OPENROUTER_PLAN_MODEL ?? 'google/gemini-3.5-flash-lite')
+      : 'deepseek/deepseek-v4-flash'
 
   if (typeof pageIndex !== 'number' || pageIndex < 0) {
     return Response.json({ error: 'Invalid pageIndex' }, { status: 400 })
@@ -251,7 +258,7 @@ export async function POST(
       })
 
       const newPageMessage = await openai.chat.completions.create({
-        model: 'deepseek/deepseek-v4-flash',
+        model: contentModel,
         max_tokens: 8192,
         messages: [
           { role: 'system', content: newPagePrompt },
@@ -278,7 +285,7 @@ export async function POST(
       })
 
       const editMessage = await openai.chat.completions.create({
-        model: 'deepseek/deepseek-v4-flash',
+        model: contentModel,
         max_tokens: 8192,
         messages: [
           { role: 'system', content: editPrompt },

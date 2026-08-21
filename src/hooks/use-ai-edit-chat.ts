@@ -27,6 +27,10 @@ const log = createLogger('ai:edit:chat')
 
 export type ChatMode = 'auto' | 'ask'
 
+// 'flash' reuses the fast plan-step model for content generation too (less
+// depth, much faster); 'thinking' uses the dedicated, slower content model.
+export type ContentModel = 'flash' | 'thinking'
+
 export type CardStatus =
   | 'generating' // model is producing the content
   | 'proposed' // ask mode: awaiting accept/reject
@@ -82,6 +86,7 @@ interface UseAIEditChatOptions {
   target: AIEditTarget
   currentContent?: string
   mode: ChatMode
+  contentModel: ContentModel
   // Called when the currently-open page (the focused page or a frontpage) is
   // changed on disk, so the surrounding editor can sync its buffer.
   onEditsApplied?: (newContent?: string) => void
@@ -114,6 +119,7 @@ export function useAIEditChat({
   target,
   currentContent,
   mode,
+  contentModel,
   onEditsApplied,
 }: UseAIEditChatOptions): UseAIEditChatReturn {
   const [turns, setTurns] = useState<Turn[]>([])
@@ -139,6 +145,10 @@ export function useAIEditChat({
   // Mode is read live by the driver (user may toggle mid-conversation).
   const modeRef = useRef<ChatMode>(mode)
   modeRef.current = mode
+  // Content model likewise — read live so a mid-conversation toggle affects
+  // the next generate() call without requiring a new turn.
+  const contentModelRef = useRef<ContentModel>(contentModel)
+  contentModelRef.current = contentModel
 
   const focusedPageId = target.mode === 'page' ? target.pageId : undefined
 
@@ -288,7 +298,7 @@ export function useAIEditChat({
       const res = await fetch(`/api/ai/edit/${jobId}/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pageIndex, ...(feedback ? { feedback } : {}) }),
+        body: JSON.stringify({ pageIndex, contentModel: contentModelRef.current, ...(feedback ? { feedback } : {}) }),
         signal: controller.signal,
       })
       const text = await res.text()
