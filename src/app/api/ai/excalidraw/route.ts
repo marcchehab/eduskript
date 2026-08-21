@@ -1,7 +1,7 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
-import { openrouterProviderRouting } from '@/lib/ai/openrouter'
+import { openrouterProviderRouting, DEEPSEEK_V4_FLASH_PROVIDERS } from '@/lib/ai/openrouter'
 import {
   EXCALIDRAW_SYSTEM_PROMPT,
   buildUserPrompt,
@@ -96,7 +96,7 @@ export async function POST(request: Request) {
         { role: 'system', content: EXCALIDRAW_SYSTEM_PROMPT },
         { role: 'user', content: userMessage },
       ],
-      ...(openrouterProviderRouting() as Record<string, unknown>),
+      ...(openrouterProviderRouting(DEEPSEEK_V4_FLASH_PROVIDERS) as Record<string, unknown>),
     })
 
     const raw = completion.choices[0]?.message?.content ?? ''

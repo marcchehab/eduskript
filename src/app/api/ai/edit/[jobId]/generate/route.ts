@@ -6,7 +6,7 @@ import { assembleSinglePageEditPrompt } from '@/lib/ai/prompts'
 import type { SkriptContext } from '@/lib/ai/types'
 import { loadFrontPageContext } from '@/lib/ai/frontpage-context'
 import { normalizeContent } from '@/lib/ai/normalize-content'
-import { openrouterProviderRouting } from '@/lib/ai/openrouter'
+import { openrouterProviderRouting, DEEPSEEK_V4_FLASH_PROVIDERS } from '@/lib/ai/openrouter'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import OpenAI from 'openai'
 import { createLogger } from '@/lib/logger'
@@ -206,12 +206,14 @@ export async function POST(
     defaultHeaders: { 'HTTP-Referer': 'https://eduskript.org', 'X-Title': 'Eduskript' },
   })
 
-  // Provider routing: OPENROUTER_PROVIDERS env wins if set, otherwise let
-  // OpenRouter auto-route among deepseek-v4-flash's many cheap providers.
-  // Unlike glm-5.2, no single flaky-latency provider needing a pinned order
-  // (see docs/ai-model-selection-eval.md for the deepseek vs glm/qwen comparison).
-  const envRouting = openrouterProviderRouting()
-  const modelRouting = ('provider' in envRouting ? envRouting : {}) as Record<string, unknown>
+  // Provider routing: OPENROUTER_PROVIDERS env wins if set. Otherwise, pin to
+  // known-healthy deepseek-v4-flash providers ('thinking') — its unpinned pool
+  // includes providers with real outages (see DEEPSEEK_V4_FLASH_PROVIDERS).
+  // 'flash' reuses gemini-3.5-flash-lite (Google-only), no pin needed.
+  const routing = openrouterProviderRouting(
+    contentModel === 'deepseek/deepseek-v4-flash' ? DEEPSEEK_V4_FLASH_PROVIDERS : undefined
+  )
+  const modelRouting = ('provider' in routing ? routing : {}) as Record<string, unknown>
 
   // Fetch user and organization custom AI prompts (both live on Site).
   let orgPrompt: string | undefined

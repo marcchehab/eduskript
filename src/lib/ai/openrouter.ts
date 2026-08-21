@@ -21,14 +21,21 @@ export interface OpenrouterProviderRouting {
   }
 }
 
-export function openrouterProviderRouting(): OpenrouterProviderRouting | Record<string, never> {
-  const raw = process.env.OPENROUTER_PROVIDERS
-  if (!raw) return {}
+/**
+ * Known-healthy provider order for `deepseek/deepseek-v4-flash` (checked
+ * 2026-08-21 via OpenRouter's endpoints API). Excludes providers with poor
+ * uptime at the time: Azure (41.7% uptime/30m), DeepSeek official (92.4%),
+ * SiliconFlow (88.2%). Re-check periodically — provider health drifts.
+ */
+export const DEEPSEEK_V4_FLASH_PROVIDERS = ['DigitalOcean', 'DeepInfra', 'GMICloud', 'CoreWeave']
 
+export function openrouterProviderRouting(
+  defaultOrder?: string[]
+): OpenrouterProviderRouting | Record<string, never> {
+  const raw = process.env.OPENROUTER_PROVIDERS
   const providers = raw
-    .split(',')
-    .map(s => s.trim())
-    .filter(Boolean)
+    ? raw.split(',').map(s => s.trim()).filter(Boolean)
+    : (defaultOrder ?? [])
 
   if (providers.length === 0) return {}
 

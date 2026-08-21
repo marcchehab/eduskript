@@ -13,7 +13,7 @@
  */
 
 import OpenAI from 'openai'
-import { openrouterProviderRouting } from './openrouter'
+import { openrouterProviderRouting, DEEPSEEK_V4_FLASH_PROVIDERS } from './openrouter'
 import { extractCriterionRegex, runCriterionCheck, stripInlineRegex } from '@/lib/scoring/regex-check'
 
 /**
@@ -118,8 +118,9 @@ async function complete(
   maxTokens: number,
   opts: { temperature?: number; seed?: number } = {},
 ): Promise<{ content: string; finishReason: string | null; diag: ResponseDiag }> {
+  const model = scoringModel()
   const res = await client().chat.completions.create({
-    model: scoringModel(),
+    model,
     max_tokens: maxTokens,
     // Force well-formed JSON: the model occasionally emitted slightly malformed
     // JSON (e.g. a dropped "{"), which the parser couldn't recover → a student
@@ -130,7 +131,9 @@ async function complete(
       { role: 'user', content: user },
     ],
     ...opts,
-    ...(openrouterProviderRouting() as Record<string, unknown>),
+    ...(openrouterProviderRouting(
+      model === 'deepseek/deepseek-v4-flash' ? DEEPSEEK_V4_FLASH_PROVIDERS : undefined
+    ) as Record<string, unknown>),
   })
   // Reasoning models (minimax) put their chain-of-thought in message.reasoning and
   // the answer in message.content; OpenRouter may add native_finish_reason + a
