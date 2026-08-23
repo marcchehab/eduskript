@@ -285,7 +285,7 @@ export async function saveFile({
 /**
  * Get MIME type from file extension
  */
-function getMimeType(extension: string): string {
+export function getMimeType(extension: string): string {
   const mimeTypes: Record<string, string> = {
     'jpg': 'image/jpeg',
     'jpeg': 'image/jpeg',
