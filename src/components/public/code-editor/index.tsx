@@ -62,6 +62,7 @@ import { PythonTestResults } from './python-test-results'
 import { useCoupledVideo, parseTimecode } from '@/components/markdown/coupled-video-context'
 import type { PythonCheckResult } from './types'
 import { deferUntilIdle } from '@/lib/defer-until-idle'
+import { safeRandomUUID } from '@/lib/uuid'
 import {
   runPython,
   runChecks,
@@ -675,7 +676,7 @@ export const CodeEditor = memo(function CodeEditor({
   const [globalImports, setGlobalImports] = useState<GlobalImportsData>({ files: [] })
 
   // Stable per-instance ID for pub/sub self-filtering
-  const editorInstanceId = useRef(crypto.randomUUID()).current
+  const editorInstanceId = useRef(safeRandomUUID()).current
 
   // Load import files from IndexedDB on mount + subscribe for cross-editor sync
   useEffect(() => {

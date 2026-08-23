@@ -12,6 +12,8 @@
  * text marks it in the pen's colour, never broadcast, always personal).
  */
 
+import { safeRandomUUID } from '@/lib/uuid'
+
 export type PenType = 'pen' | 'highlight'
 
 export interface PenConfig {
@@ -93,10 +95,7 @@ export const DEFAULT_PENS: PenConfig[] = [
   { id: 'highlight-2', color: '#EE892B', size: DEFAULT_SIZE, type: 'highlight' },
 ]
 
-function genId(): string {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
-  return `pen-${Math.random().toString(36).slice(2)}`
-}
+const genId = safeRandomUUID
 
 /** Pick the first palette colour not already used; fall back to cycling. */
 export function nextPenColor(existing: string[]): string {

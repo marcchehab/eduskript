@@ -66,6 +66,7 @@ import { getStroke } from 'perfect-freehand'
 import type { StrokeOptions } from 'perfect-freehand'
 import { determineSectionFromY, liveSectionYShift, type HeadingPosition } from '@/lib/annotations/reposition-strokes'
 import { smoothPoints } from '@/lib/annotations/svg-path'
+import { safeRandomUUID } from '@/lib/uuid'
 import {
   HOLD_SNAP_MS,
   HOLD_SNAP_TOLERANCE_PX,
@@ -1127,7 +1128,7 @@ export const SimpleCanvas = forwardRef<SimpleCanvasHandle, SimpleCanvasProps>(
 
         // Save the path with all original points and pressure data intact
         pathsRef.current.push({
-          id: crypto.randomUUID(),
+          id: safeRandomUUID(),
           points: currentPathRef.current,
           mode: currentModeRef.current,
           color: strokeColor,

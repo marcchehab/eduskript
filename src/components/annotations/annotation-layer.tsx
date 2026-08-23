@@ -116,6 +116,7 @@ import { SnapsDisplay, type StudentWorkSnap, type SnapOverridesData, type SnapPo
 import { LayerBadges } from './layer-badges'
 import { SpacersDisplay } from './spacers-display'
 import { createLogger } from '@/lib/logger'
+import { safeRandomUUID } from '@/lib/uuid'
 import { DEFAULT_PENS, loadPens, savePens, addPen, removePen, reorderPens, setPenColor, setPenSize, type PenConfig, type PenType } from '@/lib/annotations/pens'
 import { HighlightPenContext } from '@/components/text-highlights/highlight-pen-context'
 
@@ -2043,7 +2044,7 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
 
   // Spacer CRUD operations
   const handleAddSpacer = useCallback((afterBlockIndex: number) => {
-    const id = crypto.randomUUID()
+    const id = safeRandomUUID()
     const newSpacer: Spacer = {
       id,
       afterBlockIndex,
