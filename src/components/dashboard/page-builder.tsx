@@ -1,67 +1,90 @@
-'use client'
+"use client";
 
-import { Fragment, useEffect, useRef } from 'react'
-import { Droppable, Draggable } from '@hello-pangea/dnd'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Layout, Eye, BookOpen, FileText, Edit, ChevronDown, ChevronRight, X, GripVertical, Pencil, EyeOff } from 'lucide-react'
-import { Sketch } from '@uiw/react-color'
-import { PublishToggle } from './publish-toggle'
-import { cn } from '@/lib/utils'
-import Link from 'next/link'
-import { useState } from 'react'
-import { QuestSpotlight } from '@/components/onboarding/quest-spotlight'
+import { Fragment, useEffect, useRef } from "react";
+import { Droppable, Draggable } from "@hello-pangea/dnd";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Layout,
+  Eye,
+  BookOpen,
+  FileText,
+  Edit,
+  ChevronDown,
+  ChevronRight,
+  X,
+  GripVertical,
+  Pencil,
+  EyeOff,
+} from "lucide-react";
+import { Sketch } from "@uiw/react-color";
+import { PublishToggle } from "./publish-toggle";
+import { cn } from "@/lib/utils";
+import Link from "next/link";
+import { useState } from "react";
+import { QuestSpotlight } from "@/components/onboarding/quest-spotlight";
 
 interface PageItem {
-  id: string
-  type: 'collection' | 'skript'
-  title: string
-  description?: string
-  order: number
-  slug?: string
-  parentId?: string // For nested skripts under collections
-  skripts?: PageItem[] // For collections containing skripts
-  isInLayout?: boolean // For skripts: whether they're explicitly in the page layout
-  isPublished?: boolean // For skripts: whether the skript is published
-  isUnlisted?: boolean // For skripts: whether the skript is hidden from navigation
-  accentColor?: string | null // For collections: hex color for sidebar letter markers
+  id: string;
+  type: "collection" | "skript";
+  title: string;
+  description?: string;
+  order: number;
+  slug?: string;
+  parentId?: string; // For nested skripts under collections
+  skripts?: PageItem[]; // For collections containing skripts
+  isInLayout?: boolean; // For skripts: whether they're explicitly in the page layout
+  isPublished?: boolean; // For skripts: whether the skript is published
+  isUnlisted?: boolean; // For skripts: whether the skript is hidden from navigation
+  accentColor?: string | null; // For collections: hex color for sidebar letter markers
   permissions?: {
-    canEdit: boolean
-    canView: boolean
-  }
+    canEdit: boolean;
+    canView: boolean;
+  };
 }
 
 interface PageBuilderContext {
-  type: 'user' | 'organization'
-  organizationId?: string
+  type: "user" | "organization";
+  organizationId?: string;
   // For type 'user': the specific site new collections should attach to.
-  siteId?: string
+  siteId?: string;
 }
 
 interface PageBuilderProps {
-  items: PageItem[]
-  onItemsChange?: (items: PageItem[], changedCollectionIds?: Set<string>) => void
-  onPreview?: () => void
+  items: PageItem[];
+  onItemsChange?: (
+    items: PageItem[],
+    changedCollectionIds?: Set<string>,
+  ) => void;
+  onPreview?: () => void;
   // Display string for the public page (e.g. "eduskript.org/my-page"), shown
   // in the View button. Null/undefined when no page URL is set yet.
-  previewUrl?: string | null
-  expandedCollections?: string[]
-  onToggleCollection?: (collectionId: string) => void
+  previewUrl?: string | null;
+  expandedCollections?: string[];
+  onToggleCollection?: (collectionId: string) => void;
   // Called when the user saves the collection edit modal (rename + colour).
   // Receives the full updated collection record from the API; the parent
   // should merge it into local state. Null `accentColor` means "no tint,
   // use default".
-  onCollectionUpdate?: (collection: { id: string; title: string; accentColor?: string | null }) => void
+  onCollectionUpdate?: (collection: {
+    id: string;
+    title: string;
+    accentColor?: string | null;
+  }) => void;
   draggedItem?: {
-    type: 'collection' | 'skript'
-    id: string
-    title: string
-    description?: string
-    parentId?: string
-    fromLibrary?: boolean
-  } | null
-  context?: PageBuilderContext
+    type: "collection" | "skript";
+    id: string;
+    title: string;
+    description?: string;
+    parentId?: string;
+    fromLibrary?: boolean;
+  } | null;
+  context?: PageBuilderContext;
 }
 
 export function PageBuilder({
@@ -73,39 +96,39 @@ export function PageBuilder({
   onToggleCollection,
   onCollectionUpdate,
   draggedItem,
-  context = { type: 'user' }
+  context = { type: "user" },
 }: PageBuilderProps) {
   // Determine the frontpage URL based on context
-  const frontpageUrl = context.type === 'organization' && context.organizationId
-    ? `/dashboard/org/${context.organizationId}/frontpage`
-    : context.siteId
-      ? `/dashboard/site/${context.siteId}/frontpage`
-      : '/dashboard/frontpage'
+  const frontpageUrl =
+    context.type === "organization" && context.organizationId
+      ? `/dashboard/org/${context.organizationId}/frontpage`
+      : context.siteId
+        ? `/dashboard/site/${context.siteId}/frontpage`
+        : "/dashboard/frontpage";
   const handleRemoveItem = (id: string, parentId?: string) => {
     if (parentId) {
       // Remove skript from collection
-      const updatedItems = items.map(item => {
+      const updatedItems = items.map((item) => {
         if (item.id === parentId && item.skripts) {
           return {
             ...item,
             skripts: item.skripts
-              .filter(skript => skript.id !== id)
-              .map((skript, index) => ({ ...skript, order: index }))
-          }
+              .filter((skript) => skript.id !== id)
+              .map((skript, index) => ({ ...skript, order: index })),
+          };
         }
-        return item
-      })
-      const changedCollectionIds = new Set([parentId])
-      onItemsChange?.(updatedItems, changedCollectionIds)
+        return item;
+      });
+      const changedCollectionIds = new Set([parentId]);
+      onItemsChange?.(updatedItems, changedCollectionIds);
     } else {
       // Remove root level item
       const updatedItems = items
-        .filter(item => item.id !== id)
-        .map((item, index) => ({ ...item, order: index }))
-      onItemsChange?.(updatedItems)
+        .filter((item) => item.id !== id)
+        .map((item, index) => ({ ...item, order: index }));
+      onItemsChange?.(updatedItems);
     }
-  }
-
+  };
 
   return (
     <Card className="min-h-[400px]">
@@ -121,6 +144,7 @@ export function PageBuilder({
                 variant="outline"
                 size="sm"
                 className="flex items-center gap-2"
+                title="Edit the content shown on the landing page of your public website"
               >
                 <Pencil className="w-4 h-4" />
                 Edit Frontpage
@@ -132,7 +156,7 @@ export function PageBuilder({
                 size="sm"
                 onClick={onPreview}
                 className="flex items-center gap-2"
-                title={previewUrl ? `View Public Page at ${previewUrl}` : 'View Page'}
+                title={previewUrl || undefined}
               >
                 <Eye className="w-4 h-4" />
                 View Page
@@ -162,13 +186,17 @@ export function PageBuilder({
               className={cn(
                 "min-h-[400px] border-2 border-dashed rounded-lg p-4 transition-colors",
                 "border-muted-foreground/25",
-                items.length === 0 && "flex items-center justify-center"
+                items.length === 0 && "flex items-center justify-center",
               )}
             >
               {items.length === 0 ? (
-                <div id="page-builder-empty-drop-zone" className="text-center max-w-lg mx-auto">
+                <div
+                  id="page-builder-empty-drop-zone"
+                  className="text-center max-w-lg mx-auto"
+                >
                   <h3 className="text-lg font-medium text-muted-foreground">
-                    Drag a skript or collection from the library to add it to your page
+                    Drag a skript or collection from the library to add it to
+                    your page
                   </h3>
                   {provided.placeholder}
                 </div>
@@ -197,11 +225,11 @@ export function PageBuilder({
             </div>
           )}
         </Droppable>
-        
+
         {items.length > 0 && (
           <div className="mt-4 p-3 bg-muted/50 rounded-lg">
             <p className="text-xs text-muted-foreground">
-              💡 New to Eduskript?{' '}
+              💡 New to Eduskript?{" "}
               <a
                 href="https://eduskript.org/c/first-steps"
                 target="_blank"
@@ -215,7 +243,7 @@ export function PageBuilder({
         )}
       </CardContent>
     </Card>
-  )
+  );
 }
 
 // Slim drop strip between root items. The whole point is to give root drops
@@ -239,40 +267,53 @@ function RootGap({ index }: { index: number }) {
             // own placeholder (skript-sized) makes the zone obvious.
             // isDraggingOver only changes colour — not the box.
             "h-8 rounded transition-colors",
-            snapshot.isDraggingOver && "bg-primary/20 ring-1 ring-primary/40"
+            snapshot.isDraggingOver && "bg-primary/20 ring-1 ring-primary/40",
           )}
         >
           {provided.placeholder}
         </div>
       )}
     </Droppable>
-  )
+  );
 }
 
 interface PageBuilderItemProps {
-  item: PageItem
-  index: number
-  onRemove: (id: string, parentId?: string) => void
-  expandedCollections: string[]
-  onToggleCollection?: (collectionId: string) => void
-  onCollectionUpdate?: (collection: { id: string; title: string; accentColor?: string | null }) => void
+  item: PageItem;
+  index: number;
+  onRemove: (id: string, parentId?: string) => void;
+  expandedCollections: string[];
+  onToggleCollection?: (collectionId: string) => void;
+  onCollectionUpdate?: (collection: {
+    id: string;
+    title: string;
+    accentColor?: string | null;
+  }) => void;
   draggedItem?: {
-    type: 'collection' | 'skript'
-    id: string
-    title: string
-    description?: string
-    parentId?: string
-    fromLibrary?: boolean
-  } | null
+    type: "collection" | "skript";
+    id: string;
+    title: string;
+    description?: string;
+    parentId?: string;
+    fromLibrary?: boolean;
+  } | null;
 }
 
-function PageBuilderItem({ item, index, onRemove, expandedCollections, onToggleCollection, onCollectionUpdate, draggedItem }: PageBuilderItemProps) {
-  const Icon = item.type === 'collection' ? BookOpen : FileText
+function PageBuilderItem({
+  item,
+  index,
+  onRemove,
+  expandedCollections,
+  onToggleCollection,
+  onCollectionUpdate,
+  draggedItem,
+}: PageBuilderItemProps) {
+  const Icon = item.type === "collection" ? BookOpen : FileText;
   // Root-level skripts use a distinct draggable prefix so the drag-end parser
   // can tell them apart from collections (both render through this component).
-  const draggableId = item.type === 'collection'
-    ? `collection-${item.id}`
-    : `root-skript-${item.id}`
+  const draggableId =
+    item.type === "collection"
+      ? `collection-${item.id}`
+      : `root-skript-${item.id}`;
 
   return (
     <Draggable
@@ -288,14 +329,14 @@ function PageBuilderItem({ item, index, onRemove, expandedCollections, onToggleC
             "bg-card border border-border rounded-lg hover:shadow-xs transition-shadow",
             !item.permissions?.canEdit && "opacity-60 bg-muted/50",
             item.permissions?.canView === false && "border-red-200 bg-red-50",
-            snapshot.isDragging && "opacity-50"
+            snapshot.isDragging && "opacity-50",
           )}
         >
           {/* Main content row */}
           <div className="flex items-start gap-3 p-3 relative">
             {/* Drag Handle */}
             {item.permissions?.canView !== false && (
-              <div 
+              <div
                 {...provided.dragHandleProps}
                 className="opacity-70 hover:opacity-100 cursor-grab active:cursor-grabbing transition-opacity"
               >
@@ -304,17 +345,19 @@ function PageBuilderItem({ item, index, onRemove, expandedCollections, onToggleC
             )}
             {/* Remove button + publish toggle - top-right corner */}
             <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
-              {item.type === 'skript' && item.permissions?.canEdit && item.isPublished !== undefined && (
-                <PublishToggle
-                  type="skript"
-                  itemId={item.id}
-                  isPublished={item.isPublished}
-                  isUnlisted={item.isUnlisted}
-                  onToggle={() => {}}
-                  size="sm"
-                  showText={false}
-                />
-              )}
+              {item.type === "skript" &&
+                item.permissions?.canEdit &&
+                item.isPublished !== undefined && (
+                  <PublishToggle
+                    type="skript"
+                    itemId={item.id}
+                    isPublished={item.isPublished}
+                    isUnlisted={item.isUnlisted}
+                    onToggle={() => {}}
+                    size="sm"
+                    showText={false}
+                  />
+                )}
               <Button
                 variant="ghost"
                 size="sm"
@@ -325,187 +368,207 @@ function PageBuilderItem({ item, index, onRemove, expandedCollections, onToggleC
                 <X className="w-4 h-4" />
               </Button>
             </div>
-          <span className="text-xs text-muted-foreground font-mono w-6">
-            {index + 1}
-          </span>
-          
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <Icon
-                className="w-5 h-5 shrink-0 text-primary"
-                style={
-                  item.type === 'collection' && item.accentColor
-                    ? { color: item.accentColor }
-                    : undefined
-                }
-              />
-              {!item.permissions?.canEdit && (
-                <Eye className="w-3 h-3 text-muted-foreground absolute -bottom-1 -right-1 bg-background rounded-full" />
-              )}
-            </div>
-            {item.type === 'collection' && (
-              <button
-                onClick={() => onToggleCollection?.(item.id)}
-                className="hover:bg-muted rounded p-1"
-                title={expandedCollections.includes(item.id) ? 'Collapse' : 'Expand'}
-              >
-                {expandedCollections.includes(item.id) ? (
-                  <ChevronDown className="w-3 h-3 text-muted-foreground" />
-                ) : (
-                  <ChevronRight className="w-3 h-3 text-muted-foreground" />
-                )}
-              </button>
-            )}
-          </div>
-          
-          <div className="flex-1 min-w-0">
-            {item.permissions?.canView === false ? (
-              <div className="space-y-1">
-                <h4 className="font-medium text-sm text-red-600 truncate">Access Revoked</h4>
-                <p className="text-xs text-red-500 truncate">Your access was revoked. This content can no longer be displayed on your page.</p>
-              </div>
-            ) : (
-              <>
-                {item.permissions?.canEdit && item.type === 'collection' ? (
-                  <div className="flex items-center gap-1.5">
-                    <CollectionTitleInlineEditor
-                      collectionId={item.id}
-                      title={item.title}
-                      onUpdated={onCollectionUpdate}
-                    />
-                    <CollectionColorButton
-                      collectionId={item.id}
-                      accentColor={item.accentColor ?? null}
-                      onUpdated={onCollectionUpdate}
-                    />
-                  </div>
-                ) : item.permissions?.canEdit && item.slug ? (
-                  <QuestSpotlight step="open_page_editor" label="Try this!">
-                    <Link
-                      href={`/dashboard/skripts/${item.slug}`}
-                      className="font-medium text-sm truncate hover:underline flex items-center gap-1 w-fit"
-                      title="Edit skript"
-                    >
-                      {item.title}
-                      <Edit className="w-3 h-3 shrink-0" />
-                    </Link>
-                  </QuestSpotlight>
-                ) : (
-                  <h4 className="font-medium text-sm truncate">{item.title}</h4>
-                )}
-                {item.description && (
-                  <p className="text-xs text-muted-foreground line-clamp-2 leading-snug mt-0.5">{item.description}</p>
-                )}
-              </>
-            )}
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground capitalize">
-                {item.type}
-              </span>
-              {item.type === 'collection' && (
-                <span className="text-xs text-muted-foreground">
-                  • {item.skripts?.length || 0} skripts
-                </span>
-              )}
-              {item.type === 'skript' && item.isPublished === false && (
-                <span className="text-xs text-warning flex items-center gap-0.5">
-                  <EyeOff className="w-3 h-3" />
-                  Draft
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
+            <span className="text-xs text-muted-foreground font-mono w-6">
+              {index + 1}
+            </span>
 
-        {/* Nested skripts for collections - only show when expanded */}
-        {item.type === 'collection' && expandedCollections.includes(item.id) && (
-          <div className="px-3 pb-3">
-            {/* The Droppable's innerRef element owns the visible drop-zone styles
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Icon
+                  className="w-5 h-5 shrink-0 text-primary"
+                  style={
+                    item.type === "collection" && item.accentColor
+                      ? { color: item.accentColor }
+                      : undefined
+                  }
+                />
+                {!item.permissions?.canEdit && (
+                  <Eye className="w-3 h-3 text-muted-foreground absolute -bottom-1 -right-1 bg-background rounded-full" />
+                )}
+              </div>
+              {item.type === "collection" && (
+                <button
+                  onClick={() => onToggleCollection?.(item.id)}
+                  className="hover:bg-muted rounded p-1"
+                  title={
+                    expandedCollections.includes(item.id)
+                      ? "Collapse"
+                      : "Expand"
+                  }
+                >
+                  {expandedCollections.includes(item.id) ? (
+                    <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                  ) : (
+                    <ChevronRight className="w-3 h-3 text-muted-foreground" />
+                  )}
+                </button>
+              )}
+            </div>
+
+            <div className="flex-1 min-w-0">
+              {item.permissions?.canView === false ? (
+                <div className="space-y-1">
+                  <h4 className="font-medium text-sm text-red-600 truncate">
+                    Access Revoked
+                  </h4>
+                  <p className="text-xs text-red-500 truncate">
+                    Your access was revoked. This content can no longer be
+                    displayed on your page.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {item.permissions?.canEdit && item.type === "collection" ? (
+                    <div className="flex items-center gap-1.5">
+                      <CollectionTitleInlineEditor
+                        collectionId={item.id}
+                        title={item.title}
+                        onUpdated={onCollectionUpdate}
+                      />
+                      <CollectionColorButton
+                        collectionId={item.id}
+                        accentColor={item.accentColor ?? null}
+                        onUpdated={onCollectionUpdate}
+                      />
+                    </div>
+                  ) : item.permissions?.canEdit && item.slug ? (
+                    <QuestSpotlight step="open_page_editor" label="Try this!">
+                      <Link
+                        href={`/dashboard/skripts/${item.slug}`}
+                        className="font-medium text-sm truncate hover:underline flex items-center gap-1 w-fit"
+                        title="Edit skript"
+                      >
+                        {item.title}
+                        <Edit className="w-3 h-3 shrink-0" />
+                      </Link>
+                    </QuestSpotlight>
+                  ) : (
+                    <h4 className="font-medium text-sm truncate">
+                      {item.title}
+                    </h4>
+                  )}
+                  {item.description && (
+                    <p className="text-xs text-muted-foreground line-clamp-2 leading-snug mt-0.5">
+                      {item.description}
+                    </p>
+                  )}
+                </>
+              )}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground capitalize">
+                  {item.type}
+                </span>
+                {item.type === "collection" && (
+                  <span className="text-xs text-muted-foreground">
+                    • {item.skripts?.length || 0} skripts
+                  </span>
+                )}
+                {item.type === "skript" && item.isPublished === false && (
+                  <span className="text-xs text-warning flex items-center gap-0.5">
+                    <EyeOff className="w-3 h-3" />
+                    Draft
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Nested skripts for collections - only show when expanded */}
+          {item.type === "collection" &&
+            expandedCollections.includes(item.id) && (
+              <div className="px-3 pb-3">
+                {/* The Droppable's innerRef element owns the visible drop-zone styles
                 (border, padding, min-height). If those sit on a wrapper instead,
                 the Droppable's bounding rect shrinks to its content and drops in
                 the visual gap fall through to the outer `page-builder` Droppable. */}
-            {item.skripts && item.skripts.length > 0 ? (
-              <Droppable
-                droppableId={`skript-${item.id}`}
-                isDropDisabled={draggedItem?.type === 'collection'}
-              >
-                {(provided) => (
-                  <div
-                    {...provided.droppableProps}
-                    ref={provided.innerRef}
-                    className="ml-6 space-y-2 border-l-2 border-muted pl-4 min-h-[60px]"
+                {item.skripts && item.skripts.length > 0 ? (
+                  <Droppable
+                    droppableId={`skript-${item.id}`}
+                    isDropDisabled={draggedItem?.type === "collection"}
                   >
-                    {item.skripts!
-                      .sort((a, b) => a.order - b.order)
-                      .map((skript, skriptIndex) => (
-                        <SimpleSkriptItem
-                          key={skript.id}
-                          item={skript}
-                          index={skriptIndex}
-                          parentId={item.id}
-                          parentCanEdit={item.permissions?.canEdit}
-                          parentAccentColor={item.accentColor ?? null}
-                          onRemove={onRemove}
-                        />
-                      ))}
-                    {provided.placeholder}
-                  </div>
-                )}
-              </Droppable>
-            ) : (
-              <Droppable
-                droppableId={`empty-${item.id}`}
-                isDropDisabled={draggedItem?.type === 'collection'}
-              >
-                {(provided) => (
-                  <div
-                    {...provided.droppableProps}
-                    ref={provided.innerRef}
-                    className="ml-6 border-l-2 border-muted pl-4 min-h-[60px] text-center py-4 text-muted-foreground text-xs"
+                    {(provided) => (
+                      <div
+                        {...provided.droppableProps}
+                        ref={provided.innerRef}
+                        className="ml-6 space-y-2 border-l-2 border-muted pl-4 min-h-[60px]"
+                      >
+                        {item
+                          .skripts!.sort((a, b) => a.order - b.order)
+                          .map((skript, skriptIndex) => (
+                            <SimpleSkriptItem
+                              key={skript.id}
+                              item={skript}
+                              index={skriptIndex}
+                              parentId={item.id}
+                              parentCanEdit={item.permissions?.canEdit}
+                              parentAccentColor={item.accentColor ?? null}
+                              onRemove={onRemove}
+                            />
+                          ))}
+                        {provided.placeholder}
+                      </div>
+                    )}
+                  </Droppable>
+                ) : (
+                  <Droppable
+                    droppableId={`empty-${item.id}`}
+                    isDropDisabled={draggedItem?.type === "collection"}
                   >
-                    <FileText className="w-8 h-8 mx-auto mb-2 text-muted-foreground/50" />
-                    <p>No skripts in this collection</p>
-                    {provided.placeholder}
-                  </div>
+                    {(provided) => (
+                      <div
+                        {...provided.droppableProps}
+                        ref={provided.innerRef}
+                        className="ml-6 border-l-2 border-muted pl-4 min-h-[60px] text-center py-4 text-muted-foreground text-xs"
+                      >
+                        <FileText className="w-8 h-8 mx-auto mb-2 text-muted-foreground/50" />
+                        <p>No skripts in this collection</p>
+                        {provided.placeholder}
+                      </div>
+                    )}
+                  </Droppable>
                 )}
-              </Droppable>
+              </div>
             )}
-          </div>
-        )}
         </div>
       )}
     </Draggable>
-  )
+  );
 }
 
 interface SimpleSkriptItemProps {
-  item: PageItem
-  index: number
-  parentId: string
-  parentCanEdit?: boolean
+  item: PageItem;
+  index: number;
+  parentId: string;
+  parentCanEdit?: boolean;
   // Hex colour from the owning collection. When null we keep the default
   // primary-blue icon (same as root skripts).
-  parentAccentColor?: string | null
-  onRemove: (id: string, parentId?: string) => void
+  parentAccentColor?: string | null;
+  onRemove: (id: string, parentId?: string) => void;
 }
 
-function SimpleSkriptItem({ item, index, parentId, parentCanEdit = true, parentAccentColor = null, onRemove }: SimpleSkriptItemProps) {
-
+function SimpleSkriptItem({
+  item,
+  index,
+  parentId,
+  parentCanEdit = true,
+  parentAccentColor = null,
+  onRemove,
+}: SimpleSkriptItemProps) {
   return (
-    <Draggable 
-      draggableId={`${parentId}-skript-${item.id}`} 
+    <Draggable
+      draggableId={`${parentId}-skript-${item.id}`}
       index={index}
       isDragDisabled={item.permissions?.canView === false}
     >
       {(provided, snapshot) => (
-        <div 
+        <div
           ref={provided.innerRef}
           {...provided.draggableProps}
           className={cn(
             "bg-muted/30 border border-border rounded-lg hover:bg-muted/50 hover:shadow-xs transition-all",
             snapshot.isDragging && "opacity-50",
             !item.permissions?.canEdit && "opacity-70 bg-muted/50",
-            item.permissions?.canView === false && "border-red-200 bg-red-50"
+            item.permissions?.canView === false && "border-red-200 bg-red-50",
           )}
         >
           <div className="flex items-start gap-3 p-2">
@@ -525,7 +588,7 @@ function SimpleSkriptItem({ item, index, parentId, parentCanEdit = true, parentA
                   "w-4 h-4 shrink-0",
                   !item.permissions?.canEdit
                     ? "text-muted-foreground"
-                    : !parentAccentColor && "text-primary"
+                    : !parentAccentColor && "text-primary",
                 )}
                 style={
                   item.permissions?.canEdit && parentAccentColor
@@ -541,8 +604,13 @@ function SimpleSkriptItem({ item, index, parentId, parentCanEdit = true, parentA
             <div className="flex-1 min-w-0">
               {item.permissions?.canView === false ? (
                 <div className="space-y-1">
-                  <h5 className="font-medium text-xs text-red-600 truncate">Access Revoked</h5>
-                  <p className="text-xs text-red-500 truncate">Your access was revoked. This content can no longer be displayed on your page.</p>
+                  <h5 className="font-medium text-xs text-red-600 truncate">
+                    Access Revoked
+                  </h5>
+                  <p className="text-xs text-red-500 truncate">
+                    Your access was revoked. This content can no longer be
+                    displayed on your page.
+                  </p>
                 </div>
               ) : (
                 <>
@@ -553,7 +621,9 @@ function SimpleSkriptItem({ item, index, parentId, parentCanEdit = true, parentA
                           href={`/dashboard/skripts/${item.slug}`}
                           className={cn(
                             "font-medium text-xs truncate hover:underline flex items-center gap-1 w-fit",
-                            !item.permissions?.canEdit ? "text-muted-foreground" : "text-foreground"
+                            !item.permissions?.canEdit
+                              ? "text-muted-foreground"
+                              : "text-foreground",
                           )}
                           title="Edit skript"
                         >
@@ -562,10 +632,16 @@ function SimpleSkriptItem({ item, index, parentId, parentCanEdit = true, parentA
                         </Link>
                       </QuestSpotlight>
                     ) : (
-                      <h5 className={cn(
-                        "font-medium text-xs truncate",
-                        !item.permissions?.canEdit ? "text-muted-foreground" : "text-foreground"
-                      )}>{item.title}</h5>
+                      <h5
+                        className={cn(
+                          "font-medium text-xs truncate",
+                          !item.permissions?.canEdit
+                            ? "text-muted-foreground"
+                            : "text-foreground",
+                        )}
+                      >
+                        {item.title}
+                      </h5>
                     )}
                     {/* Show draft indicator for unpublished skripts */}
                     {item.isPublished === false && (
@@ -576,7 +652,9 @@ function SimpleSkriptItem({ item, index, parentId, parentCanEdit = true, parentA
                     )}
                   </div>
                   {item.description && (
-                    <p className="text-xs text-muted-foreground line-clamp-2 leading-snug mt-0.5">{item.description}</p>
+                    <p className="text-xs text-muted-foreground line-clamp-2 leading-snug mt-0.5">
+                      {item.description}
+                    </p>
                   )}
                 </>
               )}
@@ -610,28 +688,28 @@ function SimpleSkriptItem({ item, index, parentId, parentCanEdit = true, parentA
         </div>
       )}
     </Draggable>
-  )
+  );
 }
 
 // Curated palette shown at the bottom of the Sketch picker. Tailwind-500
 // hues — same family the public sidebar already uses for letter markers.
 const PRESET_ACCENT_COLORS = [
-  '#6b7280', // gray
-  '#ef4444', // red
-  '#f97316', // orange
-  '#eab308', // yellow
-  '#22c55e', // green
-  '#14b8a6', // teal
-  '#3b82f6', // blue
-  '#6366f1', // indigo
-  '#8b5cf6', // violet
-  '#ec4899', // pink
-]
+  "#6b7280", // gray
+  "#ef4444", // red
+  "#f97316", // orange
+  "#eab308", // yellow
+  "#22c55e", // green
+  "#14b8a6", // teal
+  "#3b82f6", // blue
+  "#6366f1", // indigo
+  "#8b5cf6", // violet
+  "#ec4899", // pink
+];
 
 export interface CollectionUpdate {
-  id: string
-  title: string
-  accentColor?: string | null
+  id: string;
+  title: string;
+  accentColor?: string | null;
 }
 
 // Inline rename: title shows as text + small pencil. Click pencil (or the
@@ -643,57 +721,57 @@ export function CollectionTitleInlineEditor({
   title,
   onUpdated,
 }: {
-  collectionId: string
-  title: string
-  onUpdated?: (collection: CollectionUpdate) => void
+  collectionId: string;
+  title: string;
+  onUpdated?: (collection: CollectionUpdate) => void;
 }) {
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(title)
-  const [saving, setSaving] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(title);
+  const [saving, setSaving] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Reset draft whenever the canonical title changes (e.g. successful save
   // from elsewhere) and we're not actively editing.
   useEffect(() => {
-    if (!editing) setDraft(title)
-  }, [title, editing])
+    if (!editing) setDraft(title);
+  }, [title, editing]);
 
   // Autofocus + select on entry.
   useEffect(() => {
     if (editing) {
-      inputRef.current?.focus()
-      inputRef.current?.select()
+      inputRef.current?.focus();
+      inputRef.current?.select();
     }
-  }, [editing])
+  }, [editing]);
 
   const commit = async () => {
-    const next = draft.trim()
+    const next = draft.trim();
     if (!next || next === title) {
-      setEditing(false)
-      setDraft(title)
-      return
+      setEditing(false);
+      setDraft(title);
+      return;
     }
-    setSaving(true)
+    setSaving(true);
     try {
       const res = await fetch(`/api/collections/${collectionId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: next }),
-      })
-      if (!res.ok) throw new Error(await res.text())
-      const updated = await res.json()
-      onUpdated?.(updated)
-      setEditing(false)
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const updated = await res.json();
+      onUpdated?.(updated);
+      setEditing(false);
     } catch (err) {
-      console.error('Failed to rename collection:', err)
+      console.error("Failed to rename collection:", err);
       // Roll back the visible draft so the user isn't left with an
       // unsavable input. They can click the pencil again to retry.
-      setDraft(title)
-      setEditing(false)
+      setDraft(title);
+      setEditing(false);
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
-  }
+  };
 
   if (editing) {
     return (
@@ -703,19 +781,19 @@ export function CollectionTitleInlineEditor({
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault()
-            commit()
-          } else if (e.key === 'Escape') {
-            e.preventDefault()
-            setDraft(title)
-            setEditing(false)
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            setDraft(title);
+            setEditing(false);
           }
         }}
         disabled={saving}
         className="font-medium text-sm bg-transparent border-b border-primary outline-hidden w-fit min-w-[10ch] max-w-full"
       />
-    )
+    );
   }
 
   return (
@@ -728,7 +806,7 @@ export function CollectionTitleInlineEditor({
       {title}
       <Edit className="w-3 h-3 shrink-0" />
     </button>
-  )
+  );
 }
 
 // Small coloured circle that opens a Sketch popover. The picker change fires
@@ -739,27 +817,27 @@ function CollectionColorButton({
   accentColor,
   onUpdated,
 }: {
-  collectionId: string
-  accentColor: string | null
-  onUpdated?: (collection: CollectionUpdate) => void
+  collectionId: string;
+  accentColor: string | null;
+  onUpdated?: (collection: CollectionUpdate) => void;
 }) {
-  const [open, setOpen] = useState(false)
-  const displayColor = accentColor || '#9ca3af' // muted gray when no colour set
+  const [open, setOpen] = useState(false);
+  const displayColor = accentColor || "#9ca3af"; // muted gray when no colour set
 
   const save = async (color: string | null) => {
     try {
       const res = await fetch(`/api/collections/${collectionId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ accentColor: color }),
-      })
-      if (!res.ok) throw new Error(await res.text())
-      const updated = await res.json()
-      onUpdated?.(updated)
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const updated = await res.json();
+      onUpdated?.(updated);
     } catch (err) {
-      console.error('Failed to update collection accent colour:', err)
+      console.error("Failed to update collection accent colour:", err);
     }
-  }
+  };
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -768,16 +846,16 @@ function CollectionColorButton({
           type="button"
           className="rounded-full border border-border w-4 h-4 hover:scale-110 transition-transform shrink-0"
           style={{ backgroundColor: displayColor }}
-          title={accentColor ? `Accent: ${accentColor}` : 'Set accent colour'}
+          title={accentColor ? `Accent: ${accentColor}` : "Set accent colour"}
           aria-label="Set collection accent colour"
         />
       </PopoverTrigger>
       <PopoverContent className="w-auto p-2 color-picker-themed" align="start">
         <Sketch
-          color={accentColor ?? '#9ca3af'}
+          color={accentColor ?? "#9ca3af"}
           presetColors={PRESET_ACCENT_COLORS}
           disableAlpha
-          style={{ background: 'transparent', boxShadow: 'none' }}
+          style={{ background: "transparent", boxShadow: "none" }}
           onChange={(c) => save(c.hex)}
         />
         {accentColor && (
@@ -787,8 +865,8 @@ function CollectionColorButton({
             size="sm"
             className="w-full mt-2 text-xs h-7"
             onClick={() => {
-              save(null)
-              setOpen(false)
+              save(null);
+              setOpen(false);
             }}
           >
             Reset to default
@@ -796,7 +874,5 @@ function CollectionColorButton({
         )}
       </PopoverContent>
     </Popover>
-  )
+  );
 }
-
-
