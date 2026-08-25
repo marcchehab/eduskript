@@ -35,7 +35,7 @@ const COLLECTION_TITLE_DE = 'Benutzerhandbuch'
 // The single starter skript seeded at signup (see seedOnboardingSkript).
 // Marc is actively adapting these two skripts' content — if he renames
 // either skript's slug via the dashboard, update these to match.
-const ONBOARDING_SKRIPT_SLUG_EN = 'welcome'
+const ONBOARDING_SKRIPT_SLUG_EN = 'first-steps'
 const ONBOARDING_SKRIPT_SLUG_DE = 'erste-schritte'
 
 interface SeedDemoContentOptions {
