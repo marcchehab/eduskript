@@ -6,16 +6,12 @@ import { useSession } from 'next-auth/react'
 import { Moon, Sun } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
-interface ThemeToggleProps {
-  isCollapsed?: boolean
-}
-
 // Theme is a per-device preference. localStorage (via next-themes) is the
 // source of truth on the client; PATCH /api/user/theme records it on the user
 // row purely so it round-trips through /api/user/data-export. We deliberately
 // do NOT fetch the server preference back on mount: that fetch was the cause
 // of a post-paint setTheme flash whenever localStorage and the DB disagreed.
-export function ThemeToggle({ isCollapsed = false }: ThemeToggleProps) {
+export function ThemeToggle() {
   const { setTheme, resolvedTheme } = useTheme()
   const { data: session } = useSession()
   const [mounted, setMounted] = useState(false)
@@ -40,14 +36,8 @@ export function ThemeToggle({ isCollapsed = false }: ThemeToggleProps) {
 
   if (!mounted) {
     return (
-      <Button
-        variant="ghost"
-        size="sm"
-        className={`${isCollapsed ? 'w-10 h-10 p-0' : 'w-full justify-start'}`}
-        disabled
-      >
+      <Button variant="ghost" size="sm" className="w-10 h-10 p-0" disabled>
         <Sun className="w-5 h-5" />
-        {!isCollapsed && <span className="ml-2">Theme</span>}
       </Button>
     )
   }
@@ -81,11 +71,10 @@ export function ThemeToggle({ isCollapsed = false }: ThemeToggleProps) {
       variant="ghost"
       size="sm"
       onClick={cycleTheme}
-      className={`${isCollapsed ? 'w-10 h-10 p-0' : 'w-full justify-start'} transition-none`}
-      title={isCollapsed ? `Theme: ${getThemeLabel()} (click to cycle)` : undefined}
+      className="w-10 h-10 p-0 transition-none"
+      title={`Theme: ${getThemeLabel()} (click to cycle)`}
     >
       {getThemeIcon()}
-      {!isCollapsed && <span className="ml-2">Theme: {getThemeLabel()}</span>}
     </Button>
   )
 }
