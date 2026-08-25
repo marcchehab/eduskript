@@ -7,10 +7,9 @@
  * 'global') — read once here via the generic GET route, updated by
  * useQuestStep()'s POSTs (fired from this widget for route-detectable steps,
  * and from scattered dashboard/public call sites for action-detectable
- * ones). The centered/expanded presentation still doesn't block the page
- * underneath (no backdrop, pointer-events pass through the overlay wrapper)
- * — the whole point is the teacher keeps interacting with the page while
- * this stays visible.
+ * ones). Docked bottom-left at the sidebar's width, not a backdrop-blocking
+ * overlay — the teacher keeps interacting with the page while this stays
+ * visible.
  */
 'use client'
 
@@ -18,7 +17,7 @@ import { useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { usePathname } from 'next/navigation'
 import { useSession } from 'next-auth/react'
-import { Check, Minus, PartyPopper, X } from 'lucide-react'
+import { Check, Minus, PartyPopper, Plus, X } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { fetchQuestState, refreshQuestState, subscribeQuestUpdates, useQuestStep } from '@/lib/onboarding-quest/use-quest-step'
@@ -33,27 +32,19 @@ const MuxPlayer = dynamic(
 
 type StepVideo = { playbackId: string; poster?: string; aspectRatio?: number }
 
-const QUEST_TITLE = 'Start here to build your site!'
+const QUEST_TITLE = 'Start here'
 
-// The card sits centered over the page, right where the teacher often needs
-// to click next — dragging it aside is the whole point, so the offset is
-// remembered per device (localStorage; unlike quest completion, this doesn't
-// need to survive the dashboard/public-site origin boundary).
-const POSITION_KEY = 'eduskript:quest-position'
+// Docked bottom-left at the sidebar's width (dashboard/sidebar.tsx w-64) so
+// it never grows wider than the sidebar it sits next to, even at high OS
+// zoom (e.g. Windows 1.5x) where a centered max-w-xl card overflowed.
+const WIDGET_WIDTH = 'w-64'
 // Minimized/expanded is a per-device UI preference, not quest progress.
 const MINIMIZED_FLAG = 'eduskript:quest-minimized'
-
-function loadPositionPreference(): { x: number; y: number } {
-  if (typeof window === 'undefined') return { x: 0, y: 0 }
-  try {
-    const raw = window.localStorage.getItem(POSITION_KEY)
-    if (!raw) return { x: 0, y: 0 }
-    const parsed = JSON.parse(raw)
-    return { x: Number(parsed.x) || 0, y: Number(parsed.y) || 0 }
-  } catch {
-    return { x: 0, y: 0 }
-  }
-}
+// User-resized height (via the card's top-edge drag handle), in px.
+// Defaults to half the viewport height on first load.
+const HEIGHT_KEY = 'eduskript:quest-height'
+// Horizontal-only drag offset from the docked left-4 position, in px.
+const X_OFFSET_KEY = 'eduskript:quest-x-offset'
 
 function loadMinimizedPreference(): boolean {
   if (typeof window === 'undefined') return false
@@ -64,16 +55,44 @@ function loadMinimizedPreference(): boolean {
   }
 }
 
+function loadXOffsetPreference(): number {
+  if (typeof window === 'undefined') return 0
+  try {
+    const raw = window.localStorage.getItem(X_OFFSET_KEY)
+    const n = raw ? Number(raw) : NaN
+    if (Number.isFinite(n) && n >= 0) return n
+  } catch {
+    // ignore
+  }
+  // No saved preference yet — start horizontally centered rather than at the
+  // left-4 dock, so a first-time teacher notices it instead of it blending
+  // into the sidebar. 256 matches WIDGET_WIDTH (w-64).
+  const cardWidth = 256
+  return Math.max(0, window.innerWidth / 2 - cardWidth / 2 - 16)
+}
+
+function loadHeightPreference(): number {
+  if (typeof window === 'undefined') return 400
+  try {
+    const raw = window.localStorage.getItem(HEIGHT_KEY)
+    const n = raw ? Number(raw) : NaN
+    if (Number.isFinite(n) && n > 0) return n
+  } catch {
+    // ignore
+  }
+  return window.innerHeight / 2
+}
+
 const STEP_LABELS: Record<QuestStep, string> = {
-  place_skript: 'Place your first skript on your page',
+  place_skript: 'Place your first skript',
   visit_public_page: 'Visit your public page',
-  return_to_builder: 'Go back to your page builder on the dashboard',
+  return_to_builder: 'Go back to your page builder',
   open_page_editor: 'Open a skript to edit its pages',
   rename_skript: 'Rename your skript',
-  view_pages: "View the skript's pages and open another page",
+  view_pages: 'View other pages',
   edit_page_content: 'Edit a page',
   view_via_eye_icon: 'Preview a page with the eye icon',
-  return_via_edit_link: 'Return to page editor via edit button',
+  return_via_edit_link: 'Return to page editor',
   use_ai_edit: 'Use AI edit to add a page',
 }
 
@@ -130,12 +149,12 @@ export function OnboardingQuestWidget() {
   const { completeStep, dismissQuest, jumpToStep } = useQuestStep()
   const [state, setState] = useState<QuestState | null>(null)
   const [justGrantedBanner, setJustGrantedBanner] = useState(false)
-  // Lazy initializer reads localStorage once on mount — same pattern as
-  // NicknameModalGate's shouldOpenInitially, avoids a cascading-render effect.
-  const [position, setPosition] = useState(loadPositionPreference)
   const [stepVideos, setStepVideos] = useState<Partial<Record<QuestStep, StepVideo>>>({})
   const [minimized, setMinimized] = useState(loadMinimizedPreference)
-  const cardRef = useRef<HTMLDivElement>(null)
+  const [height, setHeight] = useState(loadHeightPreference)
+  const [xOffset, setXOffset] = useState(loadXOffsetPreference)
+  const [isDragging, setIsDragging] = useState(false)
+  const draggedRef = useRef(false)
 
   const setMinimizedPersisted = (value: boolean) => {
     setMinimized(value)
@@ -146,27 +165,68 @@ export function OnboardingQuestWidget() {
     }
   }
 
-  const handleDragStart = (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('button')) return
+  // The card's bottom edge is pinned to the viewport bottom, so the resize
+  // handle sits on the TOP edge — dragging it up must grow the card
+  // (increase height), unlike a native bottom-right resize handle.
+  const handleResizeStart = (e: React.MouseEvent) => {
     e.preventDefault()
-    const startMouseX = e.clientX
     const startMouseY = e.clientY
-    const startX = position.x
-    const startY = position.y
+    const startHeight = height
+    const maxHeight = window.innerHeight
 
     const onMove = (ev: MouseEvent) => {
-      const x = startX + (ev.clientX - startMouseX)
-      const y = startY + (ev.clientY - startMouseY)
-      if (cardRef.current) cardRef.current.style.transform = `translate(${x}px, ${y}px)`
+      const next = Math.min(maxHeight, Math.max(120, startHeight + (startMouseY - ev.clientY)))
+      setHeight(next)
     }
     const onUp = (ev: MouseEvent) => {
-      const next = { x: startX + (ev.clientX - startMouseX), y: startY + (ev.clientY - startMouseY) }
-      setPosition(next)
+      const next = Math.min(maxHeight, Math.max(120, startHeight + (startMouseY - ev.clientY)))
       try {
-        window.localStorage.setItem(POSITION_KEY, JSON.stringify(next))
+        window.localStorage.setItem(HEIGHT_KEY, String(next))
       } catch {
         // ignore
       }
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }
+
+  // Horizontal-only: the widget stays docked to bottom-left, but a teacher
+  // may want it out of the way of content underneath — clamped so it can't
+  // be dragged past the right edge of the viewport.
+  const handleXDragStart = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('button')) return
+    // Without this, dragging over the title/description text selects it
+    // instead of moving the card.
+    e.preventDefault()
+    const startMouseX = e.clientX
+    const startOffset = xOffset
+    const cardWidth = (e.currentTarget as HTMLElement).closest('.card-drag-root')?.getBoundingClientRect().width ?? 256
+    const maxOffset = Math.max(0, window.innerWidth - cardWidth - 16)
+    draggedRef.current = false
+
+    const onMove = (ev: MouseEvent) => {
+      if (Math.abs(ev.clientX - startMouseX) > 3 && !draggedRef.current) {
+        draggedRef.current = true
+        // A body-level cursor override doesn't win over other elements' own
+        // cursor styles (incl. our own cursor-grab classes, text, buttons) —
+        // render a full-viewport overlay instead so the grabbing cursor
+        // always shows. Deferred until real movement so a plain click (e.g.
+        // to expand the minimized pill) doesn't get eaten by the overlay.
+        setIsDragging(true)
+      }
+      const next = Math.min(maxOffset, Math.max(0, startOffset + (ev.clientX - startMouseX)))
+      setXOffset(next)
+    }
+    const onUp = (ev: MouseEvent) => {
+      const next = Math.min(maxOffset, Math.max(0, startOffset + (ev.clientX - startMouseX)))
+      try {
+        window.localStorage.setItem(X_OFFSET_KEY, String(next))
+      } catch {
+        // ignore
+      }
+      setIsDragging(false)
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
     }
@@ -248,8 +308,7 @@ export function OnboardingQuestWidget() {
         <CardContent className="pt-6 flex flex-col items-center text-center gap-2">
           <PartyPopper className="w-8 h-8 text-primary" />
           <p className="font-medium text-sm">
-            Congratulations! You now understand the basic idea of Eduskript and we doubled your access to pro
-            features like AI edit.
+            Congratulations! You now understand the basic idea of Eduskript and we doubled your trial time.
           </p>
           <a
             href="https://eduskript.org/c/first-steps"
@@ -275,17 +334,38 @@ export function OnboardingQuestWidget() {
 
   if (state.rewardGranted) return null
 
+  const dragOverlay = isDragging && (
+    <div className="fixed inset-0 z-[60] cursor-grabbing" />
+  )
+
   if (minimized) {
     return (
-      <Card
-        className={`fixed bottom-4 right-4 z-50 cursor-pointer hover:opacity-90 ${POP_BORDER}`}
-        onClick={() => setMinimizedPersisted(false)}
-        title="Expand"
-      >
-        <CardContent className="py-2.5 px-4">
-          <span className="text-sm font-bold text-foreground">{QUEST_TITLE}</span>
-        </CardContent>
-      </Card>
+      <>
+        {dragOverlay}
+        <Card
+          style={{ transform: `translateX(${xOffset}px)` }}
+          className={`card-drag-root fixed bottom-0 left-4 z-50 ${WIDGET_WIDTH} rounded-b-none cursor-grab active:cursor-grabbing hover:opacity-90 ${POP_BORDER}`}
+          onMouseDown={handleXDragStart}
+          onClick={() => {
+            if (draggedRef.current) return
+            setMinimizedPersisted(false)
+          }}
+          title="Drag to move"
+        >
+          <CardContent className="py-2 pl-3 pr-1.5 flex items-center justify-between gap-2">
+            <span className="text-xs font-bold text-foreground select-none">{QUEST_TITLE}</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0 shrink-0"
+              onClick={() => setMinimizedPersisted(false)}
+              title="Expand"
+            >
+              <Plus className="w-4 h-4" />
+            </Button>
+          </CardContent>
+        </Card>
+      </>
     )
   }
 
@@ -297,7 +377,7 @@ export function OnboardingQuestWidget() {
         return (
           <li key={step} className={`flex flex-col gap-0.5 ${active ? 'my-2.5' : ''}`}>
             <div
-              className="flex items-start gap-2 text-sm cursor-pointer hover:opacity-80"
+              className="flex items-start gap-2 text-xs cursor-pointer hover:opacity-80"
               onClick={() => jumpToStep(step)}
               title="Jump to this step"
             >
@@ -328,9 +408,9 @@ export function OnboardingQuestWidget() {
             </div>
             {active && (
               <>
-                <p className="ml-6 text-sm text-blue-600 dark:text-blue-400">{STEP_DESCRIPTIONS[step]}</p>
+                <p className="text-xs text-blue-600 dark:text-blue-400">{STEP_DESCRIPTIONS[step]}</p>
                 {stepVideos[step] && (
-                  <div className="ml-6 mt-1.5">
+                  <div className="mt-1.5">
                     <MuxPlayer
                       playbackId={stepVideos[step]!.playbackId}
                       poster={stepVideos[step]!.poster}
@@ -361,34 +441,42 @@ export function OnboardingQuestWidget() {
   )
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none p-4">
+    <>
+      {dragOverlay}
       <Card
-        ref={cardRef}
-        style={{ transform: `translate(${position.x}px, ${position.y}px)` }}
-        className={`pointer-events-auto w-full max-w-xl ${POP_BORDER}`}
+        style={{ height: `${height}px`, minHeight: '120px', maxHeight: '100vh', transform: `translateX(${xOffset}px)` }}
+        className={`card-drag-root fixed bottom-0 left-4 z-50 ${WIDGET_WIDTH} rounded-b-none overflow-hidden flex flex-col ${POP_BORDER}`}
       >
+        <div
+          className="h-1.5 shrink-0 cursor-ns-resize hover:bg-blue-400/50"
+          onMouseDown={handleResizeStart}
+          title="Drag to resize"
+        />
         <CardHeader
-          className="flex flex-row items-start justify-between pb-2 cursor-move"
-          onMouseDown={handleDragStart}
+          className="flex flex-row items-start justify-between py-2 px-3 shrink-0 cursor-grab active:cursor-grabbing"
+          onMouseDown={handleXDragStart}
         >
-          <CardTitle className="text-3xl font-bold text-foreground">{QUEST_TITLE}</CardTitle>
-          <div className="flex items-center gap-1">
-            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setMinimizedPersisted(true)} title="Minimize">
-              <Minus className="w-5 h-5" />
+          <CardTitle className="text-sm font-bold text-foreground leading-tight select-none">{QUEST_TITLE}</CardTitle>
+          <div className="flex items-center gap-1 shrink-0">
+            <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setMinimizedPersisted(true)} title="Minimize">
+              <Minus className="w-3.5 h-3.5" />
             </Button>
-            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={dismissQuest} title="Dismiss">
-              <X className="w-5 h-5" />
+            <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={dismissQuest} title="Dismiss">
+              <X className="w-3.5 h-3.5" />
             </Button>
           </div>
         </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground mb-4">
-            We highly recommend you finish this quest to get started! Nice side-effect: it will{' '}
-            <strong className="text-foreground">double your access to all pro features</strong>.
+        <CardContent className="px-3 pb-3 overflow-y-auto flex-1">
+          <p
+            className="text-xs text-muted-foreground mb-3 select-none cursor-grab active:cursor-grabbing"
+            onMouseDown={handleXDragStart}
+          >
+            Finish this quest to get started and{' '}
+            <strong className="text-foreground">double your trial time</strong>.
           </p>
           {checklist}
         </CardContent>
       </Card>
-    </div>
+    </>
   )
 }
