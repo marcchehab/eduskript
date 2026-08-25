@@ -300,7 +300,7 @@ export function ContentLibrary({
                 onClick={() => setSkriptsExpanded((v) => !v)}
                 className="w-full flex items-center justify-between text-sm font-medium text-muted-foreground mb-3 hover:text-foreground"
               >
-                <span className="flex items-center gap-2">
+                <span className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
                   <FileText className="w-4 h-4" />
                   Skripts ({filteredSkripts.length})
                 </span>

@@ -107,7 +107,7 @@ export function DraggableCollection({
               <BookOpen
                 className={cn(
                   "w-5 h-5 shrink-0",
-                  isViewOnly ? "text-muted-foreground" : "text-primary"
+                  isViewOnly ? "text-muted-foreground" : "text-foreground"
                 )}
                 style={accentColor ? { color: accentColor } : undefined}
               />

@@ -375,7 +375,10 @@ function PageBuilderItem({
             <div className="flex items-center gap-2">
               <div className="relative">
                 <Icon
-                  className="w-5 h-5 shrink-0 text-primary"
+                  className={cn(
+                    "w-5 h-5 shrink-0",
+                    item.type === "collection" ? "text-foreground" : "text-primary"
+                  )}
                   style={
                     item.type === "collection" && item.accentColor
                       ? { color: item.accentColor }
