@@ -622,8 +622,8 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
   )
 
   const extraTabs: ExtraManageTab[] = [
-    { id: 'pages', label: 'Pages', icon: <FileText className="w-3.5 h-3.5" />, content: pagesTabContent, position: 'start' },
-    { id: 'access', label: 'Access', icon: <Users className="w-3.5 h-3.5" />, content: accessTabContent },
+    { id: 'pages', label: 'Pages', icon: <FileText className="w-3.5 h-3.5" />, content: pagesTabContent, position: 'start', title: 'View and reorder this skript\'s pages, or switch to another one' },
+    { id: 'access', label: 'Access', icon: <Users className="w-3.5 h-3.5" />, content: accessTabContent, title: 'Manage access of other teachers to this skript' },
   ]
 
   return (

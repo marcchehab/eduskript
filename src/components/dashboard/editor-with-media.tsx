@@ -50,6 +50,8 @@ export interface ExtraManageTab {
   /** Where in the strip this tab sits relative to the built-in Files/Videos tabs.
    *  'start' renders before Files; 'end' (default) renders after Videos. */
   position?: 'start' | 'end'
+  /** Tooltip shown on hover — helps new users tell the tabs apart. */
+  title?: string
 }
 
 export interface AIEditConfig {
@@ -511,8 +513,8 @@ export function EditorWithMedia({
   // Tab strip — extras with `position: 'start'` (e.g. Pages in the page editor)
   // come first, then the built-in Files/Videos, then end-positioned extras.
   const builtInTabs: ExtraManageTab[] = [
-    { id: 'files', label: 'Files', icon: <Files className="w-3.5 h-3.5" />, content: null },
-    { id: 'videos', label: 'Videos', icon: <Film className="w-3.5 h-3.5" />, content: null },
+    { id: 'files', label: 'Files', icon: <Files className="w-3.5 h-3.5" />, content: null, title: 'Upload and insert images, documents, and other files into this content' },
+    { id: 'videos', label: 'Videos', icon: <Film className="w-3.5 h-3.5" />, content: null, title: 'Upload and insert videos into this content' },
   ]
   const startExtras = (extraTabs ?? []).filter(t => t.position === 'start')
   const endExtras = (extraTabs ?? []).filter(t => t.position !== 'start')
@@ -535,6 +537,7 @@ export function EditorWithMedia({
                   handleTabClick(tab.id)
                   if (tab.id === 'pages') completeStep('view_pages')
                 }}
+                title={tab.title}
                 className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${
                   activeTab === tab.id
                     ? 'bg-background text-foreground shadow-xs border-b-2 border-primary'
