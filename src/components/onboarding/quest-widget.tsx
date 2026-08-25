@@ -18,7 +18,7 @@ import { useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { usePathname } from 'next/navigation'
 import { useSession } from 'next-auth/react'
-import { Check, PartyPopper, X } from 'lucide-react'
+import { Check, Minus, PartyPopper, X } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { fetchQuestState, refreshQuestState, subscribeQuestUpdates, useQuestStep } from '@/lib/onboarding-quest/use-quest-step'
@@ -33,11 +33,15 @@ const MuxPlayer = dynamic(
 
 type StepVideo = { playbackId: string; poster?: string; aspectRatio?: number }
 
+const QUEST_TITLE = 'Start here to build your site!'
+
 // The card sits centered over the page, right where the teacher often needs
 // to click next — dragging it aside is the whole point, so the offset is
 // remembered per device (localStorage; unlike quest completion, this doesn't
 // need to survive the dashboard/public-site origin boundary).
 const POSITION_KEY = 'eduskript:quest-position'
+// Minimized/expanded is a per-device UI preference, not quest progress.
+const MINIMIZED_FLAG = 'eduskript:quest-minimized'
 
 function loadPositionPreference(): { x: number; y: number } {
   if (typeof window === 'undefined') return { x: 0, y: 0 }
@@ -48,6 +52,15 @@ function loadPositionPreference(): { x: number; y: number } {
     return { x: Number(parsed.x) || 0, y: Number(parsed.y) || 0 }
   } catch {
     return { x: 0, y: 0 }
+  }
+}
+
+function loadMinimizedPreference(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    return window.localStorage.getItem(MINIMIZED_FLAG) === '1'
+  } catch {
+    return false
   }
 }
 
@@ -121,7 +134,17 @@ export function OnboardingQuestWidget() {
   // NicknameModalGate's shouldOpenInitially, avoids a cascading-render effect.
   const [position, setPosition] = useState(loadPositionPreference)
   const [stepVideos, setStepVideos] = useState<Partial<Record<QuestStep, StepVideo>>>({})
+  const [minimized, setMinimized] = useState(loadMinimizedPreference)
   const cardRef = useRef<HTMLDivElement>(null)
+
+  const setMinimizedPersisted = (value: boolean) => {
+    setMinimized(value)
+    try {
+      window.localStorage.setItem(MINIMIZED_FLAG, value ? '1' : '0')
+    } catch {
+      // ignore
+    }
+  }
 
   const handleDragStart = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('button')) return
@@ -252,6 +275,20 @@ export function OnboardingQuestWidget() {
 
   if (state.rewardGranted) return null
 
+  if (minimized) {
+    return (
+      <Card
+        className={`fixed bottom-4 right-4 z-50 cursor-pointer hover:opacity-90 ${POP_BORDER}`}
+        onClick={() => setMinimizedPersisted(false)}
+        title="Expand"
+      >
+        <CardContent className="py-2.5 px-4">
+          <span className="text-sm font-bold text-foreground">{QUEST_TITLE}</span>
+        </CardContent>
+      </Card>
+    )
+  }
+
   const checklist = (
     <ul className="space-y-1.5">
       {QUEST_STEPS.map((step, index) => {
@@ -334,10 +371,15 @@ export function OnboardingQuestWidget() {
           className="flex flex-row items-start justify-between pb-2 cursor-move"
           onMouseDown={handleDragStart}
         >
-          <CardTitle className="text-3xl font-bold text-foreground">Welcome to Eduskript!</CardTitle>
-          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={dismissQuest} title="Dismiss">
-            <X className="w-5 h-5" />
-          </Button>
+          <CardTitle className="text-3xl font-bold text-foreground">{QUEST_TITLE}</CardTitle>
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setMinimizedPersisted(true)} title="Minimize">
+              <Minus className="w-5 h-5" />
+            </Button>
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={dismissQuest} title="Dismiss">
+              <X className="w-5 h-5" />
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <p className="text-muted-foreground mb-4">
