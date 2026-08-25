@@ -872,7 +872,6 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
             }}
             onCollectionUpdate={handleCollectionUpdate}
             draggedItem={activeItem}
-            onRefresh={() => setRefreshTrigger(prev => prev + 1)}
             context={context}
           />
 

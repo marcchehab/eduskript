@@ -5,8 +5,10 @@ import { useSession } from 'next-auth/react'
 import { Droppable } from '@hello-pangea/dnd'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { DraggableCollection, DraggableSkript } from './draggable-content'
-import { Search, BookOpen, FileText, ChevronDown, ChevronRight } from 'lucide-react'
+import { Search, BookOpen, FileText, ChevronDown, ChevronRight, Plus } from 'lucide-react'
 import { SkriptAuthor, User, Collection, Skript } from '@prisma/client'
 import { checkSkriptPermissions } from '@/lib/permissions'
 import { api, handleJsonResponse } from '@/lib/api-error-handler'
@@ -59,6 +61,9 @@ export function ContentLibrary({ onDataLoad, refreshTrigger, context = { type: '
   const [loading, setLoading] = useState(true)
   const [skriptsExpanded, setSkriptsExpanded] = useState(true)
   const [collectionsExpanded, setCollectionsExpanded] = useState(true)
+  const [createCollectionOpen, setCreateCollectionOpen] = useState(false)
+  const [newCollectionTitle, setNewCollectionTitle] = useState('')
+  const [creatingCollection, setCreatingCollection] = useState(false)
   const alertDialog = useAlertDialog()
 
   const fetchContent = useCallback(async () => {
@@ -138,6 +143,36 @@ export function ContentLibrary({ onDataLoad, refreshTrigger, context = { type: '
     }
   }
 
+  const handleCreateCollection = async () => {
+    const title = newCollectionTitle.trim()
+    if (!title) return
+    setCreatingCollection(true)
+    try {
+      const res = await fetch('/api/collections', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // Attach to the specific site being edited (falls back to primary
+        // server-side when siteId is absent).
+        body: JSON.stringify({ title, description: '', siteId: context.siteId }),
+      })
+      if (res.ok) {
+        setCreateCollectionOpen(false)
+        setNewCollectionTitle('')
+        // onRefresh also reloads the page builder, in case it needs the
+        // collection right away; without it, fall back to a library-only refetch.
+        if (onRefresh) onRefresh()
+        else fetchContent()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        alertDialog.showError(data.error || 'Failed to create collection')
+      }
+    } catch {
+      alertDialog.showError('Failed to create collection')
+    } finally {
+      setCreatingCollection(false)
+    }
+  }
+
   // Filter content based on search term. Collections no longer have a
   // description field, so we search the title only.
   const filteredCollections = collections.filter(collection =>
@@ -187,11 +222,23 @@ export function ContentLibrary({ onDataLoad, refreshTrigger, context = { type: '
             className="pl-9"
           />
         </div>
-        <CreateSkriptModal
-          collections={collections.map(c => ({ id: c.id, title: c.title }))}
-          onSkriptCreated={() => fetchContent()}
-          onSkriptCreatedWithSlug={(slug) => router.push(`/dashboard/skripts/${slug}`)}
-        />
+        <div className="flex items-center gap-2 w-full">
+          <div className="flex-1 [&>button]:w-full">
+            <CreateSkriptModal
+              collections={collections.map(c => ({ id: c.id, title: c.title }))}
+              onSkriptCreated={() => fetchContent()}
+              onSkriptCreatedWithSlug={(slug) => router.push(`/dashboard/skripts/${slug}`)}
+            />
+          </div>
+          <Button
+            variant="outline"
+            className="items-center justify-center gap-1 h-10 shrink-0 whitespace-nowrap text-xs"
+            onClick={() => setCreateCollectionOpen(true)}
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Collection
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Skripts Section */}
@@ -322,6 +369,44 @@ export function ContentLibrary({ onDataLoad, refreshTrigger, context = { type: '
         )}
       </CardContent>
     </Card>
+
+    {/* New-collection prompt (replaces window.prompt). */}
+    <Dialog open={createCollectionOpen} onOpenChange={setCreateCollectionOpen}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>New collection</DialogTitle>
+        </DialogHeader>
+        <Input
+          autoFocus
+          placeholder="Collection name"
+          value={newCollectionTitle}
+          onChange={(e) => setNewCollectionTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              handleCreateCollection()
+            }
+          }}
+          disabled={creatingCollection}
+        />
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => setCreateCollectionOpen(false)}
+            disabled={creatingCollection}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleCreateCollection}
+            disabled={creatingCollection || !newCollectionTitle.trim()}
+          >
+            {creatingCollection ? 'Creating…' : 'Create'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
     <AlertDialogModal
       open={alertDialog.open}
       onOpenChange={alertDialog.setOpen}

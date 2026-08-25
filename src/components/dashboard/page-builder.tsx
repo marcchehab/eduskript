@@ -5,11 +5,7 @@ import { Droppable, Draggable } from '@hello-pangea/dnd'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
-import { useAlertDialog } from '@/hooks/use-alert-dialog'
-import { Layout, Eye, BookOpen, FileText, Plus, Edit, ChevronDown, ChevronRight, X, GripVertical, Pencil, EyeOff } from 'lucide-react'
+import { Layout, Eye, BookOpen, FileText, Edit, ChevronDown, ChevronRight, X, GripVertical, Pencil, EyeOff } from 'lucide-react'
 import { Sketch } from '@uiw/react-color'
 import { PublishToggle } from './publish-toggle'
 import { cn } from '@/lib/utils'
@@ -65,7 +61,6 @@ interface PageBuilderProps {
     parentId?: string
     fromLibrary?: boolean
   } | null
-  onRefresh?: () => void
   context?: PageBuilderContext
 }
 
@@ -78,7 +73,6 @@ export function PageBuilder({
   onToggleCollection,
   onCollectionUpdate,
   draggedItem,
-  onRefresh,
   context = { type: 'user' }
 }: PageBuilderProps) {
   // Determine the frontpage URL based on context
@@ -87,41 +81,6 @@ export function PageBuilder({
     : context.siteId
       ? `/dashboard/site/${context.siteId}/frontpage`
       : '/dashboard/frontpage'
-  const dialog = useAlertDialog()
-  const [createCollectionOpen, setCreateCollectionOpen] = useState(false)
-  const [newCollectionTitle, setNewCollectionTitle] = useState('')
-  const [creatingCollection, setCreatingCollection] = useState(false)
-
-  // Create a collection from the "New Collection" / "Start from scratch"
-  // dialog, then refresh so it shows up in the builder + library.
-  const handleCreateCollection = async () => {
-    const title = newCollectionTitle.trim()
-    if (!title) return
-    setCreatingCollection(true)
-    try {
-      const res = await fetch('/api/collections', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        // Attach to the specific site being edited (falls back to primary
-        // server-side when siteId is absent).
-        body: JSON.stringify({ title, description: '', siteId: context.siteId }),
-      })
-      if (res.ok) {
-        setCreateCollectionOpen(false)
-        setNewCollectionTitle('')
-        onRefresh?.()
-      } else {
-        const data = await res.json().catch(() => ({}))
-        dialog.showError(data.error || 'Failed to create collection')
-      }
-    } catch {
-      dialog.showError('Failed to create collection')
-    } finally {
-      setCreatingCollection(false)
-    }
-  }
-
-
   const handleRemoveItem = (id: string, parentId?: string) => {
     if (parentId) {
       // Remove skript from collection
@@ -149,7 +108,6 @@ export function PageBuilder({
 
 
   return (
-    <>
     <Card className="min-h-[400px]">
       <CardHeader>
         <div className="flex items-center justify-between">
@@ -165,31 +123,19 @@ export function PageBuilder({
                 className="flex items-center gap-2"
               >
                 <Pencil className="w-4 h-4" />
-                Edit Main Frontpage
+                Edit Frontpage
               </Button>
             </Link>
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex items-center gap-2"
-              onClick={() => setCreateCollectionOpen(true)}
-            >
-              <Plus className="w-4 h-4" />
-              New Collection
-            </Button>
             <QuestSpotlight step="visit_public_page" label="Try this!">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={onPreview}
                 className="flex items-center gap-2"
+                title={previewUrl ? `View Public Page at ${previewUrl}` : 'View Page'}
               >
                 <Eye className="w-4 h-4" />
-                {previewUrl ? (
-                  <span>View Public Page at <strong>{previewUrl}</strong></span>
-                ) : (
-                  'View'
-                )}
+                View Page
               </Button>
             </QuestSpotlight>
           </div>
@@ -269,58 +215,6 @@ export function PageBuilder({
         )}
       </CardContent>
     </Card>
-
-    {/* New-collection prompt (replaces window.prompt). Both "New Collection"
-        and the empty-state "Start from scratch" open this. */}
-    <Dialog open={createCollectionOpen} onOpenChange={setCreateCollectionOpen}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>New collection</DialogTitle>
-        </DialogHeader>
-        <Input
-          autoFocus
-          placeholder="Collection name"
-          value={newCollectionTitle}
-          onChange={(e) => setNewCollectionTitle(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              handleCreateCollection()
-            }
-          }}
-          disabled={creatingCollection}
-        />
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => setCreateCollectionOpen(false)}
-            disabled={creatingCollection}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={handleCreateCollection}
-            disabled={creatingCollection || !newCollectionTitle.trim()}
-          >
-            {creatingCollection ? 'Creating…' : 'Create'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-
-    <AlertDialogModal
-      open={dialog.open}
-      onOpenChange={dialog.setOpen}
-      type={dialog.type}
-      title={dialog.title}
-      message={dialog.message}
-      onConfirm={dialog.onConfirm}
-      showCancel={dialog.showCancel}
-      confirmText={dialog.confirmText}
-      cancelText={dialog.cancelText}
-      destructive={dialog.destructive}
-    />
-    </>
   )
 }
 

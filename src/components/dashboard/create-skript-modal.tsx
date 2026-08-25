@@ -91,7 +91,7 @@ export function CreateSkriptModal({ collectionId, collections, onSkriptCreated, 
       <DialogTrigger asChild>
         <Button>
           <Plus className="w-4 h-4 mr-2" />
-          Add Skript
+          New Skript
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
