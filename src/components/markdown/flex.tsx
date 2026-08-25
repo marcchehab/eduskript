@@ -49,9 +49,13 @@ export function FlexItem({ children, className, style, width, grow = true, ...da
         'min-w-0 [&>*:first-child]:mt-0!',
         doesGrow ? 'grow' : 'grow-0',
         doesGrow && !width && 'basis-0',
+        // `width` only takes effect at md+, matching Flex's own flex-col->md:flex-row
+        // breakpoint — applying it unconditionally (as a plain inline style) clamped
+        // items to e.g. 32% even while stacked full-width below md.
+        width && 'w-full md:w-(--flex-item-width)',
         className
       )}
-      style={{ ...(width ? { width } : {}), ...style }}
+      style={{ ...(width ? { '--flex-item-width': width } as CSSProperties : {}), ...style }}
       {...dataAttrs}
     >
       {children}
