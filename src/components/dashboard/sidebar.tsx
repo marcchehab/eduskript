@@ -5,14 +5,13 @@ import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { cn } from '@/lib/utils'
-import { BookOpen, Settings, Users, ChevronLeft, ChevronRight, Shield, GraduationCap, User, Camera, CornerUpLeft, Globe, BarChart3, CreditCard, Lock, Tag, Puzzle, ClipboardCheck, FileText } from 'lucide-react'
+import { BookOpen, Settings, Users, ChevronLeft, ChevronRight, Shield, GraduationCap, User, Camera, CornerUpLeft, Globe, BarChart3, CreditCard, Lock, Tag, Puzzle, ClipboardCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 // Per-site authoring items (site-scoped URLs). A teacher normally has one
 // site; superadmin-granted extra sites each get their own stacked block.
 const siteNavItems = [
   { name: 'Page Builder', suffix: '/page-builder', icon: BookOpen },
-  { name: 'Frontpage', suffix: '/frontpage', icon: FileText },
   { name: 'Settings', suffix: '/settings', icon: Settings },
 ]
 
