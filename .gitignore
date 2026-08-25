@@ -93,3 +93,6 @@ QUEUE.md
 
 # raw OpenRouter API dump (scratch, regenerate on demand)
 or.json
+
+# onboarding quest tutorial clips (drop stepN.mp4 here, Claude uploads to Mux)
+onboarding-videos/

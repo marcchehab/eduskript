@@ -77,7 +77,7 @@ export function refreshQuestState(): Promise<QuestState | null> {
     .catch(() => null)
 }
 
-async function postQuestAction(body: { step: QuestStep } | { dismiss: true }): Promise<void> {
+async function postQuestAction(body: { step: QuestStep } | { dismiss: true } | { jumpToStep: QuestStep }): Promise<void> {
   try {
     const res = await fetch('/api/onboarding-quest/complete-step', {
       method: 'POST',
@@ -100,7 +100,11 @@ async function postQuestAction(body: { step: QuestStep } | { dismiss: true }): P
  * sessions — this is what keeps the quest's cost at zero for the vast
  * majority of scattered call sites (student viewers, anonymous visitors).
  */
-export function useQuestStep(): { completeStep: (step: QuestStep) => void; dismissQuest: () => void } {
+export function useQuestStep(): {
+  completeStep: (step: QuestStep) => void
+  dismissQuest: () => void
+  jumpToStep: (step: QuestStep) => void
+} {
   const { data: session } = useSession()
   const isTeacher = session?.user?.accountType === 'teacher'
 
@@ -117,7 +121,17 @@ export function useQuestStep(): { completeStep: (step: QuestStep) => void; dismi
     void postQuestAction({ dismiss: true })
   }, [isTeacher])
 
-  return { completeStep, dismissQuest }
+  // Clicking a step's header in the checklist — forward or rewind to it
+  // directly, no matter the current progress (quest-widget.tsx).
+  const jumpToStep = useCallback(
+    (step: QuestStep) => {
+      if (!isTeacher) return
+      void postQuestAction({ jumpToStep: step })
+    },
+    [isTeacher]
+  )
+
+  return { completeStep, dismissQuest, jumpToStep }
 }
 
 /**

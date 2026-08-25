@@ -882,7 +882,7 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
           <p className="text-xs text-muted-foreground">
             💡 New to Eduskript?{' '}
             <a
-              href="https://eduskript.org/c/welcome/welcome-to-eduskript"
+              href="https://eduskript.org/c/first-steps"
               target="_blank"
               rel="noopener noreferrer"
               className="underline underline-offset-2 hover:text-foreground"
