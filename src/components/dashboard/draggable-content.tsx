@@ -177,8 +177,9 @@ export function DraggableSkript({
         <div
           ref={provided.innerRef}
           {...provided.draggableProps}
+          {...provided.dragHandleProps}
           className={cn(
-            "bg-card border border-border rounded-lg hover:shadow-xs transition-shadow",
+            "bg-card border border-border rounded-lg hover:shadow-xs transition-shadow cursor-grab active:cursor-grabbing",
             snapshot.isDragging && "opacity-50",
             isViewOnly && "opacity-70 bg-muted/50",
             className
@@ -186,7 +187,11 @@ export function DraggableSkript({
         >
           <div className="flex items-start gap-3 p-3 relative">
             {!isViewOnly && slug && (
-              <Link href={`/dashboard/skripts/${slug}`} className="absolute top-2 right-2 z-10">
+              <Link
+                href={`/dashboard/skripts/${slug}`}
+                className="absolute top-2 right-2 z-10"
+                onMouseDown={(e) => e.stopPropagation()}
+              >
                 <Button
                   variant="ghost"
                   size="sm"
@@ -198,11 +203,10 @@ export function DraggableSkript({
                 </Button>
               </Link>
             )}
-            {/* Drag Handle */}
+            {/* Decorative now — the whole card is the drag handle. */}
             <div
               id={dragHandleId}
-              {...provided.dragHandleProps}
-              className="opacity-70 hover:opacity-100 cursor-grab active:cursor-grabbing transition-opacity"
+              className="opacity-70 transition-opacity"
             >
               <GripVertical className="w-4 h-4 text-muted-foreground" />
             </div>
