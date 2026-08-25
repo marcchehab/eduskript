@@ -60,6 +60,7 @@ interface ContentImageProps {
   invert?: 'dark' | 'light' | 'always' // Invert colors for diagrams
   saturate?: string // Saturation percentage to apply with invert (e.g., '70' or '150')
   optimizeImages?: boolean // Enable Next.js Image optimization (WebP/AVIF, resizing)
+  nozoom?: boolean // Suppress the fullscreen/zoom button and lightbox (e.g. UI screenshots linked to another page)
   // Files data for resolving URLs (serializable)
   files?: SkriptFilesData
   // Source line tracking for editor sync
@@ -67,7 +68,7 @@ interface ContentImageProps {
   sourceLineEnd?: string
 }
 
-export function ContentImage({ src, alt = '', title, style, onWidthChange, originalSrc, align = 'center', wrap = false, inline = false, invert, saturate, optimizeImages, files, sourceLineStart, sourceLineEnd }: ContentImageProps) {
+export function ContentImage({ src, alt = '', title, style, onWidthChange, originalSrc, align = 'center', wrap = false, inline = false, invert, saturate, optimizeImages, nozoom = false, files, sourceLineStart, sourceLineEnd }: ContentImageProps) {
   const filename = originalSrc || src
   const { resolvedTheme } = useTheme()
   const [lightboxOpen, setLightboxOpen] = useState(false)
@@ -118,9 +119,12 @@ export function ContentImage({ src, alt = '', title, style, onWidthChange, origi
     if (saturate) {
       attrs += ` data-saturate="${saturate}"`
     }
+    if (nozoom) {
+      attrs += ` data-nozoom="true"`
+    }
 
     onWidthChange(`<img ${attrs} />`)
-  }, [alt, filename, invert, saturate, onWidthChange])
+  }, [alt, filename, invert, saturate, nozoom, onWidthChange])
 
   // Inline logo/icon mode: an inline-block logo that flows with surrounding text
   // (e.g. inside an <h1>). No resize/align handles, no float wrapper. Sizes to the
@@ -174,7 +178,7 @@ export function ContentImage({ src, alt = '', title, style, onWidthChange, origi
     >
       {/* Image */}
       <span className="block relative group/img">
-        {!isMissing && (
+        {!isMissing && !nozoom && (
           <button
             onClick={() => setLightboxOpen(true)}
             className="absolute top-2 right-2 z-20 p-1.5 rounded-md bg-background/80 backdrop-blur-xs border border-border shadow-xs opacity-0 group-hover/img:opacity-100 transition-opacity hover:bg-accent cursor-zoom-in"
@@ -220,7 +224,7 @@ export function ContentImage({ src, alt = '', title, style, onWidthChange, origi
       )}
 
       {/* Lightbox */}
-      {!isMissing && (
+      {!isMissing && !nozoom && (
         <ImageLightbox open={lightboxOpen} onClose={() => setLightboxOpen(false)}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img

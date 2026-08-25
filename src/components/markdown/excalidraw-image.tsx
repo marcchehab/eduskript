@@ -20,6 +20,8 @@ interface ExcalidrawImageProps {
   // just prefers the light look). Previously done by hand-renaming the file
   // to drop the dark export; this is the same effect via markdown, not files.
   lightonly?: boolean
+  // Suppress the fullscreen/zoom button and lightbox (e.g. UI screenshots linked to another page)
+  nozoom?: boolean
   // Files data for resolving URLs (serializable)
   files?: SkriptFilesData
   // Source line tracking for editor sync
@@ -27,7 +29,7 @@ interface ExcalidrawImageProps {
   sourceLineEnd?: string
 }
 
-export function ExcalidrawImage({ src, alt, style, onWidthChange, onEdit, align = 'center', wrap = false, lightonly = false, files, sourceLineStart, sourceLineEnd }: ExcalidrawImageProps) {
+export function ExcalidrawImage({ src, alt, style, onWidthChange, onEdit, align = 'center', wrap = false, lightonly = false, nozoom = false, files, sourceLineStart, sourceLineEnd }: ExcalidrawImageProps) {
   const filename = src
   const caption = alt || ''
   const [lightboxOpen, setLightboxOpen] = useState(false)
@@ -84,9 +86,12 @@ export function ExcalidrawImage({ src, alt, style, onWidthChange, onEdit, align 
     if (nextLightonly) {
       props += ` lightonly`
     }
+    if (nozoom) {
+      props += ` nozoom`
+    }
 
     return `<excali ${props} />`
-  }, [alt, filename, align, wrap, forceLight, initialWidth])
+  }, [alt, filename, align, wrap, forceLight, nozoom, initialWidth])
 
   // Handle layout changes from the wrapper
   const handleLayoutChange = useCallback((layout: { width: number; align: 'left' | 'center' | 'right'; wrap: boolean }) => {
@@ -155,13 +160,15 @@ export function ExcalidrawImage({ src, alt, style, onWidthChange, onEdit, align 
       )}
 
       {/* Fullscreen button */}
-      <button
-        onClick={() => setLightboxOpen(true)}
-        className="absolute top-2 right-2 z-20 p-1.5 rounded-md bg-background/80 backdrop-blur-xs border border-border shadow-xs opacity-0 group-hover/excalidraw:opacity-100 transition-opacity hover:bg-accent cursor-zoom-in"
-        title="Fullscreen"
-      >
-        <Maximize2 className="w-3.5 h-3.5" />
-      </button>
+      {!nozoom && (
+        <button
+          onClick={() => setLightboxOpen(true)}
+          className="absolute top-2 right-2 z-20 p-1.5 rounded-md bg-background/80 backdrop-blur-xs border border-border shadow-xs opacity-0 group-hover/excalidraw:opacity-100 transition-opacity hover:bg-accent cursor-zoom-in"
+          title="Fullscreen"
+        >
+          <Maximize2 className="w-3.5 h-3.5" />
+        </button>
+      )}
 
       {/* Render both images, CSS controls visibility based on theme */}
       {/* Plain <img> intentional: SVGs don't benefit from Next.js Image optimization */}
@@ -201,27 +208,29 @@ export function ExcalidrawImage({ src, alt, style, onWidthChange, onEdit, align 
       )}
 
       {/* Lightbox */}
-      <ImageLightbox open={lightboxOpen} onClose={() => setLightboxOpen(false)}>
-        {/* Show theme-appropriate image in lightbox */}
-        {lightSrc && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={lightSrc}
-            alt={caption}
-            style={{ width: '95vw', height: '90vh' }}
-            className={`max-w-[95vw] max-h-[90vh] w-auto h-auto object-contain rounded-md ${forceLight ? '' : 'dark:hidden'}`}
-          />
-        )}
-        {darkSrc && !forceLight && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={darkSrc}
-            alt={caption}
-            style={{ width: '95vw', height: '90vh' }}
-            className="max-w-[95vw] max-h-[90vh] w-auto h-auto object-contain rounded-md hidden dark:block"
-          />
-        )}
-      </ImageLightbox>
+      {!nozoom && (
+        <ImageLightbox open={lightboxOpen} onClose={() => setLightboxOpen(false)}>
+          {/* Show theme-appropriate image in lightbox */}
+          {lightSrc && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={lightSrc}
+              alt={caption}
+              style={{ width: '95vw', height: '90vh' }}
+              className={`max-w-[95vw] max-h-[90vh] w-auto h-auto object-contain rounded-md ${forceLight ? '' : 'dark:hidden'}`}
+            />
+          )}
+          {darkSrc && !forceLight && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={darkSrc}
+              alt={caption}
+              style={{ width: '95vw', height: '90vh' }}
+              className="max-w-[95vw] max-h-[90vh] w-auto h-auto object-contain rounded-md hidden dark:block"
+            />
+          )}
+        </ImageLightbox>
+      )}
     </ResizableWrapper>
   )
 }

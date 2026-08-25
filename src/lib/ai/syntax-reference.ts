@@ -307,10 +307,11 @@ Wrong: \`$\\color{orange}8 \\cdot 1 + \\color{blue}4 \\cdot 1 \\color{black} = .
 - \`wrap="true"\` — Float image so text wraps around it
 - \`invert="dark|light|always"\` — Invert colors (useful for diagrams)
 - \`saturate="70"\` — Saturation adjustment when inverted
+- \`nozoom="true"\` — Suppress the fullscreen/zoom button and lightbox (e.g. a UI screenshot that's itself a link)
 
 A \`{key=value;key2}\` attribute block right after the image (e.g. \`{invert}\`, \`{invert=light;saturate=70}\`) IS implemented, but only for \`invert\`/\`saturate\` — \`{width=...}\` is parsed but silently has no effect (use \`style="width: X%"\` instead).
 
-Excalidraw diagrams: Reference \`.excalidraw\` files directly. The system auto-detects light/dark SVG variants. Use \`<excali src="name" lightonly />\` (or the \`lightonly\` attribute on the shorthand) to always show the light variant regardless of viewer theme, e.g. for diagrams without a meaningful dark version.`)
+Excalidraw diagrams: Reference \`.excalidraw\` files directly. The system auto-detects light/dark SVG variants. Use \`<excali src="name" lightonly />\` (or the \`lightonly\` attribute on the shorthand) to always show the light variant regardless of viewer theme, e.g. for diagrams without a meaningful dark version. Use \`<excali src="name" nozoom />\` to suppress the fullscreen/zoom button and lightbox.`)
 
   // Text alignment
   sections.push(`## Text alignment
@@ -792,7 +793,7 @@ export function getCondensedSyntaxReference(): string {
 
 **Math:** \`$inline$\` and \`$$display$$\` (KaTeX). Chemistry: \`\\ce{N2(g) + 3 H2(g) <=> 2 NH3(g)}\` (mhchem) — prefer over hand-rolled \`\\mathrm{}\`. Colored terms: \`\\textcolor{orange}{8 \\cdot 1}\`, NEVER \`\\color{orange}...\` — \`\\color\` is an unscoped switch needing a \`\\color{black}\` reset that breaks dark mode (black text invisible on dark background); \`\\textcolor{}{}\` is scoped, so text outside it just stays the normal theme-aware color.
 
-**Images:** \`![alt](img.png)\` or \`<img src="img.png" alt="alt" style="width: 50%" align="left" wrap="true" />\`
+**Images:** \`![alt](img.png)\` or \`<img src="img.png" alt="alt" style="width: 50%" align="left" wrap="true" />\` — add \`nozoom="true"\` to suppress the fullscreen/zoom button (also works on \`<excali>\`).
 
 **Text alignment:** wrap content in \`<left>\`, \`<center>\`, or \`<right>\` — markdown parses inside with or without surrounding blank lines. Closing tag required.
 

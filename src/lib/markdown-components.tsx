@@ -240,6 +240,7 @@ export function createMarkdownComponents(
     if (dataExcalidraw) {
       const dataAlign = (dataProps['data-align'] as string) || 'center'
       const dataWrap = dataProps['data-wrap'] as string
+      const dataNozoom = dataProps['data-nozoom'] as string
 
       return (
         <ExcalidrawImage
@@ -249,6 +250,7 @@ export function createMarkdownComponents(
           style={style}
           align={dataAlign as 'left' | 'center' | 'right'}
           wrap={dataWrap === 'true'}
+          nozoom={dataNozoom === 'true'}
           files={files}
           onWidthChange={onImageWidthChange ? (markdown) => onImageWidthChange(dataExcalidraw, markdown) : undefined}
           onEdit={onExcalidrawEdit}
@@ -265,6 +267,7 @@ export function createMarkdownComponents(
     const dataInvert = (dataProps['data-invert'] as string) || (dataProps['dataInvert'] as string) || (dataProps['invert'] as string)
     const dataSaturate = (dataProps['data-saturate'] as string) || (dataProps['dataSaturate'] as string) || (dataProps['saturate'] as string)
     const dataInline = (dataProps['data-inline'] as string) || (dataProps['dataInline'] as string) || (dataProps['inline'] as string)
+    const dataNozoom = (dataProps['data-nozoom'] as string) || (dataProps['dataNozoom'] as string) || (dataProps['nozoom'] as string)
 
     const srcStr = typeof src === 'string' ? src : ''
 
@@ -281,6 +284,7 @@ export function createMarkdownComponents(
         inline={dataInline === 'true'}
         invert={dataInvert as 'dark' | 'light' | 'always' | undefined}
         saturate={dataSaturate}
+        nozoom={dataNozoom === 'true'}
         files={files}
         optimizeImages={optimizeImages}
         onWidthChange={onImageWidthChange ? (markdown) => onImageWidthChange(originalSrc || srcStr, markdown) : undefined}
@@ -546,6 +550,7 @@ export function createMarkdownComponents(
     const alt = (props['alt'] as string) || ''
     const dataAlign = (props['data-align'] as string) || 'center'
     const dataWrap = (props['data-wrap'] as string)
+    const dataNozoom = (props['data-nozoom'] as string)
     // Check both kebab-case (from HTML) and camelCase formats
     const sourceLineStart = (props['data-source-line-start'] as string) || (props['dataSourceLineStart'] as string) || undefined
     const sourceLineEnd = (props['data-source-line-end'] as string) || (props['dataSourceLineEnd'] as string) || undefined
@@ -556,6 +561,7 @@ export function createMarkdownComponents(
         alt={alt}
         align={dataAlign as 'left' | 'center' | 'right'}
         wrap={dataWrap === 'true'}
+        nozoom={dataNozoom === 'true'}
         files={files}
         onWidthChange={onImageWidthChange ? (markdown) => onImageWidthChange(src, markdown) : undefined}
         onEdit={onExcalidrawEdit}
@@ -870,6 +876,7 @@ export function createMarkdownComponents(
       align?: 'left' | 'center' | 'right'
       wrap?: boolean
       lightonly?: boolean
+      nozoom?: boolean
     }) {
       const { src, alt = '', width, align = 'center' } = props
       // Bare boolean attrs (`<excali wrap />`) parse as the empty string —
@@ -877,6 +884,7 @@ export function createMarkdownComponents(
       // truthy check would treat every hand-written `wrap`/`lightonly` as off.
       const wrap = props.wrap !== undefined && props.wrap !== false && (props.wrap as unknown) !== 'false'
       const lightonly = props.lightonly !== undefined && props.lightonly !== false && (props.lightonly as unknown) !== 'false'
+      const nozoom = props.nozoom !== undefined && props.nozoom !== false && (props.nozoom as unknown) !== 'false'
       // Ensure src has .excalidraw extension
       const filename = src.endsWith('.excalidraw') ? src : `${src}.excalidraw`
 
@@ -888,6 +896,7 @@ export function createMarkdownComponents(
           align={align}
           wrap={wrap}
           lightonly={lightonly}
+          nozoom={nozoom}
           files={files}
           onWidthChange={onImageWidthChange ? (markdown) => onImageWidthChange(filename, markdown) : undefined}
           onEdit={onExcalidrawEdit}
