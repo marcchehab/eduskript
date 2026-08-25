@@ -545,7 +545,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
             }}
             onDragEnd={() => { dragIdxRef.current = null; setDragOverIdx(null) }}
             className={`group flex items-center gap-1 rounded-md text-sm transition-colors ${
-              p.id === page.id ? 'bg-primary/10' : 'hover:bg-muted'
+              p.id === page.id ? 'bg-orange-500/10' : 'hover:bg-muted'
             }`}
           >
             <GripVertical className="w-4 h-4 shrink-0 text-muted-foreground opacity-40 hover:opacity-80 cursor-grab ml-1" />
@@ -553,16 +553,16 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
               href={`/dashboard/skripts/${skript.slug}/pages/${p.slug}/edit`}
               className={`flex items-center gap-2 flex-1 min-w-0 px-1 py-1.5 ${
                 p.id === page.id
-                  ? 'text-primary font-medium'
+                  ? 'text-orange-600 dark:text-orange-400 font-medium'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               {p.pageType === 'exam'
-                ? <FilePenLine className={`w-4 h-4 shrink-0 ${p.id === page.id ? '' : 'text-orange-500'}`} />
+                ? <FilePenLine className="w-4 h-4 shrink-0" />
                 : <FileText className="w-4 h-4 shrink-0" />}
-              <span className={`truncate ${p.pageType === 'exam' && p.id !== page.id ? 'text-orange-500' : ''}`}>
+              <span className="truncate">
                 {p.title}
-                {p.pageType === 'exam' && <span className="text-orange-500/70 font-normal"> (exam)</span>}
+                {p.pageType === 'exam' && <span className="text-muted-foreground font-normal"> (exam)</span>}
               </span>
               {/* Visibility marker — mirrors PublishToggle's icon/color
                   language so the read-only indicator and the interactive
@@ -570,7 +570,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
               {(() => {
                 const state = !p.isPublished ? 'draft' : p.isUnlisted ? 'unlisted' : 'published'
                 const Icon = state === 'draft' ? CircleMinus : state === 'unlisted' ? EyeOff : CircleCheckBig
-                const color = state === 'draft' ? 'text-warning' : state === 'unlisted' ? 'text-violet-500' : 'text-success'
+                const color = state === 'draft' ? 'text-red-600 dark:text-red-400' : state === 'unlisted' ? 'text-violet-500' : 'text-success'
                 const label = state === 'draft' ? 'Draft' : state === 'unlisted' ? 'Unlisted' : 'Published'
                 return (
                   <span className={`ml-auto shrink-0 ${color}`} title={label} aria-label={label}>
@@ -626,6 +626,99 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
     { id: 'access', label: 'Access', icon: <Users className="w-3.5 h-3.5" />, content: accessTabContent, title: 'Manage access of other teachers to this skript' },
   ]
 
+  // Skript-level header, handed to EditorWithMedia as `headerContent` so it
+  // shares one bordered card with the manage tab strip below (both are
+  // skript-scoped, unlike the page-specific editor further down).
+  const skriptHeaderContent = (
+    <div>
+      <div className="flex items-center gap-2 px-3 py-2">
+        <Link href="/dashboard/page-builder" className="shrink-0">
+          <Button variant="ghost" size="sm">
+            <ArrowLeft className="w-4 h-4" />
+          </Button>
+        </Link>
+        <div className="flex flex-col min-w-0 flex-1">
+          <span className="text-3xl font-semibold truncate leading-tight">{skript.title}</span>
+          {skript.description && (
+            <span className="text-sm text-muted-foreground line-clamp-2 leading-snug">{skript.description}</span>
+          )}
+        </div>
+        {canEdit && (
+          <div className="flex items-center gap-1 ml-auto shrink-0">
+            <PublishToggle
+              type="skript"
+              itemId={skript.id}
+              isPublished={skript.isPublished}
+              isUnlisted={skript.isUnlisted}
+              onToggle={() => {}}
+              showText={false}
+              size="sm"
+            />
+            <QuestSpotlight step="rename_skript" label="Try this!">
+              <EditModal
+                type="skript"
+                item={skript}
+                onItemUpdated={handleSkriptUpdated}
+              />
+            </QuestSpotlight>
+            <Link href={`/dashboard/skripts/${skript.slug}/frontpage`}>
+              <Button variant="ghost" size="sm" title="Front Page">
+                <BookA className="w-4 h-4" />
+              </Button>
+            </Link>
+            <ExportSkriptModal skriptId={skript.id} skriptTitle={skript.title} />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleDeleteSkript}
+              disabled={isDeleting}
+              title="Delete Skript"
+              className="text-red-600 hover:text-red-600 dark:text-red-400 dark:hover:text-red-400"
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* A new skript starts unpublished but its first page is created
+          published (dashboard/skripts/[skriptSlug]/page.tsx), so this is
+          the state every teacher lands in — not an edge case. The only
+          previous signal was a tooltip on a disabled eye icon, which
+          nobody sees. */}
+      {page.isPublished && !skript.isPublished && (
+        <div className="mt-3 mx-3 mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
+          <AlertCircle className="h-4 w-4 shrink-0 text-amber-600" />
+          <span>
+            This page is published, but the skript <strong>{skript.title}</strong> is not —
+            so nobody can see it yet.
+          </span>
+          {canEdit && (
+            <PublishToggle
+              type="skript"
+              itemId={skript.id}
+              isPublished={skript.isPublished}
+              isUnlisted={skript.isUnlisted}
+              onToggle={() => router.refresh()}
+              showText
+              size="sm"
+            />
+          )}
+        </div>
+      )}
+    </div>
+  )
+
+  // "Page" label, handed to EditorWithMedia as `pageLabel` — sits above the
+  // metadata+editor card in orange, distinct from the blue "Skript" label
+  // above the header+tabs card, so the two scopes read apart at a glance.
+  const pageLabelContent = (
+    <div className="flex items-center gap-1.5 px-1 mb-1">
+      <FilePenLine className="w-4 h-4 text-orange-600 dark:text-orange-400" />
+      <span className="text-sm font-medium text-orange-600 dark:text-orange-400">Page</span>
+    </div>
+  )
+
   return (
     <div
       className={
@@ -639,96 +732,20 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
       }
     >
 
-      {/* ── SKRIPT HEADER ── (hidden in fullscreen) */}
+      {/* "Skript" label sits above the bordered card (rather than inside its
+          header row) to signal that everything inside — header AND manage
+          tabs — belongs to the skript, not the page being edited below. */}
       {!isFullscreen && (
-        <section className="border rounded-lg">
-          <div className="flex items-center gap-2 px-3 py-2">
-            <div className="flex items-center justify-between w-30 shrink-0">
-              <Link href="/dashboard/page-builder">
-                <Button variant="ghost" size="sm">
-                  <ArrowLeft className="w-4 h-4" />
-                </Button>
-              </Link>
-              <div className="flex items-center gap-1.5">
-                <BookOpen className="w-4 h-4 text-muted-foreground shrink-0" />
-                <span className="text-sm text-muted-foreground">Skript:</span>
-              </div>
-            </div>
-            <div className="flex flex-col min-w-0 flex-1">
-              <span className="text-3xl font-semibold truncate leading-tight">{skript.title}</span>
-              {skript.description && (
-                <span className="text-sm text-muted-foreground line-clamp-2 leading-snug">{skript.description}</span>
-              )}
-            </div>
-            {canEdit && (
-              <div className="flex items-center gap-1 ml-auto shrink-0">
-                <PublishToggle
-                  type="skript"
-                  itemId={skript.id}
-                  isPublished={skript.isPublished}
-                  isUnlisted={skript.isUnlisted}
-                  onToggle={() => {}}
-                  showText={false}
-                  size="sm"
-                />
-                <QuestSpotlight step="rename_skript" label="Try this!">
-                  <EditModal
-                    type="skript"
-                    item={skript}
-                    onItemUpdated={handleSkriptUpdated}
-                  />
-                </QuestSpotlight>
-                <Link href={`/dashboard/skripts/${skript.slug}/frontpage`}>
-                  <Button variant="ghost" size="sm" title="Front Page">
-                    <BookA className="w-4 h-4" />
-                  </Button>
-                </Link>
-                <ExportSkriptModal skriptId={skript.id} skriptTitle={skript.title} />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleDeleteSkript}
-                  disabled={isDeleting}
-                  title="Delete Skript"
-                  className="text-destructive hover:text-destructive"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-            )}
-          </div>
-
-          {/* A new skript starts unpublished but its first page is created
-              published (dashboard/skripts/[skriptSlug]/page.tsx), so this is
-              the state every teacher lands in — not an edge case. The only
-              previous signal was a tooltip on a disabled eye icon, which
-              nobody sees. */}
-          {page.isPublished && !skript.isPublished && (
-            <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
-              <AlertCircle className="h-4 w-4 shrink-0 text-amber-600" />
-              <span>
-                This page is published, but the skript <strong>{skript.title}</strong> is not —
-                so nobody can see it yet.
-              </span>
-              {canEdit && (
-                <PublishToggle
-                  type="skript"
-                  itemId={skript.id}
-                  isPublished={skript.isPublished}
-                  isUnlisted={skript.isUnlisted}
-                  onToggle={() => router.refresh()}
-                  showText
-                  size="sm"
-                />
-              )}
-            </div>
-          )}
-        </section>
+        <div className="flex items-center gap-1.5 px-1 mb-1">
+          <BookOpen className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+          <span className="text-sm font-medium text-blue-600 dark:text-blue-400">Skript</span>
+        </div>
       )}
 
-      {/* Shared editor shell — owns manage tabs (Files/Videos + Pages/Access via
-          extraTabs), the markdown editor, drag-drop / insertion menu, Excalidraw,
-          PDF extraction, and the AI Edit modal. */}
+      {/* Shared editor shell — owns the skript header + manage tabs
+          (Files/Videos + Pages/Access via extraTabs) in one card, the
+          markdown editor, drag-drop / insertion menu, Excalidraw, PDF
+          extraction, and the AI Edit modal. Header is hidden in fullscreen. */}
       <EditorWithMedia
         content={content}
         onChange={handleShellContentChange}
@@ -736,6 +753,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
         skriptId={skript.id}
         pageId={page.id}
         domain={(session?.user as { pageSlug?: string })?.pageSlug || undefined}
+        headerContent={skriptHeaderContent}
         manageLabel="Manage:"
         extraTabs={extraTabs}
         tabStorageKey="eduskript:page-editor-tab"
@@ -756,15 +774,12 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
         }}
         isAdmin={session?.user?.isAdmin}
         fullscreen={isFullscreen}
+        pageLabel={pageLabelContent}
         metadataSlot={
           <div className="space-y-4">
             {/* Page title row — always visible (Save/Fullscreen toggle live here). */}
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <div className="flex items-center justify-end gap-1.5 w-30 shrink-0">
-                  <FilePenLine className="w-4 h-4 text-muted-foreground shrink-0" />
-                  <span className="text-sm text-muted-foreground">Page:</span>
-                </div>
                 <Input
                   type="text"
                   value={title}
@@ -881,7 +896,6 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
 
               {!isFullscreen && (
                 <div className="flex items-center gap-2">
-                  <div className="w-30 shrink-0" />
                   <Input
                     type="text"
                     value={description}
@@ -1009,45 +1023,43 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
 
           </div>
         }
-      />
-
-      {/* Version History (hidden in fullscreen) */}
-      {!isFullscreen && (
-        <>
-          <p className="text-xs text-muted-foreground mb-2">
-            💡 New to Eduskript?{' '}
-            <a
-              href="https://eduskript.org/c/first-steps"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline underline-offset-2 hover:text-foreground"
+        footerSlot={
+          <>
+            <p className="text-xs text-muted-foreground mb-2">
+              💡 New to Eduskript?{' '}
+              <a
+                href="https://eduskript.org/c/first-steps"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-2 hover:text-foreground"
+              >
+                Read the User Manual
+              </a>
+            </p>
+            <CollapsibleDrawer
+              title={
+                <div className="flex items-center gap-2">
+                  <span>Version history</span>
+                  {lastSaved && (
+                    <span className="text-xs text-muted-foreground font-normal">
+                      Last saved {lastSaved.toLocaleTimeString()}
+                    </span>
+                  )}
+                </div>
+              }
+              icon={<History className="w-5 h-5" />}
+              defaultOpen={false}
             >
-              Read the User Manual
-            </a>
-          </p>
-          <CollapsibleDrawer
-          title={
-            <div className="flex items-center gap-2">
-              <span>Version history</span>
-              {lastSaved && (
-                <span className="text-xs text-muted-foreground font-normal">
-                  Last saved {lastSaved.toLocaleTimeString()}
-                </span>
-              )}
-            </div>
-          }
-          icon={<History className="w-5 h-5" />}
-          defaultOpen={false}
-        >
-          <VersionHistory
-            pageId={page.id}
-            versions={versions}
-            currentContent={content}
-            onRestoreVersion={handleRestoreVersion}
-          />
-        </CollapsibleDrawer>
-        </>
-      )}
+              <VersionHistory
+                pageId={page.id}
+                versions={versions}
+                currentContent={content}
+                onRestoreVersion={handleRestoreVersion}
+              />
+            </CollapsibleDrawer>
+          </>
+        }
+      />
 
       <AlertDialogModal
         open={alert.open}

@@ -37,7 +37,7 @@ const stateConfig: Record<VisibilityState, {
 }> = {
   draft: {
     label: 'Draft',
-    color: 'text-warning hover:text-warning/80',
+    color: 'text-red-600 hover:text-red-600/80 dark:text-red-400 dark:hover:text-red-400/80',
     icon: CircleMinus,
     tooltip: 'Publish',
   },

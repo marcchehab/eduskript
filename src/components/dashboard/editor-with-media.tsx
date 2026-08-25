@@ -84,6 +84,12 @@ export interface EditorWithMediaProps {
   pageId?: string
 
   // Manage strip
+  /** Skript/frontpage-level header (title, back button, publish toggle, etc.).
+   *  Rendered above the manage tab strip inside one shared bordered card with
+   *  a divider line between them — both belong to the skript, not the page
+   *  being edited below. Omit to render the tab strip on its own (no card at
+   *  all when there's also no skriptId). */
+  headerContent?: React.ReactNode
   /** Label shown before the tab buttons. Defaults to "Manage:". */
   manageLabel?: string
   /** Tabs to append after Files/Videos (e.g. Pages, Access for the page editor). */
@@ -112,6 +118,14 @@ export interface EditorWithMediaProps {
   /** Rendered between the manage section and the editor card. Page editor uses this
    *  for page metadata (title/slug/exam settings); frontpage editor leaves it empty. */
   metadataSlot?: React.ReactNode
+  /** Label shown above the metadataSlot+editor card (e.g. "Page" for the page
+   *  editor) — mirrors headerContent's relationship to the manage tab strip.
+   *  Only rendered when metadataSlot is also provided, and hidden in fullscreen. */
+  pageLabel?: React.ReactNode
+  /** Rendered after the editor card, inside the same bordered card as
+   *  metadataSlot (e.g. version history) — it's part of the page too, not a
+   *  separate scope. Hidden in fullscreen. */
+  footerSlot?: React.ReactNode
 }
 
 const DEFAULT_EDITOR_HEIGHT = 500
@@ -135,6 +149,7 @@ export function EditorWithMedia({
   skriptId,
   domain,
   pageId,
+  headerContent,
   manageLabel = 'Manage:',
   extraTabs,
   tabStorageKey,
@@ -143,6 +158,8 @@ export function EditorWithMedia({
   isAdmin,
   fullscreen = false,
   metadataSlot,
+  pageLabel,
+  footerSlot,
 }: EditorWithMediaProps) {
   const alert = useAlertDialog()
   const isFreePlan = useIsFreeTeacher()
@@ -522,91 +539,127 @@ export function EditorWithMedia({
 
   return (
     <>
-      {/* Manage tab strip — hidden in fullscreen, and also hidden entirely when
-          there's no skriptId (no file storage to manage). The editor below still
-          renders, so the user can type and use AI edit. */}
-      {!fullscreen && skriptId && (
-      <section className="border rounded-lg">
-        <div className="flex items-center">
-          <span className="px-3 text-xs text-muted-foreground whitespace-nowrap">{manageLabel}</span>
-          {allTabs.map((tab) => {
-            const button = (
-              <button
-                key={tab.id}
-                onClick={() => {
-                  handleTabClick(tab.id)
-                  if (tab.id === 'pages') completeStep('view_pages')
+      {/* Header + manage tab strip share one card — both belong to the
+          skript/frontpage, not the individual page below, so a single
+          rounded border encapsulates them with a divider line in between.
+          The tab strip is hidden in fullscreen, and hidden entirely when
+          there's no skriptId (no file storage to manage) — the editor below
+          still renders either way, so the user can type and use AI edit. */}
+      {!fullscreen && (headerContent || skriptId) && (
+      <section className="border border-blue-400/70 dark:border-blue-500/60 rounded-lg overflow-hidden divide-y divide-border">
+        {headerContent}
+        {skriptId && (
+        <div>
+          <div className="flex items-center">
+            <span className="px-3 text-xs text-muted-foreground whitespace-nowrap">{manageLabel}</span>
+            {allTabs.map((tab) => {
+              const button = (
+                <button
+                  key={tab.id}
+                  onClick={() => {
+                    handleTabClick(tab.id)
+                    if (tab.id === 'pages') completeStep('view_pages')
+                  }}
+                  title={tab.title}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${
+                    tab.id === 'pages'
+                      // Orange, matching the page-scope card below — Pages is
+                      // the tab that jumps between pages, so the tint signals
+                      // that connection. Active indicator stays blue (border-primary)
+                      // like every other tab — it's still part of the skript-scope strip.
+                      ? activeTab === tab.id
+                        ? 'bg-background text-orange-600 dark:text-orange-400 shadow-xs border-b-2 border-primary'
+                        : 'text-orange-600/80 dark:text-orange-400/80 hover:text-orange-600 dark:hover:text-orange-400 bg-muted/50'
+                      : activeTab === tab.id
+                        ? 'bg-background text-foreground shadow-xs border-b-2 border-primary'
+                        : 'text-muted-foreground hover:text-foreground bg-muted/50'
+                  }`}
+                >
+                  {tab.icon}
+                  {tab.label}
+                </button>
+              )
+              return tab.id === 'pages' ? (
+                <QuestSpotlight key={tab.id} step="view_pages" label="Try this!">
+                  {button}
+                </QuestSpotlight>
+              ) : (
+                button
+              )
+            })}
+          </div>
+
+          {/* Tab content — built-in panels rendered here, extras render their own JSX */}
+          {activeTab === 'files' && (
+            <div className="border-t">
+              <FileBrowser
+                skriptId={skriptId}
+                files={fileList}
+                loading={fileListLoading}
+                onFileSelect={(file) => {
+                  handleFileInsert(file)
+                  refreshFileList()
                 }}
-                title={tab.title}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${
-                  activeTab === tab.id
-                    ? 'bg-background text-foreground shadow-xs border-b-2 border-primary'
-                    : 'text-muted-foreground hover:text-foreground bg-muted/50'
-                }`}
-              >
-                {tab.icon}
-                {tab.label}
-              </button>
-            )
-            return tab.id === 'pages' ? (
-              <QuestSpotlight key={tab.id} step="view_pages" label="Try this!">
-                {button}
-              </QuestSpotlight>
-            ) : (
-              button
-            )
-          })}
+                onUploadComplete={refreshFileList}
+                onFileRenamed={handleFileRenamed}
+                onExcalidrawEdit={handleExcalidrawEdit}
+              />
+            </div>
+          )}
+
+          {activeTab === 'videos' && (
+            <div className="border-t">
+              <VideoBrowser
+                videos={videoList}
+                loading={fileListLoading}
+                isAdmin={isAdmin}
+                skriptId={skriptId}
+                onVideoAdded={refreshFileList}
+                onUploadComplete={refreshFileList}
+              />
+            </div>
+          )}
+
+          {extraTabs?.map((tab) => activeTab === tab.id && (
+            <div key={tab.id} className="border-t">
+              {tab.content}
+            </div>
+          ))}
         </div>
-
-        {/* Tab content — built-in panels rendered here, extras render their own JSX */}
-        {activeTab === 'files' && (
-          <div className="border-t">
-            <FileBrowser
-              skriptId={skriptId}
-              files={fileList}
-              loading={fileListLoading}
-              onFileSelect={(file) => {
-                handleFileInsert(file)
-                refreshFileList()
-              }}
-              onUploadComplete={refreshFileList}
-              onFileRenamed={handleFileRenamed}
-              onExcalidrawEdit={handleExcalidrawEdit}
-            />
-          </div>
         )}
-
-        {activeTab === 'videos' && (
-          <div className="border-t">
-            <VideoBrowser
-              videos={videoList}
-              loading={fileListLoading}
-              isAdmin={isAdmin}
-              skriptId={skriptId}
-              onVideoAdded={refreshFileList}
-              onUploadComplete={refreshFileList}
-            />
-          </div>
-        )}
-
-        {extraTabs?.map((tab) => activeTab === tab.id && (
-          <div key={tab.id} className="border-t">
-            {tab.content}
-          </div>
-        ))}
       </section>
       )}
 
-      {/* Parent-supplied metadata (page title/slug/exam settings, etc.). Always
-          rendered — the parent decides what's visible in fullscreen, since some
-          controls (e.g. the fullscreen toggle itself) need to stay reachable. */}
-      {metadataSlot}
+      {/* Page label + metadata + editor share one bordered card — same
+          "one border per scope" idea as the skript header+tabs above — so a
+          single border visually groups everything about THIS page. Border
+          drops away in fullscreen, same as the Card itself always did;
+          metadataSlot is still always rendered — the parent decides what's
+          visible in fullscreen, since some controls (e.g. the fullscreen
+          toggle itself) need to stay reachable. */}
+      {!fullscreen && metadataSlot && pageLabel}
+      <div className={
+        fullscreen
+          ? 'flex-1 min-h-0 flex flex-col'
+          : metadataSlot
+            ? 'border border-orange-400/70 dark:border-orange-500/60 rounded-lg overflow-hidden divide-y divide-border'
+            : ''
+      }>
+        {metadataSlot && (
+          <div className={fullscreen ? '' : 'p-3'}>
+            {metadataSlot}
+          </div>
+        )}
 
-      {/* Editor card. In fullscreen, `min-h-0` is the magic bit: without it
-          the flex child defaults to min-height:auto and refuses to shrink
-          below its content, which breaks the inner panes' ability to scroll
-          within their own bounds. */}
-      <Card className={fullscreen ? 'border-0 shadow-none flex-1 min-h-0 flex flex-col' : ''}>
+        {/* Editor card. In fullscreen, `min-h-0` is the magic bit: without it
+            the flex child defaults to min-height:auto and refuses to shrink
+            below its content, which breaks the inner panes' ability to scroll
+            within their own bounds. */}
+        <Card className={
+          fullscreen
+            ? 'border-0 shadow-none flex-1 min-h-0 flex flex-col'
+            : metadataSlot ? 'border-0 rounded-none shadow-none' : ''
+        }>
         {!fullscreen && (description !== null) && (
           <CardHeader className="pb-2">
             <CardDescription>
@@ -654,6 +707,12 @@ export function EditorWithMedia({
           )}
         </CardContent>
       </Card>
+      {!fullscreen && footerSlot && (
+        <div className="p-3">
+          {footerSlot}
+        </div>
+      )}
+      </div>
 
       {/* Excalidraw editor modal — requires skriptId (storage destination). */}
       {excalidrawEditFile && skriptId && (

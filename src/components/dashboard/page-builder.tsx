@@ -464,7 +464,7 @@ function PageBuilderItem({
                   </span>
                 )}
                 {item.type === "skript" && item.isPublished === false && (
-                  <span className="text-xs text-warning flex items-center gap-0.5">
+                  <span className="text-xs text-red-600 dark:text-red-400 flex items-center gap-0.5">
                     <EyeOff className="w-3 h-3" />
                     Draft
                   </span>
@@ -645,7 +645,7 @@ function SimpleSkriptItem({
                     )}
                     {/* Show draft indicator for unpublished skripts */}
                     {item.isPublished === false && (
-                      <span className="text-xs text-warning flex items-center gap-0.5">
+                      <span className="text-xs text-red-600 dark:text-red-400 flex items-center gap-0.5">
                         <EyeOff className="w-3 h-3" />
                         Draft
                       </span>
