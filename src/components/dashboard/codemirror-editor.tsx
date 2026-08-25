@@ -2310,38 +2310,6 @@ const CodeMirrorEditor = function CodeMirrorEditor({
             </DropdownMenu>
           </div>
 
-          {/* Font size controls */}
-          <div className="h-4 w-px bg-border mx-1" />
-          <div className="flex items-center gap-0.5">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                const newSize = Math.max(10, editorFontSize - 1)
-                setEditorFontSize(newSize)
-                localStorage.setItem('eduskript:editor-font-size', String(newSize))
-              }}
-              className="w-6 h-6 p-0"
-              title="Decrease font size"
-            >
-              <Minus className="w-3 h-3" />
-            </Button>
-            <span className="text-xs text-muted-foreground w-6 text-center tabular-nums">{editorFontSize}</span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                const newSize = Math.min(24, editorFontSize + 1)
-                setEditorFontSize(newSize)
-                localStorage.setItem('eduskript:editor-font-size', String(newSize))
-              }}
-              className="w-6 h-6 p-0"
-              title="Increase font size"
-            >
-              <Plus className="w-3 h-3" />
-            </Button>
-          </div>
-
           {/* Show collapsed panel buttons */}
           {(!showEditor || !showPreview) && (
             <>
@@ -2397,6 +2365,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
 
         {/* Editor */}
         <div
+          className="relative"
           style={{
             width: showEditor ? (showPreview ? `${editorWidth}%` : '100%') : '0',
             display: showEditor ? 'block' : 'none'
@@ -2414,6 +2383,39 @@ const CodeMirrorEditor = function CodeMirrorEditor({
           ) : (
             <div ref={editorRef} className="h-full" />
           )}
+
+          {/* Editor-only display size — doesn't affect page content, so it
+              floats over the editor pane rather than living in the shared
+              toolbar. */}
+          <div className="absolute bottom-2 right-2 z-10 flex items-center gap-0.5 rounded-md border bg-background/90 backdrop-blur-xs shadow-xs p-0.5">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                const newSize = Math.max(10, editorFontSize - 1)
+                setEditorFontSize(newSize)
+                localStorage.setItem('eduskript:editor-font-size', String(newSize))
+              }}
+              className="w-6 h-6 p-0"
+              title="Decrease font size"
+            >
+              <Minus className="w-3 h-3" />
+            </Button>
+            <span className="text-xs text-muted-foreground w-6 text-center tabular-nums">{editorFontSize}</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                const newSize = Math.min(24, editorFontSize + 1)
+                setEditorFontSize(newSize)
+                localStorage.setItem('eduskript:editor-font-size', String(newSize))
+              }}
+              className="w-6 h-6 p-0"
+              title="Increase font size"
+            >
+              <Plus className="w-3 h-3" />
+            </Button>
+          </div>
         </div>
 
         {/* Draggable Splitter - wider touch target on mobile */}
