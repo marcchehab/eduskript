@@ -40,6 +40,15 @@ export default function OrgPageBuilderPage({
           throw new Error(data.error || 'Failed to fetch organization')
         }
 
+        // Plain members can read the org but not build its page — every
+        // request the builder makes (available-content, page-layout) needs
+        // admin. Without this they landed here from the public profile
+        // button and got an "Access Denied" dialog on an empty builder.
+        if (data.role !== 'owner' && data.role !== 'admin') {
+          router.replace('/dashboard/page-builder')
+          return
+        }
+
         setOrganization(data.organization)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'An error occurred')

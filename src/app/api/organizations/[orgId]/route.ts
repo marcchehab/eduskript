@@ -11,8 +11,13 @@ export async function GET(
   { params }: { params: Promise<{ orgId: string }> }
 ) {
   const { orgId } = await params
-  const { error } = await requireOrgMember(orgId)
+  const { error, session, membership } = await requireOrgMember(orgId)
   if (error) return error
+
+  // The caller's own role, so client pages can gate admin-only UI without a
+  // second round-trip. Platform admins (isAdmin) pass requireOrgMember with a
+  // null membership — they get admin rights everywhere.
+  const role = membership?.role ?? (session?.user?.isAdmin ? 'admin' : 'member')
 
   try {
     const [organization, teacherCount, studentCount] = await Promise.all([
@@ -84,7 +89,7 @@ export async function GET(
       site: undefined,
       customDomains: undefined,
     }
-    return NextResponse.json({ organization: orgWithSlug, teacherCount, studentCount })
+    return NextResponse.json({ organization: orgWithSlug, role, teacherCount, studentCount })
   } catch (error) {
     console.error('Error fetching organization:', error)
     return NextResponse.json({ error: 'Failed to fetch organization' }, { status: 500 })
