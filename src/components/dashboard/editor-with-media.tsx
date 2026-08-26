@@ -90,6 +90,10 @@ export interface EditorWithMediaProps {
    *  being edited below. Omit to render the tab strip on its own (no card at
    *  all when there's also no skriptId). */
   headerContent?: React.ReactNode
+  /** Border color of the header+tabs card. 'skript' (default) paints it blue;
+   *  'neutral' keeps the plain border — used by the site/organization
+   *  frontpage editor, whose header isn't skript-scoped. */
+  headerScope?: 'skript' | 'neutral'
   /** Label shown before the tab buttons. Defaults to "Manage:". */
   manageLabel?: string
   /** Tabs to append after Files/Videos (e.g. Pages, Access for the page editor). */
@@ -150,6 +154,7 @@ export function EditorWithMedia({
   domain,
   pageId,
   headerContent,
+  headerScope = 'skript',
   manageLabel = 'Manage:',
   extraTabs,
   tabStorageKey,
@@ -537,6 +542,11 @@ export function EditorWithMedia({
   const endExtras = (extraTabs ?? []).filter(t => t.position !== 'start')
   const allTabs = [...startExtras, ...builtInTabs, ...endExtras]
 
+  // The page-scope (orange) card wraps metadata + editor + footer. The page
+  // editor turns it on via metadataSlot; the frontpage editor has no metadata
+  // row, so its pageLabel alone is enough.
+  const hasPageCard = Boolean(metadataSlot || pageLabel)
+
   return (
     <>
       {/* Header + manage tab strip share one card — both belong to the
@@ -546,7 +556,9 @@ export function EditorWithMedia({
           there's no skriptId (no file storage to manage) — the editor below
           still renders either way, so the user can type and use AI edit. */}
       {!fullscreen && (headerContent || skriptId) && (
-      <section className="border border-blue-400/70 dark:border-blue-500/60 rounded-lg overflow-hidden divide-y divide-border">
+      <section className={`rounded-lg overflow-hidden divide-y divide-border ${
+        headerScope === 'neutral' ? 'border' : 'border border-blue-400/70 dark:border-blue-500/60'
+      }`}>
         {headerContent}
         {skriptId && (
         <div>
@@ -637,11 +649,11 @@ export function EditorWithMedia({
           metadataSlot is still always rendered — the parent decides what's
           visible in fullscreen, since some controls (e.g. the fullscreen
           toggle itself) need to stay reachable. */}
-      {!fullscreen && metadataSlot && pageLabel}
+      {!fullscreen && pageLabel}
       <div className={
         fullscreen
           ? 'flex-1 min-h-0 flex flex-col'
-          : metadataSlot
+          : hasPageCard
             ? 'border border-orange-400/70 dark:border-orange-500/60 rounded-lg overflow-hidden divide-y divide-border'
             : ''
       }>
@@ -658,7 +670,7 @@ export function EditorWithMedia({
         <Card className={
           fullscreen
             ? 'border-0 shadow-none flex-1 min-h-0 flex flex-col'
-            : metadataSlot ? 'border-0 rounded-none shadow-none' : ''
+            : hasPageCard ? 'border-0 rounded-none shadow-none' : ''
         }>
         {!fullscreen && (description !== null) && (
           <CardHeader className="pb-2">

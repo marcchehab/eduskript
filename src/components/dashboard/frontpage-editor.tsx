@@ -8,7 +8,7 @@ import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { CollapsibleDrawer } from '@/components/ui/collapsible-drawer'
 import { EditorWithMedia } from '@/components/dashboard/editor-with-media'
-import { ArrowLeft, Save, History, Eye, Files, BookA, Maximize2, Minimize2 } from 'lucide-react'
+import { ArrowLeft, Save, History, Eye, Files, BookA, BookOpen, Building2, Globe, Maximize2, Minimize2 } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import { usePublicUrl } from '@/hooks/use-public-url'
 
@@ -365,6 +365,126 @@ export function FrontPageEditor({
     </div>
   )
 
+  // Scope label above the header card — mirrors the page editor's
+  // "Skript"/"Page" pair. A skript frontpage is skript-scoped (blue); a
+  // user/organization frontpage belongs to the site itself (neutral).
+  const scopeLabel = type === 'skript' ? (
+    <div className="flex items-center gap-1.5 px-1 mb-1">
+      <BookOpen className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+      <span className="text-sm font-medium text-blue-600 dark:text-blue-400">Skript</span>
+    </div>
+  ) : (
+    <div className="flex items-center gap-1.5 px-1 mb-1">
+      {type === 'organization'
+        ? <Building2 className="w-4 h-4 text-muted-foreground" />
+        : <Globe className="w-4 h-4 text-muted-foreground" />}
+      <span className="text-sm font-medium text-muted-foreground">
+        {type === 'organization' ? 'Organization' : 'Site'}
+      </span>
+    </div>
+  )
+
+  // Header handed to EditorWithMedia as `headerContent` so it shares one
+  // bordered card with the manage tab strip below — same grouping the page
+  // editor uses for the skript header.
+  const headerContent = (
+    <div className="flex items-center gap-2 px-3 py-2">
+      <Link href={backUrl} className="shrink-0">
+        <Button variant="ghost" size="sm">
+          <ArrowLeft className="w-4 h-4" />
+        </Button>
+      </Link>
+      <div className="flex flex-col min-w-0 flex-1">
+        <span className="text-3xl font-semibold truncate leading-tight">{title}</span>
+        <span className="text-sm text-muted-foreground line-clamp-2 leading-snug">{description}</span>
+      </div>
+      <div className="ml-auto shrink-0">{actionCluster}</div>
+    </div>
+  )
+
+  // "Front page" label above the editor card — orange, the page scope, since
+  // the front page is the content being edited here.
+  const pageLabel = (
+    <div className="flex items-center gap-1.5 px-1 mb-1">
+      <BookA className="w-4 h-4 text-orange-600 dark:text-orange-400" />
+      <span className="text-sm font-medium text-orange-600 dark:text-orange-400">Front page</span>
+    </div>
+  )
+
+  // File-storage CTA — only for user/org frontpages that haven't enabled
+  // storage yet. Skript frontpages always have storage (their own skript).
+  const fileStorageCta = !effectiveSkriptId && type !== 'skript' ? (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Files className="w-5 h-5" />
+          Files & videos
+        </CardTitle>
+        <CardDescription>
+          Enable file storage to upload images, videos, and other media to embed in your front page.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Button
+          onClick={ensureFileStorage}
+          disabled={isCreatingFileStorage || !frontPageId}
+          variant="outline"
+          size="sm"
+        >
+          {isCreatingFileStorage ? 'Enabling...' : 'Enable file storage'}
+        </Button>
+        {!frontPageId && (
+          <p className="text-xs text-muted-foreground mt-2">
+            Save the front page first to enable file storage.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  ) : null
+
+  // Version history — uses the FrontPageVersion API (different from the page
+  // editor's PageVersion API), so it can't reuse VersionHistory.
+  const versionHistory = frontPageId && versions.length > 0 ? (
+    <CollapsibleDrawer
+      title={
+        <div className="flex items-center gap-2">
+          <span>History</span>
+          {lastSaved && (
+            <span className="text-xs text-muted-foreground font-normal">
+              Last saved {lastSaved.toLocaleTimeString()}
+            </span>
+          )}
+        </div>
+      }
+      icon={<History className="w-5 h-5" />}
+      defaultOpen={false}
+    >
+      <div className="space-y-2">
+        {versions.map((version) => (
+          <div
+            key={version.id}
+            className="flex items-center justify-between p-3 bg-muted rounded-lg"
+          >
+            <div>
+              <div className="font-medium">Version {version.version}</div>
+              <div className="text-xs text-muted-foreground">
+                {version.author?.name || version.author?.email} • {new Date(version.createdAt).toLocaleString()}
+                {version.changeLog && ` • ${version.changeLog}`}
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleRestoreVersion(version.id, version.content)}
+            >
+              Restore
+            </Button>
+          </div>
+        ))}
+      </div>
+    </CollapsibleDrawer>
+  ) : null
+
   return (
     <div
       className={
@@ -377,30 +497,9 @@ export function FrontPageEditor({
           : 'space-y-6'
       }
     >
-      {/* Front page header — mirrors the page editor's topbar style: bordered
-          section with back button + label + title on the left, action cluster on
-          the right. Hidden when the parent (e.g. OrgNav) provides its own nav. */}
-      {!hideHeader && (
-        <section className="border rounded-lg">
-          <div className="flex items-center gap-2 px-3 py-2">
-            <div className="flex items-center justify-between w-30 shrink-0">
-              <Link href={backUrl}>
-                <Button variant="ghost" size="sm">
-                  <ArrowLeft className="w-4 h-4" />
-                </Button>
-              </Link>
-              <div className="flex items-center gap-1.5">
-                <BookA className="w-4 h-4 text-muted-foreground shrink-0" />
-                <span className="text-sm text-muted-foreground">Front page:</span>
-              </div>
-            </div>
-            <span className="text-3xl font-semibold truncate">{title}</span>
-            <div className="ml-auto shrink-0">{actionCluster}</div>
-          </div>
-        </section>
-      )}
+      {!hideHeader && !isFullscreen && scopeLabel}
 
-      {/* Toolbar when header is hidden — keeps publish/view/save reachable
+      {/* Toolbar when the header is hidden — keeps publish/view/save reachable
           while letting the parent (org nav) own the page chrome. */}
       {hideHeader && (
         <div className="flex items-center justify-between gap-4">
@@ -409,10 +508,11 @@ export function FrontPageEditor({
         </div>
       )}
 
-      {/* Editor shell — always rendered. When effectiveSkriptId is missing
-          (user/org frontpage without file storage yet), the shell hides its
-          manage tabs but the markdown editor and AI Edit (if a frontPageId
-          exists) still work. */}
+      {/* Editor shell — owns the header + manage tabs in one card, and the
+          "Front page" label + editor + footer in a second card. Always
+          rendered: when effectiveSkriptId is missing (user/org frontpage
+          without file storage yet) the shell hides its manage tabs, but the
+          markdown editor and AI Edit (if a frontPageId exists) still work. */}
       <EditorWithMedia
         content={content}
         onChange={handleContentChange}
@@ -427,6 +527,8 @@ export function FrontPageEditor({
         skriptId={effectiveSkriptId || undefined}
         pageId={frontPageId || undefined}
         domain={pageSlug}
+        headerContent={hideHeader ? undefined : headerContent}
+        headerScope={type === 'skript' ? 'skript' : 'neutral'}
         manageLabel="Manage:"
         tabStorageKey="eduskript:frontpage-editor-tab"
         aiEdit={frontPageId ? {
@@ -444,83 +546,13 @@ export function FrontPageEditor({
         }}
         isAdmin={(session?.user as { isAdmin?: boolean })?.isAdmin}
         fullscreen={isFullscreen}
+        pageLabel={pageLabel}
+        footerSlot={
+          fileStorageCta || versionHistory
+            ? <div className="space-y-4">{fileStorageCta}{versionHistory}</div>
+            : undefined
+        }
       />
-
-      {/* File storage CTA — only for user/org frontpages that haven't enabled
-          storage yet. Skript frontpages always have storage (their own skript).
-          Hidden in fullscreen so the editor takes the whole viewport. */}
-      {!effectiveSkriptId && type !== 'skript' && !isFullscreen && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Files className="w-5 h-5" />
-              Files & videos
-            </CardTitle>
-            <CardDescription>
-              Enable file storage to upload images, videos, and other media to embed in your front page.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button
-              onClick={ensureFileStorage}
-              disabled={isCreatingFileStorage || !frontPageId}
-              variant="outline"
-              size="sm"
-            >
-              {isCreatingFileStorage ? 'Enabling...' : 'Enable file storage'}
-            </Button>
-            {!frontPageId && (
-              <p className="text-xs text-muted-foreground mt-2">
-                Save the front page first to enable file storage.
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Version history — only show if we have any. Uses the FrontPageVersion
-          API (different from the page editor's PageVersion API). Hidden in
-          fullscreen. */}
-      {frontPageId && versions.length > 0 && !isFullscreen && (
-        <CollapsibleDrawer
-          title={
-            <div className="flex items-center gap-2">
-              <span>History</span>
-              {lastSaved && (
-                <span className="text-xs text-muted-foreground font-normal">
-                  Last saved {lastSaved.toLocaleTimeString()}
-                </span>
-              )}
-            </div>
-          }
-          icon={<History className="w-5 h-5" />}
-          defaultOpen={false}
-        >
-          <div className="space-y-2">
-            {versions.map((version) => (
-              <div
-                key={version.id}
-                className="flex items-center justify-between p-3 bg-muted rounded-lg"
-              >
-                <div>
-                  <div className="font-medium">Version {version.version}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {version.author?.name || version.author?.email} • {new Date(version.createdAt).toLocaleString()}
-                    {version.changeLog && ` • ${version.changeLog}`}
-                  </div>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleRestoreVersion(version.id, version.content)}
-                >
-                  Restore
-                </Button>
-              </div>
-            ))}
-          </div>
-        </CollapsibleDrawer>
-      )}
 
       <AlertDialogModal
         open={alert.open}
