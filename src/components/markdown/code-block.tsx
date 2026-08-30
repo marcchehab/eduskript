@@ -1,9 +1,17 @@
 'use client'
 
-import { useEffect, useRef, memo, useState } from 'react'
+import { useEffect, useMemo, useRef, memo, useState } from 'react'
 import { useTheme } from 'next-themes'
 import { Check, Copy } from 'lucide-react'
 import type { Extension } from '@codemirror/state'
+
+/** 1-based line numbers per annotation kind (from remarkCodeAnnotations). */
+export interface CodeLineMarks {
+  add?: number[]
+  del?: number[]
+  highlight?: number[]
+  focus?: number[]
+}
 
 interface CodeBlockProps {
   code: string
@@ -11,15 +19,23 @@ interface CodeBlockProps {
   className?: string
   /** Show the copy-to-clipboard button. Default true; callers hide it on exams. */
   showCopy?: boolean
+  /** Diff / highlight / focus line marks, rendered as CodeMirror line decorations. */
+  marks?: CodeLineMarks
 }
 
-function CodeBlockInner({ code, language, className, showCopy = true }: CodeBlockProps) {
+function CodeBlockInner({ code, language, className, showCopy = true, marks }: CodeBlockProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const editorRef = useRef<unknown>(null)
   const [isMounted, setIsMounted] = useState(false)
   const [copied, setCopied] = useState(false)
   const { resolvedTheme } = useTheme()
   const isDark = resolvedTheme === 'dark'
+
+  // Callers build `marks` inline on every render; without this the editor would
+  // be torn down and rebuilt each time. Key on the content, not the identity.
+  const marksKey = marks ? JSON.stringify(marks) : ''
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const stableMarks = useMemo(() => marks, [marksKey])
 
   useEffect(() => {
     setIsMounted(true)
@@ -101,6 +117,42 @@ function CodeBlockInner({ code, language, className, showCopy = true }: CodeBloc
         )
       }
 
+      // Line decorations for [!code ++/--/highlight/focus] marks. The document is
+      // read-only, so the decoration set is built once from line offsets in the
+      // source string — no update listener needed.
+      const markExtensions: Extension[] = []
+      if (stableMarks) {
+        const { Decoration } = await import('@codemirror/view')
+        const { RangeSetBuilder } = await import('@codemirror/state')
+        const classes = new Map<number, string[]>()
+        const addClass = (lines: number[] | undefined, cls: string) => {
+          for (const n of lines ?? []) {
+            const list = classes.get(n) ?? []
+            list.push(cls)
+            classes.set(n, list)
+          }
+        }
+        addClass(stableMarks.add, 'cm-line-add')
+        addClass(stableMarks.del, 'cm-line-del')
+        addClass(stableMarks.highlight, 'cm-line-highlight')
+        addClass(stableMarks.focus, 'cm-line-focus')
+
+        const offsets: number[] = []
+        let pos = 0
+        for (const line of code.split('\n')) {
+          offsets.push(pos)
+          pos += line.length + 1
+        }
+
+        const builder = new RangeSetBuilder<import('@codemirror/view').Decoration>()
+        for (const n of [...classes.keys()].sort((a, b) => a - b)) {
+          const from = offsets[n - 1]
+          if (from === undefined) continue
+          builder.add(from, from, Decoration.line({ class: classes.get(n)!.join(' ') }))
+        }
+        markExtensions.push(EditorView.decorations.of(builder.finish()))
+      }
+
       if (!containerRef.current) return
 
       // Clear the placeholder
@@ -113,6 +165,7 @@ function CodeBlockInner({ code, language, className, showCopy = true }: CodeBloc
           extensions: [
             ...(langSupport ? [langSupport] : []),
             ...indentExtensions,
+            ...markExtensions,
             ...(isDark ? [vsCodeDark] : [vsCodeLight]),
             EditorState.readOnly.of(true),
             EditorView.editable.of(false),
@@ -143,10 +196,10 @@ function CodeBlockInner({ code, language, className, showCopy = true }: CodeBloc
         editorRef.current = null
       }
     }
-  }, [isMounted, isDark, code, language])
+  }, [isMounted, isDark, code, language, stableMarks])
 
   return (
-    <div className={`code-block relative rounded-lg overflow-hidden ${className || ''}`}>
+    <div className={`code-block relative rounded-lg overflow-hidden${stableMarks?.focus?.length ? ' code-block-focus' : ''} ${className || ''}`}>
       {showCopy && (
         <button
           onClick={handleCopy}

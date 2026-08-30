@@ -14,6 +14,7 @@ import { remarkImageAttrs } from './remark-plugins/image-attrs'
 import { remarkExcalidraw } from './remark-plugins/excalidraw'
 import { remarkCodeEditor } from './remark-plugins/code-editor'
 import { remarkCodeCopy } from './remark-plugins/code-copy'
+import { remarkCodeAnnotations } from './remark-plugins/code-annotations'
 import { remarkInlineCodeLang } from './remark-plugins/inline-code-lang'
 import { remarkCallouts } from './remark-plugins/callouts'
 import { remarkMuxVideo } from './remark-plugins/mux-video'
@@ -44,6 +45,7 @@ export const remarkPlugins: PluggableList = [
   remarkMermaid,
   remarkPlot, // before remarkCodeEditor/remarkCodeCopy: they claim every remaining fence
   remarkCodeEditor,
+  remarkCodeAnnotations, // after remarkCodeEditor: only plain code blocks remain
   remarkCodeCopy, // after remarkCodeEditor: only plain code blocks remain
   remarkInlineCodeLang,
   remarkCallouts,

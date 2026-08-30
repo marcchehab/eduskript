@@ -199,6 +199,26 @@ If you omit \`for\` or the editor \`id\`, the check block is silently dropped.
 
 A fenced block WITHOUT \`editor\` (just \`\`\`python \`\`\`) is not interactive — it's a read-only, syntax-highlighted display block (see the "Code Blocks" reference for plain blocks and inline code). It shows a copy button on hover; add \`copy=false\` (or \`no-copy\`) to the info string to hide it, \`copy\`/\`copy=true\` to force it on. Hidden by default on exam pages.
 
+### Line annotations (plain, non-\`editor\` code blocks)
+
+Mark individual lines of a read-only block as added, removed, highlighted or focused — Shiki's notation, stripped from the code before it renders:
+
+\`\`\`python
+import turtle
+import os              # [!code ++]
+ship = turtle.Turtle() # [!code ++]
+turtle.done()          # [!code --]
+window.tracer(0)       # [!code highlight]
+ship.setx(new_x)       # [!code focus]
+\`\`\`
+
+- \`++\` green (added), \`--\` red (removed), \`highlight\` neutral tint, \`focus\` blurs every other line until the block is hovered.
+- \`[!code ++:3]\` applies the mark to that line and the 2 following — useful for a block of new lines.
+- A line whose only content is the marker becomes an empty added line.
+- Any comment token works (\`#\`, \`//\`, \`--\`, \`;\`, \`%\`, \`/* */\`, \`<!-- -->\`), and the comment is removed with the marker.
+- Without comments: line ranges in the info string — \`\`\`python {2,5-7} add={3-4} del={9} focus={1}\`\`\` (a bare \`{...}\` means highlight).
+- Only plain blocks; an \`editor\` block keeps its text verbatim (students edit it).
+
 ### Turtle auto-grading
 
 Turtle exercises are gradeable through the same \`python-check\` mechanism. Pyodide's stdlib doesn't ship turtle, so the runner installs a recording stub that captures every move into a global \`turtle_path\` list (tuples of \`(x, y, pen_down)\`). Three helper functions are then available inside any \`python-check\`:
@@ -821,6 +841,8 @@ export function getCondensedSyntaxReference(): string {
 **Slide presentations:** any page can be presented full-screen as slides, split from the markdown itself (same source reads as a page OR a deck). A new slide starts at each \`#\`/\`##\` heading, each \`---\` (also a horizontal rule on the page), or \`---/\` (invisible break — splits slides, draws no rule). A \`---x\` line drops the following content from the deck until the next break/heading (still shown on the page) — for background prose you don't want projected. Markers go on their own line outside code blocks; empty slides are dropped; exam pages aren't presentable.
 
 **Code-block copy button:** plain \`\`\`lang code blocks show a copy button; add \`copy=false\` (or \`no-copy\`) to the info string to hide it, \`copy\`/\`copy=true\` to force it. Hidden by default on exam pages.
+
+**Code-block line annotations:** in plain \`\`\`lang blocks, a trailing \`# [!code ++]\` marks a line as added (green), \`[!code --]\` removed (red), \`[!code highlight]\` highlighted, \`[!code focus]\` focused (rest blurred until hover). The marker and its comment are stripped from the rendered code. \`[!code ++:3]\` covers 3 lines; info-string ranges work too: \`\`\`python {2,5-7} add={3} del={9}\`\`\`. Not available in \`editor\` blocks.
 
 **Inline code with a language:** \`code\`{:python} — a language marker right after the closing backtick of inline code gets the same per-token color highlighting as a fenced block, without breaking it out of the sentence. Same language set as code editors/blocks (python, javascript/js, typescript/ts, sql, php, java, cpp, rust, go, html, css, json, xml, yaml). No marker → plain, uncolored inline code (the default).
 
