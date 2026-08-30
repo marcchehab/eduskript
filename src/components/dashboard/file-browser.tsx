@@ -99,6 +99,30 @@ export function FileBrowser({ skriptId, onFileSelect, className = '', onUploadCo
     return files.find(f => getFileName(f) === schemaName)
   }
 
+  // Hidden companion files (a DB's schema drawing, a drawing's generated SVGs)
+  // are surfaced as small pills on the owning row so they can still be dragged
+  // into the editor. They stay out of getDisplayFiles().
+  const findByName = (name: string) => files.find(f => getFileName(f) === name)
+
+  const getCompanionPills = (file: FileItem): { label: string; file: FileItem }[] => {
+    const name = getFileName(file)
+    if (isDatabaseFile(name)) {
+      const schema = findSchemaForDatabase(file)
+      // No light/dark split here: for a schema the theme-aware .excalidraw ref
+      // is what authors want, the raw SVG variants would just be noise.
+      return schema ? [{ label: 'schema', file: schema }] : []
+    }
+    if (isExcalidrawFile(name)) {
+      const light = findByName(`${name}.light.svg`)
+      const dark = findByName(`${name}.dark.svg`)
+      return [
+        ...(light ? [{ label: 'light', file: light }] : []),
+        ...(dark ? [{ label: 'dark', file: dark }] : []),
+      ]
+    }
+    return []
+  }
+
   // Filter out auto-generated files
   const shouldShowFile = (filename: string) => {
     // Don't show .excalidraw.light.svg or .excalidraw.dark.svg files
@@ -505,6 +529,24 @@ export function FileBrowser({ skriptId, onFileSelect, className = '', onUploadCo
                           >
                             <ExternalLink className="w-3 h-3" />
                           </button>
+                          {getCompanionPills(file).map(({ label, file: companion }) => (
+                            <button
+                              key={label}
+                              draggable
+                              onDragStart={(e) => {
+                                e.stopPropagation()
+                                handleFileDragStart(e, companion)
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onFileSelect?.(companion, 'embed')
+                              }}
+                              className="shrink-0 px-1.5 py-0.5 rounded-full border border-border bg-muted/60 text-[10px] leading-none text-muted-foreground hover:text-foreground hover:border-foreground/40 cursor-grab active:cursor-grabbing transition-colors"
+                              title={`Insert ${getFileName(companion)}`}
+                            >
+                              {label}
+                            </button>
+                          ))}
                         </div>
                         <p className="text-xs text-muted-foreground">{formatFileSize(getFileSize(file))}</p>
                       </div>
