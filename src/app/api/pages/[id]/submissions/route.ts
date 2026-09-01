@@ -14,6 +14,10 @@
  *
  * Auth: page authors only (resolved via checkPagePermissions, inherits from
  * skript/collection). Anyone else → 403.
+ *
+ * The id may also be a FrontPage id — site/org landing pages mount the same
+ * toolbar and scope their userData to it. Those are authorized on site
+ * ownership (site.userId, or owner/admin of the site's organization).
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -92,19 +96,58 @@ export async function GET(
       },
     })
 
-    if (!page) {
-      return NextResponse.json(empty)
-    }
+    // Authors of the item, used both as the auth gate and to exclude
+    // teachers from the respondent roster below.
+    let authorIds: Set<string>
 
-    const perms = checkPagePermissions(
-      session.user.id,
-      page.authors,
-      page.skript.authors,
-      session.user.isAdmin
-    )
+    if (page) {
+      const perms = checkPagePermissions(
+        session.user.id,
+        page.authors,
+        page.skript.authors,
+        session.user.isAdmin
+      )
 
-    if (!perms.canEdit) {
-      return NextResponse.json(empty)
+      if (!perms.canEdit) {
+        return NextResponse.json(empty)
+      }
+
+      authorIds = new Set<string>([
+        ...page.authors.map(a => a.user.id),
+        ...page.skript.authors.map(a => a.user.id),
+      ])
+    } else {
+      // FrontPage ids reach this route too: the site/org landing pages mount
+      // the same teacher toolbar with `frontPage.id` as the pageId (see
+      // app/[domain]/page.tsx and app/org/[orgSlug]/page.tsx), and userData
+      // written by components on a frontpage is scoped to that id. There is
+      // no Page row, so authorship is site ownership: the site's owner user,
+      // or an owner/admin of the org that owns the site.
+      const frontPage = await prisma.frontPage.findUnique({
+        where: { id: pageId },
+        select: { site: { select: { userId: true, organizationId: true } } },
+      })
+
+      if (!frontPage?.site) {
+        return NextResponse.json(empty)
+      }
+
+      const { userId: siteUserId, organizationId } = frontPage.site
+      const orgAdmins = organizationId
+        ? await prisma.organizationMember.findMany({
+            where: { organizationId, role: { in: ['owner', 'admin'] } },
+            select: { userId: true },
+          })
+        : []
+
+      authorIds = new Set<string>([
+        ...(siteUserId ? [siteUserId] : []),
+        ...orgAdmins.map(m => m.userId),
+      ])
+
+      if (!authorIds.has(session.user.id) && !session.user.isAdmin) {
+        return NextResponse.json(empty)
+      }
     }
 
     // Optional sessionId lookup: caller passes their browser's
@@ -143,15 +186,10 @@ export async function GET(
       },
     })
 
-    // Authors are not respondents. Skript-level authors inherit page edit
-    // rights via the permission model (see checkPagePermissions), so they're
+    // Authors are not respondents (authorIds resolved above). Skript-level
+    // authors inherit page edit rights via the permission model, so they're
     // excluded too — otherwise a co-author who once previewed the page would
     // show up in the teacher's own submission roster as a "student".
-    const authorIds = new Set<string>([
-      ...page.authors.map(a => a.user.id),
-      ...page.skript.authors.map(a => a.user.id),
-    ])
-
     const userIds = Array.from(new Set(rows.map(r => r.userId))).filter(id => !authorIds.has(id))
     if (userIds.length === 0) {
       return NextResponse.json({
@@ -198,7 +236,7 @@ export async function GET(
       }
     }
 
-    const isExamPage = page.pageType === 'exam'
+    const isExamPage = page?.pageType === 'exam'
 
     const submissions: PageSubmissionRow[] = userIds
       .map(userId => {
