@@ -1036,7 +1036,7 @@ function StickyNoteCard({ note, paperEl, onUpdate, onDelete, readOnly, onPositio
         {/* Preview of content when minimized / label when empty */}
         <span
           className={cn(
-            'text-xs opacity-60 truncate flex-1 min-w-0 select-none',
+            'text-xs opacity-85 truncate flex-1 min-w-0 select-none',
             note.minimized ? 'max-w-[160px]' : '',
           )}
           style={{

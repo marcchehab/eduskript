@@ -2352,6 +2352,11 @@ body>div[style*="display: inline-block"]>div[style*="resize: both"] {
 
 mark {
   background-color: var(--text-highlight-yellow);
+  /* The UA stylesheet forces `color: MarkText` (near-black) on <mark>. In dark
+     mode that puts black text on a dark translucent highlight — unreadable.
+     Inherit the surrounding text color instead so highlights work in both
+     themes. */
+  color: inherit;
   border-radius: 2px;
   padding: 0 1px;
 }
@@ -2381,6 +2386,14 @@ mark.text-highlight-blue {
 
 mark.text-highlight-purple {
   background-color: var(--text-highlight-purple);
+}
+
+mark.text-highlight-pink {
+  background-color: var(--text-highlight-pink);
+}
+
+mark.text-highlight-orange {
+  background-color: var(--text-highlight-orange);
 }
 
 /* ===== Theme-aware named color palette =====
@@ -2445,15 +2458,17 @@ mark.text-highlight-purple {
 .es-color-purple     { color: var(--es-color-purple); }
 .es-color-lightblue  { color: var(--es-color-lightblue); }
 
-/* Author-written highlights match <mark>'s UA-default dark text so they read
- * the same as user-highlights on the translucent background in both themes. */
+/* Author-written highlights inherit the surrounding text color, matching
+ * <mark> above. A fixed dark ink here (the previous behaviour, copied from
+ * <mark>'s UA default) was unreadable in dark mode: near-black text on a
+ * translucent highlight over a near-black page. */
 .es-bg-yellow,
 .es-bg-green,
 .es-bg-blue,
 .es-bg-pink,
 .es-bg-orange,
 .es-bg-red,
-.es-bg-purple { color: #18181b; }
+.es-bg-purple { color: inherit; }
 
 .es-bg-yellow { background-color: var(--es-bg-yellow); border-radius: 2px; padding: 0 1px; }
 .es-bg-green  { background-color: var(--es-bg-green);  border-radius: 2px; padding: 0 1px; }

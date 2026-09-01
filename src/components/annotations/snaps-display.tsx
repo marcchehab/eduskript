@@ -353,7 +353,7 @@ const StudentWorkSnapItem = memo(function StudentWorkSnapItem({
       >
         <GripVertical className="w-3 h-3 opacity-30 shrink-0" />
         <ImageIcon className="w-3 h-3 opacity-50 shrink-0" />
-        <span className="text-xs opacity-60 truncate flex-1 min-w-0">
+        <span className="text-xs opacity-85 truncate flex-1 min-w-0">
           {snap.name}
         </span>
         <span className={`text-xs ${colorClass} flex items-center gap-1 shrink-0`}>
@@ -637,7 +637,7 @@ const TeacherSnapItem = memo(function TeacherSnapItem({
       >
         <GripVertical className="w-3 h-3 opacity-30 shrink-0" />
         <ImageIcon className="w-3 h-3 opacity-50 shrink-0" />
-        <span className="text-xs opacity-60 truncate flex-1 min-w-0">
+        <span className="text-xs opacity-85 truncate flex-1 min-w-0">
           {snap.name}
         </span>
         <span className={`text-xs ${colorClass} flex items-center gap-1 shrink-0`}>
@@ -1040,7 +1040,7 @@ const SnapItem = memo(function SnapItem({
               handleStartEdit()
             }}
             onPointerDown={(e) => e.stopPropagation()}
-            className="snap-title text-xs opacity-60 truncate flex-1 min-w-0 cursor-text hover:opacity-100 transition-opacity"
+            className="snap-title text-xs opacity-85 truncate flex-1 min-w-0 cursor-text hover:opacity-100 transition-opacity"
           >
             {snap.name}
           </span>

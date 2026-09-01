@@ -325,8 +325,6 @@ export function FrontPageEditor({
         isPublished ? (
           <Link
             href={resolvedPreviewUrl}
-            target="_blank"
-            rel="noopener noreferrer"
             prefetch={false}
           >
             <Button variant="ghost" size="sm" title="View front page">
