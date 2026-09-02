@@ -1,6 +1,6 @@
-# Images and Diagrams
+# Images, Drawings, Diagrams
 
-Drag, drop, done. But a few of Eduskript's image features go beyond the basics — theme-aware Excalidraw drawings that swap with light/dark mode, a curated color palette that stays readable in both themes, and `invert` for hand-drawn black-on-white sketches.
+Drag, drop, done. But a few of Eduskript's image features go beyond the basics — theme-aware Excalidraw drawings that swap with light/dark mode (including AI-generated diagrams), a curated color palette that stays readable in both themes, `invert` for hand-drawn black-on-white sketches, and Mermaid for diagrams you'd rather describe than draw.
 
 ---
 
@@ -54,6 +54,10 @@ Click the **Excalidraw button** in the toolbar → opens a drawing canvas inline
 
 That's the entire workflow. The drawing remains editable — click it later in the preview to re-open the editor.
 
+### Generating a diagram from a prompt
+
+The in-page Excalidraw editor can also generate a first draft from an AI prompt — describe the diagram you want, let the AI sketch it, then adjust the result by hand like any other Excalidraw drawing.
+
 ### The manual path: external Excalidraw
 
 If you prefer Excalidraw's standalone web app or desktop app:
@@ -83,6 +87,23 @@ Eduskript looks up the `.light.svg` / `.dark.svg` siblings automatically. The `.
 > - Photos (use JPG)
 > - Pixel-perfect diagrams (use a vector tool like Figma or Inkscape)
 > - Very large diagrams that don't fit in a normal page width
+
+---
+
+## Mermaid diagrams
+
+For flowcharts, sequence diagrams, and other structured diagrams, Eduskript also renders [Mermaid](https://mermaid.js.org) natively — a text-based diagram syntax, theme-aware like everything else:
+
+````markdown
+```mermaid
+flowchart LR
+    A[Start] --> B{Condition}
+    B -->|yes| C[Do X]
+    B -->|no| D[Do Y]
+```
+````
+
+Most teachers don't hand-write Mermaid syntax. Describe the diagram you want to the AI Edit chat — "draw a flowchart of the algorithm above" — and it writes the ` ```mermaid ` block for you. Tweak the generated code afterward if it's not quite right.
 
 ---
 
@@ -149,7 +170,7 @@ For videos, see the **Video** chapter — they're handled separately via Mux.
 
 ---
 
-## Image cheat sheet
+## Image and diagram cheat sheet
 
 | Goal | Syntax |
 |------|--------|
@@ -157,6 +178,8 @@ For videos, see the **Video** chapter — they're handled separately via Mux.
 | Right-aligned at 50% width | `<image src="file.png" width="50%" align="right" />` |
 | Floated with text wrapping | `<image src="file.png" width="40%" align="left" wrap />` |
 | Theme-aware Excalidraw diagram | `![Caption](mydiagram.excalidraw)` |
+| AI-drafted Excalidraw diagram | Excalidraw toolbar button → describe it in the prompt |
+| Mermaid diagram | ` ```mermaid ` fenced code block, or ask AI Edit to write one |
 | Hand-drawn sketch (auto-invert dark) | `<image src="sketch.png" invert />` |
 | Inline themed text color | `<span class="es-color-cyan">text</span>` |
 | Inline themed highlight | `<span class="es-bg-yellow">text</span>` |

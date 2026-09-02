@@ -1,7 +1,6 @@
 import { visit } from 'unist-util-visit'
 
-// Extensions handled by other plugins (images, excalidraw, video)
-const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.avif']
+// Extensions handled by other plugins (excalidraw, video)
 const SKIP_EXTENSIONS = ['.excalidraw', '.excalidraw.md', '.mp4', '.mov']
 
 /**
@@ -13,7 +12,6 @@ const SKIP_EXTENSIONS = ['.excalidraw', '.excalidraw.md', '.mp4', '.mov']
  *
  * Skips:
  * - Already-resolved URLs (http, https, /, #, mailto:)
- * - Image files (handled by remarkImageResolver)
  * - Excalidraw/video files (handled by their own plugins)
  */
 export function remarkFileLinkResolver() {
@@ -28,11 +26,10 @@ export function remarkFileLinkResolver() {
         return
       }
 
-      // Skip image files (handled by remarkImageResolver via img elements)
+      // Image extensions are NOT skipped: this visits `link` nodes only, so
+      // [text](photo.png) is a download link to the image, not an <img>
+      // (those are `image` nodes, handled by remarkImageResolver).
       const lowerUrl = url.toLowerCase()
-      if (IMAGE_EXTENSIONS.some(ext => lowerUrl.endsWith(ext))) {
-        return
-      }
 
       // Skip excalidraw and video files
       if (SKIP_EXTENSIONS.some(ext => lowerUrl.endsWith(ext))) {

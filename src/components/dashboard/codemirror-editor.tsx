@@ -457,15 +457,19 @@ const CodeMirrorEditor = function CodeMirrorEditor({
     } else if (extension === 'excalidraw') {
       // Excalidraw drawing - use image syntax with just filename
       insertText = `![](${fileName})`
-    } else if (['mp4', 'avi', 'mov', 'wmv'].includes(extension || '')) {
-      // Video - use full URL for non-image files
-      insertText = `<video controls>\n  <source src="${file.url || fileName}" type="video/${extension}">\n  Your browser does not support the video tag.\n</video>`
+    } else if (['mp4', 'mov'].includes(extension || '')) {
+      // Mux-hosted video reference, resolved at render time via remarkMuxVideo
+      // (same as editor-with-media's file panel).
+      insertText = `![](${fileName})`
     } else if (['mp3', 'wav', 'ogg'].includes(extension || '')) {
-      // Audio - use full URL for non-image files
-      insertText = `<audio controls>\n  <source src="${file.url || fileName}" type="audio/${extension}">\n  Your browser does not support the audio tag.\n</audio>`
+      // Bare filename; markdown-components' AudioComponent resolves it to the
+      // current file URL at render time.
+      insertText = `<audio controls src="${fileName}"></audio>`
     } else {
-      // Generic file/download link - use full URL for non-image files
-      insertText = `[${fileName}](${file.url || fileName})`
+      // Generic file/download link. Bare filename, resolved to the current
+      // file URL at render time (markdown-components AnchorComponent); label is
+      // the basename without extension.
+      insertText = `[${fileName.replace(/\.[^.]+$/, '')}](${fileName})`
     }
 
     if (editorViewRef.current && !useSimpleEditor) {

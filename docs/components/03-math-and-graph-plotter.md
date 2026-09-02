@@ -1,6 +1,6 @@
-# Math
+# Math and Graph Plotter
 
-Mathematical notation rendered with [KaTeX](https://katex.org/). Fast, beautiful, supports nearly all standard LaTeX commands.
+Mathematical notation rendered with [KaTeX](https://katex.org/). Fast, beautiful, supports nearly all standard LaTeX commands. This page also covers the two ways to plot a function — natively, or with Python — and embedding interactive GeoGebra applets.
 
 ---
 
@@ -204,7 +204,79 @@ Full supported-commands list: [katex.org/docs/supported](https://katex.org/docs/
 
 ---
 
-## Math cheat sheet
+## Function plots
+
+A ```` ```plot ```` fenced code block draws a function graph natively — no Python, no editor, just a static SVG. One entry per line:
+
+````markdown
+```plot
+f(x) = 1/3x^3 - x
+x: -4..4
+y: -3..3
+A = (2, 1)
+vline x=-1
+grid
+caption: A cubic with a marked point
+```
+````
+
+**Entry types:**
+
+| Entry | Meaning |
+|-------|---------|
+| `f(x) = ...` | a curve (implicit multiplication allowed: `1/3x^3` works) |
+| `x: -4..4` | the x window |
+| `y: -3..3` | the y window (optional — auto-fit if omitted) |
+| `A = (2, 1)` | a labeled point |
+| `vline x=-1` | a vertical line |
+| `hline y=2` | a horizontal line |
+
+**Flags:** `grid` / `nogrid`, `aspect: equal`, `size: 640x400`, `caption: ...`.
+
+Per-entry options go after a comma on the same line: a colour word, `label="..."`, `dashed`, `thick` — e.g. `f(x) = x^2, red, thick, label="parabola"`. Use `ln` for natural log, `log` for base 10.
+
+Because the plot renders as a static `<img>`, an `<ai-feedback>` tag in the same section captures it along with any pen strokes drawn on top — the way to build "sketch the tangent at x=1" tasks. See **Code Editors & Scoring** for `<ai-feedback>` details.
+
+---
+
+## Plotting with Python (matplotlib)
+
+The native `plot` block above covers most "graph this function" needs. For anything that needs real computation first — plotting data, a numerical simulation, a matplotlib figure with subplots — use a regular Python editor instead:
+
+````markdown
+```python editor output-only
+import matplotlib.pyplot as plt
+import numpy as np
+
+x = np.linspace(-4, 4, 200)
+plt.plot(x, x**3 / 3 - x)
+plt.grid(True)
+plt.show()
+```
+````
+
+`output-only` auto-runs the code on page load and shows just the resulting figure (code collapsed, expandable) — see **Code Editors & Scoring** for the full rundown of editor options, scoring, and the Python/JavaScript/SQL runtimes.
+
+---
+
+## GeoGebra
+
+Embed an interactive GeoGebra applet by its material ID (the id from a geogebra.org share link):
+
+```html
+<geogebra material-id="dNPHaqgb" show-toolbar="true" />
+```
+
+- `material-id` (required) — from the GeoGebra share link
+- `show-toolbar="true"` — shows GeoGebra's own editing toolbar (omit for a clean viewer)
+- `height="450"` — pins a fixed height; by default the embed auto-fits its content
+- `correct-when="correct"` — captures per-student correctness for the teacher's class tally, for applets that expose a correctness state
+
+Good for constructions students manipulate directly — dragging points, exploring transformations — rather than a static plot.
+
+---
+
+## Math and plotting cheat sheet
 
 | Goal | Syntax |
 |------|--------|
@@ -223,25 +295,6 @@ Full supported-commands list: [katex.org/docs/supported](https://katex.org/docs/
 | Text in math | `\text{word}` |
 | Themed color | `\textcolor{cyan}{x}` |
 | Small space | `\,` |
-
----
-
-## Structural formulas (chemistry)
-
-`<molecule>` draws a structural formula from a SMILES string:
-
-```html
-<molecule smiles="CC(=O)Oc1ccccc1C(=O)O" name="Aspirin" />
-<molecule smiles="O" name="Wasser" width="240" height="180" />
-```
-
-**Attributes:** `smiles` (required), `name` (caption under the drawing), `width` / `height` in px (default 420×300). Layout works like an image: drag the handle in the editor preview to resize, use the buttons to align left/centre/right or let text wrap around it — that writes `display-width`, `align` and `wrap` back into the tag.
-
-SMILES is the standard text notation for molecules — `CCO` is ethanol, `c1ccccc1` benzene, `O` water. You don't have to write them from memory: PubChem lists a SMILES for every substance name, and structure editors export them.
-
-The drawing is a normal image, so students can annotate it with the pens and an `<ai-feedback>` tag in the same section picks it up — the way to build "mark the functional group" tasks.
-
-> [!note] Why it looks slightly different from your textbook
-> The layout is generated, not drawn: bond angles and where a chain bends are the renderer's choice. Element colours follow the usual convention (O red, N blue), and in dark mode only the black ink is lightened.
-
-Broken SMILES don't break the page — the image itself shows what the parser objected to.
+| Native function plot | ` ```plot ` fenced block |
+| Python/matplotlib plot | ` ```python editor output-only ` |
+| GeoGebra applet | `<geogebra material-id="..." />` |

@@ -303,6 +303,12 @@ export function EditorWithMedia({
     refreshFileList()
   }, [refreshFileList])
 
+  // Link text for a file link: the basename without extension. The href is
+  // the bare filename — markdown-components' AnchorComponent resolves it to the
+  // current file URL at render time, so the link survives a re-upload with the
+  // same name (a pasted S3 URL would not).
+  const linkLabel = (name: string) => name.replace(/\.[^.]+$/, '')
+
   // Insert file content at the current cursor position (or append to end).
   // Branches on extension and insertion type. Note that .mp4/.mov go through
   // the Mux pipeline (`![](filename)`) — the markdown renderer resolves them
@@ -325,7 +331,7 @@ export function EditorWithMedia({
       if (insertionType === 'sql-editor') {
         insertText = `\`\`\`sql editor db="${file.name}"\n-- Show all tables in the database\nSELECT name FROM sqlite_master WHERE type='table' ORDER BY name;\n\`\`\``
       } else {
-        insertText = `[${file.name}](${file.url || file.name})`
+        insertText = `[${linkLabel(file.name)}](${file.name})`
       }
     } else if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(extension || '')) {
       if (insertionType === 'embed') {
@@ -335,7 +341,7 @@ export function EditorWithMedia({
         // when they want one.
         insertText = `![](${file.name})`
       } else {
-        insertText = `[${file.name}](${file.url || file.name})`
+        insertText = `[${linkLabel(file.name)}](${file.name})`
       }
     } else if (extension === 'excalidraw') {
       insertText = `![](${file.name})`
@@ -343,9 +349,11 @@ export function EditorWithMedia({
       // Mux-hosted video reference (resolved at render time via remarkMuxVideo)
       insertText = `![](${file.name})`
     } else if (['mp3', 'wav', 'ogg'].includes(extension || '')) {
-      insertText = `<audio controls>\n  <source src="${file.url || file.name}" type="audio/${extension}">\n  Your browser does not support the audio tag.\n</audio>`
+      // Bare filename; markdown-components' AudioComponent resolves it to the
+      // current file URL at render time.
+      insertText = `<audio controls src="${file.name}"></audio>`
     } else {
-      insertText = `[${file.name}](${file.url || file.name})`
+      insertText = `[${linkLabel(file.name)}](${file.name})`
     }
 
     if (file.position !== undefined) {

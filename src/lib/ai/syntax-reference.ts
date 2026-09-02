@@ -418,7 +418,9 @@ The alt text is the caption. Playback options are attributes on the tag form (va
 
 **Attributes:** \`gif\` — play it like an animated GIF (muted autoplay, looping, no controls, not clickable; browsers only autoplay muted video); \`autoplay\` (muted), \`loop\`, \`pin\` (pins into a corner overlay when scrolled past), \`poster\` (filename or URL overriding the auto thumbnail), \`alt\` (caption).
 
-In the dashboard preview these toggle from a toolbar in the video's top-right corner.`)
+In the dashboard preview these toggle from a toolbar in the video's top-right corner.
+
+**Audio:** \`<audio controls src="clip.mp3"></audio>\` — the filename is resolved from the skript's files at render time, like a link. Also accepts \`<source src="clip.mp3">\` children and absolute URLs.`)
 
   // YouTube
   sections.push(`## YouTube Embeds
@@ -821,6 +823,7 @@ export function getCondensedSyntaxReference(): string {
 
 **Videos (Mux):** \`![caption](lecture.mp4)\` — the alt text becomes the caption. Playback options via \`<muxvideo>\`: \`<muxvideo src="intro.mp4" gif />\` (muted autoplay loop, GIF-style), \`autoplay\` (muted), \`loop\`, \`pin\` (corner overlay when scrolled past), \`poster="cover.png"\`, \`alt="caption"\`.
 
+**Audio:** \`<audio controls src="clip.mp3"></audio>\` — filename resolved from the skript's files at render time; \`<source src>\` children and absolute URLs also work.
 **Custom CSS:** \`<style>.my-class { ... }</style>\` — scoped CSS blocks are supported. Inline \`style="..."\` also works on any element.
 
 **Flex layouts:** \`<flex gap="medium"><flex-item>Left</flex-item><flex-item>Right</flex-item></flex>\` — side-by-side columns that stack on mobile. Items divide space equally by default (no \`width\` needed); set \`width="30%"\` only for deliberately uneven splits. \`<flex>\` takes \`gap\`, \`direction\`, \`justify\`, \`align\`, \`wrap\`. \`<flex-item>\` accepts \`style\`/\`class\` for backgrounds and padding.

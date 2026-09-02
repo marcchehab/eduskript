@@ -786,6 +786,22 @@ export function createMarkdownComponents(
     return <a href={href} {...props}>{children}</a>
   }
 
+  // <audio controls src="clip.mp3"> and <source src="clip.mp3"> — resolve a
+  // bare filename to the file's current URL, like AnchorComponent does for
+  // links. Absolute URLs pass through. A name that isn't in the skript files
+  // is left as-is (the browser shows a broken player, not a crash).
+  const resolveMediaSrc = (src: unknown): string | undefined => {
+    if (typeof src !== 'string' || !src) return undefined
+    if (/^(https?:)?\/\//.test(src) || src.startsWith('/') || src.startsWith('data:')) return src
+    return resolveFile(files, src)?.url ?? src
+  }
+  function AudioComponent({ src, children, ...props }: React.AudioHTMLAttributes<HTMLAudioElement>) {
+    return <audio src={resolveMediaSrc(src)} {...props}>{children}</audio>
+  }
+  function SourceComponent({ src, ...props }: React.SourceHTMLAttributes<HTMLSourceElement>) {
+    return <source src={resolveMediaSrc(src)} {...props} />
+  }
+
   // When custom block-level components (e.g. <ColorSliders />) appear on their
   // own line in markdown, rehype wraps them in <p>. HTML forbids <div> inside
   // <p>, causing hydration errors. When a <p> contains only a single custom
@@ -809,6 +825,8 @@ export function createMarkdownComponents(
     code: (props: React.HTMLAttributes<HTMLElement>) => <CodeComponent {...props} isExam={isExam} />,
     img: ImgElementComponent,
     a: AnchorComponent,
+    audio: AudioComponent,
+    source: SourceComponent,
     blockquote: BlockquoteComponent,
     h1: createHeading(1),
     h2: createHeading(2),

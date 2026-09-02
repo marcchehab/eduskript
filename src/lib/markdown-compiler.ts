@@ -98,6 +98,8 @@ export const sanitizeSchema = {
     'mermaid-diagram',
     'function-plot', // ```plot fence; body rides in data-spec
     'molecule', // SMILES structural formula, rendered by /api/render/molecule.svg
+    'audio', // <audio controls src="clip.mp3">; src resolved by filename in markdown-components AudioComponent
+    'source', // <source src="clip.mp3"> inside <audio>; src resolved the same way
     'stickme',
     'demoeditor',
     'ourteachers',
@@ -167,6 +169,8 @@ export const sanitizeSchema = {
     // iframe: 'sandbox' is intentionally omitted — rehypeSandboxIframes forces
     // a safe value after sanitize so authors can't weaken it.
     'iframe': ['src', 'width', 'height', 'title', 'loading', 'allowfullscreen', 'frameborder', 'className', 'style'],
+    'audio': ['src', 'controls', 'preload', 'loop', 'muted', 'className', 'style'],
+    'source': ['src', 'type'],
     'pdf': ['src', 'height'],
     // GeoGebra applet. material-id (online) is the primary source; src is
     // reserved for a future uploaded .ggb. Both kebab + camel for HAST/raw-HTML.
