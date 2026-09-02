@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react'
 import Image from 'next/image'
-import { Image as ImageIcon, Video, Music, FileText, Archive, File, Trash2, ExternalLink, Pencil, TextCursor, Database, FileCode, Link2, Import } from 'lucide-react'
+import { Image as ImageIcon, Video, Music, FileText, Archive, File, Trash2, ExternalLink, Pencil, TextCursor, Database, FileCode, Link2, Import, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
@@ -50,6 +50,8 @@ export function FileBrowser({ skriptId, onFileSelect, className = '', onUploadCo
   const [newUploadName, setNewUploadName] = useState('')
   const [uploadProgress, setUploadProgress] = useState<number | null>(null) // 0-100 or null
   const [importDialogOpen, setImportDialogOpen] = useState(false)
+  // Name filter for the list, same as the video browser's.
+  const [query, setQuery] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { resolvedTheme } = useTheme()
   const alert = useAlertDialog()
@@ -144,6 +146,12 @@ export function FileBrowser({ skriptId, onFileSelect, className = '', onUploadCo
       return !f.isDirectory && (f.uploadType === 'skript' || !f.uploadType) && shouldShowFile(filename)
     })
   }
+
+  // Files the panel shows at all, and the subset matching the filter box.
+  const displayFiles = getDisplayFiles()
+  const visibleFiles = query.trim()
+    ? displayFiles.filter(f => getFileName(f).toLowerCase().includes(query.trim().toLowerCase()))
+    : displayFiles
 
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 Bytes'
@@ -420,12 +428,22 @@ export function FileBrowser({ skriptId, onFileSelect, className = '', onUploadCo
           {/* Import from another skript — sits above the drop zone so it's discoverable
               whether or not files already exist. Imports use content-addressed dedup,
               so no S3 re-upload happens. */}
-          <div className="flex justify-end">
+          <div className="flex items-center gap-1.5">
+            <div className="flex-1 flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1">
+              <Search className="w-3 h-3 text-muted-foreground shrink-0" />
+              <input
+                type="text"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Filter files…"
+                className="flex-1 text-xs bg-transparent outline-hidden placeholder:text-muted-foreground"
+              />
+            </div>
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              className="h-7 text-xs gap-1.5"
+              className="h-7 text-xs gap-1.5 shrink-0"
               onClick={() => setImportDialogOpen(true)}
             >
               <Import className="w-3.5 h-3.5" />
@@ -467,17 +485,19 @@ export function FileBrowser({ skriptId, onFileSelect, className = '', onUploadCo
                 </svg>
               </div>
             )}
-            {getDisplayFiles().length === 0 ? (
+            {displayFiles.length === 0 ? (
               <div className="text-center py-2 text-muted-foreground text-sm" data-upload-zone>
                 Drop files here or click to upload
               </div>
+            ) : visibleFiles.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-3">No matches</p>
             ) : (
               <div className="space-y-1">
                 <div className="text-xs text-muted-foreground mb-2">
-                  {getDisplayFiles().length} file{getDisplayFiles().length !== 1 ? 's' : ''}
+                  {visibleFiles.length} file{visibleFiles.length !== 1 ? 's' : ''}
                 </div>
                 <div className="space-y-1 max-h-96 overflow-y-auto">
-                {getDisplayFiles().map((file) => (
+                {visibleFiles.map((file) => (
                   <div
                     key={file.id || file.url}
                     className="flex items-center space-x-2 p-2 rounded hover:bg-muted group"

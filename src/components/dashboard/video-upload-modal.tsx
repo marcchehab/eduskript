@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { Upload, Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 import {
   Dialog,
@@ -18,9 +18,12 @@ interface VideoUploadModalProps {
   // Skript to associate the uploaded video with via SkriptVideos.
   // Omit for admin uploads that aren't tied to a specific skript.
   skriptId?: string
+  // File to start with, e.g. one dropped onto the video browser. Applied each
+  // time the modal opens; the user can still pick a different one.
+  initialFile?: File | null
 }
 
-export function VideoUploadModal({ open, onOpenChange, onUploadComplete, skriptId }: VideoUploadModalProps) {
+export function VideoUploadModal({ open, onOpenChange, onUploadComplete, skriptId, initialFile }: VideoUploadModalProps) {
   const [state, setState] = useState<UploadState>('idle')
   const [filename, setFilename] = useState('')
   const [file, setFile] = useState<File | null>(null)
@@ -49,6 +52,13 @@ export function VideoUploadModal({ open, onOpenChange, onUploadComplete, skriptI
     }
     onOpenChange(isOpen)
   }, [state, reset, onOpenChange])
+
+  useEffect(() => {
+    if (!open || !initialFile) return
+    setFile(initialFile)
+    setFilename(initialFile.name)
+    setError('')
+  }, [open, initialFile])
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0]

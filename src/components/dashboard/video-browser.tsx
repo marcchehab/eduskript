@@ -29,6 +29,9 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
   const [copiedPlaybackId, setCopiedPlaybackId] = useState<string | null>(null)
   const [showAddForm, setShowAddForm] = useState(false)
   const [showUploadModal, setShowUploadModal] = useState(false)
+  // A video file dropped onto the panel: opens the upload modal with it selected.
+  const [droppedFile, setDroppedFile] = useState<File | null>(null)
+  const [fileDragOver, setFileDragOver] = useState(false)
   const [showImportDialog, setShowImportDialog] = useState(false)
   const [addFilename, setAddFilename] = useState('')
   const [addPlaybackId, setAddPlaybackId] = useState('')
@@ -87,6 +90,38 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
       // clipboard not available, silently ignore
     }
   }
+
+  // Drop a video file anywhere on the panel to upload it. Only OS file drags
+  // are handled; dragging a listed video (application/Eduskript-mux-video)
+  // over its own panel is left alone so the browser shows "not allowed".
+  const isFileDrag = (e: React.DragEvent) => Array.from(e.dataTransfer.types).includes('Files')
+  const handleFileDragOver = (e: React.DragEvent) => {
+    if (!isFileDrag(e)) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'copy'
+    setFileDragOver(true)
+  }
+  const handleFileDragLeave = (e: React.DragEvent) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return
+    setFileDragOver(false)
+  }
+  const handleFileDrop = (e: React.DragEvent) => {
+    if (!isFileDrag(e)) return
+    e.preventDefault()
+    setFileDragOver(false)
+    const dropped = Array.from(e.dataTransfer.files).find(f => f.type.startsWith('video/'))
+    if (!dropped) {
+      dialog.showAlert('warning', 'Not a video', 'Drop a video file (mp4, mov, webm) to upload it.')
+      return
+    }
+    setDroppedFile(dropped)
+    setShowUploadModal(true)
+  }
+  const openUploadModal = (isOpen: boolean) => {
+    setShowUploadModal(isOpen)
+    if (!isOpen) setDroppedFile(null)
+  }
+  const dropZoneClass = fileDragOver ? 'ring-2 ring-inset ring-blue-500 bg-blue-50 dark:bg-blue-900/10 rounded-md' : ''
 
   const handleDragStart = (e: React.DragEvent, video: VideoInfo) => {
     // Don't allow dragging non-ready videos
@@ -197,7 +232,12 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
 
   if (videos.length === 0 && !isAdmin) {
     return (
-      <div className={`p-4 text-center text-sm text-muted-foreground ${className}`}>
+      <div
+        className={`p-4 text-center text-sm text-muted-foreground ${className} ${dropZoneClass}`}
+        onDragOver={handleFileDragOver}
+        onDragLeave={handleFileDragLeave}
+        onDrop={handleFileDrop}
+      >
         <Film className="w-8 h-8 mx-auto mb-2 opacity-40" />
         <p>No videos available.</p>
         <p className="mt-1 text-xs">Upload a video, or import one from another skript.</p>
@@ -221,9 +261,10 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
         </div>
         <VideoUploadModal
           open={showUploadModal}
-          onOpenChange={setShowUploadModal}
+          onOpenChange={openUploadModal}
           onUploadComplete={onUploadComplete}
           skriptId={skriptId}
+          initialFile={droppedFile}
         />
         {skriptId && (
           <VideoImportDialog
@@ -239,7 +280,12 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
 
   return (
     <>
-    <div className={`flex flex-col ${className}`}>
+    <div
+      className={`flex flex-col ${className} ${dropZoneClass}`}
+      onDragOver={handleFileDragOver}
+      onDragLeave={handleFileDragLeave}
+      onDrop={handleFileDrop}
+    >
       {/* Search + Upload + Admin Add buttons */}
       <div className="px-2 pt-2 pb-1 flex items-center gap-1.5">
         <div className="flex-1 flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1">
@@ -421,9 +467,10 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
 
       <VideoUploadModal
         open={showUploadModal}
-        onOpenChange={setShowUploadModal}
+        onOpenChange={openUploadModal}
         onUploadComplete={onUploadComplete}
         skriptId={skriptId}
+        initialFile={droppedFile}
       />
       {skriptId && (
         <VideoImportDialog
