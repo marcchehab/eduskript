@@ -513,7 +513,7 @@ A button students press to get AI feedback on what they drew or wrote by hand on
 <ai-feedback id="fb-quadratics" label="Check my solution" prompt="..." />
 \`\`\`
 
-**Attributes:** \`prompt\` — teacher instructions for the AI (not shown to students); \`id\` — optional stable identifier (components map to their prompt by position automatically, even with several per page); \`label\` — button text (default "Get AI feedback"). Place the tag inside the exercise's own heading section; an h3 per exercise keeps the context tight. Requires a logged-in user; requests are rate-limited.`)
+**Attributes:** \`prompt\` — teacher instructions for the AI (not shown to students); \`id\` — optional stable identifier (components map to their prompt by position automatically, even with several per page); \`label\` — button text (default "Get AI feedback"). Place the tag inside the exercise's own heading section; an h3 per exercise keeps the context tight. Works for logged-out visitors too; requests are rate-limited per user or IP.`)
 
   // Ping terminal
   sections.push(`## Ping Terminal
@@ -858,7 +858,7 @@ export function getCondensedSyntaxReference(): string {
 
 **Newsletter:** \`<newsletter [title="..."] [description="..."] [button="..."] />\` — email capture; addresses go to the site's Brevo list, which owns confirmation and unsubscribe.
 
-**AI feedback:** \`<ai-feedback prompt="teacher instructions for the AI" [id="fb1"] [label="Check my solution"] />\` — button for students: sends their pen strokes in the surrounding h1/h2/h3 section (rendered to an image) + the section markdown to a vision model for feedback; pasting a screenshot (hover box, Ctrl+V) works as alternative input. Several tags per page map to their prompts by position (\`id\` optional); requires login.
+**AI feedback:** \`<ai-feedback prompt="teacher instructions for the AI" [id="fb1"] [label="Check my solution"] />\` — button for students: sends their pen strokes in the surrounding h1/h2/h3 section (rendered to an image) + the section markdown to a vision model for feedback; pasting a screenshot (hover box, Ctrl+V) works as alternative input. Several tags per page map to their prompts by position (\`id\` optional); no login required.
 
 **Ping:** \`<ping [host="wairualodge.co.nz"] [count="4"] [os="linux|macos|windows"] />\` — interactive terminal; students type \`ping [-c N] host\`. Server-side TCP connect (not ICMP; works where school wifi blocks ICMP). RTT/IP/loss are real; \`host\` auto-runs a demo; requires login; private addresses blocked; top-right button switches OS style.
 

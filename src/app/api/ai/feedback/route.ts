@@ -36,11 +36,11 @@ const requestCounts = new Map<string, { count: number; resetAt: number }>()
 const RATE_LIMIT = 10 // requests per window
 const RATE_WINDOW = 60 * 1000
 
-function checkRateLimit(userId: string): boolean {
+function checkRateLimit(key: string): boolean {
   const now = Date.now()
-  const record = requestCounts.get(userId)
+  const record = requestCounts.get(key)
   if (!record || now > record.resetAt) {
-    requestCounts.set(userId, { count: 1, resetAt: now + RATE_WINDOW })
+    requestCounts.set(key, { count: 1, resetAt: now + RATE_WINDOW })
     return true
   }
   if (record.count >= RATE_LIMIT) return false
@@ -68,17 +68,24 @@ Guidelines:
 
 export async function POST(request: Request) {
   try {
+    // Anonymous callers are allowed on published content (the landing pages
+    // demo this component to logged-out teachers). Unpublished content still
+    // needs a session with view permission. Rate limit keys on the user id,
+    // or the client IP for anon — per-instance, so it caps a single visitor,
+    // not global spend; restrict to logged-in users again if cost becomes a
+    // problem.
     const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    const userId = session.user.id
+    const userId = session?.user?.id ?? null
+    const isAdmin = !!session?.user?.isAdmin
+    const rateKey =
+      userId ??
+      `ip:${request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? request.headers.get('x-real-ip') ?? 'unknown'}`
 
     if (!process.env.OPENROUTER_API_KEY) {
       return Response.json({ error: 'AI service not configured' }, { status: 503 })
     }
 
-    if (!checkRateLimit(userId)) {
+    if (!checkRateLimit(rateKey)) {
       return Response.json(
         { error: 'Rate limit exceeded. Please wait a moment before asking again.' },
         { status: 429 }
@@ -103,6 +110,14 @@ export async function POST(request: Request) {
       return Response.json({ error: 'Invalid or oversized image' }, { status: 400 })
     }
 
+    // Resolve the content + site prompt behind `pageId`. Two kinds of id reach
+    // this route: a Page id, or a FrontPage id — the site/org landing pages
+    // mount the markdown renderer with `frontPage.id` as pageId (see
+    // app/[domain]/page.tsx, app/org/[orgSlug]/page.tsx), and there is no Page
+    // row for those. Same split as /api/pages/[id]/submissions.
+    let content: string
+    let sitePrompt: string | null | undefined
+
     const page = await prisma.page.findUnique({
       where: { id: pageId },
       select: {
@@ -126,26 +141,56 @@ export async function POST(request: Request) {
         },
       },
     })
-    if (!page) {
-      return Response.json({ error: 'Page not found' }, { status: 404 })
-    }
 
-    // Published pages: any signed-in user may ask for feedback (students are
-    // not page authors). Unpublished: authors/admin only.
-    const isPublic = page.isPublished && page.skript.isPublished
-    if (!isPublic) {
-      const perms = checkPagePermissions(
-        userId,
-        page.authors,
-        page.skript.authors,
-        !!session.user.isAdmin
-      )
-      if (!perms.canView) {
-        return Response.json({ error: 'Access denied' }, { status: 403 })
+    if (page) {
+      // Published pages: anyone, signed in or not. Unpublished: authors/admin only.
+      const isPublic = page.isPublished && page.skript.isPublished
+      if (!isPublic) {
+        if (!userId) {
+          return Response.json({ error: 'Unauthorized' }, { status: 401 })
+        }
+        const perms = checkPagePermissions(userId, page.authors, page.skript.authors, isAdmin)
+        if (!perms.canView) {
+          return Response.json({ error: 'Access denied' }, { status: 403 })
+        }
       }
+      content = page.content
+      sitePrompt = page.skript.collectionSkripts[0]?.collection.site.aiSystemPrompt
+    } else {
+      const frontPage = await prisma.frontPage.findUnique({
+        where: { id: pageId },
+        select: {
+          content: true,
+          isPublished: true,
+          site: { select: { userId: true, organizationId: true, aiSystemPrompt: true } },
+        },
+      })
+      if (!frontPage) {
+        return Response.json({ error: 'Page not found' }, { status: 404 })
+      }
+      // Unpublished frontpage: site owner, org owner/admin, or site admin only.
+      if (!frontPage.isPublished && !isAdmin) {
+        if (!userId) {
+          return Response.json({ error: 'Unauthorized' }, { status: 401 })
+        }
+        const site = frontPage.site
+        let allowed = site?.userId === userId
+        if (!allowed && site?.organizationId) {
+          const member = await prisma.organizationMember.findFirst({
+            where: { organizationId: site.organizationId, userId, role: { in: ['owner', 'admin'] } },
+            select: { userId: true },
+          })
+          allowed = !!member
+        }
+        if (!allowed) {
+          return Response.json({ error: 'Access denied' }, { status: 403 })
+        }
+      }
+      content = frontPage.content
+      sitePrompt = frontPage.site?.aiSystemPrompt
     }
 
-    const context = extractFeedbackContext(page.content, feedbackId, feedbackIndex)
+    const context = extractFeedbackContext(content, feedbackId, feedbackIndex)
     if (!context) {
       return Response.json(
         { error: 'No matching ai-feedback component on this page' },
@@ -155,7 +200,6 @@ export async function POST(request: Request) {
 
     // Layer the prompt: base tutor role → site voice/language (aiSystemPrompt,
     // shared with the authoring AI) → this exercise's teacher instructions.
-    const sitePrompt = page.skript.collectionSkripts[0]?.collection.site.aiSystemPrompt
     let systemPrompt = BASE_SYSTEM_PROMPT
     if (sitePrompt?.trim()) {
       systemPrompt += `\n\nSite style and language guidelines:\n${sitePrompt.trim()}`
