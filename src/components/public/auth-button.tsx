@@ -141,7 +141,7 @@ export function AuthButton({ pageId, teacherPageSlug, teacherBillingPlan, isOrgP
   // If user can edit this page, show profile picture with edit overlay
   if (editUrl && !isStudent) {
     return (
-      <QuestSpotlight step="return_via_edit_link" label="Try this!">
+      <QuestSpotlight step={['return_to_builder', 'return_via_edit_link']} label="Try this!">
         <Link
           href={editUrl}
           title="Edit this page"
@@ -284,25 +284,27 @@ export function AuthButton({ pageId, teacherPageSlug, teacherBillingPlan, isOrgP
         : '/dashboard'
 
   return (
-    <Link
-      href={dashboardHref}
-      title={`Go to dashboard (${userName})`}
-      className="relative h-8 w-8 rounded-md border border-border bg-card hover:bg-muted transition-colors inline-flex items-center justify-center"
-    >
-      {session.user?.image ? (
-        // Show profile picture (OAuth image passed through session, not stored for students)
-        <div className="absolute inset-0 overflow-hidden rounded-md">
-          <Image
-            src={session.user.image}
-            alt={userName}
-            fill
-            className="object-cover opacity-90 hover:opacity-100 transition-opacity"
-          />
-        </div>
-      ) : (
-        // Show icon for users without images
-        <UserCheck className="h-4 w-4 text-primary" />
-      )}
-    </Link>
+    <QuestSpotlight step="return_to_builder" label="Try this!">
+      <Link
+        href={dashboardHref}
+        title={`Go to dashboard (${userName})`}
+        className="relative h-8 w-8 rounded-md border border-border bg-card hover:bg-muted transition-colors inline-flex items-center justify-center"
+      >
+        {session.user?.image ? (
+          // Show profile picture (OAuth image passed through session, not stored for students)
+          <div className="absolute inset-0 overflow-hidden rounded-md">
+            <Image
+              src={session.user.image}
+              alt={userName}
+              fill
+              className="object-cover opacity-90 hover:opacity-100 transition-opacity"
+            />
+          </div>
+        ) : (
+          // Show icon for users without images
+          <UserCheck className="h-4 w-4 text-primary" />
+        )}
+      </Link>
+    </QuestSpotlight>
   )
 }

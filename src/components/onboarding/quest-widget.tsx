@@ -17,7 +17,14 @@ import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Check, Minus, PartyPopper, Plus, X } from "lucide-react";
+import {
+  Check,
+  Minus,
+  MoveDiagonal2,
+  PartyPopper,
+  Plus,
+  X,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,15 +50,17 @@ type StepVideo = { playbackId: string; poster?: string; aspectRatio?: number };
 
 const QUEST_TITLE = "How to start";
 
-// Docked bottom-left at the sidebar's width (dashboard/sidebar.tsx w-64) so
-// it never grows wider than the sidebar it sits next to, even at high OS
-// zoom (e.g. Windows 1.5x) where a centered max-w-xl card overflowed.
-const WIDGET_WIDTH = "w-64";
+// Wider than the sidebar (dashboard/sidebar.tsx w-64) since step
+// descriptions were cramped at w-64; clamped to the viewport on resize and
+// via maxWidth so it still fits small viewports / high OS zoom.
+const DEFAULT_WIDTH = 448; // 28rem
+const MIN_WIDTH = 256;
 // Minimized/expanded is a per-device UI preference, not quest progress.
 const MINIMIZED_FLAG = "eduskript:quest-minimized";
-// User-resized height (via the card's top-edge drag handle), in px.
-// Defaults to half the viewport height on first load.
+// User-resized size (via the top-right corner gizmo), in px.
+// Height defaults to half the viewport height on first load.
 const HEIGHT_KEY = "eduskript:quest-height";
+const WIDTH_KEY = "eduskript:quest-width";
 // Horizontal-only drag offset from the docked left-4 position, in px.
 const X_OFFSET_KEY = "eduskript:quest-x-offset";
 
@@ -73,11 +82,19 @@ function loadXOffsetPreference(): number {
   } catch {
     // ignore
   }
-  // No saved preference yet — start horizontally centered rather than at the
-  // left-4 dock, so a first-time teacher notices it instead of it blending
-  // into the sidebar. 256 matches WIDGET_WIDTH (w-64).
-  const cardWidth = 256;
-  return Math.max(0, window.innerWidth / 2 - cardWidth / 2 - 16);
+  return 0;
+}
+
+function loadWidthPreference(): number {
+  if (typeof window === "undefined") return DEFAULT_WIDTH;
+  try {
+    const raw = window.localStorage.getItem(WIDTH_KEY);
+    const n = raw ? Number(raw) : NaN;
+    if (Number.isFinite(n) && n >= MIN_WIDTH) return n;
+  } catch {
+    // ignore
+  }
+  return DEFAULT_WIDTH;
 }
 
 function loadHeightPreference(): number {
@@ -181,6 +198,7 @@ export function OnboardingQuestWidget() {
   >({});
   const [minimized, setMinimized] = useState(loadMinimizedPreference);
   const [height, setHeight] = useState(loadHeightPreference);
+  const [width, setWidth] = useState(loadWidthPreference);
   const [xOffset, setXOffset] = useState(loadXOffsetPreference);
   const [isDragging, setIsDragging] = useState(false);
   const draggedRef = useRef(false);
@@ -194,29 +212,41 @@ export function OnboardingQuestWidget() {
     }
   };
 
-  // The card's bottom edge is pinned to the viewport bottom, so the resize
-  // handle sits on the TOP edge — dragging it up must grow the card
-  // (increase height), unlike a native bottom-right resize handle.
+  // Two-dimensional resize from the top-right corner gizmo. The card's
+  // bottom edge is pinned to the viewport bottom and its left edge is
+  // anchored (left-4 + translateX), so dragging UP grows the height and
+  // dragging RIGHT grows the width — unlike a native bottom-right handle.
   const handleResizeStart = (e: React.MouseEvent) => {
     e.preventDefault();
+    e.stopPropagation();
+    const startMouseX = e.clientX;
     const startMouseY = e.clientY;
     const startHeight = height;
+    const startWidth = width;
     const maxHeight = window.innerHeight;
+    const maxWidth = window.innerWidth - 32;
+
+    const compute = (ev: MouseEvent) => ({
+      h: Math.min(
+        maxHeight,
+        Math.max(120, startHeight + (startMouseY - ev.clientY)),
+      ),
+      w: Math.min(
+        maxWidth,
+        Math.max(MIN_WIDTH, startWidth + (ev.clientX - startMouseX)),
+      ),
+    });
 
     const onMove = (ev: MouseEvent) => {
-      const next = Math.min(
-        maxHeight,
-        Math.max(120, startHeight + (startMouseY - ev.clientY)),
-      );
-      setHeight(next);
+      const { h, w } = compute(ev);
+      setHeight(h);
+      setWidth(w);
     };
     const onUp = (ev: MouseEvent) => {
-      const next = Math.min(
-        maxHeight,
-        Math.max(120, startHeight + (startMouseY - ev.clientY)),
-      );
+      const { h, w } = compute(ev);
       try {
-        window.localStorage.setItem(HEIGHT_KEY, String(next));
+        window.localStorage.setItem(HEIGHT_KEY, String(h));
+        window.localStorage.setItem(WIDTH_KEY, String(w));
       } catch {
         // ignore
       }
@@ -240,7 +270,7 @@ export function OnboardingQuestWidget() {
     const cardWidth =
       (e.currentTarget as HTMLElement)
         .closest(".card-drag-root")
-        ?.getBoundingClientRect().width ?? 256;
+        ?.getBoundingClientRect().width ?? DEFAULT_WIDTH;
     const maxOffset = Math.max(0, window.innerWidth - cardWidth - 16);
     draggedRef.current = false;
 
@@ -348,6 +378,16 @@ export function OnboardingQuestWidget() {
 
   if (!state || state.dismissed) return null;
 
+  // Don't appear before the teacher reaches the page builder: right after
+  // OAuth signup the user is still on /auth/complete-profile, and the widget
+  // rendered on top of that (providers.tsx mounts it on every route). Until
+  // the quest has actually started (first step completed sets startedAt),
+  // only show inside the dashboard. Once started, keep showing everywhere —
+  // the visit_public_page/return steps happen outside /dashboard.
+  const questStarted =
+    state.startedAt > 0 || Object.keys(state.completedSteps).length > 0;
+  if (!questStarted && !pathname?.startsWith("/dashboard")) return null;
+
   if (justGrantedBanner) {
     return (
       <Card className={`fixed bottom-4 right-4 z-50 w-80 ${POP_BORDER}`}>
@@ -390,8 +430,12 @@ export function OnboardingQuestWidget() {
       <>
         {dragOverlay}
         <Card
-          style={{ transform: `translateX(${xOffset}px)` }}
-          className={`card-drag-root fixed bottom-0 left-4 z-50 ${WIDGET_WIDTH} rounded-b-none cursor-grab active:cursor-grabbing hover:opacity-90 ${POP_BORDER}`}
+          style={{
+            width: `${width}px`,
+            maxWidth: "calc(100vw - 2rem)",
+            transform: `translateX(${xOffset}px)`,
+          }}
+          className={`card-drag-root fixed bottom-0 left-4 z-50 rounded-b-none cursor-grab active:cursor-grabbing hover:opacity-90 ${POP_BORDER}`}
           onMouseDown={handleXDragStart}
           onClick={() => {
             if (draggedRef.current) return;
@@ -502,17 +546,16 @@ export function OnboardingQuestWidget() {
           height: `${height}px`,
           minHeight: "120px",
           maxHeight: "100vh",
+          width: `${width}px`,
+          maxWidth: "calc(100vw - 2rem)",
           transform: `translateX(${xOffset}px)`,
         }}
-        className={`card-drag-root fixed bottom-0 left-4 z-50 ${WIDGET_WIDTH} rounded-b-none overflow-hidden flex flex-col ${POP_BORDER}`}
+        // No overflow-hidden here (the corner gizmo hangs outside the card);
+        // CardContent below does its own overflow-y-auto scrolling.
+        className={`card-drag-root fixed bottom-0 left-4 z-50 rounded-b-none flex flex-col ${POP_BORDER}`}
       >
-        <div
-          className="h-1.5 shrink-0 cursor-ns-resize hover:bg-blue-400/50"
-          onMouseDown={handleResizeStart}
-          title="Drag to resize"
-        />
         <CardHeader
-          className="flex flex-row items-start justify-between py-2 px-3 shrink-0 cursor-grab active:cursor-grabbing"
+          className="group/header relative flex flex-row items-start justify-between py-2 px-3 shrink-0 cursor-grab active:cursor-grabbing"
           onMouseDown={handleXDragStart}
         >
           <CardTitle className="text-sm font-bold text-foreground leading-tight select-none">
@@ -538,6 +581,18 @@ export function OnboardingQuestWidget() {
               <X className="w-3.5 h-3.5" />
             </Button>
           </div>
+          {/* Resize gizmo: child of the header so hovering it keeps the
+              header's :hover (it's only visible while hovering the draggable
+              top area). Positioned against the header, which sits flush with
+              the card's top-right corner. */}
+          <button
+            type="button"
+            className="absolute -top-3 -right-3 z-10 w-7 h-7 rounded-full bg-blue-500 text-white shadow-lg flex items-center justify-center cursor-nesw-resize opacity-0 group-hover/header:opacity-100 transition-opacity duration-200"
+            onMouseDown={handleResizeStart}
+            title="Drag to resize"
+          >
+            <MoveDiagonal2 className="w-4 h-4 rotate-90" />
+          </button>
         </CardHeader>
         <CardContent className="px-3 pb-3 overflow-y-auto flex-1">
           <p

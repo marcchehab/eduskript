@@ -48,10 +48,14 @@ export function EmptyPageDragHint({ watch }: { watch?: number | string }) {
     const t1 = setTimeout(measure, 200)
     const t2 = setTimeout(measure, 800)
     window.addEventListener('resize', measure)
+    // Capture-phase so scrolls of inner containers (the library panel, not
+    // just the page) reposition the fixed-position hint too.
+    window.addEventListener('scroll', measure, true)
     return () => {
       clearTimeout(t1)
       clearTimeout(t2)
       window.removeEventListener('resize', measure)
+      window.removeEventListener('scroll', measure, true)
     }
   }, [watch])
 
@@ -80,6 +84,13 @@ export function EmptyPageDragHint({ watch }: { watch?: number | string }) {
         className="absolute w-5 h-5 text-primary -translate-x-1/2 -translate-y-1/2 -rotate-45 drop-shadow"
         style={{ left: line.x1, top: line.y1 }}
       />
+      {/* Same bouncing label as QuestSpotlight (quest-spotlight.tsx). */}
+      <span
+        className="absolute -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-full bg-blue-500 text-white text-xs font-medium px-2 py-0.5 shadow-lg animate-bounce"
+        style={{ left: line.x1, top: line.y1 - 16 }}
+      >
+        Try this!
+      </span>
     </div>
   )
 }
