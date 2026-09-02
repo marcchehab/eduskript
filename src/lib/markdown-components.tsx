@@ -673,6 +673,20 @@ export function createMarkdownComponents(
     const showFeedback = showFeedbackSet
       ? props['showFeedback'] !== false && props['showfeedback'] !== 'false'
       : undefined
+    // feedback="check|instant|none" (non-exam pages; see QuestionInner) and
+    // attempts="3" | "unlimited" for check mode.
+    const feedbackRaw = props['feedback'] as string | undefined
+    const feedback =
+      feedbackRaw === 'check' || feedbackRaw === 'instant' || feedbackRaw === 'none' ? feedbackRaw : undefined
+    const attemptsRaw = props['attempts'] as string | undefined
+    const attempts =
+      attemptsRaw === undefined
+        ? undefined
+        : attemptsRaw === 'unlimited'
+          ? Infinity
+          : Number.isFinite(Number(attemptsRaw)) && Number(attemptsRaw) >= 1
+            ? Math.floor(Number(attemptsRaw))
+            : undefined
     const minValue = props['minValue'] !== undefined ? Number(props['minValue']) : (props['minvalue'] !== undefined ? Number(props['minvalue']) : undefined)
     const maxValue = props['maxValue'] !== undefined ? Number(props['maxValue']) : (props['maxvalue'] !== undefined ? Number(props['maxvalue']) : undefined)
     const step = props['step'] !== undefined ? Number(props['step']) : undefined
@@ -718,6 +732,8 @@ export function createMarkdownComponents(
         pageId={pageId}
         type={type}
         showFeedback={showFeedback}
+        feedback={feedback}
+        attempts={attempts}
         minValue={minValue}
         maxValue={maxValue}
         step={step}

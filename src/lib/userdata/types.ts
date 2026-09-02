@@ -118,6 +118,12 @@ export interface QuizData {
   // buys. Absent when the author set no target, and in surveys.
   sliderRatio?: number
   sliderScore?: number
+  // Check mode (feedback="check", the non-exam default): how many times the
+  // student pressed Check, and whether the question is finished — correct, or
+  // attempts exhausted — which reveals the answer key and locks the inputs.
+  // Absent on exam pages, in surveys, and in instant/none feedback modes.
+  attempts?: number
+  checked?: boolean
 }
 
 /**

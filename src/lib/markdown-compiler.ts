@@ -182,7 +182,7 @@ export const sanitizeSchema = {
     'login-codes': ['hook', 'interval'],
     // class="3a" arrives as className (allowed on *); these are the rest.
     'onlyfor': ['auth', 'anon', 'students', 'prompt', 'class'],
-    'question': ['id', 'type', 'showfeedback', 'expected', 'tolerance', 'window', 'minvalue', 'maxvalue', 'step', 'minlabel', 'maxlabel', 'gateat', 'gate-at', 'dataGateAt', 'data-gate-at', 'points', 'data-expected', 'dataExpected', 'ignore-case', 'ignorecase', 'ignore-whitespace', 'ignorewhitespace'],
+    'question': ['id', 'type', 'showfeedback', 'feedback', 'attempts', 'expected', 'tolerance', 'window', 'minvalue', 'maxvalue', 'step', 'minlabel', 'maxlabel', 'gateat', 'gate-at', 'dataGateAt', 'data-gate-at', 'points', 'data-expected', 'dataExpected', 'ignore-case', 'ignorecase', 'ignore-whitespace', 'ignorewhitespace'],
     'quiz-option': ['correct', 'is', 'feedback'],
     'answer': ['correct', 'is', 'feedback', 'from'],
     'yt': ['time', 'videoid', 'label'],

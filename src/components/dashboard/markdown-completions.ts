@@ -109,7 +109,9 @@ const TAG_ATTRS: Record<string, AttrDef[]> = {
   'question': [
     { label: 'id', info: 'Unique question ID' },
     { label: 'type', info: 'single | multiple | text | number | range (default: multiple)' },
-    { label: 'showFeedback', info: 'Show per-answer feedback after submitting' },
+    { label: 'feedback', info: 'check (Check button, default) | instant (on every change) | none (silent poll). Ignored on exam pages' },
+    { label: 'attempts', info: 'Check mode: presses before the question locks (default 1), or "unlimited"' },
+    { label: 'showFeedback', info: 'Legacy: "true" = feedback="instant", "false" = feedback="none"' },
     { label: 'points', info: 'Points awarded for a correct answer' },
     { label: 'minValue', info: 'Range: minimum value' },
     { label: 'maxValue', info: 'Range: maximum value' },

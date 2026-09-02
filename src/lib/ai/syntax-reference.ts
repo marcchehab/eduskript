@@ -664,7 +664,9 @@ What is 2 + 2?
 **question attributes:**
 - \`id="unique-id"\` — Optional, auto-generated if omitted
 - \`type="multiple"\` — Multiple choice / checkboxes (the default if \`type\` is omitted). **Always set \`type\` explicitly** — omitting it silently gives checkboxes, not a single-select radio group. Other types: \`single\` (radio, one answer), \`text\` (free-text answer), \`number\` (slider), \`range\` (two-handle slider)
-- \`showFeedback="true"\` — reveal correct/wrong feedback (and the auto-check score/diff) to the student during the attempt. **OFF by default for students** in both exams and practice (there's no Submit button, so default-on would leak the answer the moment they type). Teachers always see correctness when grading, and students see it on their returned/graded exam.
+- \`feedback="check|instant|none"\` — when correctness is revealed on a NON-exam page. \`check\` (default): a **Check answer** button; nothing is revealed until pressed, and the question locks once it is correct or the attempts are used up. \`instant\`: right/wrong shown on every change (sliders with feedback bands, if dragging is the point). \`none\`: silent, no correctness at all (polls, exit tickets — the teacher still sees the class tally). **Exam pages ignore this attribute**: answers autosave silently, are handed in with the stage/exam, and feedback appears on the returned exam. Teachers always see correctness when grading.
+- \`attempts="3"\` or \`attempts="unlimited"\` — check mode only, default 1. After a wrong check with attempts left, only the student's own picks are marked (the correct answer stays hidden), and they may change the answer and check again. A correct answer always finishes the question.
+- \`showFeedback="true"\` — legacy alias for \`feedback="instant"\` (\`"false"\` = \`feedback="none"\`). Prefer \`feedback\`.
 - \`points="2"\` — max points for grading (default 1). Text questions get partial credit by similarity; single/multiple-choice score full points on an exact match of the correct set, else 0. Teachers can override any per-question score when grading an exam. For an explicit id (so the score is reliably attributed), set \`id="..."\`.
 
 **Number sliders** (\`type="number"\`) — set the range with \`minValue\` / \`maxValue\` / \`step\`. Use \`minLabel\` / \`maxLabel\` to caption the two ends; the captions render beneath the slider at either end, so don't bake them into the body text:
@@ -678,7 +680,7 @@ How relevant is Python for your work?
 **Slider auto-check** — give a \`number\` or \`range\` question an \`expected\` target and it grades itself, with partial credit and graded hints:
 
 \`\`\`markdown
-<question id="hochpunkt" type="number" points="2" showFeedback="true"
+<question id="hochpunkt" type="number" points="2" attempts="3"
           minValue="-2" maxValue="2" step="0.1" expected="-1" tolerance="0.15">
 At which $x$ does $f$ have its maximum?
 <answer from="1" feedback="Correct — $f'(x) = x^2 - 1 = 0$ and $f''(-1) < 0$."></answer>
@@ -828,13 +830,14 @@ export function getCondensedSyntaxReference(): string {
 
 **Quiz:** \`<question id="q1" type="single" points="1"><answer correct="true">Right</answer><answer feedback="Nope">Wrong</answer></question>\` — \`points\` (default 1) is the gradable max; choice questions auto-score full points on an exact match, teacher-overridable when grading.
   - \`type\` defaults to \`multiple\` (checkboxes) if omitted — **always set \`type="single"\` explicitly** for a one-answer radio group.
+  - \`feedback="check|instant|none"\` (non-exam pages; default \`check\` = a Check answer button, hidden until pressed, locks when finished; \`instant\` = on every change; \`none\` = silent poll) and \`attempts="3"|"unlimited"\` (check mode, default 1; wrong non-final checks mark only the student's picks). Exam pages ignore both: silent autosave, feedback on the returned exam. \`showFeedback="true"\` is a legacy alias for \`feedback="instant"\`.
   - Put the question text inside the tag before the answers; it renders as the card heading. Markdown and \`$math$\` work in the prompt, in the answers and in \`feedback="…"\`.
   - Sliders auto-grade when given a target: \`<question type="number" expected="-1" tolerance="0.15">\` (or \`type="range" expected="-1..1"\`), with \`<answer from="0.7" feedback="…">\` bands from best to worst.
   - Use \`correct="true"\` to mark the correct answer
   - If you see \`<Option>\` or \`<quiz-option>\`, convert to \`<answer>\`
   - Do NOT use \`:::quiz\` syntax — it is not implemented
 
-**Free-text auto-check (predict-output):** \`<question id="x" type="text" points="2">\` with an \`\`\`expected fenced block inside (blank line before it) → partial-credit grading by line-exact-match ratio (not fuzzy similarity) of a predicted output, with a diff. Flags: \`ignore-case\`, \`ignore-whitespace\`. Feedback is hidden from students by default (exams AND practice) — set \`showFeedback="true"\` to reveal it during the attempt; teachers see it when grading.
+**Free-text auto-check (predict-output):** \`<question id="x" type="text" points="2">\` with an \`\`\`expected fenced block inside (blank line before it) → partial-credit grading by line-exact-match ratio (not fuzzy similarity) of a predicted output, with a diff. Flags: \`ignore-case\`, \`ignore-whitespace\`. On non-exam pages the student presses Check answer to see the result (default \`feedback="check"\`); on exam pages nothing is revealed until the exam is returned.
 
 **Staged pages:** \`<next-stage label="..." title="..." confirm="..." cancel="...">\` on its own line splits a document into one-way, hand-in-locked stages (only stages up to the current one render; advancing locks the previous one read-only). Ideal for exams: predict-output questions in stage 1, runnable editors in stage 2. All strings optional/localizable.
 

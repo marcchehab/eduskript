@@ -124,6 +124,8 @@ export function remarkQuiz() {
         let attrStr = `id="${attrs.id}"`
         if (attrs.type) attrStr += ` type="${attrs.type}"`
         if (attrs.showFeedback) attrStr += ` showFeedback="${attrs.showFeedback}"`
+        if (attrs.feedback) attrStr += ` feedback="${attrs.feedback}"`
+        if (attrs.attempts) attrStr += ` attempts="${attrs.attempts}"`
         if (attrs.minValue) attrStr += ` minValue="${attrs.minValue}"`
         if (attrs.maxValue) attrStr += ` maxValue="${attrs.maxValue}"`
         if (attrs.step) attrStr += ` step="${attrs.step}"`
@@ -203,6 +205,8 @@ interface QuestionAttributes {
   id: string
   type?: string
   showFeedback?: string
+  feedback?: string
+  attempts?: string
   minValue?: string
   maxValue?: string
   step?: string
@@ -226,6 +230,8 @@ function parseQuestionBlock(content: string): { attrs: QuestionAttributes; optio
   const idMatch = attrString.match(/id=["']([^"']+)["']/)
   const typeMatch = attrString.match(/type=["']([^"']+)["']/)
   const showFeedbackMatch = attrString.match(/showFeedback=["']([^"']+)["']/)
+  const feedbackMatch = attrString.match(/\bfeedback=["']([^"']+)["']/)
+  const attemptsMatch = attrString.match(/attempts=["']([^"']+)["']/)
   const minValueMatch = attrString.match(/minValue=["']([^"']+)["']/)
   const maxValueMatch = attrString.match(/maxValue=["']([^"']+)["']/)
   const stepMatch = attrString.match(/step=["']([^"']+)["']/)
@@ -250,6 +256,8 @@ function parseQuestionBlock(content: string): { attrs: QuestionAttributes; optio
     id: idMatch ? idMatch[1] : fallbackId,
     type: typeMatch?.[1],
     showFeedback: showFeedbackMatch?.[1],
+    feedback: feedbackMatch?.[1],
+    attempts: attemptsMatch?.[1],
     minValue: minValueMatch?.[1],
     maxValue: maxValueMatch?.[1],
     step: stepMatch?.[1],

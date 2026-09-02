@@ -97,40 +97,36 @@ Renders as:
 | Attribute | Values | Effect |
 |-----------|--------|--------|
 | `id` | string | Unique ID per page; used to track student responses |
-| `type` | `single` / `multi` / `text` | Question style |
+| `type` | `single` / `multiple` / `text` / `number` / `range` | Question style. Default `multiple`, so set it explicitly |
 | `points` | number (default 1) | Score weight |
-| `feedback-correct` | string | Custom message shown on correct answer |
-| `feedback-incorrect` | string | Custom message shown on incorrect answer |
+| `feedback` | `check` (default) / `instant` / `none` | When correctness is revealed on a non-exam page. `check`: a Check answer button, nothing shown until pressed, locks when finished. `instant`: on every change. `none`: silent, no correctness (polls). Exam pages ignore this and stay silent until the exam is returned |
+| `attempts` | number (default 1) / `unlimited` | Check mode: how many Check presses before the question locks. A wrong non-final check marks only the student's own picks; the correct answer stays hidden. A correct answer always finishes the question |
+| `showFeedback` | `true` / `false` | Legacy alias: `true` = `feedback="instant"`, `false` = `feedback="none"` |
+| `expected` | string | Auto-check target for text (as an ```` ```expected ```` block), number, and range questions |
 
 ```html
-<question id="q-feedback-demo" type="single" points="2"
-          feedback-correct="Genau! In Python ist `def` das Schlüsselwort."
-          feedback-incorrect="Hinweis: Die Antwort beginnt mit dem Buchstaben d.">
-  <p>Welches Schlüsselwort definiert eine Funktion in Python?</p>
-  <answer>function</answer>
-  <answer correct>def</answer>
-  <answer>fn</answer>
+<question id="q-def" type="single" points="2" attempts="2">
+Which keyword defines a function in Python?
+<answer feedback="That is JavaScript.">function</answer>
+<answer correct="true">def</answer>
+<answer feedback="That is Rust.">fn</answer>
 </question>
 ```
 
 Renders as:
 
-<question id="q-feedback-demo" type="single" points="2"
-          feedback-correct="Genau! In Python ist `def` das Schlüsselwort."
-          feedback-incorrect="Hinweis: Die Antwort beginnt mit dem Buchstaben d.">
-  <p>Welches Schlüsselwort definiert eine Funktion in Python?</p>
-  <answer>function</answer>
-  <answer correct>def</answer>
-  <answer>fn</answer>
+<question id="q-def" type="single" points="2" attempts="2">
+Which keyword defines a function in Python?
+<answer feedback="That is JavaScript.">function</answer>
+<answer correct="true">def</answer>
+<answer feedback="That is Rust.">fn</answer>
 </question>
 
 ### What students see
 
 - Question text + answer choices
-- **Check** button to submit
-- ✓ green or ✗ red feedback after submitting
-- Custom feedback message (if set)
-- Score for that question
+- On a normal page: a **Check answer** button. ✓ green or ✗ red marks, the per-answer feedback text and the score appear after pressing it; the inputs lock once the question is finished
+- On an exam page: no button, no marks. The answer autosaves and is handed in with the exam; marks appear on the returned exam
 
 Their answer is saved per-student-per-page; coming back later shows their previous response.
 

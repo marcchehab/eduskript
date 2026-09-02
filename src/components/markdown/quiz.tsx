@@ -5,6 +5,7 @@ import { useSyncedUserData } from '@/lib/userdata'
 import type { QuizData } from '@/lib/userdata/types'
 import { cn } from '@/lib/utils'
 import { Check, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
 import { QuizProgressBar } from './quiz-progress-bar'
 import { useSurvey, type SurveyContextValue, type SurveyAnswerType } from './survey-provider'
@@ -30,7 +31,19 @@ interface QuestionProps {
   type?: 'single' | 'multiple' | 'text' | 'number' | 'range'
   id: string
   pageId: string
+  /** Legacy alias: `showFeedback="true"` = feedback="instant", "false" = "none". */
   showFeedback?: boolean
+  // When and how correctness is revealed on a NON-exam page:
+  //   check   — Check button; feedback hidden until pressed, inputs lock when
+  //             the question is finished (correct, or attempts used up). Default.
+  //   instant — correctness shown on every change (the old showFeedback="true").
+  //   none    — silent autosave, no correctness at all (polls, exit tickets).
+  // Exam pages ignore this: silent autosave, hand-in via stage/exam submit,
+  // feedback on the returned exam. Surveys are always silent.
+  feedback?: 'check' | 'instant' | 'none'
+  // Check mode only: how many Check presses before the question locks.
+  // Infinity = unlimited. A correct answer always finishes the question.
+  attempts?: number
   minValue?: number
   maxValue?: number
   step?: number
@@ -157,15 +170,19 @@ const AUTOSAVE_DISCRETE_MS = 400
 
 // Inner component that renders after data is loaded.
 //
-// There is no Submit button: every answer autosaves on change (debounced),
-// like the code editor. `isSubmitted` now means "a non-empty answer has been
-// saved" — it gates feedback and the "Saved" indicator and counts the question
-// as answered. surveyMode still hides feedback; the page-level SurveyProvider's
-// "Send" button remains the batch-submit path, fed by per-question autosaves.
+// Every answer autosaves on change (debounced), like the code editor.
+// `isSubmitted` means "a non-empty answer has been saved" — it gates the
+// instant-mode feedback and the "Saved" indicator and counts the question as
+// answered. Check mode adds a Check button on top of the autosave (see
+// handleCheck): correctness stays hidden until pressed. surveyMode hides
+// feedback; the page-level SurveyProvider's "Send" button remains the
+// batch-submit path, fed by per-question autosaves.
 function QuestionInner({
   children,
   type = 'multiple',
   showFeedback: showFeedbackProp,
+  feedback: feedbackProp,
+  attempts: attemptsProp,
   minValue = 0,
   maxValue = 100,
   step = 1,
@@ -199,15 +216,21 @@ function QuestionInner({
    *  checkpoint (exam answer-history timeline). Text questions only. */
   onAutosaveCheckpoint?: (data: QuizData) => void
 }) {
-  // Live attempts NEVER reveal correctness (correct/wrong highlight, auto-check
-  // score, expected-output diff) to the student — not in exams, not in practice.
-  // Since there's no Submit button, isSubmitted flips on the first autosave, so
-  // any default-on feedback would leak the answer the instant the student types.
-  // Authors can still opt in per question with showFeedback="true". Survey mode
-  // always hides it. Review/grade mode always shows it (teacher grading, or the
-  // student reviewing their RETURNED exam — revealing what's right is the point).
   const isExamPage = useIsExamPage()
-  const showFeedback = surveyMode ? false : reviewMode ? true : (showFeedbackProp ?? false)
+  // Feedback mode. Review/grade always reveals; surveys and exam attempts never
+  // do. Outside those, the author's `feedback` attribute wins, then the legacy
+  // `showFeedback` boolean (true → instant, false → none), then the default:
+  // check mode. Exam pages force silent autosave so a Check button can never
+  // leak the key mid-exam, whatever the author wrote.
+  const mode: 'review' | 'exam' | 'check' | 'instant' | 'none' = reviewMode
+    ? 'review'
+    : surveyMode
+      ? 'none'
+      : isExamPage
+        ? 'exam'
+        : feedbackProp ?? (showFeedbackProp === undefined ? 'check' : showFeedbackProp ? 'instant' : 'none')
+  const checkMode = mode === 'check'
+  const attemptsMax = checkMode ? Math.max(1, attemptsProp ?? 1) : 1
   // A question in a handed-in (past) exam stage is fully read-only, regardless
   // of submit state — folded into the gates + disabled props below.
   // Review mode (graded read-only view) locks the widget just like a handed-in
@@ -231,6 +254,19 @@ function QuestionInner({
     initialData?.rangeAnswer ?? { min: minValue, max: maxValue }
   )
   const [isSubmitted, setIsSubmitted] = useState(initialData?.isSubmitted ?? false)
+  // Check mode: presses so far, and whether the question is finished (locked +
+  // key revealed). `lastCheckedSig` is the answer that was last checked, so a
+  // partial (non-final) result clears as soon as the student changes something.
+  // Seeded from the stored answer on mount: the autosaved answer IS the last
+  // checked one unless the student edited after checking and then reloaded —
+  // in that case the partial marks show on an unchecked answer, which is
+  // harmless (nothing more is revealed than the earlier check already did).
+  const [attemptsUsed, setAttemptsUsed] = useState(initialData?.attempts ?? 0)
+  const [checked, setChecked] = useState(initialData?.checked ?? false)
+  const [lastCheckedSig, setLastCheckedSig] = useState<string | null>(null)
+  // Inputs freeze once a check-mode question is finished, in addition to the
+  // stage/review locks.
+  const locked = stageLocked || (checkMode && checked)
 
   // Review mode swaps initialData to the reviewed student's answer *after* mount
   // (it arrives from an async fetch), so re-sync local state when it changes.
@@ -243,6 +279,8 @@ function QuestionInner({
     setNumberAnswer(initialData?.numberAnswer ?? minValue)
     setRangeAnswer(initialData?.rangeAnswer ?? { min: minValue, max: maxValue })
     setIsSubmitted(initialData?.isSubmitted ?? false)
+    setAttemptsUsed(initialData?.attempts ?? 0)
+    setChecked(initialData?.checked ?? false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialData, reviewMode])
 
@@ -251,7 +289,7 @@ function QuestionInner({
   // below. Edits are allowed any time the widget isn't frozen (handed-in stage
   // or graded review).
   const handleSelect = (index: number) => {
-    if (stageLocked) return
+    if (locked) return
 
     if (type === 'single') {
       setSelected([index])
@@ -265,17 +303,17 @@ function QuestionInner({
   }
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    if (stageLocked) return
+    if (locked) return
     setTextAnswer(e.target.value)
   }
 
   const handleNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (stageLocked) return
+    if (locked) return
     setNumberAnswer(Number(e.target.value))
   }
 
   const handleRangeMinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (stageLocked) return
+    if (locked) return
     const newMin = Number(e.target.value)
     setRangeAnswer(prev => ({
       min: Math.min(newMin, prev.max),
@@ -284,7 +322,7 @@ function QuestionInner({
   }
 
   const handleRangeMaxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (stageLocked) return
+    if (locked) return
     const newMax = Number(e.target.value)
     setRangeAnswer(prev => ({
       min: prev.min,
@@ -354,6 +392,7 @@ function QuestionInner({
 
     return {
       isSubmitted: submitted,
+      ...(checkMode ? { attempts: attemptsUsed, checked } : {}),
       ...(type === 'single' || type === 'multiple' ? { selected } : {}),
       ...choiceFields,
       ...textFields,
@@ -373,7 +412,7 @@ function QuestionInner({
   const mountedRef = useRef(false)
 
   const commitAutosave = () => {
-    if (reviewMode || stageLocked || isEmptyAnswer) return
+    if (reviewMode || locked || isEmptyAnswer) return
     const data = buildQuizData(true)
     const sig = JSON.stringify(data)
     if (sig === lastSavedSigRef.current) return
@@ -417,11 +456,69 @@ function QuestionInner({
   // text in surrounding markdown instead.
   const prompt = extractPrompt(children)
 
+  // Signature of the current answer, for "did the student change anything
+  // since the last Check?".
+  const answerSig = JSON.stringify(
+    type === 'single' || type === 'multiple'
+      ? [...selected].sort((a, b) => a - b)
+      : type === 'text'
+        ? textAnswer
+        : type === 'number'
+          ? numberAnswer
+          : rangeAnswer
+  )
+
+  // Is the current answer correct? null = nothing to grade against (choice
+  // question without a `correct` answer, text/slider without `expected`); a
+  // Check then just locks the question. Choice = exact set match; text = exact
+  // output; slider = inside the tolerance.
+  const currentCorrect: boolean | null = (() => {
+    if (type === 'single' || type === 'multiple') {
+      const { correctIndices } = extractOptionsInfo(children, type)
+      if (correctIndices.length === 0) return null
+      const sel = [...selected].sort((a, b) => a - b)
+      const cor = [...correctIndices].sort((a, b) => a - b)
+      return sel.length === cor.length && sel.every((v, i) => v === cor[i])
+    }
+    if (type === 'text') return textResult ? textResult.exact : null
+    return sliderRatio == null ? null : sliderRatio >= 1
+  })()
+
+  // Check mode: the student pressed Check. Count the attempt, finish the
+  // question when the answer is correct, ungradable, or this was the last
+  // attempt; otherwise show a partial result and let them try again. Persisted
+  // immediately (not through the debounced autosave) so a reload right after
+  // the click can't lose the lock.
+  const handleCheck = () => {
+    if (!checkMode || locked || isEmptyAnswer) return
+    const used = attemptsUsed + 1
+    const final = currentCorrect !== false || used >= attemptsMax
+    setAttemptsUsed(used)
+    setChecked(final)
+    setLastCheckedSig(answerSig)
+    if (!isSubmitted) setIsSubmitted(true)
+    const data: QuizData = { ...buildQuizData(true), attempts: used, checked: final }
+    lastSavedSigRef.current = JSON.stringify(data)
+    void updateData(data, { immediate: true })
+  }
+
+  // What the student may see right now.
+  //   revealed — the full key: correct answers marked, expected-output diff.
+  //   partial  — only their own selections marked right/wrong (plus the
+  //              per-answer feedback text); the key itself stays hidden so the
+  //              remaining attempts mean something.
+  const partialReveal =
+    checkMode && !checked && attemptsUsed > 0 && (lastCheckedSig === null || lastCheckedSig === answerSig)
+  const revealed =
+    mode === 'review' || (mode === 'instant' && isSubmitted) || (checkMode && checked)
+  const showResult = revealed || partialReveal
+  const attemptsLeft = attemptsMax - attemptsUsed
+
   // Shared by both slider types: the graded hint under the track. Same gating as
   // every other kind of feedback — only after an answer exists and only when the
   // author opted in (or in the graded review view).
   const sliderPanel =
-    sliderRatio == null || !isSubmitted || !showFeedback ? null : (
+    sliderRatio == null || !showResult ? null : (
       <div
         className={cn(
           'rounded-lg border p-3 text-sm',
@@ -476,7 +573,6 @@ function QuestionInner({
             const { label, feedback } = splitAnswerContent(optionProps)
             const isSelected = selected.includes(index)
             const optionIsCorrect = isCorrect(optionProps.correct)
-            const showResult = isSubmitted && showFeedback
 
             return (
               <div
@@ -484,11 +580,12 @@ function QuestionInner({
                 onClick={() => handleSelect(index)}
                 className={cn(
                   'p-4 border rounded-lg transition-colors',
-                  stageLocked ? 'cursor-default' : 'cursor-pointer hover:bg-accent/50',
+                  locked ? 'cursor-default' : 'cursor-pointer hover:bg-accent/50',
                   isSelected && !showResult && 'border-primary bg-primary/5',
                   showResult && isSelected && optionIsCorrect && 'border-green-600 dark:border-green-500 bg-green-500/10',
                   showResult && isSelected && !optionIsCorrect && 'border-red-600 dark:border-red-500 bg-red-500/10',
-                  showResult && !isSelected && optionIsCorrect && 'border-green-600/50 dark:border-green-500/50'
+                  // The unselected correct answer is part of the key: full reveal only.
+                  revealed && !isSelected && optionIsCorrect && 'border-green-600/50 dark:border-green-500/50'
                 )}
               >
                 <div className="flex items-start gap-3">
@@ -550,17 +647,17 @@ function QuestionInner({
             value={textAnswer}
             onChange={handleTextChange}
             onBlur={commitAutosave}
-            disabled={stageLocked}
+            disabled={locked}
             className={cn(
               'w-full p-3 border rounded-lg min-h-[120px] bg-background resize-y',
-              stageLocked && 'opacity-70 cursor-not-allowed'
+              locked && 'opacity-70 cursor-not-allowed'
             )}
             placeholder="Enter your answer..."
           />
 
           {/* Auto-check feedback: partial-credit score + a line diff showing
               where the prediction differs from the expected output. */}
-          {autoCheck && isSubmitted && showFeedback && textResult && (
+          {autoCheck && showResult && textResult && (
             <div
               className={cn(
                 'rounded-lg border p-3 text-sm',
@@ -585,7 +682,8 @@ function QuestionInner({
                   {scoreFromRatio(textResult.ratio, maxPoints)} / {maxPoints} pts · {Math.round(textResult.ratio * 100)}%
                 </span>
               </div>
-              {!textResult.exact && (
+              {/* The diff prints the expected output, i.e. the key: full reveal only. */}
+              {!textResult.exact && revealed && (
                 <div className="mt-2 overflow-x-auto rounded bg-background/60 p-2 font-mono text-xs leading-relaxed whitespace-pre">
                   {textResult.diff.map((row, i) => (
                     <div
@@ -633,10 +731,10 @@ function QuestionInner({
               step={step}
               value={numberAnswer}
               onChange={handleNumberChange}
-              disabled={stageLocked}
+              disabled={locked}
               className={cn(
                 'w-full',
-                stageLocked && 'opacity-70 cursor-not-allowed'
+                locked && 'opacity-70 cursor-not-allowed'
               )}
             />
             {/* Optional end labels — sit directly under the track, one at
@@ -684,7 +782,7 @@ function QuestionInner({
                 step={step}
                 value={rangeAnswer.min}
                 onChange={handleRangeMinChange}
-                disabled={stageLocked}
+                disabled={locked}
                 className={cn(
                   'absolute inset-0 w-full h-full appearance-none bg-transparent cursor-pointer',
                   '[&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5',
@@ -696,7 +794,7 @@ function QuestionInner({
                   '[&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-background',
                   '[&::-moz-range-thumb]:shadow-md [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:border-0',
                   '[&::-moz-range-track]:bg-transparent',
-                  stageLocked && 'opacity-70 cursor-not-allowed'
+                  locked && 'opacity-70 cursor-not-allowed'
                 )}
                 style={{
                   clipPath: `inset(0 ${100 - ((rangeAnswer.min + rangeAnswer.max) / 2 - minValue) / (maxValue - minValue) * 100}% 0 0)`
@@ -710,7 +808,7 @@ function QuestionInner({
                 step={step}
                 value={rangeAnswer.max}
                 onChange={handleRangeMaxChange}
-                disabled={stageLocked}
+                disabled={locked}
                 className={cn(
                   'absolute inset-0 w-full h-full appearance-none bg-transparent cursor-pointer',
                   '[&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5',
@@ -722,7 +820,7 @@ function QuestionInner({
                   '[&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-background',
                   '[&::-moz-range-thumb]:shadow-md [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:border-0',
                   '[&::-moz-range-track]:bg-transparent',
-                  stageLocked && 'opacity-70 cursor-not-allowed'
+                  locked && 'opacity-70 cursor-not-allowed'
                 )}
                 style={{
                   clipPath: `inset(0 0 0 ${((rangeAnswer.min + rangeAnswer.max) / 2 - minValue) / (maxValue - minValue) * 100}%)`
@@ -734,10 +832,38 @@ function QuestionInner({
         </div>
       )}
 
+      {/* Check mode footer: the Check button while the question is open, a
+          verdict line once a check happened. Locked questions show nothing —
+          the marked answers speak for themselves. */}
+      {checkMode && !stageLocked && !checked && (
+        <div className="flex items-center justify-end gap-3 pt-2">
+          {partialReveal && (
+            <span className="text-sm text-red-600 dark:text-red-400">
+              {attemptsMax === Infinity
+                ? 'Not correct yet.'
+                : `Not correct yet. ${attemptsLeft} ${attemptsLeft === 1 ? 'attempt' : 'attempts'} left.`}
+            </span>
+          )}
+          <Button size="sm" onClick={handleCheck} disabled={isEmptyAnswer}>
+            {attemptsUsed === 0
+              ? 'Check answer'
+              : attemptsMax === Infinity
+                ? 'Check again'
+                : `Check again (${attemptsUsed + 1} of ${attemptsMax})`}
+          </Button>
+        </div>
+      )}
+      {checkMode && checked && currentCorrect === false && (
+        <div className="flex items-center justify-end pt-2 text-sm text-muted-foreground">
+          {attemptsMax === 1 ? 'Checked.' : `Checked after ${attemptsUsed} ${attemptsUsed === 1 ? 'attempt' : 'attempts'}.`}
+        </div>
+      )}
+
       {/* Autosave indicator — answers persist on change; no explicit submit.
-          Hidden in review (read-only), in survey mode (the page-level Send is
-          the submit affordance there), and until the first non-empty answer. */}
-      {isSubmitted && !reviewMode && !stageLocked && !surveyMode && (
+          Hidden in check mode (the button is the affordance there), in review
+          (read-only), in survey mode (the page-level Send is the submit
+          affordance there), and until the first non-empty answer. */}
+      {isSubmitted && !checkMode && !reviewMode && !stageLocked && !surveyMode && (
         <div className="flex items-center justify-end pt-2">
           <div className="text-sm text-muted-foreground flex items-center gap-1.5">
             <Check className="w-4 h-4 text-green-500" />
