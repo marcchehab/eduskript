@@ -125,6 +125,12 @@ export function FileBrowser({ skriptId, onFileSelect, className = '', onUploadCo
     return []
   }
 
+  // Helper functions to handle both old and new file structures.
+  // Declared before displayFiles/visibleFiles below, which run during render.
+  const getFileName = (file: FileItem) => {
+    return file.name || file.filename || file.originalName || 'Unknown file'
+  }
+
   // Filter out auto-generated files
   const shouldShowFile = (filename: string) => {
     // Don't show .excalidraw.light.svg or .excalidraw.dark.svg files
@@ -176,11 +182,6 @@ export function FileBrowser({ skriptId, onFileSelect, className = '', onUploadCo
     setDragOver(false)
     const droppedFiles = Array.from(e.dataTransfer.files)
     await uploadFiles(droppedFiles, uploadType)
-  }
-
-  // Helper functions to handle both old and new file structures
-  const getFileName = (file: FileItem) => {
-    return file.name || file.filename || file.originalName || 'Unknown file'
   }
 
   const getFileUrl = (file: FileItem) => {
