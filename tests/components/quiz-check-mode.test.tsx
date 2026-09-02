@@ -148,6 +148,24 @@ describe('check mode on sliders', () => {
     expect(lastSaved()).toMatchObject({ attempts: 1, checked: true, numberAnswer: 1.5 })
   })
 
+  it('reveals the target after the last failed attempt, not before', () => {
+    renderSlider({ attempts: 2 })
+    const slider = screen.getByRole('slider')
+    fireEvent.change(slider, { target: { value: '1.5' } })
+    act(() => { fireEvent.click(checkButton()!) })
+    expect(screen.queryByText(/Correct answer:/)).not.toBeInTheDocument()
+    fireEvent.change(slider, { target: { value: '1.2' } })
+    act(() => { fireEvent.click(checkButton()!) })
+    expect(screen.getByText(/Correct answer:/)).toBeInTheDocument()
+    expect(screen.getByText('-1')).toBeInTheDocument()
+  })
+
+  it('shows the current value beneath the track', () => {
+    renderSlider()
+    fireEvent.change(screen.getByRole('slider'), { target: { value: '0.5' } })
+    expect(screen.getByText('Your answer: 0.5')).toBeInTheDocument()
+  })
+
   it('a correct slider check finishes with the top band', () => {
     renderSlider({ attempts: 3 })
     fireEvent.change(screen.getByRole('slider'), { target: { value: '-1' } })

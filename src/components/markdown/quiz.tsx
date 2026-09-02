@@ -443,6 +443,13 @@ function QuestionInner({
   // current answer; matches the persisted score when the answer is unedited).
   const textResult = autoCheck ? compareOutput(textAnswer, expected as string, compareOpts) : null
 
+  // The author's target, formatted for the reveal line in the slider panel.
+  const sliderTarget: string | null = !sliderCheck
+    ? null
+    : type === 'number'
+      ? (() => { const t = parseExpectedNumber(expected as string); return t == null ? null : String(t) })()
+      : (() => { const t = parseExpectedRange(expected as string); return t == null ? null : `${t.min} – ${t.max}` })()
+
   // Slider feedback: the band whose threshold the current ratio clears.
   const sliderBand =
     sliderRatio == null
@@ -554,6 +561,14 @@ function QuestionInner({
           </span>
         </div>
         {sliderBand && <div className="mt-2">{sliderBand.feedback}</div>}
+        {/* The key, once the question is finished (attempts used up, or the
+            graded review) and the answer was not correct. Hidden on partial
+            results so remaining attempts still mean something. */}
+        {revealed && sliderRatio < 1 && sliderTarget && (
+          <div className="mt-2 text-sm">
+            Correct answer: <span className="font-semibold">{sliderTarget}</span>
+          </div>
+        )}
       </div>
     )
 
@@ -721,7 +736,6 @@ function QuestionInner({
           <div className="flex flex-col gap-2">
             <div className="flex justify-between text-sm text-muted-foreground">
               <span>{minValue}</span>
-              <span className="font-semibold text-foreground">{numberAnswer}</span>
               <span>{maxValue}</span>
             </div>
             <input
@@ -745,6 +759,11 @@ function QuestionInner({
                 <span className="text-right">{maxLabel}</span>
               </div>
             )}
+            {/* Current value beneath the track, in the button colour, so a
+                fresh slider does not read as a pre-filled "0" above it. */}
+            <div className="text-center text-sm font-semibold text-primary">
+              Your answer: {numberAnswer}
+            </div>
           </div>
           {sliderPanel}
         </div>
@@ -757,9 +776,6 @@ function QuestionInner({
           <div className="flex flex-col gap-2">
             <div className="flex justify-between text-sm text-muted-foreground">
               <span>{minValue}</span>
-              <span className="font-semibold text-foreground">
-                {rangeAnswer.min} – {rangeAnswer.max}
-              </span>
               <span>{maxValue}</span>
             </div>
             {/* Dual range slider track - touch compatible via clip-path */}
@@ -826,6 +842,9 @@ function QuestionInner({
                   clipPath: `inset(0 0 0 ${((rangeAnswer.min + rangeAnswer.max) / 2 - minValue) / (maxValue - minValue) * 100}%)`
                 }}
               />
+            </div>
+            <div className="text-center text-sm font-semibold text-primary">
+              Your answer: {rangeAnswer.min} – {rangeAnswer.max}
             </div>
           </div>
           {sliderPanel}
