@@ -263,23 +263,22 @@ export const authOptions: NextAuthOptions = {
     },
   } : undefined,
   callbacks: {
-    async signIn({ user }) {
-      // Record last login timestamp. Failure must not block sign-in.
-      if (user?.id) {
+    async jwt({ token, user, trigger, account, profile }) {
+      if (user) {
+        token.id = user.id
+        // Record last login timestamp here, not in the signIn callback: on a
+        // first OAuth login signIn runs before the adapter creates the user
+        // (user.id is not a DB id yet), so the update silently failed and
+        // OAuth users showed "never signed in" until their second login.
+        // updateMany so a missing row can't throw; failure must not block sign-in.
         try {
-          await prisma.user.update({
+          await prisma.user.updateMany({
             where: { id: user.id },
             data: { lastLoginAt: new Date() },
           })
         } catch (err) {
           console.error('Failed to update lastLoginAt:', err)
         }
-      }
-      return true
-    },
-    async jwt({ token, user, trigger, account, profile }) {
-      if (user) {
-        token.id = user.id
         // Fetch additional user data once during sign-in and store in token.
         // URL slug + page-display fields all live on Site now (Stage 5).
         const dbUser = await prisma.user.findUnique({
