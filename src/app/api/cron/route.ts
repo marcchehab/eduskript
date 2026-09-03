@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { resetDemoUser } from '@/lib/seed-demo-content'
 import { chargeTransaction } from '@/lib/payrexx'
+import { revalidateUserSites } from '@/lib/billing-revalidate'
 import { PATH_METRIC_PREFIX } from '@/lib/metrics/buffer'
 
 
@@ -112,6 +113,11 @@ export async function POST(request: NextRequest) {
         where: { id: { in: userIds } },
         data: { billingPlan: 'free' },
       })
+
+      // Public pages cache billingPlan (paid gates, supporter badge)
+      for (const userId of userIds) {
+        await revalidateUserSites(userId)
+      }
 
       results.expiredSubscriptions = expired.length
     } else {

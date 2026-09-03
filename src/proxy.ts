@@ -130,7 +130,8 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith('/exam-complete') ||
     pathname.startsWith('/seb-required') ||
     pathname.startsWith('/impressum') ||
-    pathname.startsWith('/terms')
+    pathname.startsWith('/terms') ||
+    pathname.startsWith('/supporters')
   ) {
     return NextResponse.next()
   }

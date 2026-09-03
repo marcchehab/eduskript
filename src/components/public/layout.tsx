@@ -7,6 +7,7 @@ import { useSession } from 'next-auth/react'
 import { ChevronDown, ChevronRight, Menu, X, ChevronLeft, NotebookPen } from 'lucide-react'
 import Image from 'next/image'
 import { Button } from '@/components/ui/button'
+import { SupporterBadge } from '@/components/ui/supporter-badge'
 import { ReadingProgress } from './reading-progress'
 import { PublicThemeToggle } from './theme-toggle'
 import { ReflowToggle } from './reflow-toggle'
@@ -28,6 +29,8 @@ interface Teacher {
   pageIcon?: string | null
   titleStyle?: string | null
   logoUrl?: string | null
+  supporterBadgeHidden?: boolean | null
+  supporterBadgeMessage?: string | null
   bio?: string | null
   title?: string | null
   // Used by AuthButton to suppress the login affordance on free teacher pages
@@ -837,6 +840,18 @@ export function PublicSiteLayout({
                 ClassToolbar reads `sidebarCollapsed` from useLayout and
                 renders only the broadcast toggle when collapsed. */}
             <div id="class-toolbar-slot" />
+            {/* Supporter badge — rendered into the ISR-cached HTML from the
+                same cached teacher data as titleStyle; nothing per-visitor. */}
+            {!isSidebarCollapsed &&
+              teacher.billingPlan?.startsWith('supporter') &&
+              !teacher.supporterBadgeHidden && (
+                <div className="pb-2 flex justify-center">
+                  <SupporterBadge
+                    message={teacher.supporterBadgeMessage}
+                    href="https://eduskript.org/supporters"
+                  />
+                </div>
+              )}
             <div className={isSidebarCollapsed ? '' : 'flex items-start justify-between gap-2'}>
               <SyncStatusButton />
               {!isSidebarCollapsed && (

@@ -25,6 +25,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { verifyWebhookSignature } from '@/lib/payrexx'
+import { revalidateUserSites } from '@/lib/billing-revalidate'
 
 interface PayrexxWebhookTransaction {
   id: number
@@ -157,7 +158,8 @@ export async function POST(request: NextRequest) {
           }),
         ])
 
-        console.log(`[payrexx-webhook] Subscription ${subscription.id} activated until ${periodEnd.toISOString()}, token=${transaction.id}`)
+        console.log(`[payrexx-webhook] Subscription ${subscription.id} activated until ${periodEnd.toISOString()}`)
+        await revalidateUserSites(subscription.userId)
         break
       }
 
@@ -186,6 +188,7 @@ export async function POST(request: NextRequest) {
           }),
         ])
         console.log(`[payrexx-webhook] Subscription ${subscription.id} refunded and cancelled`)
+        await revalidateUserSites(subscription.userId)
         break
       }
 

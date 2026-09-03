@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import bcrypt from 'bcryptjs'
 import { createTrialSubscription } from '@/lib/trial'
+import { revalidateUserSites } from '@/lib/billing-revalidate'
 
 // GET /api/admin/users/[id] - Get single user
 export async function GET(
@@ -268,6 +269,11 @@ export async function PATCH(
           { status: 400 }
         )
       }
+    }
+
+    // Public pages cache billingPlan (paid gates, supporter badge)
+    if (billingPlan !== undefined || grantTrial) {
+      await revalidateUserSites(id)
     }
 
     return NextResponse.json({ user: updatedUser })

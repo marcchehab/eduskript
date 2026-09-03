@@ -4,7 +4,8 @@ import { useEffect, useState, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { CreditCard, Check, AlertCircle, Loader2 } from 'lucide-react'
+import { Check, AlertCircle, Loader2, Handshake, GraduationCap, Building2, FileText } from 'lucide-react'
+import { SupporterBadge } from '@/components/ui/supporter-badge'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 
@@ -24,6 +25,44 @@ interface SubscriptionData {
   currentPeriodEnd: string | null
   cancelledAt: string | null
   trialEndsAt: string | null
+}
+
+// Marketing copy per plan family (matched on slug prefix). Plans without a
+// match render as a generic card, so DB-only plans (e.g. legacy "pro-monthly")
+// still work.
+const CLASSROOM_FEATURES = [
+  'AI editing',
+  'Classes with live student progress',
+  'Exams with Safe Exam Browser (SEB)',
+  'SEB-Lockdown mode in class',
+  'AI-assisted grading with rubrics',
+  'Broadcast your annotations to students',
+  'Create your own plugins with AI',
+]
+
+const SUPPORTER_FEATURES = [
+  'Everything in Classroom',
+  'Supporter badge on your public page',
+]
+
+const FREE_FEATURES = [
+  'Unlimited skripts & pages',
+  'Full markdown editor, math & code editors',
+  'File & media uploads',
+  'Your public teacher page',
+]
+
+const SCHOOL_FEATURES = [
+  'Classroom for your whole team',
+  'Billing by invoice — no credit card',
+  'Admin overview',
+  'Priority support',
+]
+
+const SCHOOL_CONTACT = 'mailto:marc@informatikgarten.ch?subject=Eduskript%20School%20licence'
+
+function isSupporter(slug: string) {
+  return slug.startsWith('supporter')
 }
 
 export default function BillingPage() {
@@ -130,21 +169,50 @@ export default function BillingPage() {
     }, { destructive: true, title: 'Stop auto-renewal', confirmText: 'Stop auto-renewal' })
   }
 
-  function formatPrice(rappen: number): string {
-    return `CHF ${(rappen / 100).toFixed(2)}`
-  }
+  const classroomYearly = plans.find((p) => p.slug === 'classroom-yearly')
+  const classroomMonthly = plans.find((p) => p.slug === 'classroom-monthly')
+  const supporterPlan = plans.find((p) => isSupporter(p.slug))
+  const knownIds = new Set(
+    [classroomYearly, classroomMonthly, supporterPlan].filter(Boolean).map((p) => p!.id)
+  )
+  const otherPlans = plans.filter((p) => !knownIds.has(p.id))
+  // With an active/past_due subscription the grid stays visible for
+  // comparison, but other plans can't be bought (the API blocks checkout
+  // while a subscription is active).
+  const lockedIn = subscription != null && subscription.status !== 'trialing'
+  const currentSlug = subscription?.plan.slug
 
-  function formatDate(dateStr: string): string {
-    return new Date(dateStr).toLocaleDateString('de-CH', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    })
-  }
-
-  function daysUntil(dateStr: string): number {
-    const diff = new Date(dateStr).getTime() - Date.now()
-    return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)))
+  function planButton(plan: PlanData, label: string, variant?: 'outline', className?: string) {
+    if (lockedIn && plan.slug === currentSlug) {
+      return (
+        <Button variant="outline" className={`mt-6 w-full ${className ?? ''}`} disabled>
+          Current plan
+        </Button>
+      )
+    }
+    if (lockedIn) {
+      return (
+        <div className="mt-6 space-y-1">
+          <Button variant="outline" className={`w-full ${className ?? ''}`} disabled>
+            {label}
+          </Button>
+          <p className="text-center text-xs text-muted-foreground">
+            Available when your current plan ends
+          </p>
+        </div>
+      )
+    }
+    return (
+      <Button
+        variant={variant}
+        className={`mt-6 w-full ${className ?? ''}`}
+        onClick={() => handleSubscribe(plan.id)}
+        disabled={actionLoading === plan.id}
+      >
+        {actionLoading === plan.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+        {label}
+      </Button>
+    )
   }
 
   if (loading) {
@@ -157,7 +225,7 @@ export default function BillingPage() {
 
   return (
     <>
-    <div className="max-w-4xl mx-auto space-y-8">
+    <div className="max-w-5xl mx-auto space-y-8">
       <div>
         <h1 className="text-2xl font-bold">Billing</h1>
         <p className="text-muted-foreground mt-1">
@@ -181,11 +249,14 @@ export default function BillingPage() {
 
       {/* Current Subscription */}
       {subscription && (
-        <div className="rounded-lg border p-6 space-y-4">
+        <div className={`rounded-xl border p-6 space-y-4 ${isSupporter(subscription.plan.slug) ? 'border-amber-400/60 bg-gradient-to-br from-amber-50/60 to-transparent dark:from-amber-950/20' : ''}`}>
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-semibold">Current Plan</h2>
-              <p className="text-2xl font-bold mt-1">{subscription.plan.name}</p>
+              <h2 className="text-sm font-medium text-muted-foreground">Current plan</h2>
+              <div className="flex items-center gap-3 mt-1">
+                <p className="text-2xl font-bold">{subscription.plan.name}</p>
+                {isSupporter(subscription.plan.slug) && <SupporterBadge />}
+              </div>
             </div>
             <StatusBadge status={subscription.status} />
           </div>
@@ -208,17 +279,6 @@ export default function BillingPage() {
           {/* No cancel button during a trial: a trial costs nothing and ends
               on its own. Cancelling it was irreversible for the user — nothing
               re-grants a trial, so only an admin could restore access. */}
-          {subscription.status === 'trialing' && (
-            <div className="flex gap-2">
-              <Button
-                onClick={() => handleSubscribe(subscription.plan.id)}
-                disabled={actionLoading === subscription.plan.id}
-              >
-                {actionLoading === subscription.plan.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Upgrade to Paid
-              </Button>
-            </div>
-          )}
 
           {subscription.status === 'active' && !subscription.cancelledAt && (
             <Button
@@ -273,34 +333,131 @@ export default function BillingPage() {
         </div>
       )}
 
-      {/* Available Plans */}
-      {plans.length > 0 && (!subscription || subscription.status === 'trialing') && (
-        <div>
-          <h2 className="text-lg font-semibold mb-4">Choose a Plan</h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {plans.map((plan) => (
-              <PlanCard
+      {/* Plans */}
+      <div className="space-y-4">
+          <h2 className="text-lg font-semibold">
+            {subscription?.status === 'trialing' ? 'Choose your plan' : 'Plans'}
+          </h2>
+          <div className="grid gap-4 md:grid-cols-3">
+            {/* Free */}
+            <div className="rounded-xl border p-6 flex flex-col">
+              <div className="flex items-center gap-2">
+                <FileText className="h-5 w-5 text-muted-foreground" />
+                <h3 className="text-lg font-semibold">Free</h3>
+              </div>
+              <p className="text-3xl font-bold mt-3">
+                CHF 0
+                <span className="text-sm font-normal text-muted-foreground"> / forever</span>
+              </p>
+              <p className="text-sm text-muted-foreground mt-1">Write and publish without limits.</p>
+              <FeatureList features={FREE_FEATURES} />
+              <div className="mt-6 h-10 flex items-center justify-center text-sm text-muted-foreground">
+                {!subscription && 'Your current plan'}
+              </div>
+            </div>
+
+            {/* Classroom */}
+            {classroomYearly && (
+              <div className="relative rounded-xl border-2 border-primary p-6 flex flex-col shadow-sm">
+                <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-0.5 text-xs font-medium text-primary-foreground">
+                  Recommended
+                </span>
+                <div className="flex items-center gap-2">
+                  <GraduationCap className="h-5 w-5 text-primary" />
+                  <h3 className="text-lg font-semibold">Classroom</h3>
+                </div>
+                <p className="text-3xl font-bold mt-3">
+                  {formatPrice(classroomYearly.priceChf)}
+                  <span className="text-sm font-normal text-muted-foreground"> / year</span>
+                </p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {formatPrice(Math.round(classroomYearly.priceChf / 12 / 10) * 10)} per month
+                </p>
+                <FeatureList features={CLASSROOM_FEATURES} />
+                {/* The monthly variant shares the card; mark it current too */}
+                {lockedIn && currentSlug === 'classroom-monthly' ? (
+                  <Button variant="outline" className="mt-6 w-full" disabled>
+                    Current plan (monthly)
+                  </Button>
+                ) : (
+                  planButton(classroomYearly, subscription?.status === 'trialing' ? 'Upgrade' : 'Subscribe')
+                )}
+                {classroomMonthly && !lockedIn && (
+                  <button
+                    className="mt-2 text-xs text-muted-foreground underline-offset-2 hover:underline disabled:opacity-50"
+                    onClick={() => handleSubscribe(classroomMonthly.id)}
+                    disabled={actionLoading === classroomMonthly.id}
+                  >
+                    {actionLoading === classroomMonthly.id
+                      ? 'Redirecting…'
+                      : `or ${formatPrice(classroomMonthly.priceChf)} monthly`}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Supporter */}
+            {supporterPlan && (
+              <div className="rounded-xl border border-amber-400/60 bg-gradient-to-br from-amber-50/60 to-transparent dark:from-amber-950/20 p-6 flex flex-col">
+                <div className="flex items-center gap-2">
+                  <Handshake className="h-5 w-5 text-amber-500" />
+                  <h3 className="text-lg font-semibold">Supporter</h3>
+                </div>
+                <p className="text-3xl font-bold mt-3">
+                  {formatPrice(supporterPlan.priceChf)}
+                  <span className="text-sm font-normal text-muted-foreground"> / year</span>
+                </p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  For teachers who want Eduskript to exist.
+                </p>
+                <FeatureList features={SUPPORTER_FEATURES} accent />
+                <div className="mt-4 flex justify-center">
+                  <SupporterBadge />
+                </div>
+                <div className="-mt-2">
+                  {planButton(supporterPlan, 'Become a Supporter', 'outline', 'border-amber-400/60 hover:bg-amber-100/60 dark:hover:bg-amber-950/40')}
+                </div>
+              </div>
+            )}
+
+            {/* Any plans without curated copy (e.g. legacy ones) */}
+            {otherPlans.map((plan) => (
+              <GenericPlanCard
                 key={plan.id}
                 plan={plan}
                 onSubscribe={handleSubscribe}
                 loading={actionLoading === plan.id}
                 isTrialing={subscription?.status === 'trialing'}
+                isCurrent={lockedIn && plan.slug === currentSlug}
+                locked={lockedIn}
               />
             ))}
           </div>
-        </div>
-      )}
 
-      {/* Free tier info when no plans exist yet */}
-      {plans.length === 0 && (!subscription || subscription.status === 'trialing') && (
-        <div className="rounded-lg border p-6 text-center">
-          <CreditCard className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
-          <h2 className="text-lg font-semibold">Free Plan</h2>
-          <p className="text-muted-foreground mt-1">
-            You&apos;re on the free plan. Paid plans will be available soon.
-          </p>
-        </div>
-      )}
+          {/* School */}
+          <div className="rounded-xl border p-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <Building2 className="h-5 w-5 text-muted-foreground" />
+                <h3 className="text-lg font-semibold">School</h3>
+                <span className="text-sm text-muted-foreground">
+                  — CHF 59 per teacher / year, from 5 teachers
+                </span>
+              </div>
+              <ul className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
+                {SCHOOL_FEATURES.map((f) => (
+                  <li key={f} className="flex items-center gap-1.5">
+                    <Check className="h-3.5 w-3.5 text-green-500 shrink-0" />
+                    {f}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <Button variant="outline" asChild className="shrink-0">
+              <a href={SCHOOL_CONTACT}>Contact us</a>
+            </Button>
+          </div>
+      </div>
     </div>
     <AlertDialogModal
       open={dialog.open} onOpenChange={dialog.setOpen}
@@ -311,6 +468,37 @@ export default function BillingPage() {
     />
     </>
   )
+}
+
+function FeatureList({ features, accent }: { features: string[]; accent?: boolean }) {
+  return (
+    <ul className="mt-4 space-y-2 flex-1">
+      {features.map((f) => (
+        <li key={f} className="flex items-start gap-2 text-sm">
+          <Check className={`h-4 w-4 shrink-0 mt-0.5 ${accent ? 'text-amber-500' : 'text-green-500'}`} />
+          <span>{f}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function formatPrice(rappen: number): string {
+  const chf = rappen / 100
+  return Number.isInteger(chf) ? `CHF ${chf}` : `CHF ${chf.toFixed(2)}`
+}
+
+function formatDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString('de-CH', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  })
+}
+
+function daysUntil(dateStr: string): number {
+  const diff = new Date(dateStr).getTime() - Date.now()
+  return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)))
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -329,24 +517,28 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
-function PlanCard({
+function GenericPlanCard({
   plan,
   onSubscribe,
   loading,
   isTrialing,
+  isCurrent,
+  locked,
 }: {
   plan: PlanData
   onSubscribe: (planId: string) => void
   loading: boolean
   isTrialing?: boolean
+  isCurrent?: boolean
+  locked?: boolean
 }) {
   const features = plan.features as Record<string, unknown>
 
   return (
-    <div className="rounded-lg border p-6 flex flex-col">
+    <div className="rounded-xl border p-6 flex flex-col">
       <h3 className="text-lg font-semibold">{plan.name}</h3>
-      <p className="text-3xl font-bold mt-2">
-        CHF {(plan.priceChf / 100).toFixed(2)}
+      <p className="text-3xl font-bold mt-3">
+        {formatPrice(plan.priceChf)}
         <span className="text-sm font-normal text-muted-foreground">
           /{plan.interval === 'monthly' ? 'mo' : 'yr'}
         </span>
@@ -368,12 +560,13 @@ function PlanCard({
       )}
 
       <Button
+        variant={locked ? 'outline' : undefined}
         className="mt-6 w-full"
         onClick={() => onSubscribe(plan.id)}
-        disabled={loading}
+        disabled={loading || locked}
       >
         {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-        {isTrialing ? 'Upgrade' : 'Subscribe'}
+        {isCurrent ? 'Current plan' : isTrialing ? 'Upgrade' : 'Subscribe'}
       </Button>
     </div>
   )

@@ -15,6 +15,7 @@ import { InlineMarkdown } from '@/components/ui/inline-markdown'
 import { appHostUrl } from '@/lib/custom-domain'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
+import { SupporterBadgeSettings } from '@/components/dashboard/supporter-badge-settings'
 
 // `siteId` scopes every read/write to one of the caller's sites (multi-site
 // site-settings page). Omitted → the APIs fall back to the primary site, which
@@ -812,6 +813,11 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
             </Button>
           </Link>
         </div>
+
+        {/* Supporter Badge Section — only meaningful on a supporter plan */}
+        {session?.user?.billingPlan?.startsWith('supporter') && (
+          <SupporterBadgeSettings siteId={siteId} />
+        )}
 
         {/* Custom Domains Section */}
         <div className="space-y-4 border-t pt-6">

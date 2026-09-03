@@ -61,6 +61,8 @@ function graftSitePageFields<U extends object>(user: U, site: SitePageFields) {
     typographyPreference: site.typographyPreference,
     titleStyle: extra.titleStyle ?? 'icon',
     logoUrl: extra.logoUrl ?? null,
+    supporterBadgeHidden: extra.supporterBadgeHidden ?? false,
+    supporterBadgeMessage: extra.supporterBadgeMessage ?? null,
   })
 }
 
@@ -1042,6 +1044,7 @@ export const getOrgTeacherContentPage = (
           name: true,
           bio: true,
           title: true,
+          billingPlan: true,
           sites: {
             where: { slug: pageSlug },
             take: 1,
@@ -1157,6 +1160,7 @@ export const getOrgTeacherSkript = (
           name: true,
           bio: true,
           title: true,
+          billingPlan: true,
           sites: {
             where: { slug: pageSlug },
             take: 1,

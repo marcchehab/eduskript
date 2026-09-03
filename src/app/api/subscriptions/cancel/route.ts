@@ -9,6 +9,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { revalidateUserSites } from '@/lib/billing-revalidate'
 
 export async function POST() {
   try {
@@ -55,6 +56,7 @@ export async function POST() {
         where: { id: session.user.id },
         data: { billingPlan: 'free' },
       })
+      await revalidateUserSites(session.user.id)
       return NextResponse.json({ success: true, immediate: true })
     }
 

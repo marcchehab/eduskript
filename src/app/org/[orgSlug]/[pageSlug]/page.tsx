@@ -312,7 +312,10 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
     titleStyle: teacherSiteExtra.titleStyle ?? 'icon',
     logoUrl: teacherSiteExtra.logoUrl ?? null,
     bio: teacher.bio || null,
-    title: teacher.title || null
+    title: teacher.title || null,
+    billingPlan: teacher.billingPlan,
+    supporterBadgeHidden: teacherSiteExtra.supporterBadgeHidden ?? false,
+    supporterBadgeMessage: teacherSiteExtra.supporterBadgeMessage ?? null,
   }
 
   return (

@@ -32,7 +32,19 @@ export interface SiteExtraSettings {
   titleStyle?: 'icon' | 'logo'
   /** Wide logo image URL, shown when titleStyle is 'logo'. */
   logoUrl?: string
+
+  /**
+   * Hide the supporter badge on this site's public sidebar AND drop the site
+   * from the /supporters listing. Only meaningful while the owner's
+   * billingPlan is a supporter plan.
+   */
+  supporterBadgeHidden?: boolean
+  /** Custom supporter badge text; falls back to DEFAULT_SUPPORTER_MESSAGE. */
+  supporterBadgeMessage?: string
 }
+
+/** Shown on the public badge when the supporter has not set a custom message. */
+export const DEFAULT_SUPPORTER_MESSAGE = 'I support 🇨🇭open-source'
 
 /** Everything storable in Organization.extraSettings. */
 export interface OrgExtraSettings {
@@ -62,6 +74,11 @@ export function readExtraSettings(source: { extraSettings?: unknown } | unknown)
 
   if (bag.titleStyle === 'icon' || bag.titleStyle === 'logo') out.titleStyle = bag.titleStyle
   if (typeof bag.logoUrl === 'string' && bag.logoUrl) out.logoUrl = bag.logoUrl
+
+  if (bag.supporterBadgeHidden === true) out.supporterBadgeHidden = true
+  if (typeof bag.supporterBadgeMessage === 'string' && bag.supporterBadgeMessage.trim()) {
+    out.supporterBadgeMessage = bag.supporterBadgeMessage.trim().slice(0, 60)
+  }
 
   return out
 }

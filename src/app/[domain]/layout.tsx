@@ -84,6 +84,8 @@ export default async function DomainLayout({ params, children }: DomainLayoutPro
     bio: teacher.bio || null,
     title: teacher.title || null,
     billingPlan: teacher.billingPlan,
+    supporterBadgeHidden: teacher.supporterBadgeHidden ?? false,
+    supporterBadgeMessage: teacher.supporterBadgeMessage ?? null,
   }
 
   return (
