@@ -754,6 +754,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
         pageId={page.id}
         domain={(session?.user as { pageSlug?: string })?.pageSlug || undefined}
         headerContent={skriptHeaderContent}
+        description={null}
         manageLabel="Manage:"
         extraTabs={extraTabs}
         tabStorageKey="eduskript:page-editor-tab"
@@ -1026,15 +1027,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
         footerSlot={
           <>
             <p className="text-xs text-muted-foreground mb-2">
-              💡 New to Eduskript?{' '}
-              <a
-                href="https://eduskript.org/c/first-steps"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline underline-offset-2 hover:text-foreground"
-              >
-                Read the User Manual
-              </a>
+              Drag files or videos from the drawers to insert them. Ctrl+S to save.
             </p>
             <CollapsibleDrawer
               title={

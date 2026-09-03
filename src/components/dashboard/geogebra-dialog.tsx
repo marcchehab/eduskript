@@ -61,6 +61,9 @@ export function GeogebraDialog({ open, onOpenChange, onInsert }: GeogebraDialogP
             </span>
             <Button size="sm" onClick={submit} disabled={!materialId}>Insert</Button>
           </div>
+          <p className="text-xs text-muted-foreground">
+            Tip: you can also paste a GeoGebra share link directly into the editor.
+          </p>
         </div>
       </DialogContent>
     </Dialog>

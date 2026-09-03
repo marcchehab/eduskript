@@ -31,7 +31,7 @@ import rehypeKatex from 'rehype-katex'
 import 'katex/contrib/mhchem' // registers \ce{} / \pu{} macros on the shared KaTeX instance
 import rehypeSlug from 'rehype-slug'
 import { remarkPlugins } from './markdown-plugins'
-import { rehypeSourceLine } from './rehype-plugins/source-line'
+import { rehypeSourceLine, rehypeMathBlockWrapper } from './rehype-plugins/source-line'
 import { rehypeColorTitle } from './rehype-plugins/color-title'
 import { rehypeHeadingSectionIds } from './rehype-plugins/heading-section-ids'
 import { rehypeMarkdownChildren } from './rehype-plugins/markdown-children'
@@ -58,6 +58,9 @@ export const rehypePlugins: PluggableList = [
   rehypeSlug,
   rehypeHeadingSectionIds,
   rehypeColorTitle,
+  // Must run BEFORE rehypeKatex: preserves block-math source positions in a
+  // wrapper div for the editor↔preview cursor sync (see source-line.ts).
+  rehypeMathBlockWrapper,
   rehypeKatex,
   // Must run AFTER rehypeKatex so it can rewrite the spans KaTeX emits for
   // \textcolor{NAME}{…} into themed class names.

@@ -1,4 +1,37 @@
-import { visit } from 'unist-util-visit'
+import { visit, SKIP } from 'unist-util-visit'
+
+/**
+ * Wrap block math in a positioned <div> BEFORE rehype-katex runs. KaTeX
+ * replaces the math element (the <pre><code class="math-display"> from
+ * remark-math) wholesale, dropping its source position — so without this
+ * wrapper, display equations get no data-source-line-* attributes and the
+ * editor↔preview cursor sync skips them. The wrapper keeps the position and
+ * survives KaTeX (which only replaces its child); rehypeSourceLine then
+ * annotates the div. Inline math needs nothing: its parent <p> is annotated.
+ */
+export function rehypeMathBlockWrapper() {
+  return function transformer(tree: any) {
+    visit(tree, 'element', (node: any, index: number | undefined, parent: any) => {
+      if (!parent || index === undefined || !node.position) return
+      const ownClasses: unknown[] = Array.isArray(node.properties?.className) ? node.properties.className : []
+      const isDisplayBlock = node.tagName !== 'code' && ownClasses.includes('math-display')
+      const isMathPre = node.tagName === 'pre' && node.children?.some((c: any) =>
+        c.type === 'element' &&
+        Array.isArray(c.properties?.className) &&
+        (c.properties.className.includes('math-display') || c.properties.className.includes('language-math'))
+      )
+      if (!isDisplayBlock && !isMathPre) return
+      parent.children[index] = {
+        type: 'element',
+        tagName: 'div',
+        properties: {},
+        position: node.position,
+        children: [node],
+      }
+      return [SKIP, index + 1]
+    })
+  }
+}
 
 /**
  * Rehype plugin to add source line position data to elements

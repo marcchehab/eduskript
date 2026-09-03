@@ -662,7 +662,7 @@ export function EditorWithMedia({
         fullscreen
           ? 'flex-1 min-h-0 flex flex-col'
           : hasPageCard
-            ? 'border border-orange-400/70 dark:border-orange-500/60 rounded-lg overflow-hidden divide-y divide-border'
+            ? 'border border-orange-400/70 dark:border-orange-500/60 rounded-lg overflow-hidden'
             : ''
       }>
         {metadataSlot && (
@@ -678,7 +678,10 @@ export function EditorWithMedia({
         <Card className={
           fullscreen
             ? 'border-0 shadow-none flex-1 min-h-0 flex flex-col'
-            : hasPageCard ? 'border-0 rounded-none shadow-none' : ''
+            // Inside the page card the editor's own rounded border is enough:
+            // no card background, and p-3 matches the footer (version history)
+            // width.
+            : hasPageCard ? 'border-0 rounded-none shadow-none bg-transparent' : ''
         }>
         {!fullscreen && (description !== null) && (
           <CardHeader className="pb-2">
@@ -687,7 +690,7 @@ export function EditorWithMedia({
             </CardDescription>
           </CardHeader>
         )}
-        <CardContent className={fullscreen ? 'flex-1 overflow-hidden' : ''}>
+        <CardContent className={fullscreen ? 'flex-1 overflow-hidden' : hasPageCard ? 'p-3' : ''}>
           <div
             style={{ height: fullscreen ? '100%' : `${editorHeight}px` }}
             className={fullscreen ? '' : 'overflow-hidden'}
@@ -728,7 +731,7 @@ export function EditorWithMedia({
         </CardContent>
       </Card>
       {!fullscreen && footerSlot && (
-        <div className="p-3">
+        <div className="p-3 border-t border-border">
           {footerSlot}
         </div>
       )}

@@ -14,7 +14,8 @@ type UploadState = 'idle' | 'preparing' | 'uploading' | 'error'
 interface VideoUploadModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onUploadComplete?: () => void
+  /** Called after a successful upload with the filename the video was stored under. */
+  onUploadComplete?: (filename?: string) => void
   // Skript to associate the uploaded video with via SkriptVideos.
   // Omit for admin uploads that aren't tied to a specific skript.
   skriptId?: string
@@ -149,9 +150,10 @@ export function VideoUploadModal({ open, onOpenChange, onUploadComplete, skriptI
 
       // Upload complete — close modal and notify parent
       // Mux will process the video asynchronously; the webhook updates status
+      const uploadedName = filename.trim()
       reset()
       onOpenChange(false)
-      onUploadComplete?.()
+      onUploadComplete?.(uploadedName)
     } catch (err) {
       if (err instanceof Error && err.message === 'Upload cancelled') {
         reset()

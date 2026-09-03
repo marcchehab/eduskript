@@ -19,6 +19,11 @@ interface ResizableWrapperProps {
   style?: React.CSSProperties
   /** Data attributes to pass through */
   dataAttributes?: Record<string, string>
+  /** Natural content width in px. Applied as max-width ONLY in the default
+      state (width 100%, not dragging) so an unresized image renders at its
+      original size capped at the pane width — once the user resizes, they are
+      free to scale past the natural size and past 100%. */
+  naturalMaxWidth?: number
 }
 
 export function ResizableWrapper({
@@ -30,6 +35,7 @@ export function ResizableWrapper({
   className = '',
   style,
   dataAttributes,
+  naturalMaxWidth,
 }: ResizableWrapperProps) {
   const containerRef = useRef<HTMLSpanElement>(null)
   const [isDragging, setIsDragging] = useState(false)
@@ -95,7 +101,8 @@ export function ResizableWrapper({
     const deltaX = e.clientX - startX
     // For right-aligned, invert the delta since we're dragging from the left
     const deltaPercent = (deltaX / parentWidth) * 100 * (currentAlign === 'right' ? -1 : 1)
-    const newWidthPercent = Math.max(10, Math.min(100, startWidth + deltaPercent))
+    // No upper clamp: the user may scale past the natural size and past 100%.
+    const newWidthPercent = Math.max(10, startWidth + deltaPercent)
 
     setCurrentWidth(Math.round(newWidthPercent))
   }, [isDragging, currentAlign])
@@ -160,7 +167,13 @@ export function ResizableWrapper({
     <span
       ref={containerRef}
       className={`block relative my-4 group ${alignmentClasses} ${className}`}
-      style={{ ...style, width: `${currentWidth}%` }}
+      style={{
+        ...style,
+        width: `${currentWidth}%`,
+        ...(naturalMaxWidth !== undefined && currentWidth === 100 && !isDragging
+          ? { maxWidth: `${naturalMaxWidth}px` }
+          : {}),
+      }}
       {...dataProps}
     >
       {/* Content */}
@@ -180,7 +193,7 @@ export function ResizableWrapper({
           </span>
 
           {/* Width indicator */}
-          {(isDragging || currentWidth < 100) && (
+          {(isDragging || currentWidth !== 100) && (
             <span className={`block absolute -top-8 left-1/2 -translate-x-1/2 bg-background/95 backdrop-blur-sm border border-border/50 px-2 py-1 rounded text-[10px] font-mono text-foreground z-10 pointer-events-none transition-opacity ${
               isDragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
             }`}>

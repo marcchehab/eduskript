@@ -149,7 +149,7 @@ export function DashboardSidebar() {
   return (
     <div className={cn(
       "bg-card border-r border-border h-full transition-all duration-300 flex flex-col",
-      isCollapsed ? "w-16 min-w-16" : "w-64"
+      isCollapsed ? "w-16 min-w-16" : "w-52"
     )}>
       <div className="p-4 flex-1 min-h-0 flex flex-col">
         {/* Top bar: back link (students) + collapse toggle.

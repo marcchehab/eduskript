@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { QuestSpotlight } from '@/components/onboarding/quest-spotlight'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
-import { Eye, EyeOff, Pencil, Code, Bold, Italic, Heading, Heading1, Heading2, Heading3, List, ListOrdered, Link, Palette, Highlighter, Circle, Wand2, ChevronDown, FilePen, Minus, Plus, CircleHelp, TextQuote, Puzzle, Sigma, AlignLeft, AlignCenter, AlignRight, MessageSquare, Compass, SeparatorHorizontal, ChartSpline } from 'lucide-react'
+import { Eye, EyeOff, Pencil, Code, Bold, Italic, Heading, MessageSquare, Heading1, Heading2, Heading3, List, ListOrdered, Link, Palette, Highlighter, Circle, Wand2, ChevronDown, FilePen, Minus, Plus, CircleHelp, TextQuote, Puzzle, Sigma, AlignLeft, AlignCenter, AlignRight, Compass, SeparatorHorizontal, ChartSpline, Table, Image as ImageIcon, Film, FileText, Columns2, Columns3, MoveHorizontal, Pin, AppWindow, Atom, FlaskConical, Terminal, Sparkles, MousePointerClick, ClipboardCheck, Music } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,8 +20,12 @@ import { Sketch } from '@uiw/react-color'
 import { ExcalidrawEditor } from './excalidraw-editor'
 import { PluginPicker } from './plugin-picker'
 import { GeogebraDialog } from './geogebra-dialog'
+import { PictureDialog } from './picture-dialog'
+import { VideoPickDialog } from './video-pick-dialog'
+import { PdfPickDialog } from './pdf-pick-dialog'
 import { InteractivePreview } from './interactive-preview'
 import { autocompletion } from '@codemirror/autocomplete'
+import { Ribbon, RibbonGroup, RibbonBigButton, RibbonSmallButton, RibbonSmallStack, RibbonSmallRow, RibbonSplitBigButton, RibbonGalleryChip } from '@/components/dashboard/editor-ribbon'
 import { createMarkdownCompletions, pageLinkCompletions } from './markdown-completions'
 import type { EditorView } from '@codemirror/view'
 import type { ViewUpdate } from '@codemirror/view'
@@ -73,6 +77,75 @@ function nextExcalidrawName(fileList: Array<{ name: string }> | undefined): stri
   return `drawing-${i}`
 }
 
+// Ribbon dropdown/gallery data. Color cssVars match the rendered classes
+// (globals.css); callout vars follow the type→color grouping there (e.g.
+// tip shares --callout-important, exercise shares --callout-summary).
+const TEXT_COLOR_NAMES = [
+  { name: 'red', label: 'Red', cssVar: '--es-color-red' },
+  { name: 'orange', label: 'Orange', cssVar: '--es-color-orange' },
+  { name: 'lightgreen', label: 'Light green', cssVar: '--es-color-lightgreen' },
+  { name: 'green', label: 'Green', cssVar: '--es-color-green' },
+  { name: 'cyan', label: 'Cyan', cssVar: '--es-color-cyan' },
+  { name: 'lightblue', label: 'Light blue', cssVar: '--es-color-lightblue' },
+  { name: 'blue', label: 'Blue', cssVar: '--es-color-blue' },
+  { name: 'violet', label: 'Violet', cssVar: '--es-color-violet' },
+  { name: 'purple', label: 'Purple', cssVar: '--es-color-purple' },
+]
+
+const HIGHLIGHT_NAMES = [
+  { name: 'yellow', label: 'Yellow', cssVar: '--es-bg-yellow' },
+  { name: 'green', label: 'Green', cssVar: '--es-bg-green' },
+  { name: 'blue', label: 'Blue', cssVar: '--es-bg-blue' },
+  { name: 'pink', label: 'Pink', cssVar: '--es-bg-pink' },
+  { name: 'orange', label: 'Orange', cssVar: '--es-bg-orange' },
+  { name: 'red', label: 'Red', cssVar: '--es-bg-red' },
+  { name: 'purple', label: 'Purple', cssVar: '--es-bg-purple' },
+]
+
+const CALLOUT_GALLERY = [
+  { type: 'note', label: 'Note', cssVar: '--callout-note' },
+  { type: 'tip', label: 'Tip', cssVar: '--callout-important' },
+  { type: 'exercise', label: 'Exercise', cssVar: '--callout-summary' },
+  { type: 'warning', label: 'Warning', cssVar: '--callout-warning' },
+  { type: 'info', label: 'Info', cssVar: '--callout-info' },
+  { type: 'success', label: 'Success / Lernziele', cssVar: '--callout-done' },
+  { type: 'danger', label: 'Danger', cssVar: '--callout-danger' },
+  { type: 'question', label: 'Question', cssVar: '--callout-question' },
+  { type: 'example', label: 'Example', cssVar: '--callout-example' },
+  { type: 'quote', label: 'Quote', cssVar: '--callout-quote' },
+  { type: 'idea', label: 'Idea', cssVar: '--callout-idea' },
+  { type: 'todo', label: 'Todo', cssVar: '--callout-info' },
+  { type: 'solution', label: 'Solution', cssVar: '--callout-quote' },
+  { type: 'discuss', label: 'Discuss', cssVar: '--callout-discuss' },
+]
+
+// Word-style table size picker (Insert > Table hover grid).
+function TableGridPicker({ onPick, maxCols = 8, maxRows = 6 }: { onPick: (cols: number, rows: number) => void; maxCols?: number; maxRows?: number }) {
+  const [hover, setHover] = useState<{ c: number; r: number }>({ c: 0, r: 0 })
+  return (
+    <div className="p-2 select-none">
+      <div className="grid gap-0.5" style={{ gridTemplateColumns: `repeat(${maxCols}, 1rem)` }}>
+        {Array.from({ length: maxRows }, (_, r) =>
+          Array.from({ length: maxCols }, (_, c) => (
+            <button
+              key={`${r}-${c}`}
+              type="button"
+              onMouseEnter={() => setHover({ c: c + 1, r: r + 1 })}
+              onClick={() => onPick(c + 1, r + 1)}
+              className={`w-4 h-4 border rounded-[2px] ${
+                c < hover.c && r < hover.r ? 'bg-primary/30 border-primary' : 'border-border bg-background'
+              }`}
+            />
+          ))
+        )}
+      </div>
+      <div className="text-xs text-muted-foreground text-center mt-1.5">
+        {hover.c > 0 ? `${hover.c} × ${hover.r} table` : 'Pick a size'}
+      </div>
+    </div>
+  )
+}
+
 const CodeMirrorEditor = function CodeMirrorEditor({
   content,
   onChange,
@@ -100,6 +173,9 @@ const CodeMirrorEditor = function CodeMirrorEditor({
     return saved ? parseInt(saved, 10) : 14
   })
   const [editorWidth, setEditorWidth] = useState(50) // Percentage
+  // Controlled: the table grid picker is a plain button grid, so Radix
+  // doesn't close the menu on click — we close it in onPick.
+  const [tableMenuOpen, setTableMenuOpen] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   // Removed previewContent state - React renderer handles markdown directly
@@ -110,6 +186,9 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   const [excalidrawOpen, setExcalidrawOpen] = useState(false)
   const [pluginPickerOpen, setPluginPickerOpen] = useState(false)
   const [geogebraDialogOpen, setGeogebraDialogOpen] = useState(false)
+  const [pictureDialogOpen, setPictureDialogOpen] = useState(false)
+  const [videoDialogOpen, setVideoDialogOpen] = useState(false)
+  const [pdfDialogOpen, setPdfDialogOpen] = useState(false)
   const [excalidrawInitialData, setExcalidrawInitialData] = useState<{
     name: string
     elements: readonly unknown[]
@@ -1025,7 +1104,11 @@ const CodeMirrorEditor = function CodeMirrorEditor({
         const elementRect = firstElement.getBoundingClientRect()
 
         if (elementRect.top < containerRect.top || elementRect.bottom > containerRect.bottom) {
-          firstElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          // Scroll ONLY the preview pane. scrollIntoView would also scroll
+          // every other scrollable ancestor, nudging the page and clipping
+          // the ribbon tab bar.
+          const delta = elementRect.top - containerRect.top - (containerRect.height - elementRect.height) / 2
+          container.scrollTo({ top: container.scrollTop + delta, behavior: 'smooth' })
         }
       }
     })
@@ -1110,7 +1193,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
 
   // Insert quiz question block
   const insertQuiz = () => {
-    const quizTemplate = `<Question id="${generateId()}">\n  <Option correct="true">Correct answer</Option>\n  <Option>Wrong answer</Option>\n</Question>\n`
+    const quizTemplate = `<question id="${generateId()}" type="single">\nQuestion text\n\n<answer correct>Correct answer</answer>\n<answer>Wrong answer</answer>\n</question>\n`
 
     if (editorViewRef.current && !useSimpleEditor) {
       const view = editorViewRef.current
@@ -1138,8 +1221,10 @@ const CodeMirrorEditor = function CodeMirrorEditor({
 
   // Insert a <spacer> writing area. An explicit id keys the round-trip
   // find/replace when the student/teacher resizes or restyles it in the preview.
-  const insertSpacer = () => {
-    const spacerTemplate = `<spacer id="${generateId()}" pattern="checkered" height="200" />\n`
+  // Maths tab inserts graph paper (checkered) for handwork; Layout inserts a
+  // blank spacer (plain vertical whitespace).
+  const insertSpacer = (pattern: 'checkered' | 'blank' = 'checkered') => {
+    const spacerTemplate = `<spacer id="${generateId()}" pattern="${pattern}" height="200" />\n`
 
     if (editorViewRef.current && !useSimpleEditor) {
       const view = editorViewRef.current
@@ -1294,8 +1379,10 @@ const CodeMirrorEditor = function CodeMirrorEditor({
       throw new Error(data.error || 'Failed to save drawing')
     }
 
-    // Only insert reference for NEW drawings, not when editing existing ones
-    if (!isEditingExistingExcalidraw) {
+    // Only insert the reference on the FIRST save of a new drawing.
+    // originalName is set both when editing an existing drawing and on
+    // re-saves within one session (the editor tracks its last saved name).
+    if (!originalName) {
       const insertText = `![](${name}.excalidraw)\n`
 
       if (editorViewRef.current && !useSimpleEditor) {
@@ -1403,6 +1490,60 @@ const CodeMirrorEditor = function CodeMirrorEditor({
       view.focus()
     }
   }
+
+  // Insert a block template at the cursor. Unlike insertAtCursor this also
+  // works in the simple-textarea fallback (same pattern as insertQuiz).
+  // Templates should match markdown-completions.ts / syntax-reference.ts.
+  const insertBlockTemplate = (template: string) => {
+    if (editorViewRef.current && !useSimpleEditor) {
+      const view = editorViewRef.current
+      const insertPos = view.state.selection.main.head
+      view.dispatch({
+        changes: { from: insertPos, insert: template },
+        selection: { anchor: insertPos + template.length }
+      })
+      onChange(view.state.doc.toString())
+      view.focus()
+    } else if (useSimpleEditor) {
+      const textarea = document.querySelector('textarea') as HTMLTextAreaElement
+      if (textarea) {
+        const start = textarea.selectionStart
+        const newContent = textareaContent.substring(0, start) + template + textareaContent.substring(start)
+        setTextareaContent(newContent)
+        onChange(newContent)
+        setTimeout(() => {
+          textarea.selectionStart = textarea.selectionEnd = start + template.length
+          textarea.focus()
+        }, 0)
+      }
+    }
+  }
+
+  // Excel-style placeholder content (A1, B1… / A2, B2…) so the row/column
+  // structure is obvious in the source.
+  const insertTable = (cols: number, rows: number) => {
+    const colLetter = (i: number) => String.fromCharCode(65 + i)
+    const header = `| ${Array.from({ length: cols }, (_, c) => `Column ${c + 1}`).join(' | ')} |`
+    const sep = `| ${Array.from({ length: cols }, () => '---').join(' | ')} |`
+    const body = Array.from({ length: rows }, (_, r) =>
+      `| ${Array.from({ length: cols }, (_, c) => `${colLetter(c)}${r + 1}`).join(' | ')} |`
+    ).join('\n')
+    insertBlockTemplate(`\n${header}\n${sep}\n${body}\n`)
+  }
+  const insertFlex = () => insertBlockTemplate('\n<flex>\n<flex-item>\n\nLeft column — put text, images, or any markdown here.\n\n</flex-item>\n<flex-item>\n\nRight column — the columns share the width equally.\n\n</flex-item>\n</flex>\n')
+  const insertFullwidth = () => insertBlockTemplate('\n<fullwidth>\n\n</fullwidth>\n')
+  const insertStickme = () => insertBlockTemplate('\n<stickme>\n\n</stickme>\n')
+  const insertTabsContainer = () => insertBlockTemplate('\n<tabs-container data-items=\'["Tab 1","Tab 2"]\'>\n<tab-item>\n\n</tab-item>\n<tab-item>\n\n</tab-item>\n</tabs-container>\n')
+  const insertSqlEditor = () => insertBlockTemplate(`\`\`\`sql editor id="${generateId()}" db=""\nSELECT name FROM sqlite_master WHERE type='table' ORDER BY name;\n\`\`\`\n`)
+  const insertHtmlEditor = () => insertBlockTemplate(`\`\`\`html editor id="${generateId()}"\n<h1>Hello!</h1>\n\`\`\`\n`)
+  const insertPlainCodeBlock = () => insertBlockTemplate('```python\n\n```\n')
+  const insertPythonCheck = () => insertBlockTemplate('```python-check for=""\nassert True, "Explain what is checked"\n```\n')
+  const insertPing = () => insertBlockTemplate('<ping />\n')
+  const insertMolecule = () => insertBlockTemplate('<molecule smiles="CC(=O)Oc1ccccc1C(=O)O" name="Aspirin" />\n')
+  const insertReaction = () => insertBlockTemplate('$$\\ce{2H2 + O2 -> 2H2O}$$\n')
+  const insertAiFeedback = () => insertBlockTemplate('<ai-feedback prompt="Check the work in this section. Point out the first error, do not reveal the solution." />\n')
+  const insertCta = () => insertBlockTemplate('<cta href="https://eduskript.org">Visit Eduskript</cta>\n')
+  const insertAudio = () => insertBlockTemplate('<audio controls src=""></audio>\n')
 
   /**
    * Find an enclosing emphasis or strong node at the given cursor position.
@@ -1539,17 +1680,24 @@ const CodeMirrorEditor = function CodeMirrorEditor({
 
   const insertBold = () => toggleFormat('**', 'strong')
   const insertItalic = () => toggleFormat('*', 'emphasis')
+  // Set the current line's heading level. Replaces an existing heading
+  // marker; same level toggles back to plain text.
   const insertHeading = (level: 1 | 2 | 3 = 2) => {
     if (editorViewRef.current && !useSimpleEditor) {
       const view = editorViewRef.current
       const pos = view.state.selection.main.head
       const line = view.state.doc.lineAt(pos)
-      const lineStart = line.from
+      const existing = line.text.match(/^(#{1,6}) /)
       const prefix = '#'.repeat(level) + ' '
+      const isSame = existing?.[1].length === level
 
       view.dispatch({
-        changes: { from: lineStart, insert: prefix },
-        selection: { anchor: lineStart + prefix.length }
+        changes: {
+          from: line.from,
+          to: line.from + (existing?.[0].length ?? 0),
+          insert: isSame ? '' : prefix,
+        },
+        selection: { anchor: line.from + (isSame ? 0 : prefix.length) }
       })
       view.focus()
     }
@@ -1575,8 +1723,46 @@ const CodeMirrorEditor = function CodeMirrorEditor({
     view.focus()
   }
 
-  const insertBulletList = () => insertAtCursor('\n- ')
-  const insertNumberedList = () => insertAtCursor('\n1. ')
+  // Toggle the selected lines as a bullet/numbered list (same pattern as
+  // toggleBlockquote). Numbered lists renumber 1..n; toggling the other list
+  // kind replaces the existing marker.
+  const toggleList = (kind: 'bullet' | 'numbered') => {
+    if (!editorViewRef.current || useSimpleEditor) return
+    const view = editorViewRef.current
+    const { from, to } = view.state.selection.main
+    const lines = []
+    for (let pos = from; pos <= to;) {
+      const line = view.state.doc.lineAt(pos)
+      lines.push(line)
+      pos = line.to + 1
+    }
+    const markerRe = kind === 'bullet' ? /^(\s*)[-*+] / : /^(\s*)\d+\. /
+    const anyMarkerRe = /^(\s*)(?:[-*+]|\d+\.) /
+    const allMarked = lines.every(l => markerRe.test(l.text) || l.text.trim() === '')
+    view.dispatch(view.state.update({
+      changes: lines.flatMap((line, i) => {
+        const existing = line.text.match(anyMarkerRe)
+        if (allMarked) {
+          // Remove this kind's marker (keep indentation)
+          const m = line.text.match(markerRe)
+          if (!m) return []
+          return [{ from: line.from + m[1].length, to: line.from + m[0].length, insert: '' }]
+        }
+        const marker = kind === 'bullet' ? '- ' : `${i + 1}. `
+        if (existing) {
+          // Switch list kind in place
+          return [{ from: line.from + existing[1].length, to: line.from + existing[0].length, insert: marker }]
+        }
+        if (line.text.trim() === '') return []
+        return [{ from: line.from, insert: marker }]
+      }),
+      userEvent: 'input',
+    }))
+    view.focus()
+  }
+
+  const insertBulletList = () => toggleList('bullet')
+  const insertNumberedList = () => toggleList('numbered')
   const insertLink = () => wrapSelection('[', '](url)')
 
   // Wrap the current line(s) in an HTML alignment block:
@@ -1601,6 +1787,60 @@ const CodeMirrorEditor = function CodeMirrorEditor({
     const view = editorViewRef.current
     const doc = view.state.doc
     const { from, to } = view.state.selection.main
+
+    // Inside a GFM table, alignment is a per-column property of the separator
+    // row (`:---` / `:---:` / `---:`) — wrap tags would break the table. Sets
+    // the column(s) under the cursor/selection; same alignment again resets.
+    const isTableLine = (t: string) => /^\s*\|/.test(t)
+    const fromLine = doc.lineAt(from)
+    if (isTableLine(fromLine.text)) {
+      let first = fromLine.number
+      while (first > 1 && isTableLine(doc.line(first - 1).text)) first--
+      const CELL_RE = /^\s*:?-{3,}:?\s*$/
+      const sepLine = first + 1 <= doc.lines ? doc.line(first + 1) : null
+      const sepCells = sepLine?.text.split('|')
+      if (sepLine && sepCells && sepCells.some(c => CELL_RE.test(c) && c.trim() !== '')) {
+        const colAt = (lineText: string, offset: number) => {
+          const pipes = (lineText.slice(0, offset).match(/\|/g) || []).length
+          return Math.max(0, pipes - 1)
+        }
+        const toLine = doc.lineAt(to)
+        const c1 = colAt(fromLine.text, from - fromLine.from)
+        const c2 = isTableLine(toLine.text) ? colAt(toLine.text, to - toLine.from) : c1
+        const [lo, hi] = [Math.min(c1, c2), Math.max(c1, c2)]
+        const marker = alignment === 'left' ? ':---' : alignment === 'center' ? ':---:' : '---:'
+        let idx = -1
+        const rebuilt = sepCells.map(cell => {
+          if (!(CELL_RE.test(cell) && cell.trim() !== '')) return cell
+          idx++
+          if (idx < lo || idx > hi) return cell
+          const t = cell.trim()
+          const current = t.startsWith(':') && t.endsWith(':') ? 'center' : t.endsWith(':') ? 'right' : t.startsWith(':') ? 'left' : 'none'
+          return ` ${current === alignment ? '---' : marker} `
+        }).join('|')
+        view.dispatch({ changes: { from: sepLine.from, to: sepLine.to, insert: rebuilt } })
+        view.focus()
+        return
+      }
+    }
+
+    // Inline form first: <right>text…</right> on the same line(s) — the
+    // form this button inserts (rehypeMarkdownChildren still parses the
+    // body as markdown, so no blank lines are needed).
+    const inlineStart = doc.lineAt(from)
+    const inlineEnd = doc.lineAt(to)
+    const segment = doc.sliceString(inlineStart.from, inlineEnd.to)
+    const inlineMatch = segment.match(/^<(left|center|right)>([\s\S]*)<\/\1>\s*$/)
+    if (inlineMatch) {
+      const [, name, inner] = inlineMatch
+      const replacement = name === alignment ? inner : `<${alignment}>${inner}</${alignment}>`
+      view.dispatch({
+        changes: { from: inlineStart.from, to: inlineEnd.to, insert: replacement },
+        selection: { anchor: inlineStart.from + replacement.length },
+      })
+      view.focus()
+      return
+    }
 
     const cursorLineNum = doc.lineAt(from).number
     const OPEN_RE = /^<(left|center|right)>\s*$/
@@ -1667,22 +1907,18 @@ const CodeMirrorEditor = function CodeMirrorEditor({
       return
     }
 
-    // No existing wrapper → wrap the selection's full lines. Leading and
-    // trailing newlines separate the block from surrounding paragraphs;
-    // blank lines INSIDE let rehype-raw + CommonMark parse the body as
-    // markdown rather than as literal HTML content.
+    // No existing wrapper → wrap the selection's full lines INLINE
+    // (<right>text</right>, no extra newlines — reads better in the source
+    // and rehypeMarkdownChildren parses the body as markdown either way).
     const startLine = doc.lineAt(from)
     const endLine = doc.lineAt(to)
     const inner = doc.sliceString(startLine.from, endLine.to)
-    const innerEmpty = !inner.trim()
     const openTag = `<${alignment}>`
     const closeTag = `</${alignment}>`
-    const wrapped = innerEmpty
-      ? `\n${openTag}\n\n\n\n${closeTag}\n`
-      : `\n${openTag}\n\n${inner}\n\n${closeTag}\n`
-    const anchor = innerEmpty
-      ? startLine.from + 1 + openTag.length + 2 // after leading-\n + <tag> + \n\n
-      : startLine.from + wrapped.length
+    const wrapped = `${openTag}${inner}${closeTag}`
+    const anchor = inner.trim()
+      ? startLine.from + wrapped.length
+      : startLine.from + openTag.length // empty paragraph: cursor between the tags
     view.dispatch({
       changes: { from: startLine.from, to: endLine.to, insert: wrapped },
       selection: { anchor },
@@ -1716,7 +1952,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
     if (!editorViewRef.current || useSimpleEditor) return
     const view = editorViewRef.current
     const { from, to } = view.state.selection.main
-    const selected = view.state.doc.sliceString(from, to) || 'x'
+    const selected = view.state.doc.sliceString(from, to) || 'a^2 + b^2 = c^2'
     const wrapped = `$${selected}$`
     view.dispatch({
       changes: { from, to, insert: wrapped },
@@ -1728,10 +1964,13 @@ const CodeMirrorEditor = function CodeMirrorEditor({
     if (!editorViewRef.current || useSimpleEditor) return
     const view = editorViewRef.current
     const pos = view.state.selection.main.head
-    const insertText = `\n$$\n\n$$\n`
+    // Sample equation (quadratic formula) selected for overtyping — shows the
+    // LaTeX idioms (frac, sqrt, subscripts) instead of an empty block.
+    const sample = String.raw`x_{1,2} = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}`
+    const insertText = `\n$$\n${sample}\n$$\n`
     view.dispatch({
       changes: { from: pos, insert: insertText },
-      selection: { anchor: pos + 4 },
+      selection: { anchor: pos + 4, head: pos + 4 + sample.length },
     })
     view.focus()
   }
@@ -1794,67 +2033,6 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   }
 
   // Insert/replace invert attribute for images (only works when cursor is on an image)
-  const insertInvert = (mode: 'dark' | 'light' | 'always' = 'dark') => {
-    if (!editorViewRef.current || useSimpleEditor) return
-    const view = editorViewRef.current
-    const pos = view.state.selection.main.head
-    const doc = view.state.doc.toString()
-
-    // Find if cursor is inside or touching an image tag
-    // Pattern: ![alt](src){optional attributes}
-    const imageRegex = /!\[[^\]]*\]\([^)]+\)(\{[^}]*\})?/g
-    let match
-    let foundImage: { start: number; end: number; hasAttrs: boolean; attrsStart: number; attrsEnd: number; attrs: string } | null = null
-
-    while ((match = imageRegex.exec(doc)) !== null) {
-      const start = match.index
-      const end = start + match[0].length
-
-      // Check if cursor is inside or touching this image (within 1 char)
-      if (pos >= start && pos <= end + 1) {
-        const hasAttrs = !!match[1]
-        foundImage = {
-          start,
-          end,
-          hasAttrs,
-          attrsStart: hasAttrs ? end - match[1].length : end,
-          attrsEnd: end,
-          attrs: hasAttrs ? match[1].slice(1, -1) : '' // Remove { and }
-        }
-        break
-      }
-    }
-
-    // If cursor is not on an image, do nothing
-    if (!foundImage) return
-
-    const invertValue = mode === 'dark' ? 'invert' : `invert=${mode}`
-
-    if (foundImage.hasAttrs) {
-      // Update existing attributes - replace or add invert
-      let newAttrs = foundImage.attrs
-        .split(';')
-        .map(a => a.trim())
-        .filter(a => !a.startsWith('invert')) // Remove existing invert
-        .filter(a => a) // Remove empty
-
-      newAttrs.unshift(invertValue) // Add new invert at start
-      const newAttrsStr = `{${newAttrs.join(';')}}`
-
-      view.dispatch({
-        changes: { from: foundImage.attrsStart, to: foundImage.attrsEnd, insert: newAttrsStr },
-        selection: { anchor: foundImage.attrsStart + newAttrsStr.length }
-      })
-    } else {
-      // Add new attributes block
-      const newAttrsStr = `{${invertValue}}`
-      view.dispatch({
-        changes: { from: foundImage.end, insert: newAttrsStr },
-        selection: { anchor: foundImage.end + newAttrsStr.length }
-      })
-    }
-    view.focus()
-  }
 
   return (
     <div
@@ -1865,487 +2043,327 @@ const CodeMirrorEditor = function CodeMirrorEditor({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      {/* Toolbar */}
-      <div className="border-b border-border p-2">
-        <div className="flex flex-wrap items-center gap-1 gap-y-2">
-          {/* AI Edit button - leftmost. Grayed with an upgrade tooltip for
-              free teachers; the click routes to billing via onAIEdit. */}
-          {onAIEdit && (
-            aiEditLocked ? (
-              <Button
-                variant="ghost"
-                size="sm"
+
+      {/* Word-style ribbon toolbar (primitives + rationale: editor-ribbon.tsx).
+          Tab/group/button layout intentionally copies Word's Home/Insert/
+          Layout/View so teachers can reuse their Word spatial memory. In the
+          simple-textarea fallback, Home and Layout are hidden (their commands
+          need the CodeMirror view). */}
+      <Ribbon
+        tabBarRight={onAIEdit ? (
+          aiEditLocked ? (
+            <button
+              type="button"
+              onClick={onAIEdit}
+              title="AI Edit is a paid feature — click to upgrade"
+              className="flex items-center gap-1.5 px-2.5 py-1 mr-1 rounded-md border border-border text-sm opacity-50 hover:bg-accent/60"
+            >
+              <Wand2 className="w-4 h-4" />
+              AI Edit
+            </button>
+          ) : (
+            <QuestSpotlight step="use_ai_edit" label="Try this!">
+              <button
+                type="button"
                 onClick={onAIEdit}
-                title="AI Edit is a paid feature — click to upgrade"
-                className="w-8 h-8 p-0 border rounded-md opacity-50"
+                title="AI Edit"
+                className="flex items-center gap-1.5 px-2.5 py-1 mr-1 rounded-md border border-border text-sm text-primary hover:bg-accent/60"
               >
                 <Wand2 className="w-4 h-4" />
-              </Button>
-            ) : (
-              <QuestSpotlight step="use_ai_edit" label="Try this!">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={onAIEdit}
-                  title="AI Edit"
-                  className="w-8 h-8 p-0 border rounded-md"
-                >
-                  <Wand2 className="w-4 h-4" />
-                </Button>
-              </QuestSpotlight>
-            )
-          )}
-          {/* Formatting buttons */}
-          {!useSimpleEditor && (
-            <>
-              <div className="h-4 w-px bg-border mx-1" />
-              {/* Text formatting group */}
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={insertBold}
-                  title="Bold (Ctrl+B)"
-                  className="w-8 h-8 p-0 border rounded-md"
-                >
-                  <Bold className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={insertItalic}
-                  title="Italic (Ctrl+I)"
-                  className="w-8 h-8 p-0 border rounded-md"
-                >
-                  <Italic className="w-4 h-4" />
-                </Button>
-                <DropdownMenu>
-                  <div className="flex items-center border rounded-md h-8">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => insertHeading(2)}
-                      title="Heading 2"
-                      className="w-8 h-8 p-0 rounded-r-none border-0"
-                    >
-                      <Heading className="w-4 h-4" />
-                    </Button>
-                    <div className="h-4 w-px bg-border" />
+                AI Edit
+              </button>
+            </QuestSpotlight>
+          )
+        ) : undefined}
+        tabs={[
+          ...(!useSimpleEditor ? [{
+            id: 'home',
+            label: 'Home',
+            content: (
+              <>
+                <RibbonGroup caption="Font">
+                  <RibbonSmallStack>
+                    <RibbonSmallRow>
+                      <RibbonSmallButton icon={<Bold />} onClick={insertBold} title="Bold (Ctrl+B)" />
+                      <RibbonSmallButton icon={<Italic />} onClick={insertItalic} title="Italic (Ctrl+I)" />
+                    </RibbonSmallRow>
+                    <RibbonSmallRow>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <RibbonSmallButton icon={<Palette />} title="Text Color" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start">
+                          {TEXT_COLOR_NAMES.map(({ name, label, cssVar }) => (
+                            <DropdownMenuItem key={name} onClick={() => insertTextColorByName(name)}>
+                              <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: `var(${cssVar})` }} /> {label}
+                            </DropdownMenuItem>
+                          ))}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => setShowTextColorPicker(true)}>
+                            Custom color...
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <RibbonSmallButton icon={<Highlighter />} title="Highlight" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start">
+                          {HIGHLIGHT_NAMES.map(({ name, label, cssVar }) => (
+                            <DropdownMenuItem key={name} onClick={() => insertHighlightByName(name)}>
+                              <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: `var(${cssVar})` }} /> {label}
+                            </DropdownMenuItem>
+                          ))}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => setShowHighlightPicker(true)}>
+                            Custom color...
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </RibbonSmallRow>
+                  </RibbonSmallStack>
+                </RibbonGroup>
+                <RibbonGroup caption="Paragraph">
+                  <RibbonSmallStack>
+                    <RibbonSmallRow>
+                      <RibbonSmallButton icon={<List />} onClick={insertBulletList} title="Bullet List" />
+                      <RibbonSmallButton icon={<ListOrdered />} onClick={insertNumberedList} title="Numbered List" />
+                      <RibbonSmallButton icon={<TextQuote />} onClick={toggleBlockquote} title="Blockquote (Ctrl+Shift+.)" />
+                    </RibbonSmallRow>
+                    <RibbonSmallRow>
+                      <RibbonSmallButton icon={<AlignLeft />} onClick={() => insertAlign('left')} title="Align left" />
+                      <RibbonSmallButton icon={<AlignCenter />} onClick={() => insertAlign('center')} title="Align center" />
+                      <RibbonSmallButton icon={<AlignRight />} onClick={() => insertAlign('right')} title="Align right" />
+                    </RibbonSmallRow>
+                  </RibbonSmallStack>
+                </RibbonGroup>
+                <RibbonGroup caption="Styles">
+                  <RibbonGalleryChip
+                    preview={<span className="text-base font-bold leading-none">H1</span>}
+                    label="Heading 1"
+                    onClick={() => insertHeading(1)}
+                  />
+                  <RibbonGalleryChip
+                    preview={<span className="text-sm font-bold leading-none">H2</span>}
+                    label="Heading 2"
+                    onClick={() => insertHeading(2)}
+                  />
+                  <RibbonGalleryChip
+                    preview={<span className="text-xs font-bold leading-none">H3</span>}
+                    label="Heading 3"
+                    onClick={() => insertHeading(3)}
+                  />
+                </RibbonGroup>
+              </>
+            ),
+          }] : []),
+          {
+            id: 'insert',
+            label: 'Insert',
+            content: (
+              <>
+                <RibbonGroup caption="Containers">
+                  <DropdownMenu open={tableMenuOpen} onOpenChange={setTableMenuOpen}>
                     <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="w-5 h-8 p-0 rounded-l-none border-0"
-                        title="Heading options"
-                      >
-                        <ChevronDown className="w-3 h-3" />
-                      </Button>
+                      <RibbonBigButton icon={<Table />} label="Table" title="Insert a table (pick the size)" />
                     </DropdownMenuTrigger>
-                  </div>
-                  <DropdownMenuContent align="start" className="min-w-[120px]">
-                    <DropdownMenuItem onClick={() => insertHeading(1)} className="gap-2">
-                      <Heading1 className="w-4 h-4" />
-                      <span>Heading 1</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertHeading(2)} className="gap-2">
-                      <Heading2 className="w-4 h-4" />
-                      <span>Heading 2</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertHeading(3)} className="gap-2">
-                      <Heading3 className="w-4 h-4" />
-                      <span>Heading 3</span>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                {/* Alignment (default click = center; dropdown for left/right) */}
-                <DropdownMenu>
-                  <div className="flex items-center border rounded-md h-8">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => insertAlign('center')}
-                      title="Align center"
-                      className="w-8 h-8 p-0 rounded-r-none border-0"
-                    >
-                      <AlignCenter className="w-4 h-4" />
-                    </Button>
-                    <div className="h-4 w-px bg-border" />
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="w-5 h-8 p-0 rounded-l-none border-0"
-                        title="Alignment options"
-                      >
-                        <ChevronDown className="w-3 h-3" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                  </div>
-                  <DropdownMenuContent align="start" className="min-w-[140px]">
-                    <DropdownMenuItem onClick={() => insertAlign('left')} className="gap-2">
-                      <AlignLeft className="w-4 h-4" />
-                      <span>Align left</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertAlign('center')} className="gap-2">
-                      <AlignCenter className="w-4 h-4" />
-                      <span>Align center</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertAlign('right')} className="gap-2">
-                      <AlignRight className="w-4 h-4" />
-                      <span>Align right</span>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-              {/* Structure group */}
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={insertBulletList}
-                  title="Bullet List"
-                  className="w-8 h-8 p-0 border rounded-md"
-                >
-                  <List className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={insertNumberedList}
-                  title="Numbered List"
-                  className="w-8 h-8 p-0 border rounded-md"
-                >
-                  <ListOrdered className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={insertLink}
-                  title="Link"
-                  className="w-8 h-8 p-0 border rounded-md"
-                >
-                  <Link className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={toggleBlockquote}
-                  title="Blockquote (Ctrl+Shift+.)"
-                  className="w-8 h-8 p-0 border rounded-md"
-                >
-                  <TextQuote className="w-4 h-4" />
-                </Button>
-                {/* Callouts (default click = note; dropdown for the rest) */}
-                <DropdownMenu>
-                  <div className="flex items-center border rounded-md h-8">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => insertCallout('note')}
-                      title="Insert Callout"
-                      className="w-8 h-8 p-0 rounded-r-none border-0"
-                    >
-                      <MessageSquare className="w-4 h-4" />
-                    </Button>
-                    <div className="h-4 w-px bg-border" />
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="w-5 h-8 p-0 rounded-l-none border-0"
-                        title="Callout types"
-                      >
-                        <ChevronDown className="w-3 h-3" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                  </div>
-                  <DropdownMenuContent align="start" className="min-w-[160px] max-h-[60vh] overflow-y-auto">
-                    <DropdownMenuItem onClick={() => insertCallout('note')}>Note</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertCallout('tip')}>Tip</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertCallout('info')}>Info</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertCallout('success')}>Success / Lernziele</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertCallout('warning')}>Warning</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertCallout('danger')}>Danger</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertCallout('question')}>Question</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertCallout('exercise')}>Exercise</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertCallout('example')}>Example</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertCallout('quote')}>Quote</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertCallout('idea')}>Idea</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertCallout('todo')}>Todo</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertCallout('solution')}>Solution</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertCallout('discuss')}>Discuss</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-              <div className="h-4 w-px bg-border mx-1" />
-              {/* Colors group */}
-              <div className="flex items-center gap-1">
-                {/* Text Color Button */}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      title="Text Color"
-                      className="w-8 h-8 p-0 border rounded-md"
-                    >
-                      <Palette className="w-4 h-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start">
-                    {/* Swatch reads the same CSS var the rendered class uses,
-                        so the picker preview matches what authors will see in
-                        the current theme. */}
-                    <DropdownMenuItem onClick={() => insertTextColorByName('red')}>
-                      <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: 'var(--es-color-red)' }} /> Red
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertTextColorByName('orange')}>
-                      <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: 'var(--es-color-orange)' }} /> Orange
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertTextColorByName('lightgreen')}>
-                      <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: 'var(--es-color-lightgreen)' }} /> Light green
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertTextColorByName('green')}>
-                      <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: 'var(--es-color-green)' }} /> Green
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertTextColorByName('cyan')}>
-                      <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: 'var(--es-color-cyan)' }} /> Cyan
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertTextColorByName('lightblue')}>
-                      <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: 'var(--es-color-lightblue)' }} /> Light blue
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertTextColorByName('blue')}>
-                      <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: 'var(--es-color-blue)' }} /> Blue
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertTextColorByName('violet')}>
-                      <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: 'var(--es-color-violet)' }} /> Violet
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertTextColorByName('purple')}>
-                      <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: 'var(--es-color-purple)' }} /> Purple
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => setShowTextColorPicker(true)}>
-                      Custom color...
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                {/* Highlight Button */}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      title="Highlight"
-                      className="w-8 h-8 p-0 border rounded-md"
-                    >
-                      <Highlighter className="w-4 h-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start">
-                    <DropdownMenuItem onClick={() => insertHighlightByName('yellow')}>
-                      <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: 'var(--es-bg-yellow)' }} /> Yellow
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertHighlightByName('green')}>
-                      <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: 'var(--es-bg-green)' }} /> Green
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertHighlightByName('blue')}>
-                      <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: 'var(--es-bg-blue)' }} /> Blue
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertHighlightByName('pink')}>
-                      <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: 'var(--es-bg-pink)' }} /> Pink
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertHighlightByName('orange')}>
-                      <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: 'var(--es-bg-orange)' }} /> Orange
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertHighlightByName('red')}>
-                      <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: 'var(--es-bg-red)' }} /> Red
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertHighlightByName('purple')}>
-                      <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: 'var(--es-bg-purple)' }} /> Purple
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => setShowHighlightPicker(true)}>
-                      Custom color...
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                {/* Invert Button */}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      title="Invert image colors (for dark mode diagrams)"
-                      className="w-8 h-8 p-0 border rounded-md"
-                    >
-                      <span className="w-4 h-4 rounded-full border border-current overflow-hidden flex">
-                        <span className="w-1/2 bg-current" />
-                        <span className="w-1/2" />
-                      </span>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start">
-                    <DropdownMenuItem onClick={() => insertInvert('dark')}>
-                      <span className="w-4 h-4 rounded-full mr-2 border overflow-hidden flex">
-                        <span className="w-1/2 bg-black" />
-                        <span className="w-1/2 bg-white" />
-                      </span>
-                      Invert in dark mode
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertInvert('light')}>
-                      <span className="w-4 h-4 rounded-full mr-2 border overflow-hidden flex">
-                        <span className="w-1/2 bg-white" />
-                        <span className="w-1/2 bg-black" />
-                      </span>
-                      Invert in light mode
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => insertInvert('always')}>
-                      <span className="w-4 h-4 rounded-full mr-2 border bg-gray-400" />
-                      Always invert
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-              <div className="h-4 w-px bg-border mx-1" />
-            </>
-          )}
-
-          {/* Insert group */}
-          <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={insertCodeEditor}
-              className="w-8 h-8 p-0 border rounded-md"
-              title="Add Code Editor"
-            >
-              <Code className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={insertQuiz}
-              className="w-8 h-8 p-0 border rounded-md"
-              title="Add Quiz Question"
-            >
-              <CircleHelp className="w-4 h-4" />
-            </Button>
-            {skriptId && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setExcalidrawOpen(true)}
-                className="w-8 h-8 p-0 border rounded-md"
-                title="Add Excalidraw Drawing"
-              >
-                <Pencil className="w-4 h-4" />
-              </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={insertSpacer}
-              className="w-8 h-8 p-0 border rounded-md"
-              title="Add Spacer (writing area)"
-            >
-              <SeparatorHorizontal className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={insertPlot}
-              className="w-8 h-8 p-0 border rounded-md"
-              title="Insert function plot"
-            >
-              <ChartSpline className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setPluginPickerOpen(true)}
-              className="w-8 h-8 p-0 border rounded-md"
-              title="Insert Plugin"
-            >
-              <Puzzle className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setGeogebraDialogOpen(true)}
-              className="w-8 h-8 p-0 border rounded-md"
-              title="Insert GeoGebra"
-            >
-              <Compass className="w-4 h-4" />
-            </Button>
-            {/* Math (display by default; dropdown for inline) */}
-            <DropdownMenu>
-              <div className="flex items-center border rounded-md h-8">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={insertMathDisplay}
-                  title="Insert Math (display)"
-                  className="w-8 h-8 p-0 rounded-r-none border-0"
-                >
-                  <Sigma className="w-4 h-4" />
-                </Button>
-                <div className="h-4 w-px bg-border" />
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="w-5 h-8 p-0 rounded-l-none border-0"
-                    title="Math options"
-                  >
-                    <ChevronDown className="w-3 h-3" />
-                  </Button>
-                </DropdownMenuTrigger>
-              </div>
-              <DropdownMenuContent align="start" className="min-w-[160px]">
-                <DropdownMenuItem onClick={insertMathDisplay} className="gap-2">
-                  <span className="font-serif italic">∑</span>
-                  <span>Display block ($$…$$)</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={insertMathInline} className="gap-2">
-                  <span className="font-serif italic">x</span>
-                  <span>Inline ($…$)</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-
-          {/* Show collapsed panel buttons */}
-          {(!showEditor || !showPreview) && (
-            <>
-              <div className="h-4 w-px bg-border mx-1" />
-              <div className="flex items-center gap-1">
-                {!showEditor && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
+                    <DropdownMenuContent align="start">
+                      <TableGridPicker onPick={(cols, rows) => { setTableMenuOpen(false); insertTable(cols, rows) }} />
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  {!useSimpleEditor && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <RibbonBigButton icon={<MessageSquare />} label="Callout" title="Insert a callout box" />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="max-h-[60vh] overflow-y-auto">
+                        {CALLOUT_GALLERY.map(({ type, label, cssVar }) => (
+                          <DropdownMenuItem key={type} onClick={() => insertCallout(type)}>
+                            <span className="w-3 h-3 rounded-sm mr-2" style={{ backgroundColor: `var(${cssVar})` }} /> {label}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                </RibbonGroup>
+                <RibbonGroup caption="Illustrations">
+                  <RibbonBigButton icon={<ImageIcon />} label="Picture" title="Insert a picture (URL or upload)" onClick={() => setPictureDialogOpen(true)} />
+                  {skriptId && (
+                    <RibbonBigButton icon={<Pencil />} label="Drawing" title="Add Excalidraw Drawing" onClick={() => setExcalidrawOpen(true)} />
+                  )}
+                </RibbonGroup>
+                <RibbonGroup caption="Media">
+                  <RibbonBigButton icon={<Film />} label="Video" title="Insert a video (YouTube, uploaded, or new upload)" onClick={() => setVideoDialogOpen(true)} />
+                  <RibbonBigButton icon={<Music />} label="Audio" title="Embed an audio clip" onClick={insertAudio} />
+                  <RibbonBigButton icon={<FileText />} label="PDF" title="Embed a PDF (existing or upload)" onClick={() => setPdfDialogOpen(true)} />
+                </RibbonGroup>
+                <RibbonGroup caption="Links">
+                  <RibbonBigButton icon={<Link />} label="Link" onClick={insertLink} />
+                  <RibbonBigButton icon={<MousePointerClick />} label="Button" title="Call-to-action link styled as a button" onClick={insertCta} />
+                </RibbonGroup>
+                <RibbonGroup caption="Interactive">
+                  <RibbonBigButton icon={<CircleHelp />} label="Quiz" title="Add Quiz Question" onClick={insertQuiz} />
+                  <RibbonBigButton icon={<Sparkles />} label="AI Feedback" title="AI feedback on drawings, plots, and photos in this section" onClick={insertAiFeedback} />
+                  <RibbonBigButton icon={<AppWindow />} label="Tabs" title="Insert tabbed sections" onClick={insertTabsContainer} />
+                </RibbonGroup>
+              </>
+            ),
+          },
+          {
+            id: 'maths',
+            label: 'Maths',
+            accent: {
+              active: 'border-violet-500 text-violet-700 dark:text-violet-300',
+              idle: 'text-violet-600/70 dark:text-violet-400/70 hover:text-violet-700 dark:hover:text-violet-300',
+            },
+            content: (
+              <>
+                <RibbonGroup caption="Symbols">
+                  <RibbonSplitBigButton
+                    icon={<Sigma />}
+                    label="Equation"
+                    title="Insert Math (display)"
+                    onDefaultAction={insertMathDisplay}
+                    menuTrigger={(bottomHalf) => (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>{bottomHalf}</DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="min-w-[160px]">
+                          <DropdownMenuItem onClick={insertMathDisplay} className="gap-2">
+                            <span className="font-serif italic">∑</span>
+                            <span>Display block ($$…$$)</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={insertMathInline} className="gap-2">
+                            <span className="font-serif italic">x</span>
+                            <span>Inline ($…$)</span>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+                  />
+                </RibbonGroup>
+                <RibbonGroup caption="Graphs">
+                  <RibbonBigButton icon={<ChartSpline />} label="Plot" title="Insert function plot" onClick={insertPlot} />
+                  <RibbonBigButton icon={<Compass />} label="GeoGebra" title="Insert GeoGebra" onClick={() => setGeogebraDialogOpen(true)} />
+                </RibbonGroup>
+                <RibbonGroup caption="Handwriting">
+                  <RibbonBigButton icon={<SeparatorHorizontal />} label="Spacer" title="Add Spacer (graph-paper writing area)" onClick={() => insertSpacer('checkered')} />
+                </RibbonGroup>
+              </>
+            ),
+          },
+          {
+            id: 'chemistry',
+            label: 'Chemistry',
+            accent: {
+              active: 'border-emerald-500 text-emerald-700 dark:text-emerald-300',
+              idle: 'text-emerald-600/70 dark:text-emerald-400/70 hover:text-emerald-700 dark:hover:text-emerald-300',
+            },
+            content: (
+              <>
+                <RibbonGroup caption="Structures">
+                  <RibbonBigButton icon={<Atom />} label="Molecule" title="Structural formula from a SMILES string" onClick={insertMolecule} />
+                </RibbonGroup>
+                <RibbonGroup caption="Equations">
+                  <RibbonBigButton icon={<FlaskConical />} label="Reaction" title="Reaction equation (mhchem)" onClick={insertReaction} />
+                </RibbonGroup>
+                <RibbonGroup caption="Handwriting">
+                  <RibbonBigButton icon={<SeparatorHorizontal />} label="Spacer" title="Add Spacer (graph-paper writing area)" onClick={() => insertSpacer('checkered')} />
+                </RibbonGroup>
+              </>
+            ),
+          },
+          {
+            id: 'informatics',
+            label: 'Computer Science',
+            accent: {
+              active: 'border-cyan-500 text-cyan-700 dark:text-cyan-300',
+              idle: 'text-cyan-600/70 dark:text-cyan-400/70 hover:text-cyan-700 dark:hover:text-cyan-300',
+            },
+            content: (
+              <>
+                <RibbonGroup caption="Code">
+                  <RibbonSplitBigButton
+                    icon={<Code />}
+                    label="Code editor"
+                    title="Add Code Editor (Python)"
+                    onDefaultAction={insertCodeEditor}
+                    menuTrigger={(bottomHalf) => (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>{bottomHalf}</DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="min-w-[190px]">
+                          <DropdownMenuItem onClick={insertCodeEditor}>Python editor</DropdownMenuItem>
+                          <DropdownMenuItem onClick={insertSqlEditor}>SQL editor</DropdownMenuItem>
+                          <DropdownMenuItem onClick={insertHtmlEditor}>HTML editor (live preview)</DropdownMenuItem>
+                          <DropdownMenuItem onClick={insertPlainCodeBlock}>Plain code block</DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+                  />
+                  <RibbonBigButton icon={<ClipboardCheck />} label="Check" title="Auto-grading checks for a code editor (python-check)" onClick={insertPythonCheck} />
+                </RibbonGroup>
+                <RibbonGroup caption="Terminal">
+                  <RibbonBigButton icon={<Terminal />} label="Ping" title="Interactive ping terminal" onClick={insertPing} />
+                </RibbonGroup>
+                <RibbonGroup caption="Extensions">
+                  <RibbonBigButton icon={<Puzzle />} label="Plugin" title="Insert Plugin" onClick={() => setPluginPickerOpen(true)} />
+                </RibbonGroup>
+              </>
+            ),
+          },
+          ...(!useSimpleEditor ? [{
+            id: 'layout',
+            label: 'Layout',
+            content: (
+              <>
+                <RibbonGroup caption="Arrange">
+                  <RibbonBigButton icon={<Columns3 />} label="Columns" title="Side-by-side layout (flex)" onClick={insertFlex} />
+                  <RibbonBigButton icon={<MoveHorizontal />} label="Full width" title="Edge-to-edge container" onClick={insertFullwidth} />
+                  <RibbonBigButton icon={<Pin />} label="Pin to margin" title="Pin content to the margin while scrolling (stickme)" onClick={insertStickme} />
+                  <RibbonBigButton icon={<SeparatorHorizontal />} label="Spacer" title="Add a blank spacer (vertical whitespace)" onClick={() => insertSpacer('blank')} />
+                </RibbonGroup>
+              </>
+            ),
+          }] : []),
+          {
+            id: 'view',
+            label: 'View',
+            content: (
+              <>
+                <RibbonGroup caption="Views">
+                  <RibbonBigButton
+                    icon={<FilePen />}
+                    label="Editor"
+                    title="Editor only"
+                    active={showEditor && !showPreview}
+                    onClick={() => setEditorWidth(100)}
+                  />
+                  <RibbonBigButton
+                    icon={<Columns2 />}
+                    label="Split"
+                    title="Editor and preview side by side"
+                    active={showEditor && showPreview}
                     onClick={() => setEditorWidth(50)}
-                    className="w-8 h-8 p-0 border rounded-md text-red-500 hover:text-foreground hover:bg-blue-100! dark:hover:bg-blue-900!"
-                    title="Show Editor"
-                  >
-                    <FilePen className="w-4 h-4" />
-                  </Button>
-                )}
-                {!showPreview && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setEditorWidth(50)}
-                    className="w-8 h-8 p-0 border rounded-md text-red-500 hover:text-foreground hover:bg-blue-100! dark:hover:bg-blue-900!"
-                    title="Show Preview"
-                  >
-                    <Eye className="w-4 h-4" />
-                  </Button>
-                )}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
+                  />
+                  <RibbonBigButton
+                    icon={<Eye />}
+                    label="Preview"
+                    title="Preview only"
+                    active={!showEditor}
+                    onClick={() => setEditorWidth(0)}
+                  />
+                </RibbonGroup>
+                <RibbonGroup caption="Zoom">
+                  <RibbonSmallRow>
+                    <RibbonSmallButton icon={<Minus />} onClick={() => setEditorFontSize(Math.max(10, editorFontSize - 1))} title="Decrease editor font size" />
+                    <span className="text-xs text-muted-foreground w-6 text-center tabular-nums">{editorFontSize}</span>
+                    <RibbonSmallButton icon={<Plus />} onClick={() => setEditorFontSize(Math.min(24, editorFontSize + 1))} title="Increase editor font size" />
+                  </RibbonSmallRow>
+                </RibbonGroup>
+              </>
+            ),
+          },
+        ]}
+      />
 
       {/* Editor and Preview */}
       <div ref={containerRef} className="flex flex-1 min-h-[400px] relative overflow-hidden">
@@ -2518,6 +2536,31 @@ const CodeMirrorEditor = function CodeMirrorEditor({
         open={geogebraDialogOpen}
         onOpenChange={setGeogebraDialogOpen}
         onInsert={insertGeogebra}
+      />
+
+      <PictureDialog
+        open={pictureDialogOpen}
+        onOpenChange={setPictureDialogOpen}
+        skriptId={skriptId}
+        onInsert={(md) => insertBlockTemplate(`${md}\n`)}
+      />
+
+      <VideoPickDialog
+        open={videoDialogOpen}
+        onOpenChange={setVideoDialogOpen}
+        skriptId={skriptId}
+        videos={videoList ?? []}
+        onInsert={(md) => insertBlockTemplate(`${md}\n`)}
+        onUploaded={onFileUpload}
+      />
+
+      <PdfPickDialog
+        open={pdfDialogOpen}
+        onOpenChange={setPdfDialogOpen}
+        skriptId={skriptId}
+        files={(fileList ?? []).filter((f): f is { id: string; name: string } => Boolean(f.name))}
+        onInsert={(md) => insertBlockTemplate(`${md}\n`)}
+        onUploaded={onFileUpload}
       />
 
       <AlertDialogModal

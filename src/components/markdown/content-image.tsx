@@ -1,9 +1,9 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import Image from 'next/image'
 import { useCallback } from 'react'
-import { Maximize2 } from 'lucide-react'
+import { Maximize2, Contrast } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import type { SkriptFilesData } from '@/lib/skript-files'
 import { resolveFile, resolveUrl } from '@/lib/skript-files'
@@ -84,10 +84,17 @@ export function ContentImage({ src, alt = '', title, style, onWidthChange, origi
   const imgWidth = fileInfo?.width ?? 800
   const imgHeight = fileInfo?.height ?? 600
 
+  // Local invert state so the editor's invert gizmo previews instantly; the
+  // prop is the saved value from the markdown round-trip.
+  const [currentInvert, setCurrentInvert] = useState(invert)
+  useEffect(() => {
+    setCurrentInvert(invert)
+  }, [invert])
+
   // Calculate if we should apply invert filter
-  const shouldInvert = invert === 'always' ||
-    (invert === 'dark' && resolvedTheme === 'dark') ||
-    (invert === 'light' && resolvedTheme === 'light')
+  const shouldInvert = currentInvert === 'always' ||
+    (currentInvert === 'dark' && resolvedTheme === 'dark') ||
+    (currentInvert === 'light' && resolvedTheme === 'light')
 
   // Build the filter string with optional saturate
   const invertFilter = shouldInvert
@@ -99,22 +106,27 @@ export function ContentImage({ src, alt = '', title, style, onWidthChange, origi
     ? parseFloat(style.width)
     : 100
 
-  // Handle layout changes from the wrapper
-  const handleLayoutChange = useCallback((layout: { width: number; align: 'left' | 'center' | 'right'; wrap: boolean }) => {
-    if (!onWidthChange) return
-
-    // Build <img> element with standard HTML attributes
-    // Using style for width, data-* for custom layout attributes
-    let attrs = `src="${filename}" alt="${alt}" style="width: ${Math.round(layout.width)}%"`
-    if (layout.align !== 'center') {
-      attrs += ` data-align="${layout.align}"`
+  // Rebuild the <img> tag from current attributes, with overrides for
+  // whichever gizmo just changed (layout from the wrapper, invert from the
+  // invert button). Uses style for width, data-* for custom attributes.
+  const buildImgTag = useCallback((overrides: {
+    width?: number
+    align?: 'left' | 'center' | 'right'
+    wrap?: boolean
+    invert?: 'dark' | 'light' | 'always' | undefined
+  }) => {
+    const nextAlign = overrides.align ?? align
+    const nextWrap = overrides.wrap ?? wrap
+    const nextInvert = 'invert' in overrides ? overrides.invert : currentInvert
+    let attrs = `src="${filename}" alt="${alt}" style="width: ${Math.round(overrides.width ?? initialWidth)}%"`
+    if (nextAlign !== 'center') {
+      attrs += ` data-align="${nextAlign}"`
     }
-    if (layout.wrap) {
+    if (nextWrap) {
       attrs += ` data-wrap="true"`
     }
-    // Preserve invert/saturate if present
-    if (invert) {
-      attrs += ` data-invert="${invert}"`
+    if (nextInvert) {
+      attrs += ` data-invert="${nextInvert}"`
     }
     if (saturate) {
       attrs += ` data-saturate="${saturate}"`
@@ -122,9 +134,22 @@ export function ContentImage({ src, alt = '', title, style, onWidthChange, origi
     if (nozoom) {
       attrs += ` data-nozoom="true"`
     }
+    return `<img ${attrs} />`
+  }, [alt, filename, align, wrap, currentInvert, initialWidth, saturate, nozoom])
 
-    onWidthChange(`<img ${attrs} />`)
-  }, [alt, filename, invert, saturate, nozoom, onWidthChange])
+  // Handle layout changes from the wrapper
+  const handleLayoutChange = useCallback((layout: { width: number; align: 'left' | 'center' | 'right'; wrap: boolean }) => {
+    if (!onWidthChange) return
+    onWidthChange(buildImgTag(layout))
+  }, [onWidthChange, buildImgTag])
+
+  // Cycle invert mode: off → dark → light → always → off
+  const handleInvertCycle = useCallback(() => {
+    const order: Array<'dark' | 'light' | 'always' | undefined> = [undefined, 'dark', 'light', 'always']
+    const next = order[(order.indexOf(currentInvert) + 1) % order.length]
+    setCurrentInvert(next)
+    onWidthChange?.(buildImgTag({ invert: next }))
+  }, [currentInvert, onWidthChange, buildImgTag])
 
   // Inline logo/icon mode: an inline-block logo that flows with surrounding text
   // (e.g. inside an <h1>). No resize/align handles, no float wrapper. Sizes to the
@@ -174,7 +199,7 @@ export function ContentImage({ src, alt = '', title, style, onWidthChange, origi
       wrap={wrap}
       onLayoutChange={onWidthChange ? handleLayoutChange : undefined}
       dataAttributes={dataAttributes}
-      style={{ maxWidth: `${imgWidth}px` }}
+      naturalMaxWidth={imgWidth}
     >
       {/* Image */}
       <span className="block relative group/img">
@@ -185,6 +210,27 @@ export function ContentImage({ src, alt = '', title, style, onWidthChange, origi
             title="Fullscreen"
           >
             <Maximize2 className="w-3.5 h-3.5" />
+          </button>
+        )}
+        {/* Invert gizmo — editor mode only. Cycles off → dark → light → always
+            and persists as data-invert on the <img> tag. */}
+        {!isMissing && onWidthChange && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              handleInvertCycle()
+            }}
+            className={`absolute top-2 right-11 z-20 p-1.5 rounded-md border border-border shadow-xs opacity-0 group-hover/img:opacity-100 transition-opacity hover:bg-accent ${
+              currentInvert ? 'bg-accent text-accent-foreground' : 'bg-background/80 backdrop-blur-xs'
+            }`}
+            title={
+              currentInvert === 'dark' ? 'Inverting in dark mode — click for: invert in light mode'
+              : currentInvert === 'light' ? 'Inverting in light mode — click for: always invert'
+              : currentInvert === 'always' ? 'Always inverting — click to turn invert off'
+              : 'Invert image colors (for dark mode diagrams)'
+            }
+          >
+            <Contrast className="w-3.5 h-3.5" />
           </button>
         )}
         {isMissing ? (

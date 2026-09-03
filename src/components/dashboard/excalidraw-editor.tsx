@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -68,6 +68,10 @@ export function ExcalidrawEditor({
   suggestedName
 }: ExcalidrawEditorProps) {
   const [drawingName, setDrawingName] = useState(initialData?.name || suggestedName || '')
+  // The name this drawing was last saved under in THIS editing session.
+  // After the first save of a new drawing, further saves must update that
+  // file (originalName) instead of creating drawing-2, drawing-3, …
+  const lastSavedNameRef = useRef<string | undefined>(initialData?.name)
   const [excalidrawAPI, setExcalidrawAPI] = useState<ExcalidrawImperativeAPI | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const { theme, systemTheme } = useTheme()
@@ -88,15 +92,21 @@ export function ExcalidrawEditor({
     setMounted(true)
   }, [])
 
-  // Reset editor key and drawing name when modal opens or initialData changes
+  // Reset editor key and drawing name ONLY on the closed→open transition.
+  // The modal stays open after a save, and the save refreshes the file list,
+  // which recomputes suggestedName (drawing → drawing-2). Re-running this on
+  // that prop change renamed the open drawing and remounted the canvas.
+  const prevOpenRef = useRef(false)
   useEffect(() => {
-    if (open) {
+    if (open && !prevOpenRef.current) {
       setEditorKey(Date.now())
       setDrawingName(initialData?.name || suggestedName || '')
+      lastSavedNameRef.current = initialData?.name
       setExcalidrawAPI(null) // Clear old API reference to prevent using stale API
       setShowAIPanel(false)
       setAIPrompt('')
     }
+    prevOpenRef.current = open
   }, [open, initialData, suggestedName])
 
   const runGenerate = useCallback(async () => {
@@ -246,8 +256,9 @@ export function ExcalidrawEditor({
         JSON.stringify(excalidrawData, null, 2),
         lightSvg,
         darkSvg,
-        initialData?.name,
+        lastSavedNameRef.current,
       )
+      lastSavedNameRef.current = drawingName.trim()
     } catch (error) {
       console.error('Error saving drawing:', error)
       const msg = error instanceof Error ? error.message : 'Failed to save drawing. Please try again.'
@@ -255,7 +266,7 @@ export function ExcalidrawEditor({
     } finally {
       setIsSaving(false)
     }
-  }, [excalidrawAPI, drawingName, alert, onSave, initialData?.name])
+  }, [excalidrawAPI, drawingName, alert, onSave])
 
   // Capture Ctrl+S to save the drawing instead of downloading the file
   useEffect(() => {
