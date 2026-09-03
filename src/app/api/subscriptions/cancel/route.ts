@@ -9,7 +9,6 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { cancelSubscription } from '@/lib/payrexx'
 
 export async function POST() {
   try {
@@ -38,24 +37,19 @@ export async function POST() {
       )
     }
 
-    // Cancel in Payrexx if we have a subscription ID
-    if (subscription.payrexxSubId) {
-      try {
-        await cancelSubscription(subscription.payrexxSubId)
-      } catch (error) {
-        console.error('[subscriptions/cancel] Payrexx cancel error:', error)
-        // Continue with local cancellation even if Payrexx call fails
-      }
-    }
-
     const now = new Date()
 
+    // Nothing happens at Payrexx: billing is tokenization-based (we charge
+    // renewals from the cron), so stopping auto-renewal is purely local —
+    // the cron simply never charges a subscription with cancelledAt set.
+    // /api/subscriptions/reactivate undoes it by clearing cancelledAt.
+
     // A subscription with no period end has nothing to run out — cancel it
-    // immediately. Everything else stays active until the period end.
+    // immediately.
     if (!subscription.currentPeriodEnd) {
       await prisma.subscription.update({
         where: { id: subscription.id },
-        data: { status: 'cancelled', cancelledAt: now },
+        data: { status: 'cancelled', cancelledAt: now, payrexxSubId: null },
       })
       await prisma.user.update({
         where: { id: session.user.id },
@@ -64,7 +58,6 @@ export async function POST() {
       return NextResponse.json({ success: true, immediate: true })
     }
 
-    // Mark as cancelled but keep plan active until period end
     await prisma.subscription.update({
       where: { id: subscription.id },
       data: { cancelledAt: now },

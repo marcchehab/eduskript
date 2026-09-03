@@ -1370,7 +1370,7 @@ model Subscription {
   id                 String    @id @default(cuid())
   userId             String    @map("user_id")
   planId             String    @map("plan_id")
-  payrexxSubId       String?   @unique @map("payrexx_sub_id") // Payrexx subscription ID
+  payrexxSubId       String?   @unique @map("payrexx_sub_id") // Payrexx token transaction id (tokenization; charged by the cron). Historic rows may hold a Payrexx subscription id.
   payrexxCustomerId  String?   @map("payrexx_customer_id") // Payrexx customer/contact ID
   status             String    @default("incomplete") // "active" | "cancelled" | "past_due" | "trialing" | "incomplete"
   currentPeriodStart DateTime? @map("current_period_start")

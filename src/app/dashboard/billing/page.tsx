@@ -91,8 +91,24 @@ export default function BillingPage() {
     }
   }
 
+  async function handleReactivate() {
+    setActionLoading('reactivate')
+    setError(null)
+    try {
+      const res = await fetch('/api/subscriptions/reactivate', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to re-enable auto-renewal')
+      setSuccessMessage('Auto-renewal is back on.')
+      await fetchData()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to re-enable auto-renewal')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
   function handleCancel() {
-    dialog.showConfirm('Are you sure you want to cancel your subscription?', async () => {
+    dialog.showConfirm('Stop auto-renewal? You keep full access until the end of the period you already paid for.', async () => {
       setActionLoading('cancel')
       setError(null)
       try {
@@ -100,9 +116,9 @@ export default function BillingPage() {
         const data = await res.json()
         if (!res.ok) throw new Error(data.error || 'Failed to cancel')
         if (data.activeUntil) {
-          setSuccessMessage(`Subscription cancelled. You'll keep access until ${formatDate(data.activeUntil)}.`)
+          setSuccessMessage(`Auto-renewal stopped. You'll keep access until ${formatDate(data.activeUntil)}.`)
         } else {
-          setSuccessMessage('Subscription cancelled.')
+          setSuccessMessage('Subscription ended.')
         }
         await fetchData()
         await updateSession()
@@ -111,7 +127,7 @@ export default function BillingPage() {
       } finally {
         setActionLoading(null)
       }
-    }, { destructive: true, title: 'Cancel subscription', confirmText: 'Cancel subscription' })
+    }, { destructive: true, title: 'Stop auto-renewal', confirmText: 'Stop auto-renewal' })
   }
 
   function formatPrice(rappen: number): string {
@@ -183,7 +199,7 @@ export default function BillingPage() {
             ) : subscription.currentPeriodEnd ? (
               <p>
                 {subscription.cancelledAt
-                  ? `Cancelled — access until ${formatDate(subscription.currentPeriodEnd)}`
+                  ? `Auto-renewal off — access until ${formatDate(subscription.currentPeriodEnd)}`
                   : `Next billing date: ${formatDate(subscription.currentPeriodEnd)}`}
               </p>
             ) : null}
@@ -211,8 +227,23 @@ export default function BillingPage() {
               disabled={actionLoading === 'cancel'}
             >
               {actionLoading === 'cancel' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Cancel Subscription
+              Stop Auto-Renewal
             </Button>
+          )}
+
+          {subscription.status === 'active' && subscription.cancelledAt && (
+            <div className="space-y-2">
+              <Button
+                onClick={handleReactivate}
+                disabled={actionLoading === 'reactivate'}
+              >
+                {actionLoading === 'reactivate' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Re-enable Auto-Renewal
+              </Button>
+              <p className="text-sm text-muted-foreground">
+                Billing simply continues on {subscription.currentPeriodEnd ? formatDate(subscription.currentPeriodEnd) : 'the next billing date'}.
+              </p>
+            </div>
           )}
 
           {subscription.status === 'past_due' && (
@@ -234,7 +265,7 @@ export default function BillingPage() {
                   disabled={actionLoading === 'cancel'}
                 >
                   {actionLoading === 'cancel' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Cancel Subscription
+                  Stop Auto-Renewal
                 </Button>
               </div>
             </div>

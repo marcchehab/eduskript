@@ -1,17 +1,25 @@
 /**
  * Payrexx Webhook Handler
  *
- * Receives payment event notifications from Payrexx and updates subscription status.
- * Payrexx sends POST requests with form-encoded body containing transaction data.
+ * Receives transaction event notifications from Payrexx and updates
+ * subscription status. Billing model: tokenization — checkout stores the
+ * payment method and charges the first period (chargeOnAuthorization); the
+ * cron charges renewals via the token (src/app/api/cron/route.ts). There are
+ * no Payrexx-scheduled subscriptions, so no subscription lifecycle events are
+ * expected here.
  *
  * Events handled:
- * - transaction.confirmed: Payment succeeded → activate subscription
- * - transaction.declined: Payment failed → mark as past_due
- * - transaction.refunded: Refund processed
- * - subscription.cancelled: Subscription cancelled by user or Payrexx
+ * - transaction authorized: the tokenization — store its id as the charge
+ *   token for renewals.
+ * - transaction confirmed: initial payment succeeded → activate subscription.
+ *   Renewal confirmations are no-ops (the cron already extended the period
+ *   synchronously).
+ * - transaction declined/failed: checkout payment failed → mark past_due
+ * - transaction refunded: refund processed → cancel + downgrade
  *
- * Webhook URL to configure in Payrexx dashboard:
- *   https://eduskript.org/api/webhooks/payrexx
+ * Signature: HMAC-SHA256 of the raw body, lowercase hex, in the
+ * X-Webhook-Signature header. Webhook URL + format (JSON) are configured in
+ * the Payrexx merchant admin: https://eduskript.org/api/webhooks/payrexx
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -22,10 +30,6 @@ interface PayrexxWebhookTransaction {
   id: number
   status: string // "confirmed", "declined", "refunded", "waiting", etc.
   referenceId: string // Our subscription ID passed when creating gateway
-  subscription?: {
-    id: number
-    status: string
-  }
   contact?: {
     email?: string
   }
@@ -64,31 +68,18 @@ export async function POST(request: NextRequest) {
       payload = { transaction: JSON.parse(transactionJson) }
     }
 
-    // Payrexx sends both transaction and subscription webhooks
     const transaction = payload.transaction as PayrexxWebhookTransaction | undefined
-    const subscriptionEvent = payload.subscription as Record<string, unknown> | undefined
-
-    // Extract status and referenceId from whichever event type we received
-    let status: string | undefined
-    let referenceId: string | undefined
-    let payrexxSubId: string | undefined
-
-    if (transaction) {
-      status = transaction.status
-      referenceId = transaction.referenceId
-      payrexxSubId = transaction.subscription?.id?.toString()
-    } else if (subscriptionEvent) {
-      // Subscription lifecycle events (active, cancelled, etc.)
-      status = subscriptionEvent.status as string
-      payrexxSubId = subscriptionEvent.id?.toString()
-      const invoice = subscriptionEvent.invoice as Record<string, unknown> | undefined
-      referenceId = invoice?.referenceId as string
-    } else {
-      console.error('[payrexx-webhook] No transaction or subscription data')
-      return NextResponse.json({ error: 'Missing data' }, { status: 400 })
+    if (!transaction) {
+      // Subscription lifecycle events can still arrive from legacy
+      // Payrexx-scheduled subscriptions; we no longer create those.
+      console.warn('[payrexx-webhook] No transaction data — ignoring')
+      return NextResponse.json({ received: true })
     }
 
-    console.log(`[payrexx-webhook] Event: type=${transaction ? 'transaction' : 'subscription'}, status=${status}, referenceId=${referenceId}, payrexxSubId=${payrexxSubId}`)
+    const status = transaction.status
+    const referenceId = transaction.referenceId
+
+    console.log(`[payrexx-webhook] Transaction ${transaction.id}: status=${status}, referenceId=${referenceId}`)
 
     if (!referenceId) {
       console.warn('[payrexx-webhook] No referenceId — ignoring')
@@ -107,10 +98,42 @@ export async function POST(request: NextRequest) {
     }
 
     switch (status) {
+      case 'authorized': {
+        // Tokenization: checkout produces TWO transactions — this one
+        // (status authorized, the chargeable token) and a confirmed one (the
+        // first charge, chargeOnAuthorization). Renewals must charge the
+        // authorized transaction; charging the confirmed one fails. Arrival
+        // order of the two webhooks is not guaranteed, so this only stores
+        // the token and 'confirmed' only activates.
+        await prisma.subscription.update({
+          where: { id: subscription.id },
+          data: { payrexxSubId: transaction.id.toString() },
+        })
+        console.log(`[payrexx-webhook] Subscription ${subscription.id} token stored: ${transaction.id}`)
+        break
+      }
+
       case 'confirmed': {
-        // Payment succeeded — activate subscription
+        // Cron-charged renewals also produce a confirmed webhook (same
+        // referenceId); the cron already extended the period, so an active
+        // subscription needs nothing here. Also makes duplicate webhook
+        // deliveries harmless.
+        if (subscription.status === 'active') {
+          console.log(`[payrexx-webhook] Subscription ${subscription.id} already active, skipping`)
+          break
+        }
+
+        // Initial payment (or past_due recovery) succeeded — activate. The
+        // token id is stored by the 'authorized' case above, not here. The
+        // new period starts where the remaining paid time ends, or now if
+        // none is left. Trial remainder is not paid time and is replaced,
+        // not appended.
         const now = new Date()
-        const periodEnd = new Date(now)
+        const base = subscription.status !== 'trialing' &&
+          subscription.currentPeriodEnd && subscription.currentPeriodEnd > now
+          ? subscription.currentPeriodEnd
+          : now
+        const periodEnd = new Date(base)
         if (subscription.plan.interval === 'monthly') {
           periodEnd.setMonth(periodEnd.getMonth() + 1)
         } else {
@@ -122,9 +145,9 @@ export async function POST(request: NextRequest) {
             where: { id: subscription.id },
             data: {
               status: 'active',
-              payrexxSubId: payrexxSubId ?? subscription.payrexxSubId,
-              currentPeriodStart: now,
+              currentPeriodStart: base,
               currentPeriodEnd: periodEnd,
+              cancelledAt: null,
             },
           }),
           // Sync the user's billingPlan field
@@ -134,12 +157,15 @@ export async function POST(request: NextRequest) {
           }),
         ])
 
-        console.log(`[payrexx-webhook] Subscription ${subscription.id} activated until ${periodEnd.toISOString()}`)
+        console.log(`[payrexx-webhook] Subscription ${subscription.id} activated until ${periodEnd.toISOString()}, token=${transaction.id}`)
         break
       }
 
       case 'declined':
       case 'failed': {
+        // Only checkout payments run through the gateway, so this can only be
+        // a failed initial payment — never a renewal (those are charged
+        // synchronously by the cron).
         await prisma.subscription.update({
           where: { id: subscription.id },
           data: { status: 'past_due' },
@@ -152,7 +178,7 @@ export async function POST(request: NextRequest) {
         await prisma.$transaction([
           prisma.subscription.update({
             where: { id: subscription.id },
-            data: { status: 'cancelled', cancelledAt: new Date() },
+            data: { status: 'cancelled', cancelledAt: new Date(), payrexxSubId: null },
           }),
           prisma.user.update({
             where: { id: subscription.userId },
@@ -160,54 +186,6 @@ export async function POST(request: NextRequest) {
           }),
         ])
         console.log(`[payrexx-webhook] Subscription ${subscription.id} refunded and cancelled`)
-        break
-      }
-
-      case 'active': {
-        // Subscription lifecycle event — activate if not already done by transaction webhook
-        if (subscription.status !== 'active') {
-          const now = new Date()
-          const periodEnd = new Date(now)
-          if (subscription.plan.interval === 'monthly') {
-            periodEnd.setMonth(periodEnd.getMonth() + 1)
-          } else {
-            periodEnd.setFullYear(periodEnd.getFullYear() + 1)
-          }
-
-          await prisma.$transaction([
-            prisma.subscription.update({
-              where: { id: subscription.id },
-              data: {
-                status: 'active',
-                payrexxSubId: payrexxSubId ?? subscription.payrexxSubId,
-                currentPeriodStart: now,
-                currentPeriodEnd: periodEnd,
-              },
-            }),
-            prisma.user.update({
-              where: { id: subscription.userId },
-              data: { billingPlan: subscription.plan.slug },
-            }),
-          ])
-          console.log(`[payrexx-webhook] Subscription ${subscription.id} activated via subscription event`)
-        } else {
-          console.log(`[payrexx-webhook] Subscription ${subscription.id} already active, skipping`)
-        }
-        break
-      }
-
-      case 'cancelled': {
-        await prisma.$transaction([
-          prisma.subscription.update({
-            where: { id: subscription.id },
-            data: { status: 'cancelled', cancelledAt: new Date() },
-          }),
-          prisma.user.update({
-            where: { id: subscription.userId },
-            data: { billingPlan: 'free' },
-          }),
-        ])
-        console.log(`[payrexx-webhook] Subscription ${subscription.id} cancelled`)
         break
       }
 

@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { createGateway, intervalToDuration } from '@/lib/payrexx'
+import { createGateway } from '@/lib/payrexx'
 
 export async function GET() {
   try {
@@ -91,6 +91,10 @@ export async function POST(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
     })
 
+    // Active blocks re-checkout even with auto-renewal stopped: re-enabling
+    // goes through /api/subscriptions/reactivate (free) — a new checkout
+    // would charge immediately for nothing. Once the period runs out the
+    // cron sets status cancelled and a fresh checkout is possible.
     if (existing && existing.status === 'active') {
       return NextResponse.json(
         { error: 'You already have an active subscription. Please cancel it first.' },
@@ -123,7 +127,12 @@ export async function POST(request: NextRequest) {
 
     const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000'
 
-    // Create Payrexx gateway (checkout page)
+    // Create Payrexx gateway (checkout page). Tokenization, not a Payrexx
+    // subscription: the checkout stores the payment method and charges the
+    // first period (chargeOnAuthorization); renewals are charged by our cron
+    // via the stored token (src/app/api/cron/route.ts). This keeps stop /
+    // re-enable of auto-renewal entirely on our side — Payrexx's subscription
+    // API can only cancel immediately and cannot reactivate.
     const gateway = await createGateway({
       amount: plan.priceChf,
       currency: 'CHF',
@@ -132,7 +141,8 @@ export async function POST(request: NextRequest) {
       cancelRedirectUrl: `${baseUrl}/dashboard/billing?status=cancelled`,
       referenceId: subscription.id,
       purpose: `${plan.name} Subscription (${plan.interval})`,
-      subscriptionInterval: intervalToDuration(plan.interval),
+      preAuthorization: true,
+      chargeOnAuthorization: true,
       contactEmail: session.user.email ?? undefined,
       contactForename: session.user.name?.split(' ')[0],
       contactSurname: session.user.name?.split(' ').slice(1).join(' ') || undefined,

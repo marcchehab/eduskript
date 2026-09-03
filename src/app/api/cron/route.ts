@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { resetDemoUser } from '@/lib/seed-demo-content'
+import { chargeTransaction } from '@/lib/payrexx'
 import { PATH_METRIC_PREFIX } from '@/lib/metrics/buffer'
 
 
@@ -25,6 +26,66 @@ export async function POST(request: NextRequest) {
   }
 
   const results: Record<string, unknown> = {}
+
+  // --- Task 0: Charge due subscription renewals ---
+  // Billing model: tokenization — we run the renewal schedule, not Payrexx
+  // (src/app/api/subscriptions/route.ts). A renewal is due once the paid
+  // period has run out and auto-renewal was not stopped (cancelledAt null).
+  // The new period starts at the old period end, so a late cron run charges
+  // late but never shifts the billing anniversary. On failure the
+  // subscription goes past_due (access retained, UI asks for a new payment
+  // method) — a transient Payrexx outage causes that too, since a declined
+  // card and an API error are not distinguishable here; leaving it active
+  // instead would retry a dead card daily forever without anyone noticing.
+  try {
+    const now = new Date()
+    const due = await prisma.subscription.findMany({
+      where: {
+        status: 'active',
+        cancelledAt: null,
+        payrexxSubId: { not: null },
+        currentPeriodEnd: { lt: now },
+      },
+      include: { plan: true },
+    })
+
+    let charged = 0
+    let failed = 0
+    for (const sub of due) {
+      try {
+        const charge = await chargeTransaction(Number(sub.payrexxSubId), {
+          amount: sub.plan.priceChf,
+          purpose: `${sub.plan.name} Subscription renewal (${sub.plan.interval})`,
+          referenceId: sub.id,
+        })
+        if (charge.status !== 'confirmed') {
+          throw new Error(`charge status ${charge.status}`)
+        }
+        const periodEnd = new Date(sub.currentPeriodEnd!)
+        if (sub.plan.interval === 'monthly') {
+          periodEnd.setMonth(periodEnd.getMonth() + 1)
+        } else {
+          periodEnd.setFullYear(periodEnd.getFullYear() + 1)
+        }
+        await prisma.subscription.update({
+          where: { id: sub.id },
+          data: { currentPeriodStart: sub.currentPeriodEnd!, currentPeriodEnd: periodEnd },
+        })
+        charged++
+      } catch (error) {
+        console.error(`[cron] renewal charge failed for ${sub.id}:`, error)
+        await prisma.subscription.update({
+          where: { id: sub.id },
+          data: { status: 'past_due' },
+        })
+        failed++
+      }
+    }
+    results.renewals = { charged, failed }
+  } catch (error) {
+    console.error('[cron] renewals error:', error)
+    results.renewals = 'error'
+  }
 
   // --- Task 1: Expire trials and cancelled subscriptions ---
   try {

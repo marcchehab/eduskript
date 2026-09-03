@@ -38,14 +38,16 @@ function buildQuery(params: Record<string, string | number | boolean | undefined
 async function payrexxRequest<T = unknown>(
   method: 'GET' | 'POST' | 'PUT' | 'DELETE',
   endpoint: string,
-  params: Record<string, string | number | boolean | undefined> = {}
+  params: Record<string, string | number | boolean | undefined> = {},
+  // Most endpoints live under v1.0; refunds need a newer API version.
+  baseUrl: string = BASE_URL
 ): Promise<T> {
   const instance = getInstance()
   const query = buildQuery(params)
 
   const url = method === 'GET' || method === 'DELETE'
-    ? `${BASE_URL}/${endpoint}/?${query ? query + '&' : ''}instance=${instance}`
-    : `${BASE_URL}/${endpoint}/?instance=${instance}`
+    ? `${baseUrl}/${endpoint}/?${query ? query + '&' : ''}instance=${instance}`
+    : `${baseUrl}/${endpoint}/?instance=${instance}`
 
   const options: RequestInit = {
     method,
@@ -85,6 +87,12 @@ export interface CreateGatewayParams {
   cancelRedirectUrl: string
   referenceId: string // our internal subscription or user ID
   purpose?: string
+  // Tokenization: store the payment method for later API-triggered charges
+  // instead of creating a Payrexx-scheduled subscription. chargeOnAuthorization
+  // additionally charges `amount` right away. The resulting transaction id is
+  // the token for chargeTransaction().
+  preAuthorization?: boolean
+  chargeOnAuthorization?: boolean
   subscriptionInterval?: string // "P1M" (monthly) or "P1Y" (yearly) — ISO 8601 duration
   subscriptionPeriod?: string // "P1Y" (1 year) or "P100Y" (indefinite) — renewal period
   subscriptionCancellationInterval?: string // "P0D" = cancel anytime
@@ -123,6 +131,11 @@ export async function createGateway(params: CreateGatewayParams): Promise<Payrex
     'fields[email][value]': params.contactEmail,
     'fields[forename][value]': params.contactForename,
     'fields[surname][value]': params.contactSurname,
+  }
+
+  if (params.preAuthorization) {
+    apiParams.preAuthorization = 1
+    if (params.chargeOnAuthorization) apiParams.chargeOnAuthorization = 1
   }
 
   // Add subscription params if this is a recurring payment
@@ -174,6 +187,35 @@ export async function getSubscription(subscriptionId: string): Promise<PayrexxSu
  */
 export async function cancelSubscription(subscriptionId: string): Promise<void> {
   await payrexxRequest('DELETE', `Subscription/${subscriptionId}`)
+}
+
+// --- Transactions ---
+
+const V116_BASE_URL = 'https://api.payrexx.com/v1.16'
+
+/**
+ * Refund a transaction (full refund when amount is omitted; amount in Rappen).
+ * The refund endpoint does not exist under v1.0, hence the newer base URL.
+ */
+export async function refundTransaction(transactionId: number, amount?: number): Promise<void> {
+  await payrexxRequest('POST', `Transaction/${transactionId}/refund`, { amount }, V116_BASE_URL)
+}
+
+export interface PayrexxChargeResult {
+  id: number
+  status: string // "confirmed" on success
+}
+
+/**
+ * Charge a tokenized (pre-authorized) transaction. The token transaction stays
+ * chargeable, so this is how renewals are billed — we run the schedule, not
+ * Payrexx. referenceId lands in the resulting transaction webhook.
+ */
+export async function chargeTransaction(
+  tokenTransactionId: number,
+  params: { amount: number; purpose?: string; referenceId?: string }
+): Promise<PayrexxChargeResult> {
+  return payrexxRequest<PayrexxChargeResult>('POST', `Transaction/${tokenTransactionId}`, params, V116_BASE_URL)
 }
 
 // --- Webhook Signature Verification ---
