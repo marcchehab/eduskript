@@ -15,9 +15,16 @@ export const revalidate = 3600
 export default async function SupportersPage() {
   // A supporter can own several sites; list each site that has not opted out
   // (Site.extraSettings.supporterBadgeHidden), since the site is what the
-  // badge links from and what visitors know them by.
+  // badge links from and what visitors know them by. The operator's own
+  // account is excluded — thanking yourself reads wrong — but his sites still
+  // show the badge (that check is billingPlan-only, in the public layout).
   const sites = await prisma.site.findMany({
-    where: { user: { billingPlan: { startsWith: 'supporter' } } },
+    where: {
+      user: {
+        billingPlan: { startsWith: 'supporter' },
+        email: { not: 'marc@informatikgarten.ch' },
+      },
+    },
     select: { slug: true, pageName: true, extraSettings: true },
     orderBy: { pageName: 'asc' },
   })
