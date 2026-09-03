@@ -180,8 +180,9 @@ export async function cancelSubscription(subscriptionId: string): Promise<void> 
 
 /**
  * Verify that a webhook request came from Payrexx.
- * Payrexx sends a POST with form-encoded body; the signature is an HMAC of the
- * transaction data.
+ * Payrexx sends the signature in the X-Webhook-Signature header:
+ * HMAC-SHA256 of the raw request body, lowercase hex.
+ * https://docs.payrexx.com/developer/guides/webhook
  */
 export function verifyWebhookSignature(
   body: string,
@@ -192,8 +193,10 @@ export function verifyWebhookSignature(
   const expected = crypto
     .createHmac('sha256', webhookSecret)
     .update(body)
-    .digest('base64')
-  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature))
+    .digest('hex')
+  const sig = Buffer.from(signature.toLowerCase())
+  const exp = Buffer.from(expected)
+  return sig.length === exp.length && crypto.timingSafeEqual(exp, sig)
 }
 
 // --- Helpers ---

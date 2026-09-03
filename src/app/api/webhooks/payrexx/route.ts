@@ -36,7 +36,7 @@ interface PayrexxWebhookTransaction {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.text()
-    const signature = request.headers.get('payrexx-signature') ?? ''
+    const signature = request.headers.get('x-webhook-signature') ?? ''
 
     // Verify webhook authenticity
     if (process.env.PAYREXX_WEBHOOK_SECRET && signature) {
