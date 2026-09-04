@@ -8,6 +8,7 @@ import { randomBytes } from 'crypto'
 import { registrationRateLimiter, getClientIdentifier } from '@/lib/rate-limit'
 import { validatePassword } from '@/lib/password-validation'
 import { createTrialSubscription } from '@/lib/trial'
+import { syncTeacherProductList } from '@/lib/teacher-list'
 import { seedOnboardingSkript } from '@/lib/seed-demo-content'
 import { CACHE_TAGS } from '@/lib/cached-queries'
 
@@ -206,6 +207,10 @@ export async function POST(request: NextRequest) {
 
     // Auto-start trial for teacher accounts (no-op if no default trial plan configured)
     await createTrialSubscription(user.id)
+
+    // Add the new teacher to the EN/DE product-update mailing list (Brevo).
+    // Fire-and-forget; registration must not depend on Brevo.
+    void syncTeacherProductList(user.id)
 
     // Seed the starter skript into the new teacher's library. Non-fatal —
     // registration should still succeed if this fails.
