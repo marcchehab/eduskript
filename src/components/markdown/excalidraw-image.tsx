@@ -187,7 +187,10 @@ export function ExcalidrawImage({ src, alt, style, onWidthChange, onEdit, align 
           width={imgWidth}
           height={imgHeight}
           decoding="async"
-          className={`excalidraw-light w-full h-auto rounded-md ${forceLight ? '' : 'dark:hidden'}`}
+          // The `excalidraw-light` class must be dropped when forcing light:
+          // globals.css hides it in dark mode with `display: none !important`,
+          // which beats any inline/Tailwind override.
+          className={`w-full h-auto rounded-md ${forceLight ? '' : 'excalidraw-light dark:hidden'}`}
         />
       )}
       {darkSrc && !forceLight && (
@@ -217,7 +220,7 @@ export function ExcalidrawImage({ src, alt, style, onWidthChange, onEdit, align 
               src={lightSrc}
               alt={caption}
               style={{ width: '95vw', height: '90vh' }}
-              className={`max-w-[95vw] max-h-[90vh] w-auto h-auto object-contain rounded-md ${forceLight ? '' : 'dark:hidden'}`}
+              className={`max-w-[95vw] max-h-[90vh] w-auto h-auto object-contain rounded-md ${forceLight ? '' : 'excalidraw-light dark:hidden'}`}
             />
           )}
           {darkSrc && !forceLight && (
