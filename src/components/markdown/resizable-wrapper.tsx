@@ -24,6 +24,10 @@ interface ResizableWrapperProps {
       original size capped at the pane width — once the user resizes, they are
       free to scale past the natural size and past 100%. */
   naturalMaxWidth?: number
+  /** Extra buttons rendered inside the alignment/wrap control group, after a
+      divider (e.g. the image invert toggle). Editor mode only — the group is
+      hidden without onLayoutChange. */
+  extraControls?: ReactNode
 }
 
 export function ResizableWrapper({
@@ -36,6 +40,7 @@ export function ResizableWrapper({
   style,
   dataAttributes,
   naturalMaxWidth,
+  extraControls,
 }: ResizableWrapperProps) {
   const containerRef = useRef<HTMLSpanElement>(null)
   const [isDragging, setIsDragging] = useState(false)
@@ -218,7 +223,9 @@ export function ResizableWrapper({
             </span>
           )}
 
-          {/* Alignment and wrap controls */}
+          {/* Alignment and wrap controls. Components hide their own top-right
+              overlays (fullscreen) in editor mode and put editor-only toggles
+              here via extraControls instead. */}
           <span className="absolute top-2 right-2 bg-background/95 backdrop-blur-sm border border-border/50 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10 flex gap-0.5 p-0.5">
             <button
               onClick={() => handleAlignChange('left')}
@@ -257,6 +264,12 @@ export function ResizableWrapper({
             >
               <WrapText className="w-3.5 h-3.5" />
             </button>
+            {extraControls && (
+              <>
+                <span className="w-px bg-border mx-0.5" />
+                {extraControls}
+              </>
+            )}
           </span>
         </>
       )}

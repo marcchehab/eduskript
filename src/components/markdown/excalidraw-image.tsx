@@ -128,6 +128,21 @@ export function ExcalidrawImage({ src, alt, style, onWidthChange, onEdit, align 
       onLayoutChange={onWidthChange ? handleLayoutChange : undefined}
       className="excalidraw-wrapper group/excalidraw"
       dataAttributes={dataAttributes}
+      extraControls={
+        // Force-light-theme toggle — lives in the wrapper's control group.
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            handleLightOnlyToggle()
+          }}
+          className={`p-1.5 rounded hover:bg-accent transition-colors ${
+            forceLight ? 'bg-accent text-accent-foreground' : 'text-muted-foreground'
+          }`}
+          title={forceLight ? 'Always showing light theme — click to follow viewer theme' : 'Always show light theme, ignore viewer theme'}
+        >
+          <Sun className="w-3.5 h-3.5" />
+        </button>
+      }
     >
       {/* Edit button overlay - only shown if onEdit is provided */}
       {onEdit && fileId && (
@@ -143,24 +158,9 @@ export function ExcalidrawImage({ src, alt, style, onWidthChange, onEdit, align 
         </button>
       )}
 
-      {/* Force-light-theme toggle - only shown in editor mode */}
-      {onWidthChange && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            handleLightOnlyToggle()
-          }}
-          className={`absolute top-2 right-11 z-20 p-1.5 rounded-md border border-border shadow-xs opacity-0 group-hover/excalidraw:opacity-100 transition-opacity hover:bg-accent ${
-            forceLight ? 'bg-accent text-accent-foreground' : 'bg-background/80 backdrop-blur-xs'
-          }`}
-          title={forceLight ? 'Always showing light theme — click to follow viewer theme' : 'Always show light theme, ignore viewer theme'}
-        >
-          <Sun className="w-3.5 h-3.5" />
-        </button>
-      )}
-
-      {/* Fullscreen button */}
-      {!nozoom && (
+      {/* Fullscreen — published view only; useless in the editor preview and
+          it collided with the wrapper's control group. */}
+      {!nozoom && !onWidthChange && (
         <button
           onClick={() => setLightboxOpen(true)}
           className="absolute top-2 right-2 z-20 p-1.5 rounded-md bg-background/80 backdrop-blur-xs border border-border shadow-xs opacity-0 group-hover/excalidraw:opacity-100 transition-opacity hover:bg-accent cursor-zoom-in"

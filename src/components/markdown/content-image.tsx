@@ -200,28 +200,17 @@ export function ContentImage({ src, alt = '', title, style, onWidthChange, origi
       onLayoutChange={onWidthChange ? handleLayoutChange : undefined}
       dataAttributes={dataAttributes}
       naturalMaxWidth={imgWidth}
-    >
-      {/* Image */}
-      <span className="block relative group/img">
-        {!isMissing && !nozoom && (
-          <button
-            onClick={() => setLightboxOpen(true)}
-            className="absolute top-2 right-2 z-20 p-1.5 rounded-md bg-background/80 backdrop-blur-xs border border-border shadow-xs opacity-0 group-hover/img:opacity-100 transition-opacity hover:bg-accent cursor-zoom-in"
-            title="Fullscreen"
-          >
-            <Maximize2 className="w-3.5 h-3.5" />
-          </button>
-        )}
-        {/* Invert gizmo — editor mode only. Cycles off → dark → light → always
-            and persists as data-invert on the <img> tag. */}
-        {!isMissing && onWidthChange && (
+      extraControls={
+        // Invert gizmo — cycles off → dark → light → always and persists as
+        // data-invert on the <img> tag. Lives in the wrapper's control group.
+        !isMissing ? (
           <button
             onClick={(e) => {
               e.stopPropagation()
               handleInvertCycle()
             }}
-            className={`absolute top-2 right-11 z-20 p-1.5 rounded-md border border-border shadow-xs opacity-0 group-hover/img:opacity-100 transition-opacity hover:bg-accent ${
-              currentInvert ? 'bg-accent text-accent-foreground' : 'bg-background/80 backdrop-blur-xs'
+            className={`p-1.5 rounded hover:bg-accent transition-colors ${
+              currentInvert ? 'bg-accent text-accent-foreground' : 'text-muted-foreground'
             }`}
             title={
               currentInvert === 'dark' ? 'Inverting in dark mode — click for: invert in light mode'
@@ -231,6 +220,21 @@ export function ContentImage({ src, alt = '', title, style, onWidthChange, origi
             }
           >
             <Contrast className="w-3.5 h-3.5" />
+          </button>
+        ) : undefined
+      }
+    >
+      {/* Image */}
+      <span className="block relative group/img">
+        {/* Fullscreen — published view only; useless in the editor preview and
+            it collided with the wrapper's control group. */}
+        {!isMissing && !nozoom && !onWidthChange && (
+          <button
+            onClick={() => setLightboxOpen(true)}
+            className="absolute top-2 right-2 z-20 p-1.5 rounded-md bg-background/80 backdrop-blur-xs border border-border shadow-xs opacity-0 group-hover/img:opacity-100 transition-opacity hover:bg-accent cursor-zoom-in"
+            title="Fullscreen"
+          >
+            <Maximize2 className="w-3.5 h-3.5" />
           </button>
         )}
         {isMissing ? (
