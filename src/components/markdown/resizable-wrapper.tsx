@@ -53,8 +53,9 @@ export function ResizableWrapper({
     return 100
   })
 
-  // Track initial drag state
-  const dragStartRef = useRef<{ startX: number; startWidth: number; parentWidth: number } | null>(null)
+  // Track initial drag state. `originalWidth` is the pre-drag state width so a
+  // click without movement can restore it instead of committing the measured %.
+  const dragStartRef = useRef<{ startX: number; startWidth: number; parentWidth: number; originalWidth: number; moved: boolean } | null>(null)
 
   // Update width when initialWidth prop changes
   useEffect(() => {
@@ -84,11 +85,19 @@ export function ResizableWrapper({
     if (!parent) return
 
     const parentRect = parent.getBoundingClientRect()
+    // Start from the RENDERED width, not the state width: in the default state
+    // (width 100% + naturalMaxWidth cap) the element is visually narrower than
+    // 100%, and starting the drag math at 100 makes the element jump to full
+    // pane width the moment the cap is lifted for dragging.
+    const renderedPercent = (containerRef.current.getBoundingClientRect().width / parentRect.width) * 100
     dragStartRef.current = {
       startX: e.clientX,
-      startWidth: currentWidth,
-      parentWidth: parentRect.width
+      startWidth: renderedPercent,
+      parentWidth: parentRect.width,
+      originalWidth: currentWidth,
+      moved: false
     }
+    setCurrentWidth(Math.round(renderedPercent))
 
     setIsDragging(true)
   }, [currentWidth])
@@ -99,6 +108,7 @@ export function ResizableWrapper({
     const { startX, startWidth, parentWidth } = dragStartRef.current
 
     const deltaX = e.clientX - startX
+    if (deltaX !== 0) dragStartRef.current.moved = true
     // For right-aligned, invert the delta since we're dragging from the left
     const deltaPercent = (deltaX / parentWidth) * 100 * (currentAlign === 'right' ? -1 : 1)
     // No upper clamp: the user may scale past the natural size and past 100%.
@@ -108,8 +118,15 @@ export function ResizableWrapper({
   }, [isDragging, currentAlign])
 
   const handleMouseUp = useCallback(() => {
-    if (isDragging && onLayoutChange) {
-      onLayoutChange({ width: currentWidth, align: currentAlign, wrap: currentWrap })
+    if (isDragging && dragStartRef.current) {
+      if (dragStartRef.current.moved) {
+        onLayoutChange?.({ width: currentWidth, align: currentAlign, wrap: currentWrap })
+      } else {
+        // Click without movement: restore the pre-drag width so a naturally
+        // capped element (width 100% + naturalMaxWidth) doesn't get its
+        // measured % committed by a stray click on the handle.
+        setCurrentWidth(dragStartRef.current.originalWidth)
+      }
     }
     setIsDragging(false)
     dragStartRef.current = null

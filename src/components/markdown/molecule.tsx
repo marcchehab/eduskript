@@ -94,7 +94,7 @@ export function MoleculeDiagram({
       align={align}
       wrap={wrap}
       onLayoutChange={onLayoutChange ? handleLayoutChange : undefined}
-      style={{ maxWidth: `${w}px` }}
+      naturalMaxWidth={w}
     >
       <span className="my-4 block">
         {/* Theme switch via .molecule-light / .molecule-dark in globals.css, for
