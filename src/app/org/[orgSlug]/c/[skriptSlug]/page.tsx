@@ -5,7 +5,7 @@ import { SkriptRedirect } from '@/components/SkriptRedirect'
 import { PublicSiteLayout } from '@/components/public/layout'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
 import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
-import { getOrgFullSiteStructure } from '@/lib/cached-queries'
+import { getOrgSidebarData } from '@/lib/sidebar-items'
 import { CurrentSiteProvider } from '@/contexts/current-site-context'
 import { buildSiteStructure } from '@/lib/site-structure'
 import { getPublicLayers, EMPTY_PUBLIC_LAYERS } from '@/lib/public-page-data'
@@ -221,17 +221,20 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
       title: null
     }
 
-    const fullSiteStructure = organization.sidebarBehavior === 'full'
-      ? await getOrgFullSiteStructure(organization.id, orgSlug)
+    // Full mode: interleaved page-builder sidebar incl. the org's root
+    // skripts (previously missing here — rootSkripts was hardcoded empty).
+    const sidebarData = organization.sidebarBehavior === 'full'
+      ? await getOrgSidebarData(organization.id, orgSlug)
       : undefined
 
     return (
       <CurrentSiteProvider siteId={collection?.siteId ?? null} organizationId={organization.id}>
       <PublicSiteLayout
         teacher={orgAsTeacher}
-        siteStructure={fullSiteStructure ?? siteStructure}
+        siteStructure={siteStructure}
         rootSkripts={[]}
-        fullSiteStructure={fullSiteStructure}
+        sidebarItems={sidebarData?.sidebarItems}
+        fullSiteStructure={sidebarData?.fullSiteStructure}
         sidebarBehavior={organization.sidebarBehavior as 'contextual' | 'full' || 'contextual'}
         typographyPreference="modern"
         routePrefix={`/org/${orgSlug}/c`}

@@ -5,7 +5,8 @@ import { ClassToolbar } from '@/components/teacher/class-toolbar'
 import type { Metadata } from 'next'
 import { prisma } from '@/lib/prisma'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
-import { getFullSiteStructure, getOrgTeacherSkript } from '@/lib/cached-queries'
+import { getOrgTeacherSkript } from '@/lib/cached-queries'
+import { getTeacherSidebarData } from '@/lib/sidebar-items'
 import { CurrentSiteProvider } from '@/contexts/current-site-context'
 import { buildSiteStructure } from '@/lib/site-structure'
 import { readExtraSettings } from '@/lib/settings'
@@ -123,8 +124,11 @@ export default async function OrgTeacherSkriptPage({ params }: PageProps) {
       }]
 
   const teacherSite = teacher.sites[0]
-  const fullSiteStructure = (teacherSite?.sidebarBehavior || 'full') === 'full'
-    ? await getFullSiteStructure(teacher.id, teacherSite.slug)
+  // Full mode: interleaved page-builder sidebar shared with the [domain]
+  // layout (includes root skripts). Contextual keeps the single-skript
+  // structure above.
+  const sidebarData = (teacherSite?.sidebarBehavior || 'full') === 'full'
+    ? await getTeacherSidebarData(teacher.id, teacherSite.slug)
     : undefined
 
   const teacherSiteExtra = readExtraSettings(teacherSite)
@@ -149,8 +153,9 @@ export default async function OrgTeacherSkriptPage({ params }: PageProps) {
     <CurrentSiteProvider siteId={teacherSite?.id ?? null} organizationId={organization.id}>
     <PublicSiteLayout
       teacher={teacherData}
-      siteStructure={fullSiteStructure ?? siteStructure}
-      fullSiteStructure={fullSiteStructure}
+      siteStructure={siteStructure}
+      sidebarItems={sidebarData?.sidebarItems}
+      fullSiteStructure={sidebarData?.fullSiteStructure}
       currentPath={currentPath}
       sidebarBehavior={(teacherSite?.sidebarBehavior as 'contextual' | 'full') || 'full'}
       typographyPreference={(teacherSite?.typographyPreference as 'modern' | 'classic') || 'modern'}

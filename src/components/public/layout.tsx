@@ -197,8 +197,16 @@ export function PublicSiteLayout({
   // first then root skripts to keep callers that haven't migrated working.
   // Contextual mode filters to the single item containing the current skript.
   const displaySidebarItems = useMemo<SidebarItem[]>(() => {
+    // Routes that render per-page (org routes) pass a single-skript
+    // siteStructure plus the tenant-wide fullSiteStructure. In full mode the
+    // latter must win, or the sidebar collapses to the current skript and
+    // looks contextual regardless of the setting (regression from 3409746a,
+    // which dropped the old displayStructure fallback).
+    const structure = sidebarBehavior === 'full' && fullSiteStructure
+      ? fullSiteStructure
+      : siteStructure
     const base: SidebarItem[] = sidebarItems ?? [
-      ...siteStructure.map(c => ({ kind: 'collection' as const, data: c })),
+      ...structure.map(c => ({ kind: 'collection' as const, data: c })),
       ...rootSkripts.map(s => ({ kind: 'skript' as const, data: s })),
     ]
     if (sidebarBehavior !== 'contextual' || !paramSkriptSlug) return base
@@ -213,7 +221,7 @@ export function PublicSiteLayout({
       }
     }
     return []
-  }, [sidebarItems, siteStructure, rootSkripts, sidebarBehavior, paramSkriptSlug])
+  }, [sidebarItems, siteStructure, fullSiteStructure, rootSkripts, sidebarBehavior, paramSkriptSlug])
 
   // Base prefix for nav URLs. routePrefix is the full internal server path;
   // we strip whatever the proxy prepended for the current hostname so links

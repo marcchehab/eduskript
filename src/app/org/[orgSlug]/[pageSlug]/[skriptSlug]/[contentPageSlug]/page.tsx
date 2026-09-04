@@ -5,7 +5,8 @@ import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
 import { getPublicLayers } from '@/lib/public-page-data'
 import { ClassToolbar } from '@/components/teacher/class-toolbar'
 import type { Metadata } from 'next'
-import { getFullSiteStructure, getOrgTeacherContentPage } from '@/lib/cached-queries'
+import { getOrgTeacherContentPage } from '@/lib/cached-queries'
+import { getTeacherSidebarData } from '@/lib/sidebar-items'
 import { CurrentSiteProvider } from '@/contexts/current-site-context'
 import { buildSiteStructure } from '@/lib/site-structure'
 import { readExtraSettings } from '@/lib/settings'
@@ -129,8 +130,12 @@ export default async function OrgTeacherContentPage({ params }: PageProps) {
       }]
 
   const teacherSite = teacher.sites[0]
-  const fullSiteStructure = (teacherSite?.sidebarBehavior || 'full') === 'full'
-    ? await getFullSiteStructure(teacher.id, teacherSite.slug)
+  // Full mode gets the interleaved page-builder sidebar (collections + root
+  // skripts) — same data the [domain] layout renders, so eduskript.org/<slug>
+  // matches the custom-domain sidebar. Contextual mode keeps the
+  // single-skript siteStructure built above.
+  const sidebarData = (teacherSite?.sidebarBehavior || 'full') === 'full'
+    ? await getTeacherSidebarData(teacher.id, teacherSite.slug)
     : undefined
 
   const teacherSiteExtra = readExtraSettings(teacherSite)
@@ -172,7 +177,8 @@ export default async function OrgTeacherContentPage({ params }: PageProps) {
     <PublicSiteLayout
       teacher={teacherData}
       siteStructure={siteStructure}
-      fullSiteStructure={fullSiteStructure}
+      sidebarItems={sidebarData?.sidebarItems}
+      fullSiteStructure={sidebarData?.fullSiteStructure}
       currentPath={currentPath}
       sidebarBehavior={(teacherSite?.sidebarBehavior as 'contextual' | 'full') || 'full'}
       typographyPreference={(teacher.sites[0]?.typographyPreference as 'modern' | 'classic') || 'modern'}

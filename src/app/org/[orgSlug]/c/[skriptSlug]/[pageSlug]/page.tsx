@@ -6,7 +6,8 @@ import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.
 import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
 import type { Metadata } from 'next'
 import { prisma } from '@/lib/prisma'
-import { getOrgPublishedPage, getOrgFullSiteStructure } from '@/lib/cached-queries'
+import { getOrgPublishedPage } from '@/lib/cached-queries'
+import { getOrgSidebarData } from '@/lib/sidebar-items'
 import { CurrentSiteProvider } from '@/contexts/current-site-context'
 import { buildSiteStructure } from '@/lib/site-structure'
 import { canonicalUrl, canonicalBase } from '@/lib/seo/canonical'
@@ -217,8 +218,9 @@ export default async function OrgPublicPage({ params }: PageProps) {
 
   const currentPath = `/${skriptSlug}/${pageSlug}`
 
-  const fullSiteStructure = organization.sidebarBehavior === 'full'
-    ? await getOrgFullSiteStructure(organization.id, orgSlug)
+  // Full mode: interleaved page-builder sidebar incl. the org's root skripts.
+  const sidebarData = organization.sidebarBehavior === 'full'
+    ? await getOrgSidebarData(organization.id, orgSlug)
     : undefined
 
   const canonical = canonicalUrl({
@@ -258,9 +260,10 @@ export default async function OrgPublicPage({ params }: PageProps) {
     <JsonLd schema={ldSchemas} />
     <PublicSiteLayout
       teacher={orgAsTeacher}
-      siteStructure={fullSiteStructure ?? siteStructure}
+      siteStructure={siteStructure}
       currentPath={currentPath}
-      fullSiteStructure={fullSiteStructure}
+      sidebarItems={sidebarData?.sidebarItems}
+      fullSiteStructure={sidebarData?.fullSiteStructure}
       sidebarBehavior={organization.sidebarBehavior as 'contextual' | 'full' || 'contextual'}
       typographyPreference="modern"
       routePrefix={`/org/${orgSlug}/c`}

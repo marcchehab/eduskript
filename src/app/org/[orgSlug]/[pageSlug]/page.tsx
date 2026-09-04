@@ -6,7 +6,7 @@ import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
 import { FrontpageOwnerCta } from '@/components/public/frontpage-owner-cta'
 import { prisma } from '@/lib/prisma'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
-import { getFullSiteStructure } from '@/lib/cached-queries'
+import { getTeacherSidebarData } from '@/lib/sidebar-items'
 import { CurrentSiteProvider } from '@/contexts/current-site-context'
 import { getPublicLayers, EMPTY_PUBLIC_LAYERS } from '@/lib/public-page-data'
 import { readExtraSettings } from '@/lib/settings'
@@ -298,8 +298,11 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
   // filters to the current skript, and the frontpage has none) while the same
   // site rendered fully on a custom host.
   const sidebarBehavior = teacherSite?.sidebarBehavior || 'full'
-  const fullSiteStructure = sidebarBehavior === 'full'
-    ? await getFullSiteStructure(teacher.id, teacherSlug)
+  // Full mode: interleaved page-builder sidebar shared with the [domain]
+  // layout. The locally built collections/rootSkripts above still back
+  // contextual mode and the frontpage body.
+  const sidebarData = sidebarBehavior === 'full'
+    ? await getTeacherSidebarData(teacher.id, teacherSlug)
     : undefined
 
   const teacherSiteExtra = readExtraSettings(teacherSite)
@@ -324,7 +327,8 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
       teacher={teacherData}
       siteStructure={collections}
       rootSkripts={rootSkripts}
-      fullSiteStructure={fullSiteStructure}
+      sidebarItems={sidebarData?.sidebarItems}
+      fullSiteStructure={sidebarData?.fullSiteStructure}
       sidebarBehavior={(sidebarBehavior as 'contextual' | 'full') || 'full'}
       typographyPreference={(teacherSite?.typographyPreference as 'modern' | 'classic') || 'modern'}
       routePrefix={`/org/${orgSlug}/${pageSlug}`}

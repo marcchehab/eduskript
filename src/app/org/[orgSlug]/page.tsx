@@ -5,7 +5,8 @@ import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.
 import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
 import { ClassToolbar } from '@/components/teacher/class-toolbar'
 import { HtmlLangSetter } from '@/components/seo/html-lang-setter'
-import { getOrgWithLayout, getOrgHomepageContent, getOrgFullSiteStructure } from '@/lib/cached-queries'
+import { getOrgWithLayout, getOrgHomepageContent } from '@/lib/cached-queries'
+import { getOrgSidebarData } from '@/lib/sidebar-items'
 import { CurrentSiteProvider } from '@/contexts/current-site-context'
 import { prisma } from '@/lib/prisma'
 import { canonicalUrl, canonicalBase } from '@/lib/seo/canonical'
@@ -181,9 +182,10 @@ export default async function OrgPage({ params }: OrgPageProps) {
     title: null
   }
 
-  // Fetch full site structure if sidebar behavior is "full"
-  const fullSiteStructure = organization.sidebarBehavior === 'full'
-    ? await getOrgFullSiteStructure(organization.id, orgSlug)
+  // Full mode: interleaved page-builder sidebar (collections + root skripts),
+  // shared with the /c/ content routes via src/lib/sidebar-items.ts.
+  const sidebarData = organization.sidebarBehavior === 'full'
+    ? await getOrgSidebarData(organization.id, orgSlug)
     : undefined
 
   return (
@@ -194,7 +196,8 @@ export default async function OrgPage({ params }: OrgPageProps) {
       teacher={orgAsTeacher}
       siteStructure={collections}
       rootSkripts={rootSkripts}
-      fullSiteStructure={fullSiteStructure}
+      sidebarItems={sidebarData?.sidebarItems}
+      fullSiteStructure={sidebarData?.fullSiteStructure}
       sidebarBehavior={organization.sidebarBehavior as 'contextual' | 'full' || 'contextual'}
       typographyPreference="modern"
       routePrefix={`/org/${orgSlug}/c`}
