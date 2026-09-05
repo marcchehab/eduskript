@@ -40,7 +40,10 @@ const updateProfileSchema = z.object({
     .optional()
     .or(z.literal('')),
   title: z.string().optional(),
-  bio: z.string().optional()
+  bio: z.string().optional(),
+  // true = listed in the public site directory (/api/sites.json); stored
+  // inverted as extraSettings.directoryOptOut so the default stays "listed".
+  directoryListing: z.boolean().optional()
 })
 
 // Admin schema allows shorter page slugs (minimum 1 character)
@@ -70,7 +73,10 @@ const adminUpdateProfileSchema = z.object({
     .optional()
     .or(z.literal('')),
   title: z.string().optional(),
-  bio: z.string().optional()
+  bio: z.string().optional(),
+  // true = listed in the public site directory (/api/sites.json); stored
+  // inverted as extraSettings.directoryOptOut so the default stays "listed".
+  directoryListing: z.boolean().optional()
 })
 
 // Read the caller's current profile + page fields fresh from the DB.
@@ -132,6 +138,7 @@ export async function GET(request: NextRequest) {
     pageLanguage: siteRow?.pageLanguage ?? null,
     titleStyle: extra.titleStyle ?? 'icon',
     logoUrl: extra.logoUrl ?? null,
+    directoryListing: extra.directoryOptOut !== true,
   })
 }
 
@@ -224,13 +231,22 @@ export async function PATCH(request: NextRequest) {
       const primarySiteId = targetSite?.id ?? null
       let newSlug = targetSite?.slug ?? null
 
-      if ('titleStyle' in body || 'logoUrl' in body) {
+      if ('titleStyle' in body || 'logoUrl' in body || 'directoryListing' in body) {
         const current = primarySiteId
           ? await prisma.site.findUnique({ where: { id: primarySiteId }, select: { extraSettings: true } })
           : null
+        // Only touch the keys the client sent — mergeExtraSettings deletes on
+        // undefined, so unconditionally passing all keys would wipe the rest.
         siteUpdate.extraSettings = mergeExtraSettings(current?.extraSettings, {
-          titleStyle: validatedData.titleStyle || undefined,
-          logoUrl: validatedData.logoUrl || undefined,
+          ...('titleStyle' in body || 'logoUrl' in body
+            ? {
+                titleStyle: validatedData.titleStyle || undefined,
+                logoUrl: validatedData.logoUrl || undefined,
+              }
+            : {}),
+          ...('directoryListing' in body
+            ? { directoryOptOut: validatedData.directoryListing === false ? true : undefined }
+            : {}),
         })
       }
 
@@ -293,6 +309,7 @@ export async function PATCH(request: NextRequest) {
         pageLanguage: siteRow?.pageLanguage ?? null,
         titleStyle: resultExtra.titleStyle ?? 'icon',
         logoUrl: resultExtra.logoUrl ?? null,
+        directoryListing: resultExtra.directoryOptOut !== true,
       }
     })
 

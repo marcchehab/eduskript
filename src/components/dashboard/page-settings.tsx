@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { Switch } from '@/components/ui/switch'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { Save, Loader2, FileText, Upload, X, ExternalLink, Globe, Wand2 } from 'lucide-react'
@@ -38,6 +39,7 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
   const [titleStyle, setTitleStyle] = useState<'icon' | 'logo'>('icon')
   const [logoUrl, setLogoUrl] = useState('')
   const [pageLanguage, setPageLanguage] = useState('')
+  const [directoryListing, setDirectoryListing] = useState(true)
   // Original DB values (loaded on mount via /api/user/profile GET, not from
   // session). Used to compute `hasPageInfoChanges` so the Save button only
   // lights up when something actually differs from the persisted state — and
@@ -50,6 +52,7 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
   const [originalTitleStyle, setOriginalTitleStyle] = useState<'icon' | 'logo'>('icon')
   const [originalLogoUrl, setOriginalLogoUrl] = useState('')
   const [originalPageLanguage, setOriginalPageLanguage] = useState('')
+  const [originalDirectoryListing, setOriginalDirectoryListing] = useState(true)
   const [iconUploadLoading, setIconUploadLoading] = useState(false)
   const [logoUploadLoading, setLogoUploadLoading] = useState(false)
   const [hostnamePrefix, setHostnamePrefix] = useState('eduskript.org/')
@@ -113,6 +116,7 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
           const style = data.titleStyle === 'logo' ? 'logo' : 'icon'
           const logo = data.logoUrl || ''
           const lang = data.pageLanguage || ''
+          const listed = data.directoryListing !== false
           setPageSlug(slug)
           setPageName(name)
           setPageDescription(desc)
@@ -120,6 +124,7 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
           setTitleStyle(style)
           setLogoUrl(logo)
           setPageLanguage(lang)
+          setDirectoryListing(listed)
           setOriginalPageSlug(slug)
           setOriginalPageName(name)
           setOriginalPageDescription(desc)
@@ -127,6 +132,7 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
           setOriginalTitleStyle(style)
           setOriginalLogoUrl(logo)
           setOriginalPageLanguage(lang)
+          setOriginalDirectoryListing(listed)
         }
       } catch (error) {
         console.error('Error loading preferences:', error)
@@ -249,6 +255,7 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
           titleStyle,
           logoUrl,
           pageLanguage,
+          directoryListing,
           name: session?.user?.name || 'User', // Include name as it's required by the API
           siteId,
         }),
@@ -265,6 +272,7 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
         setOriginalTitleStyle(data.titleStyle === 'logo' ? 'logo' : 'icon')
         setOriginalLogoUrl(data.logoUrl || '')
         setOriginalPageLanguage(data.pageLanguage || '')
+        setOriginalDirectoryListing(data.directoryListing !== false)
         await update() // Update session (best-effort — JWT may still lag)
         router.refresh() // Refresh page
       } else {
@@ -289,7 +297,8 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
     pageIcon !== originalPageIcon ||
     titleStyle !== originalTitleStyle ||
     logoUrl !== originalLogoUrl ||
-    pageLanguage !== originalPageLanguage
+    pageLanguage !== originalPageLanguage ||
+    directoryListing !== originalDirectoryListing
 
   // Check if slug is valid for saving
   const slugIsValid = pageSlug.length >= minSlugLength && slugAvailable !== false
@@ -776,6 +785,25 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
             <p className="text-sm text-muted-foreground">
               Language tag for your site (important for search engines).
             </p>
+          </div>
+
+          {/* Public Directory Listing */}
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-0.5">
+              <Label htmlFor="directoryListing" className="text-sm font-medium">
+                List site in public directories
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                Include this site in public site directories (e.g. Atlas, the
+                teaching-materials collection for Gymnasien). Only applies while
+                your site has published content.
+              </p>
+            </div>
+            <Switch
+              id="directoryListing"
+              checked={directoryListing}
+              onCheckedChange={setDirectoryListing}
+            />
           </div>
 
           {/* Save Button */}

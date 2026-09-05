@@ -85,6 +85,7 @@ export async function GET(
       aiSystemPrompt: organization.site?.aiSystemPrompt ?? null,
       titleStyle: readExtraSettings(organization.site).titleStyle ?? 'icon',
       logoUrl: readExtraSettings(organization.site).logoUrl ?? null,
+      directoryListing: readExtraSettings(organization.site).directoryOptOut !== true,
       customDomain: organization.customDomains[0]?.domain ?? null,
       site: undefined,
       customDomains: undefined,
@@ -107,7 +108,7 @@ export async function PATCH(
 
   try {
     const body = await request.json()
-    const { name, description, showIcon, iconUrl, allowMemberPages, allowTeacherCustomDomains, requireEmailDomain, sidebarBehavior, aiSystemPrompt, titleStyle, logoUrl } = body
+    const { name, description, showIcon, iconUrl, allowMemberPages, allowTeacherCustomDomains, requireEmailDomain, sidebarBehavior, aiSystemPrompt, titleStyle, logoUrl, directoryListing } = body
 
     if (titleStyle !== undefined && titleStyle !== null && !['icon', 'logo'].includes(titleStyle)) {
       return NextResponse.json({ error: 'Invalid title style' }, { status: 400 })
@@ -155,14 +156,20 @@ export async function PATCH(
     if (aiSystemPrompt !== undefined) {
       siteUpdate.aiSystemPrompt = aiSystemPrompt || null
     }
-    if (titleStyle !== undefined || logoUrl !== undefined) {
+    if (titleStyle !== undefined || logoUrl !== undefined || directoryListing !== undefined) {
       const currentSite = await prisma.site.findUnique({
         where: { organizationId: orgId },
         select: { extraSettings: true },
       })
+      // Only touch the keys the client sent — mergeExtraSettings deletes on
+      // undefined, so unconditionally passing all keys would wipe the rest.
       siteUpdate.extraSettings = mergeExtraSettings(currentSite?.extraSettings, {
-        titleStyle: titleStyle || undefined,
-        logoUrl: logoUrl || undefined,
+        ...(titleStyle !== undefined || logoUrl !== undefined
+          ? { titleStyle: titleStyle || undefined, logoUrl: logoUrl || undefined }
+          : {}),
+        ...(directoryListing !== undefined
+          ? { directoryOptOut: directoryListing === false ? true : undefined }
+          : {}),
       })
     }
 
@@ -247,6 +254,7 @@ export async function PATCH(
       aiSystemPrompt: organization.site?.aiSystemPrompt ?? null,
       titleStyle: readExtraSettings(organization.site).titleStyle ?? 'icon',
       logoUrl: readExtraSettings(organization.site).logoUrl ?? null,
+      directoryListing: readExtraSettings(organization.site).directoryOptOut !== true,
       site: undefined,
     }
     return NextResponse.json({ organization: orgWithSlug })

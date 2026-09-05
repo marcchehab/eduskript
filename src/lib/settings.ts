@@ -39,6 +39,13 @@ export interface SiteExtraSettings {
    * billingPlan is a supporter plan.
    */
   supporterBadgeHidden?: boolean
+
+  /**
+   * Opt the site out of the public site directory (/api/sites.json), which
+   * external services (e.g. Atlas) crawl. Absent = listed; only the opt-out
+   * is stored so the default stays "listed" without a backfill.
+   */
+  directoryOptOut?: boolean
   /** Custom supporter badge text; falls back to DEFAULT_SUPPORTER_MESSAGE. */
   supporterBadgeMessage?: string
 }
@@ -76,6 +83,7 @@ export function readExtraSettings(source: { extraSettings?: unknown } | unknown)
   if (typeof bag.logoUrl === 'string' && bag.logoUrl) out.logoUrl = bag.logoUrl
 
   if (bag.supporterBadgeHidden === true) out.supporterBadgeHidden = true
+  if (bag.directoryOptOut === true) out.directoryOptOut = true
   if (typeof bag.supporterBadgeMessage === 'string' && bag.supporterBadgeMessage.trim()) {
     out.supporterBadgeMessage = bag.supporterBadgeMessage.trim().slice(0, 60)
   }
