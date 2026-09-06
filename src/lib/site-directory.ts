@@ -1,8 +1,10 @@
 /**
  * Pure assembly logic for the public site directory (/api/sites.json).
  *
- * Split from the route so the URL/name/opt-out rules are unit-testable
- * without a database. The route does the Prisma queries and feeds rows in.
+ * Teacher sites only — org sites (including the eduskript.org default org,
+ * whose site would otherwise list the platform itself) are excluded by the
+ * route's query. Split from the route so the URL/name/opt-out rules are
+ * unit-testable without a database.
  */
 
 import { readExtraSettings } from '@/lib/settings'
@@ -25,11 +27,6 @@ export interface DirectorySiteRow {
   pageLanguage: string | null
   extraSettings: unknown
   user: { name: string | null } | null
-  organization: {
-    name: string
-    /** Verified org domains, primary first. */
-    customDomains: { domain: string }[]
-  } | null
   /** Verified teacher domains attached to THIS site (siteId set), primary first. */
   teacherCustomDomains: { domain: string }[]
 }
@@ -37,7 +34,7 @@ export interface DirectorySiteRow {
 const APP_HOST = 'eduskript.org'
 
 /**
- * Build directory entries from queried site rows.
+ * Build directory entries from queried teacher-site rows.
  *
  * `legacyDomainBySiteId` maps a site id to a verified TeacherCustomDomain
  * whose row predates multi-site (siteId null): those resolve to the user's
@@ -53,12 +50,10 @@ export function buildDirectoryEntries(
     if (readExtraSettings(site).directoryOptOut) continue
 
     const domain =
-      site.teacherCustomDomains[0]?.domain ??
-      legacyDomainBySiteId.get(site.id) ??
-      site.organization?.customDomains[0]?.domain
+      site.teacherCustomDomains[0]?.domain ?? legacyDomainBySiteId.get(site.id)
 
-    // eduskript.org itself can appear as the default org's CustomDomain row;
-    // normalize so the platform site doesn't get a "/slug"-less duplicate form.
+    // Guard against a domain row for the app host itself sneaking in — the
+    // /slug form is the only correct URL there.
     const url =
       domain && domain !== APP_HOST && domain !== `www.${APP_HOST}`
         ? `https://${domain}`
@@ -66,7 +61,7 @@ export function buildDirectoryEntries(
 
     entries.push({
       url,
-      name: site.pageName || site.user?.name || site.organization?.name || site.slug,
+      name: site.pageName || site.user?.name || site.slug,
       // Raw pageDescription — may contain inline markdown, consumers strip it.
       description: site.pageDescription || null,
       // BCP-47 tag as stored; null means English (schema convention).

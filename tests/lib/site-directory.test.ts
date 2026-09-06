@@ -11,7 +11,6 @@ function site(overrides: Partial<DirectorySiteRow> = {}): DirectorySiteRow {
     pageLanguage: 'de-CH',
     extraSettings: {},
     user: { name: 'Teacher' },
-    organization: null,
     teacherCustomDomains: [],
     ...overrides,
   }
@@ -45,27 +44,11 @@ describe('buildDirectoryEntries', () => {
     expect(entries[0].url).toBe('https://legacy-domain.ch')
   })
 
-  it('uses the org custom domain for org sites', () => {
+  it('falls back to /slug when a domain row is the app host itself', () => {
     const entries = buildDirectoryEntries([
-      site({
-        user: null,
-        userId: null,
-        organization: { name: 'School', customDomains: [{ domain: 'school.edu' }] },
-      }),
+      site({ teacherCustomDomains: [{ domain: 'eduskript.org' }] }),
     ])
-    expect(entries[0].url).toBe('https://school.edu')
-  })
-
-  it('falls back to /slug when the org domain is the app host itself', () => {
-    const entries = buildDirectoryEntries([
-      site({
-        slug: 'eduskript',
-        user: null,
-        userId: null,
-        organization: { name: 'Eduskript', customDomains: [{ domain: 'eduskript.org' }] },
-      }),
-    ])
-    expect(entries[0].url).toBe('https://eduskript.org/eduskript')
+    expect(entries[0].url).toBe('https://eduskript.org/my-site')
   })
 
   it('skips sites that opted out via extraSettings.directoryOptOut', () => {
@@ -77,13 +60,8 @@ describe('buildDirectoryEntries', () => {
     expect(entries[0].url).toBe('https://eduskript.org/other')
   })
 
-  it('falls back through pageName → user name → org name → slug', () => {
+  it('falls back through pageName → user name → slug', () => {
     expect(buildDirectoryEntries([site({ pageName: null })])[0].name).toBe('Teacher')
-    expect(
-      buildDirectoryEntries([
-        site({ pageName: null, user: null, organization: { name: 'Org', customDomains: [] } }),
-      ])[0].name
-    ).toBe('Org')
     expect(
       buildDirectoryEntries([site({ pageName: null, user: null })])[0].name
     ).toBe('my-site')

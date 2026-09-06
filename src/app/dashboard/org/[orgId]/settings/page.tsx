@@ -27,7 +27,6 @@ interface Organization {
   allowTeacherCustomDomains: boolean
   sidebarBehavior: string | null
   aiSystemPrompt: string | null
-  directoryListing: boolean
   billingPlan: string
   createdAt: string
   updatedAt: string
@@ -60,7 +59,6 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
     allowTeacherCustomDomains: false,
     sidebarBehavior: 'contextual' as string,
     aiSystemPrompt: '',
-    directoryListing: true,
   })
   const [uploadingIcon, setUploadingIcon] = useState(false)
   const [uploadingLogo, setUploadingLogo] = useState(false)
@@ -129,7 +127,6 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
           allowTeacherCustomDomains: data.organization.allowTeacherCustomDomains || false,
           sidebarBehavior: data.organization.sidebarBehavior || 'contextual',
           aiSystemPrompt: data.organization.aiSystemPrompt || '',
-          directoryListing: data.organization.directoryListing !== false,
         })
       } catch (err) {
         setError(err instanceof Error ? err.message : 'An error occurred')
@@ -165,7 +162,6 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
           allowTeacherCustomDomains: formData.allowTeacherCustomDomains,
           sidebarBehavior: formData.sidebarBehavior,
           aiSystemPrompt: formData.aiSystemPrompt || null,
-          directoryListing: formData.directoryListing,
         }),
       })
 
@@ -444,23 +440,6 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
                 <p className="text-xs text-muted-foreground">Wide image, transparent background recommended. Max 2MB. Drag and drop, or click to browse.</p>
               </div>
             )}
-          </div>
-
-          <div className="flex items-center justify-between border-t pt-6">
-            <div className="space-y-0.5">
-              <Label htmlFor="directoryListing">List site in public directories</Label>
-              <p className="text-xs text-muted-foreground">
-                Include this site in public site directories (e.g. Atlas, the
-                teaching-materials collection for Gymnasien).
-              </p>
-            </div>
-            <Switch
-              id="directoryListing"
-              checked={formData.directoryListing}
-              onCheckedChange={(checked) =>
-                setFormData({ ...formData, directoryListing: checked })
-              }
-            />
           </div>
 
           <div className="border-t pt-6">

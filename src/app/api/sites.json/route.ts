@@ -8,10 +8,12 @@ import { buildDirectoryEntries, type DirectoryEntry } from '@/lib/site-directory
  * GET /api/sites.json — public directory of all publicly reachable sites,
  * for external services (Atlas and friends) that crawl it ~daily.
  *
- * A site is "public" when at least one of its collections contains a
- * published, listed skript — the same isPublished/isUnlisted criteria the
- * sitemap uses. Sites can opt out via extraSettings.directoryOptOut
- * ("List this site in public directories" toggle in site/org settings).
+ * Teacher sites only — org sites are excluded, notably the eduskript.org
+ * default org, whose site is the platform itself. A site is "public" when at
+ * least one of its collections contains a published, listed skript — the
+ * same isPublished/isUnlisted criteria the sitemap uses. Sites can opt out
+ * via extraSettings.directoryOptOut ("List site in public directories"
+ * toggle in site settings).
  *
  * No auth. Response shape is a stable contract:
  *   { "version": 1, "sites": [{ url, name, description, language }] }
@@ -22,6 +24,7 @@ const getDirectory = unstable_cache(
   async (): Promise<DirectoryEntry[]> => {
     const sites = await prisma.site.findMany({
       where: {
+        organizationId: null,
         collections: {
           some: {
             collectionSkripts: {
@@ -39,16 +42,6 @@ const getDirectory = unstable_cache(
         pageLanguage: true,
         extraSettings: true,
         user: { select: { name: true } },
-        organization: {
-          select: {
-            name: true,
-            customDomains: {
-              where: { isVerified: true },
-              orderBy: { isPrimary: 'desc' },
-              select: { domain: true },
-            },
-          },
-        },
         teacherCustomDomains: {
           where: { isVerified: true },
           orderBy: { isPrimary: 'desc' },
