@@ -13,6 +13,8 @@ interface PictureDialogProps {
   skriptId?: string
   /** Called with the markdown to insert (`![](url-or-filename)`). */
   onInsert: (markdown: string) => void
+  /** Called after a successful upload so the caller can refresh its file list. */
+  onUploaded?: () => void
 }
 
 /**
@@ -20,7 +22,7 @@ interface PictureDialogProps {
  * the file is uploaded to the skript's files (same /api/upload call as paste
  * upload in editor-with-media.tsx) and embedded by name.
  */
-export function PictureDialog({ open, onOpenChange, skriptId, onInsert }: PictureDialogProps) {
+export function PictureDialog({ open, onOpenChange, skriptId, onInsert, onUploaded }: PictureDialogProps) {
   const [url, setUrl] = useState('')
   const [dragOver, setDragOver] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -63,6 +65,7 @@ export function PictureDialog({ open, onOpenChange, skriptId, onInsert }: Pictur
       }
       const uploaded = await response.json()
       onInsert(`![](${uploaded.name ?? file.name})`)
+      onUploaded?.()
       window.dispatchEvent(new Event('sidebar:refresh'))
       handleOpenChange(false)
     } catch (e) {

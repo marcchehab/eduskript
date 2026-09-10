@@ -2543,6 +2543,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
         onOpenChange={setPictureDialogOpen}
         skriptId={skriptId}
         onInsert={(md) => insertBlockTemplate(`${md}\n`)}
+        onUploaded={onFileUpload}
       />
 
       <VideoPickDialog
