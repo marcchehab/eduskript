@@ -231,7 +231,7 @@ export function PageBuilder({
             <p className="text-xs text-muted-foreground">
               💡 New to Eduskript?{" "}
               <a
-                href="https://eduskript.org/c/first-steps"
+                href="https://eduskript.org/en/first-steps"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="underline underline-offset-2 hover:text-foreground"

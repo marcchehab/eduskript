@@ -1,14 +1,19 @@
 {
   "collections": [
     {
+      "title": "Benutzerhandbuch",
+      "description": "Vollständige Anleitung für Lehrpersonen, die Eduskript verwenden.",
+      "skripts": ["de/erste-schritte", "de/inhalte-schreiben", "de/komponenten", "de/organisation"]
+    },
+    {
       "title": "User Manual",
-      "slug": "manual",
+      "site": "en",
       "description": "Complete guide for teachers using Eduskript.",
-      "skripts": ["writing-content", "components", "organization"]
+      "skripts": ["first-steps", "writing-content", "components", "organization"]
     },
     {
       "title": "Developer Guide",
-      "slug": "dev",
+      "site": "en",
       "description": "For contributors: setup, extend, and contribute.",
       "skripts": ["getting-started", "extending", "internals", "contributing", "future-ideas"]
     }

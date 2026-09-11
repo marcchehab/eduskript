@@ -398,7 +398,7 @@ export function OnboardingQuestWidget() {
             we doubled your trial time.
           </p>
           <a
-            href="https://eduskript.org/c/first-steps"
+            href="https://eduskript.org/en/first-steps"
             target="_blank"
             rel="noopener noreferrer"
             className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"

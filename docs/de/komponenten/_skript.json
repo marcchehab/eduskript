@@ -1,0 +1,5 @@
+{
+  "title": "Komponenten",
+  "description": "Jede eingebaute Komponente: Callouts, Mathematik, lauffähige Code-Editoren, SQL-Studio, automatische Bewertung, Video, Plugins, Quiz und Tabs.",
+  "copyFilesFrom": "components"
+}
