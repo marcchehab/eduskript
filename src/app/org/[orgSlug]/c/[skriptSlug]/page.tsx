@@ -47,17 +47,25 @@ export async function generateMetadata({ params }: SkriptPageProps): Promise<Met
     })
     const orgAdminIds = adminMembers.map(m => m.userId)
 
-    const skript = await prisma.skript.findFirst({
-      where: {
-        slug: skriptSlug,
-        OR: [
-          { authors: { some: { userId: { in: orgAdminIds } } } },
-          { collectionSkripts: { some: { collection: { site: { organizationId: organization.id } } } } },
-          { collectionSkripts: { some: { collection: { site: { userId: { in: orgAdminIds } } } } } }
-        ]
-      },
-      select: { title: true }
-    })
+    // Same-slug skripts can exist on an admin's own site; prefer the org's.
+    const skript =
+      (await prisma.skript.findFirst({
+        where: {
+          slug: skriptSlug,
+          collectionSkripts: { some: { collection: { site: { organizationId: organization.id } } } },
+        },
+        select: { title: true }
+      })) ??
+      (await prisma.skript.findFirst({
+        where: {
+          slug: skriptSlug,
+          OR: [
+            { authors: { some: { userId: { in: orgAdminIds } } } },
+            { collectionSkripts: { some: { collection: { site: { userId: { in: orgAdminIds } } } } } }
+          ]
+        },
+        select: { title: true }
+      }))
 
     if (!skript) {
       return { title: 'Skript Not Found' }
@@ -120,36 +128,38 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
   })
   const adminUserIds = adminMembers.map(m => m.userId)
 
-  // Find skript by slug scoped to org admins
-  const skript = await prisma.skript.findFirst({
-    where: {
-      slug: skriptSlug,
-      OR: [
-        { authors: { some: { userId: { in: adminUserIds } } } },
-        { collectionSkripts: { some: { collection: { site: { organizationId: organization.id } } } } },
-        { collectionSkripts: { some: { collection: { site: { userId: { in: adminUserIds } } } } } }
-      ]
+  // Find skript by slug scoped to org admins. Skript.slug is not unique: an
+  // admin's own site may carry a same-slug skript, so candidates linked to an
+  // org-site collection win over admin-site / admin-authored ones.
+  const skriptInclude = {
+    collectionSkripts: {
+      include: { collection: true },
+      orderBy: { order: 'asc' as const },
+      take: 1,
     },
-    include: {
-      collectionSkripts: {
-        include: {
-          collection: true
-        },
-        orderBy: { order: 'asc' },
-        take: 1,
-      },
-      pages: {
-        orderBy: { order: 'asc' },
-        select: {
-          id: true,
-          title: true,
-          slug: true,
-          order: true,
-          isPublished: true
-        }
-      }
+    pages: {
+      orderBy: { order: 'asc' as const },
+      select: { id: true, title: true, slug: true, order: true, isPublished: true }
     }
-  })
+  }
+  const skript =
+    (await prisma.skript.findFirst({
+      where: {
+        slug: skriptSlug,
+        collectionSkripts: { some: { collection: { site: { organizationId: organization.id } } } },
+      },
+      include: skriptInclude,
+    })) ??
+    (await prisma.skript.findFirst({
+      where: {
+        slug: skriptSlug,
+        OR: [
+          { authors: { some: { userId: { in: adminUserIds } } } },
+          { collectionSkripts: { some: { collection: { site: { userId: { in: adminUserIds } } } } } }
+        ]
+      },
+      include: skriptInclude,
+    }))
 
   if (!skript) {
     notFound()

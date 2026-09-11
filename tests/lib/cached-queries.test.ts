@@ -39,6 +39,7 @@ vi.mock('@/lib/prisma', () => ({
     },
     skript: {
       findFirst: vi.fn(),
+      findMany: vi.fn(),
     },
     pageLayout: {
       findFirst: vi.fn(),
@@ -366,7 +367,7 @@ describe('getOrgPublishedPage - Access Control', () => {
   })
 
   it('should return null when skript not found', async () => {
-    vi.mocked(prisma.skript.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.skript.findMany).mockResolvedValue([])
     vi.mocked(prisma.organizationMember.findMany).mockResolvedValue([
       { userId: 'admin-1' }
     ])
@@ -381,7 +382,7 @@ describe('getOrgPublishedPage - Access Control', () => {
       { userId: 'admin-1' }
     ])
     // findFirst with isPublished: true in where clause returns null for unpublished skripts
-    vi.mocked(prisma.skript.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.skript.findMany).mockResolvedValue([])
 
     const result = await getOrgPublishedPage('org-1', 'my-org', 'algebra', 'intro')
 
@@ -404,7 +405,7 @@ describe('getOrgPublishedPage - Access Control', () => {
       { userId: 'admin-1' }
     ])
 
-    vi.mocked(prisma.skript.findFirst).mockResolvedValue({
+    vi.mocked(prisma.skript.findMany).mockResolvedValue([{
       id: 'skript-1',
       title: 'Algebra',
       slug: 'algebra',
@@ -423,7 +424,7 @@ describe('getOrgPublishedPage - Access Control', () => {
         },
       }],
       pages: [mockPage],
-    })
+    }])
 
     // Org page layout (now in the unified table, keyed by siteId) contains
     // this collection.
@@ -450,7 +451,7 @@ describe('getOrgPublishedPage - Access Control', () => {
       { userId: 'admin-1' }
     ])
 
-    vi.mocked(prisma.skript.findFirst).mockResolvedValue({
+    vi.mocked(prisma.skript.findMany).mockResolvedValue([{
       id: 'skript-1',
       title: 'Secret Skript',
       slug: 'secret-skript',
@@ -478,7 +479,7 @@ describe('getOrgPublishedPage - Access Control', () => {
         pageType: 'normal',
         examSettings: null,
       }],
-    })
+    }])
 
     // Org page layout only has "tutorial-collection"
     vi.mocked(prisma.pageLayout.findFirst).mockResolvedValue({

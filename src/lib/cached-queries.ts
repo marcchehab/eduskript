@@ -751,8 +751,11 @@ export const getOrgPublishedPage = (
       })
       const adminUserIds = adminMembers.map(m => m.userId)
 
-      // Find skript by slug scoped to org admins
-      const skript = await prisma.skript.findFirst({
+      // Find skript by slug scoped to org admins. Skript.slug is not unique:
+      // an admin's own site may carry a same-slug skript (informatikgarten
+      // has "komponenten" next to the org's "komponenten"), so collect every
+      // candidate and pick the one reachable from the org layout below.
+      const candidates = await prisma.skript.findMany({
         where: {
           slug: skriptSlug,
           isPublished: true,
@@ -790,7 +793,7 @@ export const getOrgPublishedPage = (
         }
       })
 
-      if (!skript) return null
+      if (candidates.length === 0) return null
 
       // The skript has to be reachable from the org's home page — either as a
       // root skript pinned directly in the org's page layout, or via a
@@ -812,18 +815,16 @@ export const getOrgPublishedPage = (
       const layoutSkriptIds = new Set(
         orgPageLayout.items.filter(i => i.type === 'skript').map(i => i.contentId)
       )
+      const skript = candidates.find(c =>
+        layoutSkriptIds.has(c.id) ||
+        c.collectionSkripts.some(cs => layoutCollectionIds.has(cs.collection.id))
+      )
+      if (!skript) return null
       // Prefer the membership whose collection is in the org nav (drives the
       // breadcrumb/structure); fall back to the first membership for display.
       const collectionSkript =
         skript.collectionSkripts.find(cs => layoutCollectionIds.has(cs.collection.id))
         ?? skript.collectionSkripts[0]
-      const reachableViaCollection = skript.collectionSkripts.some(
-        cs => layoutCollectionIds.has(cs.collection.id)
-      )
-      const reachableAsRootSkript = layoutSkriptIds.has(skript.id)
-      if (!reachableViaCollection && !reachableAsRootSkript) {
-        return null
-      }
 
       const page = skript.pages.find(p => p.slug === pageSlug)
       if (!page) return null
