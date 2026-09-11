@@ -10,6 +10,7 @@ import { getTeacherSidebarData } from '@/lib/sidebar-items'
 import { CurrentSiteProvider } from '@/contexts/current-site-context'
 import { getPublicLayers, EMPTY_PUBLIC_LAYERS } from '@/lib/public-page-data'
 import { readExtraSettings } from '@/lib/settings'
+import { plainInlineText } from '@/lib/markdown'
 
 // ISR: published content only and no session read, so the response is the same
 // for every visitor. Next.js 16 needs generateStaticParams() — even empty — or
@@ -70,7 +71,7 @@ export async function generateMetadata({ params }: OrgTeacherPageProps): Promise
     }
 
     const title = `${teacher.sites[0]?.pageName || teacher.name || 'Teacher'} | ${organization.name}`
-    const description = teacher.sites[0]?.pageDescription || teacher.bio || `Educational content by ${teacher.name}`
+    const description = (teacher.sites[0]?.pageDescription && plainInlineText(teacher.sites[0].pageDescription)) || teacher.bio || `Educational content by ${teacher.name}`
 
     return {
       title,

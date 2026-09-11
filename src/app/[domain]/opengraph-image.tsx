@@ -1,6 +1,7 @@
 import { ImageResponse } from 'next/og'
 import { OG_SIZE, OG_CONTENT_TYPE, OgLayout, ogFonts } from '@/lib/seo/og-layout'
 import { getTeacherByUsernameDeduped } from '@/lib/cached-queries'
+import { plainInlineText } from '@/lib/markdown'
 
 export const runtime = 'nodejs'
 export const size = OG_SIZE
@@ -18,7 +19,7 @@ export default async function Image({ params }: Params) {
   const title = teacher?.pageName || teacher?.name || 'Eduskript'
   const subtitle =
     teacher?.pageTagline ||
-    teacher?.pageDescription ||
+    (teacher?.pageDescription && plainInlineText(teacher.pageDescription)) ||
     teacher?.bio ||
     null
 

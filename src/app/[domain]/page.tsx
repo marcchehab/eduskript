@@ -8,7 +8,7 @@ import { getTeacherByUsernameDeduped } from '@/lib/cached-queries'
 import { prisma } from '@/lib/prisma'
 import { canonicalUrl, canonicalBase } from '@/lib/seo/canonical'
 import { JsonLd, personSchema } from '@/lib/seo/json-ld'
-import { generateExcerpt } from '@/lib/markdown'
+import { generateExcerpt, plainInlineText } from '@/lib/markdown'
 import { getPublicLayers, EMPTY_PUBLIC_LAYERS } from '@/lib/public-page-data'
 
 // ISR: cached until explicitly invalidated. Next.js 16 requires
@@ -55,7 +55,7 @@ export async function generateMetadata({ params }: DomainIndexProps): Promise<Me
     const title = primaryDomain && teacher.pageTagline
       ? `${baseTitle} — ${teacher.pageTagline}`
       : baseTitle
-    const description = teacher.pageDescription || teacher.bio || `Educational content by ${teacher.pageName || teacher.name}`
+    const description = (teacher.pageDescription && plainInlineText(teacher.pageDescription)) || teacher.bio || `Educational content by ${teacher.pageName || teacher.name}`
 
     // og:image: explicit URL built from the canonical so multi-tenant custom
     // domains don't ship the proxy-prepended `/<pageSlug>/` prefix that

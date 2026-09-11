@@ -88,6 +88,19 @@ export function generateExcerpt(content: string, maxLength: number = 160): strin
 }
 
 /**
+ * Plain-text form of a one-line inline-markdown field (site slugline, page
+ * description) for <meta> descriptions and OG images. Mirrors what
+ * InlineMarkdown (src/components/ui/inline-markdown.tsx) interprets: strips
+ * <nobr> tags and reduces `[text](url)` links to their text. Other HTML is
+ * left as-is, matching the on-page rendering.
+ */
+export function plainInlineText(text: string): string {
+  return text
+    .replace(/<\/?nobr>/gi, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+}
+
+/**
  * Generate a URL-friendly slug from a title.
  *
  * Transforms: "My Collection Title!" → "my-collection-title"

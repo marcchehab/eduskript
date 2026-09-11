@@ -1,6 +1,7 @@
 import { ImageResponse } from 'next/og'
 import { OG_SIZE, OG_CONTENT_TYPE, OgLayout, ogFonts } from '@/lib/seo/og-layout'
 import { prisma } from '@/lib/prisma'
+import { plainInlineText } from '@/lib/markdown'
 
 export const runtime = 'nodejs'
 export const size = OG_SIZE
@@ -32,7 +33,7 @@ export default async function Image({ params }: Params) {
     : (orgSite?.organization?.name || 'Eduskript')
   const subtitle = orgSlug === 'eduskript'
     ? 'Open-source platform for interactive lessons.'
-    : (orgSite?.pageTagline || orgSite?.pageDescription || null)
+    : (orgSite?.pageTagline || (orgSite?.pageDescription && plainInlineText(orgSite.pageDescription)) || null)
   const iconUrl = orgSite?.showIcon ? orgSite?.pageIcon : null
 
   return new ImageResponse(

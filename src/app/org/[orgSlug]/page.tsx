@@ -12,6 +12,7 @@ import { prisma } from '@/lib/prisma'
 import { canonicalUrl, canonicalBase } from '@/lib/seo/canonical'
 import { JsonLd, organizationSchema } from '@/lib/seo/json-ld'
 import { getPublicLayers, EMPTY_PUBLIC_LAYERS } from '@/lib/public-page-data'
+import { plainInlineText } from '@/lib/markdown'
 
 // ISR: published content only and no session read, so every visitor gets the
 // same HTML. Next.js 16 needs generateStaticParams() — even empty — or a
@@ -90,7 +91,7 @@ export async function generateMetadata({ params }: OrgPageProps): Promise<Metada
       : orgSlug === 'eduskript'
         ? 'Eduskript — Open-Source Platform for Interactive Lessons'
         : organization.name
-    const description = organization.description || `${organization.name} on Eduskript`
+    const description = (organization.description && plainInlineText(organization.description)) || `${organization.name} on Eduskript`
 
     // og:image: explicit URL from canonical so custom-domain orgs don't ship
     // the proxy-prepended `/org/<orgSlug>/` prefix that Next's auto-detected
