@@ -1,7 +1,8 @@
 /**
- * Two seeders, both cloning skripts owned by Marc/informatikgarten, picking
- * English or German by the user's Site.pageLanguage (BCP-47, null/non-"de" =
- * English):
+ * Two seeders, both cloning the manual skripts that scripts/sync-docs.mjs
+ * keeps in sync from docs/ (German on the eduskript.org org site, English on
+ * the "en" site), picking English or German by the user's Site.pageLanguage
+ * (BCP-47, null/non-"de" = English):
  *
  * - seedDemoContent: the full "User Manual" / "Benutzerhandbuch" collection
  *   (4 skripts + pages), placed straight onto the page layout. Used only by
@@ -23,18 +24,17 @@ const PRIMARY_SITE_ORDER = [{ order: 'asc' as const }, { createdAt: 'asc' as con
 type PrismaLike = any
 
 // Slugs of the template skripts, in display order, that make up the
-// "User Manual" / "Benutzerhandbuch" collection (owned by Marc/
-// informatikgarten). Edit their content via the dashboard — this file only
-// clones them.
-const TEMPLATE_SKRIPT_SLUGS_EN = ['welcome', 'writing-content', 'components', 'classes-and-exams']
-const TEMPLATE_SKRIPT_SLUGS_DE = ['willkommen', 'inhalte-schreiben', 'komponenten', 'klassen-und-pruefungen']
+// "User Manual" / "Benutzerhandbuch" collection. These are the docs-synced
+// skripts (docs/<dir> and docs/de/<dir> — slug = directory basename); edit
+// them in docs/, never online. This file only clones them.
+const TEMPLATE_SKRIPT_SLUGS_EN = ['first-steps', 'writing-content', 'components', 'organization']
+const TEMPLATE_SKRIPT_SLUGS_DE = ['erste-schritte', 'inhalte-schreiben', 'komponenten', 'organisation']
 
 const COLLECTION_TITLE_EN = 'User Manual'
 const COLLECTION_TITLE_DE = 'Benutzerhandbuch'
 
 // The single starter skript seeded at signup (see seedOnboardingSkript).
-// Marc is actively adapting these two skripts' content — if he renames
-// either skript's slug via the dashboard, update these to match.
+// If a directory in docs/ is renamed, update these to match.
 const ONBOARDING_SKRIPT_SLUG_EN = 'first-steps'
 const ONBOARDING_SKRIPT_SLUG_DE = 'erste-schritte'
 
@@ -207,17 +207,28 @@ export async function resetDemoUser(prisma: PrismaLike): Promise<SeedResult & { 
 
 /**
  * Read a template skript's metadata + pages from the DB. The templates are
- * the 8 skripts (4 English + 4 German) in Marc's "User Manual" /
- * "Benutzerhandbuch" collections, editable via the dashboard.
+ * the docs-synced skripts (4 English + 4 German), see TEMPLATE_SKRIPT_SLUGS_*.
+ *
+ * Skript.slug is NOT unique (only [skriptId, slug] on Page is): a teacher's
+ * own skript can share the slug — informatikgarten has its own "komponenten",
+ * "inhalte-schreiben", "erste-schritte" next to the org's German manual. So
+ * collect every candidate and prefer the one placed in a collection on an
+ * org-owned site (the docs-synced German manual). The English templates live
+ * on a teacher-owned site ("en") and have no same-slug twin, so they fall
+ * through to the oldest candidate.
  */
 async function readTemplateSkript(
   prisma: PrismaLike,
   slug: string
 ): Promise<{ title: string; description?: string; pages: PageData[] }> {
-  // findFirst, not findUnique — Skript.slug has no @unique constraint at the
-  // schema level (only [skriptId, slug] on Page is unique).
-  const skript = await prisma.skript.findFirst({
+  const candidates: Array<{
+    title: string
+    description?: string
+    pages: PageData[]
+    collectionSkripts: Array<{ collection: { site: { organizationId: string | null } } }>
+  }> = await prisma.skript.findMany({
     where: { slug },
+    orderBy: { createdAt: 'asc' },
     select: {
       title: true,
       description: true,
@@ -225,12 +236,18 @@ async function readTemplateSkript(
         orderBy: { order: 'asc' },
         select: { slug: true, title: true, content: true, order: true },
       },
+      collectionSkripts: {
+        select: { collection: { select: { site: { select: { organizationId: true } } } } },
+      },
     },
   })
+  const skript =
+    candidates.find(c => c.collectionSkripts.some(cs => cs.collection.site.organizationId)) ??
+    candidates[0]
   if (!skript) {
     throw new Error(`Template skript not found: ${slug}`)
   }
-  return skript
+  return { title: skript.title, description: skript.description, pages: skript.pages }
 }
 
 /**
