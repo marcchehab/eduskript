@@ -144,7 +144,11 @@ export default async function OrgTeacherContentPage({ params }: PageProps) {
     pageSlug: teacherSite?.slug || pageSlug,
     pageName: teacherSite?.pageName || null,
     pageDescription: teacherSite?.pageDescription || null,
-    pageIcon: teacherSite?.pageIcon || null,
+    // A teacher site without its own icon inherits the org's icon on the
+    // org route (eduskript.org/<slug>); the first-letter fallback only
+    // applies when the org has none either. Custom hosts ([domain]) have no
+    // org context and keep the letter fallback.
+    pageIcon: teacherSite?.pageIcon || organization.iconUrl || null,
     titleStyle: teacherSiteExtra.titleStyle ?? 'icon',
     logoUrl: teacherSiteExtra.logoUrl ?? null,
     bio: teacher.bio || null,
