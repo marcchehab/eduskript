@@ -12,8 +12,13 @@
  * lets legacy content auto-theme via the rewriter.
  */
 
-/** Foreground (text) palette names — class is `es-color-${name}`. */
+/**
+ * Foreground (text) palette names — class is `es-color-${name}`.
+ * `text` is the page's normal text color (--foreground), for components that
+ * want "whatever body text is" as a palette value (e.g. <banner text="text">).
+ */
 export const TEXT_COLOR_NAMES = [
+  'text',
   'cyan',
   'lightgreen',
   'green',
@@ -25,8 +30,14 @@ export const TEXT_COLOR_NAMES = [
   'lightblue',
 ] as const
 
-/** Highlight (background) palette names — class is `es-bg-${name}`. */
+/**
+ * Highlight (background) palette names — class is `es-bg-${name}`.
+ * `paper` is the page background (--card), `muted` the UI's muted surface
+ * (--muted) — theme surfaces rather than tints, for <banner color="…"> etc.
+ */
 export const HIGHLIGHT_COLOR_NAMES = [
+  'paper',
+  'muted',
   'yellow',
   'green',
   'blue',

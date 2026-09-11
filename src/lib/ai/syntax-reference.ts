@@ -517,7 +517,7 @@ New: [Atlas](https://atlas.eduskript.org) maps every public Eduskript site.
 <banner id="atlas-2026" dismissible="false" color="#2563eb" text="white">…</banner>
 \`\`\`
 
-**Attributes (all optional):** \`id\` — keys the viewer's dismiss state (default: hash of the text, so new wording re-shows it); \`dismissible\` — \`false\` removes the close button; \`color\` — background, any CSS color (default orange); \`text\` — text/link color (default white). Dismissal is stored per browser in localStorage.`)
+**Attributes (all optional):** \`id\` — keys the viewer's dismiss state (default: hash of the text, so new wording re-shows it); \`dismissible\` — \`false\` removes the close button; \`color\` — background: a palette name (\`paper\` = page background, \`muted\` = muted UI surface, or \`yellow|green|blue|pink|orange|red|purple\` translucent tints; all theme-aware) or any CSS color (default orange); \`text\` — text/link color: a text palette name (\`text\` = the page's normal text color, or \`red|blue|green|orange|purple|…\`; all theme-aware) or any CSS color (default white). Dismissal is stored per browser in localStorage.`)
 
   // AI feedback
   sections.push(`## AI Feedback
@@ -878,7 +878,7 @@ export function getCondensedSyntaxReference(): string {
 
 **Newsletter:** \`<newsletter [title="..."] [description="..."] [button="..."] />\` — email capture; addresses go to the site's Brevo list, which owns confirmation and unsubscribe.
 
-**Banner:** \`<banner [id="..."] [dismissible="false"] [color="#2563eb"] [text="white"]>inline markdown</banner>\` on its own lines, first on the page — sticky announcement bar at the top edge; viewers can dismiss it (remembered per browser, keyed by id or text).
+**Banner:** \`<banner [id="..."] [dismissible="false"] [color="orange|muted|paper|#hex"] [text="text|red|#hex"]>inline markdown</banner>\` on its own lines, first on the page — sticky announcement bar at the top edge; viewers can dismiss it (remembered per browser, keyed by id or text).
 
 **AI feedback:** \`<ai-feedback prompt="teacher instructions for the AI" [id="fb1"] [label="Check my solution"] />\` — button for students: sends their pen strokes in the surrounding h1/h2/h3 section (rendered to an image) + the section markdown to a vision model for feedback; pasting a screenshot (hover box, Ctrl+V) works as alternative input. Several tags per page map to their prompts by position (\`id\` optional); no login required.
 

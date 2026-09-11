@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { QuestSpotlight } from '@/components/onboarding/quest-spotlight'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
-import { Eye, EyeOff, Pencil, Code, Bold, Italic, Heading, MessageSquare, Heading1, Heading2, Heading3, List, ListOrdered, Link, Palette, Highlighter, Circle, Wand2, ChevronDown, FilePen, Minus, Plus, CircleHelp, TextQuote, Puzzle, Sigma, AlignLeft, AlignCenter, AlignRight, Compass, SeparatorHorizontal, ChartSpline, Table, Image as ImageIcon, Film, FileText, Columns2, Columns3, MoveHorizontal, Pin, AppWindow, Atom, FlaskConical, Terminal, Sparkles, MousePointerClick, ClipboardCheck, Music } from 'lucide-react'
+import { Eye, EyeOff, Pencil, Code, Bold, Italic, Heading, MessageSquare, Heading1, Heading2, Heading3, List, ListOrdered, Link, Palette, Highlighter, Circle, Wand2, ChevronDown, FilePen, Minus, Plus, CircleHelp, TextQuote, Puzzle, Sigma, AlignLeft, AlignCenter, AlignRight, Compass, SeparatorHorizontal, ChartSpline, Table, Image as ImageIcon, Film, FileText, Columns2, Columns3, MoveHorizontal, Pin, AppWindow, Atom, FlaskConical, Terminal, Sparkles, MousePointerClick, ClipboardCheck, Music, Megaphone } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1533,6 +1533,21 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   const insertFlex = () => insertBlockTemplate('\n<flex>\n<flex-item>\n\nLeft column — put text, images, or any markdown here.\n\n</flex-item>\n<flex-item>\n\nRight column — the columns share the width equally.\n\n</flex-item>\n</flex>\n')
   const insertFullwidth = () => insertBlockTemplate('\n<fullwidth>\n\n</fullwidth>\n')
   const insertStickme = () => insertBlockTemplate('\n<stickme>\n\n</stickme>\n')
+  // <banner> goes to the TOP of the document, not the cursor: it only sits
+  // flush with the paper edge as the first element (see .es-banner CSS).
+  // Layout tab is CodeMirror-only, so no textarea branch.
+  const insertBanner = () => {
+    const view = editorViewRef.current
+    if (!view) return
+    const template = '<banner>\n\n</banner>\n\n'
+    view.dispatch({
+      changes: { from: 0, insert: template },
+      selection: { anchor: '<banner>\n'.length },
+      scrollIntoView: true,
+    })
+    onChange(view.state.doc.toString())
+    view.focus()
+  }
   const insertTabsContainer = () => insertBlockTemplate('\n<tabs-container data-items=\'["Tab 1","Tab 2"]\'>\n<tab-item>\n\n</tab-item>\n<tab-item>\n\n</tab-item>\n</tabs-container>\n')
   const insertSqlEditor = () => insertBlockTemplate(`\`\`\`sql editor id="${generateId()}" db=""\nSELECT name FROM sqlite_master WHERE type='table' ORDER BY name;\n\`\`\`\n`)
   const insertHtmlEditor = () => insertBlockTemplate(`\`\`\`html editor id="${generateId()}"\n<h1>Hello!</h1>\n\`\`\`\n`)
@@ -2320,6 +2335,9 @@ const CodeMirrorEditor = function CodeMirrorEditor({
                   <RibbonBigButton icon={<MoveHorizontal />} label="Full width" title="Edge-to-edge container" onClick={insertFullwidth} />
                   <RibbonBigButton icon={<Pin />} label="Pin to margin" title="Pin content to the margin while scrolling (stickme)" onClick={insertStickme} />
                   <RibbonBigButton icon={<SeparatorHorizontal />} label="Spacer" title="Add a blank spacer (vertical whitespace)" onClick={() => insertSpacer('blank')} />
+                </RibbonGroup>
+                <RibbonGroup caption="Page">
+                  <RibbonBigButton icon={<Megaphone />} label="Banner" title="Sticky announcement bar at the top of the page (banner)" onClick={insertBanner} />
                 </RibbonGroup>
               </>
             ),

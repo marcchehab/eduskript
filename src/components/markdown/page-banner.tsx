@@ -6,6 +6,8 @@
  *   <banner>New: [Atlas](https://atlas.eduskript.org) maps every public skript.</banner>
  *   <banner id="atlas" dismissible="false">…</banner>
  *   <banner color="#2563eb" text="white">…</banner>
+ *   <banner color="orange" text="text">…</banner>  (palette names → theme vars;
+ *                                                   text = normal text color)
  *
  * Per-page, not site-wide: it lives in the page's markdown like any other
  * component. Layout is CSS (`.es-banner` in globals.css): position sticky so
@@ -24,14 +26,24 @@
 
 import { useCallback, useSyncExternalStore } from 'react'
 import { X } from 'lucide-react'
+import { resolveHighlightColor, resolveTextColor } from '@/lib/color-palette'
 
 interface PageBannerProps {
   id?: string
   /** Any value except "false" shows the close button (default: shown). */
   dismissible?: string | boolean
-  /** Background, any CSS color (default: orange, see .es-banner in globals.css). */
+  /**
+   * Background: a highlight palette name (paper/muted = theme surfaces;
+   * yellow/green/blue/pink/orange/red/purple = the same tints as text
+   * highlights; all → --es-bg-*) or any CSS color. Default: orange, see
+   * .es-banner in globals.css.
+   */
   color?: string
-  /** Text + link color, any CSS color (default: white). */
+  /**
+   * Text + link color: a text palette name (text/red/blue/green/… →
+   * --es-color-*; `text` is the page's normal text color) or any CSS color.
+   * Default: white.
+   */
   text?: string
   children?: React.ReactNode
   className?: string
@@ -105,9 +117,24 @@ export function PageBanner({ id, dismissible, color, text, children, className, 
   const dismiss = () => writeDismissed(storageKey)
 
   // Inline styles beat the .es-banner defaults; links inherit via currentColor.
+  // Palette names resolve to the same theme vars rehypeColorClasses uses —
+  // that plugin runs before React and never sees these props, so map here.
   const style: React.CSSProperties = {}
-  if (color) style.backgroundColor = color
-  if (text) style.color = text
+  if (color) {
+    const name = resolveHighlightColor(color)
+    if (name) {
+      // Highlight tints are translucent (rgba, alpha ≈ 0.3): as a sticky bar
+      // the page would show through. Composite the tint over the paper color.
+      style.backgroundColor = 'var(--es-bg-paper)'
+      style.backgroundImage = `linear-gradient(var(--es-bg-${name}), var(--es-bg-${name}))`
+    } else {
+      style.backgroundColor = color
+    }
+  }
+  if (text) {
+    const name = resolveTextColor(text)
+    style.color = name ? `var(--es-color-${name})` : text
+  }
 
   return (
     <div

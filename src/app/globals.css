@@ -338,6 +338,16 @@
  * reflow-mode override.
  * z-index stays below the annotation canvas (36–40) and the mobile sidebar
  * overlay (z-30).
+ *
+ * Sticky only while the sidebar is docked (>= 1344px, not .no-sidebar).
+ * Everywhere else the floating page controls (layout.tsx: fixed, top 2rem,
+ * ~2rem tall, z-50) sit right on the bar, and below 1280px the paper is
+ * transform: scale()d — sticky offsets are computed in unscaled layout px,
+ * so the bar visibly drifts by (1 - scale) × scrollTop instead of sticking.
+ * In those modes the bar is static and, as the first element, its top edge
+ * starts at --es-banner-clear (viewport px) so it clears the controls.
+ * --es-banner-top is the first-element margin-top; the overrides below only
+ * change that variable.
  */
 .es-banner {
   position: sticky;
@@ -379,6 +389,7 @@
 }
 /* 5px inset from the paper edges (padding values: px-48 / py-24). */
 #paper .es-banner {
+  --es-banner-top: calc(-6rem + 5px);
   margin-left: calc(-12rem + 5px);
   margin-right: calc(-12rem + 5px);
 }
@@ -386,15 +397,33 @@
    sentinel the annotation layer renders ahead of the content. */
 #paper .es-banner:first-child,
 #paper [data-section-id="paper-top"]:first-child + .es-banner {
-  margin-top: calc(-6rem + 5px);
+  margin-top: var(--es-banner-top);
 }
 .reflow-mode #paper .es-banner {
+  --es-banner-top: calc(-4rem + 5px);
   margin-left: calc(-1.25rem + 5px);
   margin-right: calc(-1.25rem + 5px);
 }
-.reflow-mode #paper .es-banner:first-child,
-.reflow-mode #paper [data-section-id="paper-top"]:first-child + .es-banner {
-  margin-top: calc(-4rem + 5px);
+/* Floating controls visible (see header comment). 72px viewport = controls'
+   bottom edge (2rem + ~2rem) plus a gap; divided by --paper-scale (unset = 1
+   above 1280px) to get the same distance in the scaled paper's layout px.
+   Reflow mode has no scale and 4rem top padding. */
+#scroll-container.no-sidebar .es-banner {
+  position: static;
+}
+#scroll-container.no-sidebar #paper .es-banner {
+  --es-banner-top: calc(72px / var(--paper-scale, 1) - 6rem);
+}
+@media (max-width: 1343px) {
+  .es-banner {
+    position: static;
+  }
+  #paper .es-banner {
+    --es-banner-top: calc(72px / var(--paper-scale, 1) - 6rem);
+  }
+  .reflow-mode #paper .es-banner {
+    --es-banner-top: calc(72px - 4rem);
+  }
 }
 @media print {
   .es-banner {
@@ -2486,6 +2515,7 @@ mark.text-highlight-orange {
  */
 :root {
   /* Foreground colors */
+  --es-color-text: hsl(var(--foreground)); /* the normal text color; --foreground already flips in .dark */
   --es-color-cyan: #0e7490;       /* cyan-700 */
   --es-color-lightgreen: #15803d; /* green-700 — "lightgreen" was unreadable on white, so we map it to a darker green */
   --es-color-green: #15803d;      /* green-700 */
@@ -2498,6 +2528,8 @@ mark.text-highlight-orange {
 
   /* Background highlight colors — share the user-highlight palette so
    * <span class="es-bg-NAME"> renders identically to mark.text-highlight-NAME. */
+  --es-bg-paper:  hsl(var(--card));  /* the paper (page) background; flips in .dark via --card */
+  --es-bg-muted:  hsl(var(--muted)); /* the UI's muted surface */
   --es-bg-yellow: var(--text-highlight-yellow);
   --es-bg-green:  var(--text-highlight-green);
   --es-bg-blue:   var(--text-highlight-blue);
@@ -2522,6 +2554,7 @@ mark.text-highlight-orange {
    * so dark-mode values follow the user-highlight palette automatically. */
 }
 
+.es-color-text       { color: var(--es-color-text); }
 .es-color-cyan       { color: var(--es-color-cyan); }
 .es-color-lightgreen { color: var(--es-color-lightgreen); }
 .es-color-green      { color: var(--es-color-green); }
@@ -2536,6 +2569,8 @@ mark.text-highlight-orange {
  * <mark> above. A fixed dark ink here (the previous behaviour, copied from
  * <mark>'s UA default) was unreadable in dark mode: near-black text on a
  * translucent highlight over a near-black page. */
+.es-bg-paper,
+.es-bg-muted,
 .es-bg-yellow,
 .es-bg-green,
 .es-bg-blue,
@@ -2544,6 +2579,8 @@ mark.text-highlight-orange {
 .es-bg-red,
 .es-bg-purple { color: inherit; }
 
+.es-bg-paper  { background-color: var(--es-bg-paper);  border-radius: 2px; padding: 0 1px; }
+.es-bg-muted  { background-color: var(--es-bg-muted);  border-radius: 2px; padding: 0 1px; }
 .es-bg-yellow { background-color: var(--es-bg-yellow); border-radius: 2px; padding: 0 1px; }
 .es-bg-green  { background-color: var(--es-bg-green);  border-radius: 2px; padding: 0 1px; }
 .es-bg-blue   { background-color: var(--es-bg-blue);   border-radius: 2px; padding: 0 1px; }
