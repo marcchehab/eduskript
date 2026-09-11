@@ -19,6 +19,8 @@ interface Organization {
   name: string
   slug: string
   description: string | null
+  pageTagline: string | null
+  pageLanguage: string | null
   showIcon: boolean
   iconUrl: string | null
   titleStyle: string
@@ -51,6 +53,8 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
   const [formData, setFormData] = useState({
     name: '',
     description: '',
+    pageTagline: '',
+    pageLanguage: '',
     showIcon: true,
     iconUrl: '',
     titleStyle: 'icon' as 'icon' | 'logo',
@@ -119,6 +123,8 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
         setFormData({
           name: data.organization.name,
           description: data.organization.description || '',
+          pageTagline: data.organization.pageTagline || '',
+          pageLanguage: data.organization.pageLanguage || '',
           showIcon: data.organization.showIcon ?? true,
           iconUrl: data.organization.iconUrl || '',
           titleStyle: data.organization.titleStyle === 'logo' ? 'logo' : 'icon',
@@ -154,6 +160,8 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
         body: JSON.stringify({
           name: formData.name,
           description: formData.description || null,
+          pageTagline: formData.pageTagline || null,
+          pageLanguage: formData.pageLanguage || null,
           showIcon: formData.showIcon,
           iconUrl: formData.iconUrl || null,
           titleStyle: formData.titleStyle,
@@ -226,6 +234,20 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
           </div>
 
           <div>
+            <Label htmlFor="pageTagline">Tagline</Label>
+            <Input
+              id="pageTagline"
+              value={formData.pageTagline}
+              onChange={(e) => setFormData({ ...formData, pageTagline: e.target.value })}
+              placeholder="e.g. Open-source platform for interactive lessons"
+              maxLength={120}
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Browser tab title and link preview become &quot;{formData.name || 'Name'}{formData.pageTagline ? ` — ${formData.pageTagline}` : ''}&quot;. Leave empty to use the name alone.
+            </p>
+          </div>
+
+          <div>
             <Label htmlFor="description">Description</Label>
             <Input
               id="description"
@@ -233,6 +255,35 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               placeholder="Brief description of the organization"
             />
+            <p className="text-xs text-muted-foreground mt-1">
+              Shown in the sidebar and used as the meta description for search engines and link previews.
+            </p>
+          </div>
+
+          <div>
+            <Label htmlFor="pageLanguage">Page Language</Label>
+            <Input
+              id="pageLanguage"
+              list="org-page-language-suggestions"
+              value={formData.pageLanguage}
+              onChange={(e) => setFormData({ ...formData, pageLanguage: e.target.value })}
+              placeholder="e.g. de-CH, en, fr-CH"
+              maxLength={35}
+            />
+            <datalist id="org-page-language-suggestions">
+              <option value="de-CH" />
+              <option value="de" />
+              <option value="fr-CH" />
+              <option value="fr" />
+              <option value="it-CH" />
+              <option value="it" />
+              <option value="en" />
+              <option value="en-US" />
+              <option value="en-GB" />
+            </datalist>
+            <p className="text-xs text-muted-foreground mt-1">
+              Sets the HTML lang attribute on all public pages of this organization (search engines, screen readers). Defaults to &quot;en&quot;.
+            </p>
           </div>
 
           <div className="space-y-4">

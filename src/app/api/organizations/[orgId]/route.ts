@@ -37,6 +37,8 @@ export async function GET(
             select: {
               slug: true,
               pageDescription: true,
+              pageTagline: true,
+              pageLanguage: true,
               showIcon: true,
               pageIcon: true,
               sidebarBehavior: true,
@@ -79,6 +81,8 @@ export async function GET(
       ...organization,
       slug: organization.site?.slug ?? '',
       description: organization.site?.pageDescription ?? null,
+      pageTagline: organization.site?.pageTagline ?? null,
+      pageLanguage: organization.site?.pageLanguage ?? null,
       showIcon: organization.site?.showIcon ?? true,
       iconUrl: organization.site?.pageIcon ?? null,
       sidebarBehavior: organization.site?.sidebarBehavior ?? 'contextual',
@@ -107,10 +111,20 @@ export async function PATCH(
 
   try {
     const body = await request.json()
-    const { name, description, showIcon, iconUrl, allowMemberPages, allowTeacherCustomDomains, requireEmailDomain, sidebarBehavior, aiSystemPrompt, titleStyle, logoUrl } = body
+    const { name, description, pageTagline, pageLanguage, showIcon, iconUrl, allowMemberPages, allowTeacherCustomDomains, requireEmailDomain, sidebarBehavior, aiSystemPrompt, titleStyle, logoUrl } = body
 
     if (titleStyle !== undefined && titleStyle !== null && !['icon', 'logo'].includes(titleStyle)) {
       return NextResponse.json({ error: 'Invalid title style' }, { status: 400 })
+    }
+
+    // Same loose BCP-47 check as /api/user/profile.
+    if (pageLanguage !== undefined && pageLanguage !== null && pageLanguage !== '') {
+      if (typeof pageLanguage !== 'string' || pageLanguage.length > 35 || !/^[a-zA-Z][a-zA-Z0-9-]*$/.test(pageLanguage)) {
+        return NextResponse.json({ error: 'Use a BCP-47 tag like "de-CH" or "en"' }, { status: 400 })
+      }
+    }
+    if (pageTagline !== undefined && pageTagline !== null && (typeof pageTagline !== 'string' || pageTagline.length > 120)) {
+      return NextResponse.json({ error: 'Tagline must be at most 120 characters' }, { status: 400 })
     }
 
     // Validate name if provided
@@ -144,6 +158,8 @@ export async function PATCH(
 
     const siteUpdate: Record<string, unknown> = {}
     if (description !== undefined) siteUpdate.pageDescription = description || null
+    if (pageTagline !== undefined) siteUpdate.pageTagline = (pageTagline || '').trim() || null
+    if (pageLanguage !== undefined) siteUpdate.pageLanguage = pageLanguage || null
     if (showIcon !== undefined) siteUpdate.showIcon = Boolean(showIcon)
     if (iconUrl !== undefined) siteUpdate.pageIcon = iconUrl || null
     if (sidebarBehavior !== undefined) {
@@ -189,6 +205,8 @@ export async function PATCH(
           select: {
             slug: true,
             pageDescription: true,
+            pageTagline: true,
+            pageLanguage: true,
             showIcon: true,
             pageIcon: true,
             sidebarBehavior: true,
@@ -214,11 +232,10 @@ export async function PATCH(
       revalidateTag(CACHE_TAGS.orgContent(orgSlug), { expire: 0 })
 
       // org/[orgSlug]/c/[skriptSlug]* read sidebarBehavior via a plain
-      // prisma call (no unstable_cache tag), and revalidatePath(..., 'layout')
-      // above doesn't cascade into these deeper statically-generated
-      // (revalidate = false) routes since there's no shared layout.tsx.
-      // Bust each org skript/page route explicitly, same pattern as
-      // src/app/api/user-data/sync/route.ts.
+      // prisma call (no unstable_cache tag). org/[orgSlug]/layout.tsx exists
+      // now (lang setter), so the 'layout' revalidation above should cascade,
+      // but the explicit per-route busting is kept as belt-and-braces —
+      // same pattern as src/app/api/user-data/sync/route.ts.
       const orgSkripts = await prisma.pageLayoutItem.findMany({
         where: { type: 'skript', pageLayout: { site: { organizationId: orgId } } },
         select: { contentId: true },
@@ -241,6 +258,8 @@ export async function PATCH(
       ...organization,
       slug: organization.site?.slug ?? '',
       description: organization.site?.pageDescription ?? null,
+      pageTagline: organization.site?.pageTagline ?? null,
+      pageLanguage: organization.site?.pageLanguage ?? null,
       showIcon: organization.site?.showIcon ?? true,
       iconUrl: organization.site?.pageIcon ?? null,
       sidebarBehavior: organization.site?.sidebarBehavior ?? 'contextual',

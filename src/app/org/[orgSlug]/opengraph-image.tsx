@@ -26,14 +26,13 @@ export default async function Image({ params }: Params) {
     },
   }).catch(() => null)
 
-  // Match the same SEO-tuned title source order as generateMetadata in
-  // src/app/org/[orgSlug]/page.tsx so the OG card and the meta title align.
-  const title = orgSlug === 'eduskript'
-    ? 'Eduskript'
-    : (orgSite?.organization?.name || 'Eduskript')
-  const subtitle = orgSlug === 'eduskript'
-    ? 'Open-source platform for interactive lessons.'
-    : (orgSite?.pageTagline || (orgSite?.pageDescription && plainInlineText(orgSite.pageDescription)) || null)
+  // Same sources as generateMetadata in src/app/org/[orgSlug]/page.tsx so the
+  // OG card and the meta title align: name, then tagline (falls back to the
+  // description). Both are set in /dashboard/org/<id>/settings.
+  const title = orgSite?.organization?.name || 'Eduskript'
+  const subtitle = orgSite?.pageTagline
+    || (orgSite?.pageDescription && plainInlineText(orgSite.pageDescription))
+    || null
   const iconUrl = orgSite?.showIcon ? orgSite?.pageIcon : null
 
   return new ImageResponse(

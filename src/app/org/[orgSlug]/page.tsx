@@ -4,7 +4,6 @@ import { PublicSiteLayout } from '@/components/public/layout'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
 import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
 import { ClassToolbar } from '@/components/teacher/class-toolbar'
-import { HtmlLangSetter } from '@/components/seo/html-lang-setter'
 import { getOrgWithLayout, getOrgHomepageContent } from '@/lib/cached-queries'
 import { getOrgSidebarData } from '@/lib/sidebar-items'
 import { CurrentSiteProvider } from '@/contexts/current-site-context'
@@ -74,23 +73,19 @@ export async function generateMetadata({ params }: OrgPageProps): Promise<Metada
 
     // ISR-safe canonical: prefer the org's primary verified custom domain;
     // fall back to eduskript.org (root org) or eduskript.org/org/<orgSlug>.
-    const primaryDomain = organization.customDomains?.[0]?.domain
     const canonical = canonicalUrl({
       type: 'org',
       slug: orgSlug,
       customDomains: organization.customDomains,
     })
 
-    // SEO-tuned title source order:
-    //   1. Tenant on a custom domain with a configured pageTagline.
-    //   2. The canonical app org (eduskript) — hardcoded once here per the
-    //      "only eduskript.org may be hardcoded" rule.
-    //   3. Plain org name.
-    const title = primaryDomain && organization.pageTagline
+    // Title: "<name> — <tagline>" when the org admin set a tagline in
+    // /dashboard/org/<id>/settings, else the plain name. No hardcoded
+    // per-org strings — the eduskript root org configures its own tagline
+    // like any other org. Keep in sync with opengraph-image.tsx.
+    const title = organization.pageTagline
       ? `${organization.name} — ${organization.pageTagline}`
-      : orgSlug === 'eduskript'
-        ? 'Eduskript — Open-Source Platform for Interactive Lessons'
-        : organization.name
+      : organization.name
     const description = (organization.description && plainInlineText(organization.description)) || `${organization.name} on Eduskript`
 
     // og:image: explicit URL from canonical so custom-domain orgs don't ship
@@ -191,7 +186,6 @@ export default async function OrgPage({ params }: OrgPageProps) {
 
   return (
     <CurrentSiteProvider siteId={organization.siteId} organizationId={organization.id}>
-      <HtmlLangSetter lang={organization.pageLanguage} />
       {orgSlug === 'eduskript' && <JsonLd schema={organizationSchema()} />}
     <PublicSiteLayout
       teacher={orgAsTeacher}

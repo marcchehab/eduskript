@@ -622,6 +622,28 @@ export const getOrgWithLayout = (slug: string) =>
   )()
 
 /**
+ * Org site's pageLanguage only — for the shared org/[orgSlug]/layout.tsx
+ * <html lang> setter. Separate from getOrgWithLayout so the layout doesn't
+ * pull pageLayout/frontPage on every content-page request.
+ */
+export const getOrgPageLanguage = (slug: string) =>
+  unstable_cache(
+    async () => {
+      const site = await prisma.site.findUnique({
+        where: { slug },
+        select: { pageLanguage: true, organizationId: true },
+      })
+      if (!site?.organizationId) return null
+      return site.pageLanguage
+    },
+    [`org-page-language-${slug}`],
+    {
+      tags: [CACHE_TAGS.organization(slug)],
+      revalidate: false,
+    }
+  )()
+
+/**
  * Get org's full site structure for sidebar navigation - cached
  * Fetches all published collections from org's page layout
  */
