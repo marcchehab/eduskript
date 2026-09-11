@@ -220,8 +220,9 @@ export async function resetDemoUser(prisma: PrismaLike): Promise<SeedResult & { 
 async function readTemplateSkript(
   prisma: PrismaLike,
   slug: string
-): Promise<{ title: string; description?: string; pages: PageData[] }> {
+): Promise<{ id: string; title: string; description?: string; pages: PageData[] }> {
   const candidates: Array<{
+    id: string
     title: string
     description?: string
     pages: PageData[]
@@ -230,6 +231,7 @@ async function readTemplateSkript(
     where: { slug },
     orderBy: { createdAt: 'asc' },
     select: {
+      id: true,
       title: true,
       description: true,
       pages: {
@@ -247,7 +249,7 @@ async function readTemplateSkript(
   if (!skript) {
     throw new Error(`Template skript not found: ${slug}`)
   }
-  return { title: skript.title, description: skript.description, pages: skript.pages }
+  return { id: skript.id, title: skript.title, description: skript.description, pages: skript.pages }
 }
 
 /**
@@ -287,6 +289,21 @@ async function cloneTemplateSkript(
           create: { userId, permission: 'author' },
         },
       },
+    })
+  }
+
+  // Files the pages reference (excalidraw drawings + their rendered
+  // light/dark SVGs, spotify.db, ...). Without these rows the cloned pages
+  // show broken images. Storage is content-addressed by hash, so copying the
+  // row is enough — no S3 traffic. Top-level files only; the templates keep
+  // no directories.
+  const templateFiles = await prisma.file.findMany({
+    where: { skriptId: skriptMeta.id, parentId: null, isDirectory: false },
+    select: { name: true, hash: true, contentType: true, size: true, width: true, height: true },
+  })
+  for (const f of templateFiles) {
+    await prisma.file.create({
+      data: { ...f, isDirectory: false, skriptId: skript.id, createdBy: userId },
     })
   }
 
