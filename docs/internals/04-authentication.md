@@ -54,7 +54,7 @@ Clear cookie
 | `src/lib/auth.ts` | NextAuth config, account type detection |
 | `src/lib/privacy-adapter.ts` | Creates student accounts with pseudonyms |
 | `src/components/auth/signin-form.tsx` | Context-aware sign-in UI |
-| `src/app/auth/signin/page.tsx` | Sign-in page router |
+| `src/app/(app)/auth/signin/page.tsx` | Sign-in page router |
 
 ## Session Data
 

@@ -622,7 +622,7 @@ export function createMarkdownComponents(
 
   // Flag icon component - :flag-en-gb: / :flag-de-ch:, extension hardcoded
   // per code since only these two files exist in /public/flags/ (see
-  // src/app/auth/signup/page.tsx, the FLAG_CODES source of truth).
+  // src/app/(app)/auth/signup/page.tsx, the FLAG_CODES source of truth).
   const FLAG_ICON_EXT: Record<string, string> = { 'de-ch': 'png', 'en-gb': 'svg' }
   function FlagIconComponent({ ...props }: React.HTMLAttributes<HTMLElement> & Record<string, unknown>) {
     const code = (props['data-code'] as string) || (props['dataCode'] as string) || ''

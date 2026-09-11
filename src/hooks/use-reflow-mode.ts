@@ -17,7 +17,7 @@ import { useCallback, useEffect, useState } from 'react'
  *
  * The effective state is mirrored onto <html class="reflow-mode"> (CSS in
  * globals.css neutralizes the paper geometry) and a pre-paint bootstrap script
- * in src/app/layout.tsx sets the same class before the first frame to avoid a
+ * in src/components/root-shell.tsx sets the same class before the first frame to avoid a
  * flash of the desktop paper on phones. Persistence + cross-component sync are
  * done via localStorage + a window CustomEvent, mirroring font-size-controls.
  */

@@ -1,7 +1,7 @@
 import { visit } from 'unist-util-visit'
 import type { Root, Text, Parent } from 'mdast'
 
-// Only these two exist in /public/flags/ (see src/app/auth/signup/page.tsx).
+// Only these two exist in /public/flags/ (see src/app/(app)/auth/signup/page.tsx).
 const FLAG_CODES = ['de-ch', 'en-gb']
 const FLAG_PATTERN = new RegExp(`:flag-(${FLAG_CODES.join('|')}):`, 'g')
 

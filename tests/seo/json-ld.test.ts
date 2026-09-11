@@ -260,14 +260,14 @@ describe('JSON-LD wiring on public pages', () => {
   }, ROUTE_TEST_TIMEOUT_MS)
 
   it('teacher content page embeds LearningResource + Breadcrumb JSON-LD', async () => {
-    const mod = (await import('@/app/[domain]/[skriptSlug]/[pageSlug]/page')) as unknown as PageModule
+    const mod = (await import('@/app/[domain]/(site)/[skriptSlug]/[pageSlug]/page')) as unknown as PageModule
     const tree = await mod.default({
       params: Promise.resolve({ domain: 'marc', skriptSlug: 'test-skript', pageSlug: 'test-page' }),
     })
     expect(
       containsJsonLd(tree),
       'Teacher content page should render <JsonLd schema={[learningResourceSchema(...), breadcrumbSchema(...)]} />. ' +
-        'If it stopped, restore the JsonLd JSX in src/app/[domain]/[skriptSlug]/[pageSlug]/page.tsx.'
+        'If it stopped, restore the JsonLd JSX in src/app/[domain]/(site)/[skriptSlug]/[pageSlug]/page.tsx.'
     ).toBe(true)
   }, ROUTE_TEST_TIMEOUT_MS)
 

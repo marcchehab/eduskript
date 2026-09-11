@@ -21,7 +21,7 @@ export interface OgLayoutProps {
 }
 
 // Cached so we only read the TTF once per process. Barlow Condensed Bold matches
-// the project's `--font-heading` (Barlow_Condensed weight 700 in src/app/layout.tsx).
+// the project's `--font-heading` (Barlow_Condensed weight 700 in src/components/root-shell.tsx).
 // Lives under public/fonts so Next.js standalone output bundles it (the
 // alternative — reading from src/ via process.cwd() — fails in production
 // because Next traces source files into a separate prefix).

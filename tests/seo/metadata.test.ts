@@ -12,7 +12,7 @@
  * Routes intentionally NOT covered (with reason):
  *   - src/app/page.tsx                       — server-side redirect, no SEO surface
  *   - src/app/consent/page.tsx               — auth-gated client component
- *   - src/app/[domain]/[skriptSlug]/page.tsx — explicit noindex (skript preview)
+ *   - src/app/[domain]/(site)/[skriptSlug]/page.tsx — explicit noindex (skript preview)
  *   - src/app/exam/...                       — explicit noindex (exam routes)
  *   - src/app/org/[orgSlug]/[pageSlug]/...   — extra org page-layout routes;
  *                                              add as the surface stabilises
@@ -221,27 +221,27 @@ const PUBLIC_ROUTES: RouteSpec[] = [
     params: { orgSlug: 'eduskript', skriptSlug: 'test-skript', pageSlug: 'test-page' },
   },
   {
-    label: 'src/app/[domain]/page.tsx (teacher home)',
+    label: 'src/app/[domain]/(site)/page.tsx (teacher home)',
     category: 'teacher-home',
-    module: () => import('@/app/[domain]/page'),
+    module: () => import('@/app/[domain]/(site)/page'),
     params: { domain: 'marc' },
   },
   {
-    label: 'src/app/[domain]/[skriptSlug]/[pageSlug]/page.tsx (teacher content)',
+    label: 'src/app/[domain]/(site)/[skriptSlug]/[pageSlug]/page.tsx (teacher content)',
     category: 'teacher-content',
-    module: () => import('@/app/[domain]/[skriptSlug]/[pageSlug]/page'),
+    module: () => import('@/app/[domain]/(site)/[skriptSlug]/[pageSlug]/page'),
     params: { domain: 'marc', skriptSlug: 'test-skript', pageSlug: 'test-page' },
   },
   {
     label: 'src/app/impressum/page.tsx',
     category: 'static-legal',
-    module: () => import('@/app/impressum/page'),
+    module: () => import('@/app/(app)/impressum/page'),
     params: {},
   },
   {
     label: 'src/app/terms/page.tsx',
     category: 'static-legal',
-    module: () => import('@/app/terms/page'),
+    module: () => import('@/app/(app)/terms/page'),
     params: {},
   },
 ]
@@ -278,7 +278,7 @@ async function loadMetadata(mod: PageModule, params: Record<string, string>): Pr
 // --- The gate -----------------------------------------------------------
 
 // Pull `src/app/.../page.tsx` from a route label like
-// `src/app/[domain]/page.tsx (teacher home)`. The route file lives next to the
+// `src/app/[domain]/(site)/page.tsx (teacher home)`. The route file lives next to the
 // `opengraph-image.*` file convention, so the test can infer where to look.
 function routeFilePath(label: string): string | null {
   const match = label.match(/^(\S+\.tsx?)/)
@@ -320,7 +320,7 @@ describe('SEO hygiene gate', () => {
       expect(
         missing,
         `${route.label} is missing SEO fields: ${missing.join(', ')}\n` +
-          `Add them to the route's generateMetadata (or src/app/layout.tsx for global defaults).`
+          `Add them to the route's generateMetadata (or src/components/root-shell.tsx for global defaults).`
       ).toEqual([])
     }, ROUTE_TEST_TIMEOUT_MS)
   }

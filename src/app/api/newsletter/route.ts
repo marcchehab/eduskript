@@ -44,7 +44,7 @@ const SKRIPT_SITE_SELECT = {
  *
  * The id can name either a Page or a FrontPage: site and skript frontpages are
  * FrontPage records, and the renderers pass their id as `pageId` (see
- * src/app/[domain]/page.tsx). Two lookups rather than one because the ids live
+ * src/app/[domain]/(site)/page.tsx). Two lookups rather than one because the ids live
  * in separate tables; the FrontPage query only runs when the Page misses.
  */
 async function siteIdForPage(pageId: string): Promise<string | null> {

@@ -1,14 +1,17 @@
-import { HtmlLangSetter } from '@/components/seo/html-lang-setter'
+import { RootShell, rootMetadata, rootViewport } from '@/components/root-shell'
 import { getOrgPageLanguage } from '@/lib/cached-queries'
 
-// Shared shell for every /org/[orgSlug]/... route. Its only job is the
-// per-org <html lang> override (the root layout SSRs lang="en" for ISR
-// reasons, see src/app/layout.tsx). Before this layout existed only the org
-// frontpage set lang; /c/ skript and content pages stayed "en".
+// Root layout (renders <html>/<body> via RootShell) for every
+// /org/[orgSlug]/... route. Its only job is SSR-ing the org's pageLanguage
+// into <html lang>. Reads params + a cached query only (no headers()), so
+// the ISR'd child pages stay static.
 //
 // Cached read tagged CACHE_TAGS.organization(slug); the org settings PATCH
-// busts that tag, and its revalidatePath('/org/<slug>', 'layout') now
-// cascades through here into the child routes.
+// busts that tag, and its revalidatePath('/org/<slug>', 'layout') cascades
+// through here into the child routes.
+export const metadata = rootMetadata
+export const viewport = rootViewport
+
 export default async function OrgLayout({
   params,
   children,
@@ -18,10 +21,5 @@ export default async function OrgLayout({
 }) {
   const { orgSlug } = await params
   const pageLanguage = await getOrgPageLanguage(orgSlug)
-  return (
-    <>
-      <HtmlLangSetter lang={pageLanguage} />
-      {children}
-    </>
-  )
+  return <RootShell lang={pageLanguage}>{children}</RootShell>
 }

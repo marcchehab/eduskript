@@ -1,14 +1,21 @@
-import type { Metadata } from "next";
-import { Inter, Roboto_Slab, EB_Garamond, Barlow_Condensed } from "next/font/google";
-import "./globals.css";
+import type { Metadata } from 'next'
+import { Inter, Roboto_Slab, EB_Garamond, Barlow_Condensed } from 'next/font/google'
+import '@/app/globals.css'
 import { Providers } from '@/components/providers'
 import { GitInfo } from '@/components/GitInfo'
 import { DevConsole } from '@/components/dev/dev-console'
 import { ChunkErrorRecovery } from '@/components/chunk-error-recovery'
 
+// Shared <html>/<body> shell for every root layout. There are three root
+// layouts (src/app/(app)/layout.tsx, src/app/[domain]/layout.tsx,
+// src/app/org/[orgSlug]/layout.tsx) so that the tenant ones can SSR the
+// tenant's pageLanguage into <html lang> from params + cached DB reads —
+// no headers()/cookies(), so ISR is unaffected. Navigating between routes
+// of different root layouts is a full page load (Next.js route-group rule).
+
 const inter = Inter({
-  subsets: ["latin"],
-});
+  subsets: ['latin'],
+})
 
 // Modern typography (informatikgarten style)
 const modernBody = Roboto_Slab({
@@ -16,7 +23,7 @@ const modernBody = Roboto_Slab({
   weight: ['300', '600'], // 300 = body text, 600 = bold/strong
   variable: '--font-modern-body',
   preload: false, // Only used when user selects "modern" typography
-});
+})
 
 // Classic typography (luz style)
 const classicBody = EB_Garamond({
@@ -24,14 +31,14 @@ const classicBody = EB_Garamond({
   weight: ['400', '500', '600'], // 600 = bold/strong (already loaded)
   variable: '--font-classic-body',
   preload: false, // Only used when user selects "classic" typography
-});
+})
 
 // Shared heading font for both styles
 const headingFont = Barlow_Condensed({
   subsets: ['latin'],
   weight: '700',
   variable: '--font-heading',
-});
+})
 
 // Global default for resolving relative metadata URLs (file-based opengraph-image
 // is the main case). Without this, Next.js falls back to the request host —
@@ -48,37 +55,38 @@ const APP_BASE = new URL(
     : 'https://eduskript.org',
 )
 
-export const metadata: Metadata = {
+// Re-exported as `metadata` / `viewport` by each root layout.
+export const rootMetadata: Metadata = {
   metadataBase: APP_BASE,
-  title: "Eduskript - Education Platform",
-  description: "Create and manage educational content with ease",
+  title: 'Eduskript - Education Platform',
+  description: 'Create and manage educational content with ease',
   openGraph: {
-    type: "website",
-    siteName: "Eduskript",
+    type: 'website',
+    siteName: 'Eduskript',
   },
   twitter: {
-    card: "summary_large_image",
+    card: 'summary_large_image',
   },
-};
+}
 
-export const viewport = {
+export const rootViewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-};
+}
 
-export default function RootLayout({
+export function RootShell({
+  lang,
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
-  // <html lang> is set to "en" at SSR for ISR compatibility — reading
-  // headers() here would opt every downstream ISR page out of static
-  // generation. Per-tenant lang (e.g. "de-CH") is applied client-side via
-  // <HtmlLangSetter> in the deeper layouts that already know the tenant.
+}: {
+  /** BCP 47 tag for <html lang>; falls back to "en". */
+  lang?: string | null
+  children: React.ReactNode
+}) {
   return (
-    <html lang="en" suppressHydrationWarning data-scroll-behavior="smooth">
+    <html lang={lang || 'en'} suppressHydrationWarning data-scroll-behavior="smooth">
+      {/* eslint-disable-next-line @next/next/no-head-element -- this IS the root layout markup, rendered from a shared component */}
       <head>
         {/*
           Inline theme bootstrap. Runs synchronously before <body> paints so the
@@ -111,7 +119,10 @@ export default function RootLayout({
           crossOrigin="anonymous"
         />
       </head>
-      <body className={`${inter.className} ${modernBody.variable} ${classicBody.variable} ${headingFont.variable} antialiased`} suppressHydrationWarning>
+      <body
+        className={`${inter.className} ${modernBody.variable} ${classicBody.variable} ${headingFont.variable} antialiased`}
+        suppressHydrationWarning
+      >
         <Providers>
           <ChunkErrorRecovery />
           {children}
@@ -120,5 +131,5 @@ export default function RootLayout({
         </Providers>
       </body>
     </html>
-  );
+  )
 }
