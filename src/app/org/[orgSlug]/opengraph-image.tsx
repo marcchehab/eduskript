@@ -1,6 +1,7 @@
 import { ImageResponse } from 'next/og'
 import { OG_SIZE, OG_CONTENT_TYPE, OgLayout, ogFonts } from '@/lib/seo/og-layout'
 import { prisma } from '@/lib/prisma'
+import { readExtraSettings } from '@/lib/settings'
 import { plainInlineText } from '@/lib/markdown'
 
 export const runtime = 'nodejs'
@@ -20,6 +21,7 @@ export default async function Image({ params }: Params) {
     select: {
       pageDescription: true,
       pageTagline: true,
+      extraSettings: true,
       pageIcon: true,
       showIcon: true,
       organization: { select: { name: true } },
@@ -31,6 +33,7 @@ export default async function Image({ params }: Params) {
   // description). Both are set in /dashboard/org/<id>/settings.
   const title = orgSite?.organization?.name || 'Eduskript'
   const subtitle = orgSite?.pageTagline
+    || readExtraSettings(orgSite).metaDescription
     || (orgSite?.pageDescription && plainInlineText(orgSite.pageDescription))
     || null
   const iconUrl = orgSite?.showIcon ? orgSite?.pageIcon : null

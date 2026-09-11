@@ -48,6 +48,13 @@ export interface SiteExtraSettings {
   directoryOptOut?: boolean
   /** Custom supporter badge text; falls back to DEFAULT_SUPPORTER_MESSAGE. */
   supporterBadgeMessage?: string
+
+  /**
+   * <meta name="description"> for the site frontpage, separate from
+   * pageDescription (which is markdown shown in the sidebar). Absent = fall
+   * back to the plain-text pageDescription. Capped at 300 chars.
+   */
+  metaDescription?: string
 }
 
 /** Shown on the public badge when the supporter has not set a custom message. */
@@ -86,6 +93,9 @@ export function readExtraSettings(source: { extraSettings?: unknown } | unknown)
   if (bag.directoryOptOut === true) out.directoryOptOut = true
   if (typeof bag.supporterBadgeMessage === 'string' && bag.supporterBadgeMessage.trim()) {
     out.supporterBadgeMessage = bag.supporterBadgeMessage.trim().slice(0, 60)
+  }
+  if (typeof bag.metaDescription === 'string' && bag.metaDescription.trim()) {
+    out.metaDescription = bag.metaDescription.trim().slice(0, 300)
   }
 
   return out

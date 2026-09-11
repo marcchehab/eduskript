@@ -89,6 +89,7 @@ export async function GET(
       aiSystemPrompt: organization.site?.aiSystemPrompt ?? null,
       titleStyle: readExtraSettings(organization.site).titleStyle ?? 'icon',
       logoUrl: readExtraSettings(organization.site).logoUrl ?? null,
+      metaDescription: readExtraSettings(organization.site).metaDescription ?? null,
       customDomain: organization.customDomains[0]?.domain ?? null,
       site: undefined,
       customDomains: undefined,
@@ -111,7 +112,7 @@ export async function PATCH(
 
   try {
     const body = await request.json()
-    const { name, description, pageTagline, pageLanguage, showIcon, iconUrl, allowMemberPages, allowTeacherCustomDomains, requireEmailDomain, sidebarBehavior, aiSystemPrompt, titleStyle, logoUrl } = body
+    const { name, description, pageTagline, pageLanguage, metaDescription, showIcon, iconUrl, allowMemberPages, allowTeacherCustomDomains, requireEmailDomain, sidebarBehavior, aiSystemPrompt, titleStyle, logoUrl } = body
 
     if (titleStyle !== undefined && titleStyle !== null && !['icon', 'logo'].includes(titleStyle)) {
       return NextResponse.json({ error: 'Invalid title style' }, { status: 400 })
@@ -125,6 +126,9 @@ export async function PATCH(
     }
     if (pageTagline !== undefined && pageTagline !== null && (typeof pageTagline !== 'string' || pageTagline.length > 120)) {
       return NextResponse.json({ error: 'Tagline must be at most 120 characters' }, { status: 400 })
+    }
+    if (metaDescription !== undefined && metaDescription !== null && (typeof metaDescription !== 'string' || metaDescription.length > 300)) {
+      return NextResponse.json({ error: 'Meta description must be at most 300 characters' }, { status: 400 })
     }
 
     // Validate name if provided
@@ -171,14 +175,19 @@ export async function PATCH(
     if (aiSystemPrompt !== undefined) {
       siteUpdate.aiSystemPrompt = aiSystemPrompt || null
     }
-    if (titleStyle !== undefined || logoUrl !== undefined) {
+    if (titleStyle !== undefined || logoUrl !== undefined || metaDescription !== undefined) {
       const currentSite = await prisma.site.findUnique({
         where: { organizationId: orgId },
         select: { extraSettings: true },
       })
+      // Only the keys the client sent — mergeExtraSettings deletes on undefined.
       siteUpdate.extraSettings = mergeExtraSettings(currentSite?.extraSettings, {
-        titleStyle: titleStyle || undefined,
-        logoUrl: logoUrl || undefined,
+        ...(titleStyle !== undefined || logoUrl !== undefined
+          ? { titleStyle: titleStyle || undefined, logoUrl: logoUrl || undefined }
+          : {}),
+        ...(metaDescription !== undefined
+          ? { metaDescription: (metaDescription || '').trim() || undefined }
+          : {}),
       })
     }
 
@@ -266,6 +275,7 @@ export async function PATCH(
       aiSystemPrompt: organization.site?.aiSystemPrompt ?? null,
       titleStyle: readExtraSettings(organization.site).titleStyle ?? 'icon',
       logoUrl: readExtraSettings(organization.site).logoUrl ?? null,
+      metaDescription: readExtraSettings(organization.site).metaDescription ?? null,
       site: undefined,
     }
     return NextResponse.json({ organization: orgWithSlug })

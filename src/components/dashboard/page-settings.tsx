@@ -39,6 +39,8 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
   const [titleStyle, setTitleStyle] = useState<'icon' | 'logo'>('icon')
   const [logoUrl, setLogoUrl] = useState('')
   const [pageLanguage, setPageLanguage] = useState('')
+  const [pageTagline, setPageTagline] = useState('')
+  const [metaDescription, setMetaDescription] = useState('')
   const [directoryListing, setDirectoryListing] = useState(true)
   // Original DB values (loaded on mount via /api/user/profile GET, not from
   // session). Used to compute `hasPageInfoChanges` so the Save button only
@@ -52,6 +54,8 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
   const [originalTitleStyle, setOriginalTitleStyle] = useState<'icon' | 'logo'>('icon')
   const [originalLogoUrl, setOriginalLogoUrl] = useState('')
   const [originalPageLanguage, setOriginalPageLanguage] = useState('')
+  const [originalPageTagline, setOriginalPageTagline] = useState('')
+  const [originalMetaDescription, setOriginalMetaDescription] = useState('')
   const [originalDirectoryListing, setOriginalDirectoryListing] = useState(true)
   const [iconUploadLoading, setIconUploadLoading] = useState(false)
   const [logoUploadLoading, setLogoUploadLoading] = useState(false)
@@ -116,6 +120,8 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
           const style = data.titleStyle === 'logo' ? 'logo' : 'icon'
           const logo = data.logoUrl || ''
           const lang = data.pageLanguage || ''
+          const tagline = data.pageTagline || ''
+          const metaDesc = data.metaDescription || ''
           const listed = data.directoryListing !== false
           setPageSlug(slug)
           setPageName(name)
@@ -124,6 +130,8 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
           setTitleStyle(style)
           setLogoUrl(logo)
           setPageLanguage(lang)
+          setPageTagline(tagline)
+          setMetaDescription(metaDesc)
           setDirectoryListing(listed)
           setOriginalPageSlug(slug)
           setOriginalPageName(name)
@@ -132,6 +140,8 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
           setOriginalTitleStyle(style)
           setOriginalLogoUrl(logo)
           setOriginalPageLanguage(lang)
+          setOriginalPageTagline(tagline)
+          setOriginalMetaDescription(metaDesc)
           setOriginalDirectoryListing(listed)
         }
       } catch (error) {
@@ -255,6 +265,8 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
           titleStyle,
           logoUrl,
           pageLanguage,
+          pageTagline,
+          metaDescription,
           directoryListing,
           name: session?.user?.name || 'User', // Include name as it's required by the API
           siteId,
@@ -272,6 +284,8 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
         setOriginalTitleStyle(data.titleStyle === 'logo' ? 'logo' : 'icon')
         setOriginalLogoUrl(data.logoUrl || '')
         setOriginalPageLanguage(data.pageLanguage || '')
+        setOriginalPageTagline(data.pageTagline || '')
+        setOriginalMetaDescription(data.metaDescription || '')
         setOriginalDirectoryListing(data.directoryListing !== false)
         await update() // Update session (best-effort — JWT may still lag)
         router.refresh() // Refresh page
@@ -298,6 +312,8 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
     titleStyle !== originalTitleStyle ||
     logoUrl !== originalLogoUrl ||
     pageLanguage !== originalPageLanguage ||
+    pageTagline !== originalPageTagline ||
+    metaDescription !== originalMetaDescription ||
     directoryListing !== originalDirectoryListing
 
   // Check if slug is valid for saving
@@ -758,33 +774,74 @@ export function PageSettings({ siteId }: { siteId?: string } = {}) {
             </p>
           </div>
 
-          {/* Page Language */}
-          <div className="space-y-2">
-            <Label htmlFor="pageLanguage" className="text-sm font-medium">Page Language</Label>
-            <input
-              id="pageLanguage"
-              type="text"
-              list="page-language-suggestions"
-              value={pageLanguage}
-              onChange={(e) => setPageLanguage(e.target.value)}
-              placeholder="e.g. de-CH, en, fr-CH"
-              maxLength={35}
-              className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
-            />
-            <datalist id="page-language-suggestions">
-              <option value="de-CH" />
-              <option value="de" />
-              <option value="fr-CH" />
-              <option value="fr" />
-              <option value="it-CH" />
-              <option value="it" />
-              <option value="en" />
-              <option value="en-US" />
-              <option value="en-GB" />
-            </datalist>
-            <p className="text-sm text-muted-foreground">
-              Language tag for your site (important for search engines).
-            </p>
+          {/* Meta: search engines, browser tab, link previews */}
+          <div className="space-y-4 border-t pt-6">
+            <div>
+              <h3 className="text-sm font-semibold">Meta</h3>
+              <p className="text-sm text-muted-foreground">
+                What search engines, browser tabs and link previews see on your frontpage.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="pageTagline" className="text-sm font-medium">Tagline</Label>
+              <Input
+                id="pageTagline"
+                type="text"
+                value={pageTagline}
+                onChange={(e) => setPageTagline(e.target.value)}
+                placeholder="e.g. Informatik am Gymnasium"
+                maxLength={120}
+              />
+              <p className="text-sm text-muted-foreground">
+                Title becomes &quot;{pageName || session?.user?.name || 'Name'}{pageTagline ? ` — ${pageTagline}` : ''}&quot;. Leave empty to use the page name alone.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="metaDescription" className="text-sm font-medium">Meta Description</Label>
+              <Textarea
+                id="metaDescription"
+                value={metaDescription}
+                onChange={(e) => setMetaDescription(e.target.value)}
+                placeholder="One or two plain-text sentences for search results and link previews."
+                rows={3}
+                maxLength={300}
+              />
+              <p className="text-sm text-muted-foreground">
+                Plain text, max 300 characters. Falls back to the page description when empty.
+              </p>
+            </div>
+
+            {/* Page Language */}
+            <div className="space-y-2">
+              <Label htmlFor="pageLanguage" className="text-sm font-medium">Page Language</Label>
+              <input
+                id="pageLanguage"
+                type="text"
+                list="page-language-suggestions"
+                value={pageLanguage}
+                onChange={(e) => setPageLanguage(e.target.value)}
+                placeholder="e.g. de-CH, en, fr-CH"
+                maxLength={35}
+                className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
+              />
+              <datalist id="page-language-suggestions">
+                <option value="de-CH" />
+                <option value="de" />
+                <option value="fr-CH" />
+                <option value="fr" />
+                <option value="it-CH" />
+                <option value="it" />
+                <option value="en" />
+                <option value="en-US" />
+                <option value="en-GB" />
+              </datalist>
+              <p className="text-sm text-muted-foreground">
+                Language tag for your site (important for search engines).
+              </p>
+            </div>
+
           </div>
 
           {/* Public Directory Listing */}

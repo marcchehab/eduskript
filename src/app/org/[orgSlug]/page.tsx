@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
+import { readExtraSettings } from '@/lib/settings'
 import { PublicSiteLayout } from '@/components/public/layout'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
 import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
@@ -42,6 +43,7 @@ export async function generateMetadata({ params }: OrgPageProps): Promise<Metada
         pageIcon: true,
         pageTagline: true,
         showIcon: true,
+        extraSettings: true,
         organization: {
           select: {
             name: true,
@@ -61,6 +63,7 @@ export async function generateMetadata({ params }: OrgPageProps): Promise<Metada
           iconUrl: site.pageIcon,
           pageTagline: site.pageTagline,
           showIcon: site.showIcon,
+          metaDescription: readExtraSettings(site).metaDescription ?? null,
         }
       : null
 
@@ -86,7 +89,9 @@ export async function generateMetadata({ params }: OrgPageProps): Promise<Metada
     const title = organization.pageTagline
       ? `${organization.name} — ${organization.pageTagline}`
       : organization.name
-    const description = (organization.description && plainInlineText(organization.description)) || `${organization.name} on Eduskript`
+    const description = organization.metaDescription
+      || (organization.description && plainInlineText(organization.description))
+      || `${organization.name} on Eduskript`
 
     // og:image: explicit URL from canonical so custom-domain orgs don't ship
     // the proxy-prepended `/org/<orgSlug>/` prefix that Next's auto-detected

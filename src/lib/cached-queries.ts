@@ -61,6 +61,7 @@ function graftSitePageFields<U extends object>(user: U, site: SitePageFields) {
     typographyPreference: site.typographyPreference,
     titleStyle: extra.titleStyle ?? 'icon',
     logoUrl: extra.logoUrl ?? null,
+    metaDescription: extra.metaDescription ?? null,
     supporterBadgeHidden: extra.supporterBadgeHidden ?? false,
     supporterBadgeMessage: extra.supporterBadgeMessage ?? null,
   })
@@ -610,6 +611,7 @@ export const getOrgWithLayout = (slug: string) =>
         aiSystemPrompt: site.aiSystemPrompt,
         titleStyle: extra.titleStyle ?? 'icon',
         logoUrl: extra.logoUrl ?? null,
+        metaDescription: extra.metaDescription ?? null,
         pageLayout: site.pageLayout ?? null,
         frontPage: site.frontPage ?? null,
       })

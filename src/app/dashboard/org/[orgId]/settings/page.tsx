@@ -21,6 +21,7 @@ interface Organization {
   description: string | null
   pageTagline: string | null
   pageLanguage: string | null
+  metaDescription: string | null
   showIcon: boolean
   iconUrl: string | null
   titleStyle: string
@@ -55,6 +56,7 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
     description: '',
     pageTagline: '',
     pageLanguage: '',
+    metaDescription: '',
     showIcon: true,
     iconUrl: '',
     titleStyle: 'icon' as 'icon' | 'logo',
@@ -125,6 +127,7 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
           description: data.organization.description || '',
           pageTagline: data.organization.pageTagline || '',
           pageLanguage: data.organization.pageLanguage || '',
+          metaDescription: data.organization.metaDescription || '',
           showIcon: data.organization.showIcon ?? true,
           iconUrl: data.organization.iconUrl || '',
           titleStyle: data.organization.titleStyle === 'logo' ? 'logo' : 'icon',
@@ -162,6 +165,7 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
           description: formData.description || null,
           pageTagline: formData.pageTagline || null,
           pageLanguage: formData.pageLanguage || null,
+          metaDescription: formData.metaDescription || null,
           showIcon: formData.showIcon,
           iconUrl: formData.iconUrl || null,
           titleStyle: formData.titleStyle,
@@ -234,20 +238,6 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
           </div>
 
           <div>
-            <Label htmlFor="pageTagline">Tagline</Label>
-            <Input
-              id="pageTagline"
-              value={formData.pageTagline}
-              onChange={(e) => setFormData({ ...formData, pageTagline: e.target.value })}
-              placeholder="e.g. Open-source platform for interactive lessons"
-              maxLength={120}
-            />
-            <p className="text-xs text-muted-foreground mt-1">
-              Browser tab title and link preview become &quot;{formData.name || 'Name'}{formData.pageTagline ? ` — ${formData.pageTagline}` : ''}&quot;. Leave empty to use the name alone.
-            </p>
-          </div>
-
-          <div>
             <Label htmlFor="description">Description</Label>
             <Input
               id="description"
@@ -256,33 +246,7 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
               placeholder="Brief description of the organization"
             />
             <p className="text-xs text-muted-foreground mt-1">
-              Shown in the sidebar and used as the meta description for search engines and link previews.
-            </p>
-          </div>
-
-          <div>
-            <Label htmlFor="pageLanguage">Page Language</Label>
-            <Input
-              id="pageLanguage"
-              list="org-page-language-suggestions"
-              value={formData.pageLanguage}
-              onChange={(e) => setFormData({ ...formData, pageLanguage: e.target.value })}
-              placeholder="e.g. de-CH, en, fr-CH"
-              maxLength={35}
-            />
-            <datalist id="org-page-language-suggestions">
-              <option value="de-CH" />
-              <option value="de" />
-              <option value="fr-CH" />
-              <option value="fr" />
-              <option value="it-CH" />
-              <option value="it" />
-              <option value="en" />
-              <option value="en-US" />
-              <option value="en-GB" />
-            </datalist>
-            <p className="text-xs text-muted-foreground mt-1">
-              Sets the HTML lang attribute on all public pages of this organization (search engines, screen readers). Defaults to &quot;en&quot;.
+              Shown below the name in the sidebar of public pages.
             </p>
           </div>
 
@@ -491,6 +455,69 @@ export default function OrgSettingsPage({ params }: { params: Promise<{ orgId: s
                 <p className="text-xs text-muted-foreground">Wide image, transparent background recommended. Max 2MB. Drag and drop, or click to browse.</p>
               </div>
             )}
+          </div>
+
+          <div className="border-t pt-6">
+            <h3 className="text-lg font-medium mb-1">Meta</h3>
+            <p className="text-xs text-muted-foreground mb-4">
+              What search engines, browser tabs and link previews see. Applies to the organization frontpage; skript and page URLs derive their own.
+            </p>
+            <div className="space-y-6">
+              <div>
+                <Label htmlFor="pageTagline">Tagline</Label>
+                <Input
+                  id="pageTagline"
+                  value={formData.pageTagline}
+                  onChange={(e) => setFormData({ ...formData, pageTagline: e.target.value })}
+                  placeholder="e.g. Open-source platform for interactive lessons"
+                  maxLength={120}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Title becomes &quot;{formData.name || 'Name'}{formData.pageTagline ? ` — ${formData.pageTagline}` : ''}&quot;. Leave empty to use the name alone.
+                </p>
+              </div>
+
+              <div>
+                <Label htmlFor="metaDescription">Meta Description</Label>
+                <Textarea
+                  id="metaDescription"
+                  value={formData.metaDescription}
+                  onChange={(e) => setFormData({ ...formData, metaDescription: e.target.value })}
+                  placeholder="One or two plain-text sentences for search results and link previews."
+                  rows={3}
+                  maxLength={300}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Plain text, max 300 characters. Falls back to the description above when empty.
+                </p>
+              </div>
+
+              <div>
+                <Label htmlFor="pageLanguage">Page Language</Label>
+                <Input
+                  id="pageLanguage"
+                  list="org-page-language-suggestions"
+                  value={formData.pageLanguage}
+                  onChange={(e) => setFormData({ ...formData, pageLanguage: e.target.value })}
+                  placeholder="e.g. de-CH, en, fr-CH"
+                  maxLength={35}
+                />
+                <datalist id="org-page-language-suggestions">
+                  <option value="de-CH" />
+                  <option value="de" />
+                  <option value="fr-CH" />
+                  <option value="fr" />
+                  <option value="it-CH" />
+                  <option value="it" />
+                  <option value="en" />
+                  <option value="en-US" />
+                  <option value="en-GB" />
+                </datalist>
+                <p className="text-xs text-muted-foreground mt-1">
+                  HTML lang attribute on all public pages of this organization. Defaults to &quot;en&quot;.
+                </p>
+              </div>
+            </div>
           </div>
 
           <div className="border-t pt-6">

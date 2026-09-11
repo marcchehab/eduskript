@@ -27,6 +27,9 @@ const updateProfileSchema = z.object({
     )).optional(),
   pageName: z.string().optional(),
   pageDescription: z.string().optional(),
+  // Meta section: browser-title suffix + <meta description>. Empty clears.
+  pageTagline: z.string().max(120).optional(),
+  metaDescription: z.string().max(300).optional(),
   pageIcon: z.string().url().optional().or(z.literal('')),
   titleStyle: z.enum(['icon', 'logo']).optional(),
   logoUrl: z.string().url().optional().or(z.literal('')),
@@ -60,6 +63,8 @@ const adminUpdateProfileSchema = z.object({
     )).optional(),
   pageName: z.string().optional(),
   pageDescription: z.string().optional(),
+  pageTagline: z.string().max(120).optional(),
+  metaDescription: z.string().max(300).optional(),
   pageIcon: z.string().url().optional().or(z.literal('')),
   titleStyle: z.enum(['icon', 'logo']).optional(),
   logoUrl: z.string().url().optional().or(z.literal('')),
@@ -115,6 +120,7 @@ export async function GET(request: NextRequest) {
           slug: true,
           pageName: true,
           pageDescription: true,
+          pageTagline: true,
           pageIcon: true,
           pageLanguage: true,
           extraSettings: true,
@@ -134,6 +140,8 @@ export async function GET(request: NextRequest) {
     pageSlug: siteRow?.slug ?? null,
     pageName: siteRow?.pageName ?? null,
     pageDescription: siteRow?.pageDescription ?? null,
+    pageTagline: siteRow?.pageTagline ?? null,
+    metaDescription: extra.metaDescription ?? null,
     pageIcon: siteRow?.pageIcon ?? null,
     pageLanguage: siteRow?.pageLanguage ?? null,
     titleStyle: extra.titleStyle ?? 'icon',
@@ -210,6 +218,7 @@ export async function PATCH(request: NextRequest) {
       const siteUpdate: Record<string, unknown> = {}
       if ('pageName' in body) siteUpdate.pageName = validatedData.pageName || null
       if ('pageDescription' in body) siteUpdate.pageDescription = validatedData.pageDescription || null
+      if ('pageTagline' in body) siteUpdate.pageTagline = validatedData.pageTagline?.trim() || null
       if ('pageIcon' in body) siteUpdate.pageIcon = validatedData.pageIcon || null
       if ('pageLanguage' in body) siteUpdate.pageLanguage = validatedData.pageLanguage || null
 
@@ -231,7 +240,7 @@ export async function PATCH(request: NextRequest) {
       const primarySiteId = targetSite?.id ?? null
       let newSlug = targetSite?.slug ?? null
 
-      if ('titleStyle' in body || 'logoUrl' in body || 'directoryListing' in body) {
+      if ('titleStyle' in body || 'logoUrl' in body || 'directoryListing' in body || 'metaDescription' in body) {
         const current = primarySiteId
           ? await prisma.site.findUnique({ where: { id: primarySiteId }, select: { extraSettings: true } })
           : null
@@ -247,6 +256,9 @@ export async function PATCH(request: NextRequest) {
           ...('directoryListing' in body
             ? { directoryOptOut: validatedData.directoryListing === false ? true : undefined }
             : {}),
+          ...('metaDescription' in body
+            ? { metaDescription: validatedData.metaDescription?.trim() || undefined }
+            : {}),
         })
       }
 
@@ -259,11 +271,12 @@ export async function PATCH(request: NextRequest) {
         slug: true,
         pageName: true,
         pageDescription: true,
+        pageTagline: true,
         pageIcon: true,
         pageLanguage: true,
         extraSettings: true,
       } as const
-      let siteRow: { slug: string; pageName: string | null; pageDescription: string | null; pageIcon: string | null; pageLanguage: string | null; extraSettings: unknown } | null = null
+      let siteRow: { slug: string; pageName: string | null; pageDescription: string | null; pageTagline: string | null; pageIcon: string | null; pageLanguage: string | null; extraSettings: unknown } | null = null
       if (hasNewSlug || hasSiteFields) {
         // Without an existing slug we can't create a Site (slug is required).
         // Fall back to keeping whatever's there if no slug was provided.
@@ -305,6 +318,8 @@ export async function PATCH(request: NextRequest) {
         pageSlug: newSlug,
         pageName: siteRow?.pageName ?? null,
         pageDescription: siteRow?.pageDescription ?? null,
+        pageTagline: siteRow?.pageTagline ?? null,
+        metaDescription: resultExtra.metaDescription ?? null,
         pageIcon: siteRow?.pageIcon ?? null,
         pageLanguage: siteRow?.pageLanguage ?? null,
         titleStyle: resultExtra.titleStyle ?? 'icon',

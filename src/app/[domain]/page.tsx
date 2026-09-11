@@ -44,7 +44,6 @@ export async function generateMetadata({ params }: DomainIndexProps): Promise<Me
     // ISR-safe SEO metadata: derive everything from cached DB data, never
     // from request headers. Reading headers() here would opt this route
     // out of static generation.
-    const primaryDomain = teacher.customDomains?.[0]?.domain
     const canonical = canonicalUrl({
       type: 'teacher',
       slug: teacher.pageSlug ?? domain,
@@ -52,10 +51,16 @@ export async function generateMetadata({ params }: DomainIndexProps): Promise<Me
     })
 
     const baseTitle = teacher.pageName || teacher.name || 'Eduskript'
-    const title = primaryDomain && teacher.pageTagline
+    // Title/description come from the Meta section of the site settings
+    // (pageTagline, extraSettings.metaDescription); the markdown sidebar
+    // pageDescription is only the fallback. Keep in sync with opengraph-image.tsx.
+    const title = teacher.pageTagline
       ? `${baseTitle} — ${teacher.pageTagline}`
       : baseTitle
-    const description = (teacher.pageDescription && plainInlineText(teacher.pageDescription)) || teacher.bio || `Educational content by ${teacher.pageName || teacher.name}`
+    const description = teacher.metaDescription
+      || (teacher.pageDescription && plainInlineText(teacher.pageDescription))
+      || teacher.bio
+      || `Educational content by ${teacher.pageName || teacher.name}`
 
     // og:image: explicit URL built from the canonical so multi-tenant custom
     // domains don't ship the proxy-prepended `/<pageSlug>/` prefix that

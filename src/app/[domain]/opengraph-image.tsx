@@ -19,6 +19,7 @@ export default async function Image({ params }: Params) {
   const title = teacher?.pageName || teacher?.name || 'Eduskript'
   const subtitle =
     teacher?.pageTagline ||
+    teacher?.metaDescription ||
     (teacher?.pageDescription && plainInlineText(teacher.pageDescription)) ||
     teacher?.bio ||
     null
