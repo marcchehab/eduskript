@@ -33,6 +33,7 @@ import { YT } from '@/components/markdown/youtube'
 import { Flex, FlexItem } from '@/components/markdown/flex'
 import { CtaButton, type CtaVariant, type CtaSize, type CtaAlign } from '@/components/markdown/cta-button'
 import { NewsletterBox } from '@/components/markdown/newsletter-box'
+import { PageBanner } from '@/components/markdown/page-banner'
 import { PluginContainer } from '@/components/markdown/plugin-container'
 import { Fullwidth } from '@/components/markdown/fullwidth'
 import { PdfEmbed } from '@/components/markdown/pdf-embed'
@@ -1043,6 +1044,10 @@ export function createMarkdownComponents(
         />
       )
     },
+
+    // <banner> — sticky announcement bar; children re-parsed as markdown.
+    // Layout lives in globals.css (.es-banner). See page-banner.tsx.
+    'banner': PageBanner,
 
     // <image> is an alias for <img> — both use the same handler
     'image': ImgElementComponent,

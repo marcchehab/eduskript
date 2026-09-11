@@ -72,6 +72,7 @@ export function rehypeSourceLine(lineMap?: number[]) {
       'flex', 'flex-item',
       'tabs-container',
       'fullwidth',
+      'banner',
     ])
 
     // Process HTML elements

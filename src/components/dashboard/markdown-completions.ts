@@ -48,6 +48,7 @@ const TAG_COMPLETIONS: TagDef[] = [
   { label: 'spacer', info: 'Blank writing area for students to solve on by hand', apply: '<spacer pattern="checkered" height="200" />' },
   { label: 'cta', info: 'Call-to-action link styled as a button', apply: '<cta href="">Text</cta>', cursorOffset: 11 },
   { label: 'newsletter', info: 'Email signup box (Brevo list)', apply: '<newsletter />' },
+  { label: 'banner', info: 'Sticky announcement bar at the top of the page', apply: '<banner>\n\n</banner>' },
   { label: 'ai-feedback', info: 'Button: send pen strokes/section content to a vision model for feedback', apply: '<ai-feedback prompt="" />', cursorOffset: 21 },
   { label: 'ping', info: 'Interactive ping terminal', apply: '<ping />' },
   { label: 'next-stage', info: 'One-way divider that hands in the previous stage and reveals the next', apply: '<next-stage label="" />', cursorOffset: 19 },
@@ -177,6 +178,10 @@ const TAG_ATTRS: Record<string, AttrDef[]> = {
     { label: 'size', info: 'lg | default | sm' },
     { label: 'align', info: 'center | left | right' },
     { label: 'external', info: 'Open in a new tab' },
+  ],
+  'banner': [
+    { label: 'id', info: 'Keys the per-browser dismiss state (default: text hash)' },
+    { label: 'dismissible', info: 'false hides the close button' },
   ],
   'newsletter': [
     { label: 'title', info: 'Heading text' },

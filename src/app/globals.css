@@ -327,6 +327,69 @@
 .reflow-mode #zoom-spacer {
   display: none !important;
 }
+
+/*
+ * <banner> announcement bar (src/components/markdown/page-banner.tsx).
+ * Sticky to the nearest scroll container (#scroll-container on public pages,
+ * the preview pane in the editor). #paper is overflow: clip, not a scroll
+ * container, so sticky reaches through it. As the first element on the page
+ * the negative margins pull it flush with the paper's edges: values mirror
+ * .paper-responsive padding (px-48 / py-24) and its reflow-mode override.
+ * z-index stays below the annotation canvas (36–40) and the mobile sidebar
+ * overlay (z-30).
+ */
+.es-banner {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  background: hsl(var(--muted));
+  color: hsl(var(--foreground));
+  border-bottom: 1px solid hsl(var(--border));
+  margin: 0 0 1.5rem;
+}
+.es-banner-content {
+  flex: 1;
+  text-align: center;
+}
+.es-banner-content > p {
+  margin: 0;
+}
+.es-banner-close {
+  flex: none;
+  display: inline-flex;
+  padding: 0.25rem;
+  border-radius: 0.25rem;
+  color: hsl(var(--muted-foreground));
+}
+.es-banner-close:hover {
+  color: hsl(var(--foreground));
+  background: hsl(var(--accent));
+}
+#paper .es-banner {
+  margin-left: -12rem;
+  margin-right: -12rem;
+}
+#paper .es-banner:first-child {
+  margin-top: -6rem;
+}
+.reflow-mode #paper .es-banner {
+  margin-left: -1.25rem;
+  margin-right: -1.25rem;
+}
+.reflow-mode #paper .es-banner:first-child {
+  margin-top: -4rem;
+}
+@media print {
+  .es-banner {
+    display: none;
+  }
+}
 /* Belt-and-suspenders for the annotation toolbar. ReflowGate unmounts the
    whole annotation tree in React, but the toolbar is server-rendered inline
    (SSR returns it non-portaled) and only portals to <body> after hydration —

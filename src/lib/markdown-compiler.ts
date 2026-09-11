@@ -42,6 +42,7 @@ import { rehypeExternalLinks } from './rehype-plugins/external-links'
 import { rehypeStablePageLinks } from './rehype-plugins/stable-page-links'
 import { rehypeAlignTags } from './rehype-plugins/align-tags'
 import { rehypeSandboxIframes } from './rehype-plugins/sandbox-iframes'
+import { rehypeUnwrapBlockTags } from './rehype-plugins/unwrap-block-tags'
 import { stripSlideDirectives } from './markdown-slides'
 import type { ResolvedPage } from './page-stable-link'
 
@@ -124,6 +125,7 @@ export const sanitizeSchema = {
     'onlyfor', // Audience gate (auth/anon/students/class) — wraps children
     'cta', // Call-to-action button link, styled with the app's button variants
     'newsletter', // Email capture box; list lives in Brevo, per site
+    'banner', // Sticky announcement bar at the top edge of the page (per page, not site-wide)
     'plugin', // User-created plugins rendered in sandboxed iframes
     'iframe', // Raw embeds (geotraceroute, etc.) — sandbox forced post-sanitize by rehypeSandboxIframes
     'style', // <style> blocks for scoped CSS in markdown
@@ -182,6 +184,8 @@ export const sanitizeSchema = {
     // list-id is honoured only if it matches the list the page's site owns —
     // enforced server-side in src/lib/newsletter.ts, not here.
     'newsletter': ['title', 'description', 'button', 'list-id', 'listId'],
+    // id keys the per-browser dismiss state; dismissible="false" hides the X.
+    'banner': ['id', 'dismissible'],
     'ping': ['host', 'count', 'os'],
     // AI feedback on student work. prompt is the teacher's grading instruction;
     // the server re-reads it from page content, the attr here is authoring UX.
@@ -539,6 +543,9 @@ export async function compileMarkdown(
       footnoteLabelProperties: {},
     })
     .use(rehypeRaw)
+    // <p><banner>…</banner></p> → <banner>…</banner> (single-line form). Before
+    // rehypeMarkdownChildren so the banner's text is re-parsed as a block.
+    .use(rehypeUnwrapBlockTags)
     // Re-parse markdown inside custom container tags (flex-item, tab-item,
     // question, left/center/right, …) so they work with OR without blank
     // lines. MUST run before rehypeAlignTags: it re-parses <left>/<center>/

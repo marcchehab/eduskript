@@ -505,6 +505,20 @@ An email capture box. Addresses go to the site's Brevo list, which owns the conf
 
 **Attributes (all optional):** \`title\`, \`description\`, \`button\` — label on the submit button; \`list-id\` — a specific Brevo list, otherwise the site default.`)
 
+  // Announcement banner
+  sections.push(`## Banner
+
+A slim announcement bar that sticks to the top of the viewport while the page scrolls. Per page, not site-wide — put it on its own lines, ideally as the first thing on the page so it sits flush with the paper's top edge. Content is inline markdown.
+
+\`\`\`html
+<banner>
+New: [Atlas](https://atlas.eduskript.org) maps every public Eduskript site.
+</banner>
+<banner id="atlas-2026" dismissible="false">…</banner>
+\`\`\`
+
+**Attributes (all optional):** \`id\` — keys the viewer's dismiss state (default: hash of the text, so new wording re-shows it); \`dismissible\` — \`false\` removes the close button. Dismissal is stored per browser in localStorage.`)
+
   // AI feedback
   sections.push(`## AI Feedback
 
@@ -863,6 +877,8 @@ export function getCondensedSyntaxReference(): string {
 **CTA button:** \`<cta href="/auth/signup">Create free account</cta>\` — a link styled as a button in the site's own theme; \`label\` instead of children when self-closing, plus \`variant\` (default|secondary|outline|ghost), \`size\` (lg|default|sm), \`align\` (center|left|right). Never draw a button as an image.
 
 **Newsletter:** \`<newsletter [title="..."] [description="..."] [button="..."] />\` — email capture; addresses go to the site's Brevo list, which owns confirmation and unsubscribe.
+
+**Banner:** \`<banner [id="..."] [dismissible="false"]>inline markdown</banner>\` on its own lines, first on the page — sticky announcement bar at the top edge; viewers can dismiss it (remembered per browser, keyed by id or text).
 
 **AI feedback:** \`<ai-feedback prompt="teacher instructions for the AI" [id="fb1"] [label="Check my solution"] />\` — button for students: sends their pen strokes in the surrounding h1/h2/h3 section (rendered to an image) + the section markdown to a vision model for feedback; pasting a screenshot (hover box, Ctrl+V) works as alternative input. Several tags per page map to their prompts by position (\`id\` optional); no login required.
 

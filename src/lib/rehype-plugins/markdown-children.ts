@@ -34,7 +34,15 @@ const MARKDOWN_CHILDREN_ELEMENTS = new Set([
   'center',
   'right',
   'answer',
+  'banner',
 ])
+
+/**
+ * Containers whose content is INLINE: re-parsed in document order via
+ * reparseOrdered, and a lone paragraph is unwrapped so `<answer>` text keeps
+ * sitting on the radio row and `<banner>` stays a single bar.
+ */
+const INLINE_CONTENT_ELEMENTS = new Set(['answer', 'banner'])
 
 /**
  * `<question>` needs its own path. Its literal text child is the prompt, and
@@ -78,6 +86,14 @@ export function rehypeMarkdownChildren() {
   // splice the parsed HAST in place of those text nodes. Element children
   // (already-parsed content) are preserved.
   async function reparseTextChildren(node: Element): Promise<void> {
+    // Inline containers keep element order (remark may already have parsed a
+    // link or formula when the tag was written inline) and end up with inline
+    // nodes rather than a paragraph.
+    if (INLINE_CONTENT_ELEMENTS.has(node.tagName.toLowerCase())) {
+      node.children = await reparseOrdered(node.children)
+      return
+    }
+
     const textContent = node.children
       .filter((c): c is Text => c.type === 'text')
       .map((c) => c.value)
@@ -97,17 +113,7 @@ export function rehypeMarkdownChildren() {
       // editor lines. Dropping them makes source-line skip this content (clicks
       // fall back to the nearest positioned ancestor) — acceptable for
       // re-parsed inner content.
-      let parsed = hast.children as ElementContent[]
-      // `<answer>` labels are inline: drop the wrapping paragraph so the option
-      // text keeps sitting on the radio row instead of becoming a block.
-      if (
-        node.tagName.toLowerCase() === 'answer' &&
-        parsed.length === 1 &&
-        parsed[0].type === 'element' &&
-        parsed[0].tagName === 'p'
-      ) {
-        parsed = parsed[0].children as ElementContent[]
-      }
+      const parsed = hast.children as ElementContent[]
       parsed.forEach(stripPositions)
       node.children = node.children.filter((c) => c.type !== 'text')
       node.children.push(...parsed)
@@ -115,27 +121,25 @@ export function rehypeMarkdownChildren() {
   }
 
   /**
-   * Collect a `<question>`'s prompt into a `<question-prompt>` element placed
-   * before the answers.
+   * Re-parse a mixed child list IN ORDER: runs of literal text become markdown
+   * (a lone paragraph is unwrapped to its inline nodes), already-parsed
+   * elements pass through untouched. Word gaps between a text run and its
+   * element neighbours survive as single spaces.
    *
-   * Everything that is not an `<answer>` belongs to the prompt — not just the
-   * text nodes. When the author breaks the opening tag over several lines,
-   * CommonMark stops treating the block as raw HTML, so remark has already
-   * turned parts of the prompt into elements (a KaTeX span, `<strong>`, …) by
-   * the time we get here. Collecting text only would silently drop exactly
-   * those pieces: a prompt reading "Bei welchem $x$ …" lost its formula.
-   *
-   * Order is preserved: runs of literal text are re-parsed in place, already
-   * parsed elements pass through untouched.
+   * Needed wherever remark may already have parsed part of the content: when
+   * the author breaks an opening tag over several lines (CommonMark stops
+   * treating the block as raw HTML) or writes the tag inline on one line
+   * (`<banner>New: [Atlas](…)</banner>` — the link is an element by the time
+   * we get here). Collecting text only would silently drop or reorder those
+   * pieces: a prompt "Bei welchem $x$ …" lost its formula.
    */
-  async function reparseQuestionPrompt(node: Element): Promise<void> {
-    const promptParts: ElementContent[] = []
-    const answers: ElementContent[] = []
+  async function reparseOrdered(children: ElementContent[]): Promise<ElementContent[]> {
+    const parts: ElementContent[] = []
     let pendingText = ''
 
     const space = (): void => {
-      // Only between parts — a leading space would indent the prompt.
-      if (promptParts.length > 0) promptParts.push({ type: 'text', value: ' ' })
+      // Only between parts — a leading space would indent the content.
+      if (parts.length > 0) parts.push({ type: 'text', value: ' ' })
     }
 
     const flushText = async (): Promise<void> => {
@@ -157,32 +161,44 @@ export function rehypeMarkdownChildren() {
         parsed = parsed[0].children as ElementContent[]
       }
       parsed.forEach(stripPositions)
-      promptParts.push(...parsed)
+      parts.push(...parsed)
 
-      if (/\s$/.test(raw)) promptParts.push({ type: 'text', value: ' ' })
+      if (/\s$/.test(raw)) parts.push({ type: 'text', value: ' ' })
     }
 
-    for (const child of node.children) {
-      if (child.type === 'element' && child.tagName.toLowerCase() === 'answer') {
-        answers.push(child)
-        continue
-      }
+    for (const child of children) {
       if (child.type === 'text') {
         pendingText += child.value
         continue
       }
       await flushText()
-      promptParts.push(child as ElementContent)
+      parts.push(child)
     }
     await flushText()
 
-    // Drop a trailing gap (the newline before </question> or the first answer).
-    while (promptParts.length > 0) {
-      const last = promptParts[promptParts.length - 1]
+    // Drop a trailing gap (the newline before the closing tag or the first answer).
+    while (parts.length > 0) {
+      const last = parts[parts.length - 1]
       if (last.type !== 'text' || last.value.trim() !== '') break
-      promptParts.pop()
+      parts.pop()
+    }
+    return parts
+  }
+
+  /**
+   * Collect a `<question>`'s prompt into a `<question-prompt>` element placed
+   * before the answers. Everything that is not an `<answer>` belongs to the
+   * prompt — see reparseOrdered for why elements are kept, not just text.
+   */
+  async function reparseQuestionPrompt(node: Element): Promise<void> {
+    const answers: ElementContent[] = []
+    const rest: ElementContent[] = []
+    for (const child of node.children) {
+      if (child.type === 'element' && child.tagName.toLowerCase() === 'answer') answers.push(child)
+      else rest.push(child)
     }
 
+    const promptParts = await reparseOrdered(rest)
     if (promptParts.length === 0) return
 
     const prompt: Element = {
