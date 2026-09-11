@@ -79,13 +79,19 @@ function PreComponent({ children, ...props }: React.HTMLAttributes<HTMLPreElemen
     : null
   if (childProps?.className && typeof childProps.className === 'string' && childProps.className.startsWith('language-')) {
     // Language code blocks render via CodeBlock (the <pre> is dropped). Wrap in
-    // a thin div carrying the source-line attrs so editor↔preview cursor sync
-    // works (rehypeSourceLine tagged the <pre>, which we'd otherwise discard).
+    // a thin div carrying the attrs rehype put on the <pre> that we'd otherwise
+    // discard:
+    // - data-section-id (rehypeHeadingSectionIds): the code block is its own
+    //   annotation section. Its font size doesn't follow the user font-size
+    //   control, so strokes inside it must anchor to the block itself, not to
+    //   the preceding heading whose offset shifts when prose is resized.
+    // - data-source-line-* (rehypeSourceLine): editor↔preview cursor sync.
     const dataProps = props as Record<string, unknown>
+    const sectionId = (dataProps['data-section-id'] ?? dataProps['dataSectionId']) as string | undefined
     const sourceLineStart = (dataProps['data-source-line-start'] ?? dataProps['dataSourceLineStart']) as string | undefined
     const sourceLineEnd = (dataProps['data-source-line-end'] ?? dataProps['dataSourceLineEnd']) as string | undefined
-    return sourceLineStart != null
-      ? <div data-source-line-start={sourceLineStart} data-source-line-end={sourceLineEnd}>{children}</div>
+    return sectionId != null || sourceLineStart != null
+      ? <div data-section-id={sectionId} data-source-line-start={sourceLineStart} data-source-line-end={sourceLineEnd}>{children}</div>
       : <>{children}</>
   }
   return <pre {...props}>{children}</pre>
