@@ -5,6 +5,7 @@
  *
  *   <banner>New: [Atlas](https://atlas.eduskript.org) maps every public skript.</banner>
  *   <banner id="atlas" dismissible="false">…</banner>
+ *   <banner color="#2563eb" text="white">…</banner>
  *
  * Per-page, not site-wide: it lives in the page's markdown like any other
  * component. Layout is CSS (`.es-banner` in globals.css): position sticky so
@@ -28,6 +29,10 @@ interface PageBannerProps {
   id?: string
   /** Any value except "false" shows the close button (default: shown). */
   dismissible?: string | boolean
+  /** Background, any CSS color (default: orange, see .es-banner in globals.css). */
+  color?: string
+  /** Text + link color, any CSS color (default: white). */
+  text?: string
   children?: React.ReactNode
   className?: string
   // Editor preview cursor-sync + section attrs survive component substitution.
@@ -86,7 +91,7 @@ function writeDismissed(key: string): void {
 }
 const sessionDismissed = new Set<string>()
 
-export function PageBanner({ id, dismissible, children, className, ...dataAttrs }: PageBannerProps) {
+export function PageBanner({ id, dismissible, color, text, children, className, ...dataAttrs }: PageBannerProps) {
   const canDismiss = dismissible !== 'false' && dismissible !== false
   const storageKey = STORAGE_PREFIX + (id || hashText(extractText(children)))
   const getSnapshot = useCallback(
@@ -99,10 +104,16 @@ export function PageBanner({ id, dismissible, children, className, ...dataAttrs 
 
   const dismiss = () => writeDismissed(storageKey)
 
+  // Inline styles beat the .es-banner defaults; links inherit via currentColor.
+  const style: React.CSSProperties = {}
+  if (color) style.backgroundColor = color
+  if (text) style.color = text
+
   return (
     <div
       className={className ? `es-banner ${className}` : 'es-banner'}
       role="note"
+      style={style}
       {...dataAttrs}
     >
       <div className="es-banner-content">{children}</div>

@@ -182,6 +182,8 @@ const TAG_ATTRS: Record<string, AttrDef[]> = {
   'banner': [
     { label: 'id', info: 'Keys the per-browser dismiss state (default: text hash)' },
     { label: 'dismissible', info: 'false hides the close button' },
+    { label: 'color', info: 'Background color (CSS color, default orange)' },
+    { label: 'text', info: 'Text color (CSS color, default white)' },
   ],
   'newsletter': [
     { label: 'title', info: 'Heading text' },

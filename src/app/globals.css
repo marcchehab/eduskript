@@ -334,23 +334,24 @@
  * the preview pane in the editor). #paper is overflow: clip, not a scroll
  * container, so sticky reaches through it. As the first element on the page
  * the negative margins pull it flush with the paper's edges: values mirror
- * .paper-responsive padding (px-48 / py-24) and its reflow-mode override.
+ * .paper-responsive padding (px-48 / py-24) minus a 5px inset, and its
+ * reflow-mode override.
  * z-index stays below the annotation canvas (36–40) and the mobile sidebar
  * overlay (z-30).
  */
 .es-banner {
   position: sticky;
-  top: 0;
+  top: 5px;
   z-index: 20;
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.5rem 1rem;
-  font-size: 0.875rem;
+  padding: 0.6rem 1rem;
+  font-size: 1rem;
   line-height: 1.4;
-  background: hsl(var(--muted));
-  color: hsl(var(--foreground));
-  border-bottom: 1px solid hsl(var(--border));
+  background: #f97316; /* orange-500; color="…" attr overrides inline */
+  color: #fff; /* text="…" attr overrides inline */
+  border-radius: 0.5rem;
   margin: 0 0 1.5rem;
 }
 .es-banner-content {
@@ -360,30 +361,40 @@
 .es-banner-content > p {
   margin: 0;
 }
+.prose-theme .es-banner a {
+  color: currentColor;
+  text-decoration: underline;
+}
 .es-banner-close {
   flex: none;
   display: inline-flex;
   padding: 0.25rem;
   border-radius: 0.25rem;
-  color: hsl(var(--muted-foreground));
+  color: currentColor;
+  opacity: 0.8;
 }
 .es-banner-close:hover {
-  color: hsl(var(--foreground));
-  background: hsl(var(--accent));
+  opacity: 1;
+  background: rgb(128 128 128 / 0.25);
 }
+/* 5px inset from the paper edges (padding values: px-48 / py-24). */
 #paper .es-banner {
-  margin-left: -12rem;
-  margin-right: -12rem;
+  margin-left: calc(-12rem + 5px);
+  margin-right: calc(-12rem + 5px);
 }
-#paper .es-banner:first-child {
-  margin-top: -6rem;
+/* "First on the page" = nothing before it except the 0-height paper-top
+   sentinel the annotation layer renders ahead of the content. */
+#paper .es-banner:first-child,
+#paper [data-section-id="paper-top"]:first-child + .es-banner {
+  margin-top: calc(-6rem + 5px);
 }
 .reflow-mode #paper .es-banner {
-  margin-left: -1.25rem;
-  margin-right: -1.25rem;
+  margin-left: calc(-1.25rem + 5px);
+  margin-right: calc(-1.25rem + 5px);
 }
-.reflow-mode #paper .es-banner:first-child {
-  margin-top: -4rem;
+.reflow-mode #paper .es-banner:first-child,
+.reflow-mode #paper [data-section-id="paper-top"]:first-child + .es-banner {
+  margin-top: calc(-4rem + 5px);
 }
 @media print {
   .es-banner {

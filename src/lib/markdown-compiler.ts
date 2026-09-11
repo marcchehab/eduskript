@@ -184,8 +184,9 @@ export const sanitizeSchema = {
     // list-id is honoured only if it matches the list the page's site owns —
     // enforced server-side in src/lib/newsletter.ts, not here.
     'newsletter': ['title', 'description', 'button', 'list-id', 'listId'],
-    // id keys the per-browser dismiss state; dismissible="false" hides the X.
-    'banner': ['id', 'dismissible'],
+    // id keys the per-browser dismiss state; dismissible="false" hides the X;
+    // color/text are CSS colors for background/foreground.
+    'banner': ['id', 'dismissible', 'color', 'text'],
     'ping': ['host', 'count', 'os'],
     // AI feedback on student work. prompt is the teacher's grading instruction;
     // the server re-reads it from page content, the attr here is authoring UX.
