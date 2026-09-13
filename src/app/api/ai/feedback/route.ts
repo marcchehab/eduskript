@@ -11,13 +11,17 @@
  * Streams SSE events in the same { type: 'content' | 'error' | 'done' } shape
  * as /api/ai/chat.
  *
- * Model: OPENROUTER_VISION_MODEL env, falling back to google/gemini-3.5-flash-lite
+ * Model: OPENROUTER_VISION_MODEL env, falling back to google/gemini-3.8-flash
  * (the text-only chat/plan models have no image input, so vision needs its own
- * multimodal slug). Chosen over qwen/qwen3-vl-235b-a22b-instruct on a 2-image
- * handwritten-math A/B (2026-07-23): flash-lite read the strokes as accurately,
- * was 5-11x faster, and followed the "don't reveal the full solution" guideline
- * where qwen-VL kept handing over the answer. OPENROUTER_PROVIDERS is deliberately
- * NOT applied here — that pin targets the text model's provider.
+ * multimodal slug). History: flash-lite beat qwen/qwen3-vl-235b-a22b-instruct on
+ * a handwritten-math A/B (2026-07-23: as accurate, 5-11x faster, didn't hand over
+ * solutions). Replaced 2026-09-13: on a hand-drawn shortest-path stroke that runs
+ * through a node label, flash-lite misread the path ~20-30% of runs (7-10/10);
+ * 3.8-flash got 20/20 and followed "one or two sentences". Both were 6/6 on clean
+ * synthetic right/wrong paths, so the gap is reading messy strokes. Cost: 3.8-flash
+ * is $0.75/$3.75 per M tokens vs $0.30/$2.50, latency ~4-9s vs ~2s.
+ * OPENROUTER_PROVIDERS is deliberately NOT applied here — that pin targets the
+ * text model's provider.
  */
 
 import { getServerSession } from 'next-auth'
@@ -225,7 +229,7 @@ export async function POST(request: Request) {
     ;(async () => {
       try {
         const aiStream = await openai.chat.completions.create({
-          model: process.env.OPENROUTER_VISION_MODEL ?? 'google/gemini-3.5-flash-lite',
+          model: process.env.OPENROUTER_VISION_MODEL ?? 'google/gemini-3.8-flash',
           max_tokens: 2048,
           messages: [
             { role: 'system', content: systemPrompt },
