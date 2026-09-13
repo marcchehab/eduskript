@@ -1073,7 +1073,11 @@ const CodeMirrorEditor = function CodeMirrorEditor({
     requestAnimationFrame(() => {
       if (!previewRef.current) return
 
-      const allElements = previewRef.current.querySelectorAll('[data-source-line-start]')
+      // Skip elements inside a nested editor's preview (e.g. <demoeditor />):
+      // their source lines refer to the nested document, not ours.
+      const ownPreview = previewRef.current
+      const allElements = Array.from(ownPreview.querySelectorAll('[data-source-line-start]'))
+        .filter(el => el.closest('#markdown-preview-scroll-container') === ownPreview)
 
       // Remove previous highlights
       allElements.forEach(element => {
@@ -1128,6 +1132,8 @@ const CodeMirrorEditor = function CodeMirrorEditor({
     // Find the nearest element with source line data
     const elementWithLine = target.closest('[data-source-line-start]') as HTMLElement | null
     if (!elementWithLine) return
+    // Click inside a nested editor's preview — its lines aren't ours.
+    if (elementWithLine.closest('#markdown-preview-scroll-container') !== e.currentTarget) return
 
     const lineNumber = parseInt(elementWithLine.getAttribute('data-source-line-start') || '0', 10)
     if (lineNumber <= 0) return
