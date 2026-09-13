@@ -24,6 +24,57 @@ interface ExcalidrawImperativeAPI {
   addFiles: (files: unknown[]) => void
 }
 
+interface BinaryFile {
+  id: string
+  mimeType: string
+  dataURL: string
+  [key: string]: unknown
+}
+
+// Raster images below this size are saved untouched.
+const COMPRESS_MIN_BYTES = 200 * 1024
+
+/**
+ * Re-encode large PNG/JPEG files as WebP (quality 0.85, keeps alpha) before
+ * saving. Excalidraw caps pasted images at 1440px but keeps them lossless PNG
+ * (up to 4MB), and each image is saved base64-encoded in the .excalidraw JSON
+ * and in both SVG exports, so a screenshot easily exceeds 10MB per save.
+ *
+ * Only the saved copy is changed; the editor keeps the original in memory, so
+ * every save re-encodes from the original (no generational quality loss).
+ * Reopened drawings already hold WebP and are skipped. Keeps the original if
+ * the WebP isn't smaller, or if the browser can't encode WebP (canvas then
+ * returns PNG — older Safari).
+ */
+async function compressImageFiles(files: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const entries = await Promise.all(
+    Object.entries(files).map(async ([id, f]) => [id, await toWebp(f as BinaryFile)] as const)
+  )
+  return Object.fromEntries(entries)
+}
+
+async function toWebp(file: BinaryFile): Promise<BinaryFile> {
+  if (file.mimeType !== 'image/png' && file.mimeType !== 'image/jpeg') return file
+  if (file.dataURL.length * 0.75 < COMPRESS_MIN_BYTES) return file
+  try {
+    const img = new Image()
+    img.src = file.dataURL
+    await img.decode()
+    const canvas = document.createElement('canvas')
+    canvas.width = img.naturalWidth
+    canvas.height = img.naturalHeight
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return file
+    ctx.drawImage(img, 0, 0)
+    const dataURL = canvas.toDataURL('image/webp', 0.85)
+    if (!dataURL.startsWith('data:image/webp') || dataURL.length >= file.dataURL.length) return file
+    return { ...file, mimeType: 'image/webp', dataURL }
+  } catch (error) {
+    console.warn('Image compression failed, saving original', error)
+    return file
+  }
+}
+
 // Dynamically import Excalidraw to avoid SSR issues
 const Excalidraw = dynamic(
   () => import('@excalidraw/excalidraw').then(mod => mod.Excalidraw),
@@ -201,8 +252,8 @@ export function ExcalidrawEditor({
       const elements = excalidrawAPI.getSceneElements()
       const appState = excalidrawAPI.getAppState()
 
-      // Get embedded files (images, etc.)
-      const files = excalidrawAPI.getFiles()
+      // Get embedded files (images, etc.), large rasters re-encoded as WebP
+      const files = await compressImageFiles(excalidrawAPI.getFiles())
 
       // Create the Excalidraw data object (including embedded files)
       const excalidrawData = {
@@ -221,8 +272,9 @@ export function ExcalidrawEditor({
       const { exportToSvg } = await import('@excalidraw/excalidraw')
 
       // Light theme SVG. exportEmbedScene embeds the full editable scene
-      // data in the SVG itself, so it can be dragged back into Excalidraw
-      // to recover the drawing even if the .excalidraw JSON is ever lost.
+      // data (images included) in the SVG itself, so it can be dragged back
+      // into Excalidraw to recover the drawing even if the .excalidraw JSON is
+      // ever lost. Nothing in the app reads this embedded copy.
       const lightSvgElement = await exportToSvg({
         elements: elements,
         appState: {
@@ -231,20 +283,21 @@ export function ExcalidrawEditor({
           exportWithDarkMode: false,
           exportEmbedScene: true,
         },
-        files: excalidrawAPI.getFiles(),
+        files,
       })
       const lightSvg = lightSvgElement.outerHTML
 
-      // Dark theme SVG
+      // Dark theme SVG. No embedded scene: the light SVG already carries the
+      // recovery copy, and embedding it again doubles the size of every image.
       const darkSvgElement = await exportToSvg({
         elements: elements,
         appState: {
           ...appState,
           exportBackground: false,
           exportWithDarkMode: true,
-          exportEmbedScene: true,
+          exportEmbedScene: false,
         },
-        files: excalidrawAPI.getFiles(),
+        files,
       })
       const darkSvg = darkSvgElement.outerHTML
 

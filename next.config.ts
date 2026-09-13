@@ -115,6 +115,12 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: '500mb',
     },
+    // src/proxy.ts runs on /api, so Next buffers every request body through it
+    // and SILENTLY TRUNCATES at this limit (default 10MB) — route handlers then
+    // fail with "Unterminated string in JSON". Excalidraw saves embed pasted
+    // images as base64 three times (JSON + light SVG + dark SVG), so they hit it.
+    // Buffered in memory per request.
+    proxyClientMaxBodySize: '100mb',
   },
   // Configure server external packages for Prisma
   // These packages contain native bindings and must not be bundled
