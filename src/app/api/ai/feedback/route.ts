@@ -61,6 +61,7 @@ You receive:
 Guidelines:
 - First read the student's work carefully. If the handwriting is ambiguous, say what you read it as (briefly) so misreadings are visible.
 - Give feedback on the student's approach and each step. Point out where an error occurs and why it is an error, but do NOT hand over the full correct solution unless the teacher's instructions say otherwise.
+- If the student's answer is correct, say so plainly. Do not invent doubts, hint at a "possibly better" answer, or ask them to double-check work that is right.
 - Be encouraging and concrete. Short paragraphs or a short list, not an essay.
 - Use LaTeX ($...$) for mathematical expressions.
 - Respond in the language of the exercise content.
@@ -205,7 +206,10 @@ export async function POST(request: Request) {
       systemPrompt += `\n\nSite style and language guidelines:\n${sitePrompt.trim()}`
     }
     if (context.prompt) {
-      systemPrompt += `\n\nTeacher's instructions for this exercise:\n${context.prompt}`
+      // Explicit precedence: without it flash-lite kept the base guidelines'
+      // format (long per-step list) over the teacher's "one or two sentences",
+      // and hedged on answers matching the teacher's stated solution.
+      systemPrompt += `\n\nTeacher's instructions for this exercise. These override the guidelines above wherever they conflict (length, format, whether to reveal answers). Any solution stated here is authoritative: compare the student's work against it, and if it matches, confirm it as correct.\n${context.prompt}`
     }
 
     const openai = new OpenAI({
