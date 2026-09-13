@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { CACHE_TAGS } from '@/lib/cached-queries'
 import { invalidateSitemaps } from '@/lib/sitemap-cache'
+import { checkPagePermissions } from '@/lib/permissions'
 import {
   ConflictError,
   NotFoundError,
@@ -78,14 +79,32 @@ export async function DELETE(
 
     const { id } = await params
 
-    const existingPage = await prisma.page.findFirst({
-      where: {
-        id,
-        ...(session.user.isAdmin ? {} : { authors: { some: { userId: session.user.id } } }),
+    // Pages without their own PageAuthor rows inherit from the skript's
+    // authors (checkPagePermissions), so a page-authors-only filter would 404
+    // on those.
+    const existingPage = await prisma.page.findUnique({
+      where: { id },
+      include: {
+        authors: { include: { user: { select: { id: true, name: true } } } },
+        skript: {
+          include: {
+            authors: { include: { user: { select: { id: true, name: true } } } },
+          },
+        },
       },
     })
 
     if (!existingPage) {
+      return NextResponse.json({ error: 'Page not found' }, { status: 404 })
+    }
+
+    const perms = checkPagePermissions(
+      session.user.id,
+      existingPage.authors,
+      existingPage.skript.authors,
+      session.user.isAdmin
+    )
+    if (!perms.canEdit) {
       return NextResponse.json({ error: 'Page not found' }, { status: 404 })
     }
 
