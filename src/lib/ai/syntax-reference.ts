@@ -469,6 +469,18 @@ Embed an interactive GeoGebra applet by its online material id (the code at the 
 
 **Attributes:** \`material-id\` (required), \`height\` (px — OPTIONAL; omit it and the applet auto-fits its content so nothing is clipped; set it only to pin a fixed height), \`width\` (px, default fits the page), \`show-toolbar\` and \`show-algebra-input\` (default off — a clean read-only embed), \`correct-when\` (name of a boolean object in the construction that is true when the answer is right — captures per-student correctness for the teacher's class tally). Students can use the applet without a GeoGebra account; on exam pages their construction is captured for grading automatically.`)
 
+  // PhET simulations
+  sections.push(`## PhET Simulations
+
+Embed one of PhET's ~120 free interactive simulations (University of Colorado Boulder, CC BY 4.0) by its slug — the last part of \`phet.colorado.edu/en/simulations/<slug>\`. Physics, chemistry, maths, biology; almost all are translated to German. The required attribution is rendered automatically below the sim. Self-closing, lowercase tag.
+
+\`\`\`html
+<phet sim="projectile-motion" locale="de" />
+<phet sim="calculus-grapher" locale="de" height="600" />
+\`\`\`
+
+**Attributes:** \`sim\` (required, e.g. \`projectile-motion\`, \`forces-and-motion-basics\`, \`energy-skate-park\`, \`pendulum-lab\`, \`graphing-quadratics\`, \`calculus-grapher\`, \`balancing-chemical-equations\`), \`locale\` (sim language, e.g. \`de\`; untranslated sims fall back to English), \`height\` (px — optional, default keeps the sim's 1024×618 ratio), \`title\`. Only use slugs you are sure exist; the editor's Insert → PhET picker lists them all.`)
+
   // Spacer writing area
   sections.push(`## Spacer (writing area)
 
@@ -871,6 +883,8 @@ export function getCondensedSyntaxReference(): string {
 **Flag icons:** \`:flag-en-gb:\` / \`:flag-de-ch:\` inline anywhere in text, e.g. \`## User Manual :flag-en-gb:\`. Only these two codes exist.
 
 **GeoGebra:** \`<geogebra material-id="dNPHaqgb" [show-toolbar="true"] [correct-when="correct"] />\` — embeds an interactive GeoGebra applet by material id (from a geogebra.org share link); auto-fits height by default (add \`height="450"\` to pin). \`correct-when\` captures per-student correctness for the teacher's class tally.
+
+**PhET:** \`<phet sim="projectile-motion" locale="de" [height="600"] />\` — embeds a PhET simulation (CC BY 4.0, attribution added automatically) by slug from phet.colorado.edu; \`locale\` sets the sim language.
 
 **Spacer:** \`<spacer [pattern="checkered|lines|dots|blank"] [height="200"] [id="sp1"] />\` — blank writing area students solve on by hand with the pens; \`checkered\` is graph paper. Editor gives drag-to-resize + a pattern/delete toolbar; publishes as a plain patterned box.
 

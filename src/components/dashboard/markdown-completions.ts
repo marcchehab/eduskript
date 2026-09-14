@@ -45,6 +45,7 @@ const TAG_COMPLETIONS: TagDef[] = [
   { label: 'youtube', info: 'Embed a YouTube video (also works as ![caption](youtube-url))', apply: '<youtube id="" />', cursorOffset: 13 },
   { label: 'molecule', info: 'Structural formula from a SMILES string', apply: '<molecule smiles="" />', cursorOffset: 18 },
   { label: 'geogebra', info: 'Embed an interactive GeoGebra applet by material id', apply: '<geogebra material-id="" />', cursorOffset: 23 },
+  { label: 'phet', info: 'Embed a PhET simulation (Insert → PhET to browse)', apply: '<phet sim="" locale="de" />', cursorOffset: 11 },
   { label: 'spacer', info: 'Blank writing area for students to solve on by hand', apply: '<spacer pattern="checkered" height="200" />' },
   { label: 'cta', info: 'Call-to-action link styled as a button', apply: '<cta href="">Text</cta>', cursorOffset: 11 },
   { label: 'newsletter', info: 'Email signup box (Brevo list)', apply: '<newsletter />' },
@@ -165,6 +166,12 @@ const TAG_ATTRS: Record<string, AttrDef[]> = {
     { label: 'show-toolbar', info: 'Show the GeoGebra toolbar (true)' },
     { label: 'show-algebra-input', info: 'Show the algebra input bar (true)' },
     { label: 'correct-when', info: 'Captures per-student correctness for the teacher\'s class tally' },
+  ],
+  'phet': [
+    { label: 'sim', info: 'PhET sim slug, e.g. projectile-motion (from phet.colorado.edu/…/simulations/<slug>)' },
+    { label: 'locale', info: 'Sim language: de | en | fr | it | … (untranslated sims fall back to English)' },
+    { label: 'height', info: 'Pin a fixed height in px (default: PhET 1024×618 ratio)' },
+    { label: 'title', info: 'Accessible iframe title' },
   ],
   'spacer': [
     { label: 'pattern', info: 'checkered | lines | dots | blank' },

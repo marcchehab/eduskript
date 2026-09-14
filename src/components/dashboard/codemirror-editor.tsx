@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { QuestSpotlight } from '@/components/onboarding/quest-spotlight'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
-import { Eye, EyeOff, Pencil, Code, Bold, Italic, Heading, MessageSquare, Heading1, Heading2, Heading3, List, ListOrdered, Link, Palette, Highlighter, Circle, Wand2, ChevronDown, FilePen, Minus, Plus, CircleHelp, TextQuote, Puzzle, Sigma, AlignLeft, AlignCenter, AlignRight, Compass, SeparatorHorizontal, ChartSpline, Table, Image as ImageIcon, Film, FileText, Columns2, Columns3, MoveHorizontal, Pin, AppWindow, Atom, FlaskConical, Terminal, Sparkles, MousePointerClick, ClipboardCheck, Music, Megaphone } from 'lucide-react'
+import { Eye, EyeOff, Pencil, Code, Bold, Italic, Heading, MessageSquare, Heading1, Heading2, Heading3, List, ListOrdered, Link, Palette, Highlighter, Circle, Wand2, ChevronDown, FilePen, Minus, Plus, CircleHelp, TextQuote, Puzzle, Sigma, AlignLeft, AlignCenter, AlignRight, Compass, SeparatorHorizontal, ChartSpline, Table, Image as ImageIcon, Film, FileText, Columns2, Columns3, MoveHorizontal, Pin, AppWindow, Atom, FlaskConical, Terminal, Sparkles, MousePointerClick, ClipboardCheck, Music, Megaphone, Orbit } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,6 +20,7 @@ import { Sketch } from '@uiw/react-color'
 import { ExcalidrawEditor } from './excalidraw-editor'
 import { PluginPicker } from './plugin-picker'
 import { GeogebraDialog } from './geogebra-dialog'
+import { PhetPicker } from './phet-picker'
 import { PictureDialog } from './picture-dialog'
 import { VideoPickDialog } from './video-pick-dialog'
 import { PdfPickDialog } from './pdf-pick-dialog'
@@ -186,6 +187,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   const [excalidrawOpen, setExcalidrawOpen] = useState(false)
   const [pluginPickerOpen, setPluginPickerOpen] = useState(false)
   const [geogebraDialogOpen, setGeogebraDialogOpen] = useState(false)
+  const [phetPickerOpen, setPhetPickerOpen] = useState(false)
   const [pictureDialogOpen, setPictureDialogOpen] = useState(false)
   const [videoDialogOpen, setVideoDialogOpen] = useState(false)
   const [pdfDialogOpen, setPdfDialogOpen] = useState(false)
@@ -1256,45 +1258,36 @@ const CodeMirrorEditor = function CodeMirrorEditor({
     }
   }
 
-  // Insert a ```plot fence. The starter shows the features an author would
+  // Insert a ```plot fence. The starters show the features an author would
   // otherwise have to look up — a second curve with colour/style/label, marked
-  // points — rather than the shortest possible plot.
-  const insertPlot = () => {
-    const template =
-      '```plot\n' +
-      'x: -4..4\n' +
-      'y: -3..3\n' +
-      'grid\n' +
-      'f(x) = 1/3x^3 - x\n' +
-      'g(x) = x^2 - 1, red, dashed, label="f\'(x)"\n' +
-      'A = (-1, 2/3), label="H"\n' +
-      'B = (1, -2/3), label="T"\n' +
-      '```\n'
-
-    if (editorViewRef.current && !useSimpleEditor) {
-      const view = editorViewRef.current
-      const insertPos = view.state.selection.main.head
-      view.dispatch(
-        view.state.update({
-          changes: { from: insertPos, insert: template },
-          selection: { anchor: insertPos + template.length },
-        })
-      )
-      onChange(view.state.doc.toString())
-    } else if (useSimpleEditor) {
-      const textarea = document.querySelector('textarea') as HTMLTextAreaElement
-      if (textarea) {
-        const start = textarea.selectionStart
-        const newContent = textareaContent.substring(0, start) + template + textareaContent.substring(start)
-        setTextareaContent(newContent)
-        onChange(newContent)
-        setTimeout(() => {
-          textarea.selectionStart = textarea.selectionEnd = start + template.length
-          textarea.focus()
-        }, 0)
-      }
-    }
-  }
+  // points, a caption — rather than the shortest possible plot.
+  const insertPlot = () => insertTagAtCursor(
+    '```plot\n' +
+    'x: -4..4\n' +
+    'y: -3..3\n' +
+    'grid\n' +
+    'f(x) = 1/3x^3 - x\n' +
+    'g(x) = x^2 - 1, red, dashed, label="f\'(x)"\n' +
+    'A = (-1, 2/3), label="H"\n' +
+    'B = (1, -2/3), label="T"\n' +
+    '```\n'
+  )
+  // Physics: accelerate / cruise / brake — v(t) with its a(t) step function, the
+  // standard v-t reading exercise. The plot fence has no piecewise syntax, so
+  // v uses min/max and a a ternary; x is the time axis (terms must use x).
+  // vline labels aren't drawn, so the phases live in the caption.
+  const insertPhysicsPlot = () => insertTagAtCursor(
+    '```plot\n' +
+    'x: 0..16\n' +
+    'y: -3..12\n' +
+    'grid\n' +
+    'caption: Anfahren (0–5 s), konstant fahren (5–10 s), bremsen (10–15 s) — t in s\n' +
+    'v(x) = max(0, min(2x, 10, 30 - 2x)), thick, label="v(t) in m/s"\n' +
+    'a(x) = x < 5 ? 2 : (x < 10 ? 0 : (x < 15 ? -2 : 0)), red, dashed, label="a(t) in m/s²"\n' +
+    'vline x=5, dotted\n' +
+    'vline x=10, dotted\n' +
+    '```\n'
+  )
 
   // Insert plugin from picker
   const insertPlugin = (pluginSrc: string, configHint: string) => {
@@ -1325,8 +1318,16 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   }
 
   const insertGeogebra = (materialId: string) => {
-    const tag = `<geogebra material-id="${materialId}" />\n`
+    insertTagAtCursor(`<geogebra material-id="${materialId}" />\n`)
+  }
 
+  const insertPhet = (sim: string, locale: string) => {
+    // Trailing blank line keeps the tag in its own paragraph (see rehypeUnwrapBlockTags).
+    insertTagAtCursor(`<phet sim="${sim}" locale="${locale}" />\n\n`)
+  }
+
+  /** Inserts `tag` at the cursor (CodeMirror or simple textarea) and moves the cursor past it. */
+  const insertTagAtCursor = (tag: string) => {
     if (editorViewRef.current && !useSimpleEditor) {
       const view = editorViewRef.current
       const insertPos = view.state.selection.main.head
@@ -1969,11 +1970,22 @@ const CodeMirrorEditor = function CodeMirrorEditor({
 
   // Insert math. Inline wraps the current selection in $…$; display inserts a
   // $$…$$ block on its own lines and places the cursor between the delimiters.
-  const insertMathInline = () => {
+  // Samples are selected after insertion for overtyping — they show the LaTeX
+  // idioms of the subject (frac/sqrt for maths; \mathrm units with thin
+  // spaces for physics) instead of an empty block.
+  const MATHS_INLINE_SAMPLE = 'a^2 + b^2 = c^2'
+  const MATHS_DISPLAY_SAMPLE = String.raw`x_{1,2} = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}`
+  const PHYSICS_INLINE_SAMPLE = String.raw`v = 12\,\mathrm{m/s}`
+  const PHYSICS_DISPLAY_SAMPLE = String.raw`E_\mathrm{kin} = \frac{1}{2}\, m v^2 = \frac{1}{2} \cdot 2.0\,\mathrm{kg} \cdot \left(3.0\,\mathrm{m/s}\right)^2 = 9.0\,\mathrm{J}`
+  const insertMathInline = () => wrapInlineMath(MATHS_INLINE_SAMPLE)
+  const insertMathDisplay = () => insertDisplayMath(MATHS_DISPLAY_SAMPLE)
+  const insertPhysicsInline = () => wrapInlineMath(PHYSICS_INLINE_SAMPLE)
+  const insertPhysicsDisplay = () => insertDisplayMath(PHYSICS_DISPLAY_SAMPLE)
+  const wrapInlineMath = (fallback: string) => {
     if (!editorViewRef.current || useSimpleEditor) return
     const view = editorViewRef.current
     const { from, to } = view.state.selection.main
-    const selected = view.state.doc.sliceString(from, to) || 'a^2 + b^2 = c^2'
+    const selected = view.state.doc.sliceString(from, to) || fallback
     const wrapped = `$${selected}$`
     view.dispatch({
       changes: { from, to, insert: wrapped },
@@ -1981,13 +1993,10 @@ const CodeMirrorEditor = function CodeMirrorEditor({
     })
     view.focus()
   }
-  const insertMathDisplay = () => {
+  const insertDisplayMath = (sample: string) => {
     if (!editorViewRef.current || useSimpleEditor) return
     const view = editorViewRef.current
     const pos = view.state.selection.main.head
-    // Sample equation (quadratic formula) selected for overtyping — shows the
-    // LaTeX idioms (frac, sqrt, subscripts) instead of an empty block.
-    const sample = String.raw`x_{1,2} = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}`
     const insertText = `\n$$\n${sample}\n$$\n`
     view.dispatch({
       changes: { from: pos, insert: insertText },
@@ -2227,6 +2236,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
                   <RibbonBigButton icon={<Sparkles />} label="AI Feedback" title="AI feedback on drawings, plots, and photos in this section" onClick={insertAiFeedback} />
                   <RibbonBigButton icon={<AppWindow />} label="Tabs" title="Insert tabbed sections" onClick={insertTabsContainer} />
                   <RibbonBigButton icon={<Puzzle />} label="Plugin" title="Insert Plugin" onClick={() => setPluginPickerOpen(true)} />
+                  <RibbonBigButton icon={<Orbit />} label="PhET" title="Insert a PhET simulation" onClick={() => setPhetPickerOpen(true)} />
                 </RibbonGroup>
               </>
             ),
@@ -2266,6 +2276,51 @@ const CodeMirrorEditor = function CodeMirrorEditor({
                 <RibbonGroup caption="Graphs">
                   <RibbonBigButton icon={<ChartSpline />} label="Plot" title="Insert function plot" onClick={insertPlot} />
                   <RibbonBigButton icon={<Compass />} label="GeoGebra" title="Insert GeoGebra" onClick={() => setGeogebraDialogOpen(true)} />
+                  <RibbonBigButton icon={<Orbit />} label="PhET" title="Insert a PhET simulation" onClick={() => setPhetPickerOpen(true)} />
+                </RibbonGroup>
+                <RibbonGroup caption="Handwriting">
+                  <RibbonBigButton icon={<SeparatorHorizontal />} label="Spacer" title="Add Spacer (graph-paper writing area)" onClick={() => insertSpacer('checkered')} />
+                </RibbonGroup>
+              </>
+            ),
+          },
+          {
+            id: 'physics',
+            label: 'Physics',
+            accent: {
+              active: 'border-orange-500 text-orange-700 dark:text-orange-300',
+              idle: 'text-orange-600/70 dark:text-orange-400/70 hover:text-orange-700 dark:hover:text-orange-300',
+            },
+            content: (
+              <>
+                <RibbonGroup caption="Symbols">
+                  <RibbonSplitBigButton
+                    icon={<Sigma />}
+                    label="Equation"
+                    title="Insert physics formula (display)"
+                    onDefaultAction={insertPhysicsDisplay}
+                    menuTrigger={(bottomHalf) => (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>{bottomHalf}</DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="min-w-[160px]">
+                          <DropdownMenuItem onClick={insertPhysicsDisplay} className="gap-2">
+                            <span className="font-serif italic">E</span>
+                            <span>Display block ($$…$$)</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={insertPhysicsInline} className="gap-2">
+                            <span className="font-serif italic">v</span>
+                            <span>Inline with unit ($…$)</span>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+                  />
+                </RibbonGroup>
+                <RibbonGroup caption="Graphs">
+                  <RibbonBigButton icon={<ChartSpline />} label="Plot" title="Insert v(t)/a(t) diagram (accelerate, cruise, brake)" onClick={insertPhysicsPlot} />
+                </RibbonGroup>
+                <RibbonGroup caption="Simulations">
+                  <RibbonBigButton icon={<Orbit />} label="PhET" title="Insert a PhET simulation" onClick={() => setPhetPickerOpen(true)} />
                 </RibbonGroup>
                 <RibbonGroup caption="Handwriting">
                   <RibbonBigButton icon={<SeparatorHorizontal />} label="Spacer" title="Add Spacer (graph-paper writing area)" onClick={() => insertSpacer('checkered')} />
@@ -2287,6 +2342,9 @@ const CodeMirrorEditor = function CodeMirrorEditor({
                 </RibbonGroup>
                 <RibbonGroup caption="Equations">
                   <RibbonBigButton icon={<FlaskConical />} label="Reaction" title="Reaction equation (mhchem)" onClick={insertReaction} />
+                </RibbonGroup>
+                <RibbonGroup caption="Simulations">
+                  <RibbonBigButton icon={<Orbit />} label="PhET" title="Insert a PhET simulation" onClick={() => setPhetPickerOpen(true)} />
                 </RibbonGroup>
                 <RibbonGroup caption="Handwriting">
                   <RibbonBigButton icon={<SeparatorHorizontal />} label="Spacer" title="Add Spacer (graph-paper writing area)" onClick={() => insertSpacer('checkered')} />
@@ -2555,6 +2613,12 @@ const CodeMirrorEditor = function CodeMirrorEditor({
         onOpenChange={setPluginPickerOpen}
         onSelect={insertPlugin}
         userId={session?.user?.id}
+      />
+
+      <PhetPicker
+        open={phetPickerOpen}
+        onOpenChange={setPhetPickerOpen}
+        onInsert={insertPhet}
       />
 
       <GeogebraDialog

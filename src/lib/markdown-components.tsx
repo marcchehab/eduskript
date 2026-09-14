@@ -38,6 +38,7 @@ import { PluginContainer } from '@/components/markdown/plugin-container'
 import { Fullwidth } from '@/components/markdown/fullwidth'
 import { PdfEmbed } from '@/components/markdown/pdf-embed'
 import { Geogebra } from '@/components/markdown/geogebra'
+import { PhetSim } from '@/components/markdown/phet-sim'
 import { PingTerminal } from '@/components/markdown/ping-terminal'
 import { MermaidDiagram } from '@/components/markdown/mermaid-diagram'
 import { FunctionPlot } from '@/components/markdown/function-plot'
@@ -1109,6 +1110,13 @@ export function createMarkdownComponents(
           files={files}
         />
       )
+    },
+
+    // PhET simulation — iframe + CC BY attribution. See phet-sim.tsx.
+    'phet': (props: Record<string, unknown>) => {
+      const str = (k: string): string | undefined =>
+        typeof props[k] === 'string' ? (props[k] as string) : undefined
+      return <PhetSim sim={str('sim')} locale={str('locale')} height={str('height')} title={str('title')} />
     },
 
     // Student-triggered AI feedback on handwritten/annotated work.
