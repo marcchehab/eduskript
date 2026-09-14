@@ -10,18 +10,17 @@
  *                                                   text = normal text color)
  *
  * Per-page, not site-wide: it lives in the page's markdown like any other
- * component. Layout is CSS (`.es-banner` in globals.css): position sticky so
- * it stays at the top of the scroll container while the page scrolls under
- * it, and negative margins that pull it flush with the paper's edges when it
- * is the first element on the page. Placed further down it still sticks from
- * that point on. Children are re-parsed as markdown (rehypeMarkdownChildren),
- * so inline links, bold etc. work.
+ * component. Layout is CSS (`.es-banner` in globals.css): a static block that
+ * scrolls with the page; as the first element it sits in the paper's top
+ * margin. Children are re-parsed as markdown (rehypeMarkdownChildren), so
+ * inline links, bold etc. work.
  *
  * Dismissal is remembered per browser in localStorage, keyed by `id` or, when
  * absent, by the text content — so changing the wording re-shows the banner.
- * Read via useSyncExternalStore with a server snapshot of "not dismissed":
- * the bar is in the server HTML and hidden right after hydration, so on
- * cached pages a dismissed banner is briefly visible before React loads.
+ * The bar is in the server HTML. To keep a dismissed banner from flashing
+ * before hydration, a pre-paint script in root-shell.tsx reads the
+ * `es-banner-dismissed:*` keys and injects `display:none` rules matching
+ * `data-banner-key`; after hydration useSyncExternalStore unmounts it.
  */
 
 import { useCallback, useSyncExternalStore } from 'react'
@@ -53,6 +52,7 @@ interface PageBannerProps {
   'data-section-id'?: string
 }
 
+// Keep in sync with the banner bootstrap script in root-shell.tsx.
 const STORAGE_PREFIX = 'es-banner-dismissed:'
 
 function extractText(node: unknown): string {
@@ -105,7 +105,8 @@ const sessionDismissed = new Set<string>()
 
 export function PageBanner({ id, dismissible, color, text, children, className, ...dataAttrs }: PageBannerProps) {
   const canDismiss = dismissible !== 'false' && dismissible !== false
-  const storageKey = STORAGE_PREFIX + (id || hashText(extractText(children)))
+  const bannerKey = id || hashText(extractText(children))
+  const storageKey = STORAGE_PREFIX + bannerKey
   const getSnapshot = useCallback(
     () => canDismiss && (sessionDismissed.has(storageKey) || readDismissed(storageKey)),
     [canDismiss, storageKey],
@@ -141,6 +142,7 @@ export function PageBanner({ id, dismissible, color, text, children, className, 
       className={className ? `es-banner ${className}` : 'es-banner'}
       role="note"
       style={style}
+      data-banner-key={canDismiss ? bannerKey : undefined}
       {...dataAttrs}
     >
       <div className="es-banner-content">{children}</div>

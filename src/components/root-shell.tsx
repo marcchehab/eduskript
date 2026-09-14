@@ -113,6 +113,17 @@ export function RootShell({
             __html: `(function(){try{var s=localStorage.getItem('eduskript-reflow');var on=s==='on'||(s!=='off'&&Math.min(window.innerWidth,window.innerHeight)<640);document.documentElement.classList.toggle('reflow-mode',on);}catch(e){}})();`,
           }}
         />
+        {/*
+          Dismissed-banner bootstrap. <banner> is in the server HTML and only
+          unmounts after hydration; this hides dismissed ones before the first
+          frame via [data-banner-key] rules. Prefix must stay in sync with
+          STORAGE_PREFIX in page-banner.tsx. O(localStorage keys).
+        */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var p='es-banner-dismissed:',r='';for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k&&k.indexOf(p)===0&&localStorage.getItem(k)==='1'){r+='.es-banner[data-banner-key="'+CSS.escape(k.slice(p.length))+'"]{display:none}';}}if(r){var e=document.createElement('style');e.textContent=r;document.head.appendChild(e);}}catch(e){}})();`,
+          }}
+        />
         <link
           rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css"

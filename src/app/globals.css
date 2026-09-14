@@ -330,28 +330,20 @@
 
 /*
  * <banner> announcement bar (src/components/markdown/page-banner.tsx).
- * Sticky to the nearest scroll container (#scroll-container on public pages,
- * the preview pane in the editor). #paper is overflow: clip, not a scroll
- * container, so sticky reaches through it. As the first element on the page
- * the negative margins pull it flush with the paper's edges: values mirror
- * .paper-responsive padding (px-48 / py-24) minus a 5px inset, and its
- * reflow-mode override.
- * z-index stays below the annotation canvas (36–40) and the mobile sidebar
- * overlay (z-30).
- *
- * Sticky only while the sidebar is docked (>= 1344px, not .no-sidebar).
- * Everywhere else the floating page controls (layout.tsx: fixed, top 2rem,
- * ~2rem tall, z-50) sit right on the bar, and below 1280px the paper is
- * transform: scale()d — sticky offsets are computed in unscaled layout px,
- * so the bar visibly drifts by (1 - scale) × scrollTop instead of sticking.
- * In those modes the bar is static and, as the first element, its top edge
- * starts at --es-banner-clear (viewport px) so it clears the controls.
- * --es-banner-top is the first-element margin-top; the overrides below only
- * change that variable.
+ * Static: it scrolls with the page like any other block. As the first
+ * element on the page it sits in the paper's top margin — the negative
+ * margins pull it to the paper's edges (values mirror .paper-responsive
+ * padding px-48 / py-24, minus a 5px inset, and the reflow-mode override),
+ * and its top edge starts 72px below the paper top so it clears both the
+ * floating page controls (layout.tsx: fixed, top 2rem, ~2rem tall) and the
+ * section progress bar on wide screens. 72px is divided by --paper-scale
+ * (unset = 1 above 1280px) to get the same distance in the scaled paper's
+ * layout px; reflow mode has no scale and 4rem top padding.
+ * Previously sticky while the sidebar was docked; dropped because the
+ * progress bar covered it at top: 5px.
  */
 .es-banner {
-  position: sticky;
-  top: 5px;
+  position: relative;
   z-index: 20;
   display: flex;
   align-items: center;
@@ -389,7 +381,7 @@
 }
 /* 5px inset from the paper edges (padding values: px-48 / py-24). */
 #paper .es-banner {
-  --es-banner-top: calc(-6rem + 5px);
+  --es-banner-top: calc(72px / var(--paper-scale, 1) - 6rem);
   margin-left: calc(-12rem + 5px);
   margin-right: calc(-12rem + 5px);
 }
@@ -400,30 +392,9 @@
   margin-top: var(--es-banner-top);
 }
 .reflow-mode #paper .es-banner {
-  --es-banner-top: calc(-4rem + 5px);
+  --es-banner-top: calc(72px - 4rem);
   margin-left: calc(-1.25rem + 5px);
   margin-right: calc(-1.25rem + 5px);
-}
-/* Floating controls visible (see header comment). 72px viewport = controls'
-   bottom edge (2rem + ~2rem) plus a gap; divided by --paper-scale (unset = 1
-   above 1280px) to get the same distance in the scaled paper's layout px.
-   Reflow mode has no scale and 4rem top padding. */
-#scroll-container.no-sidebar .es-banner {
-  position: static;
-}
-#scroll-container.no-sidebar #paper .es-banner {
-  --es-banner-top: calc(72px / var(--paper-scale, 1) - 6rem);
-}
-@media (max-width: 1343px) {
-  .es-banner {
-    position: static;
-  }
-  #paper .es-banner {
-    --es-banner-top: calc(72px / var(--paper-scale, 1) - 6rem);
-  }
-  .reflow-mode #paper .es-banner {
-    --es-banner-top: calc(72px - 4rem);
-  }
 }
 @media print {
   .es-banner {
