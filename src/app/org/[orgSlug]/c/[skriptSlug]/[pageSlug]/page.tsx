@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import { PublicSiteLayout } from '@/components/public/layout'
 import { ClassToolbar } from '@/components/teacher/class-toolbar'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
-import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
+import { ReflowGate } from '@/components/public/reflow-gate'
 import type { Metadata } from 'next'
 import { prisma } from '@/lib/prisma'
 import { getOrgPublishedPage } from '@/lib/cached-queries'
@@ -289,7 +289,7 @@ export default async function OrgPublicPage({ params }: PageProps) {
       )}
       <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border">
         <article className="prose-theme">
-          <AnnotationWrapper pageId={page.id} content={page.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes}>
+          <ReflowGate pageId={page.id} content={page.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes}>
             <ServerMarkdownRenderer
               content={page.content}
               skriptId={skript.id}
@@ -297,7 +297,7 @@ export default async function OrgPublicPage({ params }: PageProps) {
               organizationSlug={orgSlug}
               pageLanguage={organization?.pageLanguage}
             />
-          </AnnotationWrapper>
+          </ReflowGate>
         </article>
       </div>
     </PublicSiteLayout>

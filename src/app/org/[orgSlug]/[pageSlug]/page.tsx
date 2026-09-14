@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { PublicSiteLayout } from '@/components/public/layout'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
-import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
+import { ReflowGate } from '@/components/public/reflow-gate'
 import { FrontpageOwnerCta } from '@/components/public/frontpage-owner-cta'
 import { prisma } from '@/lib/prisma'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
@@ -342,12 +342,12 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
         {/* Frontpage content or empty state for owners */}
         {frontPage?.content ? (
           <article className="prose-theme">
-            <AnnotationWrapper pageId={frontPage.id} content={frontPage.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes}>
+            <ReflowGate pageId={frontPage.id} content={frontPage.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes}>
               <ServerMarkdownRenderer
                 content={frontPage.content}
                 pageId={frontPage.id}
               />
-            </AnnotationWrapper>
+            </ReflowGate>
           </article>
         ) : (
           <div className="text-center py-12">

@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
-import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
+import { ReflowGate } from '@/components/public/reflow-gate'
 import { FrontpageOwnerCta } from '@/components/public/frontpage-owner-cta'
 import { ClassToolbar } from '@/components/teacher/class-toolbar'
 import { getTeacherByUsernameDeduped } from '@/lib/cached-queries'
@@ -198,7 +198,7 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
       />
       {frontPage?.content ? (
         <article className="prose-theme">
-          <AnnotationWrapper pageId={frontPage.id} content={frontPage.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes}>
+          <ReflowGate pageId={frontPage.id} content={frontPage.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes}>
             <ServerMarkdownRenderer
               content={frontPage.content}
               pageId={frontPage.id}
@@ -206,7 +206,7 @@ export default async function DomainIndex({ params }: DomainIndexProps) {
               ownerPageSlug={teacher.pageSlug ?? domain}
               pageLanguage={teacher.pageLanguage}
             />
-          </AnnotationWrapper>
+          </ReflowGate>
         </article>
       ) : (
         <div className="text-center py-12">

@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { SkriptRedirect } from '@/components/SkriptRedirect'
 import { PublicSiteLayout } from '@/components/public/layout'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
-import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
+import { ReflowGate } from '@/components/public/reflow-gate'
 import { getOrgSidebarData } from '@/lib/sidebar-items'
 import { CurrentSiteProvider } from '@/contexts/current-site-context'
 import { buildSiteStructure } from '@/lib/site-structure'
@@ -253,14 +253,14 @@ export default async function OrgSkriptPage({ params }: SkriptPageProps) {
         <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border">
           {frontPage?.content ? (
             <article className="prose-theme">
-              <AnnotationWrapper pageId={frontPage.id} content={frontPage.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes}>
+              <ReflowGate pageId={frontPage.id} content={frontPage.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes}>
                 <ServerMarkdownRenderer
                   content={frontPage.content}
                   skriptId={skript.id}
                   pageId={frontPage.id}
                   organizationSlug={orgSlug}
                 />
-              </AnnotationWrapper>
+              </ReflowGate>
             </article>
           ) : null}
         </div>

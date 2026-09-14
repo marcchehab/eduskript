@@ -3,7 +3,7 @@ import type { Metadata } from 'next'
 import { prisma } from '@/lib/prisma'
 import { SkriptRedirect } from '@/components/SkriptRedirect'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
-import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
+import { ReflowGate } from '@/components/public/reflow-gate'
 import { ClassToolbar } from '@/components/teacher/class-toolbar'
 import { getPublicLayers, EMPTY_PUBLIC_LAYERS } from '@/lib/public-page-data'
 
@@ -173,7 +173,7 @@ export default async function SkriptPreviewPage({ params }: SkriptPreviewProps) 
         )}
         <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border">
           <article className="prose-theme">
-            <AnnotationWrapper pageId={frontPage.id} content={frontPage.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes}>
+            <ReflowGate pageId={frontPage.id} content={frontPage.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes}>
               <ServerMarkdownRenderer
                 content={frontPage.content}
                 skriptId={skript.id}
@@ -181,7 +181,7 @@ export default async function SkriptPreviewPage({ params }: SkriptPreviewProps) 
                 ownerPageSlug={domain}
                 pageLanguage={teacherSiteRow?.pageLanguage}
               />
-            </AnnotationWrapper>
+            </ReflowGate>
           </article>
         </div>
         </>

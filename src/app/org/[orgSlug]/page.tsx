@@ -3,7 +3,7 @@ import type { Metadata } from 'next'
 import { readExtraSettings } from '@/lib/settings'
 import { PublicSiteLayout } from '@/components/public/layout'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
-import { AnnotationWrapper } from '@/components/public/annotation-wrapper'
+import { ReflowGate } from '@/components/public/reflow-gate'
 import { ClassToolbar } from '@/components/teacher/class-toolbar'
 import { getOrgWithLayout, getOrgHomepageContent } from '@/lib/cached-queries'
 import { getOrgSidebarData } from '@/lib/sidebar-items'
@@ -220,7 +220,7 @@ export default async function OrgPage({ params }: OrgPageProps) {
         {/* Frontpage content or empty state for admins */}
         {showFrontPage && frontPage.content ? (
           <article className="prose-theme">
-            <AnnotationWrapper pageId={frontPage.id} content={frontPage.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes}>
+            <ReflowGate pageId={frontPage.id} content={frontPage.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes}>
               <ServerMarkdownRenderer
                 content={frontPage.content}
                 pageId={frontPage.id}
@@ -228,7 +228,7 @@ export default async function OrgPage({ params }: OrgPageProps) {
                 organizationSlug={orgSlug}
                 pageLanguage={organization.pageLanguage}
               />
-            </AnnotationWrapper>
+            </ReflowGate>
           </article>
         ) : (
           <div className="text-center py-12">
