@@ -39,6 +39,8 @@
   }
   .tabs button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
   .stage { position: relative; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .chartbox { margin-top: 6px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  #chart { cursor: default; touch-action: auto; }
   canvas { display: block; width: 100%; touch-action: none; cursor: grab; }
   canvas.dragging { cursor: grabbing; }
   .hint { position: absolute; left: 8px; top: 6px; right: 8px; font-size: 12px; color: var(--muted); pointer-events: none; }
@@ -66,6 +68,7 @@
 <div id="app">
   <div class="tabs" id="tabs"></div>
   <div class="stage"><canvas id="cv"></canvas><div class="hint" id="hint"></div></div>
+  <div class="chartbox"><canvas id="chart"></canvas></div>
   <div class="bar" id="bar"></div>
   <div class="sliders" id="sliders"></div>
   <div class="info" id="info"></div>
@@ -100,7 +103,7 @@
       },
       play: '▶ Play', pause: '⏸ Pause', slow: 'Slow motion', reset: 'Reset', push: 'Push',
       liftOn: 'Start lift', liftOff: 'Stop lift', setAlpha: 'α = arctan μ<sub>k</sub>',
-      toScale: 'To scale', normalized: 'Normalized', decompose: 'Split F<sub>g</sub>', net: 'Net force', values: 'Values',
+      toScale: 'To scale', normalized: 'Normalized', decompose: 'Split F<sub>g</sub>', net: 'Net force', values: 'Values', chartT: 't in s', chartV: 'v in m/s',
       angle: 'Angle α', muS: 'μ<sub>s</sub> (static)', muK: 'μ<sub>k</sub> (kinetic)', mass: 'Mass m', m1: 'Mass m₁', m2: 'Mass m₂',
       vLift: 'Lift speed', beta: 'Rope angle β',
       sticking: 'sticking', sliding: 'sliding', air: 'no contact', endStop: 'end stop — reset',
@@ -119,7 +122,7 @@
       },
       play: '▶ Start', pause: '⏸ Pause', slow: 'Zeitlupe', reset: 'Zurücksetzen', push: 'Anstossen',
       liftOn: 'Lift starten', liftOff: 'Lift stoppen', setAlpha: 'α = arctan μ<sub>G</sub>',
-      toScale: 'Massstäblich', normalized: 'Normiert', decompose: 'F<sub>G</sub> zerlegen', net: 'Resultierende', values: 'Beträge',
+      toScale: 'Massstäblich', normalized: 'Normiert', decompose: 'F<sub>G</sub> zerlegen', net: 'Resultierende', values: 'Beträge', chartT: 't in s', chartV: 'v in m/s',
       angle: 'Winkel α', muS: 'μ<sub>H</sub> (Haft)', muK: 'μ<sub>G</sub> (Gleit)', mass: 'Masse m', m1: 'Masse m₁', m2: 'Masse m₂',
       vLift: 'Liftgeschw.', beta: 'Seilwinkel β',
       sticking: 'haftet', sliding: 'gleitet', air: 'kein Kontakt', endStop: 'Anschlag – zurücksetzen',
@@ -454,7 +457,7 @@
   function build() {
     if (drag) drag = null;
     P = params[sceneId];
-    S = { world: newWorld(), recs: [], ended: false };
+    S = { world: newWorld(), recs: [], ended: false, t: 0, hist: [] };
     S.ground = S.world.createBody();
     BUILD[sceneId]();
     accTime = 0;
@@ -485,6 +488,7 @@
   function stepWorld() {
     S.recs.forEach(function (r) { r.stepPn = 0; r.stepPt = 0; r.vtStep = 0; r.touch = false; });
     S.world.step(DT, 10, 4);
+    S.t += DT;
     if (S.onStep) S.onStep();
     if (drag) {
       var F = drag.joint.getReactionForce(1 / DT);         // force on the dragged body
@@ -528,8 +532,12 @@
         r.vPrev = { x: v.x, y: v.y };
         r.contact = r.touchFrame; r.touchFrame = false;
       });
+      var vm = S.main.body.getLinearVelocity();
+      S.hist.push({ t: S.t, v: Math.hypot(vm.x, vm.y) });
+      while (S.hist.length && S.hist[0].t < S.t - CHART_WIN - 1) S.hist.shift();   // ≤ ~700 samples
     }
     draw();
+    drawChart();
     updateInfo(false);
     requestAnimationFrame(frame);
   }
@@ -544,6 +552,71 @@
     cv.width = Math.round(w * dpr); cv.height = Math.round(cssH * dpr);
     cv.style.height = cssH + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  // ---------------------------------------------------------------- v-t chart
+  // Speed |v| of the main body over the last CHART_WIN seconds of simulated time (so slow
+  // motion stretches it). One sample per rendered frame that advanced the physics.
+  var CHART_WIN = 10;
+  var ch = document.getElementById('chart'), cctx = ch.getContext('2d'), chW = 600, chH = 140;
+
+  function resizeChart() {
+    var w = ch.parentElement.clientWidth;
+    chW = w; chH = Math.round(Math.max(110, Math.min(170, w * 0.2)));
+    var dpr = window.devicePixelRatio || 1;
+    ch.width = Math.round(w * dpr); ch.height = Math.round(chH * dpr);
+    ch.style.height = chH + 'px';
+    cctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function niceCeil(x) {   // smallest 1/2/5·10^n ≥ x
+    var e = Math.pow(10, Math.floor(Math.log10(x))), m = x / e;
+    return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * e;
+  }
+
+  function drawChart() {
+    var c = cctx, h = S.hist, padL = 40, padR = 12, padT = 10, padB = 22;
+    var t1 = Math.max(S.t, CHART_WIN), t0 = t1 - CHART_WIN;
+    var vmax = 0;
+    for (var i = 0; i < h.length; i++) if (h[i].t >= t0 && h[i].v > vmax) vmax = h[i].v;
+    var top = Math.max(vmax * 1.1, 0.5), yStep = niceCeil(top / 4), nY = Math.ceil(top / yStep), yMax = yStep * nY;
+    var X = function (t) { return padL + (t - t0) / CHART_WIN * (chW - padL - padR); };
+    var Y = function (v) { return chH - padB - v / yMax * (chH - padT - padB); };
+    c.fillStyle = css('--bg'); c.fillRect(0, 0, chW, chH);
+    c.font = '11px system-ui'; c.lineWidth = 1;
+    // grid + tick labels
+    c.strokeStyle = css('--line'); c.fillStyle = css('--muted');
+    for (var k = 0; k <= nY; k++) {
+      var vy = yStep * k, y = Math.round(Y(vy)) + 0.5;
+      c.beginPath(); c.moveTo(padL, y); c.lineTo(chW - padR, y); c.stroke();
+      c.textAlign = 'right'; c.fillText(+vy.toPrecision(3) + '', padL - 5, y + 4);
+    }
+    c.textAlign = 'center';
+    for (var ts = Math.ceil(t0); ts <= t1; ts++) {
+      var x = Math.round(X(ts)) + 0.5;
+      c.beginPath(); c.moveTo(x, padT); c.lineTo(x, chH - padB); c.stroke();
+      if (ts % 2 === 0) c.fillText(ts + '', x, chH - padB + 14);
+    }
+    c.textAlign = 'left'; c.fillStyle = css('--fg');
+    c.fillText(L.chartV, padL + 4, padT + 11);
+    c.textAlign = 'right'; c.fillText(L.chartT, chW - padR - 2, chH - padB - 5);
+    c.textAlign = 'start';
+    // curve
+    c.save();
+    c.beginPath(); c.rect(padL, padT - 2, chW - padL - padR, chH - padT - padB + 4); c.clip();
+    c.strokeStyle = css('--accent'); c.lineWidth = 2; c.beginPath();
+    var started = false;
+    for (var j = 0; j < h.length; j++) {
+      if (h[j].t < t0 - 0.1) continue;
+      var px = X(h[j].t), py = Y(h[j].v);
+      if (started) c.lineTo(px, py); else { c.moveTo(px, py); started = true; }
+    }
+    c.stroke();
+    if (h.length) {
+      var last = h[h.length - 1];
+      c.fillStyle = css('--accent'); c.beginPath(); c.arc(X(last.t), Y(last.v), 3.5, 0, 7); c.fill();
+    }
+    c.restore();
   }
 
   function makeTransform() {
@@ -883,7 +956,8 @@
     resize();
     build();
     renderAll();
-    new ResizeObserver(function () { resize(); }).observe(cv.parentElement);
+    resizeChart();
+    new ResizeObserver(function () { resize(); resizeChart(); }).observe(cv.parentElement);
     requestAnimationFrame(frame);
   });
   plugin.onThemeChange(applyTheme);
