@@ -75,6 +75,20 @@ $$\ce{CH3COOH <=> CH3COO- + H+}$$
 
 ---
 
+## PhET-Simulationen
+
+Die freien Chemie-Simulationen von PhET lassen sich mit einer Zeile einbetten — Gleichungen ausgleichen und dabei die Teilchen auf beiden Seiten sehen, pH-Skala, Molekülgeometrien, Atombau:
+
+```html
+<phet sim="balancing-chemical-equations" locale="de" />
+```
+
+<phet sim="balancing-chemical-equations" locale="de" />
+
+Details und die durchsuchbare Auswahl: [PhET-Simulationen](https://eduskript.org/c/komponenten/phet-simulationen).
+
+---
+
 ## Chemie-Spickzettel
 
 | Ziel | Syntax |
@@ -85,3 +99,4 @@ $$\ce{CH3COOH <=> CH3COO- + H+}$$
 | Reversible Reaktion | `\ce{A <=> B}` |
 | Aggregatzustandssymbole | `\ce{N2(g) + 3H2(g) <=> 2NH3(g)}` |
 | Ionenladung | `\ce{H+}`, `\ce{CH3COO-}` |
+| PhET-Simulation | `<phet sim="balancing-chemical-equations" locale="de" />` |

@@ -141,6 +141,8 @@ Embedding `<plugin src="your-slug/forked-plugin" />` uses your forked version. T
 > - You're teaching a domain with specific visualizations (waveforms, chemistry molecules, language conjugation drills)
 > - You want a plugin tied to your teaching style (colors, layout, language)
 
+For physics, chemistry, maths and biology, check [PhET](https://eduskript.org/en/components/phet-simulations) first: around 120 free simulations embed with one line, almost all in German.
+
 Building is covered in the developer guide. The short version: write a single HTML file with embedded JS, paste it into the **Plugins → New** form, give it a slug, publish.
 
 ---

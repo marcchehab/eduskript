@@ -118,6 +118,12 @@ LIMIT 5;
 <plugin src="marie/mod-clock" mod="7"></plugin>
 ```
 
+### PhET-Simulation
+
+```html
+<phet sim="projectile-motion" locale="de" />
+```
+
 ### Quiz (Einfachauswahl)
 
 ```html
@@ -163,6 +169,7 @@ LIMIT 5;
 | Excalidraw | `![alt](file.excalidraw)` | — |
 | Video | `![alt](file.mp4)` | `<muxvideo src="file.mp4">` |
 | Plugin | — | `<plugin src="owner/plugin">` |
+| PhET-Simulation | — | `<phet sim="projectile-motion" locale="de">` |
 | Quiz | — | `<question type="single">...<answer>` |
 | Tabs | — | `<tabs-container>...<tab-item>` |
 | Eigenes CSS | — | `<style>.cls { ... }</style>` |

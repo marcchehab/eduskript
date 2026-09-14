@@ -1,6 +1,6 @@
 # First Steps: Mathematics
 
-Formulas and function plots, answers graded with a tolerance, handwritten derivations checked by AI, GeoGebra applets, and calculations in Python. Try each one. The source is one click away under each example.
+Formulas and function plots, answers graded with a tolerance, handwritten derivations checked by AI, GeoGebra applets, PhET simulations, and calculations in Python. Try each one. The source is one click away under each example.
 
 ## Formula and graph together
 
@@ -110,6 +110,19 @@ Public GeoGebra constructions embed directly. This one is by [Laura Hochreiter](
 > ```
 
 The `material-id` is the code at the end of any geogebra.org share link. Add `correct-when="name"` with a boolean from your construction, and Eduskript records per student whether the construction is right.
+
+## PhET simulations
+
+Reshape the graph of $f$ and watch $f'$ and $\int f$ follow. One of around 120 free PhET simulations, almost all available in German.
+
+<phet sim="calculus-grapher" locale="en" />
+
+> [!code]- Show source
+> ```html
+> <phet sim="calculus-grapher" locale="en" />
+> ```
+
+In the editor: **Insert → PhET**, searchable, with thumbnails. More in [PhET Simulations](https://eduskript.org/en/components/phet-simulations).
 
 ## Calculations in Python
 

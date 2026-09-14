@@ -276,6 +276,20 @@ Gut für Konstruktionen, die Schülerinnen und Schüler direkt manipulieren — 
 
 ---
 
+## PhET-Simulationen
+
+Für fertige interaktive Mathematik — wie $f'$ und $\int f$ einem Graphen folgen, den man verformt, Steigungen von Geraden, Brüche — bette eine der freien PhET-Simulationen ein:
+
+```html
+<phet sim="calculus-grapher" locale="de" />
+```
+
+<phet sim="calculus-grapher" locale="de" />
+
+Details und die durchsuchbare Auswahl: [PhET-Simulationen](https://eduskript.org/c/komponenten/phet-simulationen).
+
+---
+
 ## Spickzettel Mathematik und Plotten
 
 | Ziel | Syntax |
@@ -298,3 +312,4 @@ Gut für Konstruktionen, die Schülerinnen und Schüler direkt manipulieren — 
 | Nativer Funktionsplot | ` ```plot `-Code-Block |
 | Python/matplotlib-Plot | ` ```python editor output-only ` |
 | GeoGebra-Applet | `<geogebra material-id="..." />` |
+| PhET-Simulation | `<phet sim="calculus-grapher" locale="de" />` |

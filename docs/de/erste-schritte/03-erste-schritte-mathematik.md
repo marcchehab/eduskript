@@ -1,6 +1,6 @@
 # Erste Schritte: Mathematik
 
-Formeln und Funktionsplots, Antworten mit Toleranz bewertet, handschriftliche Herleitungen von der KI geprüft, GeoGebra-Applets und Berechnungen in Python. Probiere jedes Beispiel aus. Der Quelltext ist unter jedem Beispiel einen Klick entfernt.
+Formeln und Funktionsplots, Antworten mit Toleranz bewertet, handschriftliche Herleitungen von der KI geprüft, GeoGebra-Applets, PhET-Simulationen und Berechnungen in Python. Probiere jedes Beispiel aus. Der Quelltext ist unter jedem Beispiel einen Klick entfernt.
 
 ## Formel und Graph zusammen
 
@@ -110,6 +110,19 @@ Der Prompt gehört dir. Die Schüler sehen ihn nie, nur das Feedback.
 > ```
 
 Die `material-id` ist der Code am Ende jedes geogebra.org-Share-Links. Füge `correct-when="name"` mit einem Boolean aus deiner Konstruktion hinzu, und Eduskript hält pro Schüler fest, ob die Konstruktion richtig ist.
+
+## PhET-Simulationen
+
+Verforme den Graphen von $f$ und beobachte, wie $f'$ und $\int f$ mitgehen. Eine von rund 120 freien PhET-Simulationen, fast alle auf Deutsch.
+
+<phet sim="calculus-grapher" locale="de" />
+
+> [!code]- Quelltext anzeigen
+> ```html
+> <phet sim="calculus-grapher" locale="de" />
+> ```
+
+Im Editor unter **Insert → PhET**, durchsuchbar und mit Vorschaubild. Mehr unter [PhET-Simulationen](https://eduskript.org/c/komponenten/phet-simulationen).
 
 ## Berechnungen in Python
 

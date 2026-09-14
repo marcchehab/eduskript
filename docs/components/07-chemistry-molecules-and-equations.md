@@ -75,6 +75,20 @@ $$\ce{CH3COOH <=> CH3COO- + H+}$$
 
 ---
 
+## PhET simulations
+
+PhET's free chemistry simulations embed with one line — balancing equations with the particles visible on both sides, pH scale, molecule shapes, build an atom:
+
+```html
+<phet sim="balancing-chemical-equations" locale="de" />
+```
+
+<phet sim="balancing-chemical-equations" locale="de" />
+
+Details and the searchable picker: [PhET Simulations](https://eduskript.org/en/components/phet-simulations).
+
+---
+
 ## Chemistry cheat sheet
 
 | Goal | Syntax |
@@ -85,3 +99,4 @@ $$\ce{CH3COOH <=> CH3COO- + H+}$$
 | Reversible reaction | `\ce{A <=> B}` |
 | State symbols | `\ce{N2(g) + 3H2(g) <=> 2NH3(g)}` |
 | Ion charge | `\ce{H+}`, `\ce{CH3COO-}` |
+| PhET simulation | `<phet sim="balancing-chemical-equations" locale="de" />` |

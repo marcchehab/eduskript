@@ -1,6 +1,6 @@
 # Erste Schritte: Chemie
 
-Strukturformeln aus SMILES, Reaktionsgleichungen, von Hand skizzierte Mechanismen, die die KI prüft, Quizfragen, Kurven und Berechnungen in Python. Probiere jedes Beispiel aus. Der Quelltext ist unter jedem Beispiel einen Klick entfernt.
+Strukturformeln aus SMILES, Reaktionsgleichungen, PhET-Simulationen, von Hand skizzierte Mechanismen, die die KI prüft, Quizfragen, Kurven und Berechnungen in Python. Probiere jedes Beispiel aus. Der Quelltext ist unter jedem Beispiel einen Klick entfernt.
 
 ## Strukturformeln
 
@@ -29,6 +29,19 @@ $$\ce{2 H2O(l) <=> H3O+ + OH-}$$
 Pfeile, Aggregatzustände, Ladungen, alles innerhalb von `\ce{}`. Normale Mathematik funktioniert genauso: im Fliesstext wie pH $= -\log_{10}[\text{H}^+]$ oder auf eigener Zeile:
 
 $$c = \frac{n}{V}$$
+
+## PhET-Simulationen
+
+Gleiche Reaktionsgleichungen aus und sieh dabei die Teilchen auf beiden Seiten. Eine von rund 120 freien PhET-Simulationen, fast alle auf Deutsch.
+
+<phet sim="balancing-chemical-equations" locale="de" />
+
+> [!code]- Quelltext anzeigen
+> ```html
+> <phet sim="balancing-chemical-equations" locale="de" />
+> ```
+
+Im Editor unter **Insert → PhET**, durchsuchbar und mit Vorschaubild — auch pH-Skala, Molekülgeometrien und Atombau. Mehr unter [PhET-Simulationen](https://eduskript.org/c/komponenten/phet-simulationen).
 
 ## Eine Strukturformel beschriften, von der KI geprüft
 

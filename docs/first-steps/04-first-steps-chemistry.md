@@ -1,6 +1,6 @@
 # First Steps: Chemistry
 
-Structural formulas from SMILES, reaction equations, mechanisms sketched by hand and checked by AI, quiz questions, curves, and calculations in Python. Try each one. The source is one click away under each example.
+Structural formulas from SMILES, reaction equations, PhET simulations, mechanisms sketched by hand and checked by AI, quiz questions, curves, and calculations in Python. Try each one. The source is one click away under each example.
 
 ## Structural formulas
 
@@ -29,6 +29,19 @@ $$\ce{2 H2O(l) <=> H3O+ + OH-}$$
 Arrows, states of matter, charges, all inside `\ce{}`. Regular math works the same way: inline like pH $= -\log_{10}[\text{H}^+]$, or on its own line:
 
 $$c = \frac{n}{V}$$
+
+## PhET simulations
+
+Balance equations and see the particles on both sides. One of around 120 free PhET simulations, almost all available in German.
+
+<phet sim="balancing-chemical-equations" locale="en" />
+
+> [!code]- Show source
+> ```html
+> <phet sim="balancing-chemical-equations" locale="en" />
+> ```
+
+In the editor: **Insert → PhET**, searchable, with thumbnails — also pH scale, molecule shapes and build an atom. More in [PhET Simulations](https://eduskript.org/en/components/phet-simulations).
 
 ## Label a structural formula, checked by AI
 

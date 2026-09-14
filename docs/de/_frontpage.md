@@ -116,7 +116,7 @@ Jede Seite ist auch eine Präsentation. Projiziere sie im Unterricht, verteile d
 
 ## Sieh es für dein Fach
 
-Eduskript ist kein Programmierwerkzeug. Chemie, Mathematik, Sprachen, Geschichte, Sporttheorie: jedes Fach mit Stoff zum Erklären und Aufgaben zum Prüfen.
+Eduskript ist kein Programmierwerkzeug. Chemie, Mathematik, Physik, Sprachen, Geschichte, Sporttheorie: jedes Fach mit Stoff zum Erklären und Aufgaben zum Prüfen.
 
 <flex>
 <flex-item>
@@ -132,7 +132,7 @@ Python und SQL im Browser, automatisch bewertet. Turtle-Grafik, Live-HTML, inter
 
 ### Mathematik
 
-Formeln und Funktionsplots, Schieberegler mit Toleranz, handschriftliche Herleitungen von der KI geprüft, GeoGebra.
+Formeln und Funktionsplots, Schieberegler mit Toleranz, handschriftliche Herleitungen von der KI geprüft, GeoGebra und PhET-Simulationen.
 
 <cta href="https://eduskript.org/c/erste-schritte/erste-schritte-mathematik" size="default">Mathematik</cta>
 
@@ -141,9 +141,18 @@ Formeln und Funktionsplots, Schieberegler mit Toleranz, handschriftliche Herleit
 
 ### Chemie
 
-Strukturformeln aus SMILES, Reaktionsgleichungen, von Hand skizzierte Mechanismen, die die KI prüft.
+Strukturformeln aus SMILES, Reaktionsgleichungen, PhET-Simulationen, von Hand skizzierte Mechanismen, die die KI prüft.
 
 <cta href="https://eduskript.org/c/erste-schritte/erste-schritte-chemie" size="default">Chemie</cta>
+
+</flex-item>
+<flex-item>
+
+### Physik
+
+PhET-Simulationen auf Deutsch, Kräfte live an der schiefen Ebene, Diagramme im Text, von Hand gezeichnete Kräftebilder, die die KI prüft.
+
+<cta href="https://eduskript.org/c/beispiele/physik" size="default">Physik</cta>
 
 </flex-item>
 </flex>

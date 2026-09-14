@@ -276,6 +276,20 @@ Good for constructions students manipulate directly — dragging points, explori
 
 ---
 
+## PhET simulations
+
+For ready-made interactive maths — how $f'$ and $\int f$ follow a graph you reshape, slopes of lines, fractions — embed one of PhET's free simulations:
+
+```html
+<phet sim="calculus-grapher" locale="de" />
+```
+
+<phet sim="calculus-grapher" locale="de" />
+
+Details and the searchable picker: [PhET Simulations](https://eduskript.org/en/components/phet-simulations).
+
+---
+
 ## Math and plotting cheat sheet
 
 | Goal | Syntax |
@@ -298,3 +312,4 @@ Good for constructions students manipulate directly — dragging points, explori
 | Native function plot | ` ```plot ` fenced block |
 | Python/matplotlib plot | ` ```python editor output-only ` |
 | GeoGebra applet | `<geogebra material-id="..." />` |
+| PhET simulation | `<phet sim="calculus-grapher" locale="de" />` |

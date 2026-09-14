@@ -141,6 +141,8 @@ Das Einbetten von `<plugin src="your-slug/forked-plugin" />` verwendet deine gef
 > - Du ein Fach mit spezifischen Visualisierungen unterrichtest (Wellenformen, Chemie-Moleküle, Konjugationsübungen)
 > - Du ein Plugin willst, das zu deinem Unterrichtsstil passt (Farben, Layout, Sprache)
 
+Für Physik, Chemie, Mathematik und Biologie lohnt sich zuerst ein Blick auf [PhET](https://eduskript.org/c/komponenten/phet-simulationen): rund 120 freie Simulationen lassen sich mit einer Zeile einbetten, fast alle auf Deutsch.
+
 Das Bauen wird im Developer Guide behandelt. Die Kurzfassung: Schreibe eine einzelne HTML-Datei mit eingebettetem JS, füge sie in das Formular **Plugins → New** ein, gib ihr einen Slug, veröffentliche sie.
 
 ---
