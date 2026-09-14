@@ -182,6 +182,34 @@ export function Geogebra({
     // stable for the component's life; this also satisfies the ref-in-cleanup lint).
     const injectEl = injectRef.current
 
+    // GeoGebra sizes the inject div (the applet's parent) to the scaled applet
+    // size MULTIPLIED by the page zoom (`transform: scale(z)` on <main>, see
+    // docs/internals/POSITIONING.md) — it measures via client rects, which
+    // already include that transform. <main> then scales the div a second time,
+    // so the space reserved below the applet grew with zoom > 1 and the next
+    // paragraph overlapped it at zoom < 1. Re-derive the size in layout px from
+    // the scaler (untransformed offsetHeight × its own scale) and overwrite
+    // GeoGebra's value whenever it (re)writes either style — it does on load
+    // and on every window resize. The equality guard stops our own write from
+    // looping through the observer.
+    let scalerObserved = false
+    const fitSize = () => {
+      if (!injectEl) return
+      const scaler = injectEl.querySelector<HTMLElement>('.applet_scaler')
+      if (!scaler) return
+      if (!scalerObserved) {
+        styleObserver.observe(scaler, { attributes: true, attributeFilter: ['style'] })
+        scalerObserved = true
+      }
+      const tf = getComputedStyle(scaler).transform
+      const scale = tf && tf !== 'none' ? new DOMMatrixReadOnly(tf).a : 1
+      const h = `${scaler.offsetHeight * scale}px`
+      if (injectEl.style.height !== h) injectEl.style.height = h
+      if (injectEl.style.width !== '100%') injectEl.style.width = '100%'
+    }
+    const styleObserver = new MutationObserver(fitSize)
+    if (injectEl) styleObserver.observe(injectEl, { attributes: true, attributeFilter: ['style'] })
+
     loadDeployGGB()
       .then(() => {
         if (cancelled || !window.GGBApplet) return
@@ -209,6 +237,7 @@ export function Geogebra({
             if (cancelled) return
             apiRef.current = api
             setReady(true)
+            fitSize()
             // Capture student work (debounced); never while a teacher is viewing
             // a snapshot, and only when persistence is wired (pageId present).
             const onChange = () => {
@@ -248,6 +277,7 @@ export function Geogebra({
 
     return () => {
       cancelled = true
+      styleObserver.disconnect()
       if (saveTimer) clearTimeout(saveTimer)
       apiRef.current = null
       // GeoGebra has no destroy() on the wrapper — clear the injected DOM so the
