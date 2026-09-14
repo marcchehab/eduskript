@@ -29,28 +29,59 @@ Nothing here.
 `
 
 describe('extractFeedbackContext', () => {
-  it('finds the tag by id and scopes to the enclosing H2 section', () => {
+  it('finds the tag by id and scopes from the preceding h2 down to the tag', () => {
     const ctx = extractFeedbackContext(PAGE, 'fb1')
     expect(ctx).not.toBeNull()
     expect(ctx!.prompt).toBe('Check each step.')
     expect(ctx!.sectionMarkdown).toContain('## Exercise 1')
     expect(ctx!.sectionMarkdown).toContain('Simplify $2x + 3x$.')
-    expect(ctx!.sectionMarkdown).toContain('More notes.')
+    expect(ctx!.sectionMarkdown).not.toContain('More notes.') // below the tag
     expect(ctx!.sectionMarkdown).not.toContain('Exercise 2')
     expect(ctx!.sectionMarkdown).not.toContain('Algebra basics')
   })
 
-  it('treats h3 headings as section boundaries', () => {
-    // The tag sits under "### Hints", so the context is that h3 subsection —
-    // not the whole of Exercise 2 above it. Scoping to h2 swept in neighbouring
-    // material and gave the model more than the task being graded.
+  it('does not treat h3 headings as boundaries', () => {
     const ctx = extractFeedbackContext(PAGE, 'fb2')
     expect(ctx!.prompt).toBe('Do not reveal the solution.')
+    expect(ctx!.sectionMarkdown).toContain('## Exercise 2')
+    expect(ctx!.sectionMarkdown).toContain('Solve $x^2 = 9$.')
     expect(ctx!.sectionMarkdown).toContain('### Hints')
     expect(ctx!.sectionMarkdown).toContain('A hint under an h3.')
-    expect(ctx!.sectionMarkdown).not.toContain('## Exercise 2')
-    expect(ctx!.sectionMarkdown).not.toContain('Solve $x^2 = 9$.')
     expect(ctx!.sectionMarkdown).not.toContain('Exercise 3')
+  })
+
+  it('gives each of several tags under one h2 only the text above it', () => {
+    const page = [
+      '## Hallo',
+      '',
+      'Erste Erklärung.',
+      '',
+      '<ai-feedback id="a" prompt="Prompt A." />',
+      '',
+      'Zweite Erklärung.',
+      '',
+      '<ai-feedback id="b" prompt="Prompt B." />',
+      '',
+      'Beispiel darunter.',
+    ].join('\n')
+    const a = extractFeedbackContext(page, 'a')!
+    expect(a.prompt).toBe('Prompt A.')
+    expect(a.sectionMarkdown).toBe('## Hallo\n\nErste Erklärung.')
+
+    const b = extractFeedbackContext(page, 'b')!
+    expect(b.prompt).toBe('Prompt B.')
+    expect(b.sectionMarkdown).toContain('Erste Erklärung.')
+    expect(b.sectionMarkdown).toContain('Zweite Erklärung.')
+    expect(b.sectionMarkdown).not.toContain('Prompt A.')
+    expect(b.sectionMarkdown).not.toContain('<ai-feedback')
+    expect(b.sectionMarkdown).not.toContain('Beispiel darunter.')
+  })
+
+  it('removes the inner content of earlier paired ai-feedback blocks', () => {
+    const page = '## S\n\n<ai-feedback id="a" prompt="A">\ninner\n</ai-feedback>\n\nText.\n\n<ai-feedback id="b" prompt="B" />'
+    const ctx = extractFeedbackContext(page, 'b')!
+    expect(ctx.sectionMarkdown).toContain('Text.')
+    expect(ctx.sectionMarkdown).not.toContain('inner')
   })
 
   it('strips ai-feedback tags from the section markdown', () => {
@@ -92,6 +123,8 @@ describe('extractFeedbackContext', () => {
       '<ai-feedback id="fake" prompt="in a fence" />',
       '## not a heading',
       '```',
+      '',
+      'Above the tag.',
       '',
       '<ai-feedback id="real" prompt="Real prompt." />',
       '',

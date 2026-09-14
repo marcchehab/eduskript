@@ -235,7 +235,7 @@ caption: A cubic with a marked point
 
 Per-entry options go after a comma on the same line: a colour word, `label="..."`, `dashed`, `thick` — e.g. `f(x) = x^2, red, thick, label="parabola"`. Use `ln` for natural log, `log` for base 10.
 
-Because the plot renders as a static `<img>`, an `<ai-feedback>` tag in the same section captures it along with any pen strokes drawn on top — the way to build "sketch the tangent at x=1" tasks. See **Code Editors & Scoring** for `<ai-feedback>` details.
+Because the plot renders as a static `<img>`, an `<ai-feedback>` tag placed below it (same h2 section) captures it along with any pen strokes drawn on top — the way to build "sketch the tangent at x=1" tasks. See **Code Editors & Scoring** for `<ai-feedback>` details.
 
 ---
 

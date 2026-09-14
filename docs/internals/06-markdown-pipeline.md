@@ -217,7 +217,7 @@ which is exactly why the parsed prompt needed its own `<question-prompt>` wrappe
 dark) which `components/markdown/function-plot.tsx` emits as `<img src="data:image/svg+xml,…">`,
 toggled with `dark:hidden` / `hidden dark:block` like Excalidraw. Notes:
 
-- It **must** stay an `<img>`: `<ai-feedback>` composites the section's `<img>` elements into the
+- It **must** stay an `<img>`: `<ai-feedback>` composites the `<img>` elements above it (back to the previous h1/h2) into the
   vision-model request; inline SVG, mermaid divs and canvases are invisible to it.
 - The fence body is **not** markdown — `function-plot` must never be added to
   `MARKDOWN_CHILDREN_ELEMENTS`, and unlike mermaid the component does **not** run

@@ -1,13 +1,14 @@
 /**
  * Extracts the context for an <ai-feedback> request from raw page markdown.
  *
- * Scope: the section surrounding the <ai-feedback> tag — from the nearest
- * preceding h1/h2/h3 heading (inclusive) to the next one or EOF. H4+ do not
- * bound the section.
+ * Scope: everything ABOVE the <ai-feedback> tag, back to the nearest
+ * preceding h1/h2 heading (inclusive) or page start. Nothing below the tag is
+ * included, so content placed after the button (an example answer, the next
+ * exercise) never reaches the model. H3+ do not bound the context; with
+ * several tags under one h2, each later tag sees the earlier ones' text too.
  *
- * H3 used to be treated as a sub-step and left inside the section, which in
- * practice swept neighbouring exercises into the context and gave the model
- * far more than the task it was grading.
+ * Other <ai-feedback> blocks in that range are removed entirely (tag and any
+ * inner content); the requested tag's own prompt is returned separately.
  *
  * Runs server-side so students can't tamper with the teacher prompt or the
  * exercise text: the client only sends pageId + feedbackId, the server
@@ -27,11 +28,11 @@
 export interface FeedbackContext {
   /** Teacher prompt from the tag's prompt="..." attribute, if any. */
   prompt: string | null
-  /** The enclosing section's markdown, ai-feedback tags stripped. */
+  /** Markdown from the preceding h1/h2 up to the tag, ai-feedback blocks stripped. */
   sectionMarkdown: string
 }
 
-const HEADING_RE = /^#{1,3}\s+\S/
+const HEADING_RE = /^#{1,2}\s+\S/
 const FENCE_RE = /^\s*(```|~~~)/
 
 /** Line indices that are inside fenced code blocks (exclusive of fences). */
@@ -53,8 +54,8 @@ function fencedLines(lines: string[]): boolean[] {
  * Collect all ai-feedback opening tags (text + start line), in source order.
  * Tags may span multiple lines; we join until the closing `>`.
  */
-function findTags(lines: string[], inFence: boolean[]): Array<{ line: number; tagText: string }> {
-  const tags: Array<{ line: number; tagText: string }> = []
+function findTags(lines: string[], inFence: boolean[]): Array<{ line: number; col: number; tagText: string }> {
+  const tags: Array<{ line: number; col: number; tagText: string }> = []
   for (let i = 0; i < lines.length; i++) {
     if (inFence[i]) continue
     const col = lines[i].search(/<ai-feedback\b/i)
@@ -69,7 +70,7 @@ function findTags(lines: string[], inFence: boolean[]): Array<{ line: number; ta
     }
     const end = tagText.indexOf('>')
     if (end !== -1) tagText = tagText.slice(0, end + 1)
-    tags.push({ line: i, tagText })
+    tags.push({ line: i, col, tagText })
   }
   return tags
 }
@@ -89,7 +90,7 @@ export function extractFeedbackContext(
   const inFence = fencedLines(lines)
 
   const tags = findTags(lines, inFence)
-  let tag: { line: number; tagText: string } | undefined
+  let tag: { line: number; col: number; tagText: string } | undefined
   if (feedbackId) {
     tag = tags.find((t) => {
       const idMatch = t.tagText.match(/\bid\s*=\s*"([^"]*)"/i)
@@ -105,7 +106,7 @@ export function extractFeedbackContext(
   const promptMatch = tag.tagText.match(/\bprompt\s*=\s*"([^"]*)"/i)
   const prompt = promptMatch ? promptMatch[1] : null
 
-  // Section bounds: nearest h1/h2/h3 at or above the tag line → next one below
+  // Context bounds: nearest h1/h2 at or above the tag line → the tag itself
   let start = 0
   for (let i = tag.line; i >= 0; i--) {
     if (!inFence[i] && HEADING_RE.test(lines[i])) {
@@ -113,19 +114,13 @@ export function extractFeedbackContext(
       break
     }
   }
-  let end = lines.length
-  for (let i = tag.line + 1; i < lines.length; i++) {
-    if (!inFence[i] && HEADING_RE.test(lines[i])) {
-      end = i
-      break
-    }
-  }
 
-  const sectionMarkdown = lines
-    .slice(start, end)
+  const sectionMarkdown = [...lines.slice(start, tag.line), lines[tag.line].slice(0, tag.col)]
     .join('\n')
-    // Strip ai-feedback tags (self-closing or paired) so the model doesn't
-    // see the teacher prompt duplicated inside the exercise text.
+    // Drop earlier ai-feedback blocks: paired ones with their inner content,
+    // then self-closing/unclosed opening tags (their prompts would otherwise
+    // leak another exercise's grading instructions into this request).
+    .replace(/<ai-feedback\b[^>]*[^/]>[\s\S]*?<\/ai-feedback>/gi, '')
     .replace(/<ai-feedback\b[^>]*>/gi, '')
     .replace(/<\/ai-feedback>/gi, '')
     .trim()

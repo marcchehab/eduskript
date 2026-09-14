@@ -4,9 +4,10 @@
  * <ai-feedback> — student-triggered AI feedback on handwritten/annotated work.
  *
  * Three input paths:
- * 1. Button: collects the student's own annotation strokes that currently sit
- *    inside the enclosing section (previous h1/h2/h3 → next one, live DOM
- *    positions), renders them to a PNG (render-strokes-to-png.ts) and sends it.
+ * 1. Button: collects the student's own annotation strokes (and content
+ *    images) that currently sit between the previous h1/h2 and this component
+ *    (live DOM positions; nothing below the component), renders them to a PNG
+ *    (render-strokes-to-png.ts) and sends it.
  * 2. Paste zone: hover/focus the dashed box and press Ctrl+V with a screenshot
  *    in the clipboard — sends the pasted image instead. Covers work on top of
  *    tables/SVG/plugins where we can't rasterize the underlying DOM.
@@ -146,7 +147,7 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
     }
   }
 
-  /** Button path: strokes in the enclosing section → PNG → send. */
+  /** Button path: strokes between the previous h1/h2 and this component → PNG → send. */
   const handleFeedbackClick = async () => {
     if (busy) return
     if (!pageId) {
@@ -169,18 +170,19 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
       const scale = paperRect.width / paperEl.offsetWidth || 1
       const toPaperY = (clientY: number) => (clientY - paperRect.top) / scale
 
-      // Section bounds: previous h1/h2/h3 (or paper top) → next one (or paper
-      // end). Must stay in step with HEADING_RE in src/lib/ai/feedback-context.ts,
+      // Capture bounds: previous h1/h2 (or paper top) → top of this component.
+      // Nothing below the component is included, so an example answer or the
+      // next exercise placed after the button stays out. Must stay in step with
+      // HEADING_RE + the tag-line cutoff in src/lib/ai/feedback-context.ts,
       // which scopes the markdown sent alongside this image — if the two
-      // disagree, the model is shown strokes from one section and text from
+      // disagree, the model is shown strokes from one range and text from
       // another.
       const componentTop = toPaperY(hostEl.getBoundingClientRect().top)
       let yTop = 0
-      let yBottom = paperRect.height / scale
-      for (const el of paperEl.querySelectorAll('[data-section-id^="h1-"], [data-section-id^="h2-"], [data-section-id^="h3-"]')) {
+      const yBottom = componentTop
+      for (const el of paperEl.querySelectorAll('[data-section-id^="h1-"], [data-section-id^="h2-"]')) {
         const top = toPaperY(el.getBoundingClientRect().top)
         if (top <= componentTop && top > yTop) yTop = top
-        if (top > componentTop && top < yBottom) yBottom = top
       }
 
       // The annotation layer autosaves 2s after the last stroke; without this
@@ -225,7 +227,7 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
       const toPaperX = (clientX: number) => (clientX - paperRect.left) / scale
       const imageCandidates: Array<{ src: string; x: number; y: number; w: number; h: number }> = []
       for (const el of paperEl.querySelectorAll('img')) {
-        if (el.closest('[data-ai-feedback]')) continue // our own thumbnail
+        if (el.closest('[data-ai-feedback]')) continue // thumbnails of any ai-feedback block
         const r = el.getBoundingClientRect()
         const w = r.width / scale
         const h = r.height / scale

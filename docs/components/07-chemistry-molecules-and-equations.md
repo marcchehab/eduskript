@@ -36,7 +36,7 @@ You don't have to write SMILES from memory: PubChem lists a SMILES string for ev
 
 Layout works like an image: drag the handle in the editor preview to resize, or use the alignment buttons to align left/centre/right or wrap text around it — that writes `display-width`, `align`, and `wrap` back into the tag.
 
-The drawing is a normal image, so students can annotate it with the pens, and an `<ai-feedback>` tag in the same section picks it up — the way to build "circle the functional group" or "label the polar bonds" tasks (see **Code Editors & Scoring** for `<ai-feedback>`).
+The drawing is a normal image, so students can annotate it with the pens, and an `<ai-feedback>` tag placed below it (same h2 section) picks it up — the way to build "circle the functional group" or "label the polar bonds" tasks (see **Code Editors & Scoring** for `<ai-feedback>`).
 
 > [!note] Why it looks slightly different from your textbook
 > The layout is generated, not drawn: bond angles and where a chain bends are the renderer's choice. Element colours follow the usual convention (O red, N blue), and in dark mode only the black ink is lightened. Broken SMILES don't break the page — the image itself shows what the parser objected to.

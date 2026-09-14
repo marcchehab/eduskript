@@ -522,14 +522,14 @@ New: [Atlas](https://atlas.eduskript.org) maps every public Eduskript site.
   // AI feedback
   sections.push(`## AI Feedback
 
-A button students press to get AI feedback on what they drew or wrote by hand on the page (with the annotation pens) — e.g. a math derivation written next to an exercise. The strokes in the surrounding section (from the previous h1, h2 or h3 heading to the next one) are rendered to an image and sent to a vision model together with the section's markdown and the teacher's prompt. Students can alternatively paste a screenshot (hover the dashed box, Ctrl+V) — useful when they marked up content like tables or diagrams. Self-closing, lowercase tag.
+A button students press to get AI feedback on what they drew or wrote by hand on the page (with the annotation pens) — e.g. a math derivation written next to an exercise. The strokes and images ABOVE the tag, back to the previous h1 or h2 heading, are rendered to an image and sent to a vision model together with that markdown and the teacher's prompt. Nothing below the tag is sent, so an example answer can sit right after it. Students can alternatively paste a screenshot (hover the dashed box, Ctrl+V) — useful when they marked up content like tables or diagrams. Self-closing, lowercase tag.
 
 \`\`\`html
 <ai-feedback prompt="Check each simplification step. Point out the first error, do not reveal the solution." />
 <ai-feedback id="fb-quadratics" label="Check my solution" prompt="..." />
 \`\`\`
 
-**Attributes:** \`prompt\` — teacher instructions for the AI (not shown to students); \`id\` — optional stable identifier (components map to their prompt by position automatically, even with several per page); \`label\` — button text (default "Get AI feedback"). Place the tag inside the exercise's own heading section; an h3 per exercise keeps the context tight. Works for logged-out visitors too; requests are rate-limited per user or IP.`)
+**Attributes:** \`prompt\` — teacher instructions for the AI (not shown to students); \`id\` — optional stable identifier (components map to their prompt by position automatically, even with several per page); \`label\` — button text (default "Get AI feedback"). Place the tag after the exercise and the space students write in; with several tags under one h2, each sees everything above it (other tags' prompts excluded). Works for logged-out visitors too; requests are rate-limited per user or IP.`)
 
   // Ping terminal
   sections.push(`## Ping Terminal
@@ -564,7 +564,7 @@ Supports all mermaid diagram types: flowcharts, sequence diagrams, class diagram
   // Function plots
   sections.push(`## Function Plots
 
-Use a \`\`\`plot\`\`\` code fence for a graph of one or more functions. It renders as a static SVG image (light + dark), so students can draw on it with the annotation pens and an \`<ai-feedback>\` tag in the same section picks the graph up automatically.
+Use a \`\`\`plot\`\`\` code fence for a graph of one or more functions. It renders as a static SVG image (light + dark), so students can draw on it with the annotation pens and an \`<ai-feedback>\` tag placed below it (same h2 section) picks the graph up automatically.
 
 \`\`\`markdown
 \`\`\`plot
@@ -603,7 +603,7 @@ A fence with only a window and \`grid\` gives an empty coordinate system to draw
 
 **Attributes:** \`smiles\` (required — the standard molecule notation: \`CCO\` ethanol, \`c1ccccc1\` benzene, \`O\` water), \`name\` (caption below the drawing), \`width\` / \`height\` in px (default 420×300), plus the same layout attributes an image takes: \`display-width\` (percent of the column), \`align="left|center|right"\`, \`wrap="true"\`. In the editor these come from the drag handles, so they rarely need typing.
 
-Rendered server-side as an \`<img>\`, so students can draw on it with the annotation pens and an \`<ai-feedback>\` tag in the same section captures it. Element colours follow the usual convention; dark mode only lightens the black ink. A SMILES that cannot be parsed renders an image stating the problem — it never breaks the page.`)
+Rendered server-side as an \`<img>\`, so students can draw on it with the annotation pens and an \`<ai-feedback>\` tag placed below it (same h2 section) captures it. Element colours follow the usual convention; dark mode only lightens the black ink. A SMILES that cannot be parsed renders an image stating the problem — it never breaks the page.`)
 
   // Plugins
   const owner = BUILTIN_PLUGIN_OWNER
@@ -880,7 +880,7 @@ export function getCondensedSyntaxReference(): string {
 
 **Banner:** \`<banner [id="..."] [dismissible="false"] [color="orange|muted|paper|#hex"] [text="text|red|#hex"]>inline markdown</banner>\` on its own lines, first on the page — sticky announcement bar at the top edge; viewers can dismiss it (remembered per browser, keyed by id or text).
 
-**AI feedback:** \`<ai-feedback prompt="teacher instructions for the AI" [id="fb1"] [label="Check my solution"] />\` — button for students: sends their pen strokes in the surrounding h1/h2/h3 section (rendered to an image) + the section markdown to a vision model for feedback; pasting a screenshot (hover box, Ctrl+V) works as alternative input. Several tags per page map to their prompts by position (\`id\` optional); no login required.
+**AI feedback:** \`<ai-feedback prompt="teacher instructions for the AI" [id="fb1"] [label="Check my solution"] />\` — button for students: sends their pen strokes above the tag back to the previous h1/h2 (rendered to an image) + that markdown; nothing below the tag to a vision model for feedback; pasting a screenshot (hover box, Ctrl+V) works as alternative input. Several tags per page map to their prompts by position (\`id\` optional); no login required.
 
 **Ping:** \`<ping [host="wairualodge.co.nz"] [count="4"] [os="linux|macos|windows"] />\` — interactive terminal; students type \`ping [-c N] host\`. Server-side TCP connect (not ICMP; works where school wifi blocks ICMP). RTT/IP/loss are real; \`host\` auto-runs a demo; requires login; private addresses blocked; top-right button switches OS style.
 
@@ -888,7 +888,7 @@ export function getCondensedSyntaxReference(): string {
 
 **Structural formulas:** \`<molecule smiles="CC(=O)Oc1ccccc1C(=O)O" [name="Aspirin"] [width="420"] [height="300"] />\` — chemistry structural formula from SMILES (\`CCO\` ethanol, \`O\` water), server-rendered as an \`<img>\`, so pens and \`<ai-feedback>\` work on it.
 
-**Function plots:** \`\`\`plot fenced code block, one entry per line: \`f(x) = 1/3x^3 - x\` (curve, implicit multiplication allowed), \`x: -4..4\` / \`y: -3..3\` (window, y optional), \`A = (2, 1)\` (point), \`vline x=-1\` / \`hline y=2\`, flags \`grid\`/\`nogrid\`/\`aspect: equal\`/\`size: 640x400\`/\`caption: …\`, per-entry options after a comma (colour word, \`label="…"\`, \`dashed\`, \`thick\`). \`ln\` natural, \`log\` base 10. Renders as a static SVG \`<img>\`, so \`<ai-feedback>\` in the same section captures the graph — the way to build "draw the tangent" tasks.
+**Function plots:** \`\`\`plot fenced code block, one entry per line: \`f(x) = 1/3x^3 - x\` (curve, implicit multiplication allowed), \`x: -4..4\` / \`y: -3..3\` (window, y optional), \`A = (2, 1)\` (point), \`vline x=-1\` / \`hline y=2\`, flags \`grid\`/\`nogrid\`/\`aspect: equal\`/\`size: 640x400\`/\`caption: …\`, per-entry options after a comma (colour word, \`label="…"\`, \`dashed\`, \`thick\`). \`ln\` natural, \`log\` base 10. Renders as a static SVG \`<img>\`, so \`<ai-feedback>\` below it in the same h2 section captures the graph — the way to build "draw the tangent" tasks.
 
 **Built-in plugins:** \`<plugin src="${BUILTIN_PLUGIN_OWNER}/<slug>" [attrs] [height="500"]></plugin>\` — user-scoped; built-ins on this deployment under \`${BUILTIN_PLUGIN_OWNER}\`:
   - \`mod-calc\` (\`formula\`, \`base\`, \`exp\`, \`mod\`, \`lang\`), \`color-sliders\`, \`cipher-lab\` (\`cipher\`, \`cipherkey\`, \`text\`, \`lang\`)

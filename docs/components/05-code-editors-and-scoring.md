@@ -450,7 +450,7 @@ For work that has no single correct answer to diff against — free-text explana
 - `id` — optional; several `<ai-feedback>` tags on one page map to their prompts by position if omitted
 - `label` — the button text shown to students (default is a generic "Check")
 
-What gets sent: the student's pen strokes in the surrounding h1/h2/h3 section, rendered to an image, plus that section's markdown — so it can see a plot, a molecule diagram, or an editor's code alongside anything drawn on top of it. Pasting a screenshot (hover box, `Ctrl+V`) works as an alternative input, e.g. for work done outside Eduskript.
+What gets sent: the student's pen strokes and images above the tag, back to the previous h1/h2 heading, rendered to an image, plus that markdown — nothing below the tag, so an example answer can go right after it — so it can see a plot, a molecule diagram, or an editor's code alongside anything drawn on top of it. Pasting a screenshot (hover box, `Ctrl+V`) works as an alternative input, e.g. for work done outside Eduskript.
 
 Works without a login, rate-limited per user or IP address. Unlike `python-check` and predict-output, this doesn't produce a numeric score — it's feedback, meant to help a student before they submit, not a grade.
 
