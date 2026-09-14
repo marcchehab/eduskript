@@ -5,6 +5,10 @@
     scenario = endless | slide | sled | lift | pulley   (initial tab, default endless)
     tabs     = "false" hides the scenario tab bar
     lang     = "de" for German labels (default English)
+    alpha, mus|muh, muk|mug, m, m2, vlift, beta
+             = start values for the initial scenario only (clamped to the slider ranges;
+               keys a scenario doesn't have are ignored). With alpha above arctan(μs)
+               the block starts sliding on load.
 
   How forces are obtained (not an analytical model):
     - F_G = m·g (exact).
@@ -951,6 +955,14 @@
     var cfg = ctx0.config || {};
     if (cfg.lang === 'de') L = STR.de;
     if (ORDER.indexOf(cfg.scenario) >= 0) sceneId = cfg.scenario;
+    var CFG_PARAMS = { alpha: 'alpha', mus: 'muS', muh: 'muS', muk: 'muK', mug: 'muK', m: 'm', m2: 'm2', vlift: 'vLift', beta: 'beta' };
+    var specs = {};
+    sliderSpecs(sceneId).forEach(function (sp) { specs[sp.key] = sp; });
+    Object.keys(CFG_PARAMS).forEach(function (k) {
+      var key = CFG_PARAMS[k], v = parseFloat(cfg[k]);
+      if (!isFinite(v) || !specs[key]) return;
+      params[sceneId][key] = Math.min(specs[key].max, Math.max(specs[key].min, v));
+    });
     if (cfg.tabs === 'false') elTabs.style.display = 'none';
     applyTheme(ctx0.theme);
     resize();

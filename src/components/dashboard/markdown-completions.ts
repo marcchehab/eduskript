@@ -228,46 +228,61 @@ const TAG_ATTRS: Record<string, AttrDef[]> = {
   'right': [],
 }
 
-// ── Per-plugin attribute definitions (keyed by `<plugin src="…">`) ───
+// ── Per-plugin attribute definitions (keyed by plugin slug) ─────────
 // These attrs are merged in addition to the generic `plugin` attrs above
-// when the current `<plugin>` tag's src matches. Add a new entry for each
-// built-in plugin you want intellisense for; user plugins keep generic.
+// when the slug part of the current `<plugin src="owner/slug">` matches.
+// Keyed by slug, not owner/slug: the built-in owner differs per deployment
+// (BUILTIN_PLUGIN_OWNER, e.g. `informatikgarten` in prod, `eduadmin` locally),
+// and forks keep the slug. A user plugin that reuses a built-in slug gets
+// these suggestions too.
 const PLUGIN_SRC_ATTRS: Record<string, AttrDef[]> = {
-  'eduadmin/dijkstra-visualizer': [
+  'dijkstra-visualizer': [
     { label: 'initialnodecount', info: 'Initial node count (3..200, default 7)' },
     { label: 'initialdirected', info: 'Start in directed mode (true | false)' },
     { label: 'initialspeed', info: 'Animation speed 100..2000, higher = faster (default 1300)' },
     { label: 'lang', info: 'UI language (en | de)' },
   ],
-  'eduadmin/mod-calc': [
+  'mod-calc': [
     { label: 'formula', info: 'Initial formula' },
     { label: 'base', info: 'Initial base' },
     { label: 'exp', info: 'Initial exponent' },
     { label: 'mod', info: 'Initial modulus' },
     { label: 'lang', info: 'UI language (en | de)' },
   ],
-  'eduadmin/cipher-lab': [
+  'cipher-lab': [
     { label: 'cipher', info: 'Initial cipher (e.g. caesar, vigenere)' },
     { label: 'cipherkey', info: 'Initial cipher key' },
     { label: 'text', info: 'Initial plaintext' },
     { label: 'lang', info: 'UI language (en | de)' },
   ],
-  'eduadmin/mod-clock': [
+  'mod-clock': [
     { label: 'mod', info: 'Initial modulus' },
     { label: 'modmax', info: 'Modulus slider max' },
     { label: 'max', info: 'Counter max' },
     { label: 'font', info: 'Custom font' },
     { label: 'lang', info: 'UI language (en | de)' },
   ],
-  'eduadmin/diffie-hellman': [
+  'diffie-hellman': [
     { label: 'p', info: 'Prime modulus' },
     { label: 'g', info: 'Generator' },
     { label: 'a', info: 'Alice secret' },
     { label: 'b', info: 'Bob secret' },
     { label: 'lang', info: 'UI language (en | de)' },
   ],
-  'eduadmin/data-cube-visualizer': [
+  'data-cube-visualizer': [
     { label: 'lang', info: 'UI language (en | de)' },
+  ],
+  'inclined-plane': [
+    { label: 'scenario', info: 'Initial tab: endless | slide | sled | lift | pulley' },
+    { label: 'tabs', info: '"false" hides the scenario tab bar' },
+    { label: 'lang', info: 'UI language (en | de)' },
+    { label: 'alpha', info: 'Start angle in degrees; above arctan(μs) the block slides on load' },
+    { label: 'mus', info: 'Static friction coefficient μs / μ_H (alias: muh)' },
+    { label: 'muk', info: 'Kinetic friction coefficient μk / μ_G (alias: mug)' },
+    { label: 'm', info: 'Mass in kg (m₁ in the pulley scenario)' },
+    { label: 'm2', info: 'Counterweight mass in kg (pulley scenario)' },
+    { label: 'vlift', info: 'Lift speed in m/s (lift scenario)' },
+    { label: 'beta', info: 'Rope angle in degrees (lift scenario)' },
   ],
 }
 
@@ -287,6 +302,7 @@ const ATTR_VALUES: Record<string, string[]> = {
   'variant': ['default', 'secondary', 'outline', 'ghost'],
   'size': ['lg', 'default', 'sm'],
   'os': ['linux', 'macos', 'windows'],
+  'scenario': ['endless', 'slide', 'sled', 'lift', 'pulley'],
 }
 
 // ── Callout completions ──────────────────────────────────────────────
@@ -403,7 +419,7 @@ export function createMarkdownCompletions(getFileList: () => FileListItem[]) {
       const tagAttrs = TAG_ATTRS[tagContext] || []
       // Merge plugin-source-specific attrs when inside a <plugin src="…">
       const pluginAttrs = tagContext === 'plugin'
-        ? (PLUGIN_SRC_ATTRS[findPluginSrc(fullTextBefore) || ''] || [])
+        ? (PLUGIN_SRC_ATTRS[(findPluginSrc(fullTextBefore) || '').split('/').pop() || ''] || [])
         : []
       const allAttrs = [...tagAttrs, ...pluginAttrs, ...GLOBAL_ATTRS]
 

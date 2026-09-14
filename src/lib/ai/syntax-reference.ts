@@ -638,6 +638,9 @@ Embed interactive plugins with \`<plugin src="<author>/<slug>" [attrs]></plugin>
   - \`initialnodecount\` (default 7), \`initialdirected\` (default false), \`initialspeed\` (100–2000, higher = faster; default 1300), \`lang\`
 - \`${owner}/data-cube-visualizer\` — 3D RGB data cube for image quantization
   - \`lang="en|de"\`
+- \`${owner}/inclined-plane\` — inclined-plane physics sim (planck.js) with live force vectors and a v-t chart
+  - \`scenario="endless|slide|sled|lift|pulley"\` (initial tab, default endless), \`tabs="false"\` hides the tab bar, \`lang="en|de"\`
+  - start values for that scenario: \`alpha\` (degrees), \`mus\`/\`muh\` (static μ), \`muk\`/\`mug\` (kinetic μ), \`m\`, \`m2\` (pulley), \`vlift\`, \`beta\` (lift). alpha above arctan(μs) → block slides on load
 
 **Universal attribute:** \`height="500"\` (optional, pixels) overrides the plugin's default height.
 
@@ -907,5 +910,6 @@ export function getCondensedSyntaxReference(): string {
 **Built-in plugins:** \`<plugin src="${BUILTIN_PLUGIN_OWNER}/<slug>" [attrs] [height="500"]></plugin>\` — user-scoped; built-ins on this deployment under \`${BUILTIN_PLUGIN_OWNER}\`:
   - \`mod-calc\` (\`formula\`, \`base\`, \`exp\`, \`mod\`, \`lang\`), \`color-sliders\`, \`cipher-lab\` (\`cipher\`, \`cipherkey\`, \`text\`, \`lang\`)
   - \`mod-clock\` (\`mod\`, \`modmax\`, \`max\`, \`font\`, \`lang\`), \`diffie-hellman\` (\`p\`, \`g\`, \`a\`, \`b\`, \`lang\`)
-  - \`dijkstra-visualizer\` (\`initialnodecount\`, \`initialdirected\`, \`initialspeed\` 100..2000 higher=faster, \`lang\`), \`data-cube-visualizer\` (\`lang\`)`
+  - \`dijkstra-visualizer\` (\`initialnodecount\`, \`initialdirected\`, \`initialspeed\` 100..2000 higher=faster, \`lang\`), \`data-cube-visualizer\` (\`lang\`)
+  - \`inclined-plane\` (\`scenario\` endless|slide|sled|lift|pulley, \`tabs\`, \`lang\`, start values \`alpha\` \`mus\` \`muk\` \`m\` \`m2\` \`vlift\` \`beta\`)`
 }
