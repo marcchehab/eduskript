@@ -126,6 +126,20 @@ const PLUGINS = [
     },
     file: 'mod-clock.html',
   },
+  {
+    slug: 'inclined-plane',
+    name: 'Inclined Plane Lab',
+    description: 'planck.js physics sim of the inclined plane with live force vectors: static/kinetic friction, sledding, ski lift, counterweight',
+    manifest: {
+      defaultHeight: 820,
+      configSchema: {
+        scenario: { type: 'string', enum: ['endless', 'slide', 'sled', 'lift', 'pulley'], default: 'endless' },
+        tabs: { type: 'boolean', default: true },
+        lang: { type: 'string', enum: ['en', 'de'], default: 'en' },
+      },
+    },
+    file: 'inclined-plane.html',
+  },
 ]
 
 async function main() {

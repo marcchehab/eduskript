@@ -1,0 +1,891 @@
+<!--
+  Inclined plane lab — planck.js (Box2D port) rigid-body sim with live force vectors.
+
+  Config attributes on <plugin>:
+    scenario = endless | slide | sled | lift | pulley   (initial tab, default endless)
+    tabs     = "false" hides the scenario tab bar
+    lang     = "de" for German labels (default English)
+
+  How forces are obtained (not an analytical model):
+    - F_G = m·g (exact).
+    - F_N, F_R come from the contact solver: post-solve impulses per step / dt,
+      averaged over the steps of one frame, then EMA-smoothed for display.
+    - Rope/hand forces come from joint impulses (pulley m_impulse, distance/mouse
+      getReactionForce).
+  Box2D has one friction coefficient per contact. Static vs. kinetic friction is
+  emulated per body: μ_H while sticking, μ_G while sliding. Stick→slide when the
+  friction impulse saturates at μ_H·N (or tangential speed > 3·V_STICK); slide→stick
+  when tangential speed < V_STICK and the friction impulse is below μ_G·N, i.e. the
+  solver found a resting solution without needing the full kinetic friction.
+-->
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1f2937; --muted: #6b7280; --line: #d1d5db; --panel: #f3f4f6;
+    --ground: #e5e7eb; --groundStroke: #6b7280; --snow: #f1f5f9; --snowStroke: #94a3b8;
+    --body: #cbd5e1; --bodyStroke: #334155; --rope: #44403c; --accent: #2563eb;
+  }
+  html[data-theme="dark"] {
+    --bg: #111827; --fg: #e5e7eb; --muted: #9ca3af; --line: #374151; --panel: #1f2937;
+    --ground: #374151; --groundStroke: #9ca3af; --snow: #334155; --snowStroke: #64748b;
+    --body: #475569; --bodyStroke: #cbd5e1; --rope: #d6d3d1; --accent: #60a5fa;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.4 system-ui, sans-serif; color: var(--fg); background: var(--bg); }
+  #app { padding: 10px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+  .tabs button, .bar button {
+    font: inherit; font-size: 13px; padding: 5px 10px; border-radius: 6px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--panel); color: var(--fg);
+  }
+  .tabs button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .stage { position: relative; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  canvas { display: block; width: 100%; touch-action: none; cursor: grab; }
+  canvas.dragging { cursor: grabbing; }
+  .hint { position: absolute; left: 8px; top: 6px; right: 8px; font-size: 12px; color: var(--muted); pointer-events: none; }
+  .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 8px 0; }
+  .bar label { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; cursor: pointer; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; }
+  .seg button.on { background: var(--accent); color: #fff; }
+  .sliders { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 4px 16px; }
+  .sl { display: grid; grid-template-columns: 7.5em 1fr 4.8em; align-items: center; gap: 6px; font-size: 13px; }
+  .sl input { width: 100%; accent-color: var(--accent); }
+  .sl output { text-align: right; font-variant-numeric: tabular-nums; }
+  .info { display: flex; flex-wrap: wrap; gap: 12px 24px; margin-top: 8px; font-size: 13px; }
+  table { border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  td { padding: 1px 6px; }
+  td.v { text-align: right; min-width: 5.5em; }
+  .sw { display: inline-block; width: 18px; height: 3px; vertical-align: middle; border-radius: 2px; }
+  .sw.dash { background: none !important; border-top: 2px dashed; height: 0; }
+  .read { color: var(--muted); }
+  .read b { color: var(--fg); font-weight: 600; }
+  .state { font-weight: 600; }
+  .err { color: #dc2626; padding: 12px; }
+</style>
+
+<div id="app">
+  <div class="tabs" id="tabs"></div>
+  <div class="stage"><canvas id="cv"></canvas><div class="hint" id="hint"></div></div>
+  <div class="bar" id="bar"></div>
+  <div class="sliders" id="sliders"></div>
+  <div class="info" id="info"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/planck@1.5.0/dist/planck.min.js"></script>
+<script>
+(function () {
+  var plugin = eduskript.init();
+  var pl = window.planck;
+  if (!pl) {
+    document.getElementById('app').innerHTML = '<div class="err">planck.js failed to load.</div>';
+    plugin.onReady(function () {});
+    return;
+  }
+  var V = pl.Vec2;
+  var G = 9.81;
+  var DT = 1 / 120;       // fixed physics step
+  var V_STICK = 0.03;     // m/s — below this tangential speed a contact may stick
+  var DEG = Math.PI / 180;
+
+  // ---------------------------------------------------------------- strings
+  var STR = {
+    en: {
+      tabs: { endless: 'Endless slide', slide: 'Regular slide', sled: 'Sledding', lift: 'Ski lift', pulley: 'Counterweight' },
+      hints: {
+        endless: 'Raise α slowly: the block sticks until tan α > μ<sub>s</sub>. Drag bodies with the mouse.',
+        slide: 'α = arctan μ<sub>k</sub>. Push the block: it slides at constant speed, F<sub>net</sub> = 0.',
+        sled: 'Watch F<sub>N</sub> grow in the curved run-out (centripetal force).',
+        lift: 'Start the lift. At constant speed F<sub>net</sub> = 0: the rope balances F<sub>g∥</sub> and friction.',
+        pulley: 'm₂ pulls m₁ up once m₂·g > m₁·g·(sin α + μ<sub>s</sub>·cos α).'
+      },
+      play: '▶ Play', pause: '⏸ Pause', slow: 'Slow motion', reset: 'Reset', push: 'Push',
+      liftOn: 'Start lift', liftOff: 'Stop lift', setAlpha: 'α = arctan μ<sub>k</sub>',
+      toScale: 'To scale', normalized: 'Normalized', decompose: 'Split F<sub>g</sub>', net: 'Net force', values: 'Values',
+      angle: 'Angle α', muS: 'μ<sub>s</sub> (static)', muK: 'μ<sub>k</sub> (kinetic)', mass: 'Mass m', m1: 'Mass m₁', m2: 'Mass m₂',
+      vLift: 'Lift speed', beta: 'Rope angle β',
+      sticking: 'sticking', sliding: 'sliding', air: 'no contact', endStop: 'end stop — reset',
+      body1: 'Block', body2: 'Counterweight', dist: 'distance',
+      f: { G: ['g', 'Weight'], N: ['N', 'Normal force'], R: ['f', 'Friction'], T: ['T', 'Tension'],
+           H: ['hand', 'Hand force'], P: ['g∥', 'Downhill component'], Q: ['g⊥', 'Perpendicular component'], S: ['net', 'Net force'] }
+    },
+    de: {
+      tabs: { endless: 'Unendliche Rutsche', slide: 'Normale Rutsche', sled: 'Schlitteln', lift: 'Skilift', pulley: 'Gegengewicht' },
+      hints: {
+        endless: 'α langsam erhöhen: Der Klotz haftet, bis tan α > μ<sub>H</sub>. Körper lassen sich mit der Maus ziehen.',
+        slide: 'α = arctan μ<sub>G</sub>. Klotz anstossen: Er rutscht mit konstanter Geschwindigkeit, F<sub>res</sub> = 0.',
+        sled: 'In der Kurve wird F<sub>N</sub> grösser (Zentripetalkraft).',
+        lift: 'Lift starten. Bei konstanter Geschwindigkeit ist F<sub>res</sub> = 0: Das Seil hält F<sub>G∥</sub> und der Reibung das Gleichgewicht.',
+        pulley: 'm₂ zieht m₁ hoch, sobald m₂·g > m₁·g·(sin α + μ<sub>H</sub>·cos α).'
+      },
+      play: '▶ Start', pause: '⏸ Pause', slow: 'Zeitlupe', reset: 'Zurücksetzen', push: 'Anstossen',
+      liftOn: 'Lift starten', liftOff: 'Lift stoppen', setAlpha: 'α = arctan μ<sub>G</sub>',
+      toScale: 'Massstäblich', normalized: 'Normiert', decompose: 'F<sub>G</sub> zerlegen', net: 'Resultierende', values: 'Beträge',
+      angle: 'Winkel α', muS: 'μ<sub>H</sub> (Haft)', muK: 'μ<sub>G</sub> (Gleit)', mass: 'Masse m', m1: 'Masse m₁', m2: 'Masse m₂',
+      vLift: 'Liftgeschw.', beta: 'Seilwinkel β',
+      sticking: 'haftet', sliding: 'gleitet', air: 'kein Kontakt', endStop: 'Anschlag – zurücksetzen',
+      body1: 'Klotz', body2: 'Gegengewicht', dist: 'Strecke',
+      f: { G: ['G', 'Gewichtskraft'], N: ['N', 'Normalkraft'], R: ['R', 'Reibungskraft'], T: ['S', 'Seilkraft'],
+           H: ['Hand', 'Handkraft'], P: ['G∥', 'Hangabtriebskraft'], Q: ['G⊥', 'Normalkomponente'], S: ['res', 'Resultierende'] }
+    }
+  };
+  var L = STR.en;
+
+  var COLORS = {
+    light: { G: '#2563eb', N: '#16a34a', R: '#dc2626', T: '#d97706', H: '#db2777', P: '#60a5fa', Q: '#60a5fa', S: '#7c3aed' },
+    dark:  { G: '#60a5fa', N: '#4ade80', R: '#f87171', T: '#fbbf24', H: '#f472b6', P: '#93c5fd', Q: '#93c5fd', S: '#c4b5fd' }
+  };
+  var theme = 'light';
+  function col(k) { return COLORS[theme][k]; }
+  var cssCache = {};   // theme tokens; cleared in applyTheme
+  function css(name) {
+    if (!(name in cssCache)) cssCache[name] = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return cssCache[name];
+  }
+
+  // ---------------------------------------------------------------- scenario defaults
+  var DEFAULTS = {
+    endless:  { alpha: 15, muS: 0.5, muK: 0.3, m: 2 },
+    slide:    { alpha: Math.atan(0.3) / DEG, muS: 0.5, muK: 0.3, m: 2 },
+    sled:     { alpha: 20, muS: 0.12, muK: 0.06, m: 30 },
+    lift:     { alpha: 25, muS: 0.15, muK: 0.08, m: 70, vLift: 2.5, beta: 20 },
+    pulley:   { alpha: 30, muS: 0.4, muK: 0.3, m: 4, m2: 2.5 }
+  };
+  var ORDER = ['endless', 'slide', 'sled', 'lift', 'pulley'];
+  var params = {};
+  ORDER.forEach(function (k) { params[k] = Object.assign({}, DEFAULTS[k]); });
+
+  // Slider specs. live: 'rebuild' rebuilds the world, 'tilt' rotates the ramp in place,
+  // anything else is read every step (μ) or applied immediately (mass).
+  function sliderSpecs(id) {
+    var s = [];
+    var amax = id === 'sled' ? 40 : id === 'lift' ? 40 : 60;
+    var amin = id === 'sled' ? 10 : 5;
+    s.push({ key: 'alpha', label: L.angle, min: id === 'endless' || id === 'slide' ? 0 : amin, max: amax, step: 0.1, unit: '°', dec: 1,
+             live: (id === 'endless' || id === 'slide') ? 'tilt' : 'rebuild' });
+    s.push({ key: 'muS', label: L.muS, min: 0, max: 1, step: 0.01, unit: '', dec: 2 });
+    s.push({ key: 'muK', label: L.muK, min: 0, max: 1, step: 0.01, unit: '', dec: 2 });
+    s.push({ key: 'm', label: id === 'pulley' ? L.m1 : L.mass, min: 0.5, max: id === 'lift' ? 120 : id === 'sled' ? 80 : 10, step: 0.5, unit: ' kg', dec: 1, live: 'mass' });
+    if (id === 'pulley') s.push({ key: 'm2', label: L.m2, min: 0, max: 10, step: 0.1, unit: ' kg', dec: 1, live: 'mass' });
+    if (id === 'lift') {
+      s.push({ key: 'vLift', label: L.vLift, min: 0.5, max: 5, step: 0.1, unit: ' m/s', dec: 1, live: 'lift' });
+      s.push({ key: 'beta', label: L.beta, min: 0, max: 40, step: 1, unit: '°', dec: 0, live: 'rebuild' });
+    }
+    return s;
+  }
+
+  // ---------------------------------------------------------------- state
+  var sceneId = 'endless';
+  var S = null;             // current scene
+  var P = null;             // params of current scene
+  var running = true, slow = false;
+  var mode = 'scale';       // 'scale' | 'norm'
+  var showSplit = false, showNet = true, showValues = true;
+  var accTime = 0, lastT = 0;
+  var drag = null;          // { joint, rec, offset }
+
+  function vec() { return { x: 0, y: 0 }; }
+
+  // ---------------------------------------------------------------- world helpers
+  function newWorld() {
+    var world = new pl.World({ gravity: V(0, -G), allowSleep: false });
+
+    // Pick μ per contact from the body's stick/slide state.
+    world.on('pre-solve', function (c) {
+      var bA = c.getFixtureA().getBody(), bB = c.getFixtureB().getBody();
+      var rA = bA.getUserData(), rB = bB.getUserData();
+      var rec = rB && rB.rec ? rB : (rA && rA.rec ? rA : null);
+      if (!rec) return;
+      var other = rec === rB ? bA : bB;
+      var wm = c.getWorldManifold(null);
+      if (wm) {
+        var v = rec.body.getLinearVelocity(), vo = other.getLinearVelocity();
+        var rx = v.x - vo.x, ry = v.y - vo.y;
+        var n = wm.normal, vn = rx * n.x + ry * n.y;
+        var vt = Math.hypot(rx - vn * n.x, ry - vn * n.y);
+        if (vt > rec.vtStep) rec.vtStep = vt;
+      }
+      c.setFriction(rec.sliding ? P.muK : P.muS);
+    });
+
+    // Contact impulses → forces (N per step, averaged over the frame later).
+    world.on('post-solve', function (c, imp) {
+      var bA = c.getFixtureA().getBody(), bB = c.getFixtureB().getBody();
+      var rA = bA.getUserData(), rB = bB.getUserData();
+      if (!(rA && rA.rec) && !(rB && rB.rec)) return;
+      var wm = c.getWorldManifold(null);
+      if (!wm) return;
+      var n = wm.normal;             // points from A to B
+      var tx = n.y, ty = -n.x;       // Box2D tangent = cross(n, 1)
+      var ni = imp.normalImpulses, ti = imp.tangentImpulses, pn = 0, pt = 0;
+      for (var i = 0; i < ni.length; i++) { pn += ni[i]; pt += ti[i]; }
+      var k = 1 / DT;
+      [[rB, 1], [rA, -1]].forEach(function (p) {
+        var r = p[0], s = p[1] * k;
+        if (!r || !r.rec) return;
+        r.acc.N.x += n.x * pn * s; r.acc.N.y += n.y * pn * s;
+        r.acc.R.x += tx * pt * s;  r.acc.R.y += ty * pt * s;
+        r.stepPn += Math.abs(pn); r.stepPt += Math.abs(pt);
+        r.touch = true;
+      });
+    });
+    return world;
+  }
+
+  function addBox(x, y, w, h, angle, mass, name, opts) {
+    opts = opts || {};
+    var b = S.world.createDynamicBody({ position: V(x, y), angle: angle, fixedRotation: !!opts.fixedRotation, allowSleep: false });
+    var fx = b.createFixture(pl.Box(w / 2, h / 2), { density: mass / (w * h), friction: 0.5, restitution: 0 });
+    var r = {
+      rec: true, body: b, fixture: fx, w: w, h: h, name: name, draw: opts.draw || 'box', massKey: opts.massKey || 'm',
+      acc: { N: vec(), R: vec(), T: vec(), H: vec() }, disp: { N: vec(), R: vec(), T: vec(), H: vec() },
+      stepPn: 0, stepPt: 0, vtStep: 0, sliding: false, touch: false, touchFrame: false,
+      vPrev: null, a: 0
+    };
+    b.setUserData(r);
+    S.recs.push(r);
+    return r;
+  }
+
+  function setMass(r, m) {
+    r.fixture.setDensity(m / (r.w * r.h));
+    r.body.resetMassData();
+  }
+
+  function staticEdges(points, chain) {
+    var b = S.world.createBody();
+    if (chain) b.createFixture(pl.Chain(points.map(function (p) { return V(p[0], p[1]); }), false), { friction: 0.5 });
+    else b.createFixture(pl.Edge(V(points[0][0], points[0][1]), V(points[1][0], points[1][1])), { friction: 0.5 });
+    return b;
+  }
+
+  function dirOf(a) { return { x: Math.cos(a), y: Math.sin(a) }; }
+  function nrmOf(a) { return { x: -Math.sin(a), y: Math.cos(a) }; }
+
+  // ---------------------------------------------------------------- scenes
+  var BUILD = {};
+
+  // Endless ramp (rising to the right) with a follow camera. The physics ramp is a 200 m edge;
+  // the block is kept within s ∈ [50, 150] m by shifting it ±100 m along the ramp. The surface
+  // is uniform and the hatch spacing (1 m) divides 100 m, so the shift is invisible.
+  // Used by 'endless'.
+  function buildEndlessRamp() {
+    S.endless = true;
+    var a = P.alpha * DEG, len = 200, w = 0.8, h = 0.5, s0 = 100;
+    S.len = len;
+    S.ramp = S.world.createBody({ position: V(0, 0), angle: a });
+    S.ramp.createFixture(pl.Edge(V(0, 0), V(len, 0)), { friction: 0.5 });
+    var p = S.ramp.getWorldPoint(V(s0, h / 2 + 0.002));
+    S.main = addBox(p.x, p.y, w, h, a, P.m, L.body1);
+    S.wrap = 0;
+    S.follow = { width: 11, dx: 0, dy: 0.6 };
+    function localS() { return S.ramp.getLocalPoint(S.main.body.getPosition()).x; }
+    S.onStep = function () {
+      var b = S.main.body, lp = S.ramp.getLocalPoint(b.getPosition());
+      var shift = lp.x > 150 ? -100 : lp.x < 50 ? 100 : 0;
+      if (!shift) return;
+      var old = b.getPosition(), np = S.ramp.getWorldPoint(V(lp.x + shift, lp.y));
+      var dx = np.x - old.x, dy = np.y - old.y;
+      b.setTransform(np, b.getAngle());
+      if (S.cam) { S.cam.x += dx; S.cam.y += dy; }
+      if (drag) { var t = drag.joint.getTarget(); drag.joint.setTarget(V(t.x + dx, t.y + dy)); }
+      S.wrap -= shift;
+    };
+    S.drawStatic = function (ctx, tr) {
+      var P0 = S.ramp.getWorldPoint(V(0, 0)), P1 = S.ramp.getWorldPoint(V(len, 0)), deep = 300;
+      poly(ctx, tr, [[P0.x, P0.y], [P1.x, P1.y], [P1.x, P1.y - deep], [P0.x, P0.y - deep]], css('--ground'), css('--groundStroke'));
+      // hatch marks every metre so motion is visible under the follow camera
+      var ls = localS();
+      for (var k = Math.floor(ls - 14); k <= ls + 14; k++) {
+        var q1 = S.ramp.getWorldPoint(V(k, 0));
+        line(ctx, tr, [[q1.x, q1.y], [q1.x, q1.y - 0.3]], css('--groundStroke'), 1);   // plumb, independent of α
+      }
+      // α marker travels with the block: vertex on the surface downhill of it, horizontal ray below the slope
+      var vx = S.ramp.getWorldPoint(V(ls - 3.2, 0));
+      ctx.save(); ctx.setLineDash([4, 3]);
+      line(ctx, tr, [[vx.x, vx.y], [vx.x + 2.4, vx.y]], css('--muted'), 1);
+      ctx.restore();
+      angleArc(ctx, tr, vx.x, vx.y, 0, S.ramp.getAngle(), 1.6, 'α');
+    };
+    S.rampAngle = function () { return S.ramp.getAngle(); };
+    S.readout = function () { return L.dist + ' <b>' + Math.abs(localS() + S.wrap - s0).toFixed(1) + ' m</b>'; };
+  }
+  BUILD.endless = buildEndlessRamp;
+
+  // Finite 7 m ramp rising to the right from pivot (0,0); floor to the left. Tilts around the pivot.
+  BUILD.slide = function () {
+    var a = P.alpha * DEG, len = 7, w = 0.8, h = 0.5, s = len - 0.7;
+    S.len = len;
+    S.ramp = S.world.createBody({ position: V(0, 0), angle: a });
+    S.ramp.createFixture(pl.Edge(V(0, 0), V(len, 0)), { friction: 0.5 });
+    staticEdges([[-14, 0], [0, 0]]);
+    var p = S.ramp.getWorldPoint(V(s, h / 2 + 0.002));
+    S.main = addBox(p.x, p.y, w, h, a, P.m, L.body1);
+    S.bounds = { x0: -4.2, x1: 7.6, y0: -0.7, y1: 6.4 };
+    S.drawStatic = function (ctx, tr) {
+      var aa = S.ramp.getAngle();
+      var top = { x: len * Math.cos(aa), y: len * Math.sin(aa) };
+      poly(ctx, tr, [[0, 0], [top.x, top.y], [top.x, 0]], css('--ground'), css('--groundStroke'));
+      line(ctx, tr, [[-14, 0], [14, 0]], css('--groundStroke'), 1.5);
+      angleArc(ctx, tr, 0, 0, 0, aa, 1.1, 'α');
+    };
+    S.rampAngle = function () { return S.ramp.getAngle(); };
+  };
+
+  BUILD.sled = function () {
+    var a = P.alpha * DEG, H = 5, R = 8;
+    var C = H / Math.tan(a), t = R * Math.tan(a / 2);
+    var d = { x: Math.cos(a), y: -Math.sin(a) };           // downhill direction
+    var pts = [[-4, H], [0, H]];
+    var A0 = { x: C - t * d.x, y: -t * d.y };
+    pts.push([A0.x, A0.y]);
+    var O = { x: C + t, y: R }, seg = 14;
+    for (var i = 1; i <= seg; i++) {
+      var th = -Math.PI / 2 - a + a * i / seg;
+      pts.push([O.x + R * Math.cos(th), O.y + R * Math.sin(th)]);
+    }
+    S.flat0 = C + t;
+    pts.push([S.flat0 + 150, 0]);
+    staticEdges(pts, true);
+    var w = 1.2, h = 0.3, s = 0.9;
+    var n = { x: Math.sin(a), y: Math.cos(a) };
+    S.main = addBox(s * d.x + n.x * (h / 2 + 0.002), H + s * d.y + n.y * (h / 2 + 0.002), w, h, -a, P.m, '', { draw: 'sled' });
+    S.follow = { width: 14, dx: 3, dy: 0.8 };
+    S.forceRef = 2.2;   // F_N peaks at ~2·mg in the curve; scale arrows so it stays on screen
+    S.drawStatic = function (ctx, tr) {
+      var fill = pts.slice(); fill.push([S.flat0 + 150, -3], [-4, -3]);
+      poly(ctx, tr, fill, css('--snow'), null);
+      line(ctx, tr, pts, css('--snowStroke'), 2);
+      ctx.fillStyle = css('--muted'); ctx.font = '11px system-ui';
+      for (var x = 0; x <= 150; x += 10) {
+        var q = tr(S.flat0 + x, 0);
+        ctx.fillRect(q.x - 0.5, q.y, 1, 6);
+        ctx.fillText(x + ' m', q.x + 3, q.y + 16);
+      }
+      line(ctx, tr, [[0, H], [2, H]], css('--muted'), 1);
+      angleArc(ctx, tr, 0, H, -a, 0, 1.4, 'α');
+    };
+    S.rampAngle = function () { return -a; };
+    S.readout = function () {
+      var x = S.main.body.getPosition().x - S.flat0;
+      return x > 0 ? L.dist + ' <b>' + x.toFixed(1) + ' m</b>' : '';
+    };
+  };
+
+  BUILD.lift = function () {
+    var a = P.alpha * DEG, len = 60, ropeL = 2.5;
+    var d = dirOf(a), n = nrmOf(a);
+    staticEdges([[0, 0], [len * d.x, len * d.y]]);
+    staticEdges([[-20, 0], [0, 0]]);
+    var w = 1.0, h = 0.6, s = 3;
+    var c = { x: s * d.x + n.x * (h / 2 + 0.002), y: s * d.y + n.y * (h / 2 + 0.002) };
+    S.main = addBox(c.x, c.y, w, h, a, P.m, '', { fixedRotation: true, draw: 'skier' });
+    var ra = a + P.beta * DEG;
+    S.anchor = S.world.createKinematicBody({ position: V(c.x + ropeL * Math.cos(ra), c.y + ropeL * Math.sin(ra)) });
+    S.rope = S.world.createJoint(pl.DistanceJoint({ frequencyHz: 1.2, dampingRatio: 0.9, length: ropeL },
+      S.anchor, S.main.body, S.anchor.getPosition(), S.main.body.getWorldCenter()));
+    S.liftOn = false;
+    S.follow = { width: 10, dx: 1, dy: 0.8 };
+    S.setLift = function (on) {
+      S.liftOn = on;
+      S.anchor.setLinearVelocity(on ? V(P.vLift * d.x, P.vLift * d.y) : V(0, 0));
+    };
+    S.onStep = function () {
+      var sa = S.anchor.getPosition().x / d.x;
+      if (S.liftOn && sa > len - 2) S.setLift(false);
+      var F = S.rope.getReactionForce(1 / DT);            // force on bodyB (the skier)
+      S.main.acc.T.x += F.x; S.main.acc.T.y += F.y;
+    };
+    S.drawStatic = function (ctx, tr) {
+      poly(ctx, tr, [[0, 0], [len * d.x, len * d.y], [len * d.x, 0]], css('--snow'), css('--snowStroke'));
+      line(ctx, tr, [[-20, 0], [0, 0]], css('--snowStroke'), 2);
+      var ap = S.anchor.getPosition();
+      // lift cable: parallel to the slope through the anchor
+      line(ctx, tr, [[ap.x - 80 * d.x, ap.y - 80 * d.y], [ap.x + 80 * d.x, ap.y + 80 * d.y]], css('--muted'), 1);
+      var bc = S.main.body.getWorldCenter();
+      line(ctx, tr, [[ap.x, ap.y], [bc.x, bc.y]], css('--rope'), 2);
+      var q = tr(ap.x, ap.y);
+      ctx.fillStyle = css('--rope'); ctx.beginPath(); ctx.arc(q.x, q.y, 4, 0, 7); ctx.fill();
+      angleArc(ctx, tr, 0, 0, 0, a, 1.4, 'α');
+    };
+    S.rampAngle = function () { return a; };
+  };
+
+  BUILD.pulley = function () {
+    var a = P.alpha * DEG, len = 6, r = 0.25, e = 0.35;
+    var d = dirOf(a), n = nrmOf(a);
+    var T = { x: len * d.x, y: len * d.y };
+    staticEdges([[0, 0], [T.x, T.y]]);
+    staticEdges([[-14, 0], [T.x + 14, 0]]);
+    var w = 0.8, h = 0.5, s = 1.2;
+    var W = { x: T.x + e * d.x + n.x * (h / 2 - r), y: T.y + e * d.y + n.y * (h / 2 - r) };  // wheel centre
+    var gA = V(W.x + r * n.x, W.y + r * n.y), gB = V(W.x + r, W.y);
+    S.main = addBox(s * d.x + n.x * (h / 2 + 0.002), s * d.y + n.y * (h / 2 + 0.002), w, h, a, P.m, 'm₁', { fixedRotation: true });
+    var lenB = Math.max(0.9, (gB.y - 0.25) / 2);
+    S.m2 = addBox(gB.x, gB.y - lenB, 0.5, 0.5, 0, Math.max(P.m2, 0.001), 'm₂', { fixedRotation: true, massKey: 'm2' });
+    S.pulley = S.world.createJoint(pl.PulleyJoint({}, S.main.body, S.m2.body, gA, gB,
+      S.main.body.getWorldCenter(), S.m2.body.getWorldCenter(), 1));
+    S.onStep = function () {
+      var j = S.pulley, tension = j.m_impulse / DT;       // positive = rope in tension
+      [[S.main, j.getAnchorA(), gA], [S.m2, j.getAnchorB(), gB]].forEach(function (p) {
+        var ux = p[1].x - p[2].x, uy = p[1].y - p[2].y, l = Math.hypot(ux, uy) || 1;
+        p[0].acc.T.x -= tension * ux / l; p[0].acc.T.y -= tension * uy / l;
+      });
+      // Box2D's pulley is bilateral (it can push like a rod), so a real slack rope can't be
+      // modelled. Stop when m₂ lands or either body reaches the wheel.
+      if (S.m2.touch || j.getCurrentLengthA() < w / 2 + 0.15 || j.getCurrentLengthB() < 0.45) { S.ended = true; syncBar(); }
+    };
+    S.bounds = { x0: -2.5, x1: T.x + 2.2, y0: -0.6, y1: Math.max(T.y + 1.2, 2.5) };
+    S.drawStatic = function (ctx, tr) {
+      poly(ctx, tr, [[0, 0], [T.x, T.y], [T.x, 0]], css('--ground'), css('--groundStroke'));
+      line(ctx, tr, [[-14, 0], [T.x + 14, 0]], css('--groundStroke'), 1.5);
+      line(ctx, tr, [[T.x, T.y], [W.x, W.y]], css('--groundStroke'), 3);
+      var bc = S.main.body.getWorldCenter(), mc = S.m2.body.getWorldCenter();
+      line(ctx, tr, [[bc.x + d.x * w / 2, bc.y + d.y * w / 2], [gA.x, gA.y]], css('--rope'), 2);
+      line(ctx, tr, [[gB.x, gB.y], [mc.x, mc.y + 0.25]], css('--rope'), 2);
+      var q = tr(W.x, W.y), rp = r * tr.scale;
+      ctx.strokeStyle = css('--bodyStroke'); ctx.fillStyle = css('--body'); ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(q.x, q.y, rp, 0, 7); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = css('--bodyStroke'); ctx.beginPath(); ctx.arc(q.x, q.y, 2.5, 0, 7); ctx.fill();
+      angleArc(ctx, tr, 0, 0, 0, a, 1.1, 'α');
+    };
+    S.rampAngle = function () { return a; };
+  };
+
+  function build() {
+    if (drag) drag = null;
+    P = params[sceneId];
+    S = { world: newWorld(), recs: [], ended: false };
+    S.ground = S.world.createBody();
+    BUILD[sceneId]();
+    accTime = 0;
+    syncBar();
+    updateInfo(true);
+  }
+
+  // Rotate the ramp live around its pivot; bodies resting on it keep their ramp-local pose.
+  // Pivot: endless ramp → surface point under the main block (keeps it in the follow camera's
+  // view); finite ramp → its foot at (0,0).
+  function tiltRamp(alphaDeg) {
+    var ramp = S.ramp, na = alphaDeg * DEG, oa = ramp.getAngle();
+    var lq = V(S.endless ? ramp.getLocalPoint(S.main.body.getPosition()).x : 0, 0), q = ramp.getWorldPoint(lq);
+    var moving = S.recs.filter(function (r) {
+      var lp = ramp.getLocalPoint(r.body.getPosition());
+      return lp.x > -0.2 && lp.x < S.len + 0.5 && lp.y > -0.1 && lp.y < r.h + 0.4;
+    }).map(function (r) {
+      return { r: r, lp: ramp.getLocalPoint(r.body.getPosition()), lv: ramp.getLocalVector(r.body.getLinearVelocity()), la: r.body.getAngle() - oa };
+    });
+    ramp.setTransform(V(q.x - (lq.x * Math.cos(na)), q.y - (lq.x * Math.sin(na))), na);
+    moving.forEach(function (m) {
+      m.r.body.setTransform(ramp.getWorldPoint(m.lp), na + m.la);
+      m.r.body.setLinearVelocity(ramp.getWorldVector(m.lv));
+    });
+  }
+
+  // ---------------------------------------------------------------- simulation loop
+  function stepWorld() {
+    S.recs.forEach(function (r) { r.stepPn = 0; r.stepPt = 0; r.vtStep = 0; r.touch = false; });
+    S.world.step(DT, 10, 4);
+    if (S.onStep) S.onStep();
+    if (drag) {
+      var F = drag.joint.getReactionForce(1 / DT);         // force on the dragged body
+      drag.rec.acc.H.x += F.x; drag.rec.acc.H.y += F.y;
+    }
+    S.recs.forEach(function (r) {
+      if (r.touch) r.touchFrame = true;
+      if (!r.touch) return;
+      if (r.sliding) {
+        if (r.vtStep < V_STICK && r.stepPt <= 0.98 * P.muK * r.stepPn) r.sliding = false;
+      } else if ((r.stepPn > 1e-9 && r.stepPt >= 0.995 * P.muS * r.stepPn) || r.vtStep > 3 * V_STICK) {
+        r.sliding = true;
+      }
+    });
+  }
+
+  function frame(t) {
+    var dtReal = Math.min((t - (lastT || t)) / 1000, 1 / 20);
+    lastT = t;
+    var steps = 0;
+    if (running && !S.ended) {
+      accTime += dtReal * (slow ? 0.2 : 1);
+      while (accTime >= DT && steps < 8 && !S.ended) { stepWorld(); accTime -= DT; steps++; }
+    }
+    // A frame that ends in an end stop contains the impact step — discard it so the frozen
+    // display shows the last regular state.
+    if (steps > 0 && S.ended) S.recs.forEach(function (r) { ['N', 'R', 'T', 'H'].forEach(function (k) { r.acc[k] = vec(); }); });
+    else if (steps > 0) {
+      var ema = slow ? 0.6 : 0.3;
+      S.recs.forEach(function (r) {
+        ['N', 'R', 'T', 'H'].forEach(function (k) {
+          var fx = r.acc[k].x / steps, fy = r.acc[k].y / steps;
+          r.disp[k].x += (fx - r.disp[k].x) * ema; r.disp[k].y += (fy - r.disp[k].y) * ema;
+          r.acc[k].x = 0; r.acc[k].y = 0;
+        });
+        var v = r.body.getLinearVelocity();
+        if (r.vPrev) {
+          var ax = (v.x - r.vPrev.x) / (steps * DT), ay = (v.y - r.vPrev.y) / (steps * DT);
+          r.a += (Math.hypot(ax, ay) - r.a) * 0.15;
+        }
+        r.vPrev = { x: v.x, y: v.y };
+        r.contact = r.touchFrame; r.touchFrame = false;
+      });
+    }
+    draw();
+    updateInfo(false);
+    requestAnimationFrame(frame);
+  }
+
+  // ---------------------------------------------------------------- drawing
+  var cv = document.getElementById('cv'), ctx = cv.getContext('2d'), cssW = 600, cssH = 300;
+
+  function resize() {
+    var w = cv.parentElement.clientWidth;
+    cssW = w; cssH = Math.round(Math.max(240, Math.min(460, w * 0.52)));
+    var dpr = window.devicePixelRatio || 1;
+    cv.width = Math.round(w * dpr); cv.height = Math.round(cssH * dpr);
+    cv.style.height = cssH + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function makeTransform() {
+    var scale, cx, cy;
+    if (S.follow) {
+      scale = cssW / S.follow.width;
+      var p = S.main.body.getPosition();
+      if (!S.cam) S.cam = { x: p.x + S.follow.dx, y: p.y + S.follow.dy };
+      S.cam.x += (p.x + S.follow.dx - S.cam.x) * 0.15; S.cam.y += (p.y + S.follow.dy - S.cam.y) * 0.15;
+      cx = S.cam.x; cy = S.cam.y;
+    } else {
+      var b = S.bounds;
+      scale = Math.min(cssW / (b.x1 - b.x0), cssH / (b.y1 - b.y0));
+      cx = (b.x0 + b.x1) / 2; cy = (b.y0 + b.y1) / 2;
+    }
+    var f = function (x, y) { return { x: cssW / 2 + (x - cx) * scale, y: cssH / 2 - (y - cy) * scale }; };
+    f.scale = scale;
+    f.inv = function (sx, sy) { return { x: cx + (sx - cssW / 2) / scale, y: cy - (sy - cssH / 2) / scale }; };
+    return f;
+  }
+
+  function poly(c, tr, pts, fill, stroke) {
+    c.beginPath();
+    pts.forEach(function (p, i) { var q = tr(p[0], p[1]); if (i) c.lineTo(q.x, q.y); else c.moveTo(q.x, q.y); });
+    c.closePath();
+    if (fill) { c.fillStyle = fill; c.fill(); }
+    if (stroke) { c.strokeStyle = stroke; c.lineWidth = 1.5; c.stroke(); }
+  }
+  function line(c, tr, pts, stroke, width) {
+    c.beginPath();
+    pts.forEach(function (p, i) { var q = tr(p[0], p[1]); if (i) c.lineTo(q.x, q.y); else c.moveTo(q.x, q.y); });
+    c.strokeStyle = stroke; c.lineWidth = width || 1; c.stroke();
+  }
+  // Arc between world angles a0 and a1 (radians) around (x,y), labelled at the middle.
+  function angleArc(c, tr, x, y, a0, a1, rad, label) {
+    var q = tr(x, y), r = rad * tr.scale;
+    c.beginPath();
+    c.arc(q.x, q.y, r, -Math.max(a0, a1), -Math.min(a0, a1), false);
+    c.strokeStyle = css('--muted'); c.lineWidth = 1; c.stroke();
+    var mid = (a0 + a1) / 2;
+    c.fillStyle = css('--fg'); c.font = 'italic 14px system-ui';
+    c.fillText(label, q.x + Math.cos(mid) * (r + 6) - 3, q.y - Math.sin(mid) * (r + 6) + 5);
+  }
+
+  function drawBody(r, tr) {
+    var b = r.body, p = b.getPosition(), a = b.getAngle(), hw = r.w / 2, hh = r.h / 2;
+    var corners = [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]].map(function (k) {
+      return [p.x + k[0] * Math.cos(a) - k[1] * Math.sin(a), p.y + k[0] * Math.sin(a) + k[1] * Math.cos(a)];
+    });
+    poly(ctx, tr, corners, css('--body'), css('--bodyStroke'));
+    if (r.draw === 'sled') {                // curved runner tip at the front (downhill, +x local)
+      var tip = [p.x + (hw + 0.15) * Math.cos(a) - (hh + 0.15) * Math.sin(a), p.y + (hw + 0.15) * Math.sin(a) + (hh + 0.15) * Math.cos(a)];
+      line(ctx, tr, [corners[1], [tip[0], tip[1]]], css('--bodyStroke'), 2);
+    }
+    if (r.draw === 'skier') {               // skis
+      var e = 0.35;
+      line(ctx, tr, [[corners[0][0] - e * Math.cos(a), corners[0][1] - e * Math.sin(a)], [corners[1][0] + e * Math.cos(a), corners[1][1] + e * Math.sin(a)]], css('--bodyStroke'), 3);
+    }
+    if (r.name) {
+      var q = tr(p.x, p.y);
+      ctx.fillStyle = css('--fg'); ctx.font = '12px system-ui'; ctx.textAlign = 'center';
+      ctx.fillText(r.name, q.x, q.y + 4 + (hh * tr.scale > 14 ? 0 : -hh * tr.scale - 8));
+      ctx.textAlign = 'start';
+    }
+  }
+
+  function arrow(o, fx, fy, color, dashed, width, sym, kScale) {
+    var mag = Math.hypot(fx, fy);
+    if (mag < 1e-6) return;
+    var len = mode === 'norm' ? 64 : mag * kScale;
+    var ux = fx / mag, uy = -fy / mag;          // screen space (y down)
+    var ex = o.x + ux * len, ey = o.y + uy * len;
+    ctx.save();
+    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = width;
+    if (dashed) ctx.setLineDash([5, 4]);
+    var head = Math.min(10, len * 0.45);
+    ctx.beginPath(); ctx.moveTo(o.x, o.y); ctx.lineTo(ex - ux * head * 0.8, ey - uy * head * 0.8); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(ex, ey);
+    ctx.lineTo(ex - ux * head - uy * head * 0.45, ey - uy * head + ux * head * 0.45);
+    ctx.lineTo(ex - ux * head + uy * head * 0.45, ey - uy * head - ux * head * 0.45);
+    ctx.closePath(); ctx.fill();
+    // label: F with subscript, pushed beyond the tip
+    var lx = ex + ux * 12, ly = ey + uy * 12;
+    ctx.font = 'italic bold 14px system-ui';
+    var wF = ctx.measureText('F').width;
+    ctx.font = '11px system-ui';
+    var subTxt = sym + (showValues ? ' = ' + fmtN(mag) : '');
+    var wS = ctx.measureText(subTxt).width;
+    var bw = wF + wS + 5, bx = lx - (wF + wS) / 2 + ux * (wF + wS) / 2;
+    // Nudge the label perpendicular to the arrow until it no longer overlaps an earlier one.
+    // O(labels²) per frame; there are < 20 labels.
+    var px = -uy, py = ux;
+    for (var tries = 0; tries < 8 && labelHits(bx - 2, ly - 12, bw, 18); tries++) {
+      var sgn = tries % 2 ? -1 : 1, step = 10 * Math.ceil((tries + 1) / 2) * sgn;
+      bx += px * step; ly += py * step;
+    }
+    labelBoxes.push([bx - 2, ly - 12, bw, 18]);
+    ctx.fillStyle = css('--bg'); ctx.globalAlpha = 0.75;
+    ctx.fillRect(bx - 2, ly - 12, bw, 18);
+    ctx.globalAlpha = 1; ctx.fillStyle = color;
+    ctx.font = 'italic bold 14px system-ui'; ctx.fillText('F', bx, ly + 2);
+    ctx.font = '11px system-ui'; ctx.fillText(subTxt, bx + wF + 1, ly + 5);
+    ctx.restore();
+  }
+
+  var labelBoxes = [];   // label rects drawn this frame, reset in draw()
+  function labelHits(x, y, w, h) {
+    return labelBoxes.some(function (b) { return x < b[0] + b[2] && b[0] < x + w && y < b[1] + b[3] && b[1] < y + h; });
+  }
+
+  function fmtN(v) { return (v >= 100 ? v.toFixed(0) : v.toFixed(1)) + ' N'; }
+
+  // Forces acting on body r, in world coordinates. Split components use the contact normal.
+  function forcesOf(r) {
+    var m = r.body.getMass(), out = [];
+    var Fg = { x: 0, y: -m * G };
+    var min = 0.01 * Math.max(m * G, 1);
+    var sum = { x: Fg.x, y: Fg.y };
+    out.push({ k: 'G', f: Fg });
+    ['N', 'R', 'T', 'H'].forEach(function (k) {
+      var f = r.disp[k];
+      sum.x += f.x; sum.y += f.y;
+      if (k === 'H' && (!drag || drag.rec !== r)) { if (Math.hypot(f.x, f.y) < min * 5) return; }
+      if (Math.hypot(f.x, f.y) >= min) out.push({ k: k, f: { x: f.x, y: f.y } });
+    });
+    if (showSplit) {
+      var nx, ny, nl = Math.hypot(r.disp.N.x, r.disp.N.y);
+      if (nl > min) { nx = r.disp.N.x / nl; ny = r.disp.N.y / nl; }
+      else { var ra = S.rampAngle(); nx = -Math.sin(ra); ny = Math.cos(ra); }
+      var gn = Fg.x * nx + Fg.y * ny;
+      if (r !== S.m2) {
+        out.push({ k: 'P', f: { x: Fg.x - gn * nx, y: Fg.y - gn * ny }, dashed: true, thin: true });
+        out.push({ k: 'Q', f: { x: gn * nx, y: gn * ny }, dashed: true, thin: true });
+      }
+    }
+    if (showNet) out.push({ k: 'S', f: sum, dashed: true, net: true, hide: Math.hypot(sum.x, sum.y) < min * 2 });
+    return out;
+  }
+
+  function draw() {
+    theme = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+    ctx.fillStyle = css('--bg'); ctx.fillRect(0, 0, cssW, cssH);
+    labelBoxes = [];
+    var tr = makeTransform();
+    S.tr = tr;
+    S.drawStatic(ctx, tr);
+    S.recs.forEach(function (r) { drawBody(r, tr); });
+    if (drag) {
+      var a = drag.rec.body.getWorldCenter(), tg = drag.joint.getTarget();
+      var qa = tr(a.x, a.y), qt = tr(tg.x, tg.y);
+      ctx.strokeStyle = col('H'); ctx.setLineDash([2, 3]); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(qa.x, qa.y); ctx.lineTo(qt.x, qt.y); ctx.stroke(); ctx.setLineDash([]);
+    }
+    var mgMax = 0;
+    S.recs.forEach(function (r) { mgMax = Math.max(mgMax, r.body.getMass() * G); });
+    var kScale = Math.min(95, cssH * 0.26) / Math.max(mgMax * (S.forceRef || 1), 1e-6);   // px per N
+    S.recs.forEach(function (r) {
+      var c = r.body.getWorldCenter(), o = tr(c.x, c.y);
+      forcesOf(r).forEach(function (F) {
+        if (F.hide) return;
+        arrow(o, F.f.x, F.f.y, col(F.k), !!F.dashed, F.thin ? 1.5 : F.net ? 2.5 : 2.5, L.f[F.k][0], kScale);
+      });
+      ctx.fillStyle = css('--bodyStroke'); ctx.beginPath(); ctx.arc(o.x, o.y, 2.5, 0, 7); ctx.fill();
+    });
+  }
+
+  // ---------------------------------------------------------------- dragging
+  function pointerWorld(e) {
+    var rc = cv.getBoundingClientRect();
+    return S.tr.inv(e.clientX - rc.left, e.clientY - rc.top);
+  }
+  cv.addEventListener('pointerdown', function (e) {
+    if (!S || !S.tr) return;
+    var p = pointerWorld(e), hit = null;
+    S.recs.forEach(function (r) { if (r.fixture.testPoint(V(p.x, p.y))) hit = r; });
+    if (!hit) {                      // generous hit area for small bodies
+      var best = 0.6;
+      S.recs.forEach(function (r) { var c = r.body.getWorldCenter(), dd = Math.hypot(c.x - p.x, c.y - p.y); if (dd < best) { best = dd; hit = r; } });
+    }
+    if (!hit) return;
+    var c = hit.body.getWorldCenter();
+    // Target tracks the pointer minus the grab offset, so the force acts at the centre of mass.
+    var j = S.world.createJoint(pl.MouseJoint({ maxForce: 40 * hit.body.getMass() * G, frequencyHz: 4, dampingRatio: 0.8 }, S.ground, hit.body, V(c.x, c.y)));
+    drag = { joint: j, rec: hit, off: { x: p.x - c.x, y: p.y - c.y } };
+    try { cv.setPointerCapture(e.pointerId); } catch (err) { /* synthetic events */ }
+    cv.classList.add('dragging');
+  });
+  cv.addEventListener('pointermove', function (e) {
+    if (!drag) return;
+    var p = pointerWorld(e);
+    drag.joint.setTarget(V(p.x - drag.off.x, p.y - drag.off.y));
+  });
+  function endDrag() {
+    if (!drag) return;
+    S.world.destroyJoint(drag.joint);
+    drag.rec.disp.H = vec();
+    drag = null; cv.classList.remove('dragging');
+  }
+  cv.addEventListener('pointerup', endDrag);
+  cv.addEventListener('pointercancel', endDrag);
+
+  // ---------------------------------------------------------------- UI
+  var elTabs = document.getElementById('tabs'), elBar = document.getElementById('bar');
+  var elSl = document.getElementById('sliders'), elInfo = document.getElementById('info'), elHint = document.getElementById('hint');
+
+  function btn(label, fn, cls) {
+    var b = document.createElement('button');
+    b.innerHTML = label; b.onclick = fn; if (cls) b.className = cls;
+    return b;
+  }
+  function sym(k) { return 'F<sub>' + L.f[k][0] + '</sub>'; }
+
+  function renderTabs() {
+    elTabs.innerHTML = '';
+    ORDER.forEach(function (id) {
+      elTabs.appendChild(btn(L.tabs[id], function () { sceneId = id; running = true; build(); renderAll(); }, id === sceneId ? 'on' : ''));
+    });
+  }
+
+  function syncBar() {
+    var pb = document.getElementById('bPlay'); if (pb) pb.textContent = running && !S.ended ? L.pause : L.play;
+    var sb = document.getElementById('bSlow'); if (sb) sb.className = slow ? 'on' : '';
+    var lb = document.getElementById('bLift'); if (lb) lb.textContent = S.liftOn ? L.liftOff : L.liftOn;
+  }
+
+  function renderBar() {
+    elBar.innerHTML = '';
+    var play = btn('', function () { if (S.ended) return; running = !running; syncBar(); }); play.id = 'bPlay';
+    var sl = btn(L.slow, function () { slow = !slow; syncBar(); }); sl.id = 'bSlow';
+    var seg = document.createElement('span'); seg.className = 'seg';
+    var reset = btn(L.reset, function () { running = true; build(); syncBar(); });
+    [play, sl, reset].forEach(function (b) { elBar.appendChild(b); });
+    if (sceneId === 'endless' || sceneId === 'slide') {
+      elBar.appendChild(btn(L.push, function () {
+        var a = S.ramp.getAngle(), v = 1.5;
+        S.main.body.setLinearVelocity(V(-v * Math.cos(a), -v * Math.sin(a)));
+        S.main.sliding = true;
+      }));
+    }
+    if (sceneId === 'slide') {
+      elBar.appendChild(btn(L.setAlpha, function () { P.alpha = Math.atan(P.muK) / DEG; tiltRamp(P.alpha); renderSliders(); }));
+    }
+    if (sceneId === 'lift') {
+      var lb = btn('', function () { S.setLift(!S.liftOn); syncBar(); }); lb.id = 'bLift';
+      elBar.appendChild(lb);
+    }
+    var bS = btn(L.toScale, function () { mode = 'scale'; renderBar(); }, mode === 'scale' ? 'on' : '');
+    var bN = btn(L.normalized, function () { mode = 'norm'; renderBar(); }, mode === 'norm' ? 'on' : '');
+    seg.appendChild(bS); seg.appendChild(bN);
+    elBar.appendChild(seg);
+    [['split', L.decompose, function () { return showSplit; }, function (v) { showSplit = v; }],
+     ['net', L.net, function () { return showNet; }, function (v) { showNet = v; }],
+     ['val', L.values, function () { return showValues; }, function (v) { showValues = v; }]].forEach(function (c) {
+      var lab = document.createElement('label'), cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.checked = c[2](); cb.onchange = function () { c[3](cb.checked); updateInfo(true); };
+      var tx = document.createElement('span'); tx.innerHTML = c[1];
+      lab.appendChild(cb); lab.appendChild(tx);
+      elBar.appendChild(lab);
+    });
+    syncBar();
+  }
+
+  function renderSliders() {
+    elSl.innerHTML = '';
+    sliderSpecs(sceneId).forEach(function (s) {
+      var row = document.createElement('div'); row.className = 'sl';
+      var lab = document.createElement('span'); lab.innerHTML = s.label;
+      var inp = document.createElement('input');
+      inp.type = 'range'; inp.min = s.min; inp.max = s.max; inp.step = s.step; inp.value = P[s.key];
+      var out = document.createElement('output');
+      var show = function () { out.textContent = Number(P[s.key]).toFixed(s.dec) + s.unit; };
+      show();
+      inp.oninput = function () {
+        P[s.key] = parseFloat(inp.value); show();
+        if (s.live === 'rebuild') build();
+        else if (s.live === 'tilt') tiltRamp(P.alpha);
+        else if (s.live === 'mass') S.recs.forEach(function (r) { if (r.massKey === s.key) setMass(r, Math.max(P[s.key], 0.001)); });
+        else if (s.live === 'lift') { if (S.liftOn) S.setLift(true); }
+        updateInfo(true);
+      };
+      row.appendChild(lab); row.appendChild(inp); row.appendChild(out);
+      elSl.appendChild(row);
+    });
+  }
+
+  var lastInfo = 0;
+  function updateInfo(force) {
+    var now = performance.now();
+    if (!force && now - lastInfo < 150) return;
+    lastInfo = now;
+    if (!S) return;
+    var html = '';
+    S.recs.forEach(function (r) {
+      var rows = forcesOf(r).map(function (F) {
+        var mag = Math.hypot(F.f.x, F.f.y);
+        var sw = F.dashed ? '<span class="sw dash" style="border-color:' + col(F.k) + '"></span>' : '<span class="sw" style="background:' + col(F.k) + '"></span>';
+        return '<tr><td>' + sw + '</td><td>' + sym(F.k) + '</td><td class="read">' + L.f[F.k][1] + '</td><td class="v">' + fmtN(F.hide ? 0 : mag) + '</td></tr>';
+      }).join('');
+      var v = r.body.getLinearVelocity(), speed = Math.hypot(v.x, v.y);
+      var st = !r.contact ? L.air : r.sliding ? L.sliding : L.sticking;
+      var title = r === S.m2 ? L.body2 + ' (m₂)' : (sceneId === 'pulley' ? L.body1 + ' (m₁)' : '');
+      html += '<div>' + (title ? '<div class="state">' + title + '</div>' : '') +
+        '<div class="read">v <b>' + speed.toFixed(2) + ' m/s</b> · a <b>' + r.a.toFixed(2) + ' m/s²</b>' +
+        (r === S.m2 ? '' : ' · <span class="state">' + st + '</span>') + '</div>' +
+        '<table>' + rows + '</table></div>';
+    });
+    var ra = Math.abs(S.rampAngle());
+    var de = L === STR.de;
+    var extra = 'tan α <b>' + Math.tan(ra).toFixed(3) + '</b> · μ<sub>' + (de ? 'H' : 's') + '</sub> <b>' + P.muS.toFixed(2) +
+      '</b> · μ<sub>' + (de ? 'G' : 'k') + '</sub> <b>' + P.muK.toFixed(2) + '</b>';
+    if (S.readout) { var ro = S.readout(); if (ro) extra += ' · ' + ro; }
+    if (S.ended) extra += ' · <span class="state">' + L.endStop + '</span>';
+    elInfo.innerHTML = html + '<div class="read">' + extra + '</div>';
+  }
+
+  function renderAll() {
+    renderTabs(); renderBar(); renderSliders();
+    elHint.innerHTML = L.hints[sceneId];
+    updateInfo(true);
+  }
+
+  function applyTheme(t) {
+    cssCache = {};
+    document.documentElement.dataset.theme = t === 'dark' ? 'dark' : 'light';
+    document.documentElement.style.colorScheme = t === 'dark' ? 'dark' : 'light';
+    updateInfo(true);
+  }
+
+  plugin.onReady(function (ctx0) {
+    var cfg = ctx0.config || {};
+    if (cfg.lang === 'de') L = STR.de;
+    if (ORDER.indexOf(cfg.scenario) >= 0) sceneId = cfg.scenario;
+    if (cfg.tabs === 'false') elTabs.style.display = 'none';
+    applyTheme(ctx0.theme);
+    resize();
+    build();
+    renderAll();
+    new ResizeObserver(function () { resize(); }).observe(cv.parentElement);
+    requestAnimationFrame(frame);
+  });
+  plugin.onThemeChange(applyTheme);
+})();
+</script>
