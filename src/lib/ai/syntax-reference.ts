@@ -529,7 +529,7 @@ A button students press to get AI feedback on what they drew or wrote by hand on
 <ai-feedback id="fb-quadratics" label="Check my solution" prompt="..." />
 \`\`\`
 
-**Attributes:** \`prompt\` — teacher instructions for the AI (not shown to students); \`id\` — optional stable identifier (components map to their prompt by position automatically, even with several per page); \`label\` — button text (default "Get AI feedback"). Place the tag after the exercise and the space students write in; with several tags under one h2, each sees everything above it (other tags' prompts excluded). Works for logged-out visitors too; requests are rate-limited per user or IP.`)
+**Attributes:** \`prompt\` — teacher instructions for the AI (not shown to students); \`solution\` — reference solution the AI compares against, never shown to students: an Excalidraw drawing name (as in \`<excali src>\`) or an image file from the skript, e.g. \`solution="kraefte-loesung"\` below a task drawing \`<excali src="kraefte-aufgabe" />\` that students draw on; \`id\` — optional stable identifier (components map to their prompt by position automatically, even with several per page); \`label\` — button text (default "Get AI feedback"). Place the tag after the exercise and the space students write in; with several tags under one h2, each sees everything above it (other tags' prompts excluded). Works for logged-out visitors too; requests are rate-limited per user or IP.`)
 
   // Ping terminal
   sections.push(`## Ping Terminal
@@ -880,7 +880,7 @@ export function getCondensedSyntaxReference(): string {
 
 **Banner:** \`<banner [id="..."] [dismissible="false"] [color="orange|muted|paper|#hex"] [text="text|red|#hex"]>inline markdown</banner>\` on its own lines, first on the page — sticky announcement bar at the top edge; viewers can dismiss it (remembered per browser, keyed by id or text).
 
-**AI feedback:** \`<ai-feedback prompt="teacher instructions for the AI" [id="fb1"] [label="Check my solution"] />\` — button for students: sends their pen strokes above the tag back to the previous h1/h2 (rendered to an image) + that markdown; nothing below the tag to a vision model for feedback; pasting a screenshot (hover box, Ctrl+V) works as alternative input. Several tags per page map to their prompts by position (\`id\` optional); no login required.
+**AI feedback:** \`<ai-feedback prompt="teacher instructions for the AI" [solution="excalidraw-name-or-image-file"] [id="fb1"] [label="Check my solution"] />\` — \`solution\` is a hidden reference drawing/image the AI compares against;button for students: sends their pen strokes above the tag back to the previous h1/h2 (rendered to an image) + that markdown; nothing below the tag to a vision model for feedback; pasting a screenshot (hover box, Ctrl+V) works as alternative input. Several tags per page map to their prompts by position (\`id\` optional); no login required.
 
 **Ping:** \`<ping [host="wairualodge.co.nz"] [count="4"] [os="linux|macos|windows"] />\` — interactive terminal; students type \`ping [-c N] host\`. Server-side TCP connect (not ICMP; works where school wifi blocks ICMP). RTT/IP/loss are real; \`host\` auto-runs a demo; requires login; private addresses blocked; top-right button switches OS style.
 

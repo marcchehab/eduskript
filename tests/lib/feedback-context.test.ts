@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractFeedbackContext } from '@/lib/ai/feedback-context'
+import { extractFeedbackContext, solutionFilename } from '@/lib/ai/feedback-context'
 
 const PAGE = `# Algebra basics
 
@@ -149,5 +149,32 @@ describe('extractFeedbackContext', () => {
     const page = '## S\n\n<ai-feedback id="ml"\n  prompt="Multi line." />\n'
     const ctx = extractFeedbackContext(page, 'ml')
     expect(ctx!.prompt).toBe('Multi line.')
+  })
+
+  it('returns the solution attribute, and null without one', () => {
+    const page = '## S\n\n<excali src="task" />\n\n<ai-feedback id="a" solution="task-solution" prompt="p" />\n\n<ai-feedback id="b" prompt="q" />\n'
+    expect(extractFeedbackContext(page, 'a')!.solution).toBe('task-solution')
+    expect(extractFeedbackContext(page, 'b')!.solution).toBeNull()
+  })
+
+  it("keeps an earlier tag's solution out of a later tag's section markdown", () => {
+    const page = '## S\n\n<ai-feedback solution="secret-1" />\n\n<ai-feedback id="later" />\n'
+    const ctx = extractFeedbackContext(page, 'later')
+    expect(ctx!.solution).toBeNull()
+    expect(ctx!.sectionMarkdown).not.toContain('secret-1')
+  })
+})
+
+describe('solutionFilename', () => {
+  it('maps a bare name or .excalidraw name to the light SVG export', () => {
+    expect(solutionFilename('forces')).toBe('forces.excalidraw.light.svg')
+    expect(solutionFilename('forces.excalidraw')).toBe('forces.excalidraw.light.svg')
+    expect(solutionFilename(' forces ')).toBe('forces.excalidraw.light.svg')
+  })
+
+  it('passes image files through unchanged', () => {
+    expect(solutionFilename('solution.png')).toBe('solution.png')
+    expect(solutionFilename('Solution.JPG')).toBe('Solution.JPG')
+    expect(solutionFilename('diagram.svg')).toBe('diagram.svg')
   })
 })

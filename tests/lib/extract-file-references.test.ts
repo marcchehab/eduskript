@@ -9,6 +9,11 @@ describe('extractReferencedFilenames', () => {
     const md = '![demo](lecture.mp4)\n![shot](photo.png)\n![clip](demo.mov)'
     expect(extractReferencedFilenames(md)).toEqual(['photo.png'])
   })
+
+  it('includes ai-feedback reference solutions', () => {
+    const md = '<ai-feedback prompt="p" solution="forces" />\n<ai-feedback solution="answer.png" />'
+    expect(extractReferencedFilenames(md)).toEqual(['forces.excalidraw.light.svg', 'answer.png'])
+  })
 })
 
 describe('extractReferencedVideoFilenames', () => {

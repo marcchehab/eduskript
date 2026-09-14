@@ -28,8 +28,29 @@
 export interface FeedbackContext {
   /** Teacher prompt from the tag's prompt="..." attribute, if any. */
   prompt: string | null
+  /**
+   * Teacher's reference solution file from solution="...", if any. Never sent
+   * to the client; loaded server-side by feedback-solution.ts.
+   */
+  solution: string | null
   /** Markdown from the preceding h1/h2 up to the tag, ai-feedback blocks stripped. */
   sectionMarkdown: string
+}
+
+const IMAGE_EXT_RE = /\.(png|jpe?g|webp|gif|svg)$/i
+
+/**
+ * Map a solution="..." value to the stored filename:
+ * - image extension (png/jpg/jpeg/webp/gif/svg) → that file as-is
+ * - anything else → an Excalidraw drawing: `<name>.excalidraw.light.svg`
+ *   (`.excalidraw` suffix optional, same as <excali src>)
+ * Shared by the loader (feedback-solution.ts) and page copy/move
+ * (extract-file-references.ts), so both agree on which file is meant.
+ */
+export function solutionFilename(name: string): string {
+  const trimmed = name.trim()
+  if (IMAGE_EXT_RE.test(trimmed)) return trimmed
+  return `${trimmed.replace(/\.excalidraw(\.md)?$/, '')}.excalidraw.light.svg`
 }
 
 const HEADING_RE = /^#{1,2}\s+\S/
@@ -105,6 +126,8 @@ export function extractFeedbackContext(
 
   const promptMatch = tag.tagText.match(/\bprompt\s*=\s*"([^"]*)"/i)
   const prompt = promptMatch ? promptMatch[1] : null
+  const solutionMatch = tag.tagText.match(/\bsolution\s*=\s*"([^"]*)"/i)
+  const solution = solutionMatch?.[1].trim() || null
 
   // Context bounds: nearest h1/h2 at or above the tag line → the tag itself
   let start = 0
@@ -125,5 +148,5 @@ export function extractFeedbackContext(
     .replace(/<\/ai-feedback>/gi, '')
     .trim()
 
-  return { prompt, sectionMarkdown }
+  return { prompt, solution, sectionMarkdown }
 }

@@ -6,6 +6,8 @@
  * This is pragmatic given the well-structured markdown patterns used in Eduskript.
  */
 
+import { solutionFilename } from '@/lib/ai/feedback-context'
+
 /** Skip absolute URLs, anchors, and mailto links */
 function isLocalRef(ref: string): boolean {
   return (
@@ -58,7 +60,15 @@ export function extractReferencedFilenames(content: string): string[] {
     filenames.add(`${name}.excalidraw.dark.svg`)
   }
 
-  // 4. File link refs: [text](filename) — non-image links
+  // 4. AI feedback reference solutions: <ai-feedback solution="name">
+  // Only the file the loader reads (light SVG for excalidraw) — the solution
+  // is never rendered, so the dark variant isn't needed.
+  const solutionRegex = /<ai-feedback\b[^>]*?\bsolution="([^"]+)"/gi
+  for (const match of content.matchAll(solutionRegex)) {
+    filenames.add(solutionFilename(match[1]))
+  }
+
+  // 5. File link refs: [text](filename) — non-image links
   // The image regex above uses `!` prefix; this captures plain links
   const linkRegex = /(?<!!)\[[^\]]*\]\(([^)\s]+)\)/g
   for (const match of content.matchAll(linkRegex)) {

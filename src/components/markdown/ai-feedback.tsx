@@ -14,8 +14,9 @@
  * 3. Camera/file: pick or shoot a photo (capture="environment" opens the rear
  *    camera on mobile). Same normalize path as paste — for work done on paper.
  *
- * The server re-derives the exercise text + teacher prompt from page content;
- * the client only sends pageId, feedbackId and the image.
+ * The server re-derives the exercise text, teacher prompt and reference
+ * solution (solution="...") from page content; the client only sends pageId,
+ * feedbackId and the image, and never receives the prompt or solution attrs.
  *
  * Section scoping duplicates the live-position math of
  * section-anchored-strokes.tsx in read-only form: a stroke's current y =

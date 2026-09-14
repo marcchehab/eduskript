@@ -6,7 +6,9 @@
  * The server re-derives the teacher prompt + exercise section from the stored
  * page content (see feedback-context.ts) — the client never sends either, so
  * students can't tamper with the instructions. The image is the student's
- * work: either strokes rendered client-side or a pasted screenshot.
+ * work: either strokes rendered client-side or a pasted screenshot. An
+ * optional solution="..." file (Excalidraw drawing or image in the skript) is
+ * loaded here and sent as a second image — see feedback-solution.ts.
  *
  * Streams SSE events in the same { type: 'content' | 'error' | 'done' } shape
  * as /api/ai/chat.
@@ -29,6 +31,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { checkPagePermissions } from '@/lib/permissions'
 import { extractFeedbackContext } from '@/lib/ai/feedback-context'
+import { loadSolutionImage } from '@/lib/ai/feedback-solution'
 import OpenAI from 'openai'
 
 export const dynamic = 'force-dynamic'
@@ -122,11 +125,15 @@ export async function POST(request: Request) {
     // row for those. Same split as /api/pages/[id]/submissions.
     let content: string
     let sitePrompt: string | null | undefined
+    // Files live per skript; frontpages have none, so solution="..." is
+    // ignored there.
+    let skriptId: string | null = null
 
     const page = await prisma.page.findUnique({
       where: { id: pageId },
       select: {
         content: true,
+        skriptId: true,
         isPublished: true,
         authors: { include: { user: true } },
         skript: {
@@ -160,6 +167,7 @@ export async function POST(request: Request) {
         }
       }
       content = page.content
+      skriptId = page.skriptId
       sitePrompt = page.skript.collectionSkripts[0]?.collection.site.aiSystemPrompt
     } else {
       const frontPage = await prisma.frontPage.findUnique({
@@ -216,6 +224,31 @@ export async function POST(request: Request) {
       systemPrompt += `\n\nTeacher's instructions for this exercise. These override the guidelines above wherever they conflict (length, format, whether to reveal answers). Any solution stated here is authoritative: compare the student's work against it, and if it matches, confirm it as correct.\n${context.prompt}`
     }
 
+    // A missing/unreadable solution file degrades to plain feedback rather
+    // than failing the student's request (logged in loadSolutionImage).
+    const solutionImage =
+      context.solution && skriptId ? await loadSolutionImage(skriptId, context.solution) : null
+    if (solutionImage) {
+      systemPrompt += `\n\nYou also receive the teacher's reference solution as an image, marked as such. The student cannot see it. It is authoritative: compare the student's work against it, and if the work matches it in substance, confirm it as correct. Differences in drawing style, layout, size, or labelling that don't change the meaning are not errors. Don't mention that a reference image exists, and don't reveal its content beyond what the guidelines above allow.`
+    }
+
+    const userContent: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [
+      {
+        type: 'text',
+        text: `The exercise (course page section, markdown):\n\n${context.sectionMarkdown}`,
+      },
+    ]
+    if (solutionImage) {
+      userContent.push(
+        { type: 'text', text: "Teacher's reference solution (hidden from the student):" },
+        { type: 'image_url', image_url: { url: solutionImage } }
+      )
+    }
+    userContent.push(
+      { type: 'text', text: 'My work on this exercise. Please give me feedback.' },
+      { type: 'image_url', image_url: { url: image } }
+    )
+
     const openai = new OpenAI({
       apiKey: process.env.OPENROUTER_API_KEY,
       baseURL: 'https://openrouter.ai/api/v1',
@@ -233,16 +266,7 @@ export async function POST(request: Request) {
           max_tokens: 2048,
           messages: [
             { role: 'system', content: systemPrompt },
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: `The exercise (course page section, markdown):\n\n${context.sectionMarkdown}\n\nThe image shows my work on this exercise. Please give me feedback.`,
-                },
-                { type: 'image_url', image_url: { url: image } },
-              ],
-            },
+            { role: 'user', content: userContent },
           ],
           stream: true,
         })

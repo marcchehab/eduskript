@@ -447,8 +447,19 @@ For work that has no single correct answer to diff against — free-text explana
 ```
 
 - `prompt` (required) — your instructions to the AI, e.g. what to look for and how strict to be
+- `solution` — optional; your reference solution, which the AI compares the student's work against. Either the name of an Excalidraw drawing (as in `<excali src="...">`) or an image file from the skript. It's loaded on the server and never shown on the page.
 - `id` — optional; several `<ai-feedback>` tags on one page map to their prompts by position if omitted
 - `label` — the button text shown to students (default is a generic "Check")
+
+A drawing task with a reference solution: students draw on the task drawing with the pen, the AI compares their strokes with the solution drawing.
+
+```html
+<excali src="inclined-plane-task" />
+
+<ai-feedback solution="inclined-plane-solution" prompt="Check which forces are drawn and their directions. Name missing or wrong forces, don't draw the solution for them." />
+```
+
+The solution file is kept off the page but still sits in the skript's public file storage — good enough for practice, not for keeping an exam answer secret.
 
 What gets sent: the student's pen strokes and images above the tag, back to the previous h1/h2 heading, rendered to an image, plus that markdown — nothing below the tag, so an example answer can go right after it — so it can see a plot, a molecule diagram, or an editor's code alongside anything drawn on top of it. Pasting a screenshot (hover box, `Ctrl+V`) works as an alternative input, e.g. for work done outside Eduskript.
 

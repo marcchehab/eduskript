@@ -447,8 +447,19 @@ Für Arbeiten ohne eine einzige richtige Antwort zum Vergleichen — Freitext-Er
 ```
 
 - `prompt` (erforderlich) — deine Anweisungen an die KI, z.B. worauf sie achten und wie streng sie sein soll
+- `solution` — optional; deine Musterlösung, mit der die KI die Arbeit des Schülers vergleicht. Entweder der Name einer Excalidraw-Zeichnung (wie bei `<excali src="...">`) oder eine Bilddatei aus dem Skript. Sie wird auf dem Server geladen und nie auf der Seite angezeigt.
 - `id` — optional; mehrere `<ai-feedback>`-Tags auf einer Seite werden ihren Prompts nach Position zugeordnet, wenn weggelassen
 - `label` — der Button-Text für Schüler (Standard ist ein generisches «Check»)
+
+Eine Zeichenaufgabe mit Musterlösung: Die Schüler zeichnen mit dem Stift auf die Aufgaben-Zeichnung, die KI vergleicht ihre Striche mit der Lösungs-Zeichnung.
+
+```html
+<excali src="schiefe-ebene-aufgabe" />
+
+<ai-feedback solution="schiefe-ebene-loesung" prompt="Prüfe, welche Kräfte eingezeichnet sind und in welche Richtung sie zeigen. Benenne fehlende oder falsche Kräfte, zeichne die Lösung nicht vor." />
+```
+
+Die Lösungsdatei erscheint nicht auf der Seite, liegt aber im öffentlichen Dateispeicher des Skripts — gut genug für Übungen, nicht um eine Prüfungslösung geheim zu halten.
 
 Was gesendet wird: die Stiftstriche des Schülers im umgebenden h1/h2/h3-Abschnitt, als Bild gerendert, plus das Markdown dieses Abschnitts — so kann das Modell einen Plot, ein Moleküldiagramm oder den Code eines Editors zusammen mit allem darüber Gezeichneten sehen. Das Einfügen eines Screenshots (Hover-Box, `Ctrl+V`) funktioniert als alternative Eingabe, z.B. für Arbeiten ausserhalb von Eduskript.
 
