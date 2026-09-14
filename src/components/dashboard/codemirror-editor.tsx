@@ -2226,6 +2226,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
                   <RibbonBigButton icon={<CircleHelp />} label="Quiz" title="Add Quiz Question" onClick={insertQuiz} />
                   <RibbonBigButton icon={<Sparkles />} label="AI Feedback" title="AI feedback on drawings, plots, and photos in this section" onClick={insertAiFeedback} />
                   <RibbonBigButton icon={<AppWindow />} label="Tabs" title="Insert tabbed sections" onClick={insertTabsContainer} />
+                  <RibbonBigButton icon={<Puzzle />} label="Plugin" title="Insert Plugin" onClick={() => setPluginPickerOpen(true)} />
                 </RibbonGroup>
               </>
             ),
