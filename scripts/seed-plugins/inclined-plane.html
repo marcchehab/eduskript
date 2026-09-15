@@ -14,8 +14,9 @@
     - F_G = m·g (exact).
     - F_N, F_R come from the contact solver: post-solve impulses per step / dt,
       averaged over the steps of one frame, then EMA-smoothed for display.
-    - Rope/hand forces come from joint impulses (pulley m_impulse, distance/mouse
-      getReactionForce).
+    - Ropes only pull. Counterweight: Box2D pulley patched into a one-sided constraint
+      (ropePulley), tension = its impulse. Ski lift: explicit pull-only spring-damper force.
+      Hand force: mouse joint getReactionForce.
   Box2D has one friction coefficient per contact. Static vs. kinetic friction is
   emulated per body: μ_H while sticking, μ_G while sliding. Stick→slide when the
   friction impulse saturates at μ_H·N (or tangential speed > 3·V_STICK); slide→stick
@@ -33,6 +34,9 @@
     --ground: #374151; --groundStroke: #9ca3af; --snow: #334155; --snowStroke: #64748b;
     --body: #475569; --bodyStroke: #cbd5e1; --rope: #d6d3d1; --accent: #60a5fa;
   }
+  /* No scrollbar: the host sizes the iframe to scrollHeight (plugin-sdk auto-resize), and a
+     scrollbar toggling on/off changes the width → canvas height → content height → loop. */
+  html { overflow: hidden; }
   * { box-sizing: border-box; }
   body { margin: 0; font: 14px/1.4 system-ui, sans-serif; color: var(--fg); background: var(--bg); }
   #app { padding: 10px; }
@@ -301,12 +305,8 @@
     S.drawStatic = function (ctx, tr) {
       var P0 = S.ramp.getWorldPoint(V(0, 0)), P1 = S.ramp.getWorldPoint(V(len, 0)), deep = 300;
       poly(ctx, tr, [[P0.x, P0.y], [P1.x, P1.y], [P1.x, P1.y - deep], [P0.x, P0.y - deep]], css('--ground'), css('--groundStroke'));
-      // hatch marks every metre so motion is visible under the follow camera
+      hatch(ctx, tr, [[P0.x, P0.y], [P1.x, P1.y]], css('--groundStroke'));
       var ls = localS();
-      for (var k = Math.floor(ls - 14); k <= ls + 14; k++) {
-        var q1 = S.ramp.getWorldPoint(V(k, 0));
-        line(ctx, tr, [[q1.x, q1.y], [q1.x, q1.y - 0.3]], css('--groundStroke'), 1);   // plumb, independent of α
-      }
       // α marker travels with the block: vertex on the surface downhill of it, horizontal ray below the slope
       var vx = S.ramp.getWorldPoint(V(ls - 3.2, 0));
       ctx.save(); ctx.setLineDash([4, 3]);
@@ -363,10 +363,12 @@
       var fill = pts.slice(); fill.push([S.flat0 + 150, -3], [-4, -3]);
       poly(ctx, tr, fill, css('--snow'), null);
       line(ctx, tr, pts, css('--snowStroke'), 2);
+      // run-out hatched separately so its ticks sit on whole metres from the start of the flat
+      hatch(ctx, tr, pts.slice(0, -1), css('--snowStroke'));
+      hatch(ctx, tr, [[S.flat0, 0], [S.flat0 + 150, 0]], css('--snowStroke'));
       ctx.fillStyle = css('--muted'); ctx.font = '11px system-ui';
       for (var x = 0; x <= 150; x += 10) {
         var q = tr(S.flat0 + x, 0);
-        ctx.fillRect(q.x - 0.5, q.y, 1, 6);
         ctx.fillText(x + ' m', q.x + 3, q.y + 16);
       }
       line(ctx, tr, [[0, H], [2, H]], css('--muted'), 1);
@@ -389,28 +391,41 @@
     S.main = addBox(c.x, c.y, w, h, a, P.m, '', { fixedRotation: true, draw: 'skier' });
     var ra = a + P.beta * DEG;
     S.anchor = S.world.createKinematicBody({ position: V(c.x + ropeL * Math.cos(ra), c.y + ropeL * Math.sin(ra)) });
-    S.rope = S.world.createJoint(pl.DistanceJoint({ frequencyHz: 1.2, dampingRatio: 0.9, length: ropeL },
-      S.anchor, S.main.body, S.anchor.getPosition(), S.main.body.getWorldCenter()));
     S.liftOn = false;
     S.follow = { width: 10, dx: 1, dy: 0.8 };
     S.setLift = function (on) {
       S.liftOn = on;
       S.anchor.setLinearVelocity(on ? V(P.vLift * d.x, P.vLift * d.y) : V(0, 0));
     };
+    // Tow rope = pull-only spring-damper, applied as an explicit force before each step
+    // (a Box2D DistanceJoint would also push). 1.2 Hz / damping 0.9 relative to the skier's
+    // mass, like a spring-loaded T-bar: the start is smooth instead of an impulse spike.
+    // Taut when longer than ropeL; tension = max(0, k·x + c·ẋ). Explicit Euler is stable here
+    // (ω·DT ≈ 0.06).
+    S.preStep = function () {
+      var b = S.main.body, m = b.getMass(), om = 2 * Math.PI * 1.2;
+      var p = b.getWorldCenter(), ap = S.anchor.getPosition();
+      var ux = ap.x - p.x, uy = ap.y - p.y, l = Math.hypot(ux, uy) || 1;
+      ux /= l; uy /= l;
+      var v = b.getLinearVelocity(), va = S.anchor.getLinearVelocity();
+      var x = l - ropeL, xd = (va.x - v.x) * ux + (va.y - v.y) * uy;
+      var T = x > 0 ? Math.max(0, m * om * om * x + 2 * 0.9 * m * om * xd) : 0;
+      b.applyForceToCenter(V(T * ux, T * uy), true);
+      S.main.acc.T.x += T * ux; S.main.acc.T.y += T * uy;
+    };
     S.onStep = function () {
       var sa = S.anchor.getPosition().x / d.x;
       if (S.liftOn && sa > len - 2) S.setLift(false);
-      var F = S.rope.getReactionForce(1 / DT);            // force on bodyB (the skier)
-      S.main.acc.T.x += F.x; S.main.acc.T.y += F.y;
     };
     S.drawStatic = function (ctx, tr) {
       poly(ctx, tr, [[0, 0], [len * d.x, len * d.y], [len * d.x, 0]], css('--snow'), css('--snowStroke'));
       line(ctx, tr, [[-20, 0], [0, 0]], css('--snowStroke'), 2);
+      hatch(ctx, tr, [[-20, 0], [0, 0], [len * d.x, len * d.y]], css('--snowStroke'));
       var ap = S.anchor.getPosition();
       // lift cable: parallel to the slope through the anchor
       line(ctx, tr, [[ap.x - 80 * d.x, ap.y - 80 * d.y], [ap.x + 80 * d.x, ap.y + 80 * d.y]], css('--muted'), 1);
       var bc = S.main.body.getWorldCenter();
-      line(ctx, tr, [[ap.x, ap.y], [bc.x, bc.y]], css('--rope'), 2);
+      rope(ctx, tr, ap, bc, ropeL - Math.hypot(ap.x - bc.x, ap.y - bc.y));
       var q = tr(ap.x, ap.y);
       ctx.fillStyle = css('--rope'); ctx.beginPath(); ctx.arc(q.x, q.y, 4, 0, 7); ctx.fill();
       angleArc(ctx, tr, 0, 0, 0, a, 1.4, 'α');
@@ -430,26 +445,27 @@
     S.main = addBox(s * d.x + n.x * (h / 2 + 0.002), s * d.y + n.y * (h / 2 + 0.002), w, h, a, P.m, 'm₁', { fixedRotation: true });
     var lenB = Math.max(0.9, (gB.y - 0.25) / 2);
     S.m2 = addBox(gB.x, gB.y - lenB, 0.5, 0.5, 0, Math.max(P.m2, 0.001), 'm₂', { fixedRotation: true, massKey: 'm2' });
-    S.pulley = S.world.createJoint(pl.PulleyJoint({}, S.main.body, S.m2.body, gA, gB,
-      S.main.body.getWorldCenter(), S.m2.body.getWorldCenter(), 1));
+    S.pulley = ropePulley(S.world.createJoint(pl.PulleyJoint({}, S.main.body, S.m2.body, gA, gB,
+      S.main.body.getWorldCenter(), S.m2.body.getWorldCenter(), 1)));
     S.onStep = function () {
-      var j = S.pulley, tension = j.m_impulse / DT;       // positive = rope in tension
+      var j = S.pulley, tension = j.m_impulse / DT;       // ≥ 0 (ropePulley), 0 = slack
       [[S.main, j.getAnchorA(), gA], [S.m2, j.getAnchorB(), gB]].forEach(function (p) {
         var ux = p[1].x - p[2].x, uy = p[1].y - p[2].y, l = Math.hypot(ux, uy) || 1;
         p[0].acc.T.x -= tension * ux / l; p[0].acc.T.y -= tension * uy / l;
       });
-      // Box2D's pulley is bilateral (it can push like a rod), so a real slack rope can't be
-      // modelled. Stop when m₂ lands or either body reaches the wheel.
-      if (S.m2.touch || j.getCurrentLengthA() < w / 2 + 0.15 || j.getCurrentLengthB() < 0.45) { S.ended = true; syncBar(); }
+      // m₂ may land (the rope goes slack); stop only when a body reaches the wheel.
+      if (j.getCurrentLengthA() < w / 2 + 0.15 || j.getCurrentLengthB() < 0.45) { S.ended = true; syncBar(); }
     };
     S.bounds = { x0: -2.5, x1: T.x + 2.2, y0: -0.6, y1: Math.max(T.y + 1.2, 2.5) };
     S.drawStatic = function (ctx, tr) {
       poly(ctx, tr, [[0, 0], [T.x, T.y], [T.x, 0]], css('--ground'), css('--groundStroke'));
       line(ctx, tr, [[-14, 0], [T.x + 14, 0]], css('--groundStroke'), 1.5);
       line(ctx, tr, [[T.x, T.y], [W.x, W.y]], css('--groundStroke'), 3);
-      var bc = S.main.body.getWorldCenter(), mc = S.m2.body.getWorldCenter();
+      // Drawn from the block's front face / m₂'s top (the physics anchors are the centres).
+      // All slack is drawn on the hanging side: a sag on the ramp side would cut through the ramp.
+      var bc = S.main.body.getWorldCenter(), mc = S.m2.body.getWorldCenter(), j = S.pulley;
       line(ctx, tr, [[bc.x + d.x * w / 2, bc.y + d.y * w / 2], [gA.x, gA.y]], css('--rope'), 2);
-      line(ctx, tr, [[gB.x, gB.y], [mc.x, mc.y + 0.25]], css('--rope'), 2);
+      rope(ctx, tr, gB, { x: mc.x, y: mc.y + 0.25 }, j.m_constant - j.getCurrentLengthA() - j.getCurrentLengthB());
       var q = tr(W.x, W.y), rp = r * tr.scale;
       ctx.strokeStyle = css('--bodyStroke'); ctx.fillStyle = css('--body'); ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.arc(q.x, q.y, rp, 0, 7); ctx.fill(); ctx.stroke();
@@ -458,6 +474,41 @@
     };
     S.rampAngle = function () { return a; };
   };
+
+  // Box2D's pulley is bilateral: C = constant − lenA − ratio·lenB = 0, so it pushes like a rod.
+  // Patch this instance into a rope, C ≥ 0: the accumulated impulse (tension) is clamped ≥ 0,
+  // a slack rope may close its slack within one step without impulse (speculative term, as in
+  // Box2D's RopeJoint), and the position solver only shortens an over-long rope.
+  // Uses planck 1.5 internals (m_uA, m_mass, c_velocity …). Drops the angular terms, so it
+  // assumes anchors at the body centres or fixedRotation bodies — true in BUILD.pulley.
+  function ropePulley(j) {
+    j.solveVelocityConstraints = function (step) {
+      var bA = this.m_bodyA, bB = this.m_bodyB, gA = this.m_groundAnchorA, gB = this.m_groundAnchorB, k = this.m_ratio;
+      var cA = bA.c_position.c, cB = bB.c_position.c, vA = bA.c_velocity.v, vB = bB.c_velocity.v, uA = this.m_uA, uB = this.m_uB;
+      var C = this.m_constant - Math.hypot(cA.x - gA.x, cA.y - gA.y) - k * Math.hypot(cB.x - gB.x, cB.y - gB.y);
+      var Cdot = -(uA.x * vA.x + uA.y * vA.y) - k * (uB.x * vB.x + uB.y * vB.y);
+      if (C > 0) Cdot += C * step.inv_dt;
+      var old = this.m_impulse;
+      this.m_impulse = Math.max(0, old - this.m_mass * Cdot);
+      var imp = this.m_impulse - old;
+      vA.x -= this.m_invMassA * imp * uA.x; vA.y -= this.m_invMassA * imp * uA.y;
+      vB.x -= this.m_invMassB * k * imp * uB.x; vB.y -= this.m_invMassB * k * imp * uB.y;
+    };
+    j.solvePositionConstraints = function () {
+      var bA = this.m_bodyA, bB = this.m_bodyB, gA = this.m_groundAnchorA, gB = this.m_groundAnchorB, k = this.m_ratio;
+      var cA = bA.c_position.c, cB = bB.c_position.c;
+      var ax = cA.x - gA.x, ay = cA.y - gA.y, bx = cB.x - gB.x, by = cB.y - gB.y;
+      var lA = Math.hypot(ax, ay) || 1, lB = Math.hypot(bx, by) || 1;
+      var C = this.m_constant - lA - k * lB;
+      if (C > -0.005) return true;                         // slack or within linearSlop
+      var mass = 1 / (this.m_invMassA + k * k * this.m_invMassB);
+      var imp = -mass * Math.max(C, -0.2);                 // maxLinearCorrection
+      cA.x -= this.m_invMassA * imp * ax / lA; cA.y -= this.m_invMassA * imp * ay / lA;
+      cB.x -= this.m_invMassB * k * imp * bx / lB; cB.y -= this.m_invMassB * k * imp * by / lB;
+      return false;
+    };
+    return j;
+  }
 
   function build() {
     if (drag) drag = null;
@@ -492,6 +543,7 @@
   // ---------------------------------------------------------------- simulation loop
   function stepWorld() {
     S.recs.forEach(function (r) { r.stepPn = 0; r.stepPt = 0; r.vtStep = 0; r.touch = false; });
+    if (S.preStep) S.preStep();
     S.world.step(DT, 10, 4);
     S.t += DT;
     if (S.onStep) S.onStep();
@@ -502,8 +554,12 @@
     S.recs.forEach(function (r) {
       if (r.touch) r.touchFrame = true;
       if (!r.touch) return;
+      // slowT: time spent below V_STICK. A body held by a rope while the other end rests is
+      // statically indeterminate; the solver may keep friction saturated at μ_G·N at v = 0,
+      // so after 0.2 s at rest it counts as sticking anyway.
+      r.slowT = r.vtStep < V_STICK ? (r.slowT || 0) + DT : 0;
       if (r.sliding) {
-        if (r.vtStep < V_STICK && r.stepPt <= 0.98 * P.muK * r.stepPn) r.sliding = false;
+        if (r.vtStep < V_STICK && (r.stepPt <= 0.98 * P.muK * r.stepPn || r.slowT > 0.2)) r.sliding = false;
       } else if ((r.stepPn > 1e-9 && r.stepPt >= 0.995 * P.muS * r.stepPn) || r.vtStep > 3 * V_STICK) {
         r.sliding = true;
       }
@@ -550,10 +606,12 @@
   // ---------------------------------------------------------------- drawing
   var cv = document.getElementById('cv'), ctx = cv.getContext('2d'), cssW = 600, cssH = 300;
 
+  // Only acts on a real width/dpr change: the ResizeObserver also fires for the height change
+  // this function causes, and resetting cv.width clears the canvas after the frame was drawn.
   function resize() {
-    var w = cv.parentElement.clientWidth;
+    var w = cv.parentElement.clientWidth, dpr = window.devicePixelRatio || 1;
+    if (w === cssW && cv.width === Math.round(w * dpr)) return;
     cssW = w; cssH = Math.round(Math.max(240, Math.min(460, w * 0.52)));
-    var dpr = window.devicePixelRatio || 1;
     cv.width = Math.round(w * dpr); cv.height = Math.round(cssH * dpr);
     cv.style.height = cssH + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -566,9 +624,9 @@
   var ch = document.getElementById('chart'), cctx = ch.getContext('2d'), chW = 600, chH = 140;
 
   function resizeChart() {
-    var w = ch.parentElement.clientWidth;
+    var w = ch.parentElement.clientWidth, dpr = window.devicePixelRatio || 1;
+    if (w === chW && ch.width === Math.round(w * dpr)) return;   // see resize()
     chW = w; chH = Math.round(Math.max(110, Math.min(170, w * 0.2)));
-    var dpr = window.devicePixelRatio || 1;
     ch.width = Math.round(w * dpr); ch.height = Math.round(chH * dpr);
     ch.style.height = chH + 'px';
     cctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -655,6 +713,40 @@
     pts.forEach(function (p, i) { var q = tr(p[0], p[1]); if (i) c.lineTo(q.x, q.y); else c.moveTo(q.x, q.y); });
     c.strokeStyle = stroke; c.lineWidth = width || 1; c.stroke();
   }
+  // Tick marks every metre of arc length along a polyline, hanging plumb (independent of α)
+  // below the surface, so motion is visible under the follow cameras (endless, sled, lift).
+  // Scenes that show the whole surface (slide, pulley) don't use it. Walks the full polyline
+  // each frame, O(length) ≈ ≤ 200 iterations; only ticks inside the view are drawn.
+  function hatch(c, tr, pts, stroke) {
+    var a = tr.inv(0, 0), b = tr.inv(cssW, cssH), arc = 0;
+    for (var i = 1; i < pts.length; i++) {
+      var x0 = pts[i - 1][0], y0 = pts[i - 1][1], dx = pts[i][0] - x0, dy = pts[i][1] - y0, l = Math.hypot(dx, dy);
+      for (var s = Math.ceil(arc) - arc; s < l; s += 1) {
+        var x = x0 + dx * s / l, y = y0 + dy * s / l;
+        if (x < a.x - 1 || x > b.x + 1 || y > a.y + 1 || y < b.y - 1) continue;
+        line(c, tr, [[x, y], [x, y - 0.3]], stroke, 1);
+      }
+      arc += l;
+    }
+  }
+
+  // Rope from p0 to p1 (world). Straight when taut; with slack > 0 it bulges as a parabola
+  // (arc ≈ chord + 8h²/3c ⇒ h = √(3c·slack/8), capped at 0.8 m) to the side facing down
+  // (+x for a vertical rope).
+  function rope(c, tr, p0, p1, slack) {
+    var q0 = tr(p0.x, p0.y), q1 = tr(p1.x, p1.y);
+    c.beginPath(); c.moveTo(q0.x, q0.y);
+    var dx = p1.x - p0.x, dy = p1.y - p0.y, ch = Math.hypot(dx, dy);
+    if (slack > 0.005 && ch > 1e-3) {
+      var h = Math.min(0.8, Math.sqrt(3 * ch * slack / 8));
+      var nx = -dy / ch, ny = dx / ch;
+      if (ny > 1e-6 || (Math.abs(ny) <= 1e-6 && nx < 0)) { nx = -nx; ny = -ny; }
+      var k = tr((p0.x + p1.x) / 2 + 2 * h * nx, (p0.y + p1.y) / 2 + 2 * h * ny);
+      c.quadraticCurveTo(k.x, k.y, q1.x, q1.y);
+    } else c.lineTo(q1.x, q1.y);
+    c.strokeStyle = css('--rope'); c.lineWidth = 2; c.stroke();
+  }
+
   // Arc between world angles a0 and a1 (radians) around (x,y), labelled at the middle.
   function angleArc(c, tr, x, y, a0, a1, rad, label) {
     var q = tr(x, y), r = rad * tr.scale;
@@ -977,7 +1069,8 @@
     build();
     renderAll();
     resizeChart();
-    new ResizeObserver(function () { resize(); resizeChart(); }).observe(cv.parentElement);
+    // Redraw right away: RO callbacks run after this frame's rAF draw, before paint.
+    new ResizeObserver(function () { resize(); resizeChart(); draw(); drawChart(); }).observe(cv.parentElement);
     requestAnimationFrame(frame);
   });
   plugin.onThemeChange(applyTheme);
