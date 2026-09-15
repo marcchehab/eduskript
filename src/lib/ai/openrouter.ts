@@ -12,13 +12,28 @@
  * to tell OpenRouter "try these in order, fall back to defaults if all
  * unavailable." Provider names are case-sensitive and match the names on
  * https://openrouter.ai (Cerebras, Groq, Google, DeepInfra, Anthropic, etc.).
+ *
+ * Every request also sets `data_collection: 'deny'`: OpenRouter then only
+ * routes to providers that don't train on or store prompts (`zdr: true` would
+ * be stricter still). It filters the pool, fallbacks still happen within it.
+ * Student work (feedback images, exam answers) goes through here, and the AVV
+ * for schools promises no training.
  */
 
-export interface OpenrouterProviderRouting {
+// A type alias (not an interface) so it casts cleanly to Record<string, unknown>
+// where it's spread into the OpenAI SDK params.
+export type OpenrouterProviderRouting = {
   provider: {
-    order: string[]
-    allow_fallbacks: boolean
+    data_collection: 'deny'
+    order?: string[]
+    allow_fallbacks?: boolean
   }
+}
+
+/** Privacy-only routing, for routes that must not pick up OPENROUTER_PROVIDERS
+ *  (that pin targets the text model's providers). */
+export const OPENROUTER_NO_TRAINING: OpenrouterProviderRouting = {
+  provider: { data_collection: 'deny' },
 }
 
 /**
@@ -31,16 +46,17 @@ export const DEEPSEEK_V4_FLASH_PROVIDERS = ['DigitalOcean', 'DeepInfra', 'GMIClo
 
 export function openrouterProviderRouting(
   defaultOrder?: string[]
-): OpenrouterProviderRouting | Record<string, never> {
+): OpenrouterProviderRouting {
   const raw = process.env.OPENROUTER_PROVIDERS
   const providers = raw
     ? raw.split(',').map(s => s.trim()).filter(Boolean)
     : (defaultOrder ?? [])
 
-  if (providers.length === 0) return {}
+  if (providers.length === 0) return OPENROUTER_NO_TRAINING
 
   return {
     provider: {
+      data_collection: 'deny',
       order: providers,
       // Fall back to other providers if every named provider is unavailable —
       // worse than the pinned ones but better than failing the request.

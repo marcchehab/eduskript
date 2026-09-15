@@ -213,7 +213,7 @@ export async function POST(
   const routing = openrouterProviderRouting(
     contentModel === 'deepseek/deepseek-v4-flash' ? DEEPSEEK_V4_FLASH_PROVIDERS : undefined
   )
-  const modelRouting = ('provider' in routing ? routing : {}) as Record<string, unknown>
+  const modelRouting = routing as Record<string, unknown>
 
   // Fetch user and organization custom AI prompts (both live on Site).
   let orgPrompt: string | undefined
