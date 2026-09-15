@@ -16,6 +16,9 @@
  * font: heading | body · weight: normal | medium | semibold | bold ·
  * fontsize: sm | base | lg | xl | 2xl | 3xl or a CSS length (1.4rem, 18px).
  * Unknown values are ignored rather than passed through to CSS.
+ *
+ * A quiet secondary link right under the button (small, muted, no underline):
+ *   <cta href="/auth/signup" note="Was kostet Eduskript?" notehref="#was-kostet-eduskript">…</cta>
  */
 
 import Link from 'next/link'
@@ -37,6 +40,10 @@ interface CtaButtonProps {
   font?: string
   weight?: string
   fontSize?: string
+  /** Small muted link text shown under the button. */
+  note?: string
+  /** Where the note links to; without it the note is plain text. */
+  noteHref?: string
   children?: React.ReactNode
 }
 
@@ -44,6 +51,11 @@ const ALIGN_CLASS: Record<CtaAlign, string> = {
   left: 'justify-start',
   center: 'justify-center',
   right: 'justify-end',
+}
+const ITEMS_CLASS: Record<CtaAlign, string> = {
+  left: 'items-start',
+  center: 'items-center',
+  right: 'items-end',
 }
 
 /**
@@ -101,6 +113,8 @@ export function CtaButton({
   font,
   weight,
   fontSize,
+  note,
+  noteHref,
   children,
 }: CtaButtonProps) {
   const hasChildren = children !== undefined && children !== null && children !== ''
@@ -124,28 +138,41 @@ export function CtaButton({
     ...ctaTypography(font, weight, fontSize),
   }
 
+  const button = isAbsolute ? (
+    <a
+      href={href}
+      className={classes}
+      style={proseOverride}
+      {...(opensNewTab ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+    >
+      {content}
+    </a>
+  ) : (
+    <Link
+      href={href}
+      className={classes}
+      style={proseOverride}
+      {...(opensNewTab ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+    >
+      {content}
+    </Link>
+  )
+
   // A span wrapper, not a div: <cta> can sit inside a paragraph, and a block
   // element there would be hoisted out by the HTML parser.
+  if (!note) {
+    return <span className={cn('my-6 flex', ALIGN_CLASS[align])}>{button}</span>
+  }
+
+  // `!` beats the `.prose-theme a` colour/underline rule (see above).
+  const noteClass = 'text-sm text-muted-foreground! no-underline! hover:text-foreground! transition-colors'
   return (
-    <span className={cn('my-6 flex', ALIGN_CLASS[align])}>
-      {isAbsolute ? (
-        <a
-          href={href}
-          className={classes}
-          style={proseOverride}
-          {...(opensNewTab ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-        >
-          {content}
-        </a>
+    <span className={cn('my-6 flex flex-col gap-2', ITEMS_CLASS[align])}>
+      {button}
+      {noteHref ? (
+        <a href={noteHref} className={noteClass}>{note}</a>
       ) : (
-        <Link
-          href={href}
-          className={classes}
-          style={proseOverride}
-          {...(opensNewTab ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-        >
-          {content}
-        </Link>
+        <span className="text-sm text-muted-foreground">{note}</span>
       )}
     </span>
   )

@@ -1024,6 +1024,8 @@ export function createMarkdownComponents(
           font={str('font', 'data-font', 'dataFont')}
           weight={str('weight', 'data-weight', 'dataWeight')}
           fontSize={str('fontsize', 'fontSize', 'data-fontsize', 'dataFontsize')}
+          note={str('note', 'data-note', 'dataNote')}
+          noteHref={str('notehref', 'noteHref', 'data-notehref', 'dataNotehref')}
         >
           {props.children as React.ReactNode}
         </CtaButton>

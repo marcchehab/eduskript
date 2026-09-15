@@ -26,6 +26,12 @@ describe('<cta> typography', () => {
     expect(ctaTypography('comic', 'heavy', 'huge; color:red')).toEqual({})
   })
 
+  it('renders a muted note link under the button', async () => {
+    const html = await render('<cta href="/auth/signup" note="Was kostet Eduskript?" notehref="#preise">Los</cta>')
+    expect(html).toMatch(/<a href="#preise" class="[^"]*text-muted-foreground![^"]*">Was kostet Eduskript\?<\/a>/)
+    expect(html).toContain('flex-col')
+  })
+
   it('leaves a plain cta unchanged', async () => {
     const html = await render('<cta href="/x">Go</cta>')
     expect(html).not.toContain('font-weight')

@@ -193,6 +193,8 @@ const TAG_ATTRS: Record<string, AttrDef[]> = {
     { label: 'font', info: 'heading | body' },
     { label: 'weight', info: 'normal | medium | semibold | bold' },
     { label: 'fontsize', info: 'sm | base | lg | xl | 2xl | 3xl or a CSS length (1.4rem)' },
+    { label: 'note', info: 'Small muted text under the button' },
+    { label: 'notehref', info: 'Link target for the note (e.g. #pricing)' },
   ],
   'banner': [
     { label: 'id', info: 'Keys the per-browser dismiss state (default: text hash)' },
