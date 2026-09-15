@@ -45,6 +45,7 @@ const TAG_COMPLETIONS: TagDef[] = [
   { label: 'youtube', info: 'Embed a YouTube video (also works as ![caption](youtube-url))', apply: '<youtube id="" />', cursorOffset: 13 },
   { label: 'molecule', info: 'Structural formula from a SMILES string', apply: '<molecule smiles="" />', cursorOffset: 18 },
   { label: 'geogebra', info: 'Embed an interactive GeoGebra applet by material id', apply: '<geogebra material-id="" />', cursorOffset: 23 },
+  { label: 'pricing', info: 'Public price table with live plan prices', apply: '<pricing lang="de" />' },
   { label: 'phet', info: 'Embed a PhET simulation (Insert → PhET to browse)', apply: '<phet sim="" locale="de" />', cursorOffset: 11 },
   { label: 'spacer', info: 'Blank writing area for students to solve on by hand', apply: '<spacer pattern="checkered" height="200" />' },
   { label: 'cta', info: 'Call-to-action link styled as a button', apply: '<cta href="">Text</cta>', cursorOffset: 11 },
@@ -166,6 +167,10 @@ const TAG_ATTRS: Record<string, AttrDef[]> = {
     { label: 'show-toolbar', info: 'Show the GeoGebra toolbar (true)' },
     { label: 'show-algebra-input', info: 'Show the algebra input bar (true)' },
     { label: 'correct-when', info: 'Captures per-student correctness for the teacher\'s class tally' },
+  ],
+  'pricing': [
+    { label: 'lang', info: 'de | en (default en)' },
+    { label: 'signup', info: 'CTA target (default /auth/signup)' },
   ],
   'phet': [
     { label: 'sim', info: 'PhET sim slug, e.g. projectile-motion (from phet.colorado.edu/…/simulations/<slug>)' },

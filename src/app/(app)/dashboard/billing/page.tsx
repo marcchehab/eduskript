@@ -8,6 +8,7 @@ import { Check, AlertCircle, Loader2, Handshake, GraduationCap, Building2, FileT
 import { SupporterBadge } from '@/components/ui/supporter-badge'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
+import { PLAN_COPY } from '@/lib/plan-copy'
 
 interface PlanData {
   id: string
@@ -27,39 +28,13 @@ interface SubscriptionData {
   trialEndsAt: string | null
 }
 
-// Marketing copy per plan family (matched on slug prefix). Plans without a
-// match render as a generic card, so DB-only plans (e.g. legacy "pro-monthly")
-// still work.
-const CLASSROOM_FEATURES = [
-  'AI editing',
-  'Classes with live student progress',
-  'Exams with Safe Exam Browser (SEB)',
-  'SEB-Lockdown mode in class',
-  'AI-assisted grading with rubrics',
-  'Broadcast your annotations to students',
-  'Create your own plugins with AI',
-]
-
-const SUPPORTER_FEATURES = [
-  'Everything in Classroom',
-  'Supporter badge on your public page',
-]
-
-const FREE_FEATURES = [
-  'Unlimited skripts & pages',
-  'Full markdown editor, math & code editors',
-  'File & media uploads',
-  'Your public teacher page',
-]
-
-const SCHOOL_FEATURES = [
-  'Classroom for your whole team',
-  'Billing by invoice — no credit card',
-  'Admin overview',
-  'Priority support',
-]
-
-const SCHOOL_CONTACT = 'mailto:marc@informatikgarten.ch?subject=Eduskript%20School%20licence'
+// Marketing copy is shared with the public <pricing> component (src/lib/plan-copy.ts).
+// Plans without a curated card render as a generic card, so DB-only plans
+// (e.g. legacy "pro-monthly") still work.
+const CLASSROOM_FEATURES = PLAN_COPY.en.classroom.features
+const SUPPORTER_FEATURES = PLAN_COPY.en.supporter.features
+const FREE_FEATURES = PLAN_COPY.en.free.features
+const SCHOOL_FEATURES = PLAN_COPY.en.school.features
 
 function isSupporter(slug: string) {
   return slug.startsWith('supporter')
@@ -441,7 +416,7 @@ export default function BillingPage() {
                 <Building2 className="h-5 w-5 text-muted-foreground" />
                 <h3 className="text-lg font-semibold">School</h3>
                 <span className="text-sm text-muted-foreground">
-                  — CHF 59 per teacher / year, from 5 teachers
+                  — {PLAN_COPY.en.school.price}
                 </span>
               </div>
               <ul className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
@@ -454,7 +429,7 @@ export default function BillingPage() {
               </ul>
             </div>
             <Button variant="outline" asChild className="shrink-0">
-              <a href={SCHOOL_CONTACT}>Contact us</a>
+              <a href={PLAN_COPY.en.school.mailto}>{PLAN_COPY.en.school.contact}</a>
             </Button>
           </div>
       </div>
@@ -470,7 +445,7 @@ export default function BillingPage() {
   )
 }
 
-function FeatureList({ features, accent }: { features: string[]; accent?: boolean }) {
+function FeatureList({ features, accent }: { features: readonly string[]; accent?: boolean }) {
   return (
     <ul className="mt-4 space-y-2 flex-1">
       {features.map((f) => (

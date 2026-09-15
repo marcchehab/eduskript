@@ -889,6 +889,8 @@ export function getCondensedSyntaxReference(): string {
 
 **PhET:** \`<phet sim="projectile-motion" locale="de" [height="600"] />\` — embeds a PhET simulation (CC BY 4.0, attribution added automatically) by slug from phet.colorado.edu; \`locale\` sets the sim language.
 
+**Pricing:** \`<pricing lang="de" />\` — public price table (Free / Classroom / Supporter / School + "no traps" list) with live prices from the plan table; for landing pages. Put it on its own line.
+
 **Spacer:** \`<spacer [pattern="checkered|lines|dots|blank"] [height="200"] [id="sp1"] />\` — blank writing area students solve on by hand with the pens; \`checkered\` is graph paper. Editor gives drag-to-resize + a pattern/delete toolbar; publishes as a plain patterned box.
 
 **CTA button:** \`<cta href="/auth/signup">Create free account</cta>\` — a link styled as a button in the site's own theme; \`label\` instead of children when self-closing, plus \`variant\` (default|secondary|outline|ghost), \`size\` (lg|default|sm), \`align\` (center|left|right). Never draw a button as an image.
