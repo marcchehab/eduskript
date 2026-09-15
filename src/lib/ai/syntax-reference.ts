@@ -893,7 +893,7 @@ export function getCondensedSyntaxReference(): string {
 
 **Spacer:** \`<spacer [pattern="checkered|lines|dots|blank"] [height="200"] [id="sp1"] />\` — blank writing area students solve on by hand with the pens; \`checkered\` is graph paper. Editor gives drag-to-resize + a pattern/delete toolbar; publishes as a plain patterned box.
 
-**CTA button:** \`<cta href="/auth/signup">Create free account</cta>\` — a link styled as a button in the site's own theme; \`label\` instead of children when self-closing, plus \`variant\` (default|secondary|outline|ghost), \`size\` (lg|default|sm), \`align\` (center|left|right). Never draw a button as an image.
+**CTA button:** \`<cta href="/auth/signup">Create free account</cta>\` — a link styled as a button in the site's own theme; \`label\` instead of children when self-closing, plus \`variant\` (default|secondary|outline|ghost), \`size\` (lg|default|sm), \`align\` (center|left|right), and typography \`font\` (heading|body), \`weight\` (normal|medium|semibold|bold), \`fontsize\` (sm|base|lg|xl|2xl|3xl or a CSS length). Never draw a button as an image.
 
 **Newsletter:** \`<newsletter [title="..."] [description="..."] [button="..."] />\` — email capture; addresses go to the site's Brevo list, which owns confirmation and unsubscribe.
 

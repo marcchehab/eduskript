@@ -1021,6 +1021,9 @@ export function createMarkdownComponents(
           size={['default', 'sm', 'lg'].includes(size ?? '') ? (size as CtaSize) : undefined}
           align={['left', 'center', 'right'].includes(align ?? '') ? (align as CtaAlign) : undefined}
           external={external === undefined ? undefined : external !== 'false'}
+          font={str('font', 'data-font', 'dataFont')}
+          weight={str('weight', 'data-weight', 'dataWeight')}
+          fontSize={str('fontsize', 'fontSize', 'data-fontsize', 'dataFontsize')}
         >
           {props.children as React.ReactNode}
         </CtaButton>

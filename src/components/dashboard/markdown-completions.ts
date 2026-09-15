@@ -190,6 +190,9 @@ const TAG_ATTRS: Record<string, AttrDef[]> = {
     { label: 'size', info: 'lg | default | sm' },
     { label: 'align', info: 'center | left | right' },
     { label: 'external', info: 'Open in a new tab' },
+    { label: 'font', info: 'heading | body' },
+    { label: 'weight', info: 'normal | medium | semibold | bold' },
+    { label: 'fontsize', info: 'sm | base | lg | xl | 2xl | 3xl or a CSS length (1.4rem)' },
   ],
   'banner': [
     { label: 'id', info: 'Keys the per-browser dismiss state (default: text hash)' },

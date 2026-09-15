@@ -15,7 +15,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { Sketch } from '@uiw/react-color'
 import { ExcalidrawEditor } from './excalidraw-editor'
 import { PluginPicker } from './plugin-picker'
@@ -2118,38 +2118,56 @@ const CodeMirrorEditor = function CodeMirrorEditor({
                       <RibbonSmallButton icon={<Italic />} onClick={insertItalic} title="Italic (Ctrl+I)" />
                     </RibbonSmallRow>
                     <RibbonSmallRow>
+                      <CustomColorPopover
+                        open={showTextColorPicker}
+                        onOpenChange={setShowTextColorPicker}
+                        initial="#000000"
+                        onApply={insertTextColorByHex}
+                      >
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <RibbonSmallButton icon={<Palette />} title="Text Color" />
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start">
+                        {/* The picker opens one tick after the menu has closed (setTimeout in
+                            onSelect), and the menu doesn't return focus to its trigger: both
+                            would otherwise count as "interaction outside" for the freshly
+                            opened picker, which then closes itself immediately. */}
+                        <DropdownMenuContent align="start" onCloseAutoFocus={(e) => e.preventDefault()}>
                           {TEXT_COLOR_NAMES.map(({ name, label, cssVar }) => (
                             <DropdownMenuItem key={name} onClick={() => insertTextColorByName(name)}>
                               <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: `var(${cssVar})` }} /> {label}
                             </DropdownMenuItem>
                           ))}
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => setShowTextColorPicker(true)}>
+                          <DropdownMenuItem onSelect={() => setTimeout(() => setShowTextColorPicker(true), 0)}>
                             Custom color...
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
+                      </CustomColorPopover>
+                      <CustomColorPopover
+                        open={showHighlightPicker}
+                        onOpenChange={setShowHighlightPicker}
+                        initial="#fef08a"
+                        onApply={insertHighlightByHex}
+                      >
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <RibbonSmallButton icon={<Highlighter />} title="Highlight" />
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start">
+                        <DropdownMenuContent align="start" onCloseAutoFocus={(e) => e.preventDefault()}>
                           {HIGHLIGHT_NAMES.map(({ name, label, cssVar }) => (
                             <DropdownMenuItem key={name} onClick={() => insertHighlightByName(name)}>
                               <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: `var(${cssVar})` }} /> {label}
                             </DropdownMenuItem>
                           ))}
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => setShowHighlightPicker(true)}>
+                          <DropdownMenuItem onSelect={() => setTimeout(() => setShowHighlightPicker(true), 0)}>
                             Custom color...
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
+                      </CustomColorPopover>
                     </RibbonSmallRow>
                   </RibbonSmallStack>
                 </RibbonGroup>
@@ -2575,38 +2593,6 @@ const CodeMirrorEditor = function CodeMirrorEditor({
           suggestedName={isEditingExistingExcalidraw ? undefined : nextExcalidrawName(fileList)}
         />
       )}
-      {/* Custom Text Color Picker */}
-      <Popover open={showTextColorPicker} onOpenChange={setShowTextColorPicker}>
-        <PopoverTrigger asChild>
-          <span />
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-2" align="start">
-          <Sketch
-            color="#000000"
-            onChange={(color) => {
-              insertTextColorByHex(color.hex)
-              setShowTextColorPicker(false)
-            }}
-          />
-        </PopoverContent>
-      </Popover>
-
-      {/* Custom Highlight Picker */}
-      <Popover open={showHighlightPicker} onOpenChange={setShowHighlightPicker}>
-        <PopoverTrigger asChild>
-          <span />
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-2" align="start">
-          <Sketch
-            color="#fef08a"
-            onChange={(color) => {
-              insertHighlightByHex(color.hex)
-              setShowHighlightPicker(false)
-            }}
-          />
-        </PopoverContent>
-      </Popover>
-
       {/* Plugin Picker */}
       <PluginPicker
         open={pluginPickerOpen}
@@ -2665,3 +2651,35 @@ const CodeMirrorEditor = function CodeMirrorEditor({
 }
 
 export default CodeMirrorEditor
+
+/**
+ * "Custom color…" picker, anchored to its ribbon button. The colour is only
+ * inserted on Apply: Sketch fires onChange on every drag step, so inserting
+ * there would wrap the selection on the first mouse move and close the picker.
+ */
+function CustomColorPopover({ open, onOpenChange, initial, onApply, children }: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  initial: string
+  onApply: (hex: string) => void
+  children: React.ReactNode
+}) {
+  const [color, setColor] = useState(initial)
+  return (
+    <Popover open={open} onOpenChange={onOpenChange}>
+      <PopoverAnchor asChild>
+        <span className="inline-flex">{children}</span>
+      </PopoverAnchor>
+      {/* Closes on click outside / Escape, but not on focus leaving: right after
+          opening, the closing menu and the editor move focus around, which would
+          dismiss the picker ~200 ms after it appears. */}
+      <PopoverContent className="w-auto p-2" align="start" onFocusOutside={(e) => e.preventDefault()}>
+        <Sketch color={color} onChange={(c) => setColor(c.hex)} />
+        <div className="mt-2 flex justify-end gap-2">
+          <Button size="sm" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button size="sm" onClick={() => { onApply(color); onOpenChange(false) }}>Apply</Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}

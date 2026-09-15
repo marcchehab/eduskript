@@ -10,6 +10,12 @@
  *
  * The label comes from the children when present, otherwise from `label`, so
  * both the container and the self-closing form work.
+ *
+ * Typography overrides for a louder button (all optional):
+ *   <cta href="/auth/signup" font="heading" weight="bold" fontsize="xl">Gratis Konto erstellen</cta>
+ * font: heading | body · weight: normal | medium | semibold | bold ·
+ * fontsize: sm | base | lg | xl | 2xl | 3xl or a CSS length (1.4rem, 18px).
+ * Unknown values are ignored rather than passed through to CSS.
  */
 
 import Link from 'next/link'
@@ -28,6 +34,9 @@ interface CtaButtonProps {
   align?: CtaAlign
   /** Opens in a new tab. Defaults to true for absolute URLs to other hosts. */
   external?: boolean
+  font?: string
+  weight?: string
+  fontSize?: string
   children?: React.ReactNode
 }
 
@@ -48,6 +57,33 @@ const ALIGN_CLASS: Record<CtaAlign, string> = {
  */
 // The --color-* variables, not the bare --primary-foreground ones: the latter
 // hold raw HSL triples ("210 40% 98%") that only work inside hsl().
+const FONT_FAMILY: Record<string, string> = {
+  heading: 'var(--font-heading), sans-serif',
+  body: 'inherit',
+}
+const FONT_WEIGHT: Record<string, number> = { normal: 400, medium: 500, semibold: 600, bold: 700 }
+const FONT_SIZE: Record<string, string> = {
+  sm: '0.875rem', base: '1rem', lg: '1.125rem', xl: '1.25rem', '2xl': '1.5rem', '3xl': '1.875rem',
+}
+const CSS_LENGTH = /^\d+(\.\d+)?(rem|em|px)$/
+
+/** Resolves the typography attrs to inline styles; unknown values → nothing. */
+export function ctaTypography(font?: string, weight?: string, fontSize?: string): React.CSSProperties {
+  const style: React.CSSProperties = {}
+  if (font && FONT_FAMILY[font]) style.fontFamily = FONT_FAMILY[font]
+  if (weight && FONT_WEIGHT[weight]) style.fontWeight = FONT_WEIGHT[weight]
+  const size = fontSize ? (FONT_SIZE[fontSize] ?? (CSS_LENGTH.test(fontSize) ? fontSize : undefined)) : undefined
+  if (size) {
+    // The size variants pin a fixed height (h-11 etc.); a bigger font needs
+    // the button to grow with it.
+    style.fontSize = size
+    style.height = 'auto'
+    style.paddingTop = '0.5em'
+    style.paddingBottom = '0.5em'
+  }
+  return style
+}
+
 const VARIANT_COLOR: Record<CtaVariant, string> = {
   default: 'var(--color-primary-foreground)',
   secondary: 'var(--color-secondary-foreground)',
@@ -62,6 +98,9 @@ export function CtaButton({
   size = 'lg',
   align = 'center',
   external,
+  font,
+  weight,
+  fontSize,
   children,
 }: CtaButtonProps) {
   const hasChildren = children !== undefined && children !== null && children !== ''
@@ -82,6 +121,7 @@ export function CtaButton({
   const proseOverride: React.CSSProperties = {
     textDecoration: 'none',
     color: VARIANT_COLOR[variant],
+    ...ctaTypography(font, weight, fontSize),
   }
 
   // A span wrapper, not a div: <cta> can sit inside a paragraph, and a block
