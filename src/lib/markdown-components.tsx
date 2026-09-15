@@ -631,8 +631,9 @@ export function createMarkdownComponents(
     const ext = FLAG_ICON_EXT[code]
     if (!ext) return null
 
+    // `!`: `.prose-theme img { block mx-auto rounded-lg }` would put the flag on its own line.
     // eslint-disable-next-line @next/next/no-img-element -- tiny static SVG/PNG flag icon; Next's image optimizer refuses local SVGs without dangerouslyAllowSVG
-    return <img src={`/flags/${code}.${ext}`} alt="" width={20} height={14} className="inline-block align-[-0.15em] rounded-xs object-cover" />
+    return <img src={`/flags/${code}.${ext}`} alt="" width={20} height={14} className="inline-block! mx-0! align-[-0.15em] rounded-xs! object-cover" />
   }
 
   // Tabs container component - renders tabs UI directly from HTML children

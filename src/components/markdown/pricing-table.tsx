@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Check, FileText, GraduationCap, Handshake, Building2, ShieldCheck } from 'lucide-react'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { ctaTypography } from '@/components/markdown/cta-button'
 import {
   PLAN_COPY,
   formatChf,
@@ -130,7 +131,7 @@ export function PricingTable({ lang, signup = '/auth/signup' }: PricingTableProp
       </div>
 
       <div className="flex justify-center pt-2">
-        <Link href={signup} className={buttonVariants({ size: 'lg' })} style={proseLink('default')}>{t.cta}</Link>
+        <Link href={signup} className={buttonVariants({ size: 'lg' })} style={{ ...proseLink('default'), ...ctaTypography('heading', 'bold', 'xl') }}>{t.cta}</Link>
       </div>
     </div>
   )
