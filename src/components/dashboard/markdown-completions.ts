@@ -6,6 +6,10 @@
  * 2. Tag-specific attributes (inside an open tag)
  * 3. Known attribute values (inside quotes)
  * 4. Callout types (after `> [!`)
+ * 5. Code-fence info strings (```python editor id="…" …, ```plot, ```python-check for="…")
+ * 6. ```plot body keywords (settings at line start, curve options after a comma)
+ * 7. Ctrl+Space on plain text: every tag plus block snippets
+ * PhET sim slugs inside `<phet sim="…">` come from the async phetSimCompletions.
  *
  * Keep this in sync with src/lib/ai/syntax-reference.ts — that file is the
  * canonical list of supported components/attributes.
@@ -14,6 +18,7 @@
 import type { CompletionContext, CompletionResult, Completion } from '@codemirror/autocomplete'
 import { startCompletion } from '@codemirror/autocomplete'
 import { calloutTypes } from '@/lib/remark-plugins/callouts'
+import { phetTitle, searchPhetSims, type PhetSimSummary } from '@/lib/phet'
 
 // ── Tag definitions ──────────────────────────────────────────────────
 
@@ -58,6 +63,11 @@ const TAG_COMPLETIONS: TagDef[] = [
   { label: 'left', info: 'Left-align block content', apply: '<left>\n\n</left>' },
   { label: 'center', info: 'Center-align block content', apply: '<center>\n\n</center>' },
   { label: 'right', info: 'Right-align block content', apply: '<right>\n\n</right>' },
+  { label: 'onlyfor', info: 'Show content only to an audience: auth | anon | students | class="3a"', apply: '<onlyfor students>\n\n</onlyfor>' },
+  { label: 'audio', info: 'Audio player for an uploaded file', apply: '<audio controls src=""></audio>', cursorOffset: 21 },
+  { label: 'iframe', info: 'Raw embed (sandboxed automatically)', apply: '<iframe src="" width="100%" height="400"></iframe>', cursorOffset: 13 },
+  { label: 'nobr', info: 'Keep the wrapped words on one line', apply: '<nobr></nobr>', cursorOffset: 6 },
+  { label: 'u', info: 'Underlined text', apply: '<u></u>', cursorOffset: 3 },
 ]
 
 // ── Attribute definitions per tag ────────────────────────────────────
@@ -80,6 +90,7 @@ const TAG_ATTRS: Record<string, AttrDef[]> = {
     { label: 'wrap', info: 'Float with text wrap (true)' },
     { label: 'invert', info: 'Invert colors: dark | light | always' },
     { label: 'saturate', info: 'Saturation % when inverted (e.g. 70)' },
+    { label: 'inline', info: 'Render inline in the text flow (true)' },
   ],
   'pdf': [
     { label: 'src', info: 'PDF filename' },
@@ -108,6 +119,7 @@ const TAG_ATTRS: Record<string, AttrDef[]> = {
     { label: 'src', info: 'Plugin source path' },
     { label: 'id', info: 'Unique plugin instance ID' },
     { label: 'height', info: 'Iframe height (e.g. 400)' },
+    { label: 'width', info: 'Iframe width' },
   ],
   'question': [
     { label: 'id', info: 'Unique question ID' },
@@ -125,6 +137,7 @@ const TAG_ATTRS: Record<string, AttrDef[]> = {
     { label: 'tolerance', info: 'Number: allowed +/- tolerance' },
     { label: 'ignore-case', info: 'Text: ignore letter casing when checking' },
     { label: 'ignore-whitespace', info: 'Text: ignore whitespace differences when checking' },
+    { label: 'gate-at', info: 'Staged page: points needed before the next stage unlocks' },
   ],
   'answer': [
     { label: 'correct', info: 'Mark as the correct answer' },
@@ -146,8 +159,11 @@ const TAG_ATTRS: Record<string, AttrDef[]> = {
     { label: 'startTime', info: 'Start time in seconds' },
     { label: 'caption', info: 'Caption shown beneath the video' },
     { label: 'thumbnail', info: 'Custom teaser image (uploaded filename or URL), overrides the YouTube thumbnail' },
+    { label: 'pin', info: 'Corner overlay when scrolled past (true)' },
   ],
-  'stickme': [],
+  'stickme': [
+    { label: 'id', info: 'Keys the saved size' },
+  ],
   'fullwidth': [],
   'mark': [],
   'style': [],
@@ -210,6 +226,7 @@ const TAG_ATTRS: Record<string, AttrDef[]> = {
   ],
   'ai-feedback': [
     { label: 'prompt', info: 'Teacher instructions for the AI' },
+    { label: 'solution', info: 'Hidden reference: Excalidraw drawing name or image file the AI compares against' },
     { label: 'id', info: 'Unique feedback instance ID (optional)' },
     { label: 'label', info: 'Button text (default: Check my solution)' },
   ],
@@ -236,6 +253,29 @@ const TAG_ATTRS: Record<string, AttrDef[]> = {
   'left': [],
   'center': [],
   'right': [],
+  'onlyfor': [
+    { label: 'auth', info: 'Any signed-in user' },
+    { label: 'anon', info: 'Only signed-out viewers' },
+    { label: 'students', info: 'Your students (any class)' },
+    { label: 'class', info: 'Students of one class (name or invite code)' },
+    { label: 'prompt', info: 'Text shown to everyone else' },
+  ],
+  'audio': [
+    { label: 'src', info: 'Audio filename' },
+    { label: 'controls', info: 'Show the player controls' },
+    { label: 'loop', info: 'Loop playback' },
+    { label: 'preload', info: 'none | metadata | auto' },
+  ],
+  'iframe': [
+    { label: 'src', info: 'Embed URL' },
+    { label: 'width', info: 'Width (e.g. 100%)' },
+    { label: 'height', info: 'Height in px' },
+    { label: 'title', info: 'Accessible title' },
+    { label: 'loading', info: 'lazy | eager' },
+    { label: 'allowfullscreen', info: 'Allow fullscreen' },
+  ],
+  'nobr': [],
+  'u': [],
 }
 
 // ── Per-plugin attribute definitions (keyed by plugin slug) ─────────
@@ -313,7 +353,130 @@ const ATTR_VALUES: Record<string, string[]> = {
   'size': ['lg', 'default', 'sm'],
   'os': ['linux', 'macos', 'windows'],
   'scenario': ['endless', 'slide', 'sled', 'lift', 'pulley'],
+  'lang': ['de', 'en'],
+  'preload': ['none', 'metadata', 'auto'],
+  'loading': ['lazy', 'eager'],
 }
+
+/**
+ * Values that only make sense on one tag. Checked before ATTR_VALUES, so the
+ * same attribute name can mean different things (flex align vs img align,
+ * question feedback vs answer feedback text). An empty list = free text.
+ */
+const TAG_ATTR_VALUES: Record<string, Record<string, string[]>> = {
+  'flex': {
+    'align': ['start', 'center', 'end', 'stretch', 'baseline'],
+    'wrap': ['true', 'false'],
+  },
+  'question': {
+    'feedback': ['check', 'instant', 'none'],
+    'attempts': ['1', '2', '3', 'unlimited'],
+  },
+  'answer': {
+    'feedback': [],
+    'correct': ['true'],
+  },
+  'cta': {
+    'font': ['heading', 'body'],
+    'weight': ['normal', 'medium', 'semibold', 'bold'],
+    'fontsize': ['sm', 'base', 'lg', 'xl', '2xl', '3xl'],
+    'external': ['true', 'false'],
+  },
+  'phet': {
+    'locale': ['de', 'en', 'fr', 'it'],
+  },
+  'banner': {
+    'color': ['paper', 'muted', 'yellow', 'green', 'blue', 'pink', 'orange', 'red', 'purple'],
+    'text': ['text', 'red', 'blue', 'green', 'orange', 'purple'],
+    'dismissible': ['false'],
+  },
+  'excali': { 'lightonly': ['true'] },
+  'geogebra': { 'show-toolbar': ['true'], 'show-algebra-input': ['true'] },
+  'youtube': { 'pin': ['true'] },
+  'img': { 'inline': ['true'] },
+}
+
+// ── Code fences ──────────────────────────────────────────────────────
+
+const RUNNABLE_LANGS = ['python', 'javascript', 'sql', 'html']
+
+/** What may follow ``` — runnable editors first, then the special fences. */
+const FENCE_KINDS: Completion[] = [
+  ...RUNNABLE_LANGS.map((lang) => ({ label: `${lang} editor`, type: 'keyword', info: `Runnable ${lang} editor`, boost: 2 })),
+  { label: 'python-check', type: 'keyword', info: 'Hidden asserts for a python editor: python-check for="id"', apply: 'python-check for=""', boost: 1 },
+  { label: 'plot', type: 'keyword', info: 'Function plot from one entry per line', boost: 1 },
+  { label: 'mermaid', type: 'keyword', info: 'Mermaid diagram', boost: 1 },
+  { label: 'expected', type: 'keyword', info: 'Expected output inside a <question type="text">' },
+  ...['python', 'javascript', 'typescript', 'sql', 'html', 'css', 'json', 'yaml', 'java', 'cpp', 'rust', 'go', 'php', 'bash', 'markdown']
+    .map((lang) => ({ label: lang, type: 'keyword', info: 'Syntax highlighting only' })),
+]
+
+const EDITOR_FLAGS: AttrDef[] = [
+  { label: 'editor', info: 'Make the block runnable' },
+  { label: 'id', info: 'Editor id (pair with python-check for="…")' },
+  { label: 'single', info: 'Hide the file tabs' },
+  { label: 'exam', info: 'Silent grading with python-check' },
+  { label: 'output-only', info: 'Run on load, show only the output' },
+  { label: 'file', info: 'Tab name; repeat the fence with the same id for more files' },
+  { label: 'height', info: 'Editor height in px' },
+  { label: 'assets', info: 'Read-only files for the code (a.csv,b.png)' },
+  { label: 'allow-upload', info: 'Students may upload their own files' },
+  { label: 'accept', info: 'Allowed upload types (e.g. .csv)' },
+]
+const SQL_FLAGS: AttrDef[] = [
+  { label: 'db', info: 'SQLite file' },
+  { label: 'solution', info: 'Expected query — pass/fail after each run' },
+  { label: 'schema-image', info: 'Override the generated ER diagram' },
+]
+const CODE_BLOCK_FLAGS: AttrDef[] = [
+  { label: 'copy=false', info: 'Hide the copy button' },
+]
+const PYTHON_CHECK_FLAGS: AttrDef[] = [
+  { label: 'for', info: 'Id of the python editor to check (required)' },
+  { label: 'points', info: 'Points for passing all asserts' },
+  { label: 'max-checks', info: 'Limit Check presses' },
+  { label: 'gate-at', info: 'Stage: points needed to unlock the next stage' },
+  { label: 'label', info: 'Stage label' },
+]
+/** Flags written bare (no ="…"). */
+const BARE_FLAGS = new Set(['editor', 'single', 'exam', 'output-only', 'allow-upload', 'copy=false'])
+
+/** ```plot settings and entries, offered at the start of a line. */
+const PLOT_LINES: Completion[] = [
+  { label: 'x: -5..5', type: 'keyword', info: 'x window' },
+  { label: 'y: -5..5', type: 'keyword', info: 'y window (optional)' },
+  { label: 'grid', type: 'keyword', info: 'Grid lines' },
+  { label: 'nogrid', type: 'keyword', info: 'No grid' },
+  { label: 'caption: ', type: 'keyword', info: 'Caption under the plot' },
+  { label: 'aspect: equal', type: 'keyword', info: 'Same scale on both axes' },
+  { label: 'size: 640x400', type: 'keyword', info: 'Size in px' },
+  { label: 'axes: off', type: 'keyword', info: 'Hide the axes' },
+  { label: 'legend: off', type: 'keyword', info: 'Hide the legend' },
+  { label: 'f(x) = ', type: 'function', info: 'Curve (up to 8)' },
+  { label: 'A = (1, 2)', type: 'variable', info: 'Point' },
+  { label: 'vline x=', type: 'keyword', info: 'Vertical guide' },
+  { label: 'hline y=', type: 'keyword', info: 'Horizontal guide' },
+]
+/** ```plot options after a comma: `f(x) = x^2, red, dashed, label="…"`. */
+const PLOT_OPTIONS: Completion[] = [
+  ...['red', 'blue', 'green', 'orange', 'purple', 'teal', 'pink', 'brown', 'gray', 'black']
+    .map((c) => ({ label: c, type: 'constant', info: 'Colour' })),
+  { label: 'dashed', type: 'keyword' },
+  { label: 'dotted', type: 'keyword' },
+  { label: 'thick', type: 'keyword' },
+  { label: 'label=""', type: 'property', info: 'Legend/point label' },
+]
+
+/** Block snippets for Ctrl+Space at the start of an empty line. */
+const BLOCK_SNIPPETS: Completion[] = [
+  { label: '```python editor', type: 'keyword', info: 'Runnable Python', apply: '```python editor\n\n```' },
+  { label: '```sql editor', type: 'keyword', info: 'Runnable SQL on an uploaded database', apply: '```sql editor db=""\n\n```' },
+  { label: '```html editor', type: 'keyword', info: 'HTML with live preview', apply: '```html editor\n\n```' },
+  { label: '```plot', type: 'keyword', info: 'Function plot', apply: '```plot\nx: -5..5\ngrid\nf(x) = x^2\n```' },
+  { label: '```mermaid', type: 'keyword', info: 'Diagram from text', apply: '```mermaid\nflowchart TD\n    A --> B\n```' },
+  { label: '> [!note]', type: 'keyword', info: 'Callout', apply: '> [!note] ' },
+  { label: '$$', type: 'keyword', info: 'Display math', apply: '$$\n\n$$' },
+]
 
 // ── Callout completions ──────────────────────────────────────────────
 
@@ -365,6 +528,18 @@ export function createMarkdownCompletions(getFileList: () => FileListItem[]) {
     }
   }
 
+  // 5. Code-fence info string: ```lang flags…
+  const fenceLine = textBefore.match(/^\s*```(.*)$/)
+  if (fenceLine && !/([\w-]+)="([^"]*)$/.test(textBefore)) {
+    return fenceInfoCompletions(context, fenceLine[1])
+  }
+
+  // 6. Inside a ```plot body
+  const fence = openFenceAt(context.state.doc.sliceString(0, line.from))
+  if (fence !== null) {
+    return fence === 'plot' ? plotCompletions(context, textBefore) : null
+  }
+
   // 3. Attribute value: attr="val…
   const valueMatch = textBefore.match(/([\w-]+)="([^"]*)$/)
   if (valueMatch) {
@@ -406,8 +581,21 @@ export function createMarkdownCompletions(getFileList: () => FileListItem[]) {
       return null
     }
 
-    const values = ATTR_VALUES[attrName]
-    if (values) {
+    // python-check for="…": the ids of python editors on this page
+    if (attrName === 'for' && /^\s*```python-check\b/.test(textBefore)) {
+      const ids = [...context.state.doc.toString().matchAll(/^\s*```python\b[^\n]*\bid="([^"]+)"/gm)].map(m => m[1])
+      if (ids.length === 0) return null
+      return {
+        from: context.pos - valueMatch[2].length,
+        options: [...new Set(ids)].map(id => ({ label: id, type: 'variable' })),
+        validFor: /^[^"]*$/,
+      }
+    }
+
+    const tagName = findOpenTag(context.state.doc.sliceString(0, context.pos))
+    const scoped = tagName ? TAG_ATTR_VALUES[tagName]?.[attrName] : undefined
+    const values = scoped ?? ATTR_VALUES[attrName]
+    if (values && values.length > 0) {
       return {
         from: context.pos - valueMatch[2].length,
         options: values.map(v => ({ label: v, type: 'enum' })),
@@ -423,8 +611,8 @@ export function createMarkdownCompletions(getFileList: () => FileListItem[]) {
   const tagContext = findOpenTag(fullTextBefore)
 
   // 2. Attribute completions: <tagname ...attr
-  if (tagContext && /\s\w*$/.test(textBefore)) {
-    const attrMatch = textBefore.match(/\s(\w*)$/)
+  if (tagContext && /\s[\w-]*$/.test(textBefore)) {
+    const attrMatch = textBefore.match(/\s([\w-]*)$/)
     if (attrMatch) {
       const tagAttrs = TAG_ATTRS[tagContext] || []
       // Merge plugin-source-specific attrs when inside a <plugin src="…">
@@ -451,7 +639,7 @@ export function createMarkdownCompletions(getFileList: () => FileListItem[]) {
             startCompletion(view)
           },
         })),
-        validFor: /^\w*$/,
+        validFor: /^[\w-]*$/,
       }
     }
   }
@@ -488,7 +676,130 @@ export function createMarkdownCompletions(getFileList: () => FileListItem[]) {
     }
   }
 
+  // 7. Ctrl+Space on plain text: every tag (with its `<`) and, at the start
+  // of a line, the block snippets.
+  if (context.explicit && !tagContext) {
+    const word = textBefore.match(/(?:^|\s)(\w*)$/)
+    if (word) {
+      const atLineStart = textBefore.trim() === word[1]
+      const tags: Completion[] = TAG_COMPLETIONS.map(t => ({
+        label: `<${t.label}>`,
+        type: 'type',
+        info: t.info,
+        apply: t.cursorOffset != null
+          ? (view: import('@codemirror/view').EditorView, _c: Completion, from: number, to: number) => {
+              view.dispatch({ changes: { from, to, insert: t.apply }, selection: { anchor: from + t.cursorOffset! } })
+              startCompletion(view)
+            }
+          : t.apply,
+      }))
+      return {
+        from: context.pos - word[1].length,
+        options: atLineStart ? [...BLOCK_SNIPPETS, ...tags] : tags,
+        validFor: /^\w*$/,
+      }
+    }
+  }
+
   return null
+  }
+}
+
+/** Completions on a ``` line: the fence kind, then the flags it accepts. */
+function fenceInfoCompletions(context: CompletionContext, info: string): CompletionResult | null {
+  // Still typing the language: ```pyt|
+  const kind = info.match(/^([\w-]*)$/)
+  if (kind) {
+    return { from: context.pos - kind[1].length, options: FENCE_KINDS, validFor: /^[\w-]*$/ }
+  }
+  const lang = info.split(/\s+/)[0]
+  const flag = info.match(/\s([\w-]*)$/)
+  if (!flag) return null
+
+  let flags: AttrDef[]
+  if (lang === 'python-check') flags = PYTHON_CHECK_FLAGS
+  else if (RUNNABLE_LANGS.includes(lang) || lang === 'js') {
+    // assets / allow-upload / accept are Python-only; SQL's own flags first.
+    const pythonOnly = new Set(['assets', 'allow-upload', 'accept'])
+    flags = /\beditor\b/.test(info)
+      ? [
+          ...(lang === 'sql' ? SQL_FLAGS : []),
+          ...EDITOR_FLAGS.filter(f => f.label !== 'editor' && (lang === 'python' || !pythonOnly.has(f.label))),
+        ]
+      : [EDITOR_FLAGS[0], ...CODE_BLOCK_FLAGS]
+  } else if (lang === 'plot' || lang === 'mermaid' || lang === 'expected') return null
+  else flags = CODE_BLOCK_FLAGS
+
+  // Don't offer what's already on the line.
+  const present = new Set([...info.matchAll(/([\w-]+)(?:=|\s|$)/g)].map(m => m[1]))
+  return {
+    from: context.pos - flag[1].length,
+    options: flags.filter(f => !present.has(f.label.split('=')[0])).map((f, i) => ({
+      label: f.label,
+      boost: -i, // keep the list order above instead of alphabetical
+      type: 'property',
+      info: f.info,
+      apply: BARE_FLAGS.has(f.label)
+        ? f.label
+        : (view: import('@codemirror/view').EditorView, _c: Completion, from: number, to: number) => {
+            view.dispatch({ changes: { from, to, insert: `${f.label}=""` }, selection: { anchor: from + f.label.length + 2 } })
+            startCompletion(view)
+          },
+    })),
+    validFor: /^[\w-]*$/,
+  }
+}
+
+/** Plot body: settings/entries at the start of a line, options after a comma. */
+function plotCompletions(context: CompletionContext, textBefore: string): CompletionResult | null {
+  const opt = textBefore.match(/,\s*(\w*)$/)
+  if (opt) return { from: context.pos - opt[1].length, options: PLOT_OPTIONS, validFor: /^\w*$/ }
+  const start = textBefore.match(/^\s*(\w*)$/)
+  if (start && (start[1] || context.explicit)) {
+    return { from: context.pos - start[1].length, options: PLOT_LINES, validFor: /^\w*$/ }
+  }
+  return null
+}
+
+/**
+ * The info word of the code fence the text ends inside (```plot → 'plot',
+ * bare ``` → ''), or null when outside any fence.
+ */
+function openFenceAt(textBeforeLine: string): string | null {
+  let open: string | null = null
+  for (const m of textBeforeLine.matchAll(/^\s*(```+|~~~+)\s*([\w-]*)/gm)) {
+    open = open === null ? m[2] : null
+  }
+  return open
+}
+
+// ── PhET sim completions ─────────────────────────────────────────────
+
+let phetSims: Promise<PhetSimSummary[]> | null = null
+
+/**
+ * Async source: inside `<phet sim="…">` suggest sims. Uses the picker's
+ * search (slug, titles and descriptions in de/en/fr/it) instead of
+ * CodeMirror's fuzzy match on the label, so "wurf" finds Projektilbewegung
+ * via its description. Loads /api/phet/sims once per session.
+ */
+export async function phetSimCompletions(context: CompletionContext): Promise<CompletionResult | null> {
+  const line = context.state.doc.lineAt(context.pos)
+  const textBefore = line.text.slice(0, context.pos - line.from)
+  const m = textBefore.match(/<phet\b[^>]*\bsim="([^"]*)$/)
+  if (!m) return null
+
+  phetSims ??= fetch('/api/phet/sims')
+    .then(res => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
+    .then((json: { sims: PhetSimSummary[] }) => json.sims)
+    .catch(() => { phetSims = null; return [] })
+  const hits = searchPhetSims(await phetSims, m[1])
+  if (hits.length === 0) return null
+
+  return {
+    from: context.pos - m[1].length,
+    filter: false,
+    options: hits.map(s => ({ label: phetTitle(s, 'de'), detail: s.sim, type: 'variable', apply: s.sim })),
   }
 }
 

@@ -27,7 +27,7 @@ import { PdfPickDialog } from './pdf-pick-dialog'
 import { InteractivePreview } from './interactive-preview'
 import { autocompletion } from '@codemirror/autocomplete'
 import { Ribbon, RibbonGroup, RibbonBigButton, RibbonSmallButton, RibbonSmallStack, RibbonSmallRow, RibbonSplitBigButton, RibbonGalleryChip } from '@/components/dashboard/editor-ribbon'
-import { createMarkdownCompletions, pageLinkCompletions } from './markdown-completions'
+import { createMarkdownCompletions, pageLinkCompletions, phetSimCompletions } from './markdown-completions'
 import type { EditorView } from '@codemirror/view'
 import type { ViewUpdate } from '@codemirror/view'
 import { fromMarkdown } from 'mdast-util-from-markdown'
@@ -759,6 +759,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
               override: [
                 createMarkdownCompletions(() => fileListRef.current || []),
                 pageLinkCompletions,
+                phetSimCompletions,
               ],
               activateOnTyping: true,
               maxRenderedOptions: 15,
