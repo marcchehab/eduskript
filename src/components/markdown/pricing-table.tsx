@@ -1,11 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
 import { Check, FileText, GraduationCap, Handshake, Building2, ShieldCheck } from 'lucide-react'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { ctaTypography } from '@/components/markdown/cta-button'
 import {
   PLAN_COPY,
   formatChf,
@@ -17,13 +15,12 @@ import {
 
 interface PricingTableProps {
   lang?: string
-  /** Where the CTA points; defaults to the signup page. */
-  signup?: string
 }
 
 /**
  * `<pricing lang="de" />` — public price table: Free / Classroom / Supporter,
- * the School licence, and a "no traps" list. Prices and trial length come
+ * the School licence, and a "no traps" list. No signup button of its own:
+ * pages put a `<cta>` after it, so the table also works without one. Prices and trial length come
  * live from /api/plans (the same Plan rows the billing page sells), so the
  * page can't advertise a stale price. Copy lives in src/lib/plan-copy.ts.
  *
@@ -35,7 +32,7 @@ interface PricingTableProps {
  * if the request fails they're simply omitted (Free + School + guarantees
  * still render — no fabricated prices).
  */
-export function PricingTable({ lang, signup = '/auth/signup' }: PricingTableProps) {
+export function PricingTable({ lang }: PricingTableProps) {
   const l: PlanCopyLang = lang === 'de' ? 'de' : 'en'
   const t = PLAN_COPY[l]
   const [plans, setPlans] = useState<PublicPlan[] | null>(null)
@@ -109,7 +106,7 @@ export function PricingTable({ lang, signup = '/auth/signup' }: PricingTableProp
             ))}
           </div>
         </div>
-        <a href={t.school.mailto} className={cn(buttonVariants({ variant: 'outline' }), 'shrink-0')} style={proseLink('outline')}>
+        <a href={t.school.mailto} className={cn(buttonVariants({ variant: 'outline' }), 'shrink-0')} style={proseLink()}>
           {t.school.contact}
         </a>
       </div>
@@ -129,10 +126,6 @@ export function PricingTable({ lang, signup = '/auth/signup' }: PricingTableProp
           ))}
         </div>
       </div>
-
-      <div className="flex justify-center pt-2">
-        <Link href={signup} className={buttonVariants({ size: 'lg' })} style={{ ...proseLink('default'), ...ctaTypography('heading', 'bold', 'xl') }}>{t.cta}</Link>
-      </div>
     </div>
   )
 }
@@ -140,13 +133,10 @@ export function PricingTable({ lang, signup = '/auth/signup' }: PricingTableProp
 /**
  * `.prose-theme a { text-primary underline }` outranks the button utility
  * classes (same problem and fix as cta-button.tsx): without the inline colour
- * the default button is blue text on blue.
+ * the outline button is underlined primary-blue text.
  */
-function proseLink(variant: 'default' | 'outline'): React.CSSProperties {
-  return {
-    textDecoration: 'none',
-    color: variant === 'default' ? 'var(--color-primary-foreground)' : 'var(--color-foreground)',
-  }
+function proseLink(): React.CSSProperties {
+  return { textDecoration: 'none', color: 'var(--color-foreground)' }
 }
 
 function Card({ children, highlighted, supporter, badge }: {

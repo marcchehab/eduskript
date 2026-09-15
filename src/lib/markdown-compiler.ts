@@ -184,7 +184,7 @@ export const sanitizeSchema = {
     'geogebra': ['material-id', 'materialId', 'src', 'height', 'width', 'show-toolbar', 'showToolbar', 'show-algebra-input', 'showAlgebraInput', 'correct-when', 'correctWhen'],
     // PhET sim: slug + locale are validated in src/lib/phet.ts before the URL is built.
     'phet': ['sim', 'locale', 'height', 'title'],
-    'pricing': ['lang', 'signup'],
+    'pricing': ['lang'],
     'cta': ['href', 'label', 'variant', 'size', 'align', 'external', 'font', 'weight', 'fontsize', 'fontSize', 'note', 'notehref', 'noteHref'],
     // list-id is honoured only if it matches the list the page's site owns —
     // enforced server-side in src/lib/newsletter.ts, not here.

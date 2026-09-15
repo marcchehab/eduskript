@@ -87,7 +87,6 @@ export const PLAN_COPY = {
       'Export all your skripts as Markdown files with attachments (ZIP, with Classroom)',
       'Students never pay',
     ],
-    cta: 'Start for free',
   },
   de: {
     free: {
@@ -143,7 +142,6 @@ export const PLAN_COPY = {
       'Alle Skripts als Markdown-Dateien samt Anhängen exportieren (ZIP, mit Classroom)',
       'Schülerinnen und Schüler zahlen nie',
     ],
-    cta: 'Gratis starten',
   },
 } as const
 

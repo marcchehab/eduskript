@@ -1130,7 +1130,7 @@ export function createMarkdownComponents(
     'pricing': (props: Record<string, unknown>) => {
       const str = (k: string): string | undefined =>
         typeof props[k] === 'string' ? (props[k] as string) : undefined
-      return <PricingTable lang={str('lang')} signup={str('signup')} />
+      return <PricingTable lang={str('lang')} />
     },
 
     // Student-triggered AI feedback on handwritten/annotated work.

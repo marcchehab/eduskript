@@ -186,7 +186,6 @@ const TAG_ATTRS: Record<string, AttrDef[]> = {
   ],
   'pricing': [
     { label: 'lang', info: 'de | en (default en)' },
-    { label: 'signup', info: 'CTA target (default /auth/signup)' },
   ],
   'phet': [
     { label: 'sim', info: 'PhET sim slug, e.g. projectile-motion (from phet.colorado.edu/…/simulations/<slug>)' },
