@@ -189,6 +189,7 @@
   var showSplit = false, showNet = true, showValues = true;
   var accTime = 0, lastT = 0;
   var drag = null;          // { joint, rec, offset }
+  var fRef = 0;             // arrow scale reference in N (see draw); 0 = re-anchor
 
   function vec() { return { x: 0, y: 0 }; }
 
@@ -778,7 +779,11 @@
     }
     var mgMax = 0;
     S.recs.forEach(function (r) { mgMax = Math.max(mgMax, r.body.getMass() * G); });
-    var kScale = Math.min(95, cssH * 0.26) / Math.max(mgMax * (S.forceRef || 1), 1e-6);   // px per N
+    // "To scale" = constant px per N. The reference only re-anchors when the heaviest weight
+    // leaves 0.4–2.5× of it (keeps arrows on screen), so moving one mass slider doesn't
+    // shrink the other body's arrows. Reset per scenario tab.
+    if (!fRef || mgMax > 2.5 * fRef || mgMax < 0.4 * fRef) fRef = mgMax;
+    var kScale = Math.min(95, cssH * 0.26) / Math.max(fRef * (S.forceRef || 1), 1e-6);   // px per N
     S.recs.forEach(function (r) {
       var c = r.body.getWorldCenter(), o = tr(c.x, c.y);
       forcesOf(r).forEach(function (F) {
@@ -838,7 +843,7 @@
   function renderTabs() {
     elTabs.innerHTML = '';
     ORDER.forEach(function (id) {
-      elTabs.appendChild(btn(L.tabs[id], function () { sceneId = id; running = true; build(); renderAll(); }, id === sceneId ? 'on' : ''));
+      elTabs.appendChild(btn(L.tabs[id], function () { sceneId = id; running = true; fRef = 0; build(); renderAll(); }, id === sceneId ? 'on' : ''));
     });
   }
 
@@ -897,7 +902,9 @@
       show();
       inp.oninput = function () {
         P[s.key] = parseFloat(inp.value); show();
-        if (s.live === 'rebuild') build();
+        // After an end stop the displayed contact/rope forces are frozen; changing a parameter
+        // there would mix a new F_G with stale forces, so restart from the initial pose instead.
+        if (s.live === 'rebuild' || S.ended) build();
         else if (s.live === 'tilt') tiltRamp(P.alpha);
         else if (s.live === 'mass') S.recs.forEach(function (r) { if (r.massKey === s.key) setMass(r, Math.max(P[s.key], 0.001)); });
         else if (s.live === 'lift') { if (S.liftOn) S.setLift(true); }
@@ -921,7 +928,8 @@
         var sw = F.dashed ? '<span class="sw dash" style="border-color:' + col(F.k) + '"></span>' : '<span class="sw" style="background:' + col(F.k) + '"></span>';
         return '<tr><td>' + sw + '</td><td>' + sym(F.k) + '</td><td class="read">' + L.f[F.k][1] + '</td><td class="v">' + fmtN(F.hide ? 0 : mag) + '</td></tr>';
       }).join('');
-      var v = r.body.getLinearVelocity(), speed = Math.hypot(v.x, v.y);
+      // After an end stop show v of the last regular frame (matches the frozen forces), not post-impact.
+      var v = S.ended && r.vPrev ? r.vPrev : r.body.getLinearVelocity(), speed = Math.hypot(v.x, v.y);
       var st = !r.contact ? L.air : r.sliding ? L.sliding : L.sticking;
       var title = r === S.m2 ? L.body2 + ' (m₂)' : (sceneId === 'pulley' ? L.body1 + ' (m₁)' : '');
       html += '<div>' + (title ? '<div class="state">' + title + '</div>' : '') +
