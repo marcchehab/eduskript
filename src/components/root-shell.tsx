@@ -107,10 +107,11 @@ export function RootShell({
           stay in sync with resolveReflow() in use-reflow-mode.ts: explicit
           'on'/'off' wins, else auto-on when the device's short edge < 640px
           (phone in either orientation; tablets' short edge is ≥ 768px).
+          Also restores the user-dragged column width (reflow-width-handle.tsx).
         */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var s=localStorage.getItem('eduskript-reflow');var on=s==='on'||(s!=='off'&&Math.min(window.innerWidth,window.innerHeight)<640);document.documentElement.classList.toggle('reflow-mode',on);}catch(e){}})();`,
+            __html: `(function(){try{var s=localStorage.getItem('eduskript-reflow');var on=s==='on'||(s!=='off'&&Math.min(window.innerWidth,window.innerHeight)<640);document.documentElement.classList.toggle('reflow-mode',on);var w=parseInt(localStorage.getItem('eduskript-reflow-width')||'',10);if(w>0)document.documentElement.style.setProperty('--reflow-max-width',w+'px');}catch(e){}})();`,
           }}
         />
         {/*

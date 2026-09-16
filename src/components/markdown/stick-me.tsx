@@ -196,7 +196,10 @@ export function StickMe({
       // Slot is never transformed → reports the element's natural on-screen rect.
       const a = slot.getBoundingClientRect()
       const scRect = sc?.getBoundingClientRect()
-      const vpTop = scRect?.top ?? 0
+      // Annotation mode: #scroll-container is the fixed-height scroller, its top
+      // is the visible top. Reflow mode: the window scrolls and the container's
+      // top goes negative — clamp to the viewport top, else nothing ever pins.
+      const vpTop = Math.max(0, scRect?.top ?? 0)
 
       // Pin once the element's top edge reaches the viewport's top edge. With
       // a registry, only the lowest-on-page eligible instance pins (so a later

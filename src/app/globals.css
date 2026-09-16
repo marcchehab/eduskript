@@ -317,12 +317,24 @@
 }
 .reflow-mode .paper-responsive {
   width: auto !important;
-  max-width: 48rem !important;
+  /* --reflow-max-width is set by the drag handle (reflow-width-handle.tsx) and
+     pre-paint in root-shell.tsx from localStorage. */
+  max-width: var(--reflow-max-width, 48rem) !important;
   transform: none !important;
   overflow: visible !important;
   margin: 0 auto 4rem !important;
   padding: 4rem 1.25rem !important;
   box-shadow: none !important;
+}
+/* Column width handle: only in reflow mode, not on phones (column is already
+   full width there). */
+.reflow-width-handle {
+  display: none;
+}
+@media (min-width: 640px) {
+  .reflow-mode .reflow-width-handle {
+    display: flex;
+  }
 }
 .reflow-mode #zoom-spacer {
   display: none !important;

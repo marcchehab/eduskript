@@ -2,6 +2,7 @@ import { Suspense } from 'react'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
 import { type PublicAnnotation, type PublicSnap } from '@/components/public/annotation-wrapper'
 import { ReflowGate } from '@/components/public/reflow-gate'
+import { ReflowWidthHandle } from '@/components/public/reflow-width-handle'
 import { ForkAttribution } from '@/components/public/fork-attribution'
 import { ClassToolbar } from '@/components/teacher/class-toolbar'
 import type { StickyNote } from '@/components/annotations/sticky-notes-layer'
@@ -64,6 +65,7 @@ export function PublicPageBody({ page, skriptId, publicAnnotations, publicSnaps,
         </Suspense>
       )}
       <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border relative">
+        <ReflowWidthHandle />
         {(page.forkedFromPageId || page.forkedFromAuthorId) && (
           <div className="absolute top-16 right-16">
             <ForkAttribution
