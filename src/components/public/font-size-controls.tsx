@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Minus, Plus } from 'lucide-react'
+import { ZoomPill } from '@/components/ui/zoom-pill'
 
 const FONT_SIZE_KEY = 'eduskript-font-size'
 const MIN_SIZE = 14
@@ -87,47 +87,20 @@ export function FontSizeControls({ orientation = 'horizontal' }: FontSizeControl
   const canIncrease = fontSize < MAX_SIZE
   const canDecrease = fontSize > MIN_SIZE
 
-  const isVertical = orientation === 'vertical'
-
   return (
-    <div className={`flex border border-border bg-card ${
-      isVertical
-        ? 'flex-col rounded-lg'
-        : 'items-center rounded-full'
-    }`}>
-      <button
-        onClick={handleDecrease}
-        disabled={!canDecrease}
-        title="Decrease text size"
-        className={`p-2 hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-          isVertical ? 'rounded-t-lg' : 'rounded-l-full'
-        }`}
-      >
-        <Minus className="h-4 w-4" />
-      </button>
-
-      <div className={isVertical ? 'h-px w-4 bg-border mx-auto' : 'w-px h-4 bg-border'} />
-
+    <ZoomPill
+      orientation={orientation}
+      onDecrease={handleDecrease}
+      onIncrease={handleIncrease}
+      canDecrease={canDecrease}
+      canIncrease={canIncrease}
+    >
       {/* Show font size number in development */}
       {process.env.NODE_ENV === 'development' && (
-        <>
-          <span className="text-xs text-muted-foreground tabular-nums px-1 min-w-[24px] text-center">
-            {fontSize}
-          </span>
-          <div className={isVertical ? 'h-px w-4 bg-border mx-auto' : 'w-px h-4 bg-border'} />
-        </>
+        <span className="text-xs text-muted-foreground tabular-nums px-1 min-w-[24px] text-center">
+          {fontSize}
+        </span>
       )}
-
-      <button
-        onClick={handleIncrease}
-        disabled={!canIncrease}
-        title="Increase text size"
-        className={`p-2 hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-          isVertical ? 'rounded-b-lg' : 'rounded-r-full'
-        }`}
-      >
-        <Plus className="h-4 w-4" />
-      </button>
-    </div>
+    </ZoomPill>
   )
 }

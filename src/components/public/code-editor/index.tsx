@@ -18,8 +18,9 @@ import { autocompletion } from '@codemirror/autocomplete'
 import { indentationMarkers } from '@replit/codemirror-indentation-markers'
 import { createPythonCompletions } from './python-completions'
 import { Button } from '@/components/ui/button'
-import { Play, Square, RotateCcw, Maximize2, Minimize2, Scan, X, Plus, FileText, ZoomIn, ZoomOut, Save, History, WrapText, Circle, CheckCircle2, Package, Trash2, Paperclip, Upload, Pencil, Cloud, HardDrive, PanelLeftClose, PanelRightClose, PanelLeftOpen, PanelRightOpen } from 'lucide-react'
+import { Play, Square, RotateCcw, Maximize2, Minimize2, Scan, X, Plus, FileText, Save, History, WrapText, Circle, CheckCircle2, Package, Trash2, Paperclip, Upload, Pencil, Cloud, HardDrive, PanelLeftClose, PanelRightClose, PanelLeftOpen, PanelRightOpen } from 'lucide-react'
 import { useZoom } from '@/contexts/zoom-context'
+import { ZoomPill } from '@/components/ui/zoom-pill'
 import { useUserData, useCreateVersion, useVersionHistory, useRestoreVersion, useDeleteVersion, useUpdateVersionLabel, useOrphanedComponentIds, useReassignVersionHistory } from '@/lib/userdata/hooks'
 import { userDataService, syncEngine } from '@/lib/userdata'
 import { registerEditor, getMountedIds, subscribeToMounted } from './mounted-registry'
@@ -78,6 +79,12 @@ import {
  * via the Stop button (which aborts immediately) or by hitting this cap.
  */
 const STUDENT_PYODIDE_TIMEOUT_MS = 30_000
+
+// Output panel font size (px), stored per viewer in localStorage
+const OUTPUT_FONT_KEY = 'eduskript-output-font-size'
+const OUTPUT_FONT_DEFAULT = 14
+const OUTPUT_FONT_MIN = 10
+const OUTPUT_FONT_MAX = 28
 
 /**
  * Strip Pyodide/internal traceback frames from Python errors, keeping only
@@ -2998,6 +3005,24 @@ export const CodeEditor = memo(function CodeEditor({
     setFontSize(prev => Math.max(prev - 2, 8)) // Min 8px
   }
 
+  // Output panel (console + SQL tables) font size. A per-viewer preference in
+  // localStorage shared by all editors — not part of the per-editor persisted
+  // data/versions. Other already-mounted editors pick it up on remount only.
+  const [outputFontSize, setOutputFontSize] = useState(OUTPUT_FONT_DEFAULT)
+  useEffect(() => {
+    try {
+      const saved = parseInt(localStorage.getItem(OUTPUT_FONT_KEY) ?? '', 10)
+      if (saved >= OUTPUT_FONT_MIN && saved <= OUTPUT_FONT_MAX) setOutputFontSize(saved)
+    } catch { /* storage unavailable */ }
+  }, [])
+  const changeOutputFontSize = (delta: number) => {
+    setOutputFontSize(prev => {
+      const next = Math.min(Math.max(prev + delta, OUTPUT_FONT_MIN), OUTPUT_FONT_MAX)
+      try { localStorage.setItem(OUTPUT_FONT_KEY, String(next)) } catch { /* storage unavailable */ }
+      return next
+    })
+  }
+
   // Update editor when active tab changes (local file or import)
   // Also fires when skriptImports/globalImports change (cross-editor sync),
   // but skips the dispatch if the document content hasn't actually changed.
@@ -3994,24 +4019,16 @@ export const CodeEditor = memo(function CodeEditor({
                 Highlighting is driven by the site-wide toolbar highlighter pen. */}
             <div ref={kernelMenuRef} className="absolute top-1 right-1 z-30 flex items-center gap-0.5 bg-background/80 backdrop-blur-xs rounded px-1">
               {/* Zoom Controls */}
-              <Button
+              <ZoomPill
                 size="sm"
-                variant="ghost"
-                onClick={decreaseFontSize}
-                className="h-6 w-6 p-0"
-                title="Decrease font size"
-              >
-                <ZoomOut className="w-3 h-3" />
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={increaseFontSize}
-                className="h-6 w-6 p-0"
-                title="Increase font size"
-              >
-                <ZoomIn className="w-3 h-3" />
-              </Button>
+                onDecrease={decreaseFontSize}
+                onIncrease={increaseFontSize}
+                canDecrease={fontSize > 8}
+                canIncrease={fontSize < 32}
+                decreaseTitle="Decrease font size"
+                increaseTitle="Increase font size"
+                className="mr-0.5"
+              />
               <button
                 onClick={() => setLineWrapping(!lineWrapping)}
                 className={`h-6 w-6 p-0 rounded-md flex items-center justify-center transition-colors hover:bg-accent hover:text-accent-foreground ${
@@ -5006,6 +5023,17 @@ export const CodeEditor = memo(function CodeEditor({
           )}
           {/* Spacer */}
           <div className="flex-1" />
+          {activePanel === 'output' && (
+            <ZoomPill
+              size="sm"
+              onDecrease={() => changeOutputFontSize(-2)}
+              onIncrease={() => changeOutputFontSize(2)}
+              canDecrease={outputFontSize > OUTPUT_FONT_MIN}
+              canIncrease={outputFontSize < OUTPUT_FONT_MAX}
+              decreaseTitle="Decrease output font size"
+              increaseTitle="Increase output font size"
+            />
+          )}
           {/* Close button */}
           <Button
             onClick={() => setPanelVisible(false)}
@@ -5020,7 +5048,7 @@ export const CodeEditor = memo(function CodeEditor({
 
         {/* Panel Content */}
         {activePanel === 'output' ? (
-          <div ref={outputPanelRef} className="flex-1 overflow-auto p-2 font-mono text-sm" style={{ overscrollBehaviorY: 'contain' }}>
+          <div ref={outputPanelRef} className="flex-1 overflow-auto p-2 font-mono" style={{ overscrollBehaviorY: 'contain', fontSize: `${outputFontSize}px` }}>
             {output.map((entry, index) => (
                 <div key={index} className="mb-2">
                   {/* Stats line with inline verification result */}
@@ -5066,7 +5094,7 @@ export const CodeEditor = memo(function CodeEditor({
                   {entry.sqlResults && entry.sqlResults.length > 0 && (
                     <div className="mt-1">
                       {entry.sqlResults.map((resultSet, rsIndex) => (
-                        <table key={rsIndex} className="w-max min-w-full border-collapse border border-border text-[11px] mb-2">
+                        <table key={rsIndex} className="w-max min-w-full border-collapse border border-border text-[0.8em] mb-2">
                           <thead className="bg-muted">
                             <tr>
                               {resultSet.columns.map((column, colIdx) => (
@@ -5085,7 +5113,7 @@ export const CodeEditor = memo(function CodeEditor({
                                 {row.map((cell, cellIdx) => (
                                   <td
                                     key={cellIdx}
-                                    className="border border-border text-[0.7rem]! text-center! p-[0.2rem]!"
+                                    className="border border-border text-[1em]! text-center! p-[0.2rem]!"
                                   >
                                     {cell === null ? (
                                       <span className="text-muted-foreground italic">NULL</span>
@@ -5105,11 +5133,11 @@ export const CodeEditor = memo(function CodeEditor({
               ))}
               {pendingInput && (
                 <div className="flex items-center gap-1 mt-1">
-                  <span className="text-muted-foreground font-mono text-sm">{'>'}</span>
+                  <span className="text-muted-foreground font-mono">{'>'}</span>
                   <input
                     autoFocus
                     type="text"
-                    className="flex-1 bg-transparent border-b border-muted-foreground/30 outline-hidden text-sm font-mono text-foreground"
+                    className="flex-1 bg-transparent border-b border-muted-foreground/30 outline-hidden font-mono text-foreground"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         const value = e.currentTarget.value
