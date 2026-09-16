@@ -422,6 +422,8 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
       if (response.ok) {
         setLastSaved(new Date())
         setHasUnsavedChanges(false)
+        // Keep the Pages tab list in sync (it's seeded from server props once)
+        setPages(prev => prev.map(p => p.id === page.id ? { ...p, title: title.trim(), slug: slug.trim(), pageType } : p))
         completeStep('edit_page_content')
         // Reload versions to show the new version
         loadVersions()
