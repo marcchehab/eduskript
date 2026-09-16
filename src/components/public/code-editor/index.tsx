@@ -5094,7 +5094,7 @@ export const CodeEditor = memo(function CodeEditor({
                   {entry.sqlResults && entry.sqlResults.length > 0 && (
                     <div className="mt-1">
                       {entry.sqlResults.map((resultSet, rsIndex) => (
-                        <table key={rsIndex} className="w-max min-w-full border-collapse border border-border text-[0.8em] mb-2">
+                        <table key={rsIndex} className="w-max min-w-full border-collapse border border-border text-[0.8em]! mb-2">
                           <thead className="bg-muted">
                             <tr>
                               {resultSet.columns.map((column, colIdx) => (
