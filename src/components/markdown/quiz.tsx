@@ -626,7 +626,8 @@ function QuestionInner({
                   {/* Option content */}
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
-                      {label}
+                      {/* Wrap: a multi-node label (text + <code>/<strong>) would otherwise become separate flex items and wrap into columns */}
+                      <div className="min-w-0">{label}</div>
                       {showResult && isSelected && (
                         optionIsCorrect
                           ? <Check className="w-4 h-4 text-green-600 dark:text-green-400" />
