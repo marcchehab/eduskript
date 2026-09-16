@@ -1072,8 +1072,14 @@ export function createMarkdownComponents(
     // Demo/marketing components
     'demoeditor': DemoEditor,
 
-    // YouTube timestamp links
-    'yt': YT,
+    // YouTube timestamp links. Attributes arrive as raw strings with lowercased
+    // names (no MDX), so legacy JSX-style `time={135} videoId="..."` shows up as
+    // time="{135}" / videoid. Strip braces; also accept "2:15" / "1:02:15".
+    'yt': function YTComponent(props: { time?: string | number; videoid?: string; videoId?: string; label?: string }) {
+      const raw = String(props.time ?? '0').replace(/^\{|\}$/g, '').trim()
+      const time = raw.split(':').reduce((acc, part) => acc * 60 + (Number(part) || 0), 0)
+      return <YT time={time} videoId={props.videoid ?? props.videoId ?? ''} label={props.label ?? ''} />
+    },
 
     // Layout components
     'flex': Flex,
