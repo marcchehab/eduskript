@@ -81,9 +81,7 @@ export function Youtube({ id, playlist, startTime, caption, thumbnail, pin }: Yo
             }),
             '*'
           )
-
-          // Scroll to video
-          iframe.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          // No scrollIntoView: it fights <pinme>/pin, which keeps the video in view anyway.
         }
       }
     }
