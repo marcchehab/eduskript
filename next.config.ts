@@ -36,6 +36,17 @@ const nextConfig: NextConfig = {
     }
     return [
       {
+        // HSTS: after one https visit the browser upgrades http URLs itself,
+        // so it never lands on the http origin (separate IndexedDB) again.
+        // Browsers ignore this header on http responses; the http → https
+        // redirect in src/proxy.ts covers the first visit. No
+        // includeSubDomains — atlas.eduskript.org is hosted elsewhere.
+        source: '/:path*',
+        headers: [
+          { key: 'Strict-Transport-Security', value: 'max-age=31536000' },
+        ],
+      },
+      {
         // Public content pages: no browser cache, allow CDN caching with revalidation
         source: '/:domain/:path*',
         headers: [

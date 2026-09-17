@@ -69,6 +69,24 @@ export async function proxy(request: NextRequest) {
   const hostname = request.headers.get('host') || ''
   const { pathname } = request.nextUrl
 
+  // http → https. Custom domains are DNS-only CNAMEs to Koyeb (a Cloudflare
+  // proxy would block Koyeb's certificate issuance, see domain-diagnostics.ts),
+  // so a zone-level "Always Use HTTPS" never applies and plain http was served
+  // with 200. http and https are separate origins, so a student who landed on
+  // http saw none of the IndexedDB work saved on https. Relies on Koyeb's edge
+  // setting x-forwarded-proto; if the header is absent nothing happens.
+  // GET/HEAD only — a 301 on a POST would drop the body. Paths excluded by the
+  // matcher below (static files, /api/internal) are not redirected.
+  if (
+    request.headers.get('x-forwarded-proto') === 'http' &&
+    (request.method === 'GET' || request.method === 'HEAD')
+  ) {
+    const host = hostname.split(':')[0]
+    if (host !== 'localhost' && host !== '127.0.0.1') {
+      return NextResponse.redirect(`https://${host}${pathname}${request.nextUrl.search}`, 301)
+    }
+  }
+
   // Before the /api early return below — API routes are matched by the config
   // at the bottom of this file, they just fall straight through otherwise.
   const denied = await demoWriteGuard(request, pathname)
