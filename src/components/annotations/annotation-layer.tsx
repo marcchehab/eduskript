@@ -107,6 +107,7 @@ import { LayerVisibilityProvider } from '@/contexts/layer-visibility-context'
 import { HeadingPositionsProvider } from '@/contexts/heading-positions-context'
 import { ZoomProvider } from '@/contexts/zoom-context'
 import { useTeacherBroadcast } from '@/hooks/use-teacher-broadcast'
+import { useDragPan } from '@/hooks/use-drag-pan'
 import { useStudentWork } from '@/hooks/use-student-work'
 import { parseStrokes, type AnimatedStroke } from '@/hooks/use-stroke-animation'
 import { useSession } from 'next-auth/react'
@@ -3332,6 +3333,9 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+
+  // Middle-drag moves the paper via the scroll container.
+  useDragPan(scrollContainerRef)
 
   // Set up event listeners for touch pinch zoom (wheel zoom is handled via Ctrl key listener)
   useEffect(() => {
