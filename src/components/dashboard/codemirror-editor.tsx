@@ -1,5 +1,7 @@
 'use client'
 
+import { PAYWALL_COPY } from '@/components/dashboard/upgrade-prompt'
+import { useUiLocale } from '@/lib/i18n/client'
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useTheme } from 'next-themes'
 import { useSession } from 'next-auth/react'
@@ -164,6 +166,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   aiEditLocked = false
 }: CodeMirrorEditorProps) {
   const { data: session } = useSession()
+  const paywall = PAYWALL_COPY[useUiLocale()]
   const editorRef = useRef<HTMLDivElement>(null)
   const editorViewRef = useRef<EditorView | null>(null)
   const onChangeRef = useRef(onChange)
@@ -2086,7 +2089,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
             <button
               type="button"
               onClick={onAIEdit}
-              title="AI Edit is a paid feature — click to upgrade"
+              title={paywall.aiEditTitle}
               className="flex items-center gap-1.5 px-2.5 py-1 mr-1 rounded-md border border-border text-sm opacity-50 hover:bg-accent/60"
             >
               <Wand2 className="w-4 h-4" />

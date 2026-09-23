@@ -50,6 +50,8 @@ interface DockedPanelProps {
   title: ReactNode;
   onClose: () => void;
   closeTitle?: string;
+  // Extra controls in the header, left of minimize/close (e.g. a language switcher).
+  headerExtra?: ReactNode;
   // Initial height before the viewer resizes; defaults to half the viewport.
   defaultHeight?: () => number;
   defaultWidth?: number;
@@ -62,6 +64,7 @@ export function DockedPanel({
   title,
   onClose,
   closeTitle = "Close",
+  headerExtra,
   defaultHeight = () => window.innerHeight / 2,
   defaultWidth = DEFAULT_WIDTH,
   children,
@@ -226,6 +229,7 @@ export function DockedPanel({
             {title}
           </CardTitle>
           <div className="flex items-center gap-1 shrink-0">
+            {headerExtra}
             <Button
               variant="ghost"
               size="sm"

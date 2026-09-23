@@ -26,7 +26,7 @@ export default async function SkriptFrontPageEditPage({ params }: SkriptFrontPag
 
   const billingPlan = session?.user?.billingPlan || 'free'
   if (billingPlan === 'free' && !session?.user?.isAdmin) {
-    return <UpgradePrompt feature="front page editing" />
+    return <UpgradePrompt feature="frontpage" />
   }
 
   const skript = await prisma.skript.findFirst({

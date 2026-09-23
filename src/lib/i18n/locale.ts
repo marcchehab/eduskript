@@ -1,10 +1,10 @@
-// UI language for the app chrome (auth, dashboard, billing) — separate from a
-// teacher's pageLanguage, which is the language of their public content.
+// Language for the few UI surfaces that are bilingual: the onboarding quest,
+// paywall/upgrade hints and the trial banner. The rest of the app chrome is
+// English only, on purpose — see git history of this file for the decision.
 //
-// Resolution: `ui-locale` cookie (explicit choice) > the browser's primary
-// Accept-Language tag > German. Only a primary tag starting with "en" yields
-// English: the audience is ~95% German-speaking Swiss teachers, so German is
-// the default and English the fallback for those who asked for it.
+// Resolution: `ui-locale` cookie (set by UiLocaleSwitcher) > German. German is
+// the default regardless of browser language: the first market is German-
+// speaking Switzerland.
 
 export const UI_LOCALES = ['de', 'en'] as const
 export type UiLocale = (typeof UI_LOCALES)[number]
@@ -15,13 +15,8 @@ export function isUiLocale(value: unknown): value is UiLocale {
   return typeof value === 'string' && (UI_LOCALES as readonly string[]).includes(value)
 }
 
-export function resolveUiLocale(cookieValue: string | undefined, acceptLanguage: string | null): UiLocale {
-  if (isUiLocale(cookieValue)) return cookieValue
-  // Primary tag = first entry; browsers list preferences in order and rarely
-  // use q-values to reorder them.
-  const primary = acceptLanguage?.split(',')[0]?.trim().toLowerCase() ?? ''
-  if (primary.startsWith('en')) return 'en'
-  return DEFAULT_UI_LOCALE
+export function resolveUiLocale(cookieValue: string | undefined): UiLocale {
+  return isUiLocale(cookieValue) ? cookieValue : DEFAULT_UI_LOCALE
 }
 
 /** Pick the string for `locale` from an inline { de, en } pair. */

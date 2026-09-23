@@ -541,7 +541,7 @@ export default function ClassesPage() {
 
   const billingPlan = session?.user?.billingPlan || 'free'
   if (billingPlan === 'free' && !session?.user?.isAdmin) {
-    return <UpgradePrompt feature="class management" />
+    return <UpgradePrompt feature="classes" />
   }
 
   return (

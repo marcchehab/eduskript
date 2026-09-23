@@ -1,5 +1,7 @@
 'use client'
 
+import { PAYWALL_COPY } from '@/components/dashboard/upgrade-prompt'
+import { useUiLocale } from '@/lib/i18n/client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -130,6 +132,7 @@ export function ExcalidrawEditor({
   const [editorKey, setEditorKey] = useState(Date.now()) // Force remount on open
   const alert = useAlertDialog()
   const isFreePlan = useIsFreeTeacher()
+  const paywall = PAYWALL_COPY[useUiLocale()]
   // AI prompt panel state. Hidden until the user clicks "Generate with AI".
   const [showAIPanel, setShowAIPanel] = useState(false)
   const [aiPrompt, setAIPrompt] = useState('')
@@ -377,11 +380,11 @@ export function ExcalidrawEditor({
                     <Button
                       variant="outline"
                       disabled
-                      title="AI generation is a paid feature. Upgrade in Billing."
+                      title={paywall.aiDiagramTitle}
                       className="opacity-50"
                     >
                       <Sparkles className="w-4 h-4 mr-2" />
-                      Generate with AI (paid)
+                      {paywall.aiDiagramLabel}
                     </Button>
                   ) : (
                     <Button

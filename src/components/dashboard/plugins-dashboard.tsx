@@ -1,5 +1,7 @@
 'use client'
 
+import { PAYWALL_COPY } from '@/components/dashboard/upgrade-prompt'
+import { useUiLocale } from '@/lib/i18n/client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTheme } from 'next-themes'
 import Link from 'next/link'
@@ -39,6 +41,7 @@ type View = 'list' | 'editor'
 
 export function PluginsDashboard({ userId, userPageSlug }: PluginsDashboardProps) {
   const isFreePlan = useIsFreeTeacher()
+  const paywall = PAYWALL_COPY[useUiLocale()]
   const dialog = useAlertDialog()
   const [plugins, setPlugins] = useState<Plugin[]>([])
   const [loading, setLoading] = useState(true)
@@ -467,9 +470,9 @@ export function PluginsDashboard({ userId, userPageSlug }: PluginsDashboardProps
       {canEdit && isFreePlan && (
         <div className="text-xs text-muted-foreground bg-muted/50 rounded-md px-3 py-2 flex items-center gap-2">
           <Sparkles className="h-3 w-3" />
-          AI plugin generation is a paid feature.{' '}
+          {paywall.aiPlugins}{' '}
           <Link href="/dashboard/billing" className="underline hover:text-foreground">
-            Upgrade
+            {paywall.upgrade}
           </Link>
         </div>
       )}
