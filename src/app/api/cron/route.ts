@@ -6,6 +6,7 @@
  *
  * Tasks:
  * - Expire trials and cancelled subscriptions past their end date
+ * - Send trial lifecycle mails (ending soon / ended)
  * - Reset demo user content from demo-content/ files
  * - Prune old metric_points and db_activity_hours rows
  */
@@ -16,6 +17,7 @@ import { resetDemoUser } from '@/lib/seed-demo-content'
 import { chargeTransaction } from '@/lib/payrexx'
 import { revalidateUserSites } from '@/lib/billing-revalidate'
 import { PATH_METRIC_PREFIX } from '@/lib/metrics/buffer'
+import { sendDueTrialEmails } from '@/lib/trial-emails'
 
 
 export async function POST(request: NextRequest) {
@@ -126,6 +128,15 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('[cron] expire-subscriptions error:', error)
     results.expiredSubscriptions = 'error'
+  }
+
+  // --- Task 1b: Trial lifecycle mails ---
+  // After Task 1, so a trial expired in this run gets its "ended" mail today.
+  try {
+    results.trialEmails = await sendDueTrialEmails()
+  } catch (error) {
+    console.error('[cron] trial-emails error:', error)
+    results.trialEmails = 'error'
   }
 
   // --- Task 2: Reset demo user content ---

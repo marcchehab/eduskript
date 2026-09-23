@@ -20,9 +20,12 @@ export interface EmailOptions {
   textContent?: string
   /** Brevo tag; also used for the X-Mailin-Tag header. */
   tag?: string
+  /** Overrides EMAIL_FROM_NAME (the address stays EMAIL_FROM, the verified sender). */
+  senderName?: string
+  replyTo?: string
 }
 
-export async function sendEmail({ to, subject, htmlContent, textContent, tag = 'verification' }: EmailOptions) {
+export async function sendEmail({ to, subject, htmlContent, textContent, tag = 'verification', senderName, replyTo }: EmailOptions) {
   const apiKey = process.env.BREVO_API_KEY
   if (!apiKey) {
     throw new Error('BREVO_API_KEY is not configured')
@@ -34,9 +37,10 @@ export async function sendEmail({ to, subject, htmlContent, textContent, tag = '
       htmlContent,
       textContent,
       sender: {
-        name: process.env.EMAIL_FROM_NAME || 'Eduskript',
+        name: senderName || process.env.EMAIL_FROM_NAME || 'Eduskript',
         email: process.env.EMAIL_FROM || 'noreply@localhost'
       },
+      ...(replyTo ? { replyTo: { email: replyTo } } : {}),
       to: (Array.isArray(to) ? to : [to]).map((email) => ({ email })),
       // Brevo-specific: suppress click tracking.
       tags: [tag, 'no-tracking'],
