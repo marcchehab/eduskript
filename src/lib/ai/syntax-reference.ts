@@ -897,6 +897,8 @@ export function getCondensedSyntaxReference(): string {
 
 **Newsletter:** \`<newsletter [title="..."] [description="..."] [button="..."] />\` — email capture; addresses go to the site's Brevo list, which owns confirmation and unsubscribe.
 
+**Help video link:** \`<helpvideo topic="create-skript">Wie erstelle ich ein neues Skript?</helpvideo>\` — inline link that opens the help clip help-<topic>.mp4 in a docked panel which stays open across pages until closed; only use topics the author names.
+
 **Banner:** \`<banner [id="..."] [dismissible="false"] [color="orange|muted|paper|#hex"] [text="text|red|#hex"]>inline markdown</banner>\` on its own lines, first on the page — sticky announcement bar at the top edge; viewers can dismiss it (remembered per browser, keyed by id or text).
 
 **AI feedback:** \`<ai-feedback prompt="teacher instructions for the AI" [solution="excalidraw-name-or-image-file"] [id="fb1"] [label="Check my solution"] />\` — \`solution\` is a hidden reference drawing/image the AI compares against;button for students: sends their pen strokes above the tag back to the previous h1/h2 (rendered to an image) + that markdown; nothing below the tag to a vision model for feedback; pasting a screenshot (hover box, Ctrl+V) works as alternative input. Several tags per page map to their prompts by position (\`id\` optional); no login required.

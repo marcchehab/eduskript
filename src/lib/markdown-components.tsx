@@ -34,6 +34,7 @@ import { Flex, FlexItem } from '@/components/markdown/flex'
 import { CtaButton, type CtaVariant, type CtaSize, type CtaAlign } from '@/components/markdown/cta-button'
 import { NewsletterBox } from '@/components/markdown/newsletter-box'
 import { PageBanner } from '@/components/markdown/page-banner'
+import { HelpVideoLink } from '@/components/help-video/help-video-link'
 import { PluginContainer } from '@/components/markdown/plugin-container'
 import { Fullwidth } from '@/components/markdown/fullwidth'
 import { PdfEmbed } from '@/components/markdown/pdf-embed'
@@ -1056,6 +1057,10 @@ export function createMarkdownComponents(
     // <banner> — sticky announcement bar; children re-parsed as markdown.
     // Layout lives in globals.css (.es-banner). See page-banner.tsx.
     'banner': PageBanner,
+    // <helpvideo topic="create-skript">Wie erstelle ich ein neues Skript?</helpvideo>
+    // Opens the docked help clip help-<topic>.mp4 (src/lib/help-videos/store.ts).
+    'helpvideo': (props: { topic?: string; children?: ReactNode }) =>
+      props.topic ? <HelpVideoLink topic={props.topic}>{props.children}</HelpVideoLink> : <>{props.children}</>,
 
     // <image> is an alias for <img> — both use the same handler
     'image': ImgElementComponent,

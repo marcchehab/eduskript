@@ -26,6 +26,7 @@ import { SkriptAuthor, User, Collection, Skript } from "@prisma/client";
 import { checkSkriptPermissions } from "@/lib/permissions";
 import { api, handleJsonResponse } from "@/lib/api-error-handler";
 import { CreateSkriptModal } from "./create-skript-modal";
+import { HelpVideoLink } from "@/components/help-video/help-video-link";
 import { AlertDialogModal } from "@/components/ui/alert-dialog-modal";
 import { useAlertDialog } from "@/hooks/use-alert-dialog";
 import { useRouter } from "next/navigation";
@@ -290,6 +291,7 @@ export function ContentLibrary({
               Collection
             </Button>
           </div>
+          <HelpVideoLink topic="create-skript" className="text-xs self-start" />
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Skripts Section */}

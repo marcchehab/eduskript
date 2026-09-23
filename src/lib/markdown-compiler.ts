@@ -126,6 +126,7 @@ export const sanitizeSchema = {
     'login-codes', // Live login-code display for an inbound-email hook (CloudMailin)
     'onlyfor', // Audience gate (auth/anon/students/class) — wraps children
     'cta', // Call-to-action button link, styled with the app's button variants
+    'helpvideo', // "How do I …?" link opening a docked help clip (help-video-link.tsx)
     'newsletter', // Email capture box; list lives in Brevo, per site
     'banner', // Sticky announcement bar at the top edge of the page (per page, not site-wide)
     'plugin', // User-created plugins rendered in sandboxed iframes
@@ -192,6 +193,7 @@ export const sanitizeSchema = {
     // id keys the per-browser dismiss state; dismissible="false" hides the X;
     // color/text are CSS colors for background/foreground.
     'banner': ['id', 'dismissible', 'color', 'text'],
+    'helpvideo': ['topic'],
     'ping': ['host', 'count', 'os'],
     // AI feedback on student work. prompt is the teacher's grading instruction;
     // the server re-reads it from page content, the attr here is authoring UX.

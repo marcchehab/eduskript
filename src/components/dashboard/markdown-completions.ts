@@ -56,6 +56,7 @@ const TAG_COMPLETIONS: TagDef[] = [
   { label: 'cta', info: 'Call-to-action link styled as a button', apply: '<cta href="">Text</cta>', cursorOffset: 11 },
   { label: 'newsletter', info: 'Email signup box (Brevo list)', apply: '<newsletter />' },
   { label: 'banner', info: 'Sticky announcement bar at the top of the page', apply: '<banner>\n\n</banner>' },
+  { label: 'helpvideo', info: 'Link that opens a docked help video (help-<topic>.mp4)', apply: '<helpvideo topic="">Text</helpvideo>', cursorOffset: 17 },
   { label: 'ai-feedback', info: 'Button: send pen strokes/section content to a vision model for feedback', apply: '<ai-feedback prompt="" />', cursorOffset: 21 },
   { label: 'ping', info: 'Interactive ping terminal', apply: '<ping />' },
   { label: 'next-stage', info: 'One-way divider that hands in the previous stage and reveals the next', apply: '<next-stage label="" />', cursorOffset: 19 },
@@ -210,6 +211,9 @@ const TAG_ATTRS: Record<string, AttrDef[]> = {
     { label: 'fontsize', info: 'sm | base | lg | xl | 2xl | 3xl or a CSS length (1.4rem)' },
     { label: 'note', info: 'Small muted text under the button' },
     { label: 'notehref', info: 'Link target for the note (e.g. #pricing)' },
+  ],
+  'helpvideo': [
+    { label: 'topic', info: 'Help clip slug — plays help-<topic>.mp4 (e.g. create-skript)' },
   ],
   'banner': [
     { label: 'id', info: 'Keys the per-browser dismiss state (default: text hash)' },

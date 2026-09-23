@@ -7,6 +7,7 @@ import { UserDataProvider } from '@/lib/userdata/provider'
 import { ClassInvitationModal } from '@/components/class-invitation-modal'
 import { NicknameModalGate } from '@/components/onboarding/nickname-modal-gate'
 import { OnboardingQuestGate } from '@/components/onboarding/quest-gate'
+import { HelpVideoWidget } from '@/components/help-video/help-video-widget'
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -24,6 +25,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
             <ClassInvitationModal />
             <NicknameModalGate />
             <OnboardingQuestGate />
+            <HelpVideoWidget />
             {children}
           </LayoutProvider>
         </UserDataProvider>
