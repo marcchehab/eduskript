@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { sendWelcomeEmail } from '@/lib/trial-emails'
 
 export async function GET(request: NextRequest) {
   const url = new URL(request.url)
@@ -77,6 +78,9 @@ export async function GET(request: NextRequest) {
         }
       }
     })
+
+    // Account is usable now — welcome mail (swallows its own errors).
+    await sendWelcomeEmail(user.id)
 
     return NextResponse.json({
       message: 'Email verified successfully'
@@ -179,6 +183,9 @@ export async function POST(request: NextRequest) {
         }
       })
     })
+
+    // Account is usable now — welcome mail (swallows its own errors).
+    await sendWelcomeEmail(user.id)
 
     return NextResponse.json({
       message: 'Email verified successfully'

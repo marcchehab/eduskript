@@ -76,6 +76,7 @@ import { revalidateTag, revalidatePath } from 'next/cache'
 import { generatePseudonym, getStableStudentNickname } from './privacy/pseudonym'
 import { createLogger } from '@/lib/logger'
 import { createTrialSubscription } from '@/lib/trial'
+import { sendWelcomeEmail } from '@/lib/trial-emails'
 import { seedOnboardingSkript } from '@/lib/seed-demo-content'
 import { CACHE_TAGS } from './cached-queries'
 import { notifyAdminsOfNewTeacher } from '@/lib/email'
@@ -415,6 +416,9 @@ export function PrivacyAdapter(options: PrivacyAdapterOptions): Adapter {
 
         // Auto-start trial for teacher accounts (no-op if no default trial plan configured)
         await createTrialSubscription(createdUser.id)
+        // OAuth address is provider-confirmed, so welcome right away
+        // (swallows its own errors).
+        await sendWelcomeEmail(createdUser.id)
 
         // Auto-join orgs by signup context (from org page or teacher page)
         await autoJoinOrgBySignupContext(prisma, createdUser.id, signupContext)

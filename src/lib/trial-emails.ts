@@ -1,14 +1,18 @@
 /**
  * Trial lifecycle mails (German, via Brevo transactional — src/lib/email.ts).
  *
+ * - `welcome`: right when the account becomes usable — after email
+ *   verification (verify-email route) or at OAuth signup (privacy-adapter).
+ *   Points to the onboarding quest in the dashboard; no videos in the mail
+ *   on purpose, the quest is the one place that walks through the steps.
  * - `ending`: 5 days before the trial ends — what Classroom adds, the price,
  *   and that nothing is charged automatically.
  * - `ended`:  after the cron expired the trial — pages stay online, how to
  *   continue with Classroom.
  *
- * Welcome/day-3 mails are deliberately not here yet (content still open).
+ * A day-3 mail is deliberately not here yet (content still open).
  *
- * Sent by the daily cron (src/app/api/cron/route.ts, 03:00 UTC), right after
+ * ending/ended are sent by the daily cron (src/app/api/cron/route.ts, 03:00 UTC), right after
  * it expires due trials. Each mail has a send window rather than an exact day
  * (ending: trial end 3–5 days away; ended: trial end 0–3 days ago), so a
  * missed cron run is caught up the next day, and trials that ended long
@@ -23,9 +27,9 @@
 
 import { prisma } from '@/lib/prisma'
 import { sendEmail } from '@/lib/email'
-import { PLAN_COPY, formatChf, monthlyEquivalent } from '@/lib/plan-copy'
+import { DEFAULT_TRIAL_DAYS, PLAN_COPY, formatChf, monthlyEquivalent } from '@/lib/plan-copy'
 
-export type TrialEmailKind = 'ending' | 'ended'
+export type TrialEmailKind = 'welcome' | 'ending' | 'ended'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const ADAPTER = 'trial-emails'
@@ -41,6 +45,8 @@ export interface TrialEmailContext {
   firstName: string | null
   trialEnd: Date
   daysLeft: number
+  // Plan trial length; the quest reward adds the same amount again (trial.ts).
+  trialDays: number
   prices: TrialEmailPrices
   baseUrl: string
 }
@@ -92,6 +98,7 @@ function button(href: string, label: string): string {
   return `<p style="margin:24px 0"><a href="${href}" style="background:#2563eb;color:#fff;padding:12px 22px;text-decoration:none;border-radius:6px;font-weight:bold;display:inline-block">${label}</a></p>`
 }
 
+// Swiss letter style: no comma, next paragraph starts capitalised.
 function greeting(firstName: string | null): string {
   return firstName ? `Hallo ${firstName}` : 'Hallo'
 }
@@ -106,14 +113,47 @@ export function renderTrialEmail(kind: TrialEmailKind, ctx: TrialEmailContext): 
   const footerEnded =
     'Das war die letzte Mail zu deinem Test. Weitere Erinnerungen kommen keine.'
 
+  if (kind === 'welcome') {
+    const dashboardUrl = `${ctx.baseUrl}/dashboard`
+    const intro =
+      'Schön, dass du Eduskript ausprobierst! Ich bin Marc und unterrichte Informatik in Zürich. Ich habe Eduskript gebaut, weil ich meine Skripts lieber als interaktive Website abgebe, die ich aktualisieren kann – du hoffentlich auch 😊'
+    const tour = (dashboard: string) =>
+      `Wie geht's weiter? Im ${dashboard} führt dich eine kurze Erklär-Tour durch die ersten Schritte. Wenn du sie meisterst, verdoppelt sich deine Testzeit auf ${ctx.trialDays * 2} Tage – es lohnt sich also!`
+    const plan = `Du hast jetzt ${ctx.trialDays} Tage lang alle Funktionen – inklusive KI und Klassenverwaltung, die mir ein Loch ins Portemonnaie brennen. Danach läuft dein Konto im Gratis-Plan weiter, deine Skripts bleiben online.`
+    const ps = 'PS: Warum ging das interaktive Skript zum Arzt? Es hatte zu viele Seiten-Effekte 🤷'
+    const html = layout([
+      greeting(name),
+      intro,
+      tour(`<a href="${dashboardUrl}" style="color:#2563eb">Dashboard</a>`),
+      plan,
+      'Fragen? Antworte einfach auf diese Mail.<br>Marc',
+      ps,
+    ])
+    const text = [
+      greeting(ctx.firstName),
+      '',
+      intro,
+      '',
+      tour(`Dashboard (${dashboardUrl})`),
+      '',
+      plan,
+      '',
+      'Fragen? Antworte einfach auf diese Mail.',
+      'Marc',
+      '',
+      ps,
+    ].join('\n')
+    return { subject: 'Willkommen bei Eduskript', htmlContent: html, textContent: text }
+  }
+
   if (kind === 'ending') {
     const days = ctx.daysLeft === 1 ? '1 Tag' : `${ctx.daysLeft} Tage`
     const date = formatDateDe(ctx.trialEnd)
     const subject = `Dein Eduskript-Test läuft noch ${days}`
     const html = layout(
       [
-        `${greeting(name)},`,
-        `dein Test von Eduskript läuft noch ${days}, bis am ${date}. Danach wechselt dein Konto automatisch in den Gratis-Plan. Es wird nichts belastet.`,
+        greeting(name),
+        `Dein Test von Eduskript läuft noch ${days}, bis am ${date}. Danach wechselt dein Konto automatisch in den Gratis-Plan. Es wird nichts belastet.`,
         `Deine Skripts und deine öffentliche Seite bleiben online. Ohne Classroom fällt weg:`,
         `<ul style="margin:0 0 16px;padding-left:20px">${features.map((f) => `<li>${f}</li>`).join('')}</ul>`,
         prices ? `Classroom kostet ${prices}.` : 'Mit Classroom behältst du alles.',
@@ -123,9 +163,9 @@ export function renderTrialEmail(kind: TrialEmailKind, ctx: TrialEmailContext): 
       ]
     )
     const text = [
-      `${greeting(ctx.firstName)},`,
+      greeting(ctx.firstName),
       '',
-      `dein Test von Eduskript läuft noch ${days}, bis am ${date}. Danach wechselt dein Konto automatisch in den Gratis-Plan. Es wird nichts belastet.`,
+      `Dein Test von Eduskript läuft noch ${days}, bis am ${date}. Danach wechselt dein Konto automatisch in den Gratis-Plan. Es wird nichts belastet.`,
       '',
       'Deine Skripts und deine öffentliche Seite bleiben online. Ohne Classroom fällt weg:',
       ...features.map((f) => `- ${f}`),
@@ -144,8 +184,8 @@ export function renderTrialEmail(kind: TrialEmailKind, ctx: TrialEmailContext): 
   const subject = 'Dein Eduskript-Test ist beendet, deine Seiten bleiben online'
   const html = layout(
     [
-      `${greeting(name)},`,
-      `dein Test von Eduskript ist abgelaufen. Dein Konto läuft jetzt im Gratis-Plan weiter: Deine Skripts und deine öffentliche Seite bleiben online, und du kannst weiterhin unbegrenzt schreiben und veröffentlichen.`,
+      greeting(name),
+      `Dein Test von Eduskript ist abgelaufen. Dein Konto läuft jetzt im Gratis-Plan weiter: Deine Skripts und deine öffentliche Seite bleiben online, und du kannst weiterhin unbegrenzt schreiben und veröffentlichen.`,
       (prices
         ? `Für KI-Bearbeitung, Klassen, Prüfungen im Safe Exam Browser und die KI-Korrektur brauchst du Classroom, für ${prices}.`
         : 'Für KI-Bearbeitung, Klassen, Prüfungen im Safe Exam Browser und die KI-Korrektur brauchst du Classroom.'),
@@ -155,9 +195,9 @@ export function renderTrialEmail(kind: TrialEmailKind, ctx: TrialEmailContext): 
     ]
   )
   const text = [
-    `${greeting(ctx.firstName)},`,
+    greeting(ctx.firstName),
     '',
-    'dein Test von Eduskript ist abgelaufen. Dein Konto läuft jetzt im Gratis-Plan weiter: Deine Skripts und deine öffentliche Seite bleiben online, und du kannst weiterhin unbegrenzt schreiben und veröffentlichen.',
+    'Dein Test von Eduskript ist abgelaufen. Dein Konto läuft jetzt im Gratis-Plan weiter: Deine Skripts und deine öffentliche Seite bleiben online, und du kannst weiterhin unbegrenzt schreiben und veröffentlichen.',
     '',
     prices
       ? `Für KI-Bearbeitung, Klassen, Prüfungen im Safe Exam Browser und die KI-Korrektur brauchst du Classroom, für ${prices}.`
@@ -229,13 +269,73 @@ async function loadPrices(): Promise<TrialEmailPrices> {
   }
 }
 
+const subscriptionSelect = {
+  id: true,
+  currentPeriodEnd: true,
+  plan: { select: { trialDays: true } },
+  user: { select: recipientSelect },
+} as const
+
+type MailSubscription = {
+  id: string
+  currentPeriodEnd: Date | null
+  plan: { trialDays: number | null }
+  user: Recipient
+}
+
+/** Render + send one mail and record it. Returns false if skipped or failed. */
+async function deliver(
+  kind: TrialEmailKind,
+  sub: MailSubscription,
+  prices: TrialEmailPrices,
+  now: Date
+): Promise<boolean> {
+  const user = sub.user
+  if (!sub.currentPeriodEnd || !isMailable(user)) return false
+  if (await alreadySent(user.id, sub.id, kind)) return false
+  const rendered = renderTrialEmail(kind, {
+    firstName: firstNameOf(user.name),
+    trialEnd: sub.currentPeriodEnd,
+    daysLeft: Math.max(1, Math.ceil((sub.currentPeriodEnd.getTime() - now.getTime()) / DAY_MS)),
+    trialDays: sub.plan.trialDays ?? DEFAULT_TRIAL_DAYS,
+    prices,
+    baseUrl: process.env.NEXTAUTH_URL || 'http://localhost:3000',
+  })
+  await sendEmail({
+    to: user.email,
+    ...rendered,
+    tag: `trial-${kind}`,
+    senderName: SENDER_NAME,
+    replyTo: REPLY_TO,
+  })
+  await markSent(user.id, sub.id, kind)
+  return true
+}
+
 /**
- * Send all due trial mails. Returns counts for the cron result. One failing
- * send is logged and skipped (not marked sent, so it retries next run while
- * still inside its window).
+ * Welcome mail, once the account is usable. Call sites: verify-email route
+ * (password signups) and privacy-adapter createUser (OAuth). No-op without a
+ * trialing subscription or for an unverified password account. Never throws —
+ * signup must not depend on Brevo.
+ */
+export async function sendWelcomeEmail(userId: string): Promise<void> {
+  try {
+    const sub = await prisma.subscription.findFirst({
+      where: { userId, status: 'trialing' },
+      select: subscriptionSelect,
+    })
+    if (sub) await deliver('welcome', sub, {}, new Date())
+  } catch (error) {
+    console.error(`[trial-emails] welcome to user ${userId} failed:`, error)
+  }
+}
+
+/**
+ * Send all due ending/ended mails. Returns counts for the cron result. One
+ * failing send is logged and skipped (not marked sent, so it retries next run
+ * while still inside its window).
  */
 export async function sendDueTrialEmails(now = new Date()): Promise<{ ending: number; ended: number; failed: number }> {
-  const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000'
   const counts = { ending: 0, ended: 0, failed: 0 }
 
   const ending = await prisma.subscription.findMany({
@@ -243,7 +343,7 @@ export async function sendDueTrialEmails(now = new Date()): Promise<{ ending: nu
       status: 'trialing',
       currentPeriodEnd: { gte: new Date(now.getTime() + 3 * DAY_MS), lte: new Date(now.getTime() + 5 * DAY_MS) },
     },
-    select: { id: true, currentPeriodEnd: true, user: { select: recipientSelect } },
+    select: subscriptionSelect,
   })
 
   // Expired trials: the cron sets status 'cancelled'. payrexxSubId null tells
@@ -256,40 +356,22 @@ export async function sendDueTrialEmails(now = new Date()): Promise<{ ending: nu
       currentPeriodEnd: { gte: new Date(now.getTime() - 3 * DAY_MS), lte: now },
       user: { subscriptions: { none: { status: { in: ['active', 'trialing', 'past_due'] } } } },
     },
-    select: { id: true, currentPeriodEnd: true, user: { select: recipientSelect } },
+    select: subscriptionSelect,
   })
 
   if (ending.length === 0 && ended.length === 0) return counts
   const prices = await loadPrices()
 
-  const batches: [TrialEmailKind, typeof ending][] = [
+  const batches: ['ending' | 'ended', MailSubscription[]][] = [
     ['ending', ending],
     ['ended', ended],
   ]
   for (const [kind, subs] of batches) {
     for (const sub of subs) {
-      const user = sub.user
-      if (!sub.currentPeriodEnd || !isMailable(user)) continue
-      if (await alreadySent(user.id, sub.id, kind)) continue
-      const rendered = renderTrialEmail(kind, {
-        firstName: firstNameOf(user.name),
-        trialEnd: sub.currentPeriodEnd,
-        daysLeft: Math.max(1, Math.ceil((sub.currentPeriodEnd.getTime() - now.getTime()) / DAY_MS)),
-        prices,
-        baseUrl,
-      })
       try {
-        await sendEmail({
-          to: user.email,
-          ...rendered,
-          tag: `trial-${kind}`,
-          senderName: SENDER_NAME,
-          replyTo: REPLY_TO,
-        })
-        await markSent(user.id, sub.id, kind)
-        counts[kind]++
+        if (await deliver(kind, sub, prices, now)) counts[kind]++
       } catch (error) {
-        console.error(`[trial-emails] ${kind} to user ${user.id} failed:`, error)
+        console.error(`[trial-emails] ${kind} to user ${sub.user.id} failed:`, error)
         counts.failed++
       }
     }
