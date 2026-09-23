@@ -22,6 +22,7 @@ vi.mock('@/lib/prisma', () => ({
     classMembership: {
       findUnique: vi.fn(),
       create: vi.fn(),
+      update: vi.fn(),
     },
     preAuthorizedStudent: {
       findUnique: vi.fn(),
@@ -196,6 +197,53 @@ describe('Class Join API', () => {
         const data = await response.json()
         expect(data.alreadyMember).toBe(true)
         expect(data.message).toBe('Already a member of this class')
+      })
+
+      it('records consent when an anonymous member accepts a pending identify request', async () => {
+        vi.mocked(getServerSession).mockResolvedValue({ user: { id: 'student-1' } } as never)
+        vi.mocked(prisma.user.findUnique).mockResolvedValue({
+          accountType: 'student',
+          studentPseudonym: 'pseudo-student1',
+        } as never)
+        vi.mocked(prisma.class.findUnique).mockResolvedValue({
+          id: 'class-1', name: 'Test Class', description: null, isActive: true, allowAnonymous: true,
+          teacher: { name: 'Teacher', pageSlug: 'teacher' },
+        } as never)
+        vi.mocked(prisma.classMembership.findUnique).mockResolvedValue({
+          id: 'membership-1', identityConsent: false,
+        } as never)
+        vi.mocked(prisma.preAuthorizedStudent.deleteMany).mockResolvedValue({ count: 1 })
+
+        const response = await POST(createPostRequest('ABC123', { identityConsent: true }), mockParams('ABC123'))
+
+        expect(response.status).toBe(200)
+        expect(prisma.preAuthorizedStudent.deleteMany).toHaveBeenCalledWith({
+          where: { classId: 'class-1', pseudonym: 'pseudo-student1' },
+        })
+        expect(prisma.classMembership.update).toHaveBeenCalledWith(
+          expect.objectContaining({ where: { id: 'membership-1' }, data: expect.objectContaining({ identityConsent: true }) }),
+        )
+      })
+
+      it('does not record consent for an anonymous member without a pending request', async () => {
+        vi.mocked(getServerSession).mockResolvedValue({ user: { id: 'student-1' } } as never)
+        vi.mocked(prisma.user.findUnique).mockResolvedValue({
+          accountType: 'student',
+          studentPseudonym: 'pseudo-student1',
+        } as never)
+        vi.mocked(prisma.class.findUnique).mockResolvedValue({
+          id: 'class-1', name: 'Test Class', description: null, isActive: true, allowAnonymous: true,
+          teacher: { name: 'Teacher', pageSlug: 'teacher' },
+        } as never)
+        vi.mocked(prisma.classMembership.findUnique).mockResolvedValue({
+          id: 'membership-1', identityConsent: false,
+        } as never)
+        vi.mocked(prisma.preAuthorizedStudent.deleteMany).mockResolvedValue({ count: 0 })
+        vi.mocked(prisma.classMembership.update).mockClear()
+
+        await POST(createPostRequest('ABC123', { identityConsent: true }), mockParams('ABC123'))
+
+        expect(prisma.classMembership.update).not.toHaveBeenCalled()
       })
     })
 

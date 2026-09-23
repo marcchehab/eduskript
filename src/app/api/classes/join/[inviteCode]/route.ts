@@ -107,6 +107,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     })
 
     if (existingMembership) {
+      // An anonymous member whose teacher later added their email (bulk
+      // import pre-authorizes non-consenting members, see bulk-import route):
+      // accepting that request records consent and clears the invitation.
+      // Without this the invitation modal would reappear on every sign-in.
+      if (!existingMembership.identityConsent && identityConsent && user.studentPseudonym) {
+        const cleared = await prisma.preAuthorizedStudent.deleteMany({
+          where: { classId: classRecord.id, pseudonym: user.studentPseudonym },
+        })
+        if (cleared.count > 0) {
+          await prisma.classMembership.update({
+            where: { id: existingMembership.id },
+            data: { identityConsent: true, consentedAt: new Date() },
+          })
+        }
+      }
       return NextResponse.json({
         message: 'Already a member of this class',
         class: {

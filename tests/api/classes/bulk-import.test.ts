@@ -272,6 +272,21 @@ describe('Bulk Import API', () => {
         expect(data.alreadyMembers).toBeGreaterThanOrEqual(1)
       })
 
+      it('only counts members WITH identity consent as already-members (no de-anonymization oracle)', async () => {
+        vi.mocked(prisma.user.findMany).mockResolvedValue([])
+        vi.mocked(prisma.classMembership.findMany).mockResolvedValue([])
+        vi.mocked(prisma.preAuthorizedStudent.findMany).mockResolvedValue([])
+        vi.mocked(prisma.preAuthorizedStudent.createMany).mockResolvedValue({ count: 1 })
+
+        const request = createPostRequest('class-1', { emails: ['anon@example.com'] })
+        await POST(request, mockParams('class-1'))
+
+        const pseudonymQuery = vi.mocked(prisma.classMembership.findMany).mock.calls
+          .map(([args]) => args as { where?: Record<string, unknown> })
+          .find((args) => args?.where && 'student' in args.where)
+        expect(pseudonymQuery?.where).toMatchObject({ identityConsent: true })
+      })
+
       it('should skip already pre-authorized emails', async () => {
         vi.mocked(prisma.user.findMany).mockResolvedValue([])
         vi.mocked(prisma.classMembership.findMany).mockResolvedValue([])

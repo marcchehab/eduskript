@@ -159,11 +159,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       pseudonyms.push(pseudonym)
     }
 
-    // Check which students are already members (signed up and joined via pseudonym)
+    // Check which students are already members WITH identity consent.
+    // Members who joined anonymously (identityConsent=false) are deliberately
+    // treated like non-members: they get a PreAuthorizedStudent row too, which
+    // shows them an "identify yourself?" request (join route handles the
+    // already-member case). Counting them as members here would turn bulk
+    // import into an oracle — import one guessed address, watch
+    // alreadyMembers / preAuthorizedCount / the DELETE 404 — that de-anonymizes
+    // a student who never consented.
     const existingMembers = pseudonyms.length > 0
       ? await prisma.classMembership.findMany({
           where: {
             classId,
+            identityConsent: true,
             student: {
               studentPseudonym: { in: pseudonyms }
             }
