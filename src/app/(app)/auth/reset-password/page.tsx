@@ -46,6 +46,7 @@ export default function ResetPasswordPage() {
 
       // Wait a moment for session to update, then redirect
       setTimeout(() => {
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- full reload so the refreshed JWT (requirePasswordReset cleared) is used
         window.location.href = '/dashboard'
       }, 100)
     } catch (err) {

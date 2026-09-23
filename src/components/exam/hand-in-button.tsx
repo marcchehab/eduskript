@@ -215,6 +215,7 @@ export function HandInButton({
 
       // Navigate to end-session which clears cookie and redirects
       // SEB will then navigate to quitURL, ending the session
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- API route (clears cookie, redirects to SEB quitURL); needs a real request
       window.location.href = '/api/exams/end-session'
     } catch (err) {
       console.error('Error handing in exam:', err)

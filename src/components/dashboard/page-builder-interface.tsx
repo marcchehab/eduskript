@@ -820,6 +820,7 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
         'Page URL Required'
       )
       setTimeout(() => {
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- pre-existing hard navigation; no router in this component
         window.location.href = '/dashboard/settings'
       }, 1500)
     }

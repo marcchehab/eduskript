@@ -16,6 +16,7 @@ export function SEBQuitButton() {
   return (
     <Button
       variant="destructive"
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- API route; needs a real request, not client routing
       onClick={() => { window.location.href = '/api/exams/end-session' }}
     >
       <LogOut className="w-4 h-4 mr-2" />
