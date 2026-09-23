@@ -14,6 +14,8 @@
 import { NextResponse } from 'next/server'
 
 export const FREE_PLAN = 'free'
+/** Admin-granted free year, see src/lib/pioneer.ts. Here so client code can import it. */
+export const PIONEER_PLAN_SLUG = 'pioneer'
 
 export interface PaidUserLike {
   billingPlan?: string | null

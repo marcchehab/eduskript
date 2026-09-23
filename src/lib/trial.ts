@@ -6,6 +6,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { pioneerExpiryWhere } from '@/lib/pioneer'
 
 /**
  * Create a trial subscription for a user.
@@ -78,6 +79,7 @@ export async function createTrialSubscription(
  * Expire subscriptions that have passed their currentPeriodEnd:
  * - Trials (status 'trialing') past their end date
  * - Cancelled paid subscriptions (status 'active', cancelledAt set) past their period end
+ * - Pioneer terms (src/lib/pioneer.ts) past their end date
  *
  * Returns true if a subscription was expired.
  */
@@ -91,6 +93,7 @@ export async function expireSubscriptionIfNeeded(userId: string): Promise<boolea
       OR: [
         { status: 'trialing' },
         { status: 'active', cancelledAt: { not: null } },
+        pioneerExpiryWhere(),
       ],
     },
   })

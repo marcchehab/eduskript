@@ -9,6 +9,7 @@ import { SupporterBadge } from '@/components/ui/supporter-badge'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { PLAN_COPY } from '@/lib/plan-copy'
+import { PIONEER_PLAN_SLUG } from '@/lib/billing'
 
 interface PlanData {
   id: string
@@ -156,6 +157,8 @@ export default function BillingPage() {
   // while a subscription is active).
   const lockedIn = subscription != null && subscription.status !== 'trialing'
   const currentSlug = subscription?.plan.slug
+  // Admin-granted free year (src/lib/pioneer.ts): no price, no auto-renewal.
+  const isPioneer = currentSlug === PIONEER_PLAN_SLUG
 
   function planButton(plan: PlanData, label: string, variant?: 'outline', className?: string) {
     if (lockedIn && plan.slug === currentSlug) {
@@ -237,10 +240,18 @@ export default function BillingPage() {
           </div>
 
           <div className="text-sm text-muted-foreground space-y-1">
-            <p>
-              {formatPrice(subscription.plan.priceChf)} / {subscription.plan.interval === 'monthly' ? 'month' : 'year'}
-            </p>
-            {subscription.status === 'trialing' && subscription.trialEndsAt ? (
+            {isPioneer ? (
+              <p>
+                Free as a pioneer
+                {subscription.currentPeriodEnd ? ` until ${formatDate(subscription.currentPeriodEnd)}` : ''}.
+                Renewed yearly for pioneers who use Eduskript with a class and share feedback each semester.
+              </p>
+            ) : (
+              <p>
+                {formatPrice(subscription.plan.priceChf)} / {subscription.plan.interval === 'monthly' ? 'month' : 'year'}
+              </p>
+            )}
+            {isPioneer ? null : subscription.status === 'trialing' && subscription.trialEndsAt ? (
               <p>Trial ends in {daysUntil(subscription.trialEndsAt)} days ({formatDate(subscription.trialEndsAt)})</p>
             ) : subscription.currentPeriodEnd ? (
               <p>
@@ -255,7 +266,7 @@ export default function BillingPage() {
               on its own. Cancelling it was irreversible for the user — nothing
               re-grants a trial, so only an admin could restore access. */}
 
-          {subscription.status === 'active' && !subscription.cancelledAt && (
+          {subscription.status === 'active' && !subscription.cancelledAt && !isPioneer && (
             <Button
               variant="outline"
               onClick={handleCancel}

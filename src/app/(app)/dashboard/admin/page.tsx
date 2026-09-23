@@ -16,6 +16,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Pencil, Trash2, RotateCw, Search, ChevronDown, Plus, Users } from 'lucide-react'
 import { appHostUrl } from '@/lib/custom-domain'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
+import { PIONEER_PLAN_SLUG } from '@/lib/billing'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 
 interface OrgMember {
@@ -75,6 +76,9 @@ function planBadge(user: User): { label: string; variant: 'default' | 'secondary
   const slug = sub.plan?.slug || 'unknown plan'
   if (sub.status === 'trialing') return { label: `trial · ${slug}`, variant: 'default' }
   if (sub.status === 'past_due') return { label: `past due · ${slug}`, variant: 'outline' }
+  if (slug === PIONEER_PLAN_SLUG && sub.currentPeriodEnd) {
+    return { label: `pioneer · until ${new Date(sub.currentPeriodEnd).toLocaleDateString('de-CH')}`, variant: 'default' }
+  }
   if (sub.cancelledAt) return { label: `${slug} · ending`, variant: 'outline' }
   return { label: slug, variant: 'default' }
 }
@@ -145,6 +149,7 @@ export default function AdminPanelPage() {
     accountType: 'teacher' as 'teacher' | 'student',
     studentPseudonym: '',
     grantTrial: false,
+    pioneer: '' as '' | 'grant' | 'revoke',
     trialDays: '14', // overwritten by openEditDialog() with the default trial plan's trialDays
     organizationId: '',
     isTemporary: false,
@@ -361,6 +366,7 @@ export default function AdminPanelPage() {
         accountType: 'teacher',
         studentPseudonym: '',
         grantTrial: false,
+        pioneer: '',
         trialDays: '14', // overwritten by openEditDialog() with the default trial plan's trialDays
         organizationId: defaultOrgId,
         isTemporary: false,
@@ -406,6 +412,7 @@ export default function AdminPanelPage() {
           ...(formData.billingPlan && { billingPlan: formData.billingPlan }),
           requirePasswordReset: formData.requirePasswordReset,
           ...(formData.grantTrial && { grantTrial: true, trialDays: Number(formData.trialDays) || 30 }),
+          ...(formData.pioneer && { pioneer: formData.pioneer }),
           ...(selectedUser.accountType === 'student' && { isTemporary: formData.isTemporary }),
           ...(formData.newPassword && { newPassword: formData.newPassword }),
         }),
@@ -418,7 +425,7 @@ export default function AdminPanelPage() {
       }
 
       // If we edited the current user's billing plan, refresh the JWT session
-      if (selectedUser.id === session?.user?.id && formData.billingPlan) {
+      if (selectedUser.id === session?.user?.id && (formData.billingPlan || formData.pioneer)) {
         await updateSession()
       }
 
@@ -609,6 +616,7 @@ export default function AdminPanelPage() {
       accountType: (user.accountType || 'teacher') as 'teacher' | 'student',
       studentPseudonym: user.studentPseudonym || '',
       grantTrial: false,
+      pioneer: '',
       trialDays: defaultTrialDays,
       organizationId: '',
       isTemporary: user.isTemporary ?? false,
@@ -1300,6 +1308,30 @@ export default function AdminPanelPage() {
                   ))}
                 </select>
               </div>
+              {selectedUser?.accountType !== 'student' && (
+                <div className="rounded-md border p-3 space-y-2">
+                  <Label htmlFor="edit-pioneer">Pioneer programme (free, 1 year per grant)</Label>
+                  <p className="text-xs text-muted-foreground">
+                    {selectedUser?.subscriptions?.[0]?.plan?.slug === PIONEER_PLAN_SLUG
+                      ? `Pioneer until ${selectedUser.subscriptions[0].currentPeriodEnd ? new Date(selectedUser.subscriptions[0].currentPeriodEnd).toLocaleDateString('de-CH') : '?'}. Renew only if the teacher used a skript with a class and gave feedback this semester.`
+                      : 'Not a pioneer. Granting cancels a running trial; a paid Payrexx subscription must be stopped first.'}
+                  </p>
+                  <select
+                    id="edit-pioneer"
+                    value={formData.pioneer}
+                    onChange={(e) => setFormData({ ...formData, pioneer: e.target.value as '' | 'grant' | 'revoke' })}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="">No change</option>
+                    <option value="grant">
+                      {selectedUser?.subscriptions?.[0]?.plan?.slug === PIONEER_PLAN_SLUG ? 'Renew (+1 year from current end)' : 'Grant (1 year from today)'}
+                    </option>
+                    {selectedUser?.subscriptions?.[0]?.plan?.slug === PIONEER_PLAN_SLUG && (
+                      <option value="revoke">Revoke now (back to free)</option>
+                    )}
+                  </select>
+                </div>
+              )}
               <div className="rounded-md border p-3 space-y-3">
                 <div className="flex items-center gap-2">
                   <Checkbox

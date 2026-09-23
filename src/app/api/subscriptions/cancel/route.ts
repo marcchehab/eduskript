@@ -10,6 +10,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { revalidateUserSites } from '@/lib/billing-revalidate'
+import { PIONEER_PLAN_SLUG } from '@/lib/pioneer'
 
 export async function POST() {
   try {
@@ -23,6 +24,7 @@ export async function POST() {
         userId: session.user.id,
         status: { in: ['active', 'trialing', 'past_due'] },
       },
+      include: { plan: { select: { slug: true } } },
     })
 
     if (!subscription) {
@@ -34,6 +36,15 @@ export async function POST() {
     if (subscription.status === 'trialing') {
       return NextResponse.json(
         { error: 'A trial cannot be cancelled. It ends automatically on its end date.' },
+        { status: 400 }
+      )
+    }
+
+    // Pioneer terms cost nothing and are ended by the admin or the cron
+    // (src/lib/pioneer.ts); the billing page shows no cancel button for them.
+    if (subscription.plan.slug === PIONEER_PLAN_SLUG) {
+      return NextResponse.json(
+        { error: 'Pioneer status cannot be cancelled here. It ends automatically on its end date.' },
         { status: 400 }
       )
     }

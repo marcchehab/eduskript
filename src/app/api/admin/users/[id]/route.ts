@@ -5,6 +5,7 @@ import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import bcrypt from 'bcryptjs'
 import { createTrialSubscription } from '@/lib/trial'
 import { revalidateUserSites } from '@/lib/billing-revalidate'
+import { grantPioneer, revokePioneer, PioneerGrantError } from '@/lib/pioneer'
 
 // GET /api/admin/users/[id] - Get single user
 export async function GET(
@@ -72,7 +73,7 @@ export async function PATCH(
   const { id } = await params
 
   try {
-    const { email, name, pageSlug, title, isAdmin, requirePasswordReset, billingPlan, grantTrial, trialPlanId, trialDays, isTemporary, newPassword } = await request.json()
+    const { email, name, pageSlug, title, isAdmin, requirePasswordReset, billingPlan, grantTrial, trialPlanId, trialDays, isTemporary, newPassword, pioneer } = await request.json()
 
     // Check if user exists
     const existingUser = await prisma.user.findUnique({
@@ -271,12 +272,28 @@ export async function PATCH(
       }
     }
 
+    // Pioneer programme (src/lib/pioneer.ts): 'grant' starts a one-year term
+    // or extends a running one by a year; 'revoke' ends it now.
+    let pioneerResult: { currentPeriodEnd: Date; renewed: boolean } | { revoked: boolean } | undefined
+    if (pioneer === 'grant') {
+      try {
+        pioneerResult = await grantPioneer(id)
+      } catch (err) {
+        if (err instanceof PioneerGrantError) {
+          return NextResponse.json({ error: err.message }, { status: 400 })
+        }
+        throw err
+      }
+    } else if (pioneer === 'revoke') {
+      pioneerResult = { revoked: await revokePioneer(id) }
+    }
+
     // Public pages cache billingPlan (paid gates, supporter badge)
-    if (billingPlan !== undefined || grantTrial) {
+    if (billingPlan !== undefined || grantTrial || pioneerResult) {
       await revalidateUserSites(id)
     }
 
-    return NextResponse.json({ user: updatedUser })
+    return NextResponse.json({ user: updatedUser, ...(pioneerResult && { pioneer: pioneerResult }) })
   } catch (error) {
     console.error('Error updating user:', error)
     return NextResponse.json(

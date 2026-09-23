@@ -5,7 +5,7 @@
  * Auth: Bearer token must match CRON_SECRET env var.
  *
  * Tasks:
- * - Expire trials and cancelled subscriptions past their end date
+ * - Expire trials, cancelled subscriptions and pioneer terms past their end date
  * - Send trial lifecycle mails (day-3 tips, ending soon)
  * - Reset demo user content from demo-content/ files
  * - Prune old metric_points and db_activity_hours rows
@@ -18,6 +18,7 @@ import { chargeTransaction } from '@/lib/payrexx'
 import { revalidateUserSites } from '@/lib/billing-revalidate'
 import { PATH_METRIC_PREFIX } from '@/lib/metrics/buffer'
 import { sendDueTrialEmails } from '@/lib/trial-emails'
+import { pioneerExpiryWhere } from '@/lib/pioneer'
 
 
 export async function POST(request: NextRequest) {
@@ -90,7 +91,7 @@ export async function POST(request: NextRequest) {
     results.renewals = 'error'
   }
 
-  // --- Task 1: Expire trials and cancelled subscriptions ---
+  // --- Task 1: Expire trials, cancelled subscriptions and pioneer terms ---
   try {
     const now = new Date()
     const expired = await prisma.subscription.findMany({
@@ -99,6 +100,9 @@ export async function POST(request: NextRequest) {
         OR: [
           { status: 'trialing' },
           { status: 'active', cancelledAt: { not: null } },
+          // Pioneers are never charged (no payrexxSubId, see task 0) and
+          // end here unless an admin renewed them (src/lib/pioneer.ts).
+          pioneerExpiryWhere(),
         ],
       },
       select: { id: true, userId: true },
