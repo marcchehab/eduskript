@@ -5,7 +5,7 @@ import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import bcrypt from 'bcryptjs'
 import { createTrialSubscription } from '@/lib/trial'
 import { revalidateUserSites } from '@/lib/billing-revalidate'
-import { grantPioneer, revokePioneer, PioneerGrantError } from '@/lib/pioneer'
+import { grantPioneer, PioneerGrantError } from '@/lib/pioneer'
 
 // GET /api/admin/users/[id] - Get single user
 export async function GET(
@@ -272,9 +272,9 @@ export async function PATCH(
       }
     }
 
-    // Pioneer programme (src/lib/pioneer.ts): 'grant' starts it (open-ended),
-    // 'revoke' ends it now. Nothing else ends it.
-    let pioneerResult: { alreadyPioneer: boolean } | { revoked: boolean } | undefined
+    // Pioneer programme (src/lib/pioneer.ts): open-ended; ended by setting
+    // billingPlan 'free' above, which cancels every active subscription.
+    let pioneerResult: { alreadyPioneer: boolean } | undefined
     if (pioneer === 'grant') {
       try {
         pioneerResult = await grantPioneer(id)
@@ -284,8 +284,6 @@ export async function PATCH(
         }
         throw err
       }
-    } else if (pioneer === 'revoke') {
-      pioneerResult = { revoked: await revokePioneer(id) }
     }
 
     // Public pages cache billingPlan (paid gates, supporter badge)

@@ -141,12 +141,13 @@ export default function AdminPanelPage() {
     title: '',
     password: '',
     isAdmin: false,
-    billingPlan: '',
     requirePasswordReset: true,
     accountType: 'teacher' as 'teacher' | 'student',
     studentPseudonym: '',
-    grantTrial: false,
-    pioneer: '' as '' | 'grant' | 'revoke',
+    // One access control in the edit dialog: '' (no change) | 'free' |
+    // 'trial' | 'pioneer' | 'plan:<slug>'. Mapped to the PATCH body in
+    // handleUpdateUser.
+    access: '',
     trialDays: '14', // overwritten by openEditDialog() with the default trial plan's trialDays
     organizationId: '',
     isTemporary: false,
@@ -358,12 +359,10 @@ export default function AdminPanelPage() {
         title: '',
         password: '',
         isAdmin: false,
-        billingPlan: '',
         requirePasswordReset: true,
         accountType: 'teacher',
         studentPseudonym: '',
-        grantTrial: false,
-        pioneer: '',
+        access: '',
         trialDays: '14', // overwritten by openEditDialog() with the default trial plan's trialDays
         organizationId: defaultOrgId,
         isTemporary: false,
@@ -406,10 +405,11 @@ export default function AdminPanelPage() {
           pageSlug: formData.pageSlug,
           title: formData.title || null,
           isAdmin: formData.isAdmin,
-          ...(formData.billingPlan && { billingPlan: formData.billingPlan }),
           requirePasswordReset: formData.requirePasswordReset,
-          ...(formData.grantTrial && { grantTrial: true, trialDays: Number(formData.trialDays) || 30 }),
-          ...(formData.pioneer && { pioneer: formData.pioneer }),
+          ...(formData.access === 'free' && { billingPlan: 'free' }),
+          ...(formData.access === 'trial' && { grantTrial: true, trialDays: Number(formData.trialDays) || 30 }),
+          ...(formData.access === 'pioneer' && { pioneer: 'grant' }),
+          ...(formData.access.startsWith('plan:') && { billingPlan: formData.access.slice(5) }),
           ...(selectedUser.accountType === 'student' && { isTemporary: formData.isTemporary }),
           ...(formData.newPassword && { newPassword: formData.newPassword }),
         }),
@@ -422,7 +422,7 @@ export default function AdminPanelPage() {
       }
 
       // If we edited the current user's billing plan, refresh the JWT session
-      if (selectedUser.id === session?.user?.id && (formData.billingPlan || formData.pioneer)) {
+      if (selectedUser.id === session?.user?.id && formData.access) {
         await updateSession()
       }
 
@@ -608,12 +608,10 @@ export default function AdminPanelPage() {
       title: user.title || '',
       password: '',
       isAdmin: user.isAdmin,
-      billingPlan: '',
       requirePasswordReset: user.requirePasswordReset,
       accountType: (user.accountType || 'teacher') as 'teacher' | 'student',
       studentPseudonym: user.studentPseudonym || '',
-      grantTrial: false,
-      pioneer: '',
+      access: '',
       trialDays: defaultTrialDays,
       organizationId: '',
       isTemporary: user.isTemporary ?? false,
@@ -1290,69 +1288,47 @@ export default function AdminPanelPage() {
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                 />
               </div>
-              <div>
-                <Label htmlFor="edit-billingPlan">Override Billing Plan?</Label>
-                <select
-                  id="edit-billingPlan"
-                  value={formData.billingPlan}
-                  onChange={(e) => setFormData({ ...formData, billingPlan: e.target.value })}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                >
-                  <option value="">Don&apos;t override (current: {selectedUser?.billingPlan || 'free'}{selectedUser?.subscriptions?.[0] ? `, ${selectedUser.subscriptions[0].status}${selectedUser.subscriptions[0].currentPeriodEnd ? ` until ${new Date(selectedUser.subscriptions[0].currentPeriodEnd).toLocaleDateString('de-CH')}` : ''}` : ''})</option>
-                  <option value="free">free</option>
-                  {availablePlans.map((plan) => (
-                    <option key={plan.id} value={plan.slug}>{plan.slug} ({plan.name})</option>
-                  ))}
-                </select>
-              </div>
               {selectedUser?.accountType !== 'student' && (
                 <div className="rounded-md border p-3 space-y-2">
-                  <Label htmlFor="edit-pioneer">Pioneer programme (free until you revoke it)</Label>
+                  <Label htmlFor="edit-access">Access</Label>
                   <p className="text-xs text-muted-foreground">
-                    {selectedUser?.subscriptions?.[0]?.plan?.slug === PIONEER_PLAN_SLUG
-                      ? 'Pioneer. Stays free until revoked here.'
-                      : 'Not a pioneer. Granting cancels a running trial; a paid Payrexx subscription must be stopped first.'}
+                    Current: {selectedUser ? planBadge(selectedUser).label : 'free'}
+                    {selectedUser?.subscriptions?.[0]?.currentPeriodEnd && selectedUser.subscriptions[0].plan?.slug !== PIONEER_PLAN_SLUG
+                      ? ` until ${new Date(selectedUser.subscriptions[0].currentPeriodEnd).toLocaleDateString('de-CH')}`
+                      : ''}
                   </p>
                   <select
-                    id="edit-pioneer"
-                    value={formData.pioneer}
-                    onChange={(e) => setFormData({ ...formData, pioneer: e.target.value as '' | 'grant' | 'revoke' })}
+                    id="edit-access"
+                    value={formData.access}
+                    onChange={(e) => setFormData({ ...formData, access: e.target.value })}
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   >
                     <option value="">No change</option>
-                    {selectedUser?.subscriptions?.[0]?.plan?.slug === PIONEER_PLAN_SLUG ? (
-                      <option value="revoke">Revoke now (back to free)</option>
-                    ) : (
-                      <option value="grant">Make pioneer</option>
-                    )}
+                    <option value="free">Free (ends any trial, pioneer or granted plan now)</option>
+                    <option value="trial">Trial — Classroom for N days, then free</option>
+                    <option value="pioneer">Pioneer — free until you set it back to Free</option>
+                    {availablePlans.map((plan) => (
+                      <option key={plan.id} value={`plan:${plan.slug}`}>{plan.name} ({plan.slug}) — granted, no payment, no end</option>
+                    ))}
                   </select>
+                  {formData.access === 'trial' && (
+                    <div>
+                      <Label htmlFor="edit-trialDays">Trial duration (days)</Label>
+                      <Input
+                        id="edit-trialDays"
+                        type="number"
+                        value={formData.trialDays}
+                        onChange={(e) => setFormData({ ...formData, trialDays: e.target.value })}
+                        min="1"
+                        max="365"
+                      />
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Replaces the current subscription. Free and Trial also cancel a Payrexx-paid one (no refund); Pioneer refuses while one runs.
+                  </p>
                 </div>
               )}
-              <div className="rounded-md border p-3 space-y-3">
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="edit-grantTrial"
-                    checked={formData.grantTrial}
-                    onCheckedChange={(checked) =>
-                      setFormData({ ...formData, grantTrial: checked as boolean })
-                    }
-                  />
-                  <Label htmlFor="edit-grantTrial">Grant trial (cancels existing subscription)</Label>
-                </div>
-                {formData.grantTrial && (
-                  <div>
-                    <Label htmlFor="edit-trialDays">Trial duration (days)</Label>
-                    <Input
-                      id="edit-trialDays"
-                      type="number"
-                      value={formData.trialDays}
-                      onChange={(e) => setFormData({ ...formData, trialDays: e.target.value })}
-                      min="1"
-                      max="365"
-                    />
-                  </div>
-                )}
-              </div>
               <div className="flex items-center gap-2">
                 <Checkbox
                   id="edit-isAdmin"

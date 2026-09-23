@@ -1,8 +1,9 @@
 /**
  * Pioneer programme: early teachers use Eduskript for free.
  *
- * Fully manual: only an admin grants the status and only an admin ends it
- * (/api/admin/users/[id], `pioneer` field). There is no end date and no
+ * Fully manual: only an admin grants it (/api/admin/users/[id],
+ * `pioneer: 'grant'`) and only an admin ends it (same route, billingPlan
+ * 'free', which cancels all active subscriptions). There is no end date and no
  * automatic expiry. Whether a pioneer still qualifies (uses a skript with a
  * class, gives feedback each semester) is judged by the admin; nothing here
  * checks it.
@@ -99,21 +100,5 @@ export async function grantPioneer(
     })
     await tx.user.update({ where: { id: userId }, data: { billingPlan: PIONEER_PLAN_SLUG } })
     return { alreadyPioneer: false }
-  })
-}
-
-/**
- * End pioneer status now: cancels the pioneer subscription and resets
- * billingPlan to 'free'. Returns false if the user was not a pioneer.
- */
-export async function revokePioneer(userId: string, now: Date = new Date()): Promise<boolean> {
-  return prisma.$transaction(async (tx) => {
-    const { count } = await tx.subscription.updateMany({
-      where: { userId, status: 'active', plan: { slug: PIONEER_PLAN_SLUG } },
-      data: { status: 'cancelled', cancelledAt: now },
-    })
-    if (count === 0) return false
-    await tx.user.update({ where: { id: userId }, data: { billingPlan: 'free' } })
-    return true
   })
 }

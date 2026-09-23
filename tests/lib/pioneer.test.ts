@@ -1,7 +1,7 @@
 /**
  * Pioneer programme (src/lib/pioneer.ts): admin-granted, open-ended free
  * access, stored as an active subscription without end date on the hidden
- * 'pioneer' plan. Prisma is mocked; the tests pin the grant/revoke writes, the
+ * 'pioneer' plan. Prisma is mocked; the tests pin the grant writes, the
  * paid-gate outcome and that neither expiry path nor the renewal charge can
  * touch a pioneer row.
  */
@@ -31,7 +31,6 @@ vi.mock('@/lib/billing-revalidate', () => ({ revalidateUserSites: vi.fn() }))
 
 import {
   grantPioneer,
-  revokePioneer,
   PioneerGrantError,
   PIONEER_PLAN_SLUG,
 } from '@/lib/pioneer'
@@ -102,23 +101,6 @@ describe('grantPioneer', () => {
     await expect(grantPioneer('s', NOW)).rejects.toBeInstanceOf(PioneerGrantError)
     db.user.findUnique.mockResolvedValueOnce(null)
     await expect(grantPioneer('x', NOW)).rejects.toBeInstanceOf(PioneerGrantError)
-  })
-})
-
-describe('revokePioneer', () => {
-  it('cancels the pioneer subscription and resets billingPlan', async () => {
-    db.subscription.updateMany.mockResolvedValue({ count: 1 })
-    expect(await revokePioneer('u1', NOW)).toBe(true)
-    expect(db.subscription.updateMany).toHaveBeenCalledWith({
-      where: { userId: 'u1', status: 'active', plan: { slug: 'pioneer' } },
-      data: { status: 'cancelled', cancelledAt: NOW },
-    })
-    expect(db.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { billingPlan: 'free' } })
-  })
-
-  it('is a no-op for non-pioneers', async () => {
-    expect(await revokePioneer('u1', NOW)).toBe(false)
-    expect(db.user.update).not.toHaveBeenCalled()
   })
 })
 
