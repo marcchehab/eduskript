@@ -9,6 +9,8 @@ import { ChevronDown, ChevronRight, Menu, X, ChevronLeft, NotebookPen } from 'lu
 import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { SupporterBadge } from '@/components/ui/supporter-badge'
+import { PioneerBadge } from '@/components/ui/pioneer-badge'
+import { PIONEER_PLAN_SLUG } from '@/lib/billing'
 import { ReadingProgress } from './reading-progress'
 import { PublicThemeToggle } from './theme-toggle'
 import { ReflowToggle } from './reflow-toggle'
@@ -861,6 +863,12 @@ export function PublicSiteLayout({
                   />
                 </div>
               )}
+            {/* Pioneer badge (src/lib/pioneer.ts), same cached teacher data. */}
+            {!isSidebarCollapsed && teacher.billingPlan === PIONEER_PLAN_SLUG && (
+              <div className="pb-2 flex justify-center">
+                <PioneerBadge href="https://eduskript.org" />
+              </div>
+            )}
             <div className={isSidebarCollapsed ? '' : 'flex items-start justify-between gap-2'}>
               <SyncStatusButton />
               {!isSidebarCollapsed && (

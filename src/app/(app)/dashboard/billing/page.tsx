@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Check, AlertCircle, Loader2, Handshake, GraduationCap, Building2, FileText } from 'lucide-react'
 import { SupporterBadge } from '@/components/ui/supporter-badge'
+import { PioneerBadge } from '@/components/ui/pioneer-badge'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { PLAN_COPY } from '@/lib/plan-copy'
@@ -234,6 +235,7 @@ export default function BillingPage() {
               <div className="flex items-center gap-3 mt-1">
                 <p className="text-2xl font-bold">{subscription.plan.name}</p>
                 {isSupporter(subscription.plan.slug) && <SupporterBadge />}
+                {isPioneer && <PioneerBadge />}
               </div>
             </div>
             <StatusBadge status={subscription.status} />
