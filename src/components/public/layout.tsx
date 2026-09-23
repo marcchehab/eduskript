@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
+import { TERMS_DATE } from '@/components/legal-footer'
 import { useSession } from 'next-auth/react'
 import { ChevronDown, ChevronRight, Menu, X, ChevronLeft, NotebookPen } from 'lucide-react'
 import Image from 'next/image'
@@ -871,7 +872,9 @@ export function PublicSiteLayout({
                   <div>
                     <Link href="/impressum" className="hover:text-muted-foreground" prefetch={false}>Legal</Link>
                     <span className="mx-1.5">·</span>
-                    <Link href="/terms" className="hover:text-muted-foreground" prefetch={false}>Terms (Mar 2026)</Link>
+                    <Link href="/datenschutz" className="hover:text-muted-foreground" prefetch={false}>Privacy</Link>
+                    <span className="mx-1.5">·</span>
+                    <Link href="/terms" className="hover:text-muted-foreground" prefetch={false}>Terms ({TERMS_DATE})</Link>
                   </div>
                   <div>
                     Built with{' '}

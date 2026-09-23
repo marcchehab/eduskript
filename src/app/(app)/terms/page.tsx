@@ -1,53 +1,55 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { LegalFooter } from '@/components/legal-footer'
 
 export const metadata: Metadata = {
-  title: 'Terms of Service – Eduskript',
-  description: 'Terms of Service for the Eduskript education platform',
+  title: 'Nutzungsbedingungen – Eduskript',
+  description: 'Nutzungsbedingungen der Bildungsplattform Eduskript',
 }
 
+// Legal texts are German (the operator and its customers are Swiss schools);
+// the app UI stays English. Bump TERMS_DATE in legal-footer.tsx on changes.
 export default function TermsPage() {
   return (
-    <div className="min-h-screen bg-background">
+    <div lang="de" className="min-h-screen bg-background">
       <div className="max-w-2xl mx-auto px-6 py-16">
         <Link
           href="/"
           className="text-sm text-muted-foreground hover:text-foreground mb-8 inline-block"
         >
-          &larr; Back
+          &larr; Zurück
         </Link>
 
-        <h1 className="text-3xl font-bold mb-2">Terms of Service</h1>
+        <h1 className="text-3xl font-bold mb-2">Nutzungsbedingungen</h1>
         <p className="text-muted-foreground mb-8">Eduskript — Luz Media GmbH</p>
 
         <div className="prose prose-neutral dark:prose-invert space-y-6 [&_p]:mt-4">
           {/* 1 */}
           <section>
-            <h2 className="text-xl font-semibold mt-6 mb-2">1. Scope</h2>
+            <h2 className="text-xl font-semibold mt-6 mb-2">1. Geltungsbereich</h2>
             <p>
-              These Terms of Service govern the use of Eduskript (the
-              &ldquo;Platform&rdquo;), operated by Luz Media GmbH,
-              Untere Vogelsangstrasse 11, 8400 Winterthur, Switzerland (the
-              &ldquo;Operator&rdquo;).
+              Diese Nutzungsbedingungen regeln die Nutzung von Eduskript (die
+              «Plattform»), betrieben von der Luz Media GmbH, Untere
+              Vogelsangstrasse 11, 8400 Winterthur, Schweiz (die
+              «Betreiberin»).
             </p>
             <p>
-              By registering for or using the Platform, you agree to these
-              terms.
+              Mit der Registrierung oder Nutzung der Plattform akzeptierst du
+              diese Bedingungen.
             </p>
           </section>
 
           {/* 2 */}
           <section>
-            <h2 className="text-xl font-semibold mt-6 mb-2">
-              2. The Platform
-            </h2>
+            <h2 className="text-xl font-semibold mt-6 mb-2">2. Die Plattform</h2>
             <p>
-              Eduskript is an open-source education platform where teachers
-              create, publish, and share digital learning materials. Students
-              access these materials through their teachers.
+              Eduskript ist eine Open-Source-Bildungsplattform, auf der
+              Lehrpersonen digitale Lernmaterialien erstellen, veröffentlichen
+              und teilen. Schülerinnen und Schüler greifen über ihre
+              Lehrpersonen auf diese Materialien zu.
             </p>
             <p>
-              The platform source code is licensed under the{' '}
+              Der Quellcode der Plattform steht unter der{' '}
               <a
                 href="https://www.gnu.org/licenses/agpl-3.0.html"
                 className="underline"
@@ -62,357 +64,271 @@ export default function TermsPage() {
 
           {/* 3 */}
           <section>
-            <h2 className="text-xl font-semibold mt-6 mb-2">
-              3. User Roles
-            </h2>
+            <h2 className="text-xl font-semibold mt-6 mb-2">3. Rollen</h2>
+            <p>Die Plattform unterscheidet zwei Arten von Nutzenden:</p>
+
+            <h3 className="text-lg font-medium mt-4 mb-1">Lehrpersonen</h3>
             <p>
-              The Platform distinguishes between two types of users:
+              Lehrpersonen registrieren sich mit einer E-Mail-Adresse oder über
+              ihr Microsoft-Konto. Sie können
+              Inhalte erstellen und veröffentlichen, mit anderen Lehrpersonen
+              zusammenarbeiten, Klassen führen und kostenpflichtige Abos
+              abschliessen.
             </p>
 
-            <h3 className="text-lg font-medium mt-4 mb-1">Teachers</h3>
+            <h3 className="text-lg font-medium mt-4 mb-1">Schülerinnen und Schüler</h3>
             <p>
-              Teachers register with an email address or via an OAuth
-              provider (GitHub, Google, Microsoft). Teachers can create and
-              publish educational content, manage classes, collaborate with
-              other teachers, and subscribe to paid plans.
-            </p>
-
-            <h3 className="text-lg font-medium mt-4 mb-1">Students</h3>
-            <p>
-              Students access the Platform through their school&apos;s OAuth
-              provider. Students do not need to provide a personal email
-              address. Student accounts are identified by a hash-based
-              pseudonym derived from their OAuth credentials, not by their
-              real name or email. However, students may choose a nickname
-              which is stored in clear text and visible to their teachers.
+              Schülerinnen und Schüler melden sich über den Anmeldedienst ihrer
+              Schule an. Sie müssen keine persönliche E-Mail-Adresse angeben.
+              Schülerkonten werden über ein Pseudonym identifiziert, das aus den
+              Anmeldedaten berechnet wird, nicht über den echten Namen oder die
+              E-Mail-Adresse. Einen selbst gewählten Spitznamen speichert die
+              Plattform im Klartext; er ist für die Lehrpersonen sichtbar.
             </p>
             <p>
-              Students can view published content, run interactive exercises,
-              and submit work to their teachers. Students do not create
-              published content and do not pay for the Platform.
+              Schülerinnen und Schüler können veröffentlichte Inhalte ansehen,
+              interaktive Aufgaben lösen und Arbeiten bei ihren Lehrpersonen
+              abgeben. Sie veröffentlichen keine Inhalte und bezahlen nichts.
             </p>
           </section>
 
           {/* 4 */}
           <section>
-            <h2 className="text-xl font-semibold mt-6 mb-2">
-              4. Accounts
-            </h2>
+            <h2 className="text-xl font-semibold mt-6 mb-2">4. Konten</h2>
             <p>
-              Teachers must provide accurate registration information and
-              keep their credentials confidential. The Operator may suspend
-              or delete accounts that violate these terms.
+              Lehrpersonen machen bei der Registrierung korrekte Angaben und
+              halten ihre Zugangsdaten geheim. Die Betreiberin kann Konten
+              sperren oder löschen, die gegen diese Bedingungen verstossen.
             </p>
             <p>
-              Student accounts are managed through their school&apos;s
-              identity provider. Teachers may pre-authorise students via
-              pseudonym for class access.
+              Schülerkonten laufen über den Anmeldedienst der Schule.
+              Lehrpersonen können Schülerinnen und Schüler über das Pseudonym
+              für eine Klasse vorab freischalten.
             </p>
           </section>
 
           {/* 5 */}
           <section>
-            <h2 className="text-xl font-semibold mt-6 mb-2">
-              5. Content and Licensing
-            </h2>
+            <h2 className="text-xl font-semibold mt-6 mb-2">5. Inhalte und Lizenz</h2>
 
-            <h3 className="text-lg font-medium mt-4 mb-1">Ownership</h3>
+            <h3 className="text-lg font-medium mt-4 mb-1">Urheberrecht</h3>
             <p>
-              Teachers retain copyright ownership of the content they
-              create. The Operator does not claim ownership of any
-              user-generated content.
+              Lehrpersonen behalten das Urheberrecht an den Inhalten, die sie
+              erstellen. Die Betreiberin beansprucht kein Eigentum an Inhalten
+              der Nutzenden.
             </p>
 
             <h3 className="text-lg font-medium mt-4 mb-1">
-              Content License — CC BY-NC-SA 4.0
+              Inhaltslizenz — CC BY-NC-SA 4.0
             </h3>
             <p>
-              By publishing content on the Platform, teachers license it
-              under{' '}
+              Mit der Veröffentlichung auf der Plattform stellen Lehrpersonen
+              ihre Inhalte unter die Lizenz{' '}
               <a
-                href="https://creativecommons.org/licenses/by-nc-sa/4.0/"
+                href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.de"
                 className="underline"
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                Creative Commons Attribution-NonCommercial-ShareAlike 4.0
-                International (CC BY-NC-SA 4.0)
+                Creative Commons Namensnennung – Nicht kommerziell – Weitergabe
+                unter gleichen Bedingungen 4.0 International (CC BY-NC-SA 4.0)
               </a>
-              . Published content is publicly accessible on the internet,
-              and anyone may copy and adapt it under the terms of this
-              license:
+              . Veröffentlichte Inhalte sind öffentlich im Internet zugänglich
+              und dürfen von allen unter diesen Bedingungen kopiert und
+              bearbeitet werden:
             </p>
             <ul className="list-disc pl-6 space-y-1">
               <li>
-                <strong>Attribution</strong> — others must credit the original
-                author.
+                <strong>Namensnennung</strong> — die ursprüngliche Autorin bzw.
+                der ursprüngliche Autor muss genannt werden.
               </li>
               <li>
-                <strong>Non-commercial</strong> — content may not be used for
-                commercial purposes (paid courses, commercial textbooks, etc.).
+                <strong>Nicht kommerziell</strong> — keine Nutzung für
+                kommerzielle Zwecke (bezahlte Kurse, kommerzielle Lehrmittel
+                usw.).
               </li>
               <li>
-                <strong>Share-alike</strong> — any derivative work must be
-                shared under the same license. Content cannot be turned into
-                a closed, proprietary product.
+                <strong>Weitergabe unter gleichen Bedingungen</strong> —
+                Bearbeitungen müssen unter derselben Lizenz weitergegeben
+                werden. Inhalte dürfen nicht zu einem geschlossenen,
+                proprietären Produkt gemacht werden.
+              </li>
+            </ul>
+
+            <h3 className="text-lg font-medium mt-4 mb-1">Forken</h3>
+            <p>
+              Zusätzlich zur öffentlichen CC-Lizenz können Lehrpersonen anderen
+              Lehrpersonen erlauben, ihre Inhalte direkt in Eduskript zu forken
+              (kopieren und bearbeiten). Geforkte Inhalte übernehmen die Lizenz
+              CC BY-NC-SA 4.0. Die Plattform setzt automatisch einen Verweis
+              «Geforkt von» auf das Original und erfüllt damit die
+              Namensnennung.
+            </p>
+
+            <h3 className="text-lg font-medium mt-4 mb-1">Rollen bei der Zusammenarbeit</h3>
+            <p>
+              Beim Teilen mit anderen Lehrpersonen wählen Lehrpersonen zwischen
+              zwei Rollen:
+            </p>
+            <ul className="list-disc pl-6 space-y-1">
+              <li>
+                <strong>Autorin/Autor</strong> — Mitautorinnen und Mitautoren
+                teilen das Urheberrecht am Werk gemeinsam.
+              </li>
+              <li>
+                <strong>Mitwirkende</strong> — Mitwirkende dürfen das Werk
+                bearbeiten, erwerben aber kein Urheberrecht. Ihre Beiträge
+                lizenzieren sie den Autorinnen und Autoren unter CC BY-NC-SA
+                4.0.
               </li>
             </ul>
 
             <h3 className="text-lg font-medium mt-4 mb-1">
-              Forking
+              Lizenz an die Betreiberin zur Darstellung
             </h3>
             <p>
-              In addition to the public CC license, teachers may choose to
-              let other teachers on the Platform fork (copy and adapt) their
-              content directly within Eduskript. Forked content inherits the
-              CC BY-NC-SA 4.0 license. The Platform automatically maintains
-              a &ldquo;Forked from&rdquo; link to the original, satisfying
-              the attribution requirement.
+              Mit dem Hochladen von Inhalten erteilen Lehrpersonen der
+              Betreiberin eine nicht exklusive, weltweite Lizenz, die Inhalte
+              auf der Plattform zu speichern, darzustellen und auszuliefern.
+              Diese Lizenz dient ausschliesslich dem Betrieb der Plattform und
+              gibt der Betreiberin kein Eigentum und kein eigenes Nutzungsrecht
+              an den Inhalten.
             </p>
 
             <h3 className="text-lg font-medium mt-4 mb-1">
-              Collaboration Roles
+              Verantwortung für veröffentlichte Inhalte
             </h3>
             <p>
-              When sharing content with collaborators, teachers choose
-              between two roles:
-            </p>
-            <ul className="list-disc pl-6 space-y-1">
-              <li>
-                <strong>Author</strong> — co-authors share joint copyright
-                ownership of the work.
-              </li>
-              <li>
-                <strong>Contributor</strong> — contributors may edit the work
-                but do not gain copyright ownership. Their contributions are
-                licensed to the author(s) under CC BY-NC-SA 4.0.
-              </li>
-            </ul>
-
-            <h3 className="text-lg font-medium mt-4 mb-1">
-              Platform License to Display Content
-            </h3>
-            <p>
-              By uploading content, teachers grant the Operator a
-              non-exclusive, worldwide license to host, display, and serve
-              the content on the Platform. This license exists solely for
-              operating the Platform and does not grant the Operator any
-              ownership or independent right to use the content.
-            </p>
-
-            <h3 className="text-lg font-medium mt-4 mb-1">
-              Responsibility for Published Content
-            </h3>
-            <p>
-              Teachers are responsible for ensuring they have the legal
-              right to publish all content they upload to the Platform.
-              Publishing on Eduskript makes content publicly available on
-              the internet under CC BY-NC-SA 4.0 — teachers must hold
-              sufficient rights to grant this license.
+              Lehrpersonen stellen sicher, dass sie alle hochgeladenen Inhalte
+              veröffentlichen dürfen. Eine Veröffentlichung auf Eduskript macht
+              Inhalte unter CC BY-NC-SA 4.0 öffentlich im Internet zugänglich —
+              Lehrpersonen müssen die Rechte besitzen, diese Lizenz zu
+              erteilen.
             </p>
             <p>
-              In particular: citing a source <em>does not</em> grant the right to
-              republish that source&apos;s content on the internet. Teachers
-              must not upload copyrighted material (e.g. textbook excerpts,
-              images, articles) unless they have explicit permission from
-              the rights holder or the material is already available under a
-              compatible open license.
+              Insbesondere gilt: Eine Quellenangabe gibt <em>nicht</em> das
+              Recht, fremde Inhalte im Internet zu veröffentlichen.
+              Urheberrechtlich geschütztes Material (z. B. Auszüge aus
+              Lehrmitteln, Bilder, Artikel) darf nur hochgeladen werden, wenn
+              eine ausdrückliche Erlaubnis der Rechteinhaber vorliegt oder das
+              Material bereits unter einer kompatiblen offenen Lizenz steht.
             </p>
           </section>
 
           {/* 6 */}
           <section>
-            <h2 className="text-xl font-semibold mt-6 mb-2">
-              6. Free and Paid Plans
-            </h2>
+            <h2 className="text-xl font-semibold mt-6 mb-2">6. Gratis- und Bezahlangebote</h2>
             <p>
-              Teachers may use the Platform on a free plan with limited
-              features. Extended features such as the page builder,
-              collaboration, and class management require a paid
-              subscription.
+              Lehrpersonen können die Plattform gratis nutzen: Skripts und
+              Seiten erstellen und veröffentlichen, den Seiten-Baukasten
+              verwenden, Dateien hochladen und mit anderen Lehrpersonen
+              zusammenarbeiten. Kostenpflichtig sind unter anderem Klassen,
+              Prüfungen, die KI-Funktionen und der Export von Inhalten.
             </p>
             <p>
-              Prices and feature details for each plan are listed on the
-              Platform under &ldquo;Billing&rdquo;. All prices are in Swiss
-              Francs (CHF) and include VAT where applicable.
+              Preise und Leistungen der einzelnen Angebote stehen auf der
+              Plattform unter «Billing». Alle Preise verstehen sich in
+              Schweizer Franken (CHF), inklusive allfälliger Mehrwertsteuer.
             </p>
             <p>
-              Students do not pay for the Platform. Student access is
-              provided through their teacher&apos;s account.
+              Schülerinnen und Schüler bezahlen nichts. Ihr Zugang läuft über
+              das Konto ihrer Lehrperson.
             </p>
           </section>
 
           {/* 7 */}
           <section>
-            <h2 className="text-xl font-semibold mt-6 mb-2">
-              7. Payment
-            </h2>
+            <h2 className="text-xl font-semibold mt-6 mb-2">7. Zahlung</h2>
             <p>
-              Payments are processed by Payrexx AG. By subscribing to a paid
-              plan, teachers authorise recurring charges at the selected
-              interval (monthly or yearly).
+              Zahlungen wickelt die Payrexx AG ab. Mit dem Abschluss eines Abos
+              ermächtigen Lehrpersonen die Betreiberin, den Betrag im gewählten
+              Intervall (monatlich oder jährlich) wiederkehrend zu belasten.
             </p>
             <p>
-              Subscriptions renew automatically unless cancelled before the
-              end of the current billing period.
+              Abos verlängern sich automatisch, wenn sie nicht vor Ablauf der
+              laufenden Periode gekündigt werden.
             </p>
           </section>
 
           {/* 8 */}
           <section>
-            <h2 className="text-xl font-semibold mt-6 mb-2">
-              8. Cancellation
-            </h2>
+            <h2 className="text-xl font-semibold mt-6 mb-2">8. Kündigung</h2>
             <p>
-              Paid subscriptions can be cancelled at any time via the
-              Platform under &ldquo;Billing&rdquo;. Cancellation takes effect
-              at the end of the current billing period. No refunds are issued
-              for the remaining period.
+              Abos können jederzeit auf der Plattform unter «Billing» gekündigt
+              werden. Die Kündigung wirkt auf das Ende der laufenden Periode.
+              Für die Restlaufzeit gibt es keine Rückerstattung.
             </p>
             <p>
-              After cancellation, the account reverts to the free plan.
-              Published content remains publicly accessible.
+              Nach der Kündigung wechselt das Konto ins Gratisangebot.
+              Veröffentlichte Inhalte bleiben öffentlich zugänglich.
             </p>
           </section>
 
           {/* 9 */}
           <section>
-            <h2 className="text-xl font-semibold mt-6 mb-2">
-              9. Availability
-            </h2>
+            <h2 className="text-xl font-semibold mt-6 mb-2">9. Verfügbarkeit</h2>
             <p>
-              The Operator aims for high availability but cannot guarantee
-              uninterrupted access. Maintenance and technical issues may
-              cause temporary disruptions.
+              Die Betreiberin strebt eine hohe Verfügbarkeit an, kann aber keinen
+              unterbrechungsfreien Zugang garantieren. Wartungsarbeiten und
+              technische Probleme können vorübergehende Unterbrüche verursachen.
             </p>
           </section>
 
           {/* 10 */}
           <section>
-            <h2 className="text-xl font-semibold mt-6 mb-2">
-              10. Liability
-            </h2>
+            <h2 className="text-xl font-semibold mt-6 mb-2">10. Haftung</h2>
             <p>
-              The Operator&apos;s liability is excluded to the extent
-              permitted by law. In particular, the Operator is not liable
-              for:
+              Die Haftung der Betreiberin ist ausgeschlossen, soweit das Gesetz
+              es zulässt. Insbesondere haftet die Betreiberin nicht für:
             </p>
             <ul className="list-disc pl-6 space-y-1">
-              <li>Data loss or corruption</li>
-              <li>Lost profits or indirect damages</li>
-              <li>Damages arising from user-generated content</li>
-              <li>Platform outages or disruptions</li>
+              <li>Datenverlust oder -beschädigung</li>
+              <li>Entgangenen Gewinn oder indirekte Schäden</li>
+              <li>Schäden aus Inhalten der Nutzenden</li>
+              <li>Ausfälle oder Unterbrüche der Plattform</li>
             </ul>
             <p>
-              Liability for intentional or grossly negligent conduct is
-              reserved.
+              Die Haftung für vorsätzliches oder grobfahrlässiges Verhalten
+              bleibt vorbehalten.
             </p>
           </section>
 
           {/* 11 */}
           <section>
-            <h2 className="text-xl font-semibold mt-6 mb-2">
-              11. Data Protection
-            </h2>
-
-            <h3 className="text-lg font-medium mt-4 mb-1">
-              Data Collected
-            </h3>
+            <h2 className="text-xl font-semibold mt-6 mb-2">11. Datenschutz</h2>
             <p>
-              The Platform processes personal data in accordance with Swiss
-              data protection law (DSG).
-            </p>
-            <ul className="list-disc pl-6 space-y-1">
-              <li>
-                <strong>Teachers:</strong> name, email address, content,
-                settings.
-              </li>
-              <li>
-                <strong>Students:</strong> during authentication, the
-                Platform receives the student&apos;s email address from their
-                school&apos;s OAuth provider. This email is used solely to
-                generate an irreversible hash-based pseudonym (HMAC) and is
-                not stored. The Platform retains only the pseudonym and an
-                optional nickname chosen by the student (stored in clear
-                text, visible to teachers).
-              </li>
-              <li>
-                <strong>Payment data:</strong> processed by Payrexx AG. The
-                Operator does not store credit card details.
-              </li>
-              <li>
-                <strong>Technical data:</strong> IP addresses are used
-                transiently for rate limiting but are not stored
-                persistently. No browser fingerprinting or device tracking
-                is performed.
-              </li>
-            </ul>
-
-            <h3 className="text-lg font-medium mt-4 mb-1">Purpose</h3>
-            <p>
-              Personal data is used exclusively for operating and improving
-              the Platform and for processing payments. Data is not sold or
-              shared with third parties beyond what is necessary for platform
-              operation.
-            </p>
-
-            <h3 className="text-lg font-medium mt-4 mb-1">
-              Student Privacy
-            </h3>
-            <p>
-              The Platform is designed with student privacy as a priority.
-              Student identities are pseudonymised at the point of
-              registration. Teachers may optionally allow students to
-              consent to revealing their identity within a class context
-              (identity consent). Anonymous class access is supported.
-            </p>
-
-            <h3 className="text-lg font-medium mt-4 mb-1">Your Rights</h3>
-            <p>
-              You have the right to access, correct, and delete your
-              personal data. Requests should be sent to{' '}
-              <a href="mailto:kontakt@luzmedia.ch" className="underline">
-                kontakt@luzmedia.ch
-              </a>
-              .
+              Wie die Plattform Personendaten bearbeitet, welche Anbieter
+              beteiligt sind und wo die Daten liegen, steht in der{' '}
+              <Link href="/datenschutz" className="underline">
+                Datenschutzerklärung
+              </Link>
+              . Sie ist Bestandteil dieser Nutzungsbedingungen.
             </p>
           </section>
 
           {/* 12 */}
           <section>
-            <h2 className="text-xl font-semibold mt-6 mb-2">
-              12. Changes to These Terms
-            </h2>
+            <h2 className="text-xl font-semibold mt-6 mb-2">12. Änderungen</h2>
             <p>
-              The Operator may update these terms at any time. Changes
-              are communicated through the Platform — the revision date is
-              displayed in the footer of every page. Continued use of the
-              Platform after an update constitutes acceptance of the revised
-              terms.
+              Die Betreiberin kann diese Bedingungen jederzeit anpassen.
+              Änderungen werden auf der Plattform mitgeteilt — das Datum der
+              aktuellen Fassung steht in der Fusszeile jeder Seite. Wer die
+              Plattform nach einer Änderung weiter nutzt, akzeptiert die neue
+              Fassung.
             </p>
           </section>
 
           {/* 13 */}
           <section>
-            <h2 className="text-xl font-semibold mt-6 mb-2">
-              13. Governing Law and Jurisdiction
-            </h2>
+            <h2 className="text-xl font-semibold mt-6 mb-2">13. Anwendbares Recht und Gerichtsstand</h2>
             <p>
-              These terms are governed by Swiss law. The exclusive place of
-              jurisdiction is Zürich, Switzerland.
+              Es gilt Schweizer Recht. Ausschliesslicher Gerichtsstand ist
+              Zürich, Schweiz.
             </p>
           </section>
         </div>
 
-        <p className="text-sm text-muted-foreground mt-12">
-          Last updated: March 2026
-        </p>
-
-        <footer className="mt-16 pt-4 border-t text-center text-xs text-muted-foreground/50">
-          <Link href="/impressum" className="hover:text-muted-foreground">Legal Notice</Link>
-          <span className="mx-2">·</span>
-          <Link href="/terms" className="hover:text-muted-foreground">Terms (Mar 2026)</Link>
-        </footer>
+        <LegalFooter />
       </div>
     </div>
   )

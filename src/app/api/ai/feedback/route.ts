@@ -32,7 +32,7 @@ import { prisma } from '@/lib/prisma'
 import { checkPagePermissions } from '@/lib/permissions'
 import { extractFeedbackContext } from '@/lib/ai/feedback-context'
 import { loadSolutionImage } from '@/lib/ai/feedback-solution'
-import { OPENROUTER_NO_TRAINING } from '@/lib/ai/openrouter'
+import { OPENROUTER_GEMINI_STUDENT_DATA } from '@/lib/ai/openrouter'
 import OpenAI from 'openai'
 
 export const dynamic = 'force-dynamic'
@@ -270,8 +270,11 @@ export async function POST(request: Request) {
             { role: 'user', content: userContent },
           ],
           stream: true,
-          // No OPENROUTER_PROVIDERS pin here (see header), only the no-training filter.
-          ...(OPENROUTER_NO_TRAINING as Record<string, unknown>),
+          // No OPENROUTER_PROVIDERS pin here (see header). zdr: the image is
+          // student work; Vertex standard → Vertex priority, never AI Studio
+          // (retains prompts). Assumes a Gemini model — a non-Google
+          // OPENROUTER_VISION_MODEL would find no endpoint.
+          ...(OPENROUTER_GEMINI_STUDENT_DATA as Record<string, unknown>),
         })
 
         for await (const chunk of aiStream) {

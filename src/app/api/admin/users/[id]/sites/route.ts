@@ -7,7 +7,7 @@ import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 // signup (see src/lib/auth.ts).
 const RESERVED_SLUGS = new Set([
   'auth', 'api', 'dashboard', 'admin', 'org', '_next', 'favicon.ico',
-  'robots.txt', 'sitemap.xml', 'terms', 'impressum',
+  'robots.txt', 'sitemap.xml', 'terms', 'impressum', 'datenschutz', 'privacy',
 ])
 
 /**

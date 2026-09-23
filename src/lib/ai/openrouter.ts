@@ -13,11 +13,15 @@
  * unavailable." Provider names are case-sensitive and match the names on
  * https://openrouter.ai (Cerebras, Groq, Google, DeepInfra, Anthropic, etc.).
  *
- * Every request also sets `data_collection: 'deny'`: OpenRouter then only
- * routes to providers that don't train on or store prompts (`zdr: true` would
- * be stricter still). It filters the pool, fallbacks still happen within it.
- * Student work (feedback images, exam answers) goes through here, and the AVV
- * for schools promises no training.
+ * Every request also sets `data_collection: 'deny'`: OpenRouter then skips
+ * providers that train on prompts. That alone does NOT exclude providers that
+ * retain prompts — e.g. Google AI Studio keeps them 55 days, GMICloud retains
+ * too (OpenRouter provider list, checked 2026-09-23). Routes that send student
+ * work (AI feedback, AI scoring/rubrics) therefore also set `zdr: true`, which
+ * limits the pool to zero-data-retention endpoints: for gemini-3.8-flash that
+ * is Google Vertex only, for deepseek-v4-flash DigitalOcean/DeepInfra among
+ * others. The privacy policy (/datenschutz) and the AVV template promise
+ * "no training, no storage" for student data — keep zdr on those routes.
  */
 
 // A type alias (not an interface) so it casts cleanly to Record<string, unknown>
@@ -25,6 +29,7 @@
 export type OpenrouterProviderRouting = {
   provider: {
     data_collection: 'deny'
+    zdr?: boolean
     order?: string[]
     allow_fallbacks?: boolean
   }
@@ -36,31 +41,61 @@ export const OPENROUTER_NO_TRAINING: OpenrouterProviderRouting = {
   provider: { data_collection: 'deny' },
 }
 
+/** No training AND zero data retention, for requests carrying student work. */
+export const OPENROUTER_STUDENT_DATA: OpenrouterProviderRouting = {
+  provider: { data_collection: 'deny', zdr: true },
+}
+
+/**
+ * Gemini vision (AI feedback on handwriting). zdr leaves Google Vertex only,
+ * and OpenRouter's default pool holds just the standard `google-vertex/global`
+ * endpoint — flex/priority tier endpoints are only used when named (see
+ * openrouter.ai/docs/guides/features/service-tiers, "How Routing Works").
+ * Standard Vertex had 94.7% uptime over 24h on 2026-09-23 (AI Studio 99.9%, but
+ * it retains prompts 55 days), so the priority endpoint (99.8%, ~1.8x price) is
+ * named as fallback; it's billed only on requests the standard one fails.
+ */
+export const OPENROUTER_GEMINI_STUDENT_DATA: OpenrouterProviderRouting = {
+  provider: {
+    data_collection: 'deny',
+    zdr: true,
+    order: ['google-vertex/global', 'google-vertex/global/priority'],
+    allow_fallbacks: false,
+  },
+}
+
 /**
  * Known-healthy provider order for `deepseek/deepseek-v4-flash` (checked
  * 2026-08-21 via OpenRouter's endpoints API). Excludes providers with poor
  * uptime at the time: Azure (41.7% uptime/30m), DeepSeek official (92.4%),
- * SiliconFlow (88.2%). Re-check periodically — provider health drifts.
+ * SiliconFlow (88.2%). 2026-09-23: dropped GMICloud (retains prompts) and
+ * CoreWeave (no longer serves this model). Both remaining providers are
+ * US-based, no-training, zero-retention. They are listed as sub-processors on
+ * /datenschutz — update that list when changing this one.
  */
-export const DEEPSEEK_V4_FLASH_PROVIDERS = ['DigitalOcean', 'DeepInfra', 'GMICloud', 'CoreWeave']
+export const DEEPSEEK_V4_FLASH_PROVIDERS = ['DigitalOcean', 'DeepInfra']
 
 export function openrouterProviderRouting(
-  defaultOrder?: string[]
+  defaultOrder?: string[],
+  opts: { zdr?: boolean } = {}
 ): OpenrouterProviderRouting {
   const raw = process.env.OPENROUTER_PROVIDERS
   const providers = raw
     ? raw.split(',').map(s => s.trim()).filter(Boolean)
     : (defaultOrder ?? [])
 
-  if (providers.length === 0) return OPENROUTER_NO_TRAINING
+  const base = opts.zdr ? OPENROUTER_STUDENT_DATA : OPENROUTER_NO_TRAINING
+  if (providers.length === 0) return base
 
   return {
     provider: {
-      data_collection: 'deny',
+      ...base.provider,
       order: providers,
       // Fall back to other providers if every named provider is unavailable —
-      // worse than the pinned ones but better than failing the request.
-      allow_fallbacks: true,
+      // worse than the pinned ones but better than failing the request. Not for
+      // student data: the fallback pool holds providers that /datenschutz does
+      // not list as sub-processors, so a request fails instead (scoring retries).
+      allow_fallbacks: !opts.zdr,
     },
   }
 }

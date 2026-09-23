@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { TERMS_DATE } from '@/components/legal-footer'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
@@ -409,7 +410,9 @@ export function DashboardSidebar() {
           <div className="px-3 py-3 text-center text-[11px] text-muted-foreground/40">
             <Link href="/impressum" className="hover:text-muted-foreground">Legal</Link>
             <span className="mx-1.5">·</span>
-            <Link href="/terms" className="hover:text-muted-foreground">Terms (Mar 2026)</Link>
+            <Link href="/datenschutz" className="hover:text-muted-foreground">Privacy</Link>
+            <span className="mx-1.5">·</span>
+            <Link href="/terms" className="hover:text-muted-foreground">Terms ({TERMS_DATE})</Link>
           </div>
         )}
       </div>

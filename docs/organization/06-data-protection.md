@@ -8,15 +8,15 @@ Eduskript is built for use in schools, where the data being handled belongs to t
 
 Eduskript is operated under the **Swiss Federal Act on Data Protection (revFADP / revDSG)**. Because all primary data is hosted within the EU, processing is also aligned with the **EU General Data Protection Regulation (GDPR)**.
 
-Switzerland holds an EU adequacy decision, and the hosting providers below are subject to Swiss and EU law — not the US CLOUD Act.
+The EU counts as a country with adequate data protection under Swiss law. The database, however, runs on infrastructure of US companies (Neon, AWS) in Frankfurt, which are in principle subject to the US CLOUD Act.
 
 ## Where Data Is Stored
 
-All primary data — the database and uploaded files — is hosted on **European infrastructure operated by French companies**. No US hyperscaler (AWS, Google Cloud, Azure) is used for storage or compute.
+All primary data — the database and uploaded files — is stored in the EU. The authoritative, dated list of all sub-processors (including payments, video and AI providers) is in the [privacy policy](https://eduskript.org/datenschutz#unterauftragsbearbeiter) (German).
 
 | Sub-processor | Purpose | Location | Company |
 |---------------|---------|----------|---------|
-| Koyeb | Application hosting + managed PostgreSQL database | EU region | Koyeb SAS (France) |
+| Koyeb | Application hosting + managed PostgreSQL database (run on Neon/AWS) | Frankfurt (`fra`) | Koyeb SAS (France) |
 | Scaleway | Object storage (uploaded files, images) | Paris (`fr-par`) | Scaleway SAS (France) |
 | Brevo | Transactional email (verification, notifications) | EU | Sendinblue SAS / Brevo (France) |
 
@@ -44,7 +44,7 @@ Student accounts are **pseudonymous by design**. The following is **never** stor
 
 Instead, a student is identified by:
 
-- A **one-way pseudonym** — an irreversible SHA-256 hash derived from their sign-in identity. The original email cannot be recovered from it.
+- A **one-way pseudonym** — an irreversible HMAC (SHA-256 with a secret key) derived from their sign-in identity. The original email cannot be recovered from it.
 - A randomly generated, stable display nickname.
 - The OAuth provider identifier used to recognise returning logins.
 
@@ -54,7 +54,7 @@ This lets a teacher match a student to a class roster (by pre-authorising the sa
 
 ## Sign-In and Third-Party Identity
 
-Eduskript supports signing in through external identity providers. Some of these are operated by US companies (Microsoft, Google, GitHub). Important boundaries:
+Eduskript supports signing in through external identity providers. Some of these are operated by US companies (Microsoft). Important boundaries:
 
 - These providers are used **only when a user actively chooses them**. Email/password sign-in never involves them.
 - Eduskript receives only the minimal profile data needed to create the account (and for students, even that is reduced to a pseudonym as described above).

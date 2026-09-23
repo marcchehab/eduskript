@@ -15,6 +15,11 @@
 import OpenAI from 'openai'
 import { openrouterProviderRouting, DEEPSEEK_V4_FLASH_PROVIDERS } from './openrouter'
 import { extractCriterionRegex, runCriterionCheck, stripInlineRegex } from '@/lib/scoring/regex-check'
+import { createLogger } from '@/lib/logger'
+
+// Raw model output can quote student work, so it only reaches the server log
+// when DEBUG=ai:scoring is set. The always-on error lines omit `raw`.
+const log = createLogger('ai:scoring')
 
 /**
  * Tolerant JSON extraction for model output. Reasoning models (e.g. minimax)
@@ -131,8 +136,10 @@ async function complete(
       { role: 'user', content: user },
     ],
     ...opts,
+    // zdr: rubric samples and scored submissions are student work.
     ...(openrouterProviderRouting(
-      model === 'deepseek/deepseek-v4-flash' ? DEEPSEEK_V4_FLASH_PROVIDERS : undefined
+      model === 'deepseek/deepseek-v4-flash' ? DEEPSEEK_V4_FLASH_PROVIDERS : undefined,
+      { zdr: true },
     ) as Record<string, unknown>),
   })
   // Reasoning models (minimax) put their chain-of-thought in message.reasoning and
@@ -514,9 +521,11 @@ export async function scoreSubmission(
     const parsed = parseAiScore(text, aiCriteria)
     if ('error' in parsed) {
       const debug = aiDebug('score', text, diag)
-      // Server log (Koyeb). The same detail rides back to the browser console when
-      // the teacher enables the `ai:*` debug namespace (see the route + panel).
-      console.error('[scoring] parse failed', debug)
+      // Server log (Koyeb) without `raw`; the raw text only with DEBUG=ai:scoring.
+      // The full detail rides back to the browser console when the teacher
+      // enables the `ai:*` debug namespace (see the route + panel).
+      console.error('[scoring] parse failed', { ...debug, raw: undefined })
+      log('parse failed, raw model output', debug.raw)
       return { ...parsed, debug }
     }
     aiResult = parsed

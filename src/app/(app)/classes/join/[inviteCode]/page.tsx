@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useSession } from 'next-auth/react'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -343,6 +344,14 @@ export default function JoinClassPage() {
               Your email is never stored. Only a pseudonymous identifier is used to track your progress.
             </p>
           )}
+
+          {/* AI feedback/scoring requests carry no identifiers (see /datenschutz,
+              "KI-Funktionen"), so the only way a name reaches the AI provider
+              is the student writing it into the work itself. */}
+          <p className="text-xs text-center text-muted-foreground">
+            AI feedback receives your work, never your name — so leave your name off it.{' '}
+            <Link href="/datenschutz" className="underline hover:text-foreground">Privacy</Link>
+          </p>
         </CardContent>
       </Card>
     </div>

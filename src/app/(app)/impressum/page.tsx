@@ -1,89 +1,91 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { LegalFooter } from "@/components/legal-footer";
 
 export const metadata: Metadata = {
-  title: "Legal Notice – Eduskript",
-  description: "Legal notice and company information for Eduskript",
+  title: "Impressum – Eduskript",
+  description: "Impressum und Angaben zur Betreiberin von Eduskript",
 };
 
 export default function ImpressumPage() {
   return (
-    <div className="min-h-screen bg-background">
+    <div lang="de" className="min-h-screen bg-background">
       <div className="max-w-2xl mx-auto px-6 py-16">
         <Link
           href="/"
           className="text-sm text-muted-foreground hover:text-foreground mb-8 inline-block"
         >
-          &larr; Back
+          &larr; Zurück
         </Link>
 
-        <h1 className="text-3xl font-bold mb-2">Legal Notice</h1>
+        <h1 className="text-3xl font-bold mb-2">Impressum</h1>
         <p className="text-muted-foreground mb-8">
-          Eduskript is operated by Luz Media GmbH, based in Winterthur,
-          Switzerland.
+          Eduskript wird von der Luz Media GmbH mit Sitz in Winterthur,
+          Schweiz, betrieben.
         </p>
 
         <div className="prose prose-neutral dark:prose-invert space-y-6 [&_p]:mt-4">
           <section>
             <p>
-              Official company address:
+              Sitz:
               <br />
               Luz Media GmbH
               <br />
               Untere Vogelsangstrasse 11
               <br />
-              8400 Winterthur, Switzerland
+              8400 Winterthur, Schweiz
             </p>
             <p>
-              Office and mail:
+              Büro und Postadresse:
               <br />
               Luz Media GmbH
               <br />
               Altwiesenstrasse 63
               <br />
-              8051 Zürich, Switzerland
+              8051 Zürich, Schweiz
             </p>
             <p>
-              Email:{" "}
+              E-Mail:{" "}
               <a href="mailto:kontakt@luzmedia.ch" className="underline">
                 kontakt@luzmedia.ch
               </a>
               <br />
               UID: CHE-261.508.926
               <br />
-              Commercial register: Canton of Zürich
+              Handelsregister: Kanton Zürich
             </p>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mt-6 mb-2">Disclaimer</h2>
+            <h2 className="text-xl font-semibold mt-6 mb-2">Haftungsausschluss</h2>
             <p>
-              The content on this website is prepared with care. However, Luz
-              Media GmbH makes no warranty as to the accuracy, completeness, or
-              timeliness of the information provided.
+              Die Inhalte dieser Website werden mit Sorgfalt erstellt. Die Luz
+              Media GmbH übernimmt jedoch keine Gewähr für die Richtigkeit,
+              Vollständigkeit und Aktualität der Informationen.
             </p>
             <p>
-              Liability claims against Luz Media GmbH for damages of a material
-              or immaterial nature arising from the use or non-use of the
-              information provided are excluded, unless caused by intentional or
-              grossly negligent conduct.
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-xl font-semibold mt-6 mb-2">External Links</h2>
-            <p>
-              This website may contain links to third-party websites. Luz Media
-              GmbH has no control over and assumes no responsibility for the
-              content of external sites. Access to and use of such websites is
-              at the user&apos;s own risk.
+              Haftungsansprüche gegen die Luz Media GmbH wegen Schäden
+              materieller oder immaterieller Art, die aus der Nutzung oder
+              Nichtnutzung der Informationen entstehen, sind ausgeschlossen,
+              sofern sie nicht auf vorsätzlichem oder grobfahrlässigem
+              Verhalten beruhen.
             </p>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mt-6 mb-2">Copyright</h2>
+            <h2 className="text-xl font-semibold mt-6 mb-2">Externe Links</h2>
             <p>
-              The Eduskript platform software is licensed under the{" "}
+              Diese Website kann Links auf Websites Dritter enthalten. Auf deren
+              Inhalte hat die Luz Media GmbH keinen Einfluss und übernimmt dafür
+              keine Verantwortung. Der Zugriff auf diese Websites erfolgt auf
+              eigene Gefahr.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-semibold mt-6 mb-2">Urheberrecht</h2>
+            <p>
+              Die Software der Plattform Eduskript steht unter der{" "}
               <a
                 href="https://www.gnu.org/licenses/agpl-3.0.html"
                 className="underline"
@@ -95,50 +97,39 @@ export default function ImpressumPage() {
               .
             </p>
             <p>
-              Teachers retain copyright ownership of their content. By
-              publishing on the Platform, they license it under{" "}
+              Lehrpersonen behalten das Urheberrecht an ihren Inhalten. Mit der
+              Veröffentlichung auf der Plattform stellen sie diese unter die
+              Lizenz{" "}
               <a
-                href="https://creativecommons.org/licenses/by-nc-sa/4.0/"
+                href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.de"
                 className="underline"
                 target="_blank"
                 rel="noopener noreferrer"
               >
                 CC BY-NC-SA 4.0
               </a>
-              , meaning others may copy and adapt it for non-commercial purposes
-              with attribution. See our{" "}
+              : Andere dürfen sie mit Namensnennung für nicht kommerzielle
+              Zwecke kopieren und bearbeiten. Details stehen in den{" "}
               <Link href="/terms" className="underline">
-                Terms of Service
-              </Link>{" "}
-              for details.
+                Nutzungsbedingungen
+              </Link>
+              .
             </p>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mt-6 mb-2">Data Protection</h2>
+            <h2 className="text-xl font-semibold mt-6 mb-2">Datenschutz</h2>
             <p>
-              Information on how we handle personal data can be found in our{" "}
-              <Link href="/terms" className="underline">
-                Terms of Service
+              Wie wir Personendaten bearbeiten, steht in der{" "}
+              <Link href="/datenschutz" className="underline">
+                Datenschutzerklärung
               </Link>
-              , section Data Protection.
+              .
             </p>
           </section>
         </div>
 
-        <p className="text-sm text-muted-foreground mt-12">
-          Last updated: March 2026
-        </p>
-
-        <footer className="mt-16 pt-4 border-t text-center text-xs text-muted-foreground/50">
-          <Link href="/impressum" className="hover:text-muted-foreground">
-            Legal Notice
-          </Link>
-          <span className="mx-2">·</span>
-          <Link href="/terms" className="hover:text-muted-foreground">
-            Terms (Mar 2026)
-          </Link>
-        </footer>
+        <LegalFooter />
       </div>
     </div>
   );

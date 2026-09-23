@@ -165,7 +165,7 @@ export default function ConsentPage() {
 
           <div className="text-xs text-center text-muted-foreground">
             By continuing, you agree to our{' '}
-            <Link href="/privacy" className="underline hover:text-foreground">
+            <Link href="/datenschutz" className="underline hover:text-foreground">
               Privacy Policy
             </Link>{' '}
             and{' '}
