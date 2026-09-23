@@ -56,7 +56,8 @@ const COPY = {
     dismiss: "Schliessen",
     congrats:
       "Gratuliere! Du kennst jetzt das Grundprinzip von Eduskript, und wir haben deine Testzeit verdoppelt.",
-    manual: "Mehr erfahren? Zum Handbuch (Englisch)",
+    manual: "Mehr erfahren? Zum Benutzerhandbuch",
+    manualUrl: "https://eduskript.org/c/erste-schritte",
     nice: "Super",
     jump: "Zu diesem Schritt springen",
   },
@@ -68,6 +69,7 @@ const COPY = {
     congrats:
       "Congratulations! You now understand the basic idea of Eduskript and we doubled your trial time.",
     manual: "Want to go deeper? Read the User Manual",
+    manualUrl: "https://eduskript.org/en/first-steps",
     nice: "Nice",
     jump: "Jump to this step",
   },
@@ -285,7 +287,7 @@ export function OnboardingQuestWidget() {
             {t.congrats}
           </p>
           <a
-            href="https://eduskript.org/en/first-steps"
+            href={t.manualUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
