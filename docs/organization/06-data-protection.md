@@ -10,6 +10,8 @@ Eduskript is operated under the **Swiss Federal Act on Data Protection (revFADP 
 
 The EU counts as a country with adequate data protection under Swiss law. The database, however, runs on infrastructure of US companies (Neon, AWS) in Frankfurt, which are in principle subject to the US CLOUD Act.
 
+> For school leadership and IT there is a [one-page overview](07-for-school-leadership-and-it.md) and a [data processing agreement template](08-dpa-template.md).
+
 ## Where Data Is Stored
 
 All primary data — the database and uploaded files — is stored in the EU. The authoritative, dated list of all sub-processors (including payments, video and AI providers) is in the [privacy policy](https://eduskript.org/datenschutz#unterauftragsbearbeiter) (German).
