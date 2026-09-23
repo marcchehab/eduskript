@@ -45,9 +45,11 @@ function writeLocale(locale: UiLocale) {
   listeners.forEach((listener) => listener())
 }
 
-const OPTIONS: { value: UiLocale; flag: string }[] = [
-  { value: 'de', flag: '/flags/de-ch.png' },
-  { value: 'en', flag: '/flags/en-gb.svg' },
+// Plain Swiss flag for German: the combined de-ch.png is unreadable at this
+// size. Swiss flag is square, so it gets its own dimensions.
+const OPTIONS: { value: UiLocale; flag: string; width: number; height: number }[] = [
+  { value: 'de', flag: '/flags/ch.svg', width: 14, height: 14 },
+  { value: 'en', flag: '/flags/en-gb.svg', width: 21, height: 14 },
 ]
 
 /**
@@ -79,7 +81,7 @@ export function UiLocaleSwitcher({ className }: { className?: string }) {
           <SelectItem key={o.value} value={o.value}>
             <span className="flex items-center gap-1.5 text-xs">
               {/* eslint-disable-next-line @next/next/no-img-element -- tiny static flag; Next's image optimizer refuses local SVGs */}
-              <img src={o.flag} alt="" width={16} height={11} className="rounded-xs object-cover" />
+              <img src={o.flag} alt="" width={o.width} height={o.height} className="rounded-xs object-cover" />
               {o.value.toUpperCase()}
             </span>
           </SelectItem>
