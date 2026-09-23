@@ -5,11 +5,12 @@ import Link from 'next/link'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { KeyRound, Mailbox } from 'lucide-react'
+import { AccountDataCard } from '@/components/dashboard/account-data-card'
 
 // Account settings = user-wide, not tied to a single site. Per-site settings
 // (page identity, sidebar/typography, AI prompt, domains) moved to
 // /dashboard/site/[siteId]/settings when multi-site landed. This page keeps the
-// account-level items: connected apps and mail hooks.
+// account-level items: connected apps, mail hooks, data export / deletion.
 export default async function SettingsPage() {
   const session = await getServerSession(authOptions)
 
@@ -68,6 +69,8 @@ export default async function SettingsPage() {
             </Link>
           </CardContent>
         </Card>
+
+        <AccountDataCard accountType="teacher" />
       </div>
     </div>
   )

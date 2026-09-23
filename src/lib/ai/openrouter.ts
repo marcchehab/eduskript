@@ -19,8 +19,8 @@
  * too (OpenRouter provider list, checked 2026-09-23). Routes that send student
  * work (AI feedback, AI scoring/rubrics) therefore also set `zdr: true`, which
  * limits the pool to zero-data-retention endpoints: for gemini-3.8-flash that
- * is Google Vertex only, for deepseek-v4-flash DigitalOcean/DeepInfra among
- * others. The privacy policy (/datenschutz) and the AVV template promise
+ * is Google Vertex only, for deepseek-v4-flash DigitalOcean among others
+ * (we pin DigitalOcean only). The privacy policy (/datenschutz) and the AVV template promise
  * "no training, no storage" for student data — keep zdr on those routes.
  */
 
@@ -68,12 +68,15 @@ export const OPENROUTER_GEMINI_STUDENT_DATA: OpenrouterProviderRouting = {
  * Known-healthy provider order for `deepseek/deepseek-v4-flash` (checked
  * 2026-08-21 via OpenRouter's endpoints API). Excludes providers with poor
  * uptime at the time: Azure (41.7% uptime/30m), DeepSeek official (92.4%),
- * SiliconFlow (88.2%). 2026-09-23: dropped GMICloud (retains prompts) and
- * CoreWeave (no longer serves this model). Both remaining providers are
- * US-based, no-training, zero-retention. They are listed as sub-processors on
- * /datenschutz — update that list when changing this one.
+ * SiliconFlow (88.2%). 2026-09-23: dropped GMICloud (retains prompts),
+ * CoreWeave (no longer serves this model) and DeepInfra (not certified under
+ * the Swiss-U.S. Data Privacy Framework; DigitalOcean is). DigitalOcean is
+ * no-training, zero-retention, 99.94% uptime/24h at the time. It is listed as
+ * a sub-processor on /datenschutz — update that list when changing this one.
+ * With zdr (student data) there is no fallback: if DigitalOcean is down, AI
+ * scoring fails and the route retries. Teacher-content routes still fall back.
  */
-export const DEEPSEEK_V4_FLASH_PROVIDERS = ['DigitalOcean', 'DeepInfra']
+export const DEEPSEEK_V4_FLASH_PROVIDERS = ['DigitalOcean']
 
 export function openrouterProviderRouting(
   defaultOrder?: string[],

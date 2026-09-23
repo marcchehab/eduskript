@@ -6,6 +6,7 @@ import { GripVertical, Trash2, Globe, Users, User, Image as ImageIcon, Palette, 
 import type { Snap, SnapColor } from '@/types/snap'
 import { SnapViewerOverlay } from './snap-viewer-overlay'
 import { useZoom } from '@/contexts/zoom-context'
+import { snapImageSrc } from '@/lib/snap-url'
 
 const SNAP_COLORS: SnapColor[] = ['blue', 'yellow', 'green', 'pink', 'purple']
 
@@ -369,7 +370,7 @@ const StudentWorkSnapItem = memo(function StudentWorkSnapItem({
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           ref={imageRef}
-          src={snap.imageUrl}
+          src={snapImageSrc(snap.imageUrl)}
           alt={snap.name}
           className="block"
           style={{
@@ -653,7 +654,7 @@ const TeacherSnapItem = memo(function TeacherSnapItem({
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           ref={imageRef}
-          src={snap.imageUrl}
+          src={snapImageSrc(snap.imageUrl)}
           alt={snap.name}
           className="block"
           style={{
@@ -1101,7 +1102,7 @@ const SnapItem = memo(function SnapItem({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             ref={imageRef}
-            src={snap.imageUrl}
+            src={snapImageSrc(snap.imageUrl)}
             alt={snap.name}
             className="block pointer-events-none"
             style={{

@@ -2,6 +2,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { ProfileSettings } from '@/components/dashboard/profile-settings'
 import { redirect } from 'next/navigation'
+import { AccountDataCard } from '@/components/dashboard/account-data-card'
 
 export default async function ProfilePage() {
   const session = await getServerSession(authOptions)
@@ -25,8 +26,9 @@ export default async function ProfilePage() {
         </p>
       </div>
 
-      <div className="max-w-2xl">
+      <div className="max-w-2xl space-y-6">
         <ProfileSettings />
+        <AccountDataCard accountType="student" />
       </div>
     </div>
   )

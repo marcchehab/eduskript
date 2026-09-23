@@ -1,6 +1,6 @@
 # Prüfungen
 
-Führe echte digitale Prüfungen im Browser durch, mit echter Abschottung über den Safe Exam Browser. Derselbe Editor, dieselbe Darstellung, dieselben automatisch bewerteten Übungen — nur mit zusätzlicher Kontrolle über Status, Zeit und Abgabeverfolgung.
+Führe echte digitale Prüfungen im Browser durch, mit echter Abschottung über den Safe Exam Browser. Derselbe Editor, dieselbe Darstellung, dieselben automatisch bewerteten Übungen — nur mit zusätzlicher Kontrolle über Status und Abgabeverfolgung.
 
 ---
 
@@ -8,7 +8,7 @@ Führe echte digitale Prüfungen im Browser durch, mit echter Abschottung über 
 
 Jede Seite kann als **Prüfungsseite** markiert werden. Wähle im Page Editor «Exam» im Seitentyp-Auswahlfeld neben dem Titel. Prüfungsseiten erhalten:
 
-- **Prüfungseinstellungen** — Status, Zeitlimit, SEB-Pflicht
+- **Prüfungseinstellungen** — Status, SEB-Pflicht
 - **Statusanzeige** im Dashboard — Closed / Lobby / Open
 - **Abgabeverfolgung** — der Versuch jedes Schülers wird als Snapshot gespeichert
 - **Bewertungsoberfläche** — Abgaben durchsehen, Feedback hinterlassen
@@ -25,10 +25,10 @@ Eine Seite im Prüfungsmodus befindet sich in einem von drei Status:
 > Die Seite ist nicht zugänglich — Schüler sehen «this exam isn't open yet». Standardstatus.
 
 > [!abstract] Lobby
-> Schüler können sich mit der Seite verbinden (Authentifizierung wird geprüft, SEB startet falls erforderlich), aber der eigentliche Inhalt ist hinter einem «waiting for instructor»-Bildschirm verborgen. Nutze das, um alle zu verbinden, bevor der Timer startet.
+> Schüler können sich mit der Seite verbinden (Authentifizierung wird geprüft, SEB startet falls erforderlich), aber der eigentliche Inhalt ist hinter einem «waiting for instructor»-Bildschirm verborgen. Nutze das, um alle zu verbinden, bevor die Prüfung beginnt.
 
 > [!abstract] Open
-> Die Prüfung läuft. Die Uhr startet (falls du ein Zeitlimit gesetzt hast). Schüler können Code schreiben, Antworten abgeben und mit `python-check`-Blöcken arbeiten.
+> Die Prüfung läuft. Schüler können Code schreiben, Antworten abgeben und mit `python-check`-Blöcken arbeiten.
 
 Du wechselst den Status in den Prüfungseinstellungen des Page Editors oder in der Prüfungsübersicht des Klassen-Dashboards. Nach Ablauf der Zeit zurück auf «Closed» zu schalten sperrt weitere Abgaben.
 
@@ -74,7 +74,7 @@ Jeder Prüfungsversuch eines Schülers erzeugt eine **Abgabe** — einen Snapsho
 - Seinen `<question>`-Antworten
 - Jedem interaktiven Zustand auf der Seite (Quizantworten, Plugin-Zustand)
 
-Snapshots werden im Moment der Abgabe erstellt (oder wenn die Zeit abläuft, je nachdem, was zuerst eintritt).
+Snapshots werden im Moment der Abgabe erstellt.
 
 ### Die Bewertungsoberfläche
 
@@ -119,22 +119,15 @@ Drei Check-Versuche, bevor der Button gesperrt wird. Die Schüler müssen nachde
 2. **SEB-Konfiguration einrichten** — pro Seite aktivieren, den Konfigurationslink vorab mit den Schülern teilen
 3. **Selbst testen** — die Prüfung in deinem eigenen SEB öffnen, um sicherzustellen, dass alles funktioniert
 4. **5 Minuten vorher** — alle Prüfungsseiten für die richtige Klasse in den Status **Lobby** schalten
-5. **Zur Startzeit** — auf **Open** schalten; die Schüler sehen den Prüfungsinhalt und die Uhr startet
+5. **Zur Startzeit** — auf **Open** schalten; die Schüler sehen den Prüfungsinhalt
 6. **Zur Endzeit** — zurück auf **Closed** schalten, um weitere Abgaben zu sperren
 7. **Bewertung** — die Abgaben in der Submissions-Oberfläche durchsehen und bewerten
 
 ---
 
-## Zeitlimits
+## Zeit
 
-Setze ein Zeitlimit in den Prüfungseinstellungen:
-
-- Startet, wenn ein Schüler die Prüfung im Status **Open** öffnet
-- Countdown-Timer pro Schüler, sichtbar in der Seitenkopfzeile
-- Abgaben werden automatisch abgeschlossen, wenn die Zeit abläuft
-- Kulanzfrist optional (z.B. 2 zusätzliche Minuten vor der harten Sperre)
-
-Für Schüler mit Nachteilsausgleich (Zeitverlängerung) setzt du individuelle Verlängerungen pro Schüler in der Klassenliste.
+Eduskript hat kein eingebautes Zeitlimit und keinen Countdown. Du steuerst die Dauer selbst: Zur Startzeit auf **Open**, zur Endzeit auf **Closed** schalten. Für Schüler mit Nachteilsausgleich lässt du die Prüfung über den Status pro Schüler länger offen.
 
 ---
 
@@ -159,8 +152,6 @@ Nichts davon ist narrensicher. Für Prüfungen mit wirklich hohem Einsatz kombin
 | Eine Seite als Prüfung markieren | Page Editor → Seitentyp-Dropdown → Exam |
 | Prüfungsstatus pro Klasse | Prüfungseinstellungen → Status pro Klasse |
 | Safe Exam Browser verlangen | Prüfungseinstellungen → Require SEB → Konfigurationslink holen |
-| Ein Zeitlimit setzen | Prüfungseinstellungen → Time limit |
-| Individuelle Zeitverlängerung | Klassenliste → Schüler → Nachteilsausgleich |
 | Versuche bei automatisch bewertetem Code begrenzen | `max-checks="3"` am `python-check`-Block |
 | Abgaben durchsehen | Dashboard → Classes → [Klasse] → Submissions |
 | Bewerten + kommentieren | Submissions-Oberfläche → Detail pro Schüler |

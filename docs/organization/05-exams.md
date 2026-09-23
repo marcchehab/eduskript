@@ -1,6 +1,6 @@
 # Exams
 
-Run real digital exams in the browser, with real lockdown via Safe Exam Browser. Same editor, same rendering, same auto-graded exercises — just with extra controls for state, timing, and submission tracking.
+Run real digital exams in the browser, with real lockdown via Safe Exam Browser. Same editor, same rendering, same auto-graded exercises — just with extra controls for state and submission tracking.
 
 ---
 
@@ -8,7 +8,7 @@ Run real digital exams in the browser, with real lockdown via Safe Exam Browser.
 
 Any page can be marked as an **exam page**. In the page editor, pick "Exam" from the page-type selector next to the title. Exam pages get:
 
-- **Exam settings panel** — state, time limit, SEB requirement
+- **Exam settings panel** — state, SEB requirement
 - **State indicator** in the dashboard — Closed / Lobby / Open
 - **Submission tracking** — each student's attempt saved as a snapshot
 - **Grading interface** — browse submissions, leave feedback
@@ -25,10 +25,10 @@ A page in exam mode can be in one of three states:
 > Page is not accessible — students see "this exam isn't open yet." Default state.
 
 > [!abstract] Lobby
-> Students can connect to the page (auth check passes, SEB launches if required) but the actual content is hidden behind a "waiting for instructor" screen. Use this to get everyone connected before the timer starts.
+> Students can connect to the page (auth check passes, SEB launches if required) but the actual content is hidden behind a "waiting for instructor" screen. Use this to get everyone connected before the exam begins.
 
 > [!abstract] Open
-> Exam is live. The clock starts (if you set a time limit). Students can write code, submit answers, interact with `python-check` blocks.
+> Exam is live. Students can write code, submit answers, interact with `python-check` blocks.
 
 You switch states from the page editor's exam settings panel, or from the class dashboard's exam overview. Switching back to "Closed" after time's up locks further submissions.
 
@@ -74,7 +74,7 @@ Each student's exam attempt creates a **submission** — a snapshot of:
 - Their `<question>` answers
 - Any in-page interactive state (quiz answers, plugin state)
 
-Snapshots are taken at the moment they submit (or when time runs out, whichever comes first).
+Snapshots are taken at the moment they submit.
 
 ### The grading interface
 
@@ -119,22 +119,15 @@ Three check attempts before the button locks. Students have to think, not just g
 2. **Set up SEB config** — enable per page, share the config link with students in advance
 3. **Test it yourself** — open the exam in your own SEB to make sure everything works
 4. **5 minutes before** — switch all exam pages to **Lobby** state for the right class
-5. **At start time** — switch to **Open**, students see the exam content and the clock starts
+5. **At start time** — switch to **Open**, students see the exam content
 6. **At end time** — switch back to **Closed** to lock further submissions
 7. **Grading** — use the submissions interface to review and grade
 
 ---
 
-## Time limits
+## Timing
 
-Set a time limit in the exam settings:
-
-- Starts when a student opens the exam in **Open** state
-- Per-student countdown timer visible in the page header
-- Submissions auto-finalize when time runs out
-- Grace period optional (e.g. 2 extra minutes before hard lock)
-
-For students with accommodations (extra time), set individual time extensions per student in the class roster.
+Eduskript has no built-in time limit or countdown. You control the duration yourself: switch to **Open** at the start time and to **Closed** at the end. For students with accommodations (extra time), keep the exam open longer via the per-student state.
 
 ---
 
@@ -159,8 +152,6 @@ None of this is foolproof. For truly high-stakes exams, combine SEB + proctoring
 | Mark a page as an exam | Page editor → page-type dropdown → Exam |
 | Per-class exam state | Exam settings panel → state per class |
 | Require Safe Exam Browser | Exam settings → Require SEB → get config link |
-| Set a time limit | Exam settings → Time limit |
-| Individual time extension | Class roster → student → accommodations |
 | Limit attempts on auto-graded code | `max-checks="3"` on the `python-check` block |
 | Review submissions | Dashboard → Classes → [class] → Submissions |
 | Grade + comment | Submissions interface → per-student detail |

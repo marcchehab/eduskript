@@ -3,12 +3,20 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
+import { snapImageSrc } from '@/lib/snap-url'
+
+/** Rewrite every snap S3 URL inside a UserData payload to an absolute proxy link. */
+function absolutizeSnapUrls(data: unknown, origin: string): unknown {
+  return JSON.parse(JSON.stringify(data), (_k, v) =>
+    typeof v === 'string' && snapImageSrc(v) !== v ? origin + snapImageSrc(v) : v,
+  )
+}
 
 /**
  * GDPR Article 15 - Right to Access
  *
  * This endpoint allows users to export all their personal data stored in the system.
- * Rate limited to prevent abuse (30-day cooldown between exports).
+ * Not rate limited (an old comment claimed a 30-day cooldown; none exists).
  */
 export async function GET(req: NextRequest) {
   try {
@@ -107,6 +115,14 @@ export async function GET(req: NextRequest) {
             }
           }
         },
+        // The student's actual work (answers, code, annotations, snaps, quiz
+        // data) and exam hand-ins. Included raw: data is already JSON.
+        userData: {
+          select: { adapter: true, itemId: true, data: true, updatedAt: true, targetType: true, targetId: true },
+        },
+        examSubmissions: {
+          select: { pageId: true, submittedAt: true, source: true },
+        },
         sentCollaborationRequests: {
           select: {
             id: true,
@@ -130,6 +146,8 @@ export async function GET(req: NextRequest) {
         { status: 404 }
       )
     }
+
+    const origin = new URL(req.url).origin
 
     // Remove sensitive data before export
     const exportData = {
@@ -179,7 +197,16 @@ export async function GET(req: NextRequest) {
         permission: pa.permission,
         since: pa.createdAt,
       })),
-      uploadedFiles: userData.files,
+      // Minimal-by-design export (Art. 25 DSG / Art. 15 DSGVO): one JSON object,
+      // binary content as links instead of an archive. File links point to
+      // /api/files/[id]; snap image URLs are rewritten to the access-checked
+      // proxy; both work when opened while logged in as this user.
+      uploadedFiles: userData.files.map(f => ({ ...f, size: f.size == null ? null : Number(f.size), url: f.isDirectory ? null : `${origin}/api/files/${f.id}` })),
+      workData: userData.userData.map(e => ({
+        ...e,
+        data: absolutizeSnapUrls(e.data, origin),
+      })),
+      examSubmissions: userData.examSubmissions,
       studentProgress: userData.studentProgress.map(sp => ({
         pageId: sp.pageId,
         pageTitle: sp.page.title,

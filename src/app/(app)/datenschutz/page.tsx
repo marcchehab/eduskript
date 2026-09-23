@@ -38,12 +38,13 @@ const SUBPROCESSORS: { name: string; purpose: string; location: string; studentD
   { name: 'Mux, Inc. (USA)', purpose: 'Video-Hosting für von Lehrpersonen hochgeladene Videos', location: 'USA', studentData: 'nein' },
   { name: 'OpenRouter, Inc. (USA)', purpose: 'Vermittlung der KI-Anfragen an die Modellanbieter', location: 'USA', studentData: 'nur Lösungen, ohne Identifikationsmerkmale' },
   { name: 'Google LLC (USA), Vertex AI', purpose: 'KI-Feedback auf Handschrift und Zeichnungen (Gemini)', location: 'von Google gewählt (global)', studentData: 'wie OpenRouter' },
-  { name: 'DigitalOcean, LLC und DeepInfra, Inc. (USA)', purpose: 'KI-Bewertung von Prüfungsantworten (DeepSeek V4 Flash, offene Gewichte)', location: 'USA', studentData: 'wie OpenRouter' },
+  { name: 'DigitalOcean, LLC (USA)', purpose: 'KI-Bewertung von Prüfungsantworten (DeepSeek V4 Flash, offene Gewichte)', location: 'USA', studentData: 'wie OpenRouter' },
   { name: 'Weitere Modellanbieter über OpenRouter', purpose: 'KI-Unterstützung der Lehrperson beim Schreiben (Chat, KI-Bearbeitung, Diagramme)', location: 'USA u. a.', studentData: 'nein' },
 ]
 
 const CHANGELOG: { date: string; change: string }[] = [
   { date: 'September 2026', change: 'Erste veröffentlichte Liste.' },
+  { date: 'September 2026', change: 'DeepInfra entfernt; KI-Bewertung nur noch über DigitalOcean.' },
 ]
 
 const h2 = 'text-xl font-semibold mt-6 mb-2'
@@ -294,12 +295,13 @@ export default function DatenschutzPage() {
             <ul className="list-disc pl-6 space-y-1">
               <li>
                 Konten und ihre Daten bleiben gespeichert, bis sie gelöscht
-                werden. Wir löschen Konten auf Anfrage.
+                werden. Konten lassen sich in den Einstellungen selbst löschen
+                oder auf Anfrage.
               </li>
               <li>
-                Löscht eine Schülerin oder ein Schüler das Konto, bleiben
-                abgegebene Arbeiten für die Lehrperson erhalten, aber ohne
-                Verbindung zum Konto.
+                Löscht eine Schülerin oder ein Schüler das Konto, werden auch
+                Antworten, Zeichnungen und abgegebene Prüfungen gelöscht; die
+                Lehrperson sieht sie danach nicht mehr.
               </li>
               <li>
                 Datensicherungen werden im regulären Zyklus überschrieben.
@@ -318,7 +320,8 @@ export default function DatenschutzPage() {
             <p>
               Du kannst Auskunft über deine Daten verlangen und sie berichtigen
               oder löschen lassen und eine Kopie deiner Daten in einem
-              maschinenlesbaren Format (JSON) erhalten. Anfragen an{' '}
+              maschinenlesbaren Format (JSON) erhalten. Export und Löschung
+              findest du in den Einstellungen deines Kontos. Anfragen an{' '}
               <a href="mailto:kontakt@luzmedia.ch" className="underline">
                 kontakt@luzmedia.ch
               </a>

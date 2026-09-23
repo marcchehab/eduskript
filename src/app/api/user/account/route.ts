@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { deleteUserAccount } from '@/lib/account-deletion'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 
 /**
@@ -66,23 +67,9 @@ export async function DELETE(req: NextRequest) {
       })
     }
 
-    // Delete the user account
-    // Prisma cascade delete will handle:
-    // - accounts, sessions (OAuth data)
-    // - customDomains
-    // - pageVersions
-    // - collectionAuthors, skriptAuthors, pageAuthors
-    // - collectionSkripts
-    // - files
-    // - collaborationRequests (sent/received)
-    // - collaborations
-    // - pageLayout
-    // - studentProgress (already deleted above if submissions exist)
-    // - studentSubmissions will be orphaned with anonymized IDs
-
-    await prisma.user.delete({
-      where: { id: userId }
-    })
+    // FK cleanup, shared-file handover, sole-author skripts, cascade and S3
+    // (snaps + unreferenced blobs): see src/lib/account-deletion.ts.
+    await deleteUserAccount(userId)
 
     return NextResponse.json({
       success: true,

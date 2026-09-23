@@ -10,6 +10,7 @@ import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { SnapViewerOverlay } from '@/components/annotations/snap-viewer-overlay'
 import { Camera, ExternalLink, Trash2 } from 'lucide-react'
 import type { SnapWithPageInfo } from '@/app/api/user-data/snaps/route'
+import { snapImageSrc } from '@/lib/snap-url'
 
 export default function MySnapsPage() {
   const router = useRouter()
@@ -168,7 +169,7 @@ export default function MySnapsPage() {
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={snap.imageUrl}
+                      src={snapImageSrc(snap.imageUrl)}
                       alt={snap.name}
                       className="w-full h-full object-contain transition-transform group-hover:scale-105"
                     />

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X, ZoomIn, ZoomOut, Download, ChevronLeft, ChevronRight } from 'lucide-react'
+import { snapImageSrc } from '@/lib/snap-url'
 
 export interface SnapViewerItem {
   id: string
@@ -121,7 +122,7 @@ export function SnapViewerOverlay<T extends SnapViewerItem>({
             <ZoomIn className="w-5 h-5" />
           </button>
           <a
-            href={currentSnap.imageUrl}
+            href={snapImageSrc(currentSnap.imageUrl)}
             download={`${currentSnap.name}.jpg`}
             onClick={(e) => e.stopPropagation()}
             className="p-2 bg-background/80 backdrop-blur-sm hover:bg-background rounded-full transition-colors"
@@ -179,7 +180,7 @@ export function SnapViewerOverlay<T extends SnapViewerItem>({
       <div className="w-full h-full flex items-center justify-center p-4 overflow-auto">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={currentSnap.imageUrl}
+          src={snapImageSrc(currentSnap.imageUrl)}
           alt={currentSnap.name}
           className="object-contain transition-transform duration-200"
           style={{

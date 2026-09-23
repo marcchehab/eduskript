@@ -101,53 +101,16 @@ export async function findDemoUser(prisma: PrismaLike) {
  * ever covered the seeded demo content, so anything a visitor created stayed
  * forever.
  *
- * S3 has to be handled before and after the row goes:
- * - snaps/{userId}/ is owned by this user alone, so the whole prefix goes.
- * - files/{hash}.{ext} is content-addressed and shared across ALL users, so a
- *   blob is only removed once no File row anywhere still references its hash.
- *   Checked after the cascade, when the demo rows are gone.
- *
- * Orphan risk in the other direction: if the S3 delete fails the blob leaks,
- * which is preferable to deleting a blob a real teacher's page still renders.
+ * The actual deletion (DB cleanup + S3 snaps and unreferenced blobs) lives in
+ * src/lib/account-deletion.ts, shared with self-service account deletion.
  */
-async function purgeDemoUser(prisma: PrismaLike, userId: string): Promise<void> {
-  const { deleteS3Prefix, deleteTeacherFile, isS3Configured, isTeacherS3Configured } =
-    await import('./s3')
-
-  const files: { hash: string | null; name: string }[] = await prisma.file.findMany({
-    where: { createdBy: userId, isDirectory: false },
-    select: { hash: true, name: true },
-  })
-
-  if (isS3Configured()) {
-    try {
-      await deleteS3Prefix(`snaps/${userId}/`)
-    } catch (error) {
-      console.warn(`[demo] snap purge failed: ${String(error).slice(0, 200)}`)
-    }
-  }
-
-  await prisma.user.delete({ where: { id: userId } })
-
-  if (!isTeacherS3Configured()) return
-
-  const seen = new Set<string>()
-  for (const file of files) {
-    if (!file.hash || seen.has(file.hash)) continue
-    seen.add(file.hash)
-
-    const stillUsed = await prisma.file.count({ where: { hash: file.hash } })
-    if (stillUsed > 0) continue
-
-    const extension = file.name.includes('.') ? file.name.split('.').pop()! : ''
-    if (!extension) continue
-
-    try {
-      await deleteTeacherFile(`files/${file.hash}.${extension}`)
-    } catch (error) {
-      console.warn(`[demo] blob purge failed for ${file.hash}: ${String(error).slice(0, 200)}`)
-    }
-  }
+async function purgeDemoUser(_prisma: PrismaLike, userId: string): Promise<void> {
+  // Same rules as self-service account deletion (FK cleanup, sole-author
+  // skripts, snaps from stored URLs — the user-data bucket denies ListObjects,
+  // so the old snaps/{userId}/ prefix purge failed with AccessDenied — and
+  // hash-checked blob purge). Uses the app's prisma client.
+  const { deleteUserAccount } = await import('./account-deletion')
+  await deleteUserAccount(userId)
 }
 
 /**

@@ -88,7 +88,7 @@ function getS3Client(): S3Client {
  * @param pageId - Page ID (for path organization)
  * @param snapId - Unique snap ID
  * @param imageData - Base64 encoded image data (data URL)
- * @returns Public URL of the uploaded image
+ * @returns S3 URL of the uploaded (private) image
  */
 export async function uploadSnapImage(
   userId: string,
@@ -115,13 +115,12 @@ export async function uploadSnapImage(
     Key: key,
     Body: buffer,
     ContentType: `image/${format}`,
-    // Make publicly readable
-    ACL: 'public-read',
-    // Cache for 1 year (snaps are immutable - identified by unique snapId)
-    CacheControl: 'public, max-age=31536000, immutable',
+    // Private (bucket default). Snaps can be student screenshots; they are
+    // served through the access-checked /api/snaps/image proxy instead.
   }))
 
-  // Return public URL
+  // Stored as the S3 URL (existing data uses this form too); clients rewrite it
+  // to the proxy with snapImageSrc() from src/lib/snap-url.ts.
   return `${SCALEWAY_ENDPOINT}/${SCALEWAY_BUCKET}/${key}`
 }
 
