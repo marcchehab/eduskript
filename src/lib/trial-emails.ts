@@ -10,11 +10,13 @@
  * - `ended`:  after the cron expired the trial — pages stay online, how to
  *   continue with Classroom.
  *
- * A day-3 mail is deliberately not here yet (content still open).
- *
- * ending/ended are sent by the daily cron (src/app/api/cron/route.ts, 03:00 UTC), right after
+ * - `tips`: 3 days into the trial — share the page link with the class, or
+ *   create a class to see progress. Skipped for teachers who already have
+ *   a class.
+ * tips/ending/ended are sent by the daily cron (src/app/api/cron/route.ts, 03:00 UTC), right after
  * it expires due trials. Each mail has a send window rather than an exact day
- * (ending: trial end 3–5 days away; ended: trial end 0–3 days ago), so a
+ * (tips: trial start 3–5 days ago; ending: trial end 3–5 days away; ended:
+ * trial end 0–3 days ago), so a
  * missed cron run is caught up the next day, and trials that ended long
  * before this shipped never get a late mail. "Already sent" is recorded per
  * subscription in UserData (adapter 'trial-emails', itemId = subscription id),
@@ -29,7 +31,7 @@ import { prisma } from '@/lib/prisma'
 import { sendEmail } from '@/lib/email'
 import { DEFAULT_TRIAL_DAYS, PLAN_COPY, formatChf, monthlyEquivalent } from '@/lib/plan-copy'
 
-export type TrialEmailKind = 'welcome' | 'ending' | 'ended'
+export type TrialEmailKind = 'welcome' | 'tips' | 'ending' | 'ended'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const ADAPTER = 'trial-emails'
@@ -144,6 +146,27 @@ export function renderTrialEmail(kind: TrialEmailKind, ctx: TrialEmailContext): 
       ps,
     ].join('\n')
     return { subject: 'Willkommen bei Eduskript', htmlContent: html, textContent: text }
+  }
+
+  if (kind === 'tips') {
+    const classesUrl = `${ctx.baseUrl}/dashboard/classes`
+    const share =
+      'Ein Tipp für die nächste Lektion: Deine Klasse braucht kein Konto, um dein Skript zu lesen. Den Link zu deiner Seite findest du im Dashboard unter «View Page». Schick ihn per Teams oder Mail, fertig.'
+    const classes =
+      'Wenn du sehen willst, wie weit deine Schülerinnen und Schüler sind, lege eine Klasse an. Sie melden sich mit ihrem Schul-Microsoft-Konto an, und du siehst live, wer welche Aufgabe gelöst hat.'
+    const html = layout([greeting(name), share, classes, button(classesUrl, 'Klasse anlegen'), 'Marc'])
+    const text = [
+      greeting(ctx.firstName),
+      '',
+      share,
+      '',
+      classes,
+      '',
+      `Klasse anlegen: ${classesUrl}`,
+      '',
+      'Marc',
+    ].join('\n')
+    return { subject: 'Dein Skript für die Klasse', htmlContent: html, textContent: text }
   }
 
   if (kind === 'ending') {
@@ -331,12 +354,23 @@ export async function sendWelcomeEmail(userId: string): Promise<void> {
 }
 
 /**
- * Send all due ending/ended mails. Returns counts for the cron result. One
+ * Send all due tips/ending/ended mails. Returns counts for the cron result. One
  * failing send is logged and skipped (not marked sent, so it retries next run
  * while still inside its window).
  */
-export async function sendDueTrialEmails(now = new Date()): Promise<{ ending: number; ended: number; failed: number }> {
-  const counts = { ending: 0, ended: 0, failed: 0 }
+export async function sendDueTrialEmails(
+  now = new Date()
+): Promise<{ tips: number; ending: number; ended: number; failed: number }> {
+  const counts = { tips: 0, ending: 0, ended: 0, failed: 0 }
+
+  const tips = await prisma.subscription.findMany({
+    where: {
+      status: 'trialing',
+      currentPeriodStart: { gte: new Date(now.getTime() - 5 * DAY_MS), lte: new Date(now.getTime() - 3 * DAY_MS) },
+      user: { teacherClasses: { none: {} } },
+    },
+    select: subscriptionSelect,
+  })
 
   const ending = await prisma.subscription.findMany({
     where: {
@@ -359,10 +393,11 @@ export async function sendDueTrialEmails(now = new Date()): Promise<{ ending: nu
     select: subscriptionSelect,
   })
 
-  if (ending.length === 0 && ended.length === 0) return counts
+  if (tips.length === 0 && ending.length === 0 && ended.length === 0) return counts
   const prices = await loadPrices()
 
-  const batches: ['ending' | 'ended', MailSubscription[]][] = [
+  const batches: ['tips' | 'ending' | 'ended', MailSubscription[]][] = [
+    ['tips', tips],
     ['ending', ending],
     ['ended', ended],
   ]

@@ -46,4 +46,10 @@ describe('trial emails', () => {
     expect(mail.htmlContent).toContain('<a href="https://eduskript.org/dashboard"')
     expect(mail.textContent).toContain('Seiten-Effekte')
   })
+  it('renders the tips mail with the classes link', () => {
+    const mail = renderTrialEmail('tips', ctx)
+    expect(mail.subject).toBe('Dein Skript für die Klasse')
+    expect(mail.textContent).toContain('«View Page»')
+    expect(mail.htmlContent).toContain('https://eduskript.org/dashboard/classes')
+  })
 })
