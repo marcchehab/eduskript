@@ -1,8 +1,9 @@
 /**
- * Pioneer programme (src/lib/pioneer.ts): admin-granted free year, stored as an
- * active subscription on the hidden 'pioneer' plan. Prisma is mocked; the
- * tests pin the grant/renew/revoke writes, the paid-gate outcome and that both
- * expiry paths (session refresh, cron) include pioneer terms.
+ * Pioneer programme (src/lib/pioneer.ts): admin-granted, open-ended free
+ * access, stored as an active subscription without end date on the hidden
+ * 'pioneer' plan. Prisma is mocked; the tests pin the grant/revoke writes, the
+ * paid-gate outcome and that neither expiry path nor the renewal charge can
+ * touch a pioneer row.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -31,7 +32,6 @@ vi.mock('@/lib/billing-revalidate', () => ({ revalidateUserSites: vi.fn() }))
 import {
   grantPioneer,
   revokePioneer,
-  pioneerTermEnd,
   PioneerGrantError,
   PIONEER_PLAN_SLUG,
 } from '@/lib/pioneer'
@@ -50,12 +50,6 @@ beforeEach(() => {
   db.subscription.updateMany.mockResolvedValue({ count: 0 })
 })
 
-describe('pioneerTermEnd', () => {
-  it('adds one calendar year', () => {
-    expect(pioneerTermEnd(NOW).toISOString()).toBe('2027-09-23T10:00:00.000Z')
-  })
-})
-
 describe('grantPioneer', () => {
   it('creates a hidden, free plan on first use', async () => {
     await grantPioneer('u1', NOW)
@@ -64,16 +58,16 @@ describe('grantPioneer', () => {
     expect(arg.create).toMatchObject({ priceChf: 0, isActive: false })
   })
 
-  it('starts a one-year active term without Payrexx and sets billingPlan', async () => {
-    const res = await grantPioneer('u1', NOW)
-    expect(res).toEqual({ currentPeriodEnd: new Date('2027-09-23T10:00:00Z'), renewed: false })
+  it('starts an open-ended active subscription without Payrexx and sets billingPlan', async () => {
+    expect(await grantPioneer('u1', NOW)).toEqual({ alreadyPioneer: false })
     const data = db.subscription.create.mock.calls[0][0].data
     expect(data).toMatchObject({ userId: 'u1', planId: PLAN.id, status: 'active', currentPeriodStart: NOW })
+    expect(data.currentPeriodEnd).toBeUndefined()
     expect(data.payrexxSubId).toBeUndefined()
     expect(db.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { billingPlan: 'pioneer' } })
   })
 
-  it('cancels a running trial before starting the term', async () => {
+  it('cancels a running trial before granting', async () => {
     db.subscription.findMany.mockResolvedValue([
       { id: 'trial1', planId: 'plan-classroom', status: 'trialing', payrexxSubId: null, currentPeriodEnd: NOW },
     ])
@@ -85,26 +79,13 @@ describe('grantPioneer', () => {
     expect(db.subscription.create).toHaveBeenCalled()
   })
 
-  it('renews from the current end, so early renewal keeps remaining days', async () => {
-    const end = new Date('2027-01-10T00:00:00Z')
+  it('is a no-op for an existing pioneer', async () => {
     db.subscription.findMany.mockResolvedValue([
-      { id: 's1', planId: PLAN.id, status: 'active', payrexxSubId: null, currentPeriodEnd: end },
+      { id: 's1', planId: PLAN.id, status: 'active', payrexxSubId: null },
     ])
-    const res = await grantPioneer('u1', NOW)
-    expect(res).toEqual({ currentPeriodEnd: new Date('2028-01-10T00:00:00Z'), renewed: true })
-    expect(db.subscription.update).toHaveBeenCalledWith({
-      where: { id: 's1' },
-      data: { currentPeriodEnd: new Date('2028-01-10T00:00:00Z') },
-    })
+    expect(await grantPioneer('u1', NOW)).toEqual({ alreadyPioneer: true })
     expect(db.subscription.create).not.toHaveBeenCalled()
-  })
-
-  it('renews from now when the stored end already passed', async () => {
-    db.subscription.findMany.mockResolvedValue([
-      { id: 's1', planId: PLAN.id, status: 'active', payrexxSubId: null, currentPeriodEnd: new Date('2026-01-01') },
-    ])
-    const res = await grantPioneer('u1', NOW)
-    expect(res.currentPeriodEnd).toEqual(pioneerTermEnd(NOW))
+    expect(db.subscription.updateMany).not.toHaveBeenCalled()
   })
 
   it('refuses while a paid Payrexx subscription is running', async () => {
@@ -149,19 +130,17 @@ describe('paid gates', () => {
   })
 })
 
-describe('expiry', () => {
-  const pioneerBranch = { status: 'active', plan: { slug: 'pioneer' } }
-
-  it('session refresh expires a pioneer term past its end', async () => {
-    db.subscription.findFirst.mockResolvedValue({ id: 's1', cancelledAt: null })
-    expect(await expireSubscriptionIfNeeded('u1')).toBe(true)
+describe('no automatic expiry', () => {
+  it('session refresh only matches rows with a past end date', async () => {
+    db.subscription.findFirst.mockResolvedValue(null)
+    expect(await expireSubscriptionIfNeeded('u1')).toBe(false)
     const where = db.subscription.findFirst.mock.calls[0][0].where
-    expect(where.currentPeriodEnd.lt).toBeInstanceOf(Date)
-    expect(where.OR).toContainEqual(pioneerBranch)
-    expect(db.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { billingPlan: 'free' } })
+    // A pioneer row has currentPeriodEnd = null, which `lt` never matches.
+    expect(where.currentPeriodEnd).toEqual({ lt: expect.any(Date) })
+    expect(JSON.stringify(where)).not.toContain('pioneer')
   })
 
-  it('cron expires pioneer terms and never charges them', async () => {
+  it('cron neither charges nor expires rows without an end date', async () => {
     vi.stubEnv('CRON_SECRET', 'test-secret')
     db.subscription.findMany.mockResolvedValue([])
     const { POST } = await import('@/app/api/cron/route')
@@ -173,8 +152,8 @@ describe('expiry', () => {
     )
     expect(res.status).toBe(200)
     const [renewalQuery, expiryQuery] = db.subscription.findMany.mock.calls.map((c) => c[0].where)
-    // Renewal charges need a Payrexx token; a pioneer row has none.
     expect(renewalQuery.payrexxSubId).toEqual({ not: null })
-    expect(expiryQuery.OR).toContainEqual(pioneerBranch)
+    expect(renewalQuery.currentPeriodEnd).toEqual({ lt: expect.any(Date) })
+    expect(expiryQuery.currentPeriodEnd).toEqual({ lt: expect.any(Date) })
   })
 })

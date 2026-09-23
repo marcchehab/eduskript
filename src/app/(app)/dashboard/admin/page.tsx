@@ -76,9 +76,6 @@ function planBadge(user: User): { label: string; variant: 'default' | 'secondary
   const slug = sub.plan?.slug || 'unknown plan'
   if (sub.status === 'trialing') return { label: `trial · ${slug}`, variant: 'default' }
   if (sub.status === 'past_due') return { label: `past due · ${slug}`, variant: 'outline' }
-  if (slug === PIONEER_PLAN_SLUG && sub.currentPeriodEnd) {
-    return { label: `pioneer · until ${new Date(sub.currentPeriodEnd).toLocaleDateString('de-CH')}`, variant: 'default' }
-  }
   if (sub.cancelledAt) return { label: `${slug} · ending`, variant: 'outline' }
   return { label: slug, variant: 'default' }
 }
@@ -1310,10 +1307,10 @@ export default function AdminPanelPage() {
               </div>
               {selectedUser?.accountType !== 'student' && (
                 <div className="rounded-md border p-3 space-y-2">
-                  <Label htmlFor="edit-pioneer">Pioneer programme (free, 1 year per grant)</Label>
+                  <Label htmlFor="edit-pioneer">Pioneer programme (free until you revoke it)</Label>
                   <p className="text-xs text-muted-foreground">
                     {selectedUser?.subscriptions?.[0]?.plan?.slug === PIONEER_PLAN_SLUG
-                      ? `Pioneer until ${selectedUser.subscriptions[0].currentPeriodEnd ? new Date(selectedUser.subscriptions[0].currentPeriodEnd).toLocaleDateString('de-CH') : '?'}. Renew only if the teacher used a skript with a class and gave feedback this semester.`
+                      ? 'Pioneer. Stays free until revoked here.'
                       : 'Not a pioneer. Granting cancels a running trial; a paid Payrexx subscription must be stopped first.'}
                   </p>
                   <select
@@ -1323,11 +1320,10 @@ export default function AdminPanelPage() {
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   >
                     <option value="">No change</option>
-                    <option value="grant">
-                      {selectedUser?.subscriptions?.[0]?.plan?.slug === PIONEER_PLAN_SLUG ? 'Renew (+1 year from current end)' : 'Grant (1 year from today)'}
-                    </option>
-                    {selectedUser?.subscriptions?.[0]?.plan?.slug === PIONEER_PLAN_SLUG && (
+                    {selectedUser?.subscriptions?.[0]?.plan?.slug === PIONEER_PLAN_SLUG ? (
                       <option value="revoke">Revoke now (back to free)</option>
+                    ) : (
+                      <option value="grant">Make pioneer</option>
                     )}
                   </select>
                 </div>

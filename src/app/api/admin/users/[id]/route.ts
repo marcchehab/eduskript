@@ -272,9 +272,9 @@ export async function PATCH(
       }
     }
 
-    // Pioneer programme (src/lib/pioneer.ts): 'grant' starts a one-year term
-    // or extends a running one by a year; 'revoke' ends it now.
-    let pioneerResult: { currentPeriodEnd: Date; renewed: boolean } | { revoked: boolean } | undefined
+    // Pioneer programme (src/lib/pioneer.ts): 'grant' starts it (open-ended),
+    // 'revoke' ends it now. Nothing else ends it.
+    let pioneerResult: { alreadyPioneer: boolean } | { revoked: boolean } | undefined
     if (pioneer === 'grant') {
       try {
         pioneerResult = await grantPioneer(id)

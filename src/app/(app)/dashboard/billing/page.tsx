@@ -157,7 +157,7 @@ export default function BillingPage() {
   // while a subscription is active).
   const lockedIn = subscription != null && subscription.status !== 'trialing'
   const currentSlug = subscription?.plan.slug
-  // Admin-granted free year (src/lib/pioneer.ts): no price, no auto-renewal.
+  // Admin-granted, open-ended (src/lib/pioneer.ts): no price, no end date.
   const isPioneer = currentSlug === PIONEER_PLAN_SLUG
 
   function planButton(plan: PlanData, label: string, variant?: 'outline', className?: string) {
@@ -241,11 +241,7 @@ export default function BillingPage() {
 
           <div className="text-sm text-muted-foreground space-y-1">
             {isPioneer ? (
-              <p>
-                Free as a pioneer
-                {subscription.currentPeriodEnd ? ` until ${formatDate(subscription.currentPeriodEnd)}` : ''}.
-                Renewed yearly for pioneers who use Eduskript with a class and share feedback each semester.
-              </p>
+              <p>Free as a pioneer. Thank you for helping shape Eduskript.</p>
             ) : (
               <p>
                 {formatPrice(subscription.plan.priceChf)} / {subscription.plan.interval === 'monthly' ? 'month' : 'year'}
