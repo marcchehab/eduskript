@@ -90,7 +90,7 @@ async function getHitCounts(): Promise<Map<string, number>> {
 const APP_HOST = 'eduskript.org'
 
 /** Served by the app itself on every host, so they have no per-tenant variant. */
-const APP_LEVEL_PATHS = new Set(['/impressum', '/terms'])
+const APP_LEVEL_PATHS = new Set(['/impressum', '/terms', '/datenschutz', '/privacy'])
 
 interface KnownHost {
   host: string

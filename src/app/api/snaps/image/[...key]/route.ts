@@ -2,8 +2,9 @@
  * GET /api/snaps/image/snaps/{ownerId}/{pageId}/{snapId}.{ext}
  *
  * Serves a snap image from the (private) Scaleway user bucket after an access
- * check. Snaps used to be uploaded public-read, so anyone holding the URL could
- * see a student's screenshot without logging in (see /datenschutz). Stored
+ * check. Snaps used to be uploaded public-read. Only relevant where
+ * SCW_USER_BUCKET is set: production has none (2026-09-23), so snaps there are
+ * stored as base64 inside UserData and this route is unused. Stored
  * snap URLs are unchanged (full S3 URLs in UserData); clients rewrite them to
  * this route via snapImageSrc() in src/lib/snap-url.ts.
  *
