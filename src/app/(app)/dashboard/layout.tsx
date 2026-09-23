@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { DashboardNav } from '@/components/dashboard/nav'
 import { DashboardSidebar } from '@/components/dashboard/sidebar'
 import { ErrorProvider } from '@/contexts/error-context'
+import { TrialBanner } from '@/components/dashboard/trial-banner'
 
 export default async function DashboardLayout({
   children,
@@ -30,6 +31,7 @@ export default async function DashboardLayout({
     <ErrorProvider>
       <div className="h-screen flex flex-col bg-background overflow-hidden">
         <DashboardNav />
+        <TrialBanner userId={session.user.id} />
         <div className="flex flex-1 overflow-hidden">
           <DashboardSidebar />
           <main className="flex-1 overflow-y-auto p-6">
