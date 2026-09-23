@@ -4,7 +4,7 @@ Diese Seite fasst auf einer Seite zusammen, was Schulleitung, ICT-Verantwortlich
 
 > [!success] Kurz gesagt
 > - Schülerinnen und Schüler sind **pseudonym**. Eduskript speichert keine E-Mail-Adressen von Schülerinnen und Schülern.
-> - Datenbank, Dateien und E-Mail-Versand liegen in der **EU** (Frankreich).
+> - Datenbank, Dateien und E-Mail-Versand liegen in der **EU** (Datenbank in Frankfurt, Dateien in Paris).
 > - Die KI erhält **nur die Lösung**, ohne Namen, Pseudonym, Konto-ID, Klasse oder IP-Adresse. Die KI-Anbieter dürfen die Inhalte weder speichern noch zum Training verwenden.
 > - Kein Tracking, keine Analyse-Dienste, keine Werbung.
 > - Quellcode öffentlich (AGPL v3), Sicherheitsprüfung durch Dritte möglich.

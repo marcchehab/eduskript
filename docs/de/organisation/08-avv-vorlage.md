@@ -5,7 +5,7 @@
 *Diese Vorlage folgt Punkt für Punkt den [AGB Auslagerung Informatikleistungen](https://www.zh.ch/content/dam/zhweb/bilder-dokumente/organisation/finanzdirektion/afi/agb_auslagerung_informatikleistungen.pdf) des Kantons Zürich und dem [Leitfaden «Bearbeiten im Auftrag»](https://docs.datenschutz.ch/u/d/publikationen/leitfaeden/leitfaden_bearbeiten_im_auftrag.pdf) der Datenschutzbeauftragten des Kantons Zürich. Wo Eduskript eine dieser Anforderungen nicht erfüllt, steht das offen in Ziffer 15.*
 
 *Viele Kantone haben eigene Muster. Die Schule kann diese Vorlage übernehmen oder ihr kantonales Muster verwenden – Eduskript unterzeichnet beides. Kontakt: [kontakt@luzmedia.ch](mailto:kontakt@luzmedia.ch).*
-*`[…]` = von der Schule auszufüllen.*
+*`[…]` = von der Schule auszufüllen. Eine [englische Übersetzung](https://eduskript.org/en/organization/dpa-template) dient nur der Information; verbindlich ist diese deutsche Fassung.*
 
 ---
 
