@@ -171,6 +171,14 @@ export function Youtube({ id, playlist, startTime, caption, thumbnail, pin }: Yo
             // maxresdefault does not exist for every video; hqdefault always does.
             if (thumbnailUrl !== fallbackThumb(id)) setThumbnailUrl(fallbackThumb(id))
           }}
+          // A missing maxresdefault is served as a 404 whose body is a 120x90
+          // grey placeholder. Browsers render it and never fire onError, so
+          // detect it by size.
+          onLoad={(e) => {
+            if (id && thumbnailUrl === maxResThumb(id) && e.currentTarget.naturalWidth <= 120) {
+              setThumbnailUrl(fallbackThumb(id))
+            }
+          }}
         />
       </span>
       <span className="absolute inset-0 flex items-center justify-center">
