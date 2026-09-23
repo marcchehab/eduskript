@@ -40,11 +40,11 @@ export async function POST() {
       )
     }
 
-    // Pioneer terms cost nothing and are ended by the admin or the cron
-    // (src/lib/pioneer.ts); the billing page shows no cancel button for them.
+    // Pioneer status costs nothing and only an admin ends it
+    // (src/lib/pioneer.ts); the billing page shows no cancel button for it.
     if (subscription.plan.slug === PIONEER_PLAN_SLUG) {
       return NextResponse.json(
-        { error: 'Pioneer status cannot be cancelled here. It ends automatically on its end date.' },
+        { error: 'Pioneer status cannot be cancelled here. It costs nothing; contact us to end it.' },
         { status: 400 }
       )
     }

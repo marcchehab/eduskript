@@ -5,7 +5,7 @@ import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import bcrypt from 'bcryptjs'
 import { createTrialSubscription } from '@/lib/trial'
 import { revalidateUserSites } from '@/lib/billing-revalidate'
-import { grantPioneer, PioneerGrantError } from '@/lib/pioneer'
+import { assertPioneerGrantable, grantPioneer, PioneerGrantError, PIONEER_PLAN_SLUG } from '@/lib/pioneer'
 
 // GET /api/admin/users/[id] - Get single user
 export async function GET(
@@ -150,6 +150,18 @@ export async function PATCH(
       }
     }
 
+    // Refuse a pioneer grant before any write (grantPioneer re-checks below).
+    if (pioneer === 'grant') {
+      try {
+        await assertPioneerGrantable(prisma, id)
+      } catch (err) {
+        if (err instanceof PioneerGrantError) {
+          return NextResponse.json({ error: err.message }, { status: 400 })
+        }
+        throw err
+      }
+    }
+
     // Check if pageSlug is taken (URL slugs are unique across all sites).
     if (pageSlug) {
       const taken = await prisma.site.findFirst({
@@ -215,48 +227,44 @@ export async function PATCH(
         }
       }
 
-      return { ...u, pageSlug: siteSlug }
-    })
-    const updatedUser = updatedUserRaw
-
-    // If billingPlan changed, create/update admin-granted subscription
-    if (overridePlan) {
-      const plan = overridePlan
-      // Upsert: find existing active subscription or create new one
-      const existingSub = await prisma.subscription.findFirst({
-        where: { userId: id, status: 'active' },
-      })
-
-      if (existingSub) {
-        await prisma.subscription.update({
-          where: { id: existingSub.id },
-          data: { planId: plan.id, status: 'active' },
+      // Admin-granted plan: replace every running subscription with a fresh
+      // admin-granted row (no payrexxSubId), in the same transaction as
+      // user.billingPlan. Re-pointing an existing row used to leave a
+      // Payrexx-paid subscription's token in place, so the renewal cron
+      // charged the card the new plan's price; it also left a parallel
+      // trialing row behind. Cancelling a paid row does not refund anything.
+      if (overridePlan) {
+        await tx.subscription.updateMany({
+          where: { userId: id, status: { in: ['active', 'trialing', 'past_due'] } },
+          data: { status: 'cancelled', cancelledAt: new Date() },
         })
-      } else {
-        await prisma.subscription.create({
+        await tx.subscription.create({
           data: {
             userId: id,
-            planId: plan.id,
+            planId: overridePlan.id,
             status: 'active',
             // No payrexxSubId — admin-granted
           },
         })
+      } else if (billingPlan === 'free') {
+        // Cancel active, trialing AND past_due subscriptions. Trials used to
+        // survive this, leaving billingPlan='free' next to a live trial — the
+        // admin list then showed the contradictory label "free (trial)".
+        await tx.subscription.updateMany({
+          where: { userId: id, status: { in: ['active', 'trialing', 'past_due'] } },
+          data: { status: 'cancelled', cancelledAt: new Date() },
+        })
       }
-    } else if (billingPlan === 'free') {
-      // Cancel active AND trialing subscriptions. Trials used to survive this,
-      // leaving billingPlan='free' next to a live trial — the admin list then
-      // showed the contradictory label "free (trial)".
-      await prisma.subscription.updateMany({
-        where: { userId: id, status: { in: ['active', 'trialing'] } },
-        data: { status: 'cancelled', cancelledAt: new Date() },
-      })
-    }
+
+      return { ...u, pageSlug: siteSlug }
+    })
+    const updatedUser = updatedUserRaw
 
     // Admin grant trial
     if (grantTrial) {
-      // Cancel any existing active/trialing subscription first
+      // Cancel any existing running subscription first
       await prisma.subscription.updateMany({
-        where: { userId: id, status: { in: ['active', 'trialing'] } },
+        where: { userId: id, status: { in: ['active', 'trialing', 'past_due'] } },
         data: { status: 'cancelled', cancelledAt: new Date() },
       })
       await prisma.user.update({
@@ -291,7 +299,10 @@ export async function PATCH(
       await revalidateUserSites(id)
     }
 
-    return NextResponse.json({ user: updatedUser, ...(pioneerResult && { pioneer: pioneerResult }) })
+    return NextResponse.json({
+      user: pioneerResult ? { ...updatedUser, billingPlan: PIONEER_PLAN_SLUG } : updatedUser,
+      ...(pioneerResult && { pioneer: pioneerResult }),
+    })
   } catch (error) {
     console.error('Error updating user:', error)
     return NextResponse.json(

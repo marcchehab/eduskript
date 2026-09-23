@@ -176,7 +176,7 @@ export default function BillingPage() {
             {label}
           </Button>
           <p className="text-center text-xs text-muted-foreground">
-            Available when your current plan ends
+            {isPioneer ? 'Pioneer access has no end date. Contact us to switch to a paid plan.' : 'Available when your current plan ends'}
           </p>
         </div>
       )

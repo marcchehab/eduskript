@@ -88,10 +88,13 @@ describe('grantPioneer', () => {
   })
 
   it('refuses while a paid Payrexx subscription is running', async () => {
-    db.subscription.findMany.mockResolvedValue([
-      { id: 'paid', planId: 'plan-classroom', status: 'active', payrexxSubId: '123', currentPeriodEnd: NOW },
-    ])
+    db.subscription.findFirst.mockResolvedValueOnce({ id: 'paid' })
     await expect(grantPioneer('u1', NOW)).rejects.toBeInstanceOf(PioneerGrantError)
+    expect(db.subscription.findFirst.mock.calls[0][0].where).toEqual({
+      userId: 'u1',
+      status: { in: ['active', 'past_due'] },
+      payrexxSubId: { not: null },
+    })
     expect(db.subscription.create).not.toHaveBeenCalled()
     expect(db.user.update).not.toHaveBeenCalled()
   })

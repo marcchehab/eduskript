@@ -30,6 +30,35 @@ export { PIONEER_PLAN_SLUG }
 
 export class PioneerGrantError extends Error {}
 
+type Db = Pick<typeof prisma, 'user' | 'subscription'>
+
+/**
+ * Throws PioneerGrantError if the user cannot become a pioneer: missing,
+ * a student, or holding a Payrexx-paid subscription (active or past_due with
+ * a payrexxSubId; granting on top would leave the card being charged).
+ * Called by grantPioneer and, before any write, by the admin PATCH route so a
+ * refusal does not leave the dialog's other edits half-saved.
+ */
+export async function assertPioneerGrantable(db: Db, userId: string): Promise<void> {
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: { accountType: true },
+  })
+  if (!user) throw new PioneerGrantError('User not found')
+  if (user.accountType === 'student') {
+    throw new PioneerGrantError('Students cannot be pioneers')
+  }
+  const paid = await db.subscription.findFirst({
+    where: { userId, status: { in: ['active', 'past_due'] }, payrexxSubId: { not: null } },
+    select: { id: true },
+  })
+  if (paid) {
+    throw new PioneerGrantError(
+      'User has a paid Payrexx subscription. Stop it (or wait for it to end) before granting pioneer status.'
+    )
+  }
+}
+
 /**
  * Make a user a pioneer, open-ended.
  *
@@ -46,14 +75,7 @@ export async function grantPioneer(
   now: Date = new Date()
 ): Promise<{ alreadyPioneer: boolean }> {
   return prisma.$transaction(async (tx) => {
-    const user = await tx.user.findUnique({
-      where: { id: userId },
-      select: { accountType: true },
-    })
-    if (!user) throw new PioneerGrantError('User not found')
-    if (user.accountType === 'student') {
-      throw new PioneerGrantError('Students cannot be pioneers')
-    }
+    await assertPioneerGrantable(tx, userId)
 
     const plan = await tx.plan.upsert({
       where: { slug: PIONEER_PLAN_SLUG },
@@ -75,12 +97,6 @@ export async function grantPioneer(
 
     if (current.some((s) => s.planId === plan.id && s.status === 'active')) {
       return { alreadyPioneer: true }
-    }
-
-    if (current.some((s) => s.payrexxSubId && s.status !== 'trialing')) {
-      throw new PioneerGrantError(
-        'User has a paid Payrexx subscription. Stop it (or wait for it to end) before granting pioneer status.'
-      )
     }
 
     if (current.length > 0) {

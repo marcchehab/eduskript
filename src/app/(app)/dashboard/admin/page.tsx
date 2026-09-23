@@ -1325,7 +1325,7 @@ export default function AdminPanelPage() {
                     </div>
                   )}
                   <p className="text-xs text-muted-foreground">
-                    Replaces the current subscription. Free and Trial also cancel a Payrexx-paid one (no refund); Pioneer refuses while one runs.
+                    Replaces the current subscription. Free, Trial and a granted plan also cancel a Payrexx-paid one (no refund); Pioneer refuses while one runs.
                   </p>
                 </div>
               )}
