@@ -6,7 +6,7 @@
  *
  * Tasks:
  * - Expire trials and cancelled subscriptions past their end date
- * - Send trial lifecycle mails (ending soon / ended)
+ * - Send trial lifecycle mails (day-3 tips, ending soon)
  * - Reset demo user content from demo-content/ files
  * - Prune old metric_points and db_activity_hours rows
  */
@@ -131,7 +131,6 @@ export async function POST(request: NextRequest) {
   }
 
   // --- Task 1b: Trial lifecycle mails ---
-  // After Task 1, so a trial expired in this run gets its "ended" mail today.
   try {
     results.trialEmails = await sendDueTrialEmails()
   } catch (error) {

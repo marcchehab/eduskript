@@ -28,10 +28,9 @@ describe('trial emails', () => {
     expect(mail.textContent).not.toContain('ß')
   })
 
-  it('renders the ended mail and escapes the name in HTML', () => {
-    const mail = renderTrialEmail('ended', { ...ctx, firstName: '<b>X</b>' })
+  it('escapes the name in HTML', () => {
+    const mail = renderTrialEmail('ending', { ...ctx, firstName: '<b>X</b>' })
     expect(mail.htmlContent).toContain('Hallo &lt;b&gt;X&lt;/b&gt;')
-    expect(mail.subject).toContain('deine Seiten bleiben online')
   })
 
   it('omits the price sentence gracefully without plans', () => {

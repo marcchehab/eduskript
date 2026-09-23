@@ -5,22 +5,20 @@
  *   verification (verify-email route) or at OAuth signup (privacy-adapter).
  *   Points to the onboarding quest in the dashboard; no videos in the mail
  *   on purpose, the quest is the one place that walks through the steps.
- * - `ending`: 5 days before the trial ends — what Classroom adds, the price,
- *   and that nothing is charged automatically.
- * - `ended`:  after the cron expired the trial — pages stay online, how to
- *   continue with Classroom.
- *
  * - `tips`: 3 days into the trial — share the page link with the class, or
  *   create a class to see progress. Skipped for teachers who already have
  *   a class.
- * tips/ending/ended are sent by the daily cron (src/app/api/cron/route.ts, 03:00 UTC), right after
- * it expires due trials. Each mail has a send window rather than an exact day
- * (tips: trial start 3–5 days ago; ending: trial end 3–5 days away; ended:
- * trial end 0–3 days ago), so a
- * missed cron run is caught up the next day, and trials that ended long
- * before this shipped never get a late mail. "Already sent" is recorded per
- * subscription in UserData (adapter 'trial-emails', itemId = subscription id),
- * so a second trial on the same account would get its own pair.
+ * - `ending`: 5 days before the trial ends — what Classroom adds, the price,
+ *   and that nothing is charged automatically. The last mail: there is no
+ *   "trial ended" mail on purpose (too many mails; the account just drops to
+ *   the free plan, pages stay online, and this mail already says so).
+ *
+ * tips/ending are sent by the daily cron (src/app/api/cron/route.ts,
+ * 03:00 UTC). Each has a send window rather than an exact day (tips: trial
+ * start 3–5 days ago; ending: trial end 3–5 days away), so a missed cron run
+ * is caught up the next day, and trials from before this shipped never get a
+ * late mail. "Already sent" is recorded per subscription in UserData
+ * (adapter 'trial-emails', itemId = subscription id).
  *
  * Recipients: teachers with a real address that is verified or came from an
  * OAuth sign-in (no password set). German only for now — the audience is
@@ -31,7 +29,7 @@ import { prisma } from '@/lib/prisma'
 import { sendEmail } from '@/lib/email'
 import { DEFAULT_TRIAL_DAYS, PLAN_COPY, formatChf, monthlyEquivalent } from '@/lib/plan-copy'
 
-export type TrialEmailKind = 'welcome' | 'tips' | 'ending' | 'ended'
+export type TrialEmailKind = 'welcome' | 'tips' | 'ending'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const ADAPTER = 'trial-emails'
@@ -111,9 +109,7 @@ export function renderTrialEmail(kind: TrialEmailKind, ctx: TrialEmailContext): 
   const prices = priceLine(ctx.prices)
   const name = ctx.firstName ? escapeHtml(ctx.firstName) : null
   const footer =
-    'Du bekommst diese Mail, weil du den Test von Eduskript gestartet hast. Nach dem Testende schicke ich dir noch eine kurze Mail, dann keine weiteren Erinnerungen.'
-  const footerEnded =
-    'Das war die letzte Mail zu deinem Test. Weitere Erinnerungen kommen keine.'
+    'Du bekommst diese Mail, weil du den Test von Eduskript gestartet hast. Es ist die letzte Erinnerung dazu.'
 
   if (kind === 'welcome') {
     const dashboardUrl = `${ctx.baseUrl}/dashboard`
@@ -169,68 +165,37 @@ export function renderTrialEmail(kind: TrialEmailKind, ctx: TrialEmailContext): 
     return { subject: 'Dein Skript für die Klasse', htmlContent: html, textContent: text }
   }
 
-  if (kind === 'ending') {
-    const days = ctx.daysLeft === 1 ? '1 Tag' : `${ctx.daysLeft} Tage`
-    const date = formatDateDe(ctx.trialEnd)
-    const subject = `Dein Eduskript-Test läuft noch ${days}`
-    const html = layout(
-      [
-        greeting(name),
-        `Dein Test von Eduskript läuft noch ${days}, bis am ${date}. Danach wechselt dein Konto automatisch in den Gratis-Plan. Es wird nichts belastet.`,
-        `Deine Skripts und deine öffentliche Seite bleiben online. Ohne Classroom fällt weg:`,
-        `<ul style="margin:0 0 16px;padding-left:20px">${features.map((f) => `<li>${f}</li>`).join('')}</ul>`,
-        prices ? `Classroom kostet ${prices}.` : 'Mit Classroom behältst du alles.',
-        button(billingUrl, 'Classroom ansehen'),
-        `Fragen? Antworte einfach auf diese Mail.<br>Marc`,
-        `<span style="color:#6b7280;font-size:13px">${footer}</span>`,
-      ]
-    )
-    const text = [
-      greeting(ctx.firstName),
-      '',
-      `Dein Test von Eduskript läuft noch ${days}, bis am ${date}. Danach wechselt dein Konto automatisch in den Gratis-Plan. Es wird nichts belastet.`,
-      '',
-      'Deine Skripts und deine öffentliche Seite bleiben online. Ohne Classroom fällt weg:',
-      ...features.map((f) => `- ${f}`),
-      '',
-      prices ? `Classroom kostet ${prices}.` : 'Mit Classroom behältst du alles.',
-      `Classroom ansehen: ${billingUrl}`,
-      '',
-      'Fragen? Antworte einfach auf diese Mail.',
-      'Marc',
-      '',
-      footer,
-    ].join('\n')
-    return { subject, htmlContent: html, textContent: text }
-  }
-
-  const subject = 'Dein Eduskript-Test ist beendet, deine Seiten bleiben online'
+  // kind === 'ending'
+  const days = ctx.daysLeft === 1 ? '1 Tag' : `${ctx.daysLeft} Tage`
+  const date = formatDateDe(ctx.trialEnd)
+  const subject = `Dein Eduskript-Test läuft noch ${days}`
   const html = layout(
     [
       greeting(name),
-      `Dein Test von Eduskript ist abgelaufen. Dein Konto läuft jetzt im Gratis-Plan weiter: Deine Skripts und deine öffentliche Seite bleiben online, und du kannst weiterhin unbegrenzt schreiben und veröffentlichen.`,
-      (prices
-        ? `Für KI-Bearbeitung, Klassen, Prüfungen im Safe Exam Browser und die KI-Korrektur brauchst du Classroom, für ${prices}.`
-        : 'Für KI-Bearbeitung, Klassen, Prüfungen im Safe Exam Browser und die KI-Korrektur brauchst du Classroom.'),
-      button(billingUrl, 'Weiter mit Classroom'),
+      `Dein Test von Eduskript läuft noch ${days}, bis am ${date}. Danach wechselt dein Konto automatisch in den Gratis-Plan. Es wird nichts belastet.`,
+      `Deine Skripts und deine öffentliche Seite bleiben online. Ohne Classroom fällt weg:`,
+      `<ul style="margin:0 0 16px;padding-left:20px">${features.map((f) => `<li>${f}</li>`).join('')}</ul>`,
+      prices ? `Classroom kostet ${prices}.` : 'Mit Classroom behältst du alles.',
+      button(billingUrl, 'Classroom ansehen'),
       `Fragen? Antworte einfach auf diese Mail.<br>Marc`,
-      `<span style="color:#6b7280;font-size:13px">${footerEnded}</span>`,
+      `<span style="color:#6b7280;font-size:13px">${footer}</span>`,
     ]
   )
   const text = [
     greeting(ctx.firstName),
     '',
-    'Dein Test von Eduskript ist abgelaufen. Dein Konto läuft jetzt im Gratis-Plan weiter: Deine Skripts und deine öffentliche Seite bleiben online, und du kannst weiterhin unbegrenzt schreiben und veröffentlichen.',
+    `Dein Test von Eduskript läuft noch ${days}, bis am ${date}. Danach wechselt dein Konto automatisch in den Gratis-Plan. Es wird nichts belastet.`,
     '',
-    prices
-      ? `Für KI-Bearbeitung, Klassen, Prüfungen im Safe Exam Browser und die KI-Korrektur brauchst du Classroom, für ${prices}.`
-      : 'Für KI-Bearbeitung, Klassen, Prüfungen im Safe Exam Browser und die KI-Korrektur brauchst du Classroom.',
-    `Weiter mit Classroom: ${billingUrl}`,
+    'Deine Skripts und deine öffentliche Seite bleiben online. Ohne Classroom fällt weg:',
+    ...features.map((f) => `- ${f}`),
+    '',
+    prices ? `Classroom kostet ${prices}.` : 'Mit Classroom behältst du alles.',
+    `Classroom ansehen: ${billingUrl}`,
     '',
     'Fragen? Antworte einfach auf diese Mail.',
     'Marc',
     '',
-    footerEnded,
+    footer,
   ].join('\n')
   return { subject, htmlContent: html, textContent: text }
 }
@@ -354,14 +319,14 @@ export async function sendWelcomeEmail(userId: string): Promise<void> {
 }
 
 /**
- * Send all due tips/ending/ended mails. Returns counts for the cron result. One
+ * Send all due tips/ending mails. Returns counts for the cron result. One
  * failing send is logged and skipped (not marked sent, so it retries next run
  * while still inside its window).
  */
 export async function sendDueTrialEmails(
   now = new Date()
-): Promise<{ tips: number; ending: number; ended: number; failed: number }> {
-  const counts = { tips: 0, ending: 0, ended: 0, failed: 0 }
+): Promise<{ tips: number; ending: number; failed: number }> {
+  const counts = { tips: 0, ending: 0, failed: 0 }
 
   const tips = await prisma.subscription.findMany({
     where: {
@@ -380,26 +345,12 @@ export async function sendDueTrialEmails(
     select: subscriptionSelect,
   })
 
-  // Expired trials: the cron sets status 'cancelled'. payrexxSubId null tells
-  // a trial apart from a cancelled paid subscription. Skip users who have
-  // since subscribed (or got a new trial).
-  const ended = await prisma.subscription.findMany({
-    where: {
-      status: 'cancelled',
-      payrexxSubId: null,
-      currentPeriodEnd: { gte: new Date(now.getTime() - 3 * DAY_MS), lte: now },
-      user: { subscriptions: { none: { status: { in: ['active', 'trialing', 'past_due'] } } } },
-    },
-    select: subscriptionSelect,
-  })
-
-  if (tips.length === 0 && ending.length === 0 && ended.length === 0) return counts
+  if (tips.length === 0 && ending.length === 0) return counts
   const prices = await loadPrices()
 
-  const batches: ['tips' | 'ending' | 'ended', MailSubscription[]][] = [
+  const batches: ['tips' | 'ending', MailSubscription[]][] = [
     ['tips', tips],
     ['ending', ending],
-    ['ended', ended],
   ]
   for (const [kind, subs] of batches) {
     for (const sub of subs) {
