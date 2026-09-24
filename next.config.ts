@@ -135,8 +135,23 @@ const nextConfig: NextConfig = {
   },
   // Configure server external packages for Prisma
   // These packages contain native bindings and must not be bundled
+  // WMF/EMF/drawing rendering (src/lib/script-import/wmf-render.ts,
+  // drawing-render.ts) loads KaTeX and DejaVu TTFs from node_modules at
+  // runtime; nothing imports them, so the standalone trace would miss them.
+  outputFileTracingIncludes: {
+    '/api/script-import': [
+      './node_modules/katex/dist/fonts/KaTeX_Main-*.ttf',
+      './node_modules/katex/dist/fonts/KaTeX_Size1-Regular.ttf',
+      './node_modules/katex/dist/fonts/KaTeX_SansSerif-*.ttf',
+      './node_modules/katex/dist/fonts/KaTeX_Math-Italic.ttf',
+      './node_modules/dejavu-fonts-ttf/ttf/DejaVuSans*.ttf',
+      './node_modules/dejavu-fonts-ttf/ttf/DejaVuSerif*.ttf',
+    ],
+  },
   serverExternalPackages: [
     '@prisma/client',
+    'pandoc-wasm', // loads its .wasm via fs relative to the module; don't bundle
+    '@napi-rs/canvas', // native .node binary (WMF rendering, src/lib/script-import/wmf-render.ts)
     'sql.js', // SQL.js uses Node.js 'fs' module which should not be bundled for server
   ],
   // Empty turbopack config to silence warnings about webpack config in Next.js 16
