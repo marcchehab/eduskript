@@ -9,6 +9,7 @@
  * - Send trial lifecycle mails (day-3 tips, ending soon)
  * - Reset demo user content from demo-content/ files
  * - Prune old metric_points and db_activity_hours rows
+ * - Delete unclaimed anonymous skript imports past retention (7 days)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -18,6 +19,7 @@ import { chargeTransaction } from '@/lib/payrexx'
 import { revalidateUserSites } from '@/lib/billing-revalidate'
 import { PATH_METRIC_PREFIX } from '@/lib/metrics/buffer'
 import { sendDueTrialEmails } from '@/lib/trial-emails'
+import { deleteExpiredImports } from '@/lib/script-import/service'
 
 
 export async function POST(request: NextRequest) {
@@ -184,6 +186,14 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('[cron] prune-metrics error:', error)
     results.prunedMetricPoints = 'error'
+  }
+
+  // --- Task 4: Delete unclaimed anonymous skript imports after 7 days ---
+  try {
+    results.deletedScriptImports = await deleteExpiredImports()
+  } catch (error) {
+    console.error('[cron] script-import cleanup error:', error)
+    results.deletedScriptImports = 'error'
   }
 
   return NextResponse.json({ success: true, results })

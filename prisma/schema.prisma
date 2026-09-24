@@ -1452,3 +1452,51 @@ model MailMessage {
   @@index([hookId, createdAt])
   @@map("mail_messages")
 }
+
+/// Anonymous "what would my skript look like on Eduskript?" import: a .docx
+/// uploaded without an account, converted (pandoc → Claude cleanup) into
+/// pages, previewed at /import/<token>, and moved into the uploader's account
+/// after signup (claim). Unclaimed rows are deleted by the daily cron once
+/// expiresAt (created + 7 days) passes; assets cascade. On claim, assets and
+/// pages are wiped and the row is kept (no content) for funnel counts.
+/// Pipeline: src/lib/script-import/.
+model ScriptImport {
+  id              String              @id @default(cuid())
+  token           String              @unique // 32 random bytes, base64url — the only key to the preview
+  status          String              @default("processing") // "processing" | "ready" | "failed"
+  fileName        String              @map("file_name")
+  title           String?
+  pages           Json? // [{ title, slug, content }]
+  warnings        Json? // ImportWarnings (src/lib/script-import/service.ts), shown in the preview
+  error           String?
+  ipHash          String              @map("ip_hash") // sha256(secret + ip), for per-IP limits
+  powSalt         String              @unique @map("pow_salt") // proof-of-work challenge, single use
+  costUsd         Float               @default(0) @map("cost_usd")
+  expiresAt       DateTime            @map("expires_at")
+  claimedAt       DateTime?           @map("claimed_at")
+  claimedByUserId String?             @map("claimed_by_user_id")
+  claimedSkriptId String?             @map("claimed_skript_id")
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+  assets          ScriptImportAsset[]
+
+  @@index([ipHash, createdAt])
+  @@index([createdAt])
+  @@index([expiresAt])
+  @@map("script_imports")
+}
+
+/// Image extracted from an anonymous import's .docx. Kept in the DB (not S3)
+/// because File rows need a skript + user, which don't exist before the claim;
+/// size is bounded by the upload limit. Copied to S3 via saveFile on claim.
+model ScriptImportAsset {
+  id          String       @id @default(cuid())
+  importId    String       @map("import_id")
+  name        String
+  contentType String       @map("content_type")
+  data        Bytes
+  import      ScriptImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+
+  @@unique([importId, name])
+  @@map("script_import_assets")
+}
