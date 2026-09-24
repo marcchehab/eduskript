@@ -4,6 +4,9 @@ import { authOptions } from '@/lib/auth'
 import { DashboardSidebar } from '@/components/dashboard/sidebar'
 import { ErrorProvider } from '@/contexts/error-context'
 import { TrialBanner } from '@/components/dashboard/trial-banner'
+import { cookies } from 'next/headers'
+import { ImportClaimer } from '@/components/dashboard/import-claimer'
+import { IMPORT_COOKIE } from '@/lib/script-import/service'
 
 export default async function DashboardLayout({
   children,
@@ -26,10 +29,14 @@ export default async function DashboardLayout({
     redirect('/auth/complete-profile')
   }
 
+  // Pending anonymous import (see src/lib/script-import/service.ts).
+  const pendingImport = (await cookies()).has(IMPORT_COOKIE)
+
   return (
     <ErrorProvider>
       <div className="h-screen flex flex-col bg-background overflow-hidden">
         <TrialBanner userId={session.user.id} />
+        {pendingImport && <ImportClaimer />}
         <div className="flex flex-1 overflow-hidden">
           <DashboardSidebar />
           <main className="flex-1 overflow-y-auto px-6 py-3">

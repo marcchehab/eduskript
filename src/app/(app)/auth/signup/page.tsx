@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { signIn } from 'next-auth/react'
@@ -32,6 +32,23 @@ export default function SignUpPage() {
   const [showVerificationMessage, setShowVerificationMessage] = useState(false)
   const router = useRouter()
 
+  // Coming from the anonymous skript import (/import): the preview's "Create
+  // account" button set a cookie. Then the page speaks German (the import
+  // funnel targets German-speaking teachers) and says the skript is waiting;
+  // the dashboard claims it after the first login (ImportClaimer).
+  const [pendingImport, setPendingImport] = useState<{ title: string; pages: number } | null>(null)
+  useEffect(() => {
+    fetch('/api/script-import/claim')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data?.pending) return
+        setPendingImport(data.pending)
+        setFormData((prev) => ({ ...prev, pageLanguage: 'de-CH' }))
+      })
+      .catch(() => {})
+  }, [])
+  const t = (en: string, de: string) => (pendingImport ? de : en)
+
   const handleOAuthSignUp = (provider: string) => {
     // Set explicit teacher-signup cookie so isStudentSignup() creates a teacher account.
     // Without this, the new safety default (no cookie → student) would create a student.
@@ -60,7 +77,7 @@ export default function SignUpPage() {
     setSuccess('')
 
     if (formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match')
+      setError(t('Passwords do not match', 'Die Passwörter stimmen nicht überein'))
       setIsLoading(false)
       return
     }
@@ -82,7 +99,8 @@ export default function SignUpPage() {
 
       if (response.ok) {
         if (data.requiresEmailVerification) {
-          setSuccess(data.message)
+          // The German verification text already says it; the API message is English.
+          setSuccess(pendingImport ? '' : data.message)
           setShowVerificationMessage(true)
         } else {
           router.push('/auth/signin?message=Account created successfully')
@@ -101,7 +119,7 @@ export default function SignUpPage() {
         }
       }
     } catch {
-      setError('An error occurred. Please try again.')
+      setError(t('An error occurred. Please try again.', 'Etwas ist schiefgelaufen. Bitte nochmals versuchen.'))
     }
 
     setIsLoading(false)
@@ -122,7 +140,7 @@ export default function SignUpPage() {
       const data = await response.json()
       
       if (response.ok) {
-        setSuccess('Verification email sent successfully!')
+        setSuccess(t('Verification email sent successfully!', 'Bestätigungs-Mail erneut gesendet.'))
       } else {
         setError(data.error || 'Failed to resend verification email')
       }
@@ -137,9 +155,11 @@ export default function SignUpPage() {
     <div className="min-h-screen flex items-center justify-center bg-background py-12 px-4 sm:px-6 lg:px-8">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl text-center">Create Teacher Account</CardTitle>
+          <CardTitle className="text-2xl text-center">{t('Create Teacher Account', 'Lehrer-Account erstellen')}</CardTitle>
           <CardDescription className="text-center">
-            Create your teacher account to start building educational content.
+            {pendingImport
+              ? `Danach liegt Ihr Skript «${pendingImport.title}» (${pendingImport.pages} ${pendingImport.pages === 1 ? 'Seite' : 'Seiten'}) in Ihrem Account, bereit zum Bearbeiten.`
+              : 'Create your teacher account to start building educational content.'}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -150,10 +170,18 @@ export default function SignUpPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Check Your Email</h3>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">{t('Check Your Email', 'Bitte E-Mail bestätigen')}</h3>
               <p className="text-gray-600 dark:text-gray-400 mb-4">
-                We&apos;ve sent a verification link to <strong>{formData.email}</strong>. 
-                Please check your email and click the link to verify your account.
+                {pendingImport ? (
+                  <>
+                    Wir haben einen Bestätigungslink an <strong>{formData.email}</strong> geschickt. Klicken Sie darauf und melden Sie sich an – Ihr Skript «{pendingImport.title}» wird dann automatisch übernommen.
+                  </>
+                ) : (
+                  <>
+                    We&apos;ve sent a verification link to <strong>{formData.email}</strong>.
+                    Please check your email and click the link to verify your account.
+                  </>
+                )}
               </p>
               
               {success && (
@@ -170,14 +198,14 @@ export default function SignUpPage() {
                   className="w-full" 
                   disabled={isLoading}
                 >
-                  {isLoading ? 'Sending...' : 'Resend Verification Email'}
+                  {isLoading ? t('Sending...', 'Wird gesendet …') : t('Resend Verification Email', 'Bestätigungs-Mail erneut senden')}
                 </Button>
                 
                 <Link
                   href="/auth/signin"
                   className="inline-flex items-center justify-center w-full px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-500 dark:text-blue-400"
                 >
-                  Back to Sign In
+                  {t('Back to Sign In', 'Zur Anmeldung')}
                 </Link>
               </div>
             </div>
@@ -196,7 +224,7 @@ export default function SignUpPage() {
                     <path d="M0 12.13h10.87V23H0z" fill="#7fba00"/>
                     <path d="M12.13 12.13H23V23H12.13z" fill="#ffb900"/>
                   </svg>
-                  Continue with Microsoft
+                  {t('Continue with Microsoft', 'Weiter mit Microsoft')}
                 </Button>
               </div>
 
@@ -206,52 +234,52 @@ export default function SignUpPage() {
                 </div>
                 <div className="relative flex justify-center text-xs uppercase">
                   <span className="bg-card px-2 text-muted-foreground">
-                    Or sign up with email
+                    {t('Or sign up with email', 'Oder mit E-Mail registrieren')}
                   </span>
                 </div>
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="name">Full Name</Label>
+                  <Label htmlFor="name">{t('Full Name', 'Name')}</Label>
                 <Input
                   id="name"
                   name="name"
                   type="text"
-                  placeholder="Enter your full name"
+                  placeholder={t('Enter your full name', 'Vor- und Nachname')}
                   value={formData.name}
                   onChange={handleChange}
                   required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">{t('Email', 'E-Mail')}</Label>
                 <Input
                   id="email"
                   name="email"
                   type="email"
-                  placeholder="Enter your email"
+                  placeholder={t('Enter your email', 'name@schule.ch')}
                   value={formData.email}
                   onChange={handleChange}
                   required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="pageSlug">Page URL</Label>
+                <Label htmlFor="pageSlug">{t('Page URL', 'Adresse Ihrer Seite')}</Label>
                 <Input
                   id="pageSlug"
                   name="pageSlug"
                   type="text"
-                  placeholder="your-page-name"
+                  placeholder={t('your-page-name', 'ihr-name')}
                   value={formData.pageSlug}
                   onChange={handleChange}
                 />
                 <p className="text-sm text-gray-500">
-                  Your page URL: eduskript.org/{formData.pageSlug || 'your-page-name'}
+                  {t('Your page URL', 'Ihre Seite')}: eduskript.org/{formData.pageSlug || t('your-page-name', 'ihr-name')}
                 </p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="pageLanguage">Page Language</Label>
+                <Label htmlFor="pageLanguage">{t('Page Language', 'Sprache der Seite')}</Label>
                 <Select
                   value={formData.pageLanguage}
                   onValueChange={(value) => setFormData(prev => ({ ...prev, pageLanguage: value }))}
@@ -272,31 +300,31 @@ export default function SignUpPage() {
                   </SelectContent>
                 </Select>
                 <p className="text-sm text-gray-500">
-                  Language of your page and the example content you start with.
+                  {t('Language of your page and the example content you start with.', 'Sprache Ihrer Seite und der Beispielinhalte.')}
                 </p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">{t('Password', 'Passwort')}</Label>
                 <Input
                   id="password"
                   name="password"
                   type="password"
-                  placeholder="Enter your password"
+                  placeholder={t('Enter your password', 'Passwort wählen')}
                   value={formData.password}
                   onChange={handleChange}
                   required
                 />
                 {formData.password.length > 0 && (
-                  <PasswordRequirements password={formData.password} />
+                  <PasswordRequirements password={formData.password} german={Boolean(pendingImport)} />
                 )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirm Password</Label>
+                <Label htmlFor="confirmPassword">{t('Confirm Password', 'Passwort bestätigen')}</Label>
                 <Input
                   id="confirmPassword"
                   name="confirmPassword"
                   type="password"
-                  placeholder="Confirm your password"
+                  placeholder={t('Confirm your password', 'Passwort wiederholen')}
                   value={formData.confirmPassword}
                   onChange={handleChange}
                   required
@@ -319,7 +347,7 @@ export default function SignUpPage() {
                 className="w-full"
                 disabled={isLoading}
               >
-                {isLoading ? 'Creating Account...' : 'Create Account'}
+                {isLoading ? t('Creating Account...', 'Account wird erstellt …') : t('Create Account', 'Account erstellen & Skript übernehmen')}
               </Button>
               </form>
             </>
@@ -327,13 +355,13 @@ export default function SignUpPage() {
           
           <div className="mt-6 text-center text-sm">
             <span className="text-gray-600 dark:text-gray-400">
-              Already have an account?{' '}
+              {t('Already have an account?', 'Schon einen Account?')}{' '}
             </span>
             <Link
               href="/auth/signin"
               className="text-blue-600 hover:text-blue-500 dark:text-blue-400"
             >
-              Sign in
+              {t('Sign in', 'Anmelden')}
             </Link>
           </div>
         </CardContent>
@@ -342,12 +370,12 @@ export default function SignUpPage() {
   )
 }
 
-function PasswordRequirements({ password }: { password: string }) {
+function PasswordRequirements({ password, german }: { password: string; german: boolean }) {
   const rules = [
-    { label: '8+ characters', met: password.length >= 8 },
-    { label: 'Lowercase letter', met: /[a-z]/.test(password) },
-    { label: 'Uppercase letter', met: /[A-Z]/.test(password) },
-    { label: 'Number', met: /[0-9]/.test(password) },
+    { label: german ? '8+ Zeichen' : '8+ characters', met: password.length >= 8 },
+    { label: german ? 'Kleinbuchstabe' : 'Lowercase letter', met: /[a-z]/.test(password) },
+    { label: german ? 'Grossbuchstabe' : 'Uppercase letter', met: /[A-Z]/.test(password) },
+    { label: german ? 'Zahl' : 'Number', met: /[0-9]/.test(password) },
   ]
 
   return (
