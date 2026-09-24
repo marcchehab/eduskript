@@ -151,7 +151,9 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith('/terms') ||
     pathname.startsWith('/datenschutz') ||
     pathname.startsWith('/privacy') ||
-    pathname.startsWith('/supporters')
+    pathname.startsWith('/supporters') ||
+    pathname.startsWith('/import/') ||
+    pathname === '/import'
   ) {
     return NextResponse.next()
   }

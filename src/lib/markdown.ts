@@ -146,6 +146,7 @@ export const RESERVED_SLUGS = [
   'test',
   'health',
   'embed',
+  'import',
   '_next',
   'static',
   'public',
