@@ -1028,11 +1028,11 @@ export const getOrgHomepageContent = (
  * against 0 for the same page on a custom domain, which is served by the ISR
  * `[domain]` tree. Both callers share this one cached entry.
  *
- * The where-clauses match what the route did before, deliberately: unlike
- * getPublishedPage() this does NOT require skript.isPublished or
- * page.isPublished, so the org route keeps serving unpublished content exactly
- * as it did. That inconsistency with the [domain] route is pre-existing and
- * worth deciding on separately — do not "fix" it here by accident.
+ * Requires skript.isPublished and page.isPublished, same as getPublishedPage()
+ * for the [domain] route. Until 2026-09-24 it did not, so drafts were
+ * reachable by direct URL on eduskript.org while custom domains 404'd them.
+ * Unlisted is not checked on either route (URL works, hidden from sidebar).
+ * The dashboard's visibility badge (src/lib/visibility.ts) assumes this.
  *
  * Tag set is a superset of what page/skript/collection saves invalidate
  * (teacherContent + orgContent), so edits show up without a deploy.
@@ -1091,8 +1091,10 @@ export const getOrgTeacherContentPage = (
       const page = await prisma.page.findFirst({
         where: {
           slug: contentPageSlug,
+          isPublished: true,
           skript: {
             slug: skriptSlug,
+            isPublished: true,
             OR: [
               { authors: { some: { userId: teacher.id } } },
               { collectionSkripts: { some: { collection: { site: { userId: teacher.id } } } } },
@@ -1152,8 +1154,7 @@ export const getOrgTeacherContentPage = (
  * even on repeat views. Next prefetches these from every sidebar link, so they
  * fire constantly while a reader browses.
  *
- * Where-clauses preserved exactly as the route had them, including the absence
- * of an isPublished filter on the skript.
+ * Requires skript.isPublished (see getOrgTeacherContentPage).
  */
 export const getOrgTeacherSkript = (
   orgSlug: string,
@@ -1207,6 +1208,7 @@ export const getOrgTeacherSkript = (
       const skript = await prisma.skript.findFirst({
         where: {
           slug: skriptSlug,
+          isPublished: true,
           OR: [
             { authors: { some: { userId: teacher.id } } },
             { collectionSkripts: { some: { collection: { site: { userId: teacher.id } } } } },
