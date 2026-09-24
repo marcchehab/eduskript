@@ -1,7 +1,7 @@
 'use client'
 
 import { DragDropContext, DropResult, DragStart } from '@hello-pangea/dnd'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { ContentLibrary } from './content-library'
 import { PageBuilder } from './page-builder'
 import { ImportExportSettings } from './import-export-settings'
@@ -84,6 +84,17 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
         : '/api/page-layout'
   const { data: session } = useSession()
   const [pageItems, setPageItems] = useState<PageItem[]>([])
+  // Skripts reachable from the sidebar: root items plus skripts inside placed
+  // collections. Feeds the library cards' visibility badge.
+  const placedSkriptIds = useMemo(
+    () =>
+      new Set(
+        pageItems.flatMap((item) =>
+          item.type === 'skript' ? [item.id] : (item.skripts ?? []).map((s) => s.id)
+        )
+      ),
+    [pageItems]
+  )
   const [activeItem, setActiveItem] = useState<DragData | null>(null)
   const [loading, setLoading] = useState(true)
   const [expandedCollections, setExpandedCollections] = useState<string[]>([])
@@ -838,6 +849,7 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
           </div>
           <div className="w-80 shrink-0">
             <ContentLibrary
+              placedSkriptIds={placedSkriptIds}
               onDataLoad={setLibraryData}
               refreshTrigger={refreshTrigger}
               collectionUpdate={libraryCollectionUpdate}
@@ -883,6 +895,7 @@ export function PageBuilderInterface({ context = { type: 'user' } }: PageBuilder
         {/* Content Library - Right Side */}
         <div className="w-80 shrink-0">
           <ContentLibrary
+            placedSkriptIds={placedSkriptIds}
             onDataLoad={setLibraryData}
             refreshTrigger={refreshTrigger}
             collectionUpdate={libraryCollectionUpdate}

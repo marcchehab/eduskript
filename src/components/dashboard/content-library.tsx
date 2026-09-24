@@ -72,6 +72,9 @@ interface ContentLibraryProps {
     title: string;
     accentColor?: string | null;
   }) => void;
+  // Skript ids on the page being built (root or inside a placed collection),
+  // for the library cards' visibility badge. Omit to hide the badge.
+  placedSkriptIds?: Set<string>;
 }
 
 export function ContentLibrary({
@@ -81,6 +84,7 @@ export function ContentLibrary({
   collectionUpdate,
   onRefresh,
   onCollectionRenamed,
+  placedSkriptIds,
 }: ContentLibraryProps = {}) {
   const { data: session } = useSession();
   const router = useRouter();
@@ -344,6 +348,16 @@ export function ContentLibrary({
                             dragHandleId={
                               index === 0
                                 ? "content-library-first-skript-hint"
+                                : undefined
+                            }
+                            visibility={
+                              placedSkriptIds
+                                ? {
+                                    isPublished: skript.isPublished,
+                                    isUnlisted: skript.isUnlisted,
+                                    placed: placedSkriptIds.has(skript.id),
+                                    placementRequired: context.type === "organization",
+                                  }
                                 : undefined
                             }
                           />

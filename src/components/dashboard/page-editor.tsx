@@ -8,14 +8,14 @@ import { Input } from '@/components/ui/input'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { CollapsibleDrawer } from '@/components/ui/collapsible-drawer'
-import { PublishToggle } from '@/components/dashboard/publish-toggle'
+import { VisibilityBadge } from '@/components/dashboard/visibility-badge'
 import { VersionHistory } from '@/components/dashboard/version-history'
 import { EditModal } from '@/components/dashboard/edit-modal'
 import { ExportSkriptModal } from '@/components/dashboard/export-skript-modal'
 import { CreatePageModal } from '@/components/dashboard/create-page-modal'
 import { SkriptAccessManager } from '@/components/permissions/SkriptAccessManager'
 import { EditorWithMedia, type ExtraManageTab } from '@/components/dashboard/editor-with-media'
-import { AlertCircle, ArrowLeft, ArrowRightLeft, Save, History, Eye, EyeOff, Check, Shield, Globe, Maximize2, Minimize2, BookA, BookOpen, FileText, FilePenLine, GripVertical, Trash2, Users, Loader2, CircleCheckBig, CircleMinus, Presentation, Link2, GraduationCap } from 'lucide-react'
+import { ArrowLeft, ArrowRightLeft, Save, History, Eye, EyeOff, Check, Shield, Globe, Maximize2, Minimize2, BookA, BookOpen, FileText, FilePenLine, GripVertical, Trash2, Users, Loader2, CircleCheckBig, CircleMinus, Presentation, Link2, GraduationCap } from 'lucide-react'
 import { ExamStateStepper } from '@/components/exam/exam-state-stepper'
 import type { ExamLifecycleState } from '@/lib/exam-state'
 import {
@@ -99,11 +99,13 @@ interface PageEditorProps {
     presentationPublic?: boolean
   }
   canEdit: boolean
+  /** Skript (or a collection holding it) is placed on one of the user's sites. */
+  placed?: boolean
   userPermissions: UserPermissions
   currentUserId: string
 }
 
-export function PageEditor({ skript, page, canEdit, userPermissions, currentUserId }: PageEditorProps) {
+export function PageEditor({ skript, page, canEdit, placed, userPermissions, currentUserId }: PageEditorProps) {
   const [title, setTitle] = useState(page.title || '')
   const [slug, setSlug] = useState(page.slug || '')
   const [description, setDescription] = useState(page.description || '')
@@ -645,17 +647,14 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
             <span className="text-sm text-muted-foreground line-clamp-2 leading-snug">{skript.description}</span>
           )}
         </div>
+        <VisibilityBadge
+          skript={skript}
+          placed={placed}
+          canEdit={canEdit}
+          onChange={() => router.refresh()}
+        />
         {canEdit && (
           <div className="flex items-center gap-1 ml-auto shrink-0">
-            <PublishToggle
-              type="skript"
-              itemId={skript.id}
-              isPublished={skript.isPublished}
-              isUnlisted={skript.isUnlisted}
-              onToggle={() => {}}
-              showText={false}
-              size="sm"
-            />
             <QuestSpotlight step="rename_skript" label="Try this!">
               <EditModal
                 type="skript"
@@ -682,32 +681,6 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
           </div>
         )}
       </div>
-
-      {/* A new skript starts unpublished but its first page is created
-          published (dashboard/skripts/[skriptSlug]/page.tsx), so this is
-          the state every teacher lands in — not an edge case. The only
-          previous signal was a tooltip on a disabled eye icon, which
-          nobody sees. */}
-      {page.isPublished && !skript.isPublished && (
-        <div className="mt-3 mx-3 mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
-          <AlertCircle className="h-4 w-4 shrink-0 text-amber-600" />
-          <span>
-            This page is published, but the skript <strong>{skript.title}</strong> is not —
-            so nobody can see it yet.
-          </span>
-          {canEdit && (
-            <PublishToggle
-              type="skript"
-              itemId={skript.id}
-              isPublished={skript.isPublished}
-              isUnlisted={skript.isUnlisted}
-              onToggle={() => router.refresh()}
-              showText
-              size="sm"
-            />
-          )}
-        </div>
-      )}
     </div>
   )
 
@@ -809,14 +782,12 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                       <SelectItem value="exam">Exam</SelectItem>
                     </SelectContent>
                   </Select>
-                  <PublishToggle
-                    type="page"
-                    itemId={page.id}
-                    isPublished={page.isPublished}
-                    isUnlisted={page.isUnlisted}
-                    onToggle={() => router.refresh()}
-                    showText={false}
-                    size="sm"
+                  <VisibilityBadge
+                    page={page}
+                    skript={skript}
+                    placed={placed}
+                    canEdit={canEdit}
+                    onChange={() => router.refresh()}
                   />
                   {sessionPageSlug && (
                     page.isPublished && skript.isPublished ? (

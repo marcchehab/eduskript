@@ -20,10 +20,9 @@ import {
   X,
   GripVertical,
   Pencil,
-  EyeOff,
 } from "lucide-react";
 import { Sketch } from "@uiw/react-color";
-import { PublishToggle } from "./publish-toggle";
+import { VisibilityBadge } from "./visibility-badge";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { useState } from "react";
@@ -345,19 +344,15 @@ function PageBuilderItem({
             )}
             {/* Remove button + publish toggle - top-right corner */}
             <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
-              {item.type === "skript" &&
-                item.permissions?.canEdit &&
-                item.isPublished !== undefined && (
-                  <PublishToggle
-                    type="skript"
-                    itemId={item.id}
-                    isPublished={item.isPublished}
-                    isUnlisted={item.isUnlisted}
-                    onToggle={() => {}}
-                    size="sm"
-                    showText={false}
-                  />
-                )}
+              {item.type === "skript" && item.isPublished !== undefined && (
+                <VisibilityBadge
+                  skript={{ id: item.id, isPublished: item.isPublished, isUnlisted: item.isUnlisted }}
+                  placed
+                  canEdit={!!item.permissions?.canEdit}
+                  compact
+                  hidePageBuilderLink
+                />
+              )}
               <Button
                 variant="ghost"
                 size="sm"
@@ -464,12 +459,6 @@ function PageBuilderItem({
                 {item.type === "collection" && (
                   <span className="text-xs text-muted-foreground">
                     • {item.skripts?.length || 0} skripts
-                  </span>
-                )}
-                {item.type === "skript" && item.isPublished === false && (
-                  <span className="text-xs text-red-600 dark:text-red-400 flex items-center gap-0.5">
-                    <EyeOff className="w-3 h-3" />
-                    Draft
                   </span>
                 )}
               </div>
@@ -646,13 +635,6 @@ function SimpleSkriptItem({
                         {item.title}
                       </h5>
                     )}
-                    {/* Show draft indicator for unpublished skripts */}
-                    {item.isPublished === false && (
-                      <span className="text-xs text-red-600 dark:text-red-400 flex items-center gap-0.5">
-                        <EyeOff className="w-3 h-3" />
-                        Draft
-                      </span>
-                    )}
                   </div>
                   {item.description && (
                     <p className="text-xs text-muted-foreground line-clamp-2 leading-snug mt-0.5">
@@ -664,15 +646,13 @@ function SimpleSkriptItem({
             </div>
             {/* Action buttons - aligned in a button bar */}
             <div className="flex items-center gap-1">
-              {item.permissions?.canEdit && item.isPublished !== undefined && (
-                <PublishToggle
-                  type="skript"
-                  itemId={item.id}
-                  isPublished={item.isPublished}
-                  isUnlisted={item.isUnlisted}
-                  onToggle={() => {}}
-                  size="sm"
-                  showText={false}
+              {item.isPublished !== undefined && (
+                <VisibilityBadge
+                  skript={{ id: item.id, isPublished: item.isPublished, isUnlisted: item.isUnlisted }}
+                  placed
+                  canEdit={!!item.permissions?.canEdit}
+                  compact
+                  hidePageBuilderLink
                 />
               )}
               {parentCanEdit && (

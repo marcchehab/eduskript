@@ -9,6 +9,7 @@ import { CollectionTitleInlineEditor, type CollectionUpdate } from './page-build
 import { cn } from '@/lib/utils'
 import { SkriptAuthor, User } from '@prisma/client'
 import Link from 'next/link'
+import { VisibilityBadge } from './visibility-badge'
 
 interface BaseContentProps {
   id: string
@@ -45,6 +46,13 @@ interface DraggableSkriptProps extends BaseContentProps {
   // DOM id for the drag-handle element. Used by EmptyPageDragHint to anchor
   // the "drag this into your page" hint on the first skript in the library.
   dragHandleId?: string
+  // Publish flags + placement for the visibility badge. Omit to hide it.
+  visibility?: {
+    isPublished: boolean
+    isUnlisted: boolean
+    placed: boolean
+    placementRequired?: boolean
+  }
 }
 
 export function DraggableCollection({
@@ -157,7 +165,8 @@ export function DraggableSkript({
   className,
   index = 0,
   slug,
-  dragHandleId
+  dragHandleId,
+  visibility,
 }: DraggableSkriptProps) {
   // Separate authors by permission
   const editableBy = authors.filter(author => 
@@ -240,6 +249,19 @@ export function DraggableSkript({
                   viewableBy={viewableBy}
                   isViewOnly={isViewOnly}
                 />
+                {visibility && (
+                  // stopPropagation: a press on the badge must not start a drag.
+                  <span className="ml-auto" onMouseDown={(e) => e.stopPropagation()}>
+                    <VisibilityBadge
+                      skript={{ id, isPublished: visibility.isPublished, isUnlisted: visibility.isUnlisted }}
+                      placed={visibility.placed}
+                      placementRequired={visibility.placementRequired}
+                      canEdit={!isViewOnly}
+                      compact
+                      hidePageBuilderLink
+                    />
+                  </span>
+                )}
               </div>
             </div>
           </div>
