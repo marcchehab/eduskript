@@ -117,7 +117,7 @@ export function renderTrialEmail(kind: TrialEmailKind, ctx: TrialEmailContext): 
       'Schön, dass du Eduskript ausprobierst! Ich bin Marc und unterrichte Informatik in Zürich. Ich habe Eduskript gebaut, weil ich meine Skripts lieber als interaktive Website abgebe, die ich aktualisieren kann – du hoffentlich auch 😊'
     const tour = (dashboard: string) =>
       `Wie geht's weiter? Im ${dashboard} führt dich eine kurze Erklär-Tour durch die ersten Schritte. Wenn du sie meisterst, verdoppelt sich deine Testzeit auf ${ctx.trialDays * 2} Tage – es lohnt sich also!`
-    const plan = `Du hast jetzt ${ctx.trialDays} Tage lang alle Funktionen – inklusive KI und Klassenverwaltung, die mir ein Loch ins Portemonnaie brennen. Danach läuft dein Konto im Gratis-Plan weiter, deine Skripts bleiben online.`
+    const plan = `Du hast jetzt ${ctx.trialDays} Tage lang alle Funktionen – inklusive KI und Klassenverwaltung. Danach läuft dein Konto im Gratis-Plan weiter.`
     const ps = 'PS: Warum ging das interaktive Skript erneut zum Arzt? Es hatte zu viele Seiten-Effekte 🤷'
     const html = layout([
       greeting(name),
