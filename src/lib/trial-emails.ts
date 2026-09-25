@@ -118,7 +118,7 @@ export function renderTrialEmail(kind: TrialEmailKind, ctx: TrialEmailContext): 
     const tour = (dashboard: string) =>
       `Wie geht's weiter? Im ${dashboard} führt dich eine kurze Erklär-Tour durch die ersten Schritte. Wenn du sie meisterst, verdoppelt sich deine Testzeit auf ${ctx.trialDays * 2} Tage – es lohnt sich also!`
     const plan = `Du hast jetzt ${ctx.trialDays} Tage lang alle Funktionen – inklusive KI und Klassenverwaltung, die mir ein Loch ins Portemonnaie brennen. Danach läuft dein Konto im Gratis-Plan weiter, deine Skripts bleiben online.`
-    const ps = 'PS: Warum ging das interaktive Skript zum Arzt? Es hatte zu viele Seiten-Effekte 🤷'
+    const ps = 'PS: Warum ging das interaktive Skript erneut zum Arzt? Es hatte zu viele Seiten-Effekte 🤷'
     const html = layout([
       greeting(name),
       intro,
