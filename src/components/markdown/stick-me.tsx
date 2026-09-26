@@ -31,7 +31,9 @@ import { useZoom } from '@/contexts/zoom-context'
  * Pinned size = a fraction of the paper width (right edge anchored to the paper
  * edge, height follows the aspect ratio). A round handle at the bottom-left
  * resizes it; the chosen width fraction is persisted in localStorage per
- * `storageKey` (local only, not synced).
+ * `storageKey` (local only, not synced). `defaultWidth` ("800px", "800",
+ * "50%") sets the width used until the reader drags the handle; px are CSS px
+ * of the unzoomed paper, so they scale with zoom like the paper does.
  *
  * `footer` is an optional node shown beneath the pinned element (e.g. the
  * coupled-video toggle). `enabled` false is a transparent passthrough.
@@ -46,6 +48,15 @@ const DEFAULT_STORAGE_KEY = 'stickme:width-fraction'
 
 function clampFraction(f: number): number {
   return Math.min(MAX_WIDTH_FRACTION, Math.max(MIN_WIDTH_FRACTION, f))
+}
+
+/** "50%" → fraction 0.5; "800px" / "800" → 800 px; anything else → null. */
+function parseDefaultWidth(w?: string): { fraction: number } | { px: number } | null {
+  const m = w?.trim().match(/^(\d+(?:\.\d+)?)\s*(%|px)?$/i)
+  if (!m) return null
+  const n = parseFloat(m[1])
+  if (!(n > 0)) return null
+  return m[2] === '%' ? { fraction: n / 100 } : { px: n }
 }
 
 // Page-wide count of currently-pinned StickMe instances. While > 0 we put
@@ -110,6 +121,7 @@ export function StickMe({
   footer,
   enabled = true,
   storageKey = DEFAULT_STORAGE_KEY,
+  defaultWidth,
   className,
   style,
 }: {
@@ -117,6 +129,9 @@ export function StickMe({
   footer?: ReactNode
   enabled?: boolean
   storageKey?: string
+  // Pinned width before the reader resizes: "800px", "800" or "50%" (of the
+  // paper width). Invalid/absent → DEFAULT_WIDTH_FRACTION.
+  defaultWidth?: string
   // Author-supplied class/style forwarded to the content wrapper. Lets authors
   // add a background, padding, border, etc. via plain CSS — handy for
   // transparent assets (e.g. Excalidraw SVGs) that would otherwise show the
@@ -135,15 +150,21 @@ export function StickMe({
   const myId = useId()
   const [pinned, setPinned] = useState(false)
   const pinnedRef = useRef(false)
-  const widthFractionRef = useRef(DEFAULT_WIDTH_FRACTION)
+  // Reader-chosen width (drag / localStorage); null = use defaultWidth.
+  const widthFractionRef = useRef<number | null>(null)
+  const defaultWidthRef = useRef(parseDefaultWidth(defaultWidth))
   const scheduleRef = useRef<() => void>(() => {})
   const draggingRef = useRef(false)
+  useEffect(() => {
+    defaultWidthRef.current = parseDefaultWidth(defaultWidth)
+    scheduleRef.current()
+  }, [defaultWidth])
 
   // Restore the persisted width on mount (local only, per storageKey).
   useEffect(() => {
     if (typeof window === 'undefined') return
     const v = parseFloat(window.localStorage.getItem(storageKey) ?? '')
-    widthFractionRef.current = Number.isNaN(v) ? DEFAULT_WIDTH_FRACTION : clampFraction(v)
+    widthFractionRef.current = Number.isNaN(v) ? null : clampFraction(v)
   }, [storageKey])
 
   // Join the page-level registry so only one StickMe is pinned at a time.
@@ -221,7 +242,18 @@ export function StickMe({
       const pRect = paper && paper.offsetWidth > 0 ? paper.getBoundingClientRect() : scRect
       const paperWidth = pRect?.width ?? window.innerWidth
 
-      const targetWidth = paperWidth * widthFractionRef.current // on-screen px
+      // Width fraction: reader's drag wins, else the author default. A px
+      // default is converted against the paper's layout (unzoomed) width.
+      let fraction = widthFractionRef.current
+      if (fraction === null) {
+        const d = defaultWidthRef.current
+        const layoutWidth = paper && paper.offsetWidth > 0 ? paper.offsetWidth : paperWidth / z
+        fraction =
+          d && 'px' in d ? clampFraction(d.px / layoutWidth)
+          : d ? clampFraction(d.fraction)
+          : DEFAULT_WIDTH_FRACTION
+      }
+      const targetWidth = paperWidth * fraction // on-screen px
       const scale = targetWidth / a.width
       // Always anchor the right edge to the viewport (scroll-container) right
       // edge, not #paper's — under zoom the paper's right edge drifts off-screen.

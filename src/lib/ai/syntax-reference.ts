@@ -422,6 +422,20 @@ In the dashboard preview these toggle from a toolbar in the video's top-right co
 
 **Audio:** \`<audio controls src="clip.mp3"></audio>\` — the filename is resolved from the skript's files at render time, like a link. Also accepts \`<source src="clip.mp3">\` children and absolute URLs.`)
 
+  sections.push(`## Pinned content (stickme)
+
+Wrap any content (image, diagram, schema, video) in \`<stickme>\` to dock it to the right margin once its top reaches the viewport top; it follows the reader down the page and its original slot shows a placeholder. Readers resize it with a handle (saved per browser). With several on a page, only the lowest scrolled-past one is pinned.
+
+\`\`\`html
+<stickme id="schema" width="50%">
+
+![Database schema](schema.excalidraw)
+
+</stickme>
+\`\`\`
+
+**Attributes:** \`width\` — default pinned width: \`"800px"\` (or \`"800"\`) or \`"50%"\` of the page width, default one third; a reader's resize overrides it. \`id\` — separate saved size for this instance. \`style\`/\`class\` — applied to the content (e.g. \`style="background:white"\` behind transparent drawings).`)
+
   // YouTube
   sections.push(`## YouTube Embeds
 
@@ -851,6 +865,8 @@ export function getCondensedSyntaxReference(): string {
 **Text alignment:** wrap content in \`<left>\`, \`<center>\`, or \`<right>\` — markdown parses inside with or without surrounding blank lines. Closing tag required.
 
 **Videos (Mux):** \`![caption](lecture.mp4)\` — the alt text becomes the caption. Playback options via \`<muxvideo>\`: \`<muxvideo src="intro.mp4" gif />\` (muted autoplay loop, GIF-style), \`autoplay\` (muted), \`loop\`, \`pin\` (corner overlay when scrolled past), \`poster="cover.png"\`, \`alt="caption"\`.
+
+**Pinned content:** \`<stickme [id="x"] [width="800px|50%"]>…</stickme>\` — docks wrapped content to the right margin while scrolling; \`width\` = default pinned width (reader resize overrides), default one third of the page.
 
 **Audio:** \`<audio controls src="clip.mp3"></audio>\` — filename resolved from the skript's files at render time; \`<source src>\` children and absolute URLs also work.
 **Custom CSS:** \`<style>.my-class { ... }</style>\` — scoped CSS blocks are supported. Inline \`style="..."\` also works on any element.

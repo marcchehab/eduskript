@@ -205,7 +205,7 @@ export const sanitizeSchema = {
     'quiz-option': ['correct', 'is', 'feedback'],
     'answer': ['correct', 'is', 'feedback', 'from'],
     'yt': ['time', 'videoid', 'label'],
-    'stickme': ['id'],
+    'stickme': ['id', 'width'],
     'next-stage': ['label', 'title', 'confirm', 'cancel'],
     'ourteachers': ['roles', 'limit', 'className'],
     'flex': ['gap', 'wrap', 'direction', 'justify', 'align', 'className'],

@@ -164,6 +164,7 @@ const TAG_ATTRS: Record<string, AttrDef[]> = {
   ],
   'stickme': [
     { label: 'id', info: 'Keys the saved size' },
+    { label: 'width', info: 'Default pinned width: "800px" or "50%" (of the paper width)' },
   ],
   'fullwidth': [],
   'mark': [],

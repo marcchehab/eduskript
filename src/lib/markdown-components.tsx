@@ -891,19 +891,23 @@ export function createMarkdownComponents(
     'answer': QuizOptionComponent,
     'survey': Survey,
     // <stickme> pins any wrapped content to the margin (general-purpose).
-    // An optional id gives the resize width its own persistence slot. class/style
+    // An optional id gives the resize width its own persistence slot. `width`
+    // sets the pinned default width ("800px", "800", "50%"); a user's dragged
+    // width (localStorage) still wins over it. class/style
     // are forwarded to the content wrapper (e.g. `style="background:white"` to
     // back a transparent Excalidraw SVG); the pipeline already parses style into
     // an object and allows class/style via the sanitize wildcard.
     'stickme': function StickMeTag(props: {
       children?: ReactNode
       id?: string
+      width?: string
       className?: string
       style?: CSSProperties
     }) {
       return (
         <StickMe
           storageKey={props.id ? `stickme:${props.id}` : undefined}
+          defaultWidth={props.width}
           className={props.className}
           style={props.style}
         >
