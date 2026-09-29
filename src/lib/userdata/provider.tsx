@@ -18,6 +18,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import { useSession } from 'next-auth/react'
 import { syncEngine, type SyncStatus } from './sync-engine'
 import { userDataService } from './userDataService'
+import { recordDeletions, removedCollectionIds } from './adapters'
 import { runOneTimeMigrationV2ToV3, migrateAnonymousIfNeeded } from './migrations'
 import { createLogger } from '@/lib/logger'
 
@@ -233,6 +234,11 @@ export function useSyncedUserData<T>(
   const [isLoading, setIsLoading] = useState(true)
   const [isSynced, setIsSynced] = useState(true)
 
+  // Latest data this hook handed out or wrote, including its deletion list —
+  // the baseline for detecting which collection items a write deletes.
+  const dataRef = React.useRef<T | null>(initialData)
+  useEffect(() => { dataRef.current = data }, [data])
+
   // Store initialData in a ref to avoid dependency issues
   // (callers often pass inline objects which would cause infinite loops)
   const initialDataRef = React.useRef(initialData)
@@ -360,6 +366,14 @@ export function useSyncedUserData<T>(
 
   const updateData = useCallback(
     async (newData: T, updateOptions: UpdateDataOptions = {}) => {
+      // Record deleted collection items on the data itself (see recordDeletions).
+      // Skipped for override saves: dataRef belongs to a different target.
+      if (updateOptions.targetTypeOverride === undefined) {
+        const previous = dataRef.current
+        newData = recordDeletions(componentId, previous, newData, removedCollectionIds(componentId, previous, newData))
+        dataRef.current = newData
+      }
+
       // Use overrides if provided, otherwise use hook's targeting
       const effectiveTargetType = updateOptions.targetTypeOverride !== undefined
         ? updateOptions.targetTypeOverride

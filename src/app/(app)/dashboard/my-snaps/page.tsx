@@ -83,7 +83,12 @@ export default function MySnapsPage() {
             {
               adapter: 'snaps',
               itemId: deletingSnap.pageId,
-              data: { snaps: updatedSnaps },
+              // Record the deletion so a stale copy elsewhere can't merge it back
+              data: {
+                ...data.data,
+                snaps: updatedSnaps,
+                deletedIds: [...(data.data?.deletedIds ?? []), deletingSnap.id],
+              },
               version: (data.version || 0) + 1,
             },
           ],

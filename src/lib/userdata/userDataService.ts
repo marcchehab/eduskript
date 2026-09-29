@@ -12,6 +12,7 @@
 import { db } from './schema'
 import type { UserDataRecord, SaveOptions, UserDataVersion, VersionBlob, CreateVersionOptions, VersionSummary, VersionKind } from './types'
 import { generateSHA256, gzipCompress, gzipDecompress, calculateSize } from './compression'
+import { recordDeletions } from './adapters'
 
 interface PendingSave<T = any> {
   timer: NodeJS.Timeout
@@ -233,6 +234,10 @@ export class UserDataService {
       // Preserve existing localOnly flag unless caller explicitly overrides.
       // This ensures the flag survives normal saves that don't pass it.
       const effectiveLocalOnly = localOnly !== undefined ? localOnly : existing?.localOnly
+
+      // Keep the record's deletion list across writes — callers pass just the
+      // collection, and dropping the list would let a merge resurrect items.
+      data = recordDeletions(componentId, existing?.data, data)
 
       const record: UserDataRecord<T> = {
         userId,

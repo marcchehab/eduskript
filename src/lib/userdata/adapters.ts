@@ -24,6 +24,96 @@ export interface DataAdapter<T> {
   merge?: (local: T, remote: T) => T
   /** Validate data structure (optional) */
   validate?: (data: T) => boolean
+  /**
+   * For id-keyed collections: the property holding the item array. Enables
+   * deletion tracking — see `deletedIds` and `recordDeletions`.
+   */
+  collectionKey?: string
+}
+
+/**
+ * Id-keyed collections (snaps, spacers, highlights, sticky notes) merge
+ * additively, so without a record of deletions a stale copy — the server
+ * before the delete was pushed, another tab, another device — brings a
+ * deleted item back on the next merge. `deletedIds` is that record: ids
+ * listed there never survive a merge, whichever side still has the item.
+ */
+export interface DeletionTracked {
+  deletedIds?: string[]
+}
+
+/** Oldest entries are dropped beyond this; a copy that stale is unlikely. */
+export const MAX_DELETED_IDS = 500
+
+function capDeletedIds(ids: Iterable<string>): string[] {
+  const unique = [...new Set(ids)]
+  return unique.slice(Math.max(0, unique.length - MAX_DELETED_IDS))
+}
+
+/**
+ * Merge two id-keyed collections. Items on either side survive unless either
+ * side has deleted them; `pick` resolves items present on both (default: local).
+ */
+function mergeCollection<I extends { id: string }>(
+  local: I[],
+  remote: I[],
+  localDeleted: string[] = [],
+  remoteDeleted: string[] = [],
+  pick: (local: I, remote: I) => I = (l) => l,
+): { items: I[]; deletedIds: string[] } {
+  const deletedIds = capDeletedIds([...remoteDeleted, ...localDeleted])
+  const deleted = new Set([...remoteDeleted, ...localDeleted])
+  const remoteById = new Map(remote.map(item => [item.id, item]))
+  const localIds = new Set(local.map(item => item.id))
+  const items = [
+    ...local.map(item => {
+      const other = remoteById.get(item.id)
+      return other ? pick(item, other) : item
+    }),
+    ...remote.filter(item => !localIds.has(item.id)),
+  ].filter(item => !deleted.has(item.id))
+  return { items, deletedIds }
+}
+
+/**
+ * Carry deletion tracking into a write: ids that were in `previous` (what the
+ * writer last saw) but are missing from `next` are recorded as deleted, on top
+ * of the deletions already stored on `existing`. Ids present in `next` are
+ * dropped from the list, so re-adding an item (undo) works.
+ *
+ * Returns `next` unchanged for adapters without a collection.
+ */
+export function recordDeletions<T>(
+  componentId: string,
+  existing: unknown,
+  next: T,
+  removedIds: Iterable<string> = [],
+): T {
+  const key = getAdapter(componentId)?.collectionKey
+  if (!key || !next || typeof next !== 'object') return next
+  const items = (next as Record<string, unknown>)[key]
+  if (!Array.isArray(items)) return next
+
+  const present = new Set(items.map((item: { id: string }) => item.id))
+  const deletedIds = capDeletedIds([
+    ...((existing as DeletionTracked | null | undefined)?.deletedIds ?? []),
+    ...((next as DeletionTracked).deletedIds ?? []),
+    ...removedIds,
+  ]).filter(id => !present.has(id))
+
+  if (deletedIds.length === 0 && !(next as DeletionTracked).deletedIds) return next
+  return { ...next, deletedIds }
+}
+
+/** Ids in `previous`'s collection that `next` no longer contains. */
+export function removedCollectionIds(componentId: string, previous: unknown, next: unknown): string[] {
+  const key = getAdapter(componentId)?.collectionKey
+  if (!key || !previous || !next) return []
+  const before = (previous as Record<string, unknown>)[key]
+  const after = (next as Record<string, unknown>)[key]
+  if (!Array.isArray(before) || !Array.isArray(after)) return []
+  const kept = new Set(after.map((item: { id: string }) => item.id))
+  return before.map((item: { id: string }) => item.id).filter(id => !kept.has(id))
 }
 
 /**
@@ -175,7 +265,7 @@ export interface SnapData {
 /**
  * Snaps collection stored per page
  */
-export interface SnapsData {
+export interface SnapsData extends DeletionTracked {
   snaps: SnapData[]
 }
 
@@ -185,19 +275,16 @@ export interface SnapsData {
  */
 export const snapsAdapter: DataAdapter<SnapsData> = {
   key: 'snaps',
+  collectionKey: 'snaps',
 
   serialize: (data) => JSON.stringify(data),
 
   deserialize: (raw) => JSON.parse(raw) as SnapsData,
 
-  // Merge by combining snaps from both, deduping by id
+  // Merge by combining snaps from both, deduping by id, minus deletions
   merge: (local, remote) => {
-    const localIds = new Set(local.snaps.map(s => s.id))
-    const mergedSnaps = [
-      ...local.snaps,
-      ...remote.snaps.filter(s => !localIds.has(s.id))
-    ]
-    return { snaps: mergedSnaps }
+    const { items, deletedIds } = mergeCollection(local.snaps, remote.snaps, local.deletedIds, remote.deletedIds)
+    return { snaps: items, deletedIds }
   },
 
   validate: (data) => {
@@ -208,7 +295,7 @@ export const snapsAdapter: DataAdapter<SnapsData> = {
 /**
  * Spacers collection stored per page
  */
-export interface SpacersData {
+export interface SpacersData extends DeletionTracked {
   spacers: Spacer[]
 }
 
@@ -218,19 +305,16 @@ export interface SpacersData {
  */
 export const spacersAdapter: DataAdapter<SpacersData> = {
   key: 'spacers',
+  collectionKey: 'spacers',
 
   serialize: (data) => JSON.stringify(data),
 
   deserialize: (raw) => JSON.parse(raw) as SpacersData,
 
-  // Merge by combining spacers from both, deduping by id
+  // Merge by combining spacers from both, deduping by id, minus deletions
   merge: (local, remote) => {
-    const localIds = new Set(local.spacers.map(s => s.id))
-    const mergedSpacers = [
-      ...local.spacers,
-      ...remote.spacers.filter(s => !localIds.has(s.id))
-    ]
-    return { spacers: mergedSpacers }
+    const { items, deletedIds } = mergeCollection(local.spacers, remote.spacers, local.deletedIds, remote.deletedIds)
+    return { spacers: items, deletedIds }
   },
 
   validate: (data) => {
@@ -242,22 +326,18 @@ export const spacersAdapter: DataAdapter<SpacersData> = {
  * Text highlights data adapter
  * Handles text passage highlights for study purposes
  */
-export const textHighlightsAdapter: DataAdapter<TextHighlightsData> = {
+export const textHighlightsAdapter: DataAdapter<TextHighlightsData & DeletionTracked> = {
   key: 'text-highlights',
+  collectionKey: 'highlights',
 
   serialize: (data) => JSON.stringify(data),
 
-  deserialize: (raw) => JSON.parse(raw) as TextHighlightsData,
+  deserialize: (raw) => JSON.parse(raw) as TextHighlightsData & DeletionTracked,
 
-  // Merge by combining highlights from both, deduping by id
+  // Merge by combining highlights from both, deduping by id, minus deletions
   merge: (local, remote) => {
-    const localIds = new Set(local.highlights.map(h => h.id))
-    return {
-      highlights: [
-        ...local.highlights,
-        ...remote.highlights.filter(h => !localIds.has(h.id)),
-      ],
-    }
+    const { items, deletedIds } = mergeCollection(local.highlights, remote.highlights, local.deletedIds, remote.deletedIds)
+    return { highlights: items, deletedIds }
   },
 
   validate: (data) => Array.isArray(data.highlights),
@@ -266,39 +346,23 @@ export const textHighlightsAdapter: DataAdapter<TextHighlightsData> = {
 /**
  * Sticky notes data adapter
  * Merges by note ID, keeping the version with the newer updatedAt timestamp.
- * Notes that exist on only one side are preserved (additive).
+ * Notes that exist on only one side are preserved (additive) unless deleted.
  */
-export const stickyNotesAdapter: DataAdapter<StickyNotesData> = {
+export const stickyNotesAdapter: DataAdapter<StickyNotesData & DeletionTracked> = {
   key: 'sticky-notes',
+  collectionKey: 'notes',
 
   serialize: (data) => JSON.stringify(data),
 
-  deserialize: (raw) => JSON.parse(raw) as StickyNotesData,
+  deserialize: (raw) => JSON.parse(raw) as StickyNotesData & DeletionTracked,
 
   merge: (local, remote) => {
-    const remoteById = new Map(remote.notes.map(n => [n.id, n]))
-    const mergedIds = new Set<string>()
-    const merged = []
-
     // Local notes win if updatedAt >= remote, otherwise take remote version
-    for (const note of local.notes) {
-      mergedIds.add(note.id)
-      const remoteNote = remoteById.get(note.id)
-      if (remoteNote && remoteNote.updatedAt > note.updatedAt) {
-        merged.push(remoteNote)
-      } else {
-        merged.push(note)
-      }
-    }
-
-    // Add remote-only notes
-    for (const note of remote.notes) {
-      if (!mergedIds.has(note.id)) {
-        merged.push(note)
-      }
-    }
-
-    return { notes: merged }
+    const { items, deletedIds } = mergeCollection(
+      local.notes, remote.notes, local.deletedIds, remote.deletedIds,
+      (l, r) => (r.updatedAt > l.updatedAt ? r : l),
+    )
+    return { notes: items, deletedIds }
   },
 
   validate: (data) => Array.isArray(data.notes),

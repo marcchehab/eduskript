@@ -277,7 +277,23 @@ export async function POST(request: NextRequest) {
           },
         })
 
-        // Special handling for snaps: upload new images to S3 and delete removed ones
+        if (existing && existing.version > item.version) {
+          // Server has newer version - conflict
+          // Include targeting info so client can resolve conflict correctly
+          conflicts.push({
+            adapter: item.adapter,
+            itemId: item.itemId,
+            serverData: existing.data,
+            serverVersion: existing.version,
+            targetType: targetType,
+            targetId: targetId,
+          })
+          continue
+        }
+
+        // Special handling for snaps: upload new images to S3 and delete removed ones.
+        // Runs after the conflict check: a stale write that gets rejected must not
+        // delete images of snaps the server row still holds.
         if (item.adapter === 'snaps' && parsedData && typeof parsedData === 'object') {
           const snapsData = parsedData as SnapsData
           if (Array.isArray(snapsData.snaps)) {
@@ -326,22 +342,8 @@ export async function POST(request: NextRequest) {
               }
             }
 
-            parsedData = { snaps: processedSnaps }
+            parsedData = { ...snapsData, snaps: processedSnaps }
           }
-        }
-
-        if (existing && existing.version > item.version) {
-          // Server has newer version - conflict
-          // Include targeting info so client can resolve conflict correctly
-          conflicts.push({
-            adapter: item.adapter,
-            itemId: item.itemId,
-            serverData: existing.data,
-            serverVersion: existing.version,
-            targetType: targetType,
-            targetId: targetId,
-          })
-          continue
         }
 
         // Create or update the data with targeting

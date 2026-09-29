@@ -563,7 +563,10 @@ export class SyncEngine {
       let mergedData: unknown = serverData.data
       let didMerge = false
 
-      if (localRecord && localRecord.data) {
+      // Merge only when local holds edits the server hasn't seen. A local copy
+      // that was already pushed is just an older state of the server row —
+      // merging it back (additive adapters) resurrects items deleted elsewhere.
+      if (localRecord && localRecord.data && !localRecord.savedToRemote) {
         const adapter = getAdapter(serverItem.adapter)
         if (adapter?.merge) {
           try {
@@ -583,8 +586,10 @@ export class SyncEngine {
         componentId: serverItem.adapter,
         data: mergedData,
         updatedAt: serverData.updatedAt,
-        savedToRemote: true,
-        version: serverData.version,
+        // A merge still contains unpushed local edits: keep it unsynced one
+        // version ahead so initialSync's unsynced pass pushes it.
+        savedToRemote: !didMerge,
+        version: didMerge ? serverData.version + 1 : serverData.version,
         createdAt: localRecord?.createdAt || new Date().toISOString(),
         targetType: localRecord?.targetType ?? '',
         targetId: localRecord?.targetId ?? '',
