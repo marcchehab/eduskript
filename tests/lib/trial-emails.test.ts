@@ -47,8 +47,8 @@ describe('trial emails', () => {
   })
   it('renders the tips mail with the classes link', () => {
     const mail = renderTrialEmail('tips', ctx)
-    expect(mail.subject).toBe('Dein Skript für die Klasse')
-    expect(mail.textContent).toContain('«View Page»')
+    expect(mail.subject).toBe('Sieh live, wie weit deine Klasse ist')
+    expect(mail.textContent).toContain('lege eine Klasse an')
     expect(mail.htmlContent).toContain('https://eduskript.org/dashboard/classes')
   })
 })

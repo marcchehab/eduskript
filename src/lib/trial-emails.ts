@@ -146,15 +146,11 @@ export function renderTrialEmail(kind: TrialEmailKind, ctx: TrialEmailContext): 
 
   if (kind === 'tips') {
     const classesUrl = `${ctx.baseUrl}/dashboard/classes`
-    const share =
-      'Ein Tipp für die nächste Lektion: Deine Klasse braucht kein Konto, um dein Skript zu lesen. Den Link zu deiner Seite findest du im Dashboard unter «View Page». Schick ihn per Teams oder Mail, fertig.'
     const classes =
-      'Wenn du sehen willst, wie weit deine Schülerinnen und Schüler sind, lege eine Klasse an. Sie melden sich mit ihrem Schul-Microsoft-Konto an, und du siehst live, wer welche Aufgabe gelöst hat.'
-    const html = layout([greeting(name), share, classes, button(classesUrl, 'Klasse anlegen'), 'Marc'])
+      'Ein Tipp für die nächste Lektion: Wenn du sehen willst, wie weit deine Schülerinnen und Schüler sind, lege eine Klasse an. Sie melden sich mit ihrem Schul-Microsoft-Konto an, und du siehst live, wer welche Aufgabe gelöst hat.'
+    const html = layout([greeting(name), classes, button(classesUrl, 'Klasse anlegen'), 'Marc'])
     const text = [
       greeting(ctx.firstName),
-      '',
-      share,
       '',
       classes,
       '',
@@ -162,7 +158,7 @@ export function renderTrialEmail(kind: TrialEmailKind, ctx: TrialEmailContext): 
       '',
       'Marc',
     ].join('\n')
-    return { subject: 'Dein Skript für die Klasse', htmlContent: html, textContent: text }
+    return { subject: 'Sieh live, wie weit deine Klasse ist', htmlContent: html, textContent: text }
   }
 
   // kind === 'ending'
