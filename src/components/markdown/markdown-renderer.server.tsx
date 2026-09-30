@@ -5,6 +5,7 @@ import { getSkriptFiles } from '@/lib/skript-files.server'
 import { extractStableLinkIds } from '@/lib/page-stable-link'
 import { resolveStableLinks } from '@/lib/page-stable-link.server'
 import { EagerImageLoader } from './eager-image-loader'
+import { FootnotePreview } from './footnote-preview'
 import { MarkdownErrorBoundary } from './markdown-error-boundary'
 import { SurveyProvider } from './survey-provider'
 import { CoupledVideoProvider } from './coupled-video-context'
@@ -171,6 +172,7 @@ export async function ServerMarkdownRenderer({ content, skriptId, pageId, ownerP
       <div className="markdown-content prose dark:prose-invert max-w-none">
         {wrapped}
       </div>
+      {content.includes('[^') && <FootnotePreview />}
     </EagerImageLoader>
   )
 }

@@ -6,6 +6,7 @@ import { createMarkdownComponents } from '@/lib/markdown-components'
 import { createSkriptFiles, createEmptySkriptFiles, type SkriptFilesData } from '@/lib/skript-files'
 import type { VideoInfo } from '@/lib/skript-files'
 import { EagerImageLoader } from './eager-image-loader'
+import { FootnotePreview } from './footnote-preview'
 import { MarkdownErrorBoundary } from './markdown-error-boundary'
 import { SurveyProvider } from './survey-provider'
 import { CoupledVideoProvider } from './coupled-video-context'
@@ -376,6 +377,7 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
       <div className="markdown-content prose dark:prose-invert max-w-none">
         {wrapped}
       </div>
+      {deferredContent.includes('[^') && <FootnotePreview />}
     </EagerImageLoader>
   )
 }

@@ -781,17 +781,17 @@ article.prose-theme > div > :first-child {
    (0,1,1). min-width + pill radius keep 2-digit footnotes round-ish.
    Colour follows --foreground (≈white on dark, dark on light) so the marker
    stays legible in both themes rather than a fixed white that vanishes on a
-   light page. */
+   light page.
+   `display: inline`, not inline-flex: an inline-flex badge is an atomic inline,
+   and browsers allow a line break before atomic inlines, so the marker wrapped
+   onto the next line alone ("kann.\n②"). A plain inline box has no break
+   opportunity after the preceding punctuation. Padding sizes the circle; 2+
+   digits become a pill. */
 .prose-theme sup a[href^="#user-content-fn-"] {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.55em;
-  height: 1.55em;
-  padding: 0 0.25em;
+  display: inline;
+  padding: 0.05em 0.42em;
   border: 1px solid currentColor;
   border-radius: 999px;
-  box-sizing: border-box;
   color: hsl(var(--foreground));
   /* digit a touch smaller than the circle so it sits with some breathing room */
   font-size: 0.88em;
@@ -2728,4 +2728,14 @@ mark.text-highlight-orange {
 .code-block-focus:hover .cm-line {
   filter: none;
   opacity: 1;
+}
+
+/* Hover preview box for footnote refs (footnote-preview.tsx). The cloned <li>
+   content brings its <p>; `.prose-theme p` would re-apply body font-size and
+   margins, so reset to the box's own size. */
+.footnote-preview p,
+.footnote-preview a {
+  margin: 0;
+  font-size: inherit;
+  line-height: inherit;
 }
