@@ -370,7 +370,11 @@ export const config = {
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      * - public files (public folder)
+     * - api/health: Koyeb's HTTP health check requests it with the instance
+     *   IP as Host, which the proxy treated as a custom domain and answered
+     *   with a 301 — the check failed and every deploy was stopped
+     *   (2026-09-30). The liveness probe must not depend on host routing.
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\..*|api/internal).*)',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\..*|api/internal|api/health).*)',
   ],
 }
