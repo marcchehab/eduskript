@@ -254,6 +254,32 @@ function processParent(parent: ParentNode): void {
     for (let i = indicesToRemove.length - 1; i >= 0; i--) {
       parent.children.splice(indicesToRemove[i], 1)
     }
+
+    // Phase 4: kara-world blocks. ASCII grid for a Kara editor (see
+    // src/lib/kara/world.ts for the legend); injected like python-check and
+    // removed from the output. Same-parent only, like python-check.
+    //   ```kara-world for="k1" tile="40"
+    for (let i = 0; i < parent.children.length; i++) {
+      const node = parent.children[i] as CodeNode
+      if (node.type !== 'code' || node.lang !== 'kara-world') continue
+      const meta = node.meta || ''
+      const forId = meta.match(/for="([^"]*)"/)?.[1]
+      if (!forId) continue
+      const tile = meta.match(/tile="(\d+)"/)?.[1]
+      const codeWidth = meta.match(/code-width="(\d+)"/)?.[1]
+      for (let j = 0; j < parent.children.length; j++) {
+        const target = parent.children[j] as any
+        if (target.type === 'html' && typeof target.value === 'string' && target.value.includes(`data-id="${forId}"`)) {
+          let extra = ` data-kara-world="${escapeHtml(node.value || '')}"`
+          if (tile) extra += ` data-kara-tile="${tile}"`
+          if (codeWidth) extra += ` data-kara-code-width="${codeWidth}"`
+          target.value = target.value.replace('></code-editor>', `${extra}></code-editor>`)
+          parent.children.splice(i, 1)
+          i--
+          break
+        }
+      }
+    }
 }
 
 /**

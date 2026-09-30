@@ -203,14 +203,26 @@ function extractUserDefinitions(code: string): Array<{ label: string, type: stri
  * Create a completion function that also indexes symbols from extra code sources
  * (other files in the editor, global/skript import files).
  */
-export function createPythonCompletions(getExtraSources: () => NamedSource[]) {
-  return (context: CompletionContext) => pythonCompletions(context, getExtraSources())
+/**
+ * `getGlobals`: extra names that exist without an import (e.g. the Kara
+ * commands the Kara runner injects); also offered after `kara.` and in
+ * `from kara import`.
+ */
+export function createPythonCompletions(
+  getExtraSources: () => NamedSource[],
+  getGlobals: () => Array<{ label: string, type: string, info: string }> = () => [],
+) {
+  return (context: CompletionContext) => pythonCompletions(context, getExtraSources(), getGlobals())
 }
 
 /**
  * Main completion function for Python
  */
-export function pythonCompletions(context: CompletionContext, extraSources: NamedSource[] = []): CompletionResult | null {
+export function pythonCompletions(
+  context: CompletionContext,
+  extraSources: NamedSource[] = [],
+  globals: Array<{ label: string, type: string, info: string }> = [],
+): CompletionResult | null {
   const word = context.matchBefore(/\w*/)
   const code = context.state.doc.toString()
   const beforeCursor = code.slice(0, context.pos)
@@ -233,6 +245,7 @@ export function pythonCompletions(context: CompletionContext, extraSources: Name
   for (const source of extraSources) {
     sourceMap.set(source.name, extractUserDefinitions(source.content))
   }
+  if (globals.length && !sourceMap.has('kara')) sourceMap.set('kara', globals)
 
   // --- Dot-access completions (object.attr) ---
   const dotMatch = beforeCursor.match(/(\w+)\.(\w*)$/)
@@ -361,6 +374,7 @@ export function pythonCompletions(context: CompletionContext, extraSources: Name
   const allCompletions = [
     ...PYTHON_KEYWORDS.map(kw => ({ label: kw, type: 'keyword' })),
     ...PYTHON_BUILTINS.map(b => ({ label: b.label, type: b.type, detail: b.info })),
+    ...globals.map(g => ({ label: g.label, type: g.type, detail: g.info })),
     ...currentFileDefs.map(d => ({ label: d.label, type: d.type, detail: d.info })),
     ...importedDefs.map(d => ({ label: d.label, type: d.type, detail: d.info }))
   ]

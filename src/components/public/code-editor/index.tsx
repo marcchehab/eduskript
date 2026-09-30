@@ -18,7 +18,7 @@ import { autocompletion } from '@codemirror/autocomplete'
 import { indentationMarkers } from '@replit/codemirror-indentation-markers'
 import { createPythonCompletions } from './python-completions'
 import { Button } from '@/components/ui/button'
-import { Play, Square, RotateCcw, Maximize2, Minimize2, Scan, X, Plus, FileText, Save, History, WrapText, Circle, CheckCircle2, Package, Trash2, Paperclip, Upload, Pencil, Cloud, HardDrive, PanelLeftClose, PanelRightClose, PanelLeftOpen, PanelRightOpen } from 'lucide-react'
+import { Play, Square, RotateCcw, Maximize2, Minimize2, Scan, X, Plus, FileText, Save, History, WrapText, Circle, CheckCircle2, Package, Trash2, Paperclip, Upload, Pencil, Cloud, HardDrive, PanelLeftClose, PanelRightClose, PanelLeftOpen, PanelRightOpen, Rows2, Columns2 } from 'lucide-react'
 import { useZoom } from '@/contexts/zoom-context'
 import { ZoomPill } from '@/components/ui/zoom-pill'
 import { useUserData, useCreateVersion, useVersionHistory, useRestoreVersion, useDeleteVersion, useUpdateVersionLabel, useOrphanedComponentIds, useReassignVersionHistory } from '@/lib/userdata/hooks'
@@ -70,6 +70,11 @@ import {
   terminatePyodideWorker,
   warmPyodideWorker,
 } from '@/lib/pyodide-worker.client'
+import { KaraPanel } from './kara-panel'
+import { karaLineHighlighting, showKaraLine, type KaraLineTarget } from './kara-line-extension'
+import { KARA_MODULE_SOURCE, KARA_RUNNER } from '@/lib/kara/kara-module'
+import { KARA_COMPLETIONS } from '@/lib/kara/completions'
+import { parseKaraLevel, type KaraTrace, type KaraWorld } from '@/lib/kara/world'
 
 /**
  * Hard wall-clock cap on a single Pyodide run from the Run / Check buttons.
@@ -153,6 +158,18 @@ interface CodeEditorProps {
   // with the code panel collapsed, so only the output/graphics show. Great for
   // matplotlib figures. The reader can expand the code panel to see/edit + rerun.
   outputOnly?: boolean
+  // Kara mode (markdown ` ```kara-world for="<id>" ` block): ASCII world grid.
+  // Switches to a stacked layout (code on top, world below) and runs the code
+  // through the `kara` Python module, replaying the trace step by step.
+  karaWorld?: string
+  // Max tile size in px for the Kara world (markdown `tile="…"`).
+  karaTile?: number
+  // Initial code width in % for the side-by-side Kara layout (markdown `code-width="20"`).
+  karaCodeWidth?: number
+  // Kara asset URLs resolved from skript files by markdown-components:
+  // audio/music file names as written in the level config, portraits as
+  // `portrait:<speaker>`.
+  karaAssets?: Record<string, string>
 }
 
 /** One stage of a staged Python check (see CodeEditorProps.checkStages). */
@@ -329,6 +346,10 @@ export const CodeEditor = memo(function CodeEditor({
   acceptUploads,
   height: explicitHeight,
   outputOnly = false,
+  karaWorld: karaWorldSource,
+  karaTile = 48,
+  karaCodeWidth,
+  karaAssets,
 }: CodeEditorProps) {
   const { resolvedTheme } = useTheme()
   const { data: session } = useSession()
@@ -584,7 +605,7 @@ export const CodeEditor = memo(function CodeEditor({
     activeFileIndex: 0,
     fontSize: 14,
     lineWrapping: true,
-    editorWidth: 50,
+    editorWidth: karaWorldSource && karaCodeWidth ? karaCodeWidth : 50,
   }
 
   // Resizable panel state (horizontal splitter between editor and graphics)
@@ -1171,7 +1192,8 @@ export const CodeEditor = memo(function CodeEditor({
       if (savedData?.activeFileIndex !== undefined) setActiveFileIndex(savedData.activeFileIndex)
       if (savedData?.fontSize !== undefined) setFontSize(savedData.fontSize)
       if (savedData?.lineWrapping !== undefined) setLineWrapping(savedData.lineWrapping)
-      if (savedData?.editorWidth !== undefined) setEditorWidth(savedData.editorWidth)
+      // Kara editors keep the page's code-width (dragging is per session).
+      if (savedData?.editorWidth !== undefined && !karaWorldSource) setEditorWidth(savedData.editorWidth)
       if (savedData?.canvasTransform) setCanvasTransform(savedData.canvasTransform)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- Intentional: this is a one-shot restore gated by hasLoadedData.current. Re-running on language/defaultData.files changes (e.g. markdown edits) would no-op anyway, and dragging them in widens the dep surface for no behaviour change.
@@ -1200,6 +1222,64 @@ export const CodeEditor = memo(function CodeEditor({
   // Refs
   const editorRef = useRef<HTMLDivElement>(null)
   const editorViewRef = useRef<EditorView | null>(null)
+
+  // Kara mode (see KaraPanel / kara-module.ts). The trace is session-only:
+  // a reload shows the initial world until the next Run.
+  // Each Run picks one of the level's variants at random; until the first
+  // Run the first variant is shown.
+  const karaLevel = useMemo(
+    () => (karaWorldSource && language === 'python' ? parseKaraLevel(karaWorldSource) : null),
+    [karaWorldSource, language],
+  )
+  const isKara = !!karaLevel
+  // Read by the completion source, which is created once with the editor.
+  const isKaraRef = useRef(isKara)
+  isKaraRef.current = isKara
+  // Kara layout: side by side (default) or code above the world. Per-browser
+  // preference (localStorage, all Kara editors share it).
+  const [karaSide, setKaraSide] = useState(true)
+  useEffect(() => {
+    try { if (localStorage.getItem('kara-layout') === 'stacked') setKaraSide(false) } catch { /* storage blocked */ }
+  }, [])
+  const toggleKaraLayout = () => {
+    setKaraSide(v => {
+      try { localStorage.setItem('kara-layout', v ? 'stacked' : 'side') } catch { /* storage blocked */ }
+      return !v
+    })
+  }
+  const karaStacked = isKara && !karaSide
+  // A narrow code pane (e.g. Kara side by side at code-width 20 %) has no room
+  // for the floating toolbar next to the file tabs: it gets its own row.
+  const splitWidth = (isKara ? karaSide : canvasVisible && showGraphics) ? (editorWidth / 100) * containerWidth : containerWidth
+  const narrowCode = containerWidth > 0 && splitWidth < 380
+  const [karaRun, setKaraRun] = useState<{ world: KaraWorld; trace: KaraTrace } | null>(null)
+  // Drag handle between code and world: sets the code height (world keeps its
+  // own size), so the whole editor grows/shrinks. Delta-based like the other
+  // splitters; `zoom` undoes an ancestor transform: scale().
+  const onKaraSplitterDown = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault()
+    const y0 = 'touches' in e ? e.touches[0]?.clientY ?? 0 : e.clientY
+    const h0 = editorHeight
+    const zoom = getZoom() || 1
+    const move = (ev: MouseEvent | TouchEvent) => {
+      const y = 'touches' in ev ? ev.touches[0]?.clientY ?? y0 : ev.clientY
+      setUserEditorHeight(Math.max(120, Math.min(1400, h0 + (y - y0) / zoom)))
+    }
+    const up = () => {
+      document.removeEventListener('mousemove', move)
+      document.removeEventListener('mouseup', up)
+      document.removeEventListener('touchmove', move)
+      document.removeEventListener('touchend', up)
+    }
+    setManualHeight(null)
+    document.addEventListener('mousemove', move)
+    document.addEventListener('mouseup', up)
+    document.addEventListener('touchmove', move, { passive: false })
+    document.addEventListener('touchend', up)
+  }
+  const onKaraLine = useCallback((target: KaraLineTarget | null) => {
+    if (editorViewRef.current) showKaraLine(editorViewRef.current, target)
+  }, [])
   const createVersionSnapshotRef = useRef<(isManualSave?: boolean) => Promise<void>>(() => Promise.resolve())
 
   // CodeMirror compartments for dynamic reconfiguration without destroying the editor
@@ -2388,7 +2468,7 @@ export const CodeEditor = memo(function CodeEditor({
         const skriptFiles = (skriptImportsRef.current?.files || []).map(toSource)
         const globalFiles = (globalImportsRef.current?.files || []).map(toSource)
         return [...otherFiles, ...skriptFiles, ...globalFiles]
-      })
+      }, () => (isKaraRef.current ? KARA_COMPLETIONS : []))
       extensions.push(
         autocompletion({
           override: [completions],
@@ -2402,6 +2482,7 @@ export const CodeEditor = memo(function CodeEditor({
 
     // Add code highlighting extension
     extensions.push(...codeHighlighting())
+    extensions.push(...karaLineHighlighting())
 
     // Sync highlight positions back to React state when the document changes.
     extensions.push(
@@ -2439,6 +2520,9 @@ export const CodeEditor = memo(function CodeEditor({
 
           // Only trigger save and version creation on user input (not programmatic changes)
           if (!isProgrammatic) {
+            // Kara: an edited program no longer matches the replay; show the
+            // starting world again so the student plans from where Kara begins.
+            setKaraRun(null)
             // Teacher editing a student's snapshot → mark dirty so Revert shows.
             // (Persistence is gated elsewhere; this is display-only.)
             if (isViewingSnapshotRef.current) setEditedSinceSnapshot(true)
@@ -3068,7 +3152,14 @@ export const CodeEditor = memo(function CodeEditor({
       const hasTurtle = /import\s+turtle|from\s+turtle/.test(code)
       const hasInput = /\binput\s*\(/.test(code)
 
-      if (hasTurtle || hasInput) {
+      if (isKara) {
+        // Kara always runs main.py (the first tab): the replay highlights lines
+        // there, and helper tabs/skript files are imported by it. Switch back to
+        // it if a helper tab is open.
+        const onMain = activeTab.type === 'local' && activeTab.index === 0
+        if (!onMain) { setActiveTab({ type: 'local', index: 0 }); setActiveFileIndex(0) }
+        runKaraCode(onMain ? code : filesRef.current[0]?.content ?? code)
+      } else if (hasTurtle || hasInput) {
         runPythonCode(code) // Use Skulpt for turtle and input() (native async suspension)
       } else {
         runPyodideCode(code) // Use Pyodide for everything else (including matplotlib)
@@ -3522,6 +3613,56 @@ export const CodeEditor = memo(function CodeEditor({
       addOutput(errorMessage, OutputLevel.ERROR)
       setRunState(RunState.STOPPED)
     } finally {
+      if (pyodideAbortControllerRef.current === controller) {
+        pyodideAbortControllerRef.current = null
+      }
+    }
+  }
+
+  // Run a Kara program in the Pyodide worker. The `kara` module executes the
+  // whole program under sys.settrace and returns the trace as a JSON string;
+  // KaraPanel replays it. prints are part of the trace (shown per step in the
+  // panel), so only stderr / runner failures reach the output panel.
+  // Exam checks are NOT run here: the check harness doesn't know the kara
+  // module, so python-check blocks don't work with Kara editors yet.
+  const runKaraCode = async (code: string) => {
+    if (!karaLevel) return
+    const karaWorld = karaLevel.variants[Math.floor(Math.random() * karaLevel.variants.length)]
+    setRunState(RunState.RUNNING)
+    setOutput([])
+    ensurePyodideLoaded()
+
+    const localFiles = filesRef.current
+    const importFiles = [...(skriptImportsRef.current?.files || []), ...(globalImportsRef.current?.files || [])]
+    const textFiles = [
+      ...(localFiles.length > 1 ? localFiles : []),
+      ...importFiles,
+      { name: 'kara.py', content: KARA_MODULE_SOURCE },
+      { name: '__kara_student.py', content: code },
+      { name: '__kara_world.json', content: JSON.stringify({ ...karaWorld, goals: karaLevel.config.goals, output: karaLevel.config.output }) },
+    ]
+
+    const controller = new AbortController()
+    pyodideAbortControllerRef.current = controller
+    try {
+      const { result, stopped, timedOut } = await runPython({
+        code: KARA_RUNNER,
+        textFiles,
+        signal: controller.signal,
+        timeoutMs: STUDENT_PYODIDE_TIMEOUT_MS,
+        onStderr: (text) => addOutput(text, OutputLevel.ERROR),
+      })
+      if (stopped) {
+        addOutput('Program stopped', OutputLevel.WARNING)
+      } else if (timedOut) {
+        addOutput('TimeoutError: Execution timed out', OutputLevel.ERROR)
+      } else if (typeof result === 'string') {
+        setKaraRun({ world: karaWorld, trace: JSON.parse(result) as KaraTrace })
+      }
+    } catch (error: any) {
+      addOutput(cleanPythonError(error.message || String(error)), OutputLevel.ERROR)
+    } finally {
+      setRunState(RunState.STOPPED)
       if (pyodideAbortControllerRef.current === controller) {
         pyodideAbortControllerRef.current = null
       }
@@ -4000,24 +4141,42 @@ export const CodeEditor = memo(function CodeEditor({
     <div
       ref={wrapperRef}
       className="flex flex-col w-full border rounded-lg overflow-hidden bg-background relative z-0"
-      style={{ height: fullscreen ? '100vh' : `${manualHeight ?? totalHeight}px` }}
+      style={{
+        // Kara stacked: content-sized (code height + world below) unless fullscreen
+        // or manually resized — the world's height follows its width. Kara side by
+        // side: fixed height (≥ 520 px); inside it the panel divides space.
+        height: fullscreen ? '100vh'
+          : karaSide ? `${manualHeight ?? Math.max(520, editorHeight)}px`
+          : isKara ? (manualHeight != null ? `${manualHeight}px` : undefined)
+          : `${manualHeight ?? totalHeight}px`,
+      }}
       data-dynamic-height="true"
     >
-      {/* Main content area */}
-      <div ref={containerRef} className="flex flex-1 overflow-hidden relative">
+      {/* Main content area (Kara: stacked, code on top, world below) */}
+      <div ref={containerRef} className={cn('flex flex-1 overflow-hidden relative', karaStacked && 'flex-col')}>
         {/* Code Editor Panel — always mounted; hidden via display:none when
             collapsed so CodeMirror keeps running (output-only auto-run reads
             from it) and a re-expand doesn't remount/reinit the editor. */}
           <div
-            className="flex flex-col border-r relative"
-            style={{
+            className={cn('flex flex-col relative', !karaStacked && 'border-r')}
+            style={karaSide ? {
+              display: showEditor ? 'flex' : 'none',
+              width: `${editorWidth}%`,
+            } : isKara ? {
+              display: showEditor ? 'flex' : 'none',
+              ...(fullscreen || manualHeight != null
+                ? { flex: '1 1 0', minHeight: 0 }
+                : { height: `${editorHeight}px`, flexShrink: 0 }),
+            } : {
               width: canvasVisible && showGraphics ? `${editorWidth}%` : '100%',
               display: showEditor ? 'flex' : 'none'
             }}
           >
             {/* Floating Toolbar - Top Right (zoom controls + kernel indicator).
                 Highlighting is driven by the site-wide toolbar highlighter pen. */}
-            <div ref={kernelMenuRef} className="absolute top-1 right-1 z-30 flex items-center gap-0.5 bg-background/80 backdrop-blur-xs rounded px-1">
+            <div ref={kernelMenuRef} className={narrowCode
+              ? 'relative z-30 flex flex-wrap items-center justify-end gap-0.5 border-b bg-muted/30 px-1 py-0.5'
+              : 'absolute top-1 right-1 z-30 flex items-center gap-0.5 bg-background/80 backdrop-blur-xs rounded px-1'}>
               {/* Zoom Controls */}
               <ZoomPill
                 size="sm"
@@ -4038,6 +4197,15 @@ export const CodeEditor = memo(function CodeEditor({
               >
                 <WrapText className="w-3 h-3" />
               </button>
+              {isKara && (
+                <button
+                  onClick={toggleKaraLayout}
+                  className="h-6 w-6 p-0 rounded-md flex items-center justify-center transition-colors hover:bg-accent hover:text-accent-foreground"
+                  title={karaSide ? 'Code above the world' : 'Code next to the world'}
+                >
+                  {karaSide ? <Rows2 className="w-3 h-3" /> : <Columns2 className="w-3 h-3" />}
+                </button>
+              )}
 
               {/* Files panel button - Python only, gated on having attached files OR allowing uploads.
                   Clicking opens a unified list of teacher-attached binaries + student uploads
@@ -4501,7 +4669,7 @@ export const CodeEditor = memo(function CodeEditor({
             {!singleFile && (
               <div
                 className="flex items-center gap-1 pl-2 border-b bg-muted/10 h-9"
-                style={{ paddingRight: toolbarWidth + 8 }}
+                style={{ paddingRight: narrowCode ? 8 : toolbarWidth + 8 }}
               >
                   <div className="flex items-center gap-1 overflow-x-auto overflow-y-hidden flex-1 h-full file-tabs-scroll">
                     {/* Local file tabs */}
@@ -4885,7 +5053,7 @@ export const CodeEditor = memo(function CodeEditor({
         )}
 
         {/* Draggable Splitter - wider touch target on mobile */}
-        {showEditor && showGraphics && canvasVisible && (
+        {!isKara && showEditor && showGraphics && canvasVisible && (
           <div
             onMouseDown={handleSplitterMouseDown}
             onTouchStart={handleSplitterTouchStart}
@@ -4906,7 +5074,7 @@ export const CodeEditor = memo(function CodeEditor({
         {/* Graphics Panel (Turtle Graphics & Matplotlib for Python) — stays
             mounted (display:none when collapsed) so rendered plots survive a
             collapse/expand without a rerun. */}
-        {canvasVisible && (
+        {!isKara && canvasVisible && (
           <div
             className="flex flex-col relative"
             style={{
@@ -4956,7 +5124,7 @@ export const CodeEditor = memo(function CodeEditor({
         )}
 
         {/* Collapsed-graphics rail: re-open the plot panel once it's hidden. */}
-        {canvasVisible && !showGraphics && (
+        {!isKara && canvasVisible && !showGraphics && (
           <div className="flex flex-col items-center gap-1 border-l bg-muted/30 px-1 py-2 shrink-0">
             <Button
               onClick={expandPanels}
@@ -4967,6 +5135,41 @@ export const CodeEditor = memo(function CodeEditor({
             >
               <PanelRightOpen className="w-4 h-4" />
             </Button>
+          </div>
+        )}
+
+        {karaSide && showEditor && (
+          <div
+            onMouseDown={handleSplitterMouseDown}
+            onTouchStart={handleSplitterTouchStart}
+            className="w-2 shrink-0 cursor-col-resize bg-border/60 hover:bg-primary/20 touch-none"
+            title="Drag to resize"
+          />
+        )}
+        {karaStacked && showEditor && !fullscreen && (
+          <div
+            onMouseDown={onKaraSplitterDown}
+            onTouchStart={onKaraSplitterDown}
+            className="relative h-2 shrink-0 cursor-row-resize border-t bg-border/60 hover:bg-primary/20 touch-none"
+            title="Drag to resize"
+          >
+            <div className="absolute -top-2 -bottom-2 inset-x-0 md:hidden" />
+          </div>
+        )}
+        {karaLevel && (
+          <div className={cn('min-w-0 shrink-0', karaSide && 'h-full')} style={karaSide ? { width: `${100 - editorWidth}%` } : undefined}>
+          <KaraPanel
+            world={karaRun?.world ?? karaLevel.variants[0]}
+            trace={karaRun?.trace ?? null}
+            config={karaLevel.config}
+            assets={karaAssets}
+            levelId={karaLevel.config.id ?? id}
+            skriptId={skriptId}
+            maxTile={karaTile}
+            maxHeight={fullscreen ? Math.round(window.innerHeight * 0.55) : undefined}
+            onLine={onKaraLine}
+            fill={karaSide}
+          />
           </div>
         )}
       </div>

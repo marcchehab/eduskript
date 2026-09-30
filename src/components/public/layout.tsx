@@ -13,6 +13,7 @@ import { PioneerBadge } from '@/components/ui/pioneer-badge'
 import { PIONEER_PLAN_SLUG } from '@/lib/billing'
 import { ReadingProgress } from './reading-progress'
 import { PublicThemeToggle } from './theme-toggle'
+import { PublicSoundToggle } from './sound-toggle'
 import { ReflowToggle } from './reflow-toggle'
 import { AuthButton } from './auth-button'
 import { FontSizeControls } from './font-size-controls'
@@ -484,6 +485,7 @@ export function PublicSiteLayout({
         <AdminToolbox pageId={pageId} />
         <FontSizeControls />
         <ReflowToggle />
+        <PublicSoundToggle />
         <PublicThemeToggle />
         <AuthButton pageId={pageId} teacherPageSlug={teacher.pageSlug} teacherBillingPlan={teacher.billingPlan} isOrgPage={routePrefix?.startsWith('/org/')} orgSlug={routePrefix?.startsWith('/org/') ? routePrefix.split('/')[2] : undefined} />
       </div>
@@ -554,7 +556,8 @@ export function PublicSiteLayout({
                 <AdminToolbox pageId={pageId} />
                 <AuthButton pageId={pageId} teacherPageSlug={teacher.pageSlug} teacherBillingPlan={teacher.billingPlan} isOrgPage={routePrefix?.startsWith('/org/')} orgSlug={routePrefix?.startsWith('/org/') ? routePrefix.split('/')[2] : undefined} />
                 <ReflowToggle />
-                <PublicThemeToggle />
+                <PublicSoundToggle />
+        <PublicThemeToggle />
                 <FontSizeControls orientation="vertical" />
               </div>
             ) : (
@@ -623,7 +626,8 @@ export function PublicSiteLayout({
                     <AdminToolbox pageId={pageId} />
                     <FontSizeControls />
                     <ReflowToggle />
-                    <PublicThemeToggle />
+                    <PublicSoundToggle />
+        <PublicThemeToggle />
                     <AuthButton pageId={pageId} teacherPageSlug={teacher.pageSlug} teacherBillingPlan={teacher.billingPlan} isOrgPage={routePrefix?.startsWith('/org/')} orgSlug={routePrefix?.startsWith('/org/') ? routePrefix.split('/')[2] : undefined} />
                   </div>
                   <Button

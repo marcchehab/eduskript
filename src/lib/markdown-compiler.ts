@@ -114,6 +114,8 @@ export const sanitizeSchema = {
     'image', // Alias for <img> — passes through sanitizer, mapped to img handler
     'excali', // <excali> shorthand for excalidraw drawings
     'spacer', // <spacer> author-placed writing area (blank/checkered/lines/dots)
+    'evidence-board', // <evidence-board> Kara evidence collected in this skript
+    'theme-toggle', // <theme-toggle> inline light/dark switch (same button as the page toolbar)
     'flex', // <flex> layout container
     'flex-item', // <flex-item> child of flex
     'fullwidth', // Breaks out of #paper padding for edge-to-edge content
@@ -152,7 +154,7 @@ export const sanitizeSchema = {
     // Allow className and style on all elements
     '*': [...(defaultSchema.attributes?.['*'] || []), 'className', 'style'],
     // Custom component attributes (camelCase for HAST, kebab-case for raw HTML)
-    'code-editor': ['dataLanguage', 'dataCode', 'dataFiles', 'dataId', 'dataDb', 'dataSchemaImage', 'dataSingle', 'dataShowCanvas', 'dataSolution', 'dataExam', 'dataCheckCode', 'dataCheckStages', 'dataCheckPoints', 'dataMaxChecks', 'dataAssets', 'dataAllowUpload', 'dataAccept', 'dataHeight', 'dataOutputOnly', 'data-language', 'data-code', 'data-files', 'data-id', 'data-db', 'data-schema-image', 'data-single', 'data-show-canvas', 'data-solution', 'data-exam', 'data-check-code', 'data-check-stages', 'data-check-points', 'data-max-checks', 'data-assets', 'data-allow-upload', 'data-accept', 'data-height', 'data-output-only'],
+    'code-editor': ['dataLanguage', 'dataCode', 'dataFiles', 'dataId', 'dataDb', 'dataSchemaImage', 'dataSingle', 'dataShowCanvas', 'dataSolution', 'dataExam', 'dataCheckCode', 'dataCheckStages', 'dataCheckPoints', 'dataMaxChecks', 'dataAssets', 'dataAllowUpload', 'dataAccept', 'dataHeight', 'dataOutputOnly', 'dataKaraWorld', 'dataKaraTile', 'dataKaraCodeWidth', 'data-language', 'data-code', 'data-files', 'data-id', 'data-db', 'data-schema-image', 'data-single', 'data-show-canvas', 'data-solution', 'data-exam', 'data-check-code', 'data-check-stages', 'data-check-points', 'data-max-checks', 'data-assets', 'data-allow-upload', 'data-accept', 'data-height', 'data-output-only', 'data-kara-world', 'data-kara-tile', 'data-kara-code-width'],
     'tabs-container': ['dataItems', 'data-items'],
     'youtube-embed': ['dataId', 'dataPlaylist', 'dataStartTime', 'dataCaption', 'dataThumbnail', 'dataPin', 'data-id', 'data-playlist', 'data-start-time', 'data-caption', 'data-thumbnail', 'data-pin'],
     'flag-icon': ['dataCode', 'data-code'],
@@ -168,6 +170,7 @@ export const sanitizeSchema = {
     'excali': ['src', 'alt', 'width', 'align', 'wrap', 'lightonly'],
     // <spacer> writing area. id keys the round-trip find/replace on edit.
     'spacer': ['id', 'height', 'pattern'],
+    'evidence-board': ['title'],
     // <image> component attributes (src, alt, width, align, wrap, invert, saturate)
     'image': ['src', 'alt', 'width', 'align', 'wrap', 'invert', 'saturate'],
     // Plugin: intrinsic attrs the React PluginContainer reads as named props.

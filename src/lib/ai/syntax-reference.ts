@@ -219,6 +219,42 @@ ship.setx(new_x)       # [!code focus]
 - Without comments: line ranges in the info string — \`\`\`python {2,5-7} add={3-4} del={9} focus={1}\`\`\` (a bare \`{...}\` means highlight).
 - Only plain blocks; an \`editor\` block keeps its text verbatim (students edit it).
 
+### Kara (grid world)
+
+Pair a \`python editor\` (with \`id\`) with a \`kara-world\` block to get a Kara level: code on top, a sci-fi top-down world below. Run executes the whole program, then the world replays it line by line — students step forward/back (buttons, ←/→, slider), see the current line highlighted, sensor results (\`wall_front() → False\`) inline in the code and prints per step. Story events (terminal logs, evidence chips) and the level result pop up as message cards; solved levels save stars and evidence per student.
+
+\`\`\`python editor id="k1"
+while not on_exit():
+    move()
+\`\`\`
+
+\`\`\`kara-world for="k1" tile="40"
+#########
+#>..*..E#
+#########
+===
+#########
+#>.*...E#
+#########
+---
+goal: exit, collect
+energy: 20
+memory: 4
+chip: log-1 | Webers Laborbuch | Gerald ist weg. | speaker=WEBER
+aurora.win: Beeindruckend.
+\`\`\`
+
+- Several grids separated by \`===\` are random variants (one per Run) — forces general solutions. Config lines after \`---\`.
+- Grid legend: \`.\`/space floor, \`#\` wall (auto-joined), \`x\` crate / \`T\` table / \`P\` desk / \`L\` locker / \`R\` red barrel / \`Y\` yellow barrel (obstacles), \`*\` green barrel (put/remove), \`B\`/\`M\` box (pushable), \`o\` box target, \`O\` box on target, \`c\` evidence chip (picked up by walking over it), \`D\` closed door, \`d\` open door, \`=\`/\`|\` laser, \`S\` switch (\`press_switch()\` toggles ALL doors and lasers), \`~\` acid (Kara falls in), \`E\` exit, \`t\` terminal (\`read_log()\` while facing it), \`s\` slime (decoration), \`> < ^ v\` Kara. The world wraps at the edges — close it with \`#\`.
+- Config: \`goal: exit, collect, boxes, chips\` (all must hold), \`energy: N\` / \`memory: N\` (2nd/3rd star: actions / program statements), \`id: level-id\` (progress key), \`log: text | speaker=NAME | audio=file.mp3\` (one per terminal, reading order), \`chip: id | title | text | speaker=… | audio=…\` (one per chip), \`aurora.win|fail|loop|error: text | audio=…\`, \`music: file.mp3\` (ambient loop, off until turned on).
+- Portraits: skript file \`portrait-<speaker>.png\` (lower-case speaker name). Audio/music names resolve against skript files.
+- \`tile="40"\`: max tile size in px (default 48).
+- \`code-width="20"\` (on the \`kara-world\` fence): initial code width in % for the side-by-side layout (default 50). Students can switch to code-above-world with a toolbar button.
+- Commands (no import needed): \`move()\`, \`turn_left()\`, \`turn_right()\`, \`put_barrel()\`, \`remove_barrel()\`, \`press_switch()\`, \`read_log()\`; sensors \`wall_front/left/right()\`, \`box_front()\`, \`door_front()\`, \`laser_front()\`, \`acid_front()\`, \`terminal_front()\`, \`on_barrel()\`, \`on_switch()\`, \`on_exit()\`, \`on_target()\`. camelCase aliases and the original Kara names (\`tree_front\`, \`on_leaf\`, …) work too.
+- \`<evidence-board title="Fallwand"></evidence-board>\` shows the evidence the student collected across the skript.
+- \`<theme-toggle></theme-toggle>\` renders the light/dark mode button inline (e.g. «Wir empfehlen den Darkmode: <theme-toggle></theme-toggle>»).
+- Limit: 50'000 executed lines. \`python-check\` does not work with Kara editors.
+
 ### Turtle auto-grading
 
 Turtle exercises are gradeable through the same \`python-check\` mechanism. Pyodide's stdlib doesn't ship turtle, so the runner installs a recording stub that captures every move into a global \`turtle_path\` list (tuples of \`(x, y, pen_down)\`). Three helper functions are then available inside any \`python-check\`:
@@ -846,6 +882,7 @@ export function getCondensedSyntaxReference(): string {
   - Executable: python, javascript, sql, html. Other language IDs only get syntax highlighting.
   - \`html editor\` is special: split view with a sandboxed iframe live-preview (\`allow-scripts allow-modals allow-forms\`, no \`allow-same-origin\`). No exam/python-check pairing.
   - \`single\`: hides file tabs (single-file mode).
+  - Kara grid world: add \`\`\`kara-world for="<editor id>" [tile="40"]\`\`\` with ASCII grid(s) (\`===\` = random variants) and config after \`---\` (goal, energy, memory, log, chip, aurora.*). Legend: \`#\` wall, \`x/T/P/L/R/Y\` obstacles, \`*\` barrel, \`B\` box, \`o\` target, \`c\` chip, \`D\` door, \`=\` laser, \`S\` switch, \`~\` acid, \`E\` exit, \`t\` terminal, \`>\` Kara. See the Kara section. \`<evidence-board>\` lists collected evidence.
   - \`exam\`: silent grading — pair with python-check; student runs code but never sees pass/fail feedback. Use for assessments, NOT practice. Default (no \`exam\`) shows feedback after each "Check" click.
   - \`file="name.py"\`: repeat the fence with the same \`id\` and a different \`file=\` to merge into one multi-tab editor (Python/JS/SQL only, not HTML yet).
   - \`assets="a.csv,b.png"\` / \`allow-upload\` + \`accept="..."\`: teacher-attached read-only files, or let the student upload their own (Python only).

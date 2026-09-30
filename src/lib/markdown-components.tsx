@@ -48,6 +48,9 @@ import { MoleculeDiagram } from '@/components/markdown/molecule'
 import { LoginCodes } from '@/components/markdown/login-codes'
 import { OnlyFor } from '@/components/markdown/only-for'
 import { AIFeedback } from '@/components/markdown/ai-feedback'
+import { parseKaraLevel, karaAssetNames, karaSpeakers } from '@/lib/kara/world'
+import { EvidenceBoard } from '@/components/markdown/evidence-board'
+import { PublicThemeToggle } from '@/components/public/theme-toggle'
 
 // Simple hash function for generating stable IDs
 function hashCode(str: string): string {
@@ -341,6 +344,9 @@ export function createMarkdownComponents(
     const allowUploadAttr = (props['dataAllowUpload'] as string) || (props['data-allow-upload'] as string)
     const acceptAttr = (props['dataAccept'] as string) || (props['data-accept'] as string)
     const outputOnly = (props['dataOutputOnly'] as string) || (props['data-output-only'] as string)
+    const karaWorldAttr = (props['dataKaraWorld'] as string) || (props['data-kara-world'] as string)
+    const karaTileAttr = (props['dataKaraTile'] as string) || (props['data-kara-tile'] as string)
+    const karaCodeWidthAttr = (props['dataKaraCodeWidth'] as string) || (props['data-kara-code-width'] as string)
 
     // Parse multi-file data if present, otherwise fall back to single-file initialCode
     let initialFiles: { name: string; content: string }[] | undefined
@@ -428,6 +434,23 @@ export function createMarkdownComponents(
       if (resolved.length > 0) attachedFiles = resolved
     }
 
+    // Kara: resolve the level's audio/music names and speaker portraits
+    // (`portrait-<speaker>.png`) against the skript files, like `assets=`.
+    const karaWorld = karaWorldAttr ? decodeHtmlEntities(karaWorldAttr) : undefined
+    let karaAssets: Record<string, string> | undefined
+    if (karaWorld) {
+      const level = parseKaraLevel(karaWorld)
+      karaAssets = {}
+      for (const name of karaAssetNames(level)) {
+        const file = resolveFile(files, name)
+        if (file?.url) karaAssets[name] = file.url
+      }
+      for (const speaker of karaSpeakers(level)) {
+        const file = resolveFile(files, `portrait-${speaker}.png`)
+        if (file?.url) karaAssets[`portrait:${speaker}`] = file.url
+      }
+    }
+
     // HTML editor renders a sandboxed-iframe live preview instead of the
     // Run-button + output panel that Python/JS/SQL share, so we route it to
     // its own component rather than threading another branch through CodeEditor.
@@ -513,6 +536,10 @@ export function createMarkdownComponents(
             acceptUploads={acceptAttr}
             height={editorHeight}
             outputOnly={outputOnly === 'true'}
+            karaWorld={karaWorld}
+            karaAssets={karaAssets}
+            karaCodeWidth={karaCodeWidthAttr ? Math.min(90, Math.max(10, parseInt(karaCodeWidthAttr, 10) || 50)) : undefined}
+            karaTile={karaTileAttr ? parseInt(karaTileAttr, 10) || undefined : undefined}
           />
         </DeferredMount>
       </div>
@@ -967,6 +994,20 @@ export function createMarkdownComponents(
         />
       )
     },
+    // <evidence-board>: Kara evidence of this skript. Portraits and audio are
+    // resolved from every skript file named portrait-*.png or ending in .mp3/.wav.
+    'evidence-board': (props: Record<string, unknown>) => {
+      const assets: Record<string, string> = {}
+      for (const f of Object.values(files?.files ?? {})) {
+        if (!f.url) continue
+        const portrait = f.name.match(/^portrait-(.+)\.png$/i)
+        if (portrait) assets[`portrait:${portrait[1].toLowerCase()}`] = f.url
+        else if (/\.(mp3|wav|ogg)$/i.test(f.name)) assets[f.name] = f.url
+      }
+      return <EvidenceBoard skriptId={skriptId} title={typeof props.title === 'string' ? props.title : undefined} assets={assets} />
+    },
+    // <theme-toggle>: the toolbar's light/dark button, inline in the text.
+    'theme-toggle': () => <span className="not-prose inline-flex align-middle"><PublicThemeToggle /></span>,
     // <spacer> author-placed writing area. Attrs arrive kebab/camel (HAST) or
     // bare (raw HTML); accept all. onSpacerChange is passed by the client
     // renderer only, so gizmos render in the editor and never on public pages.
