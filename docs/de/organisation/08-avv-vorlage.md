@@ -79,7 +79,7 @@ UID CHE-261.508.926, Betreiberin von eduskript.org
 
 8.1 Die Primärdaten werden in der EU gespeichert: die Datenbank in Frankfurt (Deutschland), hochgeladene Dateien in Paris (Frankreich), der E-Mail-Versand erfolgt in der EU. Die EU gilt nach Anhang 1 der Datenschutzverordnung (DSV) als Staat mit angemessenem Datenschutz. Die Datenbank betreibt Koyeb auf Infrastruktur von US-Unternehmen (Neon, Amazon Web Services); die Daten verbleiben in Frankfurt.
 
-8.2 Für KI-Funktionen (Ziffer 9) werden Inhalte an Anbieter in den USA übermittelt, ausschliesslich ohne Identifikationsmerkmale gemäss Ziffer 9.2. Google LLC und DigitalOcean sind unter dem Swiss-U.S. Data Privacy Framework zertifiziert. Für OpenRouter, das nicht zertifiziert ist und die Anfragen nur weiterleitet, stützt sich die Übermittlung darauf, dass die Inhalte für diesen Empfänger keiner Person zuordenbar sind.
+8.2 Für KI-Funktionen (Ziffer 9) werden Inhalte an Anbieter in den USA übermittelt, ausschliesslich ohne Identifikationsmerkmale gemäss Ziffer 9.2. Google LLC ist unter dem Swiss-U.S. Data Privacy Framework zertifiziert. Für OpenRouter, das nicht zertifiziert ist und die Anfragen nur weiterleitet, stützt sich die Übermittlung darauf, dass die Inhalte für diesen Empfänger keiner Person zuordenbar sind.
 
 8.3 Mit der Unterzeichnung bewilligt die Schule die Bearbeitung an den in Anhang 3 genannten Orten. Die aktuelle Liste der Orte und Anbieter ist in der Datenschutzerklärung dokumentiert.
 
@@ -185,8 +185,7 @@ Stand bei Unterzeichnung. Die jeweils aktuelle, datierte Liste steht in der [Dat
 | Payrexx AG | Zahlungsabwicklung | Schweiz | nein |
 | Mux, Inc. | Video-Hosting (von Lehrpersonen hochgeladene Videos) | USA | nein |
 | OpenRouter, Inc. | Vermittlung von KI-Anfragen (Ziffer 9) | USA | nur Lösungen ohne Identifikationsmerkmale |
-| Google LLC (Vertex AI) | KI-Feedback auf Handschrift (Gemini) | von Google gewählt (global) | wie OpenRouter |
-| DigitalOcean, LLC | KI-Bewertung (DeepSeek V4 Flash, offene Gewichte) | USA | wie OpenRouter |
-| Weitere Modellanbieter über OpenRouter | KI-Unterstützung der Lehrperson beim Schreiben | USA u. a. | nein |
+| Google LLC (Vertex AI) | KI-Feedback auf Handschrift, KI-Bewertung von Prüfungsantworten (Gemini) | von Google gewählt (global) | wie OpenRouter |
+| Weitere Modellanbieter über OpenRouter (nur ohne Datenspeicherung) | KI-Unterstützung der Lehrperson beim Schreiben | USA u. a. | nein |
 
 Anmeldung über Microsoft erfolgt beim Identitätsanbieter der Schule bzw. der Lehrperson und ist keine Auftragsbearbeitung durch Eduskript.

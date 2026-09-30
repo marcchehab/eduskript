@@ -22,8 +22,8 @@
  * 3.8-flash got 20/20 and followed "one or two sentences". Both were 6/6 on clean
  * synthetic right/wrong paths, so the gap is reading messy strokes. Cost: 3.8-flash
  * is $0.75/$3.75 per M tokens vs $0.30/$2.50, latency ~4-9s vs ~2s.
- * OPENROUTER_PROVIDERS is deliberately NOT applied here — that pin targets the
- * text model's provider.
+ * Routing: openrouterRouting() pins Gemini to Vertex (OPENROUTER_PROVIDERS does
+ * not apply to Gemini models).
  */
 
 import { getServerSession } from 'next-auth'
@@ -32,7 +32,7 @@ import { prisma } from '@/lib/prisma'
 import { checkPagePermissions } from '@/lib/permissions'
 import { extractFeedbackContext } from '@/lib/ai/feedback-context'
 import { loadSolutionImage } from '@/lib/ai/feedback-solution'
-import { OPENROUTER_GEMINI_STUDENT_DATA } from '@/lib/ai/openrouter'
+import { openrouterRouting } from '@/lib/ai/openrouter'
 import OpenAI from 'openai'
 
 export const dynamic = 'force-dynamic'
@@ -260,21 +260,20 @@ export async function POST(request: Request) {
     const stream = new TransformStream()
     const writer = stream.writable.getWriter()
 
+    const visionModel = process.env.OPENROUTER_VISION_MODEL ?? 'google/gemini-3.8-flash'
     ;(async () => {
       try {
         const aiStream = await openai.chat.completions.create({
-          model: process.env.OPENROUTER_VISION_MODEL ?? 'google/gemini-3.8-flash',
+          model: visionModel,
           max_tokens: 2048,
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userContent },
           ],
           stream: true,
-          // No OPENROUTER_PROVIDERS pin here (see header). zdr: the image is
-          // student work; Vertex standard → Vertex priority, never AI Studio
-          // (retains prompts). Assumes a Gemini model — a non-Google
-          // OPENROUTER_VISION_MODEL would find no endpoint.
-          ...(OPENROUTER_GEMINI_STUDENT_DATA as Record<string, unknown>),
+          // zdr: the image is student work. Gemini → Vertex standard, then
+          // Vertex priority, never AI Studio (retains prompts).
+          ...(openrouterRouting(visionModel) as Record<string, unknown>),
         })
 
         for await (const chunk of aiStream) {

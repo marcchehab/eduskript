@@ -82,7 +82,7 @@ UID CHE-261.508.926, operator of eduskript.org
 
 8.1 Primary data is stored in the EU: the database in Frankfurt (Germany), uploaded files in Paris (France); email delivery takes place in the EU. Under Annex 1 of the Swiss Data Protection Ordinance (DPO/DSV), the EU provides an adequate level of data protection. Koyeb runs the database on infrastructure of US companies (Neon, Amazon Web Services); the data remains in Frankfurt.
 
-8.2 For AI features (section 9), content is transferred to providers in the USA, exclusively without identifying information as described in section 9.2. Google LLC and DigitalOcean are certified under the Swiss-U.S. Data Privacy Framework. For OpenRouter, which is not certified and only forwards the requests, the transfer relies on the content not being attributable to any person for this recipient.
+8.2 For AI features (section 9), content is transferred to providers in the USA, exclusively without identifying information as described in section 9.2. Google LLC is certified under the Swiss-U.S. Data Privacy Framework. For OpenRouter, which is not certified and only forwards the requests, the transfer relies on the content not being attributable to any person for this recipient.
 
 8.3 By signing, the School approves processing at the locations listed in Annex 3. The current list of locations and providers is documented in the privacy policy.
 
@@ -188,8 +188,7 @@ As at signature. The current, dated list is in the [privacy policy](https://edus
 | Payrexx AG | Payment processing | Switzerland | no |
 | Mux, Inc. | Video hosting (videos uploaded by teachers) | USA | no |
 | OpenRouter, Inc. | Routing of AI requests (section 9) | USA | only answers without identifying information |
-| Google LLC (Vertex AI) | AI feedback on handwriting (Gemini) | chosen by Google (global) | as OpenRouter |
-| DigitalOcean, LLC | AI scoring (DeepSeek V4 Flash, open weights) | USA | as OpenRouter |
-| Other model providers via OpenRouter | AI support for teachers when writing | USA and others | no |
+| Google LLC (Vertex AI) | AI feedback on handwriting, AI scoring of exam answers (Gemini) | chosen by Google (global) | as OpenRouter |
+| Other model providers via OpenRouter (zero data retention only) | AI support for teachers when writing | USA and others | no |
 
 Sign-in via Microsoft happens at the identity provider of the School or teacher and is not processing on behalf by Eduskript.

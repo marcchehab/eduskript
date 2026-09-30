@@ -5,7 +5,9 @@ import { prisma } from '@/lib/prisma'
 import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import OpenAI from 'openai'
 import { PLUGIN_AUTHORING_PROMPT } from '@/lib/ai/plugin-prompt'
-import { openrouterProviderRouting, DEEPSEEK_V4_FLASH_PROVIDERS } from '@/lib/ai/openrouter'
+import { openrouterRouting } from '@/lib/ai/openrouter'
+
+const CONTENT_MODEL = 'deepseek/deepseek-v4.1-flash'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -88,15 +90,15 @@ export async function POST(request: NextRequest) {
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       const response = await openai.chat.completions.create({
-        // deepseek-v4-flash: ~15x cheaper than glm-5.2:nitro at comparable/better
-        // German quality, no dedicated-fast-provider tier needed (see docs/ai-model-selection-eval.md)
-        model: 'deepseek/deepseek-v4-flash',
+        // deepseek-v4.1-flash (successor of v4-flash, chosen 2026-08 over glm-5.2
+        // for price at comparable German quality, see docs/ai-model-selection-eval.md).
+        model: CONTENT_MODEL,
         max_tokens: 16384,
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: userMessage },
         ],
-        ...(openrouterProviderRouting(DEEPSEEK_V4_FLASH_PROVIDERS) as Record<string, unknown>),
+        ...(openrouterRouting(CONTENT_MODEL) as Record<string, unknown>),
       })
 
       const text = response.choices[0]?.message?.content ?? ''

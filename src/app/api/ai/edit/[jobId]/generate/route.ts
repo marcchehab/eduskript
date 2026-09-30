@@ -6,7 +6,7 @@ import { assembleSinglePageEditPrompt } from '@/lib/ai/prompts'
 import type { SkriptContext } from '@/lib/ai/types'
 import { loadFrontPageContext } from '@/lib/ai/frontpage-context'
 import { normalizeContent } from '@/lib/ai/normalize-content'
-import { openrouterProviderRouting, DEEPSEEK_V4_FLASH_PROVIDERS } from '@/lib/ai/openrouter'
+import { openrouterRouting } from '@/lib/ai/openrouter'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import OpenAI from 'openai'
 import { createLogger } from '@/lib/logger'
@@ -77,7 +77,7 @@ export async function POST(
   const contentModel =
     body.contentModel === 'flash'
       ? (process.env.OPENROUTER_PLAN_MODEL ?? 'google/gemini-3.5-flash-lite')
-      : 'deepseek/deepseek-v4-flash'
+      : 'deepseek/deepseek-v4.1-flash'
 
   if (typeof pageIndex !== 'number' || pageIndex < 0) {
     return Response.json({ error: 'Invalid pageIndex' }, { status: 400 })
@@ -206,14 +206,8 @@ export async function POST(
     defaultHeaders: { 'HTTP-Referer': 'https://eduskript.org', 'X-Title': 'Eduskript' },
   })
 
-  // Provider routing: OPENROUTER_PROVIDERS env wins if set. Otherwise, pin to
-  // known-healthy deepseek-v4-flash providers ('thinking') — its unpinned pool
-  // includes providers with real outages (see DEEPSEEK_V4_FLASH_PROVIDERS).
-  // 'flash' reuses gemini-3.5-flash-lite (Google-only), no pin needed.
-  const routing = openrouterProviderRouting(
-    contentModel === 'deepseek/deepseek-v4-flash' ? DEEPSEEK_V4_FLASH_PROVIDERS : undefined
-  )
-  const modelRouting = routing as Record<string, unknown>
+  // zdr + fastest provider first; Gemini pinned to Vertex (see openrouter.ts).
+  const modelRouting = openrouterRouting(contentModel) as Record<string, unknown>
 
   // Fetch user and organization custom AI prompts (both live on Site).
   let orgPrompt: string | undefined

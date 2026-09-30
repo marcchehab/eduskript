@@ -7,7 +7,7 @@ import { assembleEditPrompt } from '@/lib/ai/prompts'
 import type { EditRequest, SkriptContext } from '@/lib/ai/types'
 import { parseJsonResponse, isValidEditPlan, type ParseJsonResponse } from '@/lib/ai/parse-json-response'
 import { loadFrontPageContext } from '@/lib/ai/frontpage-context'
-import { openrouterProviderRouting } from '@/lib/ai/openrouter'
+import { openrouterRouting } from '@/lib/ai/openrouter'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import OpenAI from 'openai'
 import { createLogger } from '@/lib/logger'
@@ -216,17 +216,18 @@ export async function POST(request: Request): Promise<Response> {
     })
 
     const MAX_PLAN_RETRIES = 3
+    const planModel = process.env.OPENROUTER_PLAN_MODEL ?? 'google/gemini-3.5-flash-lite'
 
     for (let attempt = 1; attempt <= MAX_PLAN_RETRIES; attempt++) {
       const planMessage = await openai.chat.completions.create({
         // Plan step (decide how many pages to edit): short JSON, so use the fastest+cheapest
         // model. OPENROUTER_PLAN_MODEL overrides. See docs/ai-model-selection-eval.md.
-        model: process.env.OPENROUTER_PLAN_MODEL ?? 'google/gemini-3.5-flash-lite',
+        model: planModel,
         max_tokens: 8192,
         messages: [{ role: 'system', content: planPrompt }, { role: 'user', content: instruction }],
-        // OpenRouter-specific: pin preferred providers via OPENROUTER_PROVIDERS env.
-        // Field is unknown to the OpenAI SDK types but forwarded in the body.
-        ...(openrouterProviderRouting() as Record<string, unknown>),
+        // OpenRouter-specific `provider` field (see openrouter.ts). Unknown to the
+        // OpenAI SDK types but forwarded in the body.
+        ...(openrouterRouting(planModel) as Record<string, unknown>),
       })
 
       lastPlanText = planMessage.choices[0]?.message?.content ?? ''

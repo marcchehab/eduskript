@@ -1,7 +1,7 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
-import { openrouterProviderRouting, DEEPSEEK_V4_FLASH_PROVIDERS } from '@/lib/ai/openrouter'
+import { openrouterRouting } from '@/lib/ai/openrouter'
 import {
   EXCALIDRAW_SYSTEM_PROMPT,
   buildUserPrompt,
@@ -9,6 +9,8 @@ import {
   stripMermaidFences,
 } from '@/lib/ai/excalidraw-prompt'
 import OpenAI from 'openai'
+
+const CONTENT_MODEL = 'deepseek/deepseek-v4.1-flash'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -88,15 +90,15 @@ export async function POST(request: Request) {
         : buildUserPrompt(prompt, language)
 
     const completion = await openai.chat.completions.create({
-      // deepseek-v4-flash: ~15x cheaper than glm-5.2:nitro at comparable/better
-      // German quality, no dedicated-fast-provider tier needed (see docs/ai-model-selection-eval.md)
-      model: 'deepseek/deepseek-v4-flash',
+      // deepseek-v4.1-flash (successor of v4-flash, chosen 2026-08 over glm-5.2
+      // for price at comparable German quality, see docs/ai-model-selection-eval.md).
+      model: CONTENT_MODEL,
       max_tokens: 1024,
       messages: [
         { role: 'system', content: EXCALIDRAW_SYSTEM_PROMPT },
         { role: 'user', content: userMessage },
       ],
-      ...(openrouterProviderRouting(DEEPSEEK_V4_FLASH_PROVIDERS) as Record<string, unknown>),
+      ...(openrouterRouting(CONTENT_MODEL) as Record<string, unknown>),
     })
 
     const raw = completion.choices[0]?.message?.content ?? ''

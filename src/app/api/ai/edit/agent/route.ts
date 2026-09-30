@@ -5,7 +5,7 @@ import { checkSkriptPermissions } from '@/lib/permissions'
 import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import type { SkriptContext } from '@/lib/ai/types'
 import { loadFrontPageContext } from '@/lib/ai/frontpage-context'
-import { openrouterProviderRouting } from '@/lib/ai/openrouter'
+import { openrouterRouting } from '@/lib/ai/openrouter'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import OpenAI from 'openai'
 import { createLogger } from '@/lib/logger'
@@ -209,9 +209,10 @@ export async function POST(request: Request): Promise<Response> {
 
   let content = ''
   let toolCalls: Array<{ name: string; args: Record<string, unknown> }> = []
+  const model = process.env.OPENROUTER_PLAN_MODEL ?? 'google/gemini-3.5-flash-lite'
   try {
     const completion = await openai.chat.completions.create({
-      model: process.env.OPENROUTER_PLAN_MODEL ?? 'google/gemini-3.5-flash-lite',
+      model,
       max_tokens: 2048,
       messages: [
         { role: 'system', content: systemPrompt },
@@ -219,7 +220,7 @@ export async function POST(request: Request): Promise<Response> {
       ],
       tools: TOOLS,
       tool_choice: 'auto',
-      ...(openrouterProviderRouting() as Record<string, unknown>),
+      ...(openrouterRouting(model) as Record<string, unknown>),
     })
     const msg = completion.choices[0]?.message
     content = msg?.content?.trim() ?? ''

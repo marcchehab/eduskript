@@ -13,7 +13,7 @@
  */
 
 import OpenAI from 'openai'
-import { openrouterProviderRouting, DEEPSEEK_V4_FLASH_PROVIDERS } from './openrouter'
+import { openrouterRouting } from './openrouter'
 import { extractCriterionRegex, runCriterionCheck, stripInlineRegex } from '@/lib/scoring/regex-check'
 import { createLogger } from '@/lib/logger'
 
@@ -100,9 +100,13 @@ function client(): OpenAI {
 }
 
 export function scoringModel(): string {
-  // deepseek-v4-flash: 13-50x cheaper than qwen3.8-max, no measured criterion
-  // "bleeding" difference on adversarial rubric tests (see docs/ai-model-selection-eval.md).
-  return process.env.OPENROUTER_MODEL ?? 'deepseek/deepseek-v4-flash'
+  // gemini-3.8-flash on Vertex (2026-09-30): 5-6 s per scoring call vs 12-25 s
+  // for deepseek-v4-flash via zdr providers (144+ s pinned to DigitalOcean), and
+  // identical points on two runs of the same buggy submission, matching what
+  // deepseek-v4-flash awarded. deepseek-v4.1-flash was faster but its points
+  // varied by provider. One synthetic exercise only; not yet checked against
+  // real teacher grades (scripts/grading-bench/).
+  return process.env.OPENROUTER_MODEL ?? 'google/gemini-3.8-flash'
 }
 
 /** Append the teacher/org custom guidance (language, style, terminology) so the
@@ -137,10 +141,7 @@ async function complete(
     ],
     ...opts,
     // zdr: rubric samples and scored submissions are student work.
-    ...(openrouterProviderRouting(
-      model === 'deepseek/deepseek-v4-flash' ? DEEPSEEK_V4_FLASH_PROVIDERS : undefined,
-      { zdr: true },
-    ) as Record<string, unknown>),
+    ...(openrouterRouting(model) as Record<string, unknown>),
   })
   // Reasoning models (minimax) put their chain-of-thought in message.reasoning and
   // the answer in message.content; OpenRouter may add native_finish_reason + a

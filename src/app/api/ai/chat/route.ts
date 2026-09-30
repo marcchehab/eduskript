@@ -6,8 +6,10 @@ import { isPaidUser, paidOnlyResponse } from '@/lib/billing'
 import { assembleSystemPrompt } from '@/lib/ai/prompts'
 import type { ChatRequest, SkriptContext } from '@/lib/ai/types'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
-import { OPENROUTER_NO_TRAINING } from '@/lib/ai/openrouter'
+import { openrouterRouting } from '@/lib/ai/openrouter'
 import OpenAI from 'openai'
+
+const CHAT_MODEL = 'google/gemini-3.5-flash-lite'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -167,14 +169,14 @@ export async function POST(request: Request) {
       try {
         const aiStream = await openai.chat.completions.create({
           // flash-lite: fastest+cheapest, correct on chat-scale prompts (see docs/ai-model-selection-eval.md)
-          model: 'google/gemini-3.5-flash-lite',
+          model: CHAT_MODEL,
           max_tokens: 4096,
           messages: [
             { role: 'system', content: systemPrompt },
             ...messages.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
           ],
           stream: true,
-          ...(OPENROUTER_NO_TRAINING as Record<string, unknown>),
+          ...(openrouterRouting(CHAT_MODEL) as Record<string, unknown>),
         })
 
         for await (const chunk of aiStream) {

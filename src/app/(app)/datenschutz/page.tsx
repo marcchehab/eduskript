@@ -28,7 +28,7 @@ export const metadata: Metadata = {
 // Sources (checked 2026-09-23): Koyeb API (app fra1, DB service type
 // neon_postgres in region fra, host *.eu-central-1.pg.koyeb.app), src/lib/s3.ts
 // (fr-par), OpenRouter provider list (retention/training flags). AI providers
-// must match DEEPSEEK_V4_FLASH_PROVIDERS / zdr routing in src/lib/ai/openrouter.ts.
+// must match openrouterRouting() in src/lib/ai/openrouter.ts.
 const SUBPROCESSORS: { name: string; purpose: string; location: string; studentData: string }[] = [
   { name: 'Koyeb SAS (Frankreich)', purpose: 'Hosting der Anwendung und der PostgreSQL-Datenbank', location: 'Frankfurt, Deutschland', studentData: 'ja' },
   { name: 'Neon, Inc. und Amazon Web Services (USA), im Auftrag von Koyeb', purpose: 'Infrastruktur der Datenbank (verschlüsselt gespeichert)', location: 'Frankfurt, Deutschland', studentData: 'ja' },
@@ -37,14 +37,14 @@ const SUBPROCESSORS: { name: string; purpose: string; location: string; studentD
   { name: 'Payrexx AG (Schweiz)', purpose: 'Zahlungsabwicklung', location: 'Schweiz', studentData: 'nein' },
   { name: 'Mux, Inc. (USA)', purpose: 'Video-Hosting für von Lehrpersonen hochgeladene Videos', location: 'USA', studentData: 'nein' },
   { name: 'OpenRouter, Inc. (USA)', purpose: 'Vermittlung der KI-Anfragen an die Modellanbieter', location: 'USA', studentData: 'nur Lösungen, ohne Identifikationsmerkmale' },
-  { name: 'Google LLC (USA), Vertex AI', purpose: 'KI-Feedback auf Handschrift und Zeichnungen (Gemini)', location: 'von Google gewählt (global)', studentData: 'wie OpenRouter' },
-  { name: 'DigitalOcean, LLC (USA)', purpose: 'KI-Bewertung von Prüfungsantworten (DeepSeek V4 Flash, offene Gewichte)', location: 'USA', studentData: 'wie OpenRouter' },
+  { name: 'Google LLC (USA), Vertex AI', purpose: 'KI-Feedback auf Handschrift und Zeichnungen, KI-Bewertung von Prüfungsantworten (Gemini)', location: 'von Google gewählt (global)', studentData: 'wie OpenRouter' },
   { name: 'Weitere Modellanbieter über OpenRouter', purpose: 'KI-Unterstützung der Lehrperson beim Schreiben (Chat, KI-Bearbeitung, Diagramme)', location: 'USA u. a.', studentData: 'nein' },
 ]
 
 const CHANGELOG: { date: string; change: string }[] = [
   { date: 'September 2026', change: 'Erste veröffentlichte Liste.' },
   { date: 'September 2026', change: 'DeepInfra entfernt; KI-Bewertung nur noch über DigitalOcean.' },
+  { date: 'September 2026', change: 'DigitalOcean entfernt; KI-Bewertung über Google Vertex AI. KI-Unterstützung der Lehrperson nur noch über Anbieter ohne Datenspeicherung.' },
 ]
 
 const h2 = 'text-xl font-semibold mt-6 mb-2'
@@ -230,8 +230,8 @@ export default function DatenschutzPage() {
             </p>
             <p>
               Anfragen, mit denen Lehrpersonen ihre eigenen Inhalte bearbeiten,
-              gehen nur an Anbieter, die Inhalte nicht zum Training
-              verwenden.
+              gehen ebenfalls nur an Endpunkte ohne Datenspeicherung, die
+              Inhalte nicht zum Training verwenden.
             </p>
           </section>
 
