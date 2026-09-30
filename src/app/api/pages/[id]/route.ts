@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
-import { revalidatePath, revalidateTag } from 'next/cache'
+import { revalidatePath } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { CACHE_TAGS } from '@/lib/cached-queries'
-import { invalidateSitemaps } from '@/lib/sitemap-cache'
 import { checkPagePermissions } from '@/lib/permissions'
 import {
   ConflictError,
   NotFoundError,
   PermissionDeniedError,
   ValidationError,
+  invalidatePublicPageCaches,
   updatePageForUser,
 } from '@/lib/services/pages'
 
@@ -89,6 +88,7 @@ export async function DELETE(
         skript: {
           include: {
             authors: { include: { user: { select: { id: true, name: true } } } },
+            collectionSkripts: { include: { collection: true } },
           },
         },
       },
@@ -110,10 +110,10 @@ export async function DELETE(
 
     await prisma.page.delete({ where: { id } })
 
-    // /p/{id} caches this page's canonical URL (page-stable-link.server.ts);
-    // without this it would keep redirecting to a now-dead URL.
-    revalidateTag(CACHE_TAGS.page(id), { expire: 0 })
-    invalidateSitemaps()
+    // Same set as an update: without the skript/teacher/org tags the sidebar
+    // keeps listing the deleted page and its URL can stay a cached 404 while
+    // the link to it is still shown.
+    await invalidatePublicPageCaches(existingPage, existingPage, session.user.id)
     revalidatePath('/dashboard/page-builder')
 
     return NextResponse.json({ success: true })

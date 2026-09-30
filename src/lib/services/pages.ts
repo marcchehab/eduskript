@@ -133,8 +133,17 @@ async function loadPageForActor(pageId: string, userId: string, isAdmin: boolean
  * skript as a root item → the caller's primary site as a last-resort
  * fallback (orphaned skripts not yet placed anywhere).
  */
+/** The fields resolveOwningSiteSlug / invalidatePublicPageCaches read. */
+interface PageCacheScope {
+  skriptId: string
+  skript: {
+    slug: string
+    collectionSkripts: Array<{ collection: { siteId: string | null } | null }>
+  }
+}
+
 async function resolveOwningSiteSlug(
-  existingPage: NonNullable<Awaited<ReturnType<typeof loadPageForActor>>>,
+  existingPage: PageCacheScope,
   userId: string
 ): Promise<string | null> {
   const collectionSiteId = existingPage.skript.collectionSkripts[0]?.collection?.siteId
@@ -158,6 +167,68 @@ async function resolveOwningSiteSlug(
     select: { slug: true },
   })
   return primarySite?.slug ?? null
+}
+
+/**
+ * Revalidate every public cache that lists or renders this page: the page
+ * itself, its skript (sidebar page list), the teacher's site content, the
+ * /p/{id} stable link, sitemaps, and the org-route mirrors. Called after
+ * update and delete. Gated on the page's owning site existing (URL slug lives
+ * on Site now); pages with no resolvable site have nothing to invalidate.
+ *
+ * Known limitation: org tags come from the *acting* user's memberships, not
+ * the site owner's, so an admin editing someone else's page misses them.
+ */
+export async function invalidatePublicPageCaches(
+  existingPage: PageCacheScope,
+  page: { id: string; slug: string },
+  userId: string
+): Promise<void> {
+  const pageSlug = await resolveOwningSiteSlug(existingPage, userId)
+
+  if (pageSlug) {
+    log('Invalidating cache tags', {
+      pageSlug,
+      skriptSlug: existingPage.skript.slug,
+      page: page.slug,
+    })
+    revalidateTag(
+      CACHE_TAGS.pageBySlug(pageSlug, existingPage.skript.slug, page.slug),
+      { expire: 0 }
+    )
+    revalidateTag(
+      CACHE_TAGS.skriptBySlug(pageSlug, existingPage.skript.slug),
+      { expire: 0 }
+    )
+
+    revalidatePath(
+      `/${pageSlug}/${existingPage.skript.slug}/${page.slug}`
+    )
+
+    revalidateTag(CACHE_TAGS.teacherContent(pageSlug), { expire: 0 })
+
+    // Keyed on the page id rather than its slugs: the /p/{id} stable-link
+    // redirect caches this page's canonical URL, and publishing, unpublishing
+    // or renaming or deleting it all change what that redirect should do (or whether it
+    // should 404 at all). See resolveStableLink in page-stable-link.server.ts.
+    revalidateTag(CACHE_TAGS.page(page.id), { expire: 0 })
+
+    // Publishing, unpublishing, renaming or deleting changes what the sitemaps list.
+    invalidateSitemaps()
+
+    revalidatePath('/dashboard')
+
+    const orgMemberships = await prisma.organizationMember.findMany({
+      where: { userId },
+      select: { organization: { select: { site: { select: { slug: true } } } } },
+    })
+    for (const membership of orgMemberships) {
+      const orgSlug = membership.organization.site?.slug
+      if (orgSlug) {
+        revalidateTag(CACHE_TAGS.orgContent(orgSlug), { expire: 0 })
+      }
+    }
+  }
 }
 
 /**
@@ -386,54 +457,7 @@ export async function updatePageForUser(
     })
   }
 
-  // Revalidate the public page cache using tags. The whole block is gated
-  // on the page's owning site existing (URL slug lives on Site now); pages
-  // with no resolvable site have nothing to invalidate.
-  const pageSlug = await resolveOwningSiteSlug(existingPage, userId)
-
-  if (pageSlug) {
-    log('Invalidating cache tags', {
-      pageSlug,
-      skriptSlug: existingPage.skript.slug,
-      page: updatedPage.slug,
-    })
-    revalidateTag(
-      CACHE_TAGS.pageBySlug(pageSlug, existingPage.skript.slug, updatedPage.slug),
-      { expire: 0 }
-    )
-    revalidateTag(
-      CACHE_TAGS.skriptBySlug(pageSlug, existingPage.skript.slug),
-      { expire: 0 }
-    )
-
-    revalidatePath(
-      `/${pageSlug}/${existingPage.skript.slug}/${updatedPage.slug}`
-    )
-
-    revalidateTag(CACHE_TAGS.teacherContent(pageSlug), { expire: 0 })
-
-    // Keyed on the page id rather than its slugs: the /p/{id} stable-link
-    // redirect caches this page's canonical URL, and publishing, unpublishing
-    // or renaming it all change what that redirect should do (or whether it
-    // should 404 at all). See resolveStableLink in page-stable-link.server.ts.
-    revalidateTag(CACHE_TAGS.page(updatedPage.id), { expire: 0 })
-
-    // Publishing, unpublishing or renaming changes what the sitemaps list.
-    invalidateSitemaps()
-
-    revalidatePath('/dashboard')
-
-    const orgMemberships = await prisma.organizationMember.findMany({
-      where: { userId },
-      select: { organization: { select: { site: { select: { slug: true } } } } },
-    })
-    for (const membership of orgMemberships) {
-      const orgSlug = membership.organization.site?.slug
-      if (orgSlug) {
-        revalidateTag(CACHE_TAGS.orgContent(orgSlug), { expire: 0 })
-      }
-    }
-  }
+  await invalidatePublicPageCaches(existingPage, updatedPage, userId)
 
   return updatedPage
 }
