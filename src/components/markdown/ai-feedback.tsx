@@ -133,6 +133,9 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
           if (event.type === 'content' && event.content) {
             accumulated += event.content
             setFeedback(accumulated)
+          } else if (event.type === 'truncated') {
+            accumulated += '\n\n*… (the answer was cut off — please try again)*'
+            setFeedback(accumulated)
           } else if (event.type === 'error') {
             throw new Error(event.error || 'AI error')
           }

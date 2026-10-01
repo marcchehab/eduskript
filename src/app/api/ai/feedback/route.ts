@@ -265,7 +265,15 @@ export async function POST(request: Request) {
       try {
         const aiStream = await openai.chat.completions.create({
           model: visionModel,
-          max_tokens: 2048,
+          // Gemini's thinking tokens count against max_tokens. At 2048 a
+          // detailed drawing (reaction mechanism) used ~1960 on reasoning and
+          // the answer was cut after one sentence. Measured 2026-10-01 with
+          // effort 'low': reasoning 0–2900 tokens, answer 400–700 chars, so
+          // 8192 leaves ample room. OpenRouter's reasoning.max_tokens was not
+          // enforced reliably for Gemini (3700 against a 2048 cap), hence effort.
+          max_tokens: 8192,
+          // OpenRouter extension, not in the OpenAI SDK types.
+          ...({ reasoning: { effort: 'low' } } as Record<string, unknown>),
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userContent },
@@ -276,12 +284,18 @@ export async function POST(request: Request) {
           ...(openrouterRouting(visionModel) as Record<string, unknown>),
         })
 
+        let finishReason: string | null = null
         for await (const chunk of aiStream) {
           const text = chunk.choices[0]?.delta?.content ?? ''
+          finishReason = chunk.choices[0]?.finish_reason ?? finishReason
           if (text) {
             const data = JSON.stringify({ type: 'content', content: text })
             await writer.write(encoder.encode(`data: ${data}\n\n`))
           }
+        }
+        if (finishReason === 'length') {
+          console.warn(`[ai-feedback] answer truncated at max_tokens (${visionModel})`)
+          await writer.write(encoder.encode(`data: ${JSON.stringify({ type: 'truncated' })}\n\n`))
         }
         await writer.write(encoder.encode(`data: ${JSON.stringify({ type: 'done' })}\n\n`))
       } catch (error) {
