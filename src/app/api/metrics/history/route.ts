@@ -14,6 +14,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getMetricDailyAggregates } from '@/lib/metrics/aggregation'
 import { PATH_METRIC_PREFIX } from '@/lib/metrics/buffer'
+import { VISIT_METRIC_PREFIX } from '@/lib/visit-source'
 
 export async function GET(request: NextRequest) {
   // Check authentication and admin status
@@ -42,8 +43,12 @@ export async function GET(request: NextRequest) {
         timestamp: { gte: since },
         // Per-URL request counts share this table (see PATH_METRIC_PREFIX in
         // metrics/buffer.ts) but are not metrics — they feed the cache warmer,
-        // and there are hundreds of them.
-        NOT: { name: { startsWith: PATH_METRIC_PREFIX } },
+        // and there are hundreds of them. Same for visit-source counters, which
+        // have their own card (/api/admin/visit-sources).
+        AND: [
+          { NOT: { name: { startsWith: PATH_METRIC_PREFIX } } },
+          { NOT: { name: { startsWith: VISIT_METRIC_PREFIX } } },
+        ],
       },
       orderBy: { timestamp: 'asc' },
       select: {

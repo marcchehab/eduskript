@@ -183,7 +183,7 @@ describe('metrics buffer', () => {
     recordPathHit('example.com/a')
     recordPathHit('example.com/a')
     // Same counters arriving from the proxy's separate module instance.
-    mergeShipped({ paths: [['example.com/a', 3], ['example.com/b', 1]] })
+    mergeShipped({ paths: [['path:example.com/a', 3], ['path:example.com/b', 1], ['bogus', 9]] })
 
     maybeFlushOnDbActivity()
     await vi.waitFor(() => expect(executeRaw).toHaveBeenCalledTimes(2))

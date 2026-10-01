@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { recordMetric, recordPathHit, drainForShipping } from '@/lib/metrics/buffer'
+import { recordMetric, recordPathHit, recordDailyCount, drainForShipping } from '@/lib/metrics/buffer'
+import { readVisitSource, visitCounterNames } from '@/lib/visit-source'
 import { isSEBRequest } from '@/lib/seb'
 import { DEMO_EMAIL } from '@/lib/demo-account'
 
@@ -32,6 +33,10 @@ const APP_DOMAINS: Record<string, string> = {
   'eduskript.org': 'eduskript',
   'www.eduskript.org': 'eduskript',
 }
+
+// Crawlers and link scanners (mail security gateways pre-open links) would
+// otherwise inflate the visit-source counters.
+const BOT_USER_AGENT = /bot|crawl|spider|slurp|preview|scanner|headless|curl|wget|python|httpclient|facebookexternalhit|safelinks/i
 
 // Settings the public demo account may not touch. Anything that would outlive
 // the nightly reset (src/lib/seed-demo-content.ts) or break the demo URL until
@@ -119,6 +124,22 @@ export async function proxy(request: NextRequest) {
 
   if (isHardNavigation || isSpaNavigation) {
     recordMetric('page_loads_total', 1)
+  }
+
+  // Anonymous visit-source counters for the app's own site (src/lib/visit-source.ts):
+  // ?ref=, utm_*, referring domain. Hard navigations only — that's where a
+  // link from outside lands. Not on teacher custom domains: their visitors are
+  // the teacher's, not our marketing audience. Login/dashboard round-trips
+  // carry an identity provider as referrer and aren't arrivals.
+  if (
+    isHardNavigation &&
+    request.method === 'GET' &&
+    (APP_DOMAINS[domain] || domain === 'localhost') &&
+    !/^\/(auth|oauth|dashboard)(\/|$)/.test(pathname) &&
+    !BOT_USER_AGENT.test(request.headers.get('user-agent') ?? '')
+  ) {
+    const source = readVisitSource(request.nextUrl, request.headers.get('referer'))
+    if (source) for (const name of visitCounterNames(source)) recordDailyCount(name)
   }
 
   // Which URLs are worth pre-rendering after a deploy (src/lib/cache-warmer.ts).

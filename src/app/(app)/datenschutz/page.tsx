@@ -166,6 +166,16 @@ export default function DatenschutzPage() {
               in der Datenbank. Die Zugriffsprotokolle des Hosting-Anbieters
               können IP-Adressen für kurze Zeit enthalten.
             </p>
+            <p className="mt-2">
+              Für Besuche auf eduskript.org zählen wir anonym, über welchen
+              Link sie kamen: Kampagnen-Kürzel im Link (z.B.{' '}
+              <code>?ref=…</code> oder <code>utm_…</code>) und die Domain der
+              verweisenden Seite, nie deren vollständige Adresse. Gespeichert
+              wird nur eine Summe pro Tag, ohne IP-Adresse, Cookie oder
+              Kennung. Erstellst du ein Konto, merkt sich dein Browser diese
+              Herkunft bis dahin lokal (höchstens 30 Tage), und sie wird einmal
+              mit dem neuen Konto gespeichert.
+            </p>
           </section>
 
           <section>
@@ -285,8 +295,9 @@ export default function DatenschutzPage() {
               Eduskript setzt ein Anmelde-Cookie (Sitzung) und kurzzeitig ein
               Cookie, das sich während der Anmeldung die gewählte Rolle merkt.
               Einstellungen wie Farbschema oder Fortschritt ohne Anmeldung
-              speichert der Browser lokal. Es gibt keine Tracking- oder
-              Werbe-Cookies.
+              speichert der Browser lokal, ebenso bis zur Registrierung die
+              Herkunft deines ersten Besuchs (siehe oben). Es gibt keine
+              Tracking- oder Werbe-Cookies.
             </p>
           </section>
 

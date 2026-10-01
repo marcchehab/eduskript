@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { RefreshCw, TrendingUp, Clock, Database, ChevronDown, ChevronRight } from 'lucide-react'
 import { formatMetricName, getMetricUnit, getMetricDisplay, METRICS, CALCULATED_METRICS, type MetricName } from '@/lib/metrics/registry'
 import { DbAwakeCard } from '@/components/dashboard/db-awake-card'
+import { VisitSourcesCard } from '@/components/dashboard/visit-sources-card'
 import { MetricsHoverProvider, useMetricsHover, findNearestBucket, formatHoverTime } from '@/components/dashboard/metrics-hover-context'
 
 interface MetricData {
@@ -334,6 +335,8 @@ export default function MetricsAdminPage() {
       {/* Awake time first: it is the only number on this page that maps to a
           bill, and it answers a question the query counters cannot. */}
       <DbAwakeCard />
+
+      <VisitSourcesCard />
 
       {/* Metric Cards Overview */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

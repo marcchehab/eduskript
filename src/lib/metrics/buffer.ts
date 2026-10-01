@@ -18,6 +18,7 @@
  */
 
 import { type MetricName, isValidMetricName } from './registry'
+import { VISIT_METRIC_PREFIX } from '@/lib/visit-source'
 
 interface MetricAccumulator {
   sum: number
@@ -44,13 +45,16 @@ const pendingDbBuffer = new Map<MetricName, MetricAccumulator>()
 const carriedHours: Array<{ timestamp: number; entries: Map<MetricName, MetricAccumulator> }> = []
 const MAX_CARRIED_HOURS = 48
 
-// Request counts per public path, used to pick what the boot-time cache warmer
-// renders (src/lib/cache-warmer.ts). Stored in metric_points under a `path:`
-// name so it needs no table of its own, but rounded to the DAY rather than the
-// hour: ~500 public URLs would otherwise add ~12k rows a day, and the warmer
-// only ever reads a 7-day sum.
+// Daily counters, keyed by their full metric_points name. Two kinds:
+// - `path:<host><path>` — request counts per public path, used to pick what the
+//   boot-time cache warmer renders (src/lib/cache-warmer.ts).
+// - `visit:<kind>:<label>` — anonymous visit sources (src/lib/visit-source.ts).
+// Stored in metric_points so they need no table of their own, but rounded to
+// the DAY rather than the hour: ~500 public URLs would otherwise add ~12k rows
+// a day, and the readers only ever sum over days.
 const pendingPathHits = new Map<string, number>()
 export const PATH_METRIC_PREFIX = 'path:'
+const DAILY_COUNT_PREFIXES = [PATH_METRIC_PREFIX, VISIT_METRIC_PREFIX]
 // Bounds the memory a hostile crawler can make us hold by requesting junk URLs.
 const MAX_TRACKED_PATHS = 2000
 
@@ -139,8 +143,16 @@ export function recordMetric(name: MetricName, value: number): void {
  * persistence happens on the usual opportunistic triggers.
  */
 export function recordPathHit(path: string): void {
-  if (pendingPathHits.size >= MAX_TRACKED_PATHS && !pendingPathHits.has(path)) return
-  pendingPathHits.set(path, (pendingPathHits.get(path) ?? 0) + 1)
+  recordDailyCount(PATH_METRIC_PREFIX + path)
+}
+
+/**
+ * Add one to a day-stamped counter (full metric_points name, e.g.
+ * `visit:ref:coldmail-chemie`). Same persistence as recordPathHit.
+ */
+export function recordDailyCount(name: string): void {
+  if (pendingPathHits.size >= MAX_TRACKED_PATHS && !pendingPathHits.has(name)) return
+  pendingPathHits.set(name, (pendingPathHits.get(name) ?? 0) + 1)
 }
 
 /**
@@ -200,9 +212,11 @@ export function mergeShipped(payload: {
     existing.count += acc.count
     pendingDbBuffer.set(name, existing)
   }
-  for (const [path, hits] of payload.paths ?? []) {
-    if (pendingPathHits.size >= MAX_TRACKED_PATHS && !pendingPathHits.has(path)) continue
-    pendingPathHits.set(path, (pendingPathHits.get(path) ?? 0) + hits)
+  for (const [name, hits] of payload.paths ?? []) {
+    // Full names since daily counters went generic — accept only the known kinds.
+    if (typeof name !== 'string' || !DAILY_COUNT_PREFIXES.some(p => name.startsWith(p))) continue
+    if (pendingPathHits.size >= MAX_TRACKED_PATHS && !pendingPathHits.has(name)) continue
+    pendingPathHits.set(name, (pendingPathHits.get(name) ?? 0) + hits)
   }
 }
 
@@ -333,7 +347,7 @@ async function flushPendingToDb(): Promise<void> {
     for (const [path, hits] of pathEntries) {
       await prismaBase.$executeRaw`
         INSERT INTO metric_points (id, name, timestamp, avg, count, created_at)
-        VALUES (${globalThis.crypto.randomUUID()}, ${PATH_METRIC_PREFIX + path}, ${dayTimestamp}, ${0}, ${hits}, NOW())
+        VALUES (${globalThis.crypto.randomUUID()}, ${path}, ${dayTimestamp}, ${0}, ${hits}, NOW())
         ON CONFLICT (name, timestamp) DO UPDATE SET
           count = metric_points.count + EXCLUDED.count
       `
