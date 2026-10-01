@@ -27,18 +27,44 @@ export function normalize(state: string): ExamLifecycleState {
   return (EXAM_STATES as string[]).includes(state) ? (state as ExamLifecycleState) : 'hidden'
 }
 
+export interface ExamStateResolution {
+  state: ExamLifecycleState
+  /**
+   * The class whose row produced `state` — i.e. the `exam:<pageId>:<classId>`
+   * SSE channel that carries changes to it (see the exam waiting room). Null
+   * when the state is 'hidden' (no row at all).
+   */
+  classId: string | null
+  /**
+   * True when a per-student override produced `state`. The waiting room needs
+   * this to ignore class-level events, which don't apply to an overridden
+   * student (acting on them would bounce the student between views).
+   */
+  isStudentOverride: boolean
+}
+
 /**
- * The effective exam state for a single student on a page. Per-student override
- * wins; otherwise the most-open class-level row across their class memberships;
- * otherwise hidden.
+ * The effective exam state for a single student on a page, plus which row it
+ * came from. Per-student override wins; otherwise the most-open class-level row
+ * across their class memberships; otherwise hidden.
+ *
+ * Limitation: for a student in several classes with rows on the same page, only
+ * the winning class's id is returned, so a live update on one of the *other*
+ * classes' rows isn't streamed. The waiting room's poll + manual refresh cover
+ * that case.
  */
-export async function resolveExamState(pageId: string, studentId: string): Promise<ExamLifecycleState> {
+export async function resolveExamStateDetail(
+  pageId: string,
+  studentId: string,
+): Promise<ExamStateResolution> {
   // 1) Per-student override (any class) wins outright.
   const studentRow = await prisma.examState.findFirst({
     where: { pageId, studentId },
-    select: { state: true },
+    select: { state: true, classId: true },
   })
-  if (studentRow) return normalize(studentRow.state)
+  if (studentRow) {
+    return { state: normalize(studentRow.state), classId: studentRow.classId, isStudentOverride: true }
+  }
 
   // 2) Else the class-level row(s) for the student's class memberships.
   const classRows = await prisma.examState.findMany({
@@ -47,13 +73,19 @@ export async function resolveExamState(pageId: string, studentId: string): Promi
       studentId: null,
       class: { memberships: { some: { studentId } } },
     },
-    select: { state: true },
+    select: { state: true, classId: true },
   })
-  if (classRows.length === 0) return 'hidden'
+  if (classRows.length === 0) return { state: 'hidden', classId: null, isStudentOverride: false }
 
-  return classRows
-    .map((r) => normalize(r.state))
-    .reduce((best, s) => (RANK[s] > RANK[best] ? s : best), 'hidden' as ExamLifecycleState)
+  const best = classRows.reduce((a, b) =>
+    RANK[normalize(b.state)] > RANK[normalize(a.state)] ? b : a,
+  )
+  return { state: normalize(best.state), classId: best.classId, isStudentOverride: false }
+}
+
+/** State only — see resolveExamStateDetail. */
+export async function resolveExamState(pageId: string, studentId: string): Promise<ExamLifecycleState> {
+  return (await resolveExamStateDetail(pageId, studentId)).state
 }
 
 /**

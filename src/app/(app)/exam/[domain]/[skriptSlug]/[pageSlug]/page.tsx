@@ -14,6 +14,7 @@ import { PublicPageBody } from '@/components/public/public-page-body'
 import { ExamLockedPage } from '@/components/exam/exam-locked-page'
 import { SEBRequiredPage } from '@/components/exam/seb-required-page'
 import { ExamSubmittedPage } from '@/components/exam/exam-submitted-page'
+import { ExamWaitingRoom } from '@/components/exam/exam-waiting-room'
 import { ClassToolbar } from '@/components/teacher/class-toolbar'
 import { ExamDataSync } from '@/components/exam/exam-data-sync'
 import { HandInButton } from '@/components/exam/hand-in-button'
@@ -26,7 +27,7 @@ import { ExamPageContextProvider } from '@/contexts/exam-page-context'
 import { getOrCreateActiveExamKey } from '@/lib/exam-keys'
 import { getExamClassesForTeacher } from '@/lib/scoring/auth'
 import { isStudentReturned } from '@/lib/scoring/return-state'
-import { resolveExamState, type ExamLifecycleState } from '@/lib/exam-state'
+import { resolveExamStateDetail, type ExamLifecycleState } from '@/lib/exam-state'
 import { isSEBRequest, type ExamSettings } from '@/lib/seb'
 import { validateExamToken, validateExamSession } from '@/lib/exam-tokens'
 import { getPublicLayers } from '@/lib/public-page-data'
@@ -183,9 +184,10 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
 
   // Effective exam lifecycle state for this student (the single source of truth —
   // see lib/exam-state). Teachers and unlockForAll pages bypass to 'open'.
-  const examState: ExamLifecycleState = isTeacherAuthor || hasUnlockForAll
-    ? 'open'
-    : await resolveExamState(page.id, studentId)
+  const examResolution = isTeacherAuthor || hasUnlockForAll
+    ? { state: 'open' as ExamLifecycleState, classId: null, isStudentOverride: false }
+    : await resolveExamStateDetail(page.id, studentId)
+  const examState: ExamLifecycleState = examResolution.state
 
   // Classes shown in the teacher's class toolbar: assigned (has an ExamState row)
   // OR having a submitted answer. See getExamClassesForTeacher. `studentId` here
@@ -230,28 +232,6 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
     }
   }
 
-  // Fetch public annotations, snaps, and sticky notes (same as non-exam path)
-  const { publicAnnotations, publicSnaps, publicStickyNotes } = await getPublicLayers(page.id)
-
-  // Layout: the /exam/... segment doesn't inherit the [domain] sidebar layout,
-  // so render PublicSiteLayout inline. During exams students benefit from the
-  // same chrome (sidebar, typography, theme) as the regular public route.
-  const layoutTeacher = await getTeacherWithLayout(domain)
-  if (!layoutTeacher) notFound()
-  const fullSiteStructure = await getFullSiteStructure(layoutTeacher.id, domain)
-
-  const teacherForLayout = {
-    name: layoutTeacher.name || layoutTeacher.pageSlug || 'Unknown',
-    pageSlug: layoutTeacher.pageSlug || domain,
-    pageName: layoutTeacher.pageName || null,
-    pageDescription: layoutTeacher.pageDescription || null,
-    pageIcon: layoutTeacher.pageIcon || null,
-    titleStyle: layoutTeacher.titleStyle || null,
-    logoUrl: layoutTeacher.logoUrl || null,
-    bio: layoutTeacher.bio || null,
-    title: layoutTeacher.title || null,
-  }
-
   const isExamStudent = !isTeacherAuthor && (authenticatedViaToken || authenticatedViaExamSession)
 
   // Anyone taking the exam (SEB token/session OR a logged-in non-SEB student)
@@ -275,6 +255,48 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
     } catch (err) {
       console.error('[exam] backup key unavailable, continuing without backup:', err)
     }
+  }
+
+  // Gate: 'lobby' — the student may enter but the exam hasn't started. The
+  // waiting room holds them on an SSE connection to the exam-state channel and
+  // reloads as soon as the teacher moves the state (see ExamWaitingRoom).
+  // Teachers, unlockForAll pages and returned reviews never reach this (their
+  // state is forced to 'open' / handled above).
+  if (examState === 'lobby' && !isTeacherAuthor && !isReturnedReview && examResolution.classId) {
+    return (
+      <ExamWaitingRoom
+        pageId={page.id}
+        classId={examResolution.classId}
+        examTitle={page.title}
+        studentId={studentId}
+        skriptId={skript.id}
+        hasStudentOverride={examResolution.isStudentOverride}
+        backupPublicKeyJwk={backupKey?.publicKeyJwk}
+        backupKeyId={backupKey?.keyId}
+      />
+    )
+  }
+
+  // Fetch public annotations, snaps, and sticky notes (same as non-exam path)
+  const { publicAnnotations, publicSnaps, publicStickyNotes } = await getPublicLayers(page.id)
+
+  // Layout: the /exam/... segment doesn't inherit the [domain] sidebar layout,
+  // so render PublicSiteLayout inline. During exams students benefit from the
+  // same chrome (sidebar, typography, theme) as the regular public route.
+  const layoutTeacher = await getTeacherWithLayout(domain)
+  if (!layoutTeacher) notFound()
+  const fullSiteStructure = await getFullSiteStructure(layoutTeacher.id, domain)
+
+  const teacherForLayout = {
+    name: layoutTeacher.name || layoutTeacher.pageSlug || 'Unknown',
+    pageSlug: layoutTeacher.pageSlug || domain,
+    pageName: layoutTeacher.pageName || null,
+    pageDescription: layoutTeacher.pageDescription || null,
+    pageIcon: layoutTeacher.pageIcon || null,
+    titleStyle: layoutTeacher.titleStyle || null,
+    logoUrl: layoutTeacher.logoUrl || null,
+    bio: layoutTeacher.bio || null,
+    title: layoutTeacher.title || null,
   }
 
   // SEB-authenticated students have no NextAuth session, so without an
