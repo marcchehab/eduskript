@@ -32,6 +32,7 @@ import { prisma } from '@/lib/prisma'
 import { checkPagePermissions } from '@/lib/permissions'
 import { extractFeedbackContext } from '@/lib/ai/feedback-context'
 import { loadSolutionImage } from '@/lib/ai/feedback-solution'
+import { recordMetric } from '@/lib/metrics/buffer'
 import { openrouterRouting } from '@/lib/ai/openrouter'
 import OpenAI from 'openai'
 
@@ -261,41 +262,66 @@ export async function POST(request: Request) {
     const writer = stream.writable.getWriter()
 
     const visionModel = process.env.OPENROUTER_VISION_MODEL ?? 'google/gemini-3.8-flash'
+    const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userContent },
+    ]
+
+    // One streamed completion; forwards text as it arrives and returns it with
+    // the finish reason.
+    const streamAttempt = async (attemptMessages: typeof messages) => {
+      const aiStream = await openai.chat.completions.create({
+        model: visionModel,
+        // Gemini's thinking tokens count against max_tokens. At 2048 a
+        // detailed drawing (reaction mechanism) used ~1960 on reasoning and
+        // the answer was cut after one sentence. Measured 2026-10-01 with
+        // effort 'low': reasoning 0–3000 tokens, answer 400–700 chars, and
+        // the same error detection as default effort on maths/CS/chemistry
+        // tasks. OpenRouter's reasoning.max_tokens was not enforced reliably
+        // for Gemini (3700 against a 2048 cap), hence effort.
+        max_tokens: 8192,
+        // OpenRouter extension, not in the OpenAI SDK types.
+        ...({ reasoning: { effort: 'low' } } as Record<string, unknown>),
+        messages: attemptMessages,
+        stream: true,
+        // zdr: the image is student work. Gemini → Vertex standard, then
+        // Vertex priority, never AI Studio (retains prompts).
+        ...(openrouterRouting(visionModel) as Record<string, unknown>),
+      })
+      let text = ''
+      let finishReason: string | null = null
+      for await (const chunk of aiStream) {
+        const delta = chunk.choices[0]?.delta?.content ?? ''
+        finishReason = chunk.choices[0]?.finish_reason ?? finishReason
+        if (delta) {
+          text += delta
+          await writer.write(encoder.encode(`data: ${JSON.stringify({ type: 'content', content: delta })}\n\n`))
+        }
+      }
+      return { text, finishReason }
+    }
+
     ;(async () => {
       try {
-        const aiStream = await openai.chat.completions.create({
-          model: visionModel,
-          // Gemini's thinking tokens count against max_tokens. At 2048 a
-          // detailed drawing (reaction mechanism) used ~1960 on reasoning and
-          // the answer was cut after one sentence. Measured 2026-10-01 with
-          // effort 'low': reasoning 0–2900 tokens, answer 400–700 chars, so
-          // 8192 leaves ample room. OpenRouter's reasoning.max_tokens was not
-          // enforced reliably for Gemini (3700 against a 2048 cap), hence effort.
-          max_tokens: 8192,
-          // OpenRouter extension, not in the OpenAI SDK types.
-          ...({ reasoning: { effort: 'low' } } as Record<string, unknown>),
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userContent },
-          ],
-          stream: true,
-          // zdr: the image is student work. Gemini → Vertex standard, then
-          // Vertex priority, never AI Studio (retains prompts).
-          ...(openrouterRouting(visionModel) as Record<string, unknown>),
-        })
-
-        let finishReason: string | null = null
-        for await (const chunk of aiStream) {
-          const text = chunk.choices[0]?.delta?.content ?? ''
-          finishReason = chunk.choices[0]?.finish_reason ?? finishReason
-          if (text) {
-            const data = JSON.stringify({ type: 'content', content: text })
-            await writer.write(encoder.encode(`data: ${data}\n\n`))
+        const first = await streamAttempt(messages)
+        if (first.finishReason === 'length') {
+          // Cut off mid-answer. The student already sees the partial text, so
+          // a retry would visibly start over; instead ask the model to carry
+          // on and append to the same stream. Tested 2026-10-01: Gemini picks
+          // up mid-sentence without repeating, with no reasoning on the second
+          // call. One continuation only.
+          recordMetric('ai_feedback_continued', 1)
+          await writer.write(encoder.encode(`data: ${JSON.stringify({ type: 'continuing' })}\n\n`))
+          const second = await streamAttempt([
+            ...messages,
+            { role: 'assistant', content: first.text },
+            { role: 'user', content: 'Your reply was cut off. Continue exactly where it stopped, mid-sentence if needed. Do not repeat anything and do not add a preamble.' },
+          ])
+          if (second.finishReason === 'length') {
+            recordMetric('ai_feedback_truncated', 1)
+            console.warn(`[ai-feedback] answer still truncated after continuation (${visionModel})`)
+            await writer.write(encoder.encode(`data: ${JSON.stringify({ type: 'truncated' })}\n\n`))
           }
-        }
-        if (finishReason === 'length') {
-          console.warn(`[ai-feedback] answer truncated at max_tokens (${visionModel})`)
-          await writer.write(encoder.encode(`data: ${JSON.stringify({ type: 'truncated' })}\n\n`))
         }
         await writer.write(encoder.encode(`data: ${JSON.stringify({ type: 'done' })}\n\n`))
       } catch (error) {

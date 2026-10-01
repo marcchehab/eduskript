@@ -22,6 +22,12 @@ export const METRICS = {
   // what lets a db_queries_total spike be told apart from a warmer run after
   // the fact, without depending on the platform's ~24-48h log retention.
   warmer_requests_total: { unit: 'requests', source: 'server' as const, display: 'count' as const, live: true },
+  // AI feedback answers that hit max_tokens (src/app/api/ai/feedback/route.ts):
+  // continued = cut off once and resumed seamlessly; truncated = still cut off
+  // after the continuation, the student saw an apology. Either rising means
+  // the token budget is too tight for the drawings people submit.
+  ai_feedback_continued: { unit: 'answers', source: 'server' as const, display: 'count' as const, live: true },
+  ai_feedback_truncated: { unit: 'answers', source: 'server' as const, display: 'count' as const, live: true },
 } as const
 
 /**

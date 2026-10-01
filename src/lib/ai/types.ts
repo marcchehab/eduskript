@@ -11,7 +11,7 @@ export interface ChatRequest {
 }
 
 export interface ChatStreamEvent {
-  type: 'content' | 'error' | 'done' | 'truncated'
+  type: 'content' | 'error' | 'done' | 'truncated' | 'continuing'
   content?: string
   error?: string
 }

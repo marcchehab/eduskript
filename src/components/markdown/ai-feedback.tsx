@@ -78,6 +78,9 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [status, setStatus] = useState<Status>('idle')
   const [feedback, setFeedback] = useState('')
+  // Shown while the server continues an answer that hit the token limit
+  // (route.ts sends `continuing`); cleared when text resumes.
+  const [continuing, setContinuing] = useState(false)
   const [sentImage, setSentImage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -90,6 +93,7 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
     }
     setError(null)
     setFeedback('')
+    setContinuing(false)
     setSentImage(image)
     setStatus('streaming')
 
@@ -133,8 +137,12 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
           if (event.type === 'content' && event.content) {
             accumulated += event.content
             setFeedback(accumulated)
+            setContinuing(false)
+          } else if (event.type === 'continuing') {
+            setContinuing(true)
           } else if (event.type === 'truncated') {
-            accumulated += '\n\n*… (the answer was cut off — please try again)*'
+            // Retrying wouldn't help: the same drawing needs the same budget.
+            accumulated += "…\n\n*Even my spare tokens ran out, this one's too much for me. Sorry!*"
             setFeedback(accumulated)
           } else if (event.type === 'error') {
             throw new Error(event.error || 'AI error')
@@ -148,6 +156,7 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
       setError(err instanceof Error ? err.message : 'Unknown error')
     } finally {
       setStatus('idle')
+      setContinuing(false)
     }
   }
 
@@ -425,6 +434,11 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
               {feedback}
             </ReactMarkdown>
           </div>
+          {continuing && (
+            <p className="mt-2 text-sm italic text-muted-foreground">
+              Phew, overheated a little… grabbing more grey matter! (We AIs call it &ldquo;tokens&rdquo;.)
+            </p>
+          )}
         </div>
       )}
 
