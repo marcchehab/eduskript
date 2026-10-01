@@ -60,6 +60,7 @@ export function rehypeSourceLine(lineMap?: number[]) {
       'code-editor', // Interactive code editor blocks
       'excalidraw-image', // Excalidraw drawings
       'spacer', // <spacer> writing area
+      'ai-feedback', // keys the editor's "Provide solution" gizmo
       'muxvideo', // Video embeds
       'image', // Custom Image component
       'img', // Native images

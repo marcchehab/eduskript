@@ -17,6 +17,7 @@ interface InteractivePreviewProps {
   pageId?: string
   skriptId?: string
   onExcalidrawEdit?: (filename: string, fileId: string) => void
+  onFilesChanged?: () => void
 }
 
 export function InteractivePreview({
@@ -27,6 +28,7 @@ export function InteractivePreview({
   pageId,
   skriptId,
   onExcalidrawEdit,
+  onFilesChanged,
 }: InteractivePreviewProps) {
   // Memoize to avoid new array reference on every parent re-render
   const filteredFileList = useMemo(() => fileList?.filter(f => !f.isDirectory), [fileList])
@@ -58,6 +60,7 @@ export function InteractivePreview({
         skriptId={skriptId}
         onContentChange={onContentChange}
         onExcalidrawEdit={onExcalidrawEdit}
+        onFilesChanged={onFilesChanged}
         pageLanguage={pageLanguage}
       />
     </div>

@@ -2576,6 +2576,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
                 pageId={pageId}
                 skriptId={skriptId}
                 onExcalidrawEdit={onExcalidrawEditProp ?? handleExcalidrawEdit}
+                onFilesChanged={onFileUpload}
               />
             </div>
           </div>

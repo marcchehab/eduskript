@@ -11,6 +11,8 @@ import { MarkdownErrorBoundary } from './markdown-error-boundary'
 import { SurveyProvider } from './survey-provider'
 import { CoupledVideoProvider } from './coupled-video-context'
 import { StickMeProvider } from './stick-me'
+import { fencedRanges } from '@/lib/markdown-fences'
+import { getAiFeedbackSolution, setAiFeedbackSolution } from '@/lib/ai-feedback-solution-source'
 
 interface MarkdownRendererProps {
   content: string
@@ -20,31 +22,10 @@ interface MarkdownRendererProps {
   skriptId?: string
   onContentChange?: (newContent: string) => void
   onExcalidrawEdit?: (filename: string, fileId: string) => void
+  /** Refresh the file list after a gizmo uploaded a file. */
+  onFilesChanged?: () => void
   /** Site language (BCP-47) — localizes the GFM footnotes heading. null/undefined → English. */
   pageLanguage?: string | null
-}
-
-const FENCE_RE = /^[ \t]*(```|~~~)/
-
-/** Char ranges (incl. the fence lines themselves) covered by ``` / ~~~ fenced blocks. */
-function fencedRanges(content: string): Array<[number, number]> {
-  const ranges: Array<[number, number]> = []
-  let inFence = false
-  let fenceStart = 0
-  let offset = 0
-  for (const line of content.split('\n')) {
-    if (FENCE_RE.test(line)) {
-      if (!inFence) {
-        inFence = true
-        fenceStart = offset
-      } else {
-        inFence = false
-        ranges.push([fenceStart, offset + line.length])
-      }
-    }
-    offset += line.length + 1 // +1 for the '\n' split away
-  }
-  return ranges
 }
 
 /**
@@ -69,7 +50,7 @@ function replaceOutsideFences(content: string, pattern: RegExp, replacement: str
 }
 
 // Inner component that does the actual rendering
-function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId, onContentChange, onExcalidrawEdit, pageLanguage }: MarkdownRendererProps) {
+function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId, onContentChange, onExcalidrawEdit, onFilesChanged, pageLanguage }: MarkdownRendererProps) {
   // Create SkriptFiles from the file list
   const files: SkriptFilesData = useMemo(() => {
     // Videos live in their own list: a skript with a video but no files still
@@ -95,12 +76,14 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
   const contentRef = useRef(deferredContent)
   const onContentChangeRef = useRef(onContentChange)
   const onExcalidrawEditRef = useRef(onExcalidrawEdit)
+  const onFilesChangedRef = useRef(onFilesChanged)
 
   // Sync refs after render (useEffect to satisfy react-hooks/refs lint rule)
   useEffect(() => {
     contentRef.current = deferredContent
     onContentChangeRef.current = onContentChange
     onExcalidrawEditRef.current = onExcalidrawEdit
+    onFilesChangedRef.current = onFilesChanged
   })
 
   // Stable callback: find/replace image markdown in content, then notify parent.
@@ -192,6 +175,23 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
     if (newContent !== null && newContent !== currentContent) notify(newContent)
   }, [])
 
+  // "Provide solution" gizmo on <ai-feedback>. The rendered tag never carries
+  // `solution` (sanitizer), so both read and write go through the source,
+  // keyed by the tag's source line. get() runs while the gizmo renders, which
+  // is after a compile, so contentRef is already current.
+  const aiFeedbackSolution = useMemo(() => ({
+    get: (line: number) => getAiFeedbackSolution(contentRef.current, line),
+    set: (line: number, solution: string | null) => {
+      const notify = onContentChangeRef.current
+      if (!notify) return
+      const newContent = setAiFeedbackSolution(contentRef.current, line, solution)
+      if (newContent !== null && newContent !== contentRef.current) notify(newContent)
+    },
+    onUploaded: () => onFilesChangedRef.current?.(),
+  }), [])
+
+  const isEditable = Boolean(onContentChange)
+
   // Memoize the components map — only recreated when files or pageId change.
   // Callbacks are stable (empty deps) so they don't bust the memo.
   // The callbacks read refs internally but only when invoked from event handlers,
@@ -206,8 +206,9 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
       onSpacerChange: stableOnSpacerChange,
       onMuxVideoChange: stableOnMuxVideoChange,
       onMoleculeChange: stableOnMoleculeChange,
+      aiFeedbackSolution: isEditable ? aiFeedbackSolution : undefined,
     })
-  }, [files, pageId, skriptId, stableOnImageWidthChange, stableOnExcalidrawEdit, stableOnSpacerChange, stableOnMuxVideoChange, stableOnMoleculeChange])
+  }, [files, pageId, skriptId, stableOnImageWidthChange, stableOnExcalidrawEdit, stableOnSpacerChange, stableOnMuxVideoChange, stableOnMoleculeChange, aiFeedbackSolution, isEditable])
 
   // Capture scroll position before any DOM changes
   useLayoutEffect(() => {

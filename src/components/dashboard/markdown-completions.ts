@@ -57,7 +57,7 @@ const TAG_COMPLETIONS: TagDef[] = [
   { label: 'newsletter', info: 'Email signup box (Brevo list)', apply: '<newsletter />' },
   { label: 'banner', info: 'Sticky announcement bar at the top of the page', apply: '<banner>\n\n</banner>' },
   { label: 'helpvideo', info: 'Link that opens a docked help video (help-<topic>.mp4)', apply: '<helpvideo topic="">Text</helpvideo>', cursorOffset: 17 },
-  { label: 'ai-feedback', info: 'Button: send pen strokes/section content to a vision model for feedback', apply: '<ai-feedback prompt="" />', cursorOffset: 21 },
+  { label: 'ai-feedback', info: 'Button: send pen strokes/section content to a vision model for feedback. Reference solution: "Provide solution" below it in the preview', apply: '<ai-feedback prompt="" />', cursorOffset: 21 },
   { label: 'ping', info: 'Interactive ping terminal', apply: '<ping />' },
   { label: 'next-stage', info: 'One-way divider that hands in the previous stage and reveals the next', apply: '<next-stage label="" />', cursorOffset: 19 },
   { label: 'muxvideo', info: 'Mux video with playback options (gif, autoplay, loop, pin, poster)', apply: '<muxvideo src="" />', cursorOffset: 15 },

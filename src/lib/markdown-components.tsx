@@ -48,6 +48,7 @@ import { MoleculeDiagram } from '@/components/markdown/molecule'
 import { LoginCodes } from '@/components/markdown/login-codes'
 import { OnlyFor } from '@/components/markdown/only-for'
 import { AIFeedback } from '@/components/markdown/ai-feedback'
+import { AiFeedbackSolutionGizmo, type AiFeedbackSolutionApi } from '@/components/markdown/ai-feedback-solution-gizmo'
 import { parseKaraLevel, karaAssetNames, karaSpeakers } from '@/lib/kara/world'
 import { EvidenceBoard } from '@/components/markdown/evidence-board'
 import { PublicThemeToggle } from '@/components/public/theme-toggle'
@@ -238,6 +239,7 @@ interface CreateMarkdownComponentsOptions {
   onSpacerChange?: (id: string | undefined, newMarkdown: string) => void  // Stable callback for <spacer> resize/pattern/delete
   onMuxVideoChange?: (src: string, newMarkdown: string) => void  // Stable callback for the <muxvideo> options toolbar
   onMoleculeChange?: (smiles: string, newMarkdown: string) => void  // Stable callback for the <molecule> resize/align gizmos
+  aiFeedbackSolution?: AiFeedbackSolutionApi  // Editor only: "Provide solution" gizmo on <ai-feedback>
   optimizeImages?: boolean  // Enable Next.js Image optimization (only safe for public pages)
   isExam?: boolean  // Exam page: hide code-block copy buttons by default
 }
@@ -252,7 +254,7 @@ export function createMarkdownComponents(
   files: SkriptFilesData,
   options?: CreateMarkdownComponentsOptions
 ): Record<string, ComponentType<any>> {
-  const { pageId, ownerPageSlug, skriptId, onImageWidthChange, organizationSlug, onExcalidrawEdit, onSpacerChange, onMuxVideoChange, onMoleculeChange, optimizeImages, isExam } = options ?? {}
+  const { pageId, ownerPageSlug, skriptId, onImageWidthChange, organizationSlug, onExcalidrawEdit, onSpacerChange, onMuxVideoChange, onMoleculeChange, aiFeedbackSolution, optimizeImages, isExam } = options ?? {}
 
   // Img element handler - handles <img> elements from markdown with data-* attributes
   function ImgElementComponent({ src, alt, title, style, ...props }: React.ImgHTMLAttributes<HTMLImageElement>) {
@@ -1194,12 +1196,23 @@ export function createMarkdownComponents(
     'ai-feedback': (props: Record<string, unknown>) => {
       const str = (k: string): string | undefined =>
         typeof props[k] === 'string' ? (props[k] as string) : undefined
+      const sourceLine = Number(props['data-source-line-start'] ?? props['dataSourceLineStart'])
       return (
-        <AIFeedback
-          pageId={pageId}
-          feedbackId={str('id')}
-          label={str('label')}
-        />
+        <>
+          <AIFeedback
+            pageId={pageId}
+            feedbackId={str('id')}
+            label={str('label')}
+          />
+          {aiFeedbackSolution && Number.isFinite(sourceLine) && (
+            <AiFeedbackSolutionGizmo
+              api={aiFeedbackSolution}
+              sourceLine={sourceLine}
+              files={files}
+              skriptId={skriptId}
+            />
+          )}
+        </>
       )
     },
 
