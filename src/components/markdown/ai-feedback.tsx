@@ -18,6 +18,13 @@
  * solution (solution="...") from page content; the client only sends pageId,
  * feedbackId and the image, and never receives the prompt or solution attrs.
  *
+ * Persistence: the last successful feedback (text + a small JPEG thumbnail of
+ * what was sent) is saved per tag via useSyncedUserData under
+ * `ai-feedback-<id>` (or `ai-feedback-idx<n>` by DOM order when the tag has no
+ * id), so it survives a reload and syncs like other student data. Only a
+ * completed answer is saved; an aborted/failed request keeps the previous one.
+ * Index-keyed records drift if the teacher inserts another <ai-feedback> above.
+ *
  * Section scoping duplicates the live-position math of
  * section-anchored-strokes.tsx in read-only form: a stroke's current y =
  * stored y + (live section top − stored sectionOffsetY).
@@ -32,8 +39,8 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import { Sparkles, Loader2, AlertCircle, ClipboardPaste, Camera } from 'lucide-react'
-import { userDataService } from '@/lib/userdata'
-import type { AnnotationData } from '@/lib/userdata/types'
+import { userDataService, useSyncedUserData } from '@/lib/userdata'
+import type { AIFeedbackData, AnnotationData } from '@/lib/userdata/types'
 import { parseStrokes } from '@/hooks/use-stroke-animation'
 import {
   renderStrokesToPng,
@@ -70,6 +77,39 @@ function loadCorsSafeImage(src: string): Promise<HTMLImageElement | null> {
   })
 }
 
+/** Max edge (px) of the persisted thumbnail; display is max-h-40 (160px). */
+const THUMB_EDGE = 480
+
+/**
+ * Downscale the sent image to a small JPEG for persistence (the full PNG can
+ * be MBs). White background because stroke PNGs are transparent. Returns null
+ * when canvas/image decoding is unavailable — feedback text is saved anyway.
+ */
+async function makeThumbnail(dataUrl: string): Promise<string | null> {
+  const canvas = document.createElement('canvas')
+  let ctx: CanvasRenderingContext2D | null = null
+  try {
+    ctx = canvas.getContext('2d')
+  } catch {
+    return null
+  }
+  if (!ctx) return null
+  const img = await new Promise<HTMLImageElement | null>((resolve) => {
+    const el = new Image()
+    el.onload = () => resolve(el)
+    el.onerror = () => resolve(null)
+    el.src = dataUrl
+  })
+  if (!img || !img.naturalWidth || !img.naturalHeight) return null
+  const scale = Math.min(1, THUMB_EDGE / Math.max(img.naturalWidth, img.naturalHeight))
+  canvas.width = Math.round(img.naturalWidth * scale)
+  canvas.height = Math.round(img.naturalHeight * scale)
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+  return canvas.toDataURL('image/jpeg', 0.7)
+}
+
 type Status = 'idle' | 'preparing' | 'streaming'
 
 export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
@@ -84,7 +124,44 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
   const [sentImage, setSentImage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
+  // Storage key: the author's id, else this tag's DOM index (resolved after
+  // mount, when all sibling tags exist). Until then the hook stays dormant
+  // (pageId '' sentinel).
+  const [storageKey, setStorageKey] = useState<string | null>(
+    feedbackId ? `ai-feedback-${feedbackId}` : null
+  )
+  useEffect(() => {
+    if (feedbackId) {
+      setStorageKey(`ai-feedback-${feedbackId}`)
+      return
+    }
+    const index = containerRef.current
+      ? [...document.querySelectorAll('[data-ai-feedback]')].indexOf(containerRef.current)
+      : -1
+    setStorageKey(index >= 0 ? `ai-feedback-idx${index}` : null)
+  }, [feedbackId])
+  const { data: saved, updateData: saveFeedback } = useSyncedUserData<AIFeedbackData>(
+    storageKey && pageId ? pageId : '',
+    storageKey ?? 'ai-feedback',
+    null
+  )
+
+  // The "nothing written" error goes stale once the student draws; the
+  // annotation layer announces every stroke change.
+  // @see src/components/annotations/annotation-layer.tsx (eduskript:annotations-changed)
+  useEffect(() => {
+    if (!error) return
+    const clear = () => setError(null)
+    window.addEventListener('eduskript:annotations-changed', clear)
+    return () => window.removeEventListener('eduskript:annotations-changed', clear)
+  }, [error])
+
   const busy = status !== 'idle'
+
+  // Live request wins; otherwise fall back to the persisted last feedback.
+  const showLive = busy || !!feedback
+  const shownFeedback = showLive ? feedback : saved?.feedback ?? ''
+  const shownImage = showLive ? sentImage : saved?.image ?? null
 
   const sendImage = async (image: string) => {
     if (!pageId) {
@@ -151,6 +228,14 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
       }
       if (!accumulated) {
         setError('The AI returned no feedback. Please try again.')
+      } else if (storageKey && pageId) {
+        try {
+          const thumb = await makeThumbnail(image)
+          await saveFeedback({ feedback: accumulated, image: thumb, savedAt: Date.now() }, { immediate: true })
+        } catch (saveErr) {
+          // Feedback is on screen; losing persistence shouldn't surface as an error.
+          console.warn('[ai-feedback] could not save feedback:', saveErr)
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')
@@ -413,25 +498,25 @@ export function AIFeedback({ pageId, feedbackId, label }: AIFeedbackProps) {
         </div>
       )}
 
-      {(feedback || status === 'streaming') && (
+      {(shownFeedback || status === 'streaming') && (
         <div className="mt-3 rounded-md border border-border bg-muted/30 p-4">
           <div className="mb-2 flex items-center gap-2 text-sm font-medium text-muted-foreground">
             <Sparkles className="h-4 w-4" />
             AI feedback
             {status === 'streaming' && <Loader2 className="h-3 w-3 animate-spin" />}
           </div>
-          {sentImage && (
+          {shownImage && (
             // Show what was actually sent so transcription errors are visible
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={sentImage}
+              src={shownImage}
               alt="Your work as sent to the AI"
               className="mb-3 max-h-40 rounded border border-border bg-white"
             />
           )}
           <div className="prose prose-sm dark:prose-invert max-w-none">
             <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
-              {feedback}
+              {shownFeedback}
             </ReactMarkdown>
           </div>
           {continuing && (
