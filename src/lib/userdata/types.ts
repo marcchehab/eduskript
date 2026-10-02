@@ -127,6 +127,16 @@ export interface QuizData {
 }
 
 /**
+ * <ai-feedback>: the last completed AI answer for one tag (componentId
+ * `ai-feedback-<id>` / `ai-feedback-idx<n>`). Latest request overwrites.
+ */
+export interface AIFeedbackData {
+  feedback: string       // Markdown answer as streamed
+  image: string | null   // Small JPEG data URL of what was sent (null if thumbnailing failed)
+  savedAt: number        // Unix ms
+}
+
+/**
  * Stroke telemetry sample (collected every Nth stroke)
  */
 export interface StrokeTelemetry {

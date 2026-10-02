@@ -2646,6 +2646,9 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
         isClearingRef.current = false
         // Auto-unhide the layer when user draws on it
         ensureActiveLayerVisible()
+        // Lets <ai-feedback> drop a stale "nothing written" error.
+        // @see src/components/markdown/ai-feedback.tsx
+        window.dispatchEvent(new Event('eduskript:annotations-changed'))
       }
 
       // When trash button triggers this path it has already set isClearingRef
