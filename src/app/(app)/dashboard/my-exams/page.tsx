@@ -20,7 +20,13 @@ interface ExamRow {
   returnedAt: string | null
   status: 'submitted' | 'returned'
   examUrl: string | null
+  /** Set only for returned exams. */
+  grade: number | null
+  totalEarned: number | null
+  totalMax: number | null
 }
+
+const fmtNum = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
 
 const fmtDate = (iso: string) =>
   new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
@@ -68,6 +74,16 @@ export default function MyExamsPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
+                  {e.status === 'returned' && e.grade !== null && (
+                    <div className="text-right tabular-nums">
+                      <div className="text-lg font-bold leading-tight">Grade {fmtNum(e.grade)}</div>
+                      {e.totalEarned !== null && e.totalMax !== null && (
+                        <div className="text-xs text-muted-foreground">
+                          {fmtNum(e.totalEarned)} / {fmtNum(e.totalMax)} points
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {e.status === 'returned' ? (
                     <span className="rounded px-2 py-0.5 text-xs bg-green-500/15 text-green-700 dark:text-green-400">
                       Returned
