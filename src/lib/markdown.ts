@@ -103,7 +103,14 @@ export function plainInlineText(text: string): string {
 /**
  * Generate a URL-friendly slug from a title.
  *
- * Transforms: "My Collection Title!" → "my-collection-title"
+ * Transforms: "My Collection Title!" → "my-collection-title",
+ * "Übung Größe" → "uebung-groesse".
+ *
+ * German umlauts/ß are transliterated (ä→ae, ö→oe, ü→ue, ß→ss); other
+ * accented letters lose their diacritic via NFD (é→e, ñ→n). Characters
+ * without a Latin base (e.g. CJK, emoji) are still dropped. Already-ASCII
+ * slugs pass through unchanged. Used client-side by the create/edit modals
+ * and server-side to normalize submitted slugs.
  *
  * Note: This function does NOT check for reserved slugs or uniqueness.
  * Callers should use isReservedSlug() and check database uniqueness.
@@ -111,6 +118,12 @@ export function plainInlineText(text: string): string {
 export function generateSlug(title: string): string {
   return title
     .toLowerCase()
+    .replace(/ä/g, 'ae')
+    .replace(/ö/g, 'oe')
+    .replace(/ü/g, 'ue')
+    .replace(/ß/g, 'ss')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // Strip combining diacritics
     .replace(/[^\w\s-]/g, '') // Remove special characters
     .replace(/\s+/g, '-') // Replace spaces with hyphens
     .replace(/-+/g, '-') // Replace multiple hyphens with single
