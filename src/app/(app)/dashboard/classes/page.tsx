@@ -47,6 +47,7 @@ import {
 } from '@/lib/email-mapping-db'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
+import { extractEmails } from '@/lib/extract-emails'
 
 interface Student {
   id: string
@@ -243,8 +244,7 @@ export default function ClassesPage() {
     try {
       setImporting({ ...importing, [classId]: true })
 
-      // Extract emails: find all @-containing patterns via RFC 5322 local-part + domain regex
-      const emails = (emailInput.match(/[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*/g) ?? [])
+      const emails = extractEmails(emailInput)
 
       if (emails.length === 0) {
         setDialogType('error')

@@ -1,11 +1,5 @@
 import { describe, it, expect } from 'vitest'
-
-// RFC 5322 local-part + domain regex
-const EMAIL_REGEX = /[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*/g
-
-function extractEmails(input: string): string[] {
-  return input.match(EMAIL_REGEX) ?? []
-}
+import { extractEmails } from '@/lib/extract-emails'
 
 describe('extractEmails', () => {
   it('1. semicolon-separated list', () => {
@@ -112,6 +106,23 @@ dave@example.com`
       'carol@example.com',
       'dave@example.com',
     ])
+  })
+
+  it('11. non-ASCII local parts are kept whole (Swiss names)', () => {
+    const input = 'Hallo, bitte: Student2 <student2@eduskript.test>, müller@ex.ch; anna.küng@schule.ch'
+    expect(extractEmails(input)).toEqual([
+      'student2@eduskript.test',
+      'müller@ex.ch',
+      'anna.küng@schule.ch',
+    ])
+  })
+
+  it('12. non-ASCII (IDN) domains are kept whole', () => {
+    expect(extractEmails('info@zürich.ch')).toEqual(['info@zürich.ch'])
+  })
+
+  it('13. decomposed umlauts (NFD paste) are normalized, not split', () => {
+    expect(extractEmails('mu\u0308ller@ex.ch')).toEqual(['müller@ex.ch'])
   })
 
   it('returns empty array for no emails', () => {
