@@ -164,7 +164,7 @@ export default function ClassesPage() {
       setClasses((prev) =>
         prev.map((c) =>
           c.id === classId
-            ? { ...c, students: data.students, emailMapping }
+            ? { ...c, students: data.students, emailMapping, memberCount: data.students.length }
             : c
         )
       )
@@ -268,8 +268,12 @@ export default function ClassesPage() {
 
       const data = await response.json()
 
-      // Save emails to local unmapped list for later resolution
+      // Save emails to local unmapped list for later resolution. Directly
+      // enrolled accounts are members already, so they are not pending.
       addUnmappedEmails(classId, emails)
+      for (const email of (data.directlyAddedEmails ?? []) as string[]) {
+        removeUnmappedEmail(classId, email)
+      }
 
       // Clear the input and reload to show new students/invitations
       setEmailInputs({ ...emailInputs, [classId]: '' })
