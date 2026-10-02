@@ -151,6 +151,7 @@ export function VideoBrowser({ videos, loading, className, isAdmin, onVideoAdded
           filename: addFilename.trim(),
           playbackId: addPlaybackId.trim(),
           aspectRatio: addAspectRatio.trim() || undefined,
+          skriptId,
         }),
       })
 

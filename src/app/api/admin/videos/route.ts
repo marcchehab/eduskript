@@ -9,7 +9,9 @@ export async function POST(request: NextRequest) {
   if (error) return error
 
   const body = await request.json()
-  const { filename, playbackId, aspectRatio } = body
+  const { filename, playbackId, aspectRatio, skriptId } = body as {
+    filename?: string; playbackId?: string; aspectRatio?: string; skriptId?: string
+  }
 
   if (!filename || !playbackId) {
     return NextResponse.json(
@@ -47,11 +49,13 @@ export async function POST(request: NextRequest) {
         provider: 'mux',
         metadata,
         uploadedById: session!.user.id,
+        // Link to the skript whose media browser the form was opened in;
+        // without it the new video is listed nowhere until imported.
+        ...(skriptId ? { skripts: { connect: { id: skriptId } } } : {}),
       },
     })
 
-    // No skript to name here — an admin-created video is linked later.
-    invalidateSkriptFiles()
+    invalidateSkriptFiles(skriptId)
 
     return NextResponse.json(video, { status: 201 })
   } catch (e) {
