@@ -16,6 +16,11 @@ export type KaraErrorSub =
   | 'wall' | 'terminal' | 'door' | 'laser' | 'box' | 'acid' | 'item' | 'no_item' | 'no_switch' | 'no_terminal'
   // Python exception types
   | 'name' | 'module' | 'indent' | 'syntax' | 'type' | 'recursion'
+  // run refused before it started (kara-module.ts _lint: exec, eval, ...)
+  | 'forbidden'
+
+/** Static findings kara-module.ts `_lint` reports as `lints[].code`. */
+export type KaraLintCode = 'bare_call' | 'never_called' | 'sensor_no_call' | 'no_return'
 
 export const AURORA_DEFAULTS: Record<string, string> = {
   'win': 'Auftrag erledigt. Ich bin fast beeindruckt.',
@@ -38,6 +43,33 @@ export const AURORA_DEFAULTS: Record<string, string> = {
   'error.syntax': 'Python versteht diese Zeile nicht. Klammern, Doppelpunkt, Anführungszeichen: eines fehlt meistens.',
   'error.type': 'Falsche Anzahl oder Art von Argumenten. Vergleichen Sie den Aufruf mit der def-Zeile.',
   'error.recursion': 'Rekursion ohne Abbruch. Wie mein Kundendienst.',
+  'error.forbidden': '{name}? Mikroweich nennt das Lizenzverletzung. Schreiben Sie es aus.',
+  'lint.bare_call': 'Zeile {line}: {name} ohne (). Sie haben den Befehl erwähnt, nicht ausgeführt.',
+  'lint.never_called': 'Sie haben MOP-7 etwas beigebracht. Er hat es sich gemerkt. Getan hat er nichts.',
+  'lint.sensor_no_call': 'Sie haben den Sensor nicht gefragt. Sie haben nur bestätigt, dass er existiert.',
+  'lint.no_return': 'Ihre Funktion zeigt etwas an. Zurückgeben tut sie nichts. Die Bedingung bekommt None.',
+}
+
+/** Placeholders a line may contain: {line} (lints) and {name} (lints, error.forbidden). */
+export type AuroraVars = { line?: number; name?: string }
+
+function fill(text: string, vars: AuroraVars | undefined): string {
+  if (!vars) return text
+  return text.replace(/\{(line|name)\}/g, (m, k: 'line' | 'name') => (vars[k] !== undefined ? String(vars[k]) : m))
+}
+
+/**
+ * True when `text` is a built-in default, also with its placeholders filled
+ * ({line} = digits, {name} = a Python identifier). Used by the TTS route to
+ * allow on-demand rendering; every distinct filled text is its own voice file.
+ */
+export function isAuroraDefault(text: string): boolean {
+  return Object.values(AURORA_DEFAULTS).some(t => {
+    if (t === text) return true
+    if (!t.includes('{')) return false
+    const re = t.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\{line\}/g, '\\d{1,5}').replace(/\{name\}/g, '[A-Za-z_][A-Za-z0-9_]{0,40}')
+    return new RegExp(`^${re}$`).test(text)
+  })
 }
 
 /**
@@ -46,6 +78,9 @@ export const AURORA_DEFAULTS: Record<string, string> = {
  *   event 'error' with sub:  level error.<sub> → level error → default error.<sub> → default error
  *   event 'fail', failStreak ≥ 3:  level fail.3 → (as 'fail')
  *   other events:            level <event> → default <event>
+ *                            (lints: event 'lint.<code>', e.g. 'lint.bare_call')
+ *
+ * `vars` fills {line} / {name} in the chosen text (level or default).
  *
  * Level lines always win over course defaults, so a level's generic
  * `aurora.error` also covers subs the level does not name.
@@ -53,9 +88,13 @@ export const AURORA_DEFAULTS: Record<string, string> = {
 export function auroraLine(
   config: Pick<KaraConfig, 'aurora'>,
   event: string,
-  opts: { sub?: string; failStreak?: number } = {},
+  opts: { sub?: string; failStreak?: number; vars?: AuroraVars } = {},
 ): KaraMessage | undefined {
-  const { aurora } = config
+  const m = pick(config.aurora, event, opts)
+  return m && opts.vars ? { ...m, text: fill(m.text, opts.vars) } : m
+}
+
+function pick(aurora: Record<string, KaraMessage>, event: string, opts: { sub?: string; failStreak?: number }): KaraMessage | undefined {
   const def = (key: string): KaraMessage | undefined =>
     AURORA_DEFAULTS[key] ? { text: AURORA_DEFAULTS[key], speaker: 'AURORA' } : undefined
   if (event === 'error') {

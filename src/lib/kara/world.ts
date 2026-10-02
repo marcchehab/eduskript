@@ -46,8 +46,12 @@
  *   aurora.error.<sub>: text              per error class, sub = wall, terminal, door,
  *                                         laser, box, acid, item, no_item, no_switch,
  *                                         no_terminal, name, module, indent, syntax,
- *                                         type, recursion. Lookup: error.<sub> → error →
+ *                                         type, recursion, forbidden. Lookup: error.<sub> → error →
  *                                         course default (aurora-defaults.ts auroraLine)
+ *   aurora.lint.<code>: text              AURORA's comment on a static finding when the run
+ *                                         does not win; code = bare_call, never_called,
+ *                                         sensor_no_call, no_return. {line} and {name} are
+ *                                         replaced (also in aurora.error.forbidden: {name})
  *   aurora.fail.3: text                   replaces aurora.fail from the 3rd failed run
  *                                         in a row (per page view, see kara-panel.tsx)
  *   music: file.mp3                       ambient loop (off until the student turns it on)
@@ -56,7 +60,7 @@
  * the opposite side. Close levels with `#`.
  */
 
-import type { KaraErrorSub } from './aurora-defaults'
+import type { KaraErrorSub, KaraLintCode } from './aurora-defaults'
 
 // Cell flags. Keep in sync with kara-module.ts.
 export const BLOCK = 1
@@ -294,6 +298,14 @@ export interface KaraStep {
   fn?: string
 }
 
+/** One static finding; AURORA comments on it with `lint.<code>` (aurora-defaults.ts). */
+export interface KaraLint {
+  line: number
+  code: KaraLintCode
+  /** The command / sensor / function the finding is about. */
+  name: string
+}
+
 export interface KaraTrace {
   steps: KaraStep[]
   error: {
@@ -302,7 +314,11 @@ export interface KaraTrace {
     kind?: 'loop' | 'kara' | 'python'
     /** Error class for AURORA's comment (null/absent: unclassified, e.g. ValueError). */
     sub?: KaraErrorSub | null
+    /** Forbidden name (sub 'forbidden'), e.g. 'exec'. */
+    name?: string
   } | null
+  /** Static checks of the student's code (kara-module.ts `_lint`), sorted by line. */
+  lints?: KaraLint[]
   /** Level result; absent when the program raised. */
   goal?: { reached: boolean; missing: KaraGoal[] }
   /** Actions performed (moves, turns, put/remove, press, read). */

@@ -2,26 +2,60 @@
  * Marks the line of the current Kara replay step in CodeMirror and shows the
  * step's helper frame (an action inside e.g. befehle.py: '↳ drei_vor() ·
  * befehle.py:3'), sensor results and error message inline at the end of that line.
+ * Static findings (lints) get a violet tint and a chip on their own lines.
  * Driven by KaraPanel via `setKaraLine`; any document edit clears it (the
  * trace no longer matches the code).
  */
 import { StateEffect, StateField } from '@codemirror/state'
 import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view'
 
-export interface KaraLineTarget {
+export interface KaraLintNote {
   line: number
+  /** Short English chip text, e.g. 'turn_right is not called: add ()'. */
+  note: string
+}
+
+export interface KaraLineTarget {
+  /** Current step's line; absent when only lint notes are shown (run without steps). */
+  line?: number
   /** Sensor calls made while this line ran: [name, result]. */
   sensors?: [string, boolean][]
   /** Set on the error step (last position of a run that raised). */
   error?: string
   /** Helper frame the step's action ran in, e.g. 'drei_vor() · befehle.py:3'. */
   via?: string
+  /** Static findings (end of a run that did not win): own line tint + chip. */
+  lints?: KaraLintNote[]
 }
 
 export const setKaraLine = StateEffect.define<KaraLineTarget | null>()
 
 const stepLine = Decoration.line({ class: 'cm-kara-line' })
 const errorLine = Decoration.line({ class: 'cm-kara-error-line' })
+const lintLine = Decoration.line({ class: 'cm-kara-lint-line' })
+
+class KaraLintWidget extends WidgetType {
+  constructor(readonly notes: string[]) { super() }
+
+  eq(other: KaraLintWidget) {
+    return other.notes.join('\n') === this.notes.join('\n')
+  }
+
+  toDOM() {
+    const wrap = document.createElement('span')
+    wrap.className = 'cm-kara-notes'
+    for (const text of this.notes) {
+      const chip = document.createElement('span')
+      chip.className = 'cm-kara-note cm-kara-note-lint'
+      chip.textContent = `⚠ ${text}`
+      chip.title = 'AURORA found this before the run (static check)'
+      wrap.appendChild(chip)
+    }
+    return wrap
+  }
+
+  ignoreEvent() { return true }
+}
 
 class KaraNotesWidget extends WidgetType {
   constructor(readonly sensors: [string, boolean][], readonly error: string | undefined, readonly via: string | undefined) { super() }
@@ -64,13 +98,27 @@ const karaLineField = StateField.define<DecorationSet>({
     for (const e of tr.effects) {
       if (!e.is(setKaraLine)) continue
       const t = e.value
-      if (!t || t.line < 1 || t.line > tr.state.doc.lines) return Decoration.none
-      const line = tr.state.doc.line(t.line)
-      const ranges = [(t.error ? errorLine : stepLine).range(line.from)]
-      if (t.sensors?.length || t.error || t.via) {
-        ranges.push(Decoration.widget({ widget: new KaraNotesWidget(t.sensors ?? [], t.error, t.via), side: 1 }).range(line.to))
+      if (!t) return Decoration.none
+      const doc = tr.state.doc
+      const ranges = []
+      if (t.line && t.line >= 1 && t.line <= doc.lines) {
+        const line = doc.line(t.line)
+        ranges.push((t.error ? errorLine : stepLine).range(line.from))
+        if (t.sensors?.length || t.error || t.via) {
+          ranges.push(Decoration.widget({ widget: new KaraNotesWidget(t.sensors ?? [], t.error, t.via), side: 1 }).range(line.to))
+        }
       }
-      return Decoration.set(ranges)
+      // Lint notes grouped per line; the lint tint only where no step/error tint is.
+      const byLine = new Map<number, string[]>()
+      for (const n of t.lints ?? []) {
+        if (n.line >= 1 && n.line <= doc.lines) byLine.set(n.line, [...(byLine.get(n.line) ?? []), n.note])
+      }
+      for (const [n, notes] of byLine) {
+        const line = doc.line(n)
+        if (n !== t.line) ranges.push(lintLine.range(line.from))
+        ranges.push(Decoration.widget({ widget: new KaraLintWidget(notes), side: 2 }).range(line.to))
+      }
+      return Decoration.set(ranges, true)
     }
     return tr.docChanged ? Decoration.none : deco
   },
@@ -93,17 +141,23 @@ const karaLineTheme = EditorView.baseTheme({
   '&dark .cm-kara-note-via': { color: '#fcd34d', backgroundColor: 'rgba(250, 204, 21, 0.12)' },
   '&light .cm-kara-note-error': { color: '#b91c1c', fontFamily: 'sans-serif' },
   '&dark .cm-kara-note-error': { color: '#f87171', fontFamily: 'sans-serif' },
+  '&light .cm-line.cm-kara-lint-line': { backgroundColor: 'rgba(168, 85, 247, 0.14)' },
+  '&dark .cm-line.cm-kara-lint-line': { backgroundColor: 'rgba(168, 85, 247, 0.18)' },
+  '.cm-kara-note-lint': { fontFamily: 'sans-serif' },
+  '&light .cm-kara-note-lint': { color: '#6b21a8', backgroundColor: 'rgba(168, 85, 247, 0.14)' },
+  '&dark .cm-kara-note-lint': { color: '#d8b4fe', backgroundColor: 'rgba(168, 85, 247, 0.2)' },
 })
 
 export function karaLineHighlighting() {
   return [karaLineField, karaLineTheme]
 }
 
-/** Highlight `target.line` (or clear with null) and scroll it into view. */
+/** Highlight `target.line` and lint lines (or clear with null) and scroll the step line (else the first lint) into view. */
 export function showKaraLine(view: EditorView, target: KaraLineTarget | null) {
   const effects: StateEffect<unknown>[] = [setKaraLine.of(target)]
-  if (target && target.line >= 1 && target.line <= view.state.doc.lines) {
-    effects.push(EditorView.scrollIntoView(view.state.doc.line(target.line).from, { y: 'nearest' }))
+  const line = target?.line ?? target?.lints?.[0]?.line
+  if (line && line >= 1 && line <= view.state.doc.lines) {
+    effects.push(EditorView.scrollIntoView(view.state.doc.line(line).from, { y: 'nearest' }))
   }
   view.dispatch({ effects })
 }

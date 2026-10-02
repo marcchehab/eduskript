@@ -132,3 +132,63 @@ describe.skipIf(!hasPython)('kara.py trace: one action per step', () => {
     expect(run('x = 1 / 0\n').error).toMatchObject({ kind: 'python', sub: null })
   })
 })
+
+describe.skipIf(!hasPython)('kara.py lints', () => {
+  beforeAll(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kara-lint-test-'))
+    fs.writeFileSync(path.join(dir, 'kara.py'), KARA_MODULE_SOURCE)
+    fs.writeFileSync(path.join(dir, 'befehle.py'), BEFEHLE)
+  })
+  afterAll(() => fs.rmSync(dir, { recursive: true, force: true }))
+
+  const lints = (code: string) => run(code).lints?.map(l => [l.line, l.code, l.name])
+
+  it('clean programs have no lints', () => {
+    expect(lints('def zwei():\n    move()\n    move()\n\nzwei()\nif not wall_front():\n    move()\n')).toEqual([])
+    expect(lints('from befehle import *\ndrei_vor()\n')).toEqual([])
+  })
+
+  it('bare_call: a command or own function without ()', () => {
+    expect(lints('move()\nturn_right\n')).toEqual([[2, 'bare_call', 'turn_right']])
+    expect(lints('def stufe():\n    move()\nstufe\n')).toEqual([[3, 'bare_call', 'stufe']])
+    expect(lints('from befehle import drei_vor\ndrei_vor\n')).toEqual([[2, 'bare_call', 'drei_vor']])
+    expect(lints('x = 3\nx\n')).toEqual([])
+  })
+
+  it('never_called: a top-level def nobody calls (own recursion does not count)', () => {
+    expect(lints('def umdrehen():\n    turn_left()\n    turn_left()\n')).toEqual([[1, 'never_called', 'umdrehen']])
+    expect(lints('def f():\n    f()\n')).toEqual([[1, 'never_called', 'f']])
+    expect(lints('def a():\n    move()\ndef b():\n    a()\nb()\n')).toEqual([])
+  })
+
+  it('sensor_no_call: a sensor or own function as a bare condition', () => {
+    expect(lints('if wall_front:\n    turn_left()\n')).toEqual([[1, 'sensor_no_call', 'wall_front']])
+    expect(lints('while not wall_front:\n    move()\n')).toEqual([[1, 'sensor_no_call', 'wall_front']])
+    expect(lints('if on_exit() or wallFront:\n    pass\n')).toEqual([[1, 'sensor_no_call', 'wallFront']])
+    expect(lints('if wall_front():\n    pass\nelif on_barrel:\n    pass\n')).toEqual([[3, 'sensor_no_call', 'on_barrel']])
+    const t = run('n = 0\nwhile not wall_front:\n    move()\n    n = n + 1\n')
+    expect(t.lints).toEqual([{ line: 2, code: 'sensor_no_call', name: 'wall_front' }])
+    expect(t.steps.some(s => s.k)).toBe(false) // the program really ran: not True → loop never entered
+  })
+
+  it('no_return: a printing function used as a condition or in a comparison', () => {
+    const def = 'def frei():\n    print(not wall_front())\n'
+    expect(lints(def + 'if frei():\n    move()\n')).toEqual([[3, 'no_return', 'frei']])
+    expect(lints(def + 'if frei() == True:\n    move()\n')).toEqual([[3, 'no_return', 'frei']])
+    expect(lints(def + 'frei()\n')).toEqual([])
+    expect(lints('def frei():\n    print(1)\n    return not wall_front()\nif frei():\n    move()\n')).toEqual([])
+  })
+
+  it('forbidden: exec & co. refuse the whole run', () => {
+    const t = run('move()\nexec("move()\\n" * 3)\n')
+    expect(t.error).toMatchObject({ kind: 'python', sub: 'forbidden', name: 'exec', line: 2, message: 'ForbiddenError: exec is not available in Kara programs.' })
+    expect(t.steps).toEqual([])
+    expect(t.energy).toBe(0)
+    expect(run('f = eval\n').error?.name).toBe('eval')
+    expect(run('import builtins\nbuiltins.setattr(1, "a", 2)\n').error?.name).toBe('setattr')
+    expect(run('from builtins import compile\n').error?.name).toBe('compile')
+    expect(run('globals()["x"] = 1\n').error?.sub).toBe('forbidden')
+    expect(run('__import__("os")\n').error?.sub).toBe('forbidden')
+  })
+})
+

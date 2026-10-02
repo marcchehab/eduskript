@@ -40,6 +40,24 @@
  * can comment per error class (src/lib/kara/aurora-defaults.ts). Messages
  * stay English like real Python errors; AURORA's card is the translation.
  *
+ * Lints (`_lint`, before the program runs; student file only, helper modules
+ * like befehle.py are not checked): `result.lints = [{line, code, name}]`,
+ * shown by kara-panel.tsx when the run does not win. Codes: `bare_call`
+ * (`turn_right` as a statement, no parentheses), `sensor_no_call` (a command,
+ * sensor or student function without () as an if/elif/while/assert/ternary
+ * test or operand of and/or/not: always truthy), `no_return` (a student def
+ * that prints but never returns a value, called in a condition or comparison),
+ * `never_called` (a top-level def whose name is never loaded outside its own
+ * body). "Student function" = a def anywhere in the file or a name from
+ * `from x import name`; `from befehle import *` names are unknown here, so
+ * `if drei_vor:` after a star import is not caught.
+ *
+ * Forbidden names (`_FORBIDDEN`: exec, eval, compile, __import__, globals,
+ * setattr) as a name, attribute or from-import refuse the whole run with
+ * error sub 'forbidden' (closes "exec('move()\n' * 20)" beating the memory
+ * star). This is a speed bump for copy-paste tricks, not a sandbox:
+ * `getattr(__builtins__, 'ex' + 'ec')` or a helper module still get through.
+ *
  * Keep the direction encoding (0=N,1=E,2=S,3=W) and the trace shape in sync
  * with src/lib/kara/world.ts.
  */
@@ -407,6 +425,108 @@ def _statements(tree):
     return n
 
 
+_FORBIDDEN = frozenset(('exec', 'eval', 'compile', '__import__', 'globals', 'setattr'))
+_CONDITIONS = (_ast.If, _ast.While, _ast.IfExp, _ast.Assert)
+
+
+class ForbiddenError(Exception):
+    pass
+
+
+def _no_return(fn):
+    """True when a def prints but never returns a value (callers get None)."""
+    prints = False
+    for node in _ast.walk(fn):
+        if isinstance(node, _ast.Return) and node.value is not None and not (
+                isinstance(node.value, _ast.Constant) and node.value.value is None):
+            return False
+        if isinstance(node, _ast.Call) and isinstance(node.func, _ast.Name) and node.func.id == 'print':
+            prints = True
+    return prints
+
+
+def _lint(tree):
+    """Static checks before the run (see the header in kara-module.ts).
+
+    Returns (lints, forbidden): lints = [{line, code, name}] sorted by line,
+    forbidden = the first node using a name in _FORBIDDEN (or None).
+    One ast.walk per top-level statement (O(nodes)), plus one walk per def
+    that is called inside a condition (_no_return)."""
+    defs = {}        # every def in the file (also nested): name -> node
+    imported = set()  # names from 'from x import name' (not '*')
+    refs = {}        # name -> top-level defs (None = module level) that load it
+    bare, tests, compared = [], [], []
+    forbidden = None
+
+    def ban(node):
+        nonlocal forbidden
+        if forbidden is None or node.lineno < forbidden.lineno:
+            forbidden = node
+
+    for top in tree.body:
+        owner = top.name if isinstance(top, (_ast.FunctionDef, _ast.AsyncFunctionDef)) else None
+        for node in _ast.walk(top):
+            if isinstance(node, _ast.Name):
+                if node.id in _FORBIDDEN:
+                    ban(node)
+                if isinstance(node.ctx, _ast.Load):
+                    refs.setdefault(node.id, set()).add(owner)
+            elif isinstance(node, _ast.Attribute):
+                if node.attr in _FORBIDDEN:
+                    ban(node)
+            elif isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
+                defs[node.name] = node
+            elif isinstance(node, _ast.ImportFrom):
+                for a in node.names:
+                    if a.name in _FORBIDDEN:
+                        ban(node)
+                    if a.name != '*':
+                        imported.add(a.asname or a.name)
+            elif isinstance(node, _ast.Expr):
+                if isinstance(node.value, _ast.Name):
+                    bare.append(node.value)
+            elif isinstance(node, _CONDITIONS):
+                tests.append(node.test)
+            elif isinstance(node, _ast.BoolOp):
+                tests.extend(node.values)
+            elif isinstance(node, _ast.UnaryOp):
+                if isinstance(node.op, _ast.Not):
+                    tests.append(node.operand)
+            elif isinstance(node, _ast.Compare):
+                compared.append(node.left)
+                compared.extend(node.comparators)
+    if forbidden is not None:
+        return [], forbidden
+
+    commands = set(__all__) - {'KaraError'}
+    callables = commands | set(defs) | imported
+    found = {}
+
+    def add(node, code, name):
+        found.setdefault((node.lineno, code, name), None)
+
+    for n in bare:
+        if n.id in callables:
+            add(n, 'bare_call', n.id)
+    for t in tests:
+        if isinstance(t, _ast.Name) and t.id in callables:
+            add(t, 'sensor_no_call', t.id)
+    silent = {}
+    for t in tests + compared:
+        if isinstance(t, _ast.Call) and isinstance(t.func, _ast.Name) and t.func.id in defs:
+            name = t.func.id
+            if name not in silent:
+                silent[name] = _no_return(defs[name])
+            if silent[name]:
+                add(t, 'no_return', name)
+    for top in tree.body:
+        if isinstance(top, (_ast.FunctionDef, _ast.AsyncFunctionDef)) and not refs.get(top.name, set()) - {top.name}:
+            add(top, 'never_called', top.name)
+    lints = [{'line': line, 'code': code, 'name': name} for line, code, name in found]
+    lints.sort(key=lambda d: d['line'])
+    return lints, None
+
+
 def _run(student_path='__kara_student.py', world_path='__kara_world.json'):
     global _w, _steps, _cur, _expected_output
     with open(world_path) as f:
@@ -432,11 +552,19 @@ def _run(student_path='__kara_student.py', world_path='__kara_world.json'):
         setattr(_builtins, name, globals()[name])
     error = None
     memory = 0
+    lints = []
     old_out = _sys.stdout
     _sys.stdout = _Out()
     try:
         tree = _ast.parse(source, _STUDENT)
         memory = _statements(tree)
+        lints, banned = _lint(tree)
+        if banned is not None:
+            name = getattr(banned, 'id', None) or getattr(banned, 'attr', None) or next(
+                a.name for a in banned.names if a.name in _FORBIDDEN)
+            e = ForbiddenError(f'{name} is not available in Kara programs.')
+            e.name, e.lineno = name, banned.lineno
+            raise e
         code = compile(tree, _STUDENT, 'exec')
         _sys.settrace(_global_trace)
         try:
@@ -448,6 +576,9 @@ def _run(student_path='__kara_student.py', world_path='__kara_world.json'):
         # imported helper (befehle.py) has a syntax error.
         error = {'line': e.lineno if e.filename == _STUDENT else _error_line(e),
                  'message': f'{type(e).__name__}: {e.msg}', 'kind': 'python', 'sub': _error_sub(e)}
+    except ForbiddenError as e:
+        error = {'line': e.lineno, 'message': f'{type(e).__name__}: {e}', 'kind': 'python',
+                 'sub': 'forbidden', 'name': e.name}
     except StepLimitError as e:
         error = {'line': _error_line(e), 'message': f'{type(e).__name__}: {e}', 'kind': 'loop'}
     except KaraError as e:
@@ -462,7 +593,7 @@ def _run(student_path='__kara_student.py', world_path='__kara_world.json'):
         for m in step.get('m', []):
             m[2] &= mask
             m[3] &= mask
-    result = {'steps': _steps, 'error': error, 'energy': _w.energy, 'memory': memory}
+    result = {'steps': _steps, 'error': error, 'energy': _w.energy, 'memory': memory, 'lints': lints}
     if error is None:
         result['goal'] = _goal(data.get('goals', []))
     return _json.dumps(result)

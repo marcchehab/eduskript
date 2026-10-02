@@ -26,7 +26,10 @@
  * (src/lib/kara/aurora-defaults.ts): level `aurora.*` first, then the German
  * course defaults; errors pick a line per `error.sub` (wall, name, ...), and
  * `aurora.fail.3` replaces `aurora.fail` from the 3rd non-winning run in a
- * row (component state: resets on reload and on a win). Events only trigger when the replay steps onto them
+ * row (component state: resets on reload and on a win). Static findings
+ * (`trace.lints`, kara-module.ts `_lint`) replace that result line with
+ * AURORA's `lint.<code>` comment on the first one (LINT_ORDER, then line) when the run did not win,
+ * and every finding gets an inline chip at the end of the replay. Events only trigger when the replay steps onto them
  * (play / step forward); jumping or scrubbing skips them. Results are saved per student (stars,
  * evidence) as soon as a run reaches the goal, see src/lib/kara/progress.ts.
  */
@@ -36,7 +39,7 @@ import { Music, Pause, Play, SkipBack, SkipForward, Star, StepBack, StepForward 
 import { cn } from '@/lib/utils'
 import { recordKaraResult } from '@/lib/kara/progress'
 import { playVoice, stopVoice, ttsLineUrl } from '@/lib/kara/voice'
-import { auroraLine } from '@/lib/kara/aurora-defaults'
+import { auroraLine, type KaraLintCode } from '@/lib/kara/aurora-defaults'
 import { playSfx } from '@/lib/kara/sfx'
 import { registerSoundSource, useMuted } from '@/lib/sound'
 import { DOOR, ITEM, LASER } from '@/lib/kara/world'
@@ -50,6 +53,7 @@ import {
   type KaraConfig,
   type KaraEvidence,
   type KaraGoal,
+  type KaraLint,
   type KaraMessage,
   type KaraPos,
   type KaraStep,
@@ -154,6 +158,17 @@ function helperFrame(step: KaraStep): string | undefined {
   if (!step.f) return undefined
   const fn = step.fn && !step.fn.startsWith('<') ? `${step.fn}() · ` : ''
   return `${fn}${step.f}${step.fl ? `:${step.fl}` : ''}`
+}
+
+/** AURORA comments on the first finding in this order: direct causes of a lost run before an unused def. */
+const LINT_ORDER: KaraLintCode[] = ['bare_call', 'sensor_no_call', 'no_return', 'never_called']
+
+/** Inline chip text per lint (English UI; AURORA's German comment is in the message bar). */
+const LINT_NOTE: Record<KaraLintCode, (name: string) => string> = {
+  bare_call: n => `${n} is not called: add ()`,
+  sensor_no_call: n => `${n} without () is always true`,
+  no_return: n => `${n}() returns None`,
+  never_called: n => `${n}() is never called`,
 }
 
 const SPEEDS = [1, 2, 5, 10, 25, 100] // steps per second
@@ -269,6 +284,12 @@ export function KaraPanel({ world, trace, maxTile, maxHeight, onLine, config, as
   }
 
   const stars = trace ? karaStars(trace, config) : 0
+  /** Static findings, shown only when the run did not win (a level without goals never wins). */
+  const lints = useMemo((): KaraLint[] => {
+    if (!trace?.lints?.length) return []
+    const won = !trace.error && config.goals.length > 0 && !!trace.goal?.reached
+    return won ? [] : trace.lints
+  }, [trace, config])
 
   /** Story events on a single forward step (pause until Continue). */
   const eventCards = useCallback((from: number, to: number): KaraCard[] => {
@@ -288,8 +309,17 @@ export function KaraPanel({ world, trace, maxTile, maxHeight, onLine, config, as
       config.memory ? `Memory ${trace.memory}/${config.memory}` : `Memory ${trace.memory}`,
       config.energy ? `Energy ${trace.energy}/${config.energy}` : `Energy ${trace.energy}`,
     ].join(' · ')
+    // A static finding explains a lost run better than its symptom (loop, wall, goal missed).
+    if (lints.length) {
+      const first = [...lints].sort((a, b) => LINT_ORDER.indexOf(a.code) - LINT_ORDER.indexOf(b.code) || a.line - b.line)[0]
+      const m = auroraLine(config, `lint.${first.code}`, { vars: first })
+      if (m) return { message: m, detail: lints.length > 1 ? `${lints.length - 1} more marked in the code` : undefined }
+    }
     if (trace.error?.kind === 'loop') { const m = auroraLine(config, 'loop'); return m ? { message: m } : null }
-    if (trace.error) { const m = auroraLine(config, 'error', { sub: trace.error.sub ?? undefined }); return m ? { message: m } : null }
+    if (trace.error) {
+      const m = auroraLine(config, 'error', { sub: trace.error.sub ?? undefined, vars: { name: trace.error.name } })
+      return m ? { message: m } : null
+    }
     if (!config.goals.length || !trace.goal) return null
     if (trace.goal.reached) return { message: auroraLine(config, 'win')!, stars, detail: limits }
     // A level-specific fail text replaces the generic (English) goal list.
@@ -299,7 +329,7 @@ export function KaraPanel({ world, trace, maxTile, maxHeight, onLine, config, as
         ? undefined
         : `Still to do: ${trace.goal.missing.map(g => GOAL_TEXT[g]).join(', ')}`,
     }
-  }, [trace, config, stars, failStreak])
+  }, [trace, config, stars, failStreak, lints])
 
   /** Sound effects for stepping from `to - 1` to `to` (and the result at the end). */
   const stepSfx = useCallback((to: number) => {
@@ -399,19 +429,22 @@ export function KaraPanel({ world, trace, maxTile, maxHeight, onLine, config, as
   // Editor line highlight.
   useEffect(() => {
     if (!trace) { onLine(null); return }
+    const lintNotes = pos === total && lints.length ? lints.map(l => ({ line: l.line, note: LINT_NOTE[l.code](l.name) })) : undefined
     if (pos === total && trace.error) {
       const last = steps[total - 1]
       const line = trace.error.line ?? last?.l
       // The failing line's own sensor calls stay visible next to the error.
       const sensors = last && last.l === line ? last.s : undefined
-      onLine(line ? { line, sensors, error: trace.error.message, via: last && last.l === line ? helperFrame(last) : undefined } : null)
+      onLine(line || lintNotes ? { line: line ?? undefined, sensors, error: trace.error.message, via: last && last.l === line ? helperFrame(last) : undefined, lints: lintNotes } : null)
+    } else if (lintNotes && pos === 0) {
+      onLine({ lints: lintNotes })
     } else if (pos === 0) {
       onLine(null)
     } else {
       const s = steps[pos - 1]
-      onLine({ line: s.l, sensors: s.s, via: helperFrame(s) })
+      onLine({ line: s.l, sensors: s.s, via: helperFrame(s), lints: lintNotes })
     }
-  }, [pos, total, trace, steps, onLine])
+  }, [pos, total, trace, steps, onLine, lints])
 
   const tile = useMemo(() => {
     let t = width ? Math.floor(width / world.cols) : maxTile

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { AURORA_DEFAULTS, auroraLine } from '@/lib/kara/aurora-defaults'
+import { AURORA_DEFAULTS, auroraLine, isAuroraDefault } from '@/lib/kara/aurora-defaults'
 import { unified } from 'unified'
 import remarkParse from 'remark-parse'
 import remarkCodeEditor from '@/lib/remark-plugins/code-editor'
@@ -178,5 +178,26 @@ describe('auroraLine', () => {
     expect(text(c, 'fail', { failStreak: 3 })).toBe('F3.')
     expect(text(c, 'fail', { failStreak: 5 })).toBe('F3.')
     expect(text(cfg(''), 'fail', { failStreak: 3 })).toBe(AURORA_DEFAULTS.fail)
+  })
+
+  it('lint.<code>: level override, placeholders {line} / {name} filled', () => {
+    const vars = { line: 7, name: 'turn_right' }
+    expect(auroraLine(cfg(''), 'lint.bare_call', { vars })?.text)
+      .toBe('Zeile 7: turn_right ohne (). Sie haben den Befehl erwähnt, nicht ausgeführt.')
+    expect(auroraLine(cfg('aurora.lint.bare_call: {name}, Zeile {line}. Klammern.'), 'lint.bare_call', { vars })?.text)
+      .toBe('turn_right, Zeile 7. Klammern.')
+    expect(auroraLine(cfg(''), 'error', { sub: 'forbidden', vars: { name: 'exec' } })?.text)
+      .toBe('exec? Mikroweich nennt das Lizenzverletzung. Schreiben Sie es aus.')
+  })
+})
+
+describe('isAuroraDefault', () => {
+  it('accepts defaults with filled placeholders, nothing else', () => {
+    expect(isAuroraDefault(AURORA_DEFAULTS.win)).toBe(true)
+    expect(isAuroraDefault('Zeile 12: stufe ohne (). Sie haben den Befehl erwähnt, nicht ausgeführt.')).toBe(true)
+    expect(isAuroraDefault('eval? Mikroweich nennt das Lizenzverletzung. Schreiben Sie es aus.')).toBe(true)
+    expect(isAuroraDefault('Zeile x: stufe ohne (). Sie haben den Befehl erwähnt, nicht ausgeführt.')).toBe(false)
+    expect(isAuroraDefault('Zeile 1: a b ohne (). Sie haben den Befehl erwähnt, nicht ausgeführt.')).toBe(false)
+    expect(isAuroraDefault('Irgendein Text.')).toBe(false)
   })
 })
