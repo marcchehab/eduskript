@@ -28,6 +28,7 @@ import {
   Pencil,
 } from 'lucide-react'
 import { UpgradePrompt } from '@/components/dashboard/upgrade-prompt'
+import { ClassExams } from '@/components/dashboard/class-exams'
 import {
   Dialog,
   DialogContent,
@@ -763,6 +764,9 @@ export default function ClassesPage() {
                             </Button>
                           </div>
                         )}
+
+                        {/* Exams: status counts + link to grading */}
+                        <ClassExams classId={classItem.id} />
 
                         {/* Add Students Section */}
                         <div className="space-y-3">
