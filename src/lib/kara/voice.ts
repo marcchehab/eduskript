@@ -42,13 +42,26 @@ export function ttsLineUrl(speaker: string, text: string): Promise<string | null
   return p
 }
 
+const stopListeners = new Set<() => void>()
+
+/** Called whenever a playing (or loading) line is cut off, including by the next playVoice(). */
+export function onVoiceStop(cb: () => void): () => void {
+  stopListeners.add(cb)
+  return () => { stopListeners.delete(cb) }
+}
+
 export function stopVoice() {
+  stopListeners.forEach(cb => cb())
   seq++
   if (current) { current.el.pause(); current.stop(); current = null }
 }
 
-/** Play `url`, with the speaker's voice effect and speed (VOICE_FX) if it has one. */
-export async function playVoice(url: string, speaker?: string): Promise<void> {
+/**
+ * Play `url`, with the speaker's voice effect and speed (VOICE_FX) if it has one.
+ * `onEnded` runs when the line finishes on its own (not when another line or
+ * stopVoice() cuts it off, and not when muted).
+ */
+export async function playVoice(url: string, speaker?: string, onEnded?: () => void): Promise<void> {
   stopVoice()
   if (isMuted()) return
   const token = seq
@@ -62,7 +75,7 @@ export async function playVoice(url: string, speaker?: string): Promise<void> {
   const src = c.createMediaElementSource(el)
   const stop = fx ? await connectVoiceFx(c, src, c.destination, fx) : (src.connect(c.destination), () => {})
   if (token !== seq) { stop(); return }
-  el.onended = () => { stop(); src.disconnect() }
+  el.onended = () => { stop(); src.disconnect(); if (current?.el === el) current = null; onEnded?.() }
   current = { el, stop }
   await el.play()
 }

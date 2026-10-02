@@ -29,13 +29,20 @@
  *
  * Config keys (values: positional fields separated by `|`, then optional
  * `key=value` fields):
- *   goal: exit, collect, boxes, chips     all listed goals must hold at the end
+ *   goal: exit, collect, boxes, chips, logs   all listed goals must hold at the end
+ *                                         (logs = every terminal read via read_log())
  *   output: 7                             goal: the last printed line must equal this
  *   energy: N / memory: N                 limits for the 2nd/3rd star
  *   id: level-id                          key for saved progress (default: editor id)
  *   log: text | speaker=WEBER | audio=f.mp3        one per terminal, in reading order
  *   chip: id | title | text | speaker=… | audio=…  one per chip, in reading order
+ *   intro: text | speaker=BRANDT | audio=f.mp3     repeatable; the level briefing,
+ *                                         shown as a card above the code editor
+ *                                         (several lines = a short dialogue, in order;
+ *                                         speaker defaults to AURORA). Collapses to one
+ *                                         line once the level is solved.
  *   aurora.<event>: text | audio=…        events: start, win, fail, error, loop
+ *                                         (start = idle line in the bar under the world)
  *   music: file.mp3                       ambient loop (off until the student turns it on)
  *
  * The world is a torus like the original Kara: walking off one edge enters on
@@ -88,7 +95,7 @@ export interface KaraEvidence extends KaraMessage {
   title: string
 }
 
-export type KaraGoal = 'exit' | 'collect' | 'boxes' | 'chips' | 'output'
+export type KaraGoal = 'exit' | 'collect' | 'boxes' | 'chips' | 'logs' | 'output'
 
 export interface KaraConfig {
   id?: string
@@ -97,6 +104,8 @@ export interface KaraConfig {
   output?: string
   energy?: number
   memory?: number
+  /** Level briefing above the editor, in order (speaker always set, default AURORA). */
+  intro: KaraMessage[]
   logs: KaraMessage[]
   chips: KaraEvidence[]
   aurora: Record<string, KaraMessage>
@@ -110,7 +119,7 @@ export interface KaraLevel {
 
 const DIR_CHARS: Record<string, KaraDir> = { '^': 0, '>': 1, 'v': 2, '<': 3 }
 const OBSTACLES = new Set(['#', 'x', 'T', 'P', 'L', 'R', 'Y'])
-const GOALS = new Set<KaraGoal>(['exit', 'collect', 'boxes', 'chips', 'output'])
+const GOALS = new Set<KaraGoal>(['exit', 'collect', 'boxes', 'chips', 'logs', 'output'])
 
 /** Legend char → [flags, look]. Kara chars and unknown chars are floor. */
 function cellFor(ch: string): [number, string] {
@@ -191,7 +200,7 @@ function evidence(value: string): KaraEvidence {
 }
 
 export function parseKaraConfig(src: string): KaraConfig {
-  const config: KaraConfig = { goals: [], logs: [], chips: [], aurora: {} }
+  const config: KaraConfig = { goals: [], intro: [], logs: [], chips: [], aurora: {} }
   for (const raw of src.replace(/\r/g, '').split('\n')) {
     const m = raw.match(/^\s*([a-z.]+)\s*:\s*(.*)$/i)
     if (!m) continue
@@ -202,6 +211,7 @@ export function parseKaraConfig(src: string): KaraConfig {
     else if (key === 'output') config.output = value
     else if (key === 'id') config.id = value
     else if (key === 'music') config.music = value
+    else if (key === 'intro') { const msg = message(value); config.intro.push({ ...msg, speaker: msg.speaker || 'AURORA' }) }
     else if (key === 'log') config.logs.push(message(value))
     else if (key === 'chip') config.chips.push(evidence(value))
     else if (key.startsWith('aurora.')) config.aurora[key.slice(7)] = { ...message(value), speaker: 'AURORA' }
@@ -226,16 +236,16 @@ export const DEFAULT_AURORA: Record<string, string> = {
   loop: 'An endless loop. How… familiar.',
 }
 
-/** Every spoken line of a level: logs, chips and AURORA events. */
+/** Every spoken line of a level: intro, logs, chips and AURORA events. */
 export function karaMessages(level: KaraLevel): KaraMessage[] {
   const { config } = level
-  return [...config.logs, ...config.chips, ...Object.values(config.aurora)]
+  return [...config.intro, ...config.logs, ...config.chips, ...Object.values(config.aurora)]
 }
 
 /** Asset file names a level references (audio, music), for resolving to URLs. */
 export function karaAssetNames(level: KaraLevel): string[] {
   const { config } = level
-  const msgs: KaraMessage[] = [...config.logs, ...config.chips, ...Object.values(config.aurora)]
+  const msgs = karaMessages(level)
   const names = msgs.map(m => m.audio).filter((a): a is string => !!a)
   if (config.music) names.push(config.music)
   return [...new Set(names)]
@@ -243,8 +253,7 @@ export function karaAssetNames(level: KaraLevel): string[] {
 
 /** Every speaker a level shows a portrait for (lower-case). */
 export function karaSpeakers(level: KaraLevel): string[] {
-  const { config } = level
-  const msgs: KaraMessage[] = [...config.logs, ...config.chips, ...Object.values(config.aurora)]
+  const msgs = karaMessages(level)
   return [...new Set(['aurora', ...msgs.map(m => m.speaker?.toLowerCase()).filter((s): s is string => !!s)])]
 }
 

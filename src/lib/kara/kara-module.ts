@@ -76,6 +76,7 @@ class _World:
         self.x, self.y, self.d = k['x'], k['y'], k['d']
         self.terminals = [tuple(t) for t in data.get('terminals', [])]
         self.chips = [tuple(c) for c in data.get('chips', [])]
+        self.read = set()  # terminal indices read via read_log() (goal 'logs')
         self.energy = 0
 
     def ahead(self, x, y, d):
@@ -228,7 +229,9 @@ def read_log():
     if not _w.get(tx, ty) & TERMINAL:
         raise KaraError("Kara can't read a log: there is no terminal in front.")
     if (tx, ty) in _w.terminals:
-        _event('log', _w.terminals.index((tx, ty)))
+        i = _w.terminals.index((tx, ty))
+        _w.read.add(i)
+        _event('log', i)
 
 
 # Door / laser cells are marked once at load (a pressed switch clears DOOR/LASER,
@@ -354,6 +357,8 @@ def _goal(goals):
         missing.append('boxes')
     if 'chips' in goals and any(c & CHIP for c in cells):
         missing.append('chips')
+    if 'logs' in goals and len(_w.read) < len(_w.terminals):
+        missing.append('logs')
     if 'output' in goals:
         printed = ''.join(s.get('o', '') for s in _steps).strip().splitlines()
         if not printed or printed[-1].strip() != str(_expected_output).strip():

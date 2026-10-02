@@ -3,7 +3,7 @@ import { unified } from 'unified'
 import remarkParse from 'remark-parse'
 import remarkCodeEditor from '@/lib/remark-plugins/code-editor'
 import {
-  parseKaraWorld, parseKaraLevel, buildReplay, seekCells, karaStars, karaAssetNames, karaSpeakers,
+  parseKaraWorld, parseKaraLevel, buildReplay, seekCells, karaStars, karaAssetNames, karaSpeakers, karaMessages,
   BLOCK, ITEM, BOX, CHIP, DOOR, LASER, ACID, EXIT, SWITCH, TARGET, TERMINAL, type KaraTrace,
 } from '@/lib/kara/world'
 
@@ -62,6 +62,22 @@ music: hum.mp3`)
   it('lists assets and speakers', () => {
     expect(karaAssetNames(level).sort()).toEqual(['hum.mp3', 'w1.mp3', 'win.mp3'])
     expect(karaSpeakers(level).sort()).toEqual(['aurora', 'weber'])
+  })
+
+  it('parses intro lines in order with AURORA as default speaker', () => {
+    const l = parseKaraLevel(`#>E#
+---
+goal: exit, logs
+intro: Frachtraum B, sofort. | speaker=BRANDT | audio=b.mp3
+intro: Er meint: bitte.`)
+    expect(l.config.goals).toEqual(['exit', 'logs'])
+    expect(l.config.intro).toEqual([
+      { text: 'Frachtraum B, sofort.', speaker: 'BRANDT', audio: 'b.mp3' },
+      { text: 'Er meint: bitte.', speaker: 'AURORA', audio: undefined },
+    ])
+    expect(karaMessages(l).slice(0, 2)).toEqual(l.config.intro)
+    expect(karaAssetNames(l)).toEqual(['b.mp3'])
+    expect(karaSpeakers(l).sort()).toEqual(['aurora', 'brandt'])
   })
 
   it('works without config or variants', () => {

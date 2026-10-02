@@ -240,13 +240,14 @@ while not on_exit():
 goal: exit, collect
 energy: 20
 memory: 4
+intro: Frachtraum B. Holen Sie das Fass und verschwinden Sie. | speaker=BRANDT
 chip: log-1 | Webers Laborbuch | Gerald ist weg. | speaker=WEBER
 aurora.win: Beeindruckend.
 \`\`\`
 
 - Several grids separated by \`===\` are random variants (one per Run) — forces general solutions. Config lines after \`---\`.
 - Grid legend: \`.\`/space floor, \`#\` wall (auto-joined), \`x\` crate / \`T\` table / \`P\` desk / \`L\` locker / \`R\` red barrel / \`Y\` yellow barrel (obstacles), \`*\` green barrel (put/remove), \`B\`/\`M\` box (pushable), \`o\` box target, \`O\` box on target, \`c\` evidence chip (picked up by walking over it), \`D\` closed door, \`d\` open door, \`=\`/\`|\` laser, \`S\` switch (\`press_switch()\` toggles ALL doors and lasers), \`~\` acid (Kara falls in), \`E\` exit, \`t\` terminal (\`read_log()\` while facing it), \`s\` slime (decoration), \`> < ^ v\` Kara. The world wraps at the edges — close it with \`#\`.
-- Config: \`goal: exit, collect, boxes, chips\` (all must hold), \`energy: N\` / \`memory: N\` (2nd/3rd star: actions / program statements), \`id: level-id\` (progress key), \`log: text | speaker=NAME | audio=file.mp3\` (one per terminal, reading order), \`chip: id | title | text | speaker=… | audio=…\` (one per chip), \`aurora.win|fail|loop|error: text | audio=…\`, \`music: file.mp3\` (ambient loop, off until turned on).
+- Config: \`goal: exit, collect, boxes, chips, logs\` (all must hold; \`logs\` = every terminal read with \`read_log()\`), \`intro: text | speaker=BRANDT | audio=file.mp3\` (repeatable level briefing shown as a card with portrait and a Listen button ABOVE the editor; several lines = short dialogue in order; speaker defaults to AURORA; collapses to one line once solved), \`energy: N\` / \`memory: N\` (2nd/3rd star: actions / program statements), \`id: level-id\` (progress key), \`log: text | speaker=NAME | audio=file.mp3\` (one per terminal, reading order), \`chip: id | title | text | speaker=… | audio=…\` (one per chip), \`aurora.start|win|fail|loop|error: text | audio=…\` (start = idle line under the world), \`music: file.mp3\` (ambient loop, off until turned on).
 - Portraits: skript file \`portrait-<speaker>.png\` (lower-case speaker name). Audio/music names resolve against skript files.
 - \`tile="40"\`: max tile size in px (default 48).
 - \`code-width="20"\` (on the \`kara-world\` fence): initial code width in % for the side-by-side layout (default 50). Students can switch to code-above-world with a toolbar button.
@@ -883,7 +884,7 @@ export function getCondensedSyntaxReference(): string {
   - Executable: python, javascript, sql, html. Other language IDs only get syntax highlighting.
   - \`html editor\` is special: split view with a sandboxed iframe live-preview (\`allow-scripts allow-modals allow-forms\`, no \`allow-same-origin\`). No exam/python-check pairing.
   - \`single\`: hides file tabs (single-file mode).
-  - Kara grid world: add \`\`\`kara-world for="<editor id>" [tile="40"]\`\`\` with ASCII grid(s) (\`===\` = random variants) and config after \`---\` (goal, energy, memory, log, chip, aurora.*). Legend: \`#\` wall, \`x/T/P/L/R/Y\` obstacles, \`*\` barrel, \`B\` box, \`o\` target, \`c\` chip, \`D\` door, \`=\` laser, \`S\` switch, \`~\` acid, \`E\` exit, \`t\` terminal, \`>\` Kara. See the Kara section. \`<evidence-board>\` lists collected evidence.
+  - Kara grid world: add \`\`\`kara-world for="<editor id>" [tile="40"]\`\`\` with ASCII grid(s) (\`===\` = random variants) and config after \`---\` (goal incl. \`logs\`, energy, memory, intro (briefing above the editor, repeatable, \`| speaker=\`), log, chip, aurora.*). Legend: \`#\` wall, \`x/T/P/L/R/Y\` obstacles, \`*\` barrel, \`B\` box, \`o\` target, \`c\` chip, \`D\` door, \`=\` laser, \`S\` switch, \`~\` acid, \`E\` exit, \`t\` terminal, \`>\` Kara. See the Kara section. \`<evidence-board>\` lists collected evidence.
   - \`exam\`: silent grading — pair with python-check; student runs code but never sees pass/fail feedback. Use for assessments, NOT practice. Default (no \`exam\`) shows feedback after each "Check" click.
   - \`file="name.py"\`: repeat the fence with the same \`id\` and a different \`file=\` to merge into one multi-tab editor (Python/JS/SQL only, not HTML yet).
   - \`assets="a.csv,b.png"\` / \`allow-upload\` + \`accept="..."\`: teacher-attached read-only files, or let the student upload their own (Python only).

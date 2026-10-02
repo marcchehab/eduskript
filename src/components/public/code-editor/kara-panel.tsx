@@ -159,6 +159,7 @@ const GOAL_TEXT: Record<KaraGoal, string> = {
   collect: 'collect every barrel',
   boxes: 'push every box onto a target',
   chips: 'pick up every chip',
+  logs: 'read every terminal',
   output: 'print the right answer',
 }
 
@@ -352,7 +353,7 @@ export function KaraPanel({ world, trace, maxTile, maxHeight, onLine, config, as
     if (s > 0 || found.length) void recordKaraResult(skriptId, levelId, s, found)
   }, [trace, config, skriptId, levelId])
 
-  // Message bar: pending story event, else the result at the end, else the level's intro line.
+  // Message bar: pending story event, else the result at the end, else the level's `aurora.start` idle line (the `intro:` briefing is KaraIntro above the editor).
   const startCard = useMemo((): KaraCard | null => (config.aurora.start ? { message: config.aurora.start } : null), [config])
   const card = cards[0] ?? (trace && pos === total ? finalCard : null) ?? (pos === 0 ? startCard : null)
   // Voice only for events and results (never on page load).

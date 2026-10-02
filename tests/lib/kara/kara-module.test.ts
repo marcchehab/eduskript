@@ -104,4 +104,16 @@ describe.skipIf(!hasPython)('kara.py trace: one action per step', () => {
     expect(t.error?.kind).toBe('loop')
     expect(t.error?.line).toBe(2)
   })
+
+  it("goal 'logs' needs every terminal read", () => {
+    const logs = parseKaraWorld('#t#\n#^#\n#t#')
+    const runLogs = (code: string): KaraTrace => {
+      fs.writeFileSync(path.join(dir, '__kara_world.json'), JSON.stringify({ ...logs, goals: ['logs'] }))
+      fs.writeFileSync(path.join(dir, '__kara_student.py'), code)
+      return JSON.parse(execFileSync('python3', ['-c', 'import kara; print(kara._run())'], { cwd: dir }).toString())
+    }
+    expect(runLogs('read_log()\n').goal).toEqual({ reached: false, missing: ['logs'] })
+    expect(runLogs('read_log()\nread_log()\n').goal?.reached).toBe(false)
+    expect(runLogs('read_log()\nturn_left()\nturn_left()\nread_log()\n').goal).toEqual({ reached: true, missing: [] })
+  })
 })

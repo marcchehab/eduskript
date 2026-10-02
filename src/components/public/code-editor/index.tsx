@@ -72,6 +72,7 @@ import {
   warmPyodideWorker,
 } from '@/lib/pyodide-worker.client'
 import { KaraPanel } from './kara-panel'
+import { KaraIntro } from './kara-intro'
 import { karaLineHighlighting, showKaraLine, type KaraLineTarget } from './kara-line-extension'
 import { KARA_MODULE_SOURCE, KARA_RUNNER } from '@/lib/kara/kara-module'
 import { KARA_COMPLETIONS } from '@/lib/kara/completions'
@@ -1272,6 +1273,9 @@ export const CodeEditor = memo(function CodeEditor({
   const splitWidth = (isKara ? karaSide : canvasVisible && showGraphics && !graphicsStacked) ? (editorWidth / 100) * containerWidth : containerWidth
   const narrowCode = containerWidth > 0 && splitWidth < 380
   const [karaRun, setKaraRun] = useState<{ world: KaraWorld; trace: KaraTrace } | null>(null)
+  // First pointer-down inside a Kara editor → KaraIntro may speak the briefing once.
+  const karaIntroAutoplay = useRef<(() => void) | null>(null)
+  const karaIntroPoked = useRef(false)
   // Drag handle between code and world: sets the code height (world keeps its
   // own size), so the whole editor grows/shrinks. Delta-based like the other
   // splitters; `zoom` undoes an ancestor transform: scale().
@@ -4168,8 +4172,25 @@ export const CodeEditor = memo(function CodeEditor({
 
   return (
     <>
+    {/* Kara level briefing (`intro:` lines) sits above the editor box, outside
+        it, so it never takes height from the side-by-side layout. Not shown in
+        fullscreen (the wrapper is the fullscreen element). */}
+    {karaLevel && karaLevel.config.intro.length > 0 && (
+      <KaraIntro
+        lines={karaLevel.config.intro}
+        assets={karaAssets}
+        levelId={karaLevel.config.id ?? id}
+        skriptId={skriptId}
+        autoplayRef={karaIntroAutoplay}
+      />
+    )}
     <div
       ref={wrapperRef}
+      onPointerDownCapture={isKara ? () => {
+        if (karaIntroPoked.current) return
+        karaIntroPoked.current = true
+        karaIntroAutoplay.current?.()
+      } : undefined}
       className="flex flex-col w-full border rounded-lg overflow-hidden bg-background relative z-0"
       style={{
         // Kara stacked: content-sized (code height + world below) unless fullscreen
