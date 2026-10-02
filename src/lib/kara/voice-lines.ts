@@ -1,9 +1,10 @@
 /**
- * Voiced Kara lines: which speakers have a voice and where their pre-rendered
- * MP3s live (raw voice; effects are added client-side, see voice-fx.ts). The files are generated OFFLINE (TTS + effect + upload) by
- * ~/Documents/2_Areas/eduskript/kara-kurs/voices.ts — the server only looks
- * them up (no TTS calls, no ffmpeg on the app instance). The key covers voice,
- * style, effect and text, so changing any of them needs a re-render.
+ * Voiced Kara lines: which speakers have a voice and where their files live
+ * (raw voice; effects are added client-side, see voice-fx.ts). Files are
+ * either rendered OFFLINE as MP3 by ~/Documents/2_Areas/eduskript/kara-kurs/voices.mts,
+ * or on first request as WAV by voice-tts.server.ts (no ffmpeg on the app
+ * instance). The key covers voice, style, effect and text, so changing any
+ * of them renders a new file.
  */
 
 import { createHash } from 'crypto'

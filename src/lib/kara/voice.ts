@@ -3,7 +3,8 @@
 /**
  * Plays Kara voice lines in the browser. Lines come either from a skript file
  * (`audio=` in the level config) or from the cached TTS route
- * (/api/kara/tts looks up pre-rendered raw lines, see src/lib/kara/voice-lines.ts).
+ * (/api/kara/tts returns the cached raw line, rendering it on first request,
+ * see src/lib/kara/voice-tts.server.ts).
  * The speaker's voice effect is applied live via Web Audio (voice-fx.ts).
  * One line plays at a time.
  */
