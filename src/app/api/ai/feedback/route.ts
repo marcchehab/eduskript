@@ -328,9 +328,10 @@ export async function POST(request: Request) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error'
         console.error('AI feedback OpenRouter error:', error)
         const data = JSON.stringify({ type: 'error', error: errorMessage })
-        await writer.write(encoder.encode(`data: ${data}\n\n`))
+        // Rejects if the client disconnected (stream already cancelled).
+        await writer.write(encoder.encode(`data: ${data}\n\n`)).catch(() => {})
       } finally {
-        await writer.close()
+        await writer.close().catch(() => { /* already closed by client abort */ })
       }
     })()
 
