@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { generateSlug } from "@/lib/markdown";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -51,15 +52,6 @@ export function CreateSkriptModal({
       // Auto-generate slug from title if title is being changed
       ...(name === "title" ? { slug: generateSlug(value) } : {}),
     }));
-  };
-
-  const generateSlug = (title: string) => {
-    return title
-      .toLowerCase()
-      .replace(/[^\w\s-]/g, "")
-      .replace(/\s+/g, "-")
-      .replace(/-+/g, "-")
-      .trim();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

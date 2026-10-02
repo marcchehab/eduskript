@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { generateSlug } from '@/lib/markdown'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -72,15 +73,6 @@ export function EditModal({ type, item, onItemUpdated, triggerClassName, buttonT
       ...prev,
       isPublished: checked
     }))
-  }
-
-  const generateSlug = (title: string) => {
-    return title
-      .toLowerCase()
-      .replace(/[^\w\s-]/g, '')
-      .replace(/\s+/g, '-')
-      .replace(/-+/g, '-')
-      .trim()
   }
 
   const handleSubmit = async (e: React.FormEvent) => {

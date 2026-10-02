@@ -224,6 +224,21 @@ describe('Markdown Processing', () => {
       expect(slug).toBe('this-is-a-title')
     })
 
+    it('should transliterate German umlauts and ß', () => {
+      expect(generateSlug('Übung Beschleunigung')).toBe('uebung-beschleunigung')
+      expect(generateSlug('Größe und Maße')).toBe('groesse-und-masse')
+      expect(generateSlug('ÄRA öl')).toBe('aera-oel')
+    })
+
+    it('should strip other accents instead of dropping the letter', () => {
+      expect(generateSlug('Énergie café señor')).toBe('energie-cafe-senor')
+    })
+
+    it('should leave existing ASCII slugs unchanged', () => {
+      expect(generateSlug('bung-beschleunigung')).toBe('bung-beschleunigung')
+      expect(generateSlug('my_slug-2')).toBe('my_slug-2')
+    })
+
     it('should remove special characters', () => {
       const slug = generateSlug('Title with @#$% special!')
 
