@@ -27,6 +27,7 @@ import { Music, Pause, Play, SkipBack, SkipForward, Star, StepBack, StepForward 
 import { cn } from '@/lib/utils'
 import { recordKaraResult } from '@/lib/kara/progress'
 import { playVoice, stopVoice, ttsLineUrl } from '@/lib/kara/voice'
+import { DEFAULT_AURORA } from '@/lib/kara/world'
 import { playSfx } from '@/lib/kara/sfx'
 import { registerSoundSource, useMuted } from '@/lib/sound'
 import { DOOR, ITEM, LASER } from '@/lib/kara/world'
@@ -137,12 +138,6 @@ function drawWorld(
 
 const SPEEDS = [1, 2, 5, 10, 25, 100] // steps per second
 
-// Built-in AURORA lines; levels override them with `aurora.<event>:`.
-const DEFAULT_AURORA: Record<string, string> = {
-  win: 'Task completed. I am almost impressed.',
-  fail: 'Program finished. Task not completed.',
-  loop: 'An endless loop. How… familiar.',
-}
 const GOAL_TEXT: Record<KaraGoal, string> = {
   exit: 'reach the exit',
   collect: 'collect every barrel',

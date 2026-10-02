@@ -3,18 +3,36 @@
  *
  * Existing files (offline MP3 from voices.mts, or an earlier on-demand WAV)
  * are returned directly. A missing line is rendered on demand
- * (voice-tts.server.ts), but only when the exact text appears in some page's
- * content, so the endpoint cannot be used to synthesize arbitrary text.
- * That check is a `contains` scan over pages.content (no index, O(pages)),
- * and runs only on cache misses. Drafts count too, so authors hear lines
- * while previewing.
+ * (voice-tts.server.ts), but only when it is a real Kara line: a built-in
+ * AURORA default, or a message with this exact speaker and text in a
+ * ```kara-world block of some page. The candidate pages come from a
+ * `contains` scan over pages.content (no index, O(pages)); it runs only on
+ * cache misses. Drafts count too, so authors hear lines while previewing.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { voiceLineUrl } from '@/lib/kara/voice-tts.server'
+import { DEFAULT_AURORA, karaMessages, parseKaraLevel } from '@/lib/kara/world'
 
 const MAX_TEXT = 600
+
+/** True when (speaker, text) is a line some Kara level or default actually speaks. */
+async function isKaraLine(speaker: string, text: string): Promise<boolean> {
+  const who = speaker.toUpperCase()
+  if (who === 'AURORA' && Object.values(DEFAULT_AURORA).includes(text)) return true
+  const pages = await prisma.page.findMany({
+    where: { AND: [{ content: { contains: text } }, { content: { contains: '```kara-world' } }] },
+    select: { content: true },
+    take: 20,
+  })
+  for (const { content } of pages) {
+    for (const m of content.matchAll(/```kara-world[^\n]*\n([\s\S]*?)```/g)) {
+      if (karaMessages(parseKaraLevel(m[1])).some(msg => msg.text === text && msg.speaker?.toUpperCase() === who)) return true
+    }
+  }
+  return false
+}
 
 export async function POST(request: NextRequest) {
   const { text, speaker } = (await request.json().catch(() => ({}))) as { text?: string; speaker?: string }
@@ -22,8 +40,7 @@ export async function POST(request: NextRequest) {
 
   let url = await voiceLineUrl(speaker, text, { render: false })
   if (!url && text.length <= MAX_TEXT) {
-    const inContent = await prisma.page.findFirst({ where: { content: { contains: text } }, select: { id: true } })
-    if (inContent) {
+    if (await isKaraLine(speaker, text)) {
       try {
         url = await voiceLineUrl(speaker, text, { render: true })
       } catch (e) {

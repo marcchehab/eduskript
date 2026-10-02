@@ -219,6 +219,19 @@ export function parseKaraLevel(src: string): KaraLevel {
   return { variants: variants.length ? variants : [parseKaraWorld('')], config: parseKaraConfig(config) }
 }
 
+/** Built-in AURORA lines; levels override them with `aurora.<event>:`. */
+export const DEFAULT_AURORA: Record<string, string> = {
+  win: 'Task completed. I am almost impressed.',
+  fail: 'Program finished. Task not completed.',
+  loop: 'An endless loop. How… familiar.',
+}
+
+/** Every spoken line of a level: logs, chips and AURORA events. */
+export function karaMessages(level: KaraLevel): KaraMessage[] {
+  const { config } = level
+  return [...config.logs, ...config.chips, ...Object.values(config.aurora)]
+}
+
 /** Asset file names a level references (audio, music), for resolving to URLs. */
 export function karaAssetNames(level: KaraLevel): string[] {
   const { config } = level
