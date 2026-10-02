@@ -23,6 +23,7 @@ export interface OutputEntry {
   timestamp: number
   isHtml?: boolean // For rendering matplotlib plots and rich output
   sqlResults?: SqlResultSet[] // For SQL query results
+  truncationNotice?: boolean // "Output truncated" hint, see output-cap.ts
 }
 
 export interface PythonFile {

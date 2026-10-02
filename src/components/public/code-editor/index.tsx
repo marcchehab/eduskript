@@ -58,6 +58,7 @@ import {
   SqlResultSet
 } from './types'
 import { SqlProgressBar } from './sql-progress-bar'
+import { appendOutputCapped } from './output-cap'
 import { PythonProgressBar } from './python-progress-bar'
 import { PythonTestResults } from './python-test-results'
 import { useCoupledVideo, parseTimecode } from '@/components/markdown/coupled-video-context'
@@ -2786,7 +2787,7 @@ export const CodeEditor = memo(function CodeEditor({
 
   // Add output helper
   const addOutput = (message: string, level: OutputLevel = OutputLevel.OUTPUT) => {
-    setOutput((prev) => [...prev, { message, level, timestamp: Date.now() }])
+    setOutput((prev) => appendOutputCapped(prev, { message, level, timestamp: Date.now() }))
     setPanelVisible(true)
     setActivePanel('output')
   }
@@ -5269,7 +5270,7 @@ export const CodeEditor = memo(function CodeEditor({
                     ) : (
                       entry.message
                     )}
-                    {verificationResult !== null && !exam && (
+                    {verificationResult !== null && !exam && !entry.truncationNotice && (
                       <>
                         {verificationResult.isCorrect ? (
                           <span className="text-green-600 dark:text-green-400"> · &#10003; Correct!</span>
