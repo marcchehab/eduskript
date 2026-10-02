@@ -16,6 +16,11 @@
  *     [[merge-criteria]] — so the priority resolver stays unchanged.
  * `feedback` (the general feedback) is always independent. The row is deleted
  * once it carries no points, no per-criterion edits, and no feedback.
+ *
+ * Points must stay within 0..max (400 otherwise): whole-component points
+ * against the component's effective max (same resolution as [[score-component]]:
+ * override max → declared markdown max → other source max → 1), criterion
+ * points against that rubric criterion's points (≥ 0 if it isn't in the rubric).
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -25,7 +30,8 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getAuthoredExamPage, isTeacherOfStudentForPage } from '@/lib/scoring/auth'
 import { isStudentReturned, returnedLockResponse } from '@/lib/scoring/return-state'
-import { SCORE_PRIORITY } from '@/lib/scoring/score-component'
+import { SCORE_PRIORITY, scoreComponent, isPointsInRange } from '@/lib/scoring/score-component'
+import { parseGradableComponents } from '@/lib/scoring/components'
 import { mergedCriterionTotal, type OverrideCriterion, type AiCriterion } from '@/lib/scoring/merge-criteria'
 
 export async function PUT(
@@ -44,7 +50,8 @@ export async function PUT(
       return NextResponse.json({ error: 'studentId and componentId are required' }, { status: 400 })
     }
 
-    if (!(await getAuthoredExamPage(session.user.id, pageId))) {
+    const page = await getAuthoredExamPage(session.user.id, pageId)
+    if (!page) {
       return NextResponse.json({ error: 'Page not found or access denied' }, { status: 404 })
     }
     if (!(await isTeacherOfStudentForPage(session.user.id, studentId, pageId))) {
@@ -122,7 +129,22 @@ export async function PUT(
           select: { meta: true },
         }),
       ])
-      const rubricIds = (((rubric?.criteria as { id: string }[] | null) ?? []).map((c) => c.id))
+      const rubricCriteria = (rubric?.criteria as { id: string; points?: unknown }[] | null) ?? []
+      const rubricIds = rubricCriteria.map((c) => c.id)
+      if (hasCriterion) {
+        const inc = body.criterion as { id?: unknown; points?: unknown }
+        const p = byId.get(String(inc.id))?.points
+        if (p != null) {
+          const rc = rubricCriteria.find((c) => c.id === String(inc.id))
+          const critMax = rc ? Number(rc.points) || 0 : Infinity
+          if (!isPointsInRange(p, critMax)) {
+            return NextResponse.json(
+              { error: rc ? `criterion.points must be between 0 and ${critMax}` : 'criterion.points must be at least 0' },
+              { status: 400 },
+            )
+          }
+        }
+      }
       const aiCriteria = (((aiRow?.meta as { criteria?: AiCriterion[] } | null)?.criteria) ?? [])
       earned = criteria.length ? mergedCriterionTotal(rubricIds, aiCriteria, criteria) : null
     } else if (hasPoints) {
@@ -134,6 +156,18 @@ export async function PUT(
         const n = Number(body.awardedPoints)
         if (!Number.isFinite(n)) {
           return NextResponse.json({ error: 'awardedPoints must be a number or null' }, { status: 400 })
+        }
+        const [declared] = parseGradableComponents(page.content ?? '').filter((c) => c.componentId === componentId)
+        const others = await prisma.componentScore.findMany({
+          where: { pageId, studentId, componentId, source: { not: 'override' } },
+          select: { source: true, priority: true, earned: true, max: true, updatedAt: true },
+        })
+        const { max } = scoreComponent({
+          declaredMax: declared?.maxPoints ?? null,
+          sources: [...others, { source: 'override', priority: SCORE_PRIORITY.override, earned: n, max: maxPoints }],
+        })
+        if (!isPointsInRange(n, max)) {
+          return NextResponse.json({ error: `awardedPoints must be between 0 and ${max}` }, { status: 400 })
         }
         earned = n
       }

@@ -107,3 +107,13 @@ export function scoreComponent(input: ComponentScoreInput): ComponentScore {
     feedback,
   }
 }
+
+/**
+ * A teacher may award only 0..max points per question / rubric criterion — no
+ * bonus, no negatives (product decision 2026-10-02). Shared by the grading
+ * route (server-side reject) and the grading inputs (inline hint, no save).
+ * Small epsilon so a float max like 1.5 accepts 1.5 typed as "1.5".
+ */
+export function isPointsInRange(points: number, max: number): boolean {
+  return Number.isFinite(points) && points >= 0 && points <= max + 1e-9
+}
