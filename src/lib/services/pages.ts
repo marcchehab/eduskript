@@ -119,21 +119,19 @@ async function loadPageForActor(pageId: string, userId: string, isAdmin: boolean
 }
 
 /**
- * Resolve the slug of the Site that actually owns this page's skript, for
- * cache-invalidation purposes. A teacher can own multiple Sites (schema
- * comment on Site: "extra sites are provisioned by a superadmin only"), so
- * falling back to the caller's PRIMARY site — the old behavior — silently
- * revalidates the wrong site's cache tags/paths whenever the edited page
- * lives on a non-primary site (e.g. a secondary site carrying a custom
- * domain). The real public page then stays stale until something else
- * happens to bust it.
+ * Resolve the slugs of every Site that publishes this page's skript, for
+ * cache-invalidation purposes. A teacher can own multiple Sites, and one
+ * skript can be pinned in several sites' PageLayouts at once (e.g. `mop-7`
+ * on both `marc` and `eduadmin`). Invalidating only one of them — the old
+ * findFirst behavior — left the other site's public page stale until a
+ * restart.
  *
- * Preference order: the skript's collection's site (most skripts have
- * exactly one collection membership) → the site whose PageLayout pins this
- * skript as a root item → the caller's primary site as a last-resort
- * fallback (orphaned skripts not yet placed anywhere).
+ * Collects: the sites of all the skript's collections + all sites whose
+ * PageLayout pins the skript. Falls back to the caller's primary site only
+ * when neither exists (orphaned skripts not yet placed anywhere).
+ * Cost: 2 queries + 1 more for the fallback.
  */
-/** The fields resolveOwningSiteSlug / invalidatePublicPageCaches read. */
+/** The fields resolveOwningSiteSlugs / invalidatePublicPageCaches read. */
 interface PageCacheScope {
   skriptId: string
   skript: {
@@ -142,31 +140,40 @@ interface PageCacheScope {
   }
 }
 
-async function resolveOwningSiteSlug(
+async function resolveOwningSiteSlugs(
   existingPage: PageCacheScope,
   userId: string
-): Promise<string | null> {
-  const collectionSiteId = existingPage.skript.collectionSkripts[0]?.collection?.siteId
-  if (collectionSiteId) {
-    const site = await prisma.site.findUnique({
-      where: { id: collectionSiteId },
+): Promise<string[]> {
+  const slugs = new Set<string>()
+
+  const collectionSiteIds = existingPage.skript.collectionSkripts
+    .map((cs) => cs.collection?.siteId)
+    .filter((id): id is string => !!id)
+  if (collectionSiteIds.length > 0) {
+    const sites = await prisma.site.findMany({
+      where: { id: { in: collectionSiteIds } },
       select: { slug: true },
     })
-    if (site) return site.slug
+    for (const site of sites) slugs.add(site.slug)
   }
 
-  const layoutItem = await prisma.pageLayoutItem.findFirst({
+  const layoutItems = await prisma.pageLayoutItem.findMany({
     where: { type: 'skript', contentId: existingPage.skriptId },
     select: { pageLayout: { select: { site: { select: { slug: true } } } } },
   })
-  if (layoutItem?.pageLayout.site?.slug) return layoutItem.pageLayout.site.slug
+  for (const item of layoutItems) {
+    if (item.pageLayout.site?.slug) slugs.add(item.pageLayout.site.slug)
+  }
 
-  const primarySite = await prisma.site.findFirst({
-    where: { userId },
-    orderBy: PRIMARY_SITE_ORDER,
-    select: { slug: true },
-  })
-  return primarySite?.slug ?? null
+  if (slugs.size === 0) {
+    const primarySite = await prisma.site.findFirst({
+      where: { userId },
+      orderBy: PRIMARY_SITE_ORDER,
+      select: { slug: true },
+    })
+    if (primarySite) slugs.add(primarySite.slug)
+  }
+  return [...slugs]
 }
 
 /**
@@ -184,28 +191,30 @@ export async function invalidatePublicPageCaches(
   page: { id: string; slug: string },
   userId: string
 ): Promise<void> {
-  const pageSlug = await resolveOwningSiteSlug(existingPage, userId)
+  const siteSlugs = await resolveOwningSiteSlugs(existingPage, userId)
 
-  if (pageSlug) {
-    log('Invalidating cache tags', {
-      pageSlug,
-      skriptSlug: existingPage.skript.slug,
-      page: page.slug,
-    })
-    revalidateTag(
-      CACHE_TAGS.pageBySlug(pageSlug, existingPage.skript.slug, page.slug),
-      { expire: 0 }
-    )
-    revalidateTag(
-      CACHE_TAGS.skriptBySlug(pageSlug, existingPage.skript.slug),
-      { expire: 0 }
-    )
+  if (siteSlugs.length > 0) {
+    for (const pageSlug of siteSlugs) {
+      log('Invalidating cache tags', {
+        pageSlug,
+        skriptSlug: existingPage.skript.slug,
+        page: page.slug,
+      })
+      revalidateTag(
+        CACHE_TAGS.pageBySlug(pageSlug, existingPage.skript.slug, page.slug),
+        { expire: 0 }
+      )
+      revalidateTag(
+        CACHE_TAGS.skriptBySlug(pageSlug, existingPage.skript.slug),
+        { expire: 0 }
+      )
 
-    revalidatePath(
-      `/${pageSlug}/${existingPage.skript.slug}/${page.slug}`
-    )
+      revalidatePath(
+        `/${pageSlug}/${existingPage.skript.slug}/${page.slug}`
+      )
 
-    revalidateTag(CACHE_TAGS.teacherContent(pageSlug), { expire: 0 })
+      revalidateTag(CACHE_TAGS.teacherContent(pageSlug), { expire: 0 })
+    }
 
     // Keyed on the page id rather than its slugs: the /p/{id} stable-link
     // redirect caches this page's canonical URL, and publishing, unpublishing
@@ -687,37 +696,8 @@ export async function restorePageVersionForUser(
     },
   })
 
-  // Same cache fan-out as updatePageForUser. Gated on the page's owning site
-  // existing (URL slug lives on Site); pages with no resolvable site have
-  // nothing to invalidate.
-  const pageSlug = await resolveOwningSiteSlug(existingPage, userId)
-
-  if (pageSlug) {
-    revalidateTag(
-      CACHE_TAGS.pageBySlug(pageSlug, existingPage.skript.slug, updatedPage.slug),
-      { expire: 0 },
-    )
-    revalidateTag(
-      CACHE_TAGS.skriptBySlug(pageSlug, existingPage.skript.slug),
-      { expire: 0 },
-    )
-    revalidatePath(
-      `/${pageSlug}/${existingPage.skript.slug}/${updatedPage.slug}`,
-    )
-    revalidateTag(CACHE_TAGS.teacherContent(pageSlug), { expire: 0 })
-    revalidatePath('/dashboard')
-
-    const orgMemberships = await prisma.organizationMember.findMany({
-      where: { userId },
-      select: { organization: { select: { site: { select: { slug: true } } } } },
-    })
-    for (const membership of orgMemberships) {
-      const orgSlug = membership.organization.site?.slug
-      if (orgSlug) {
-        revalidateTag(CACHE_TAGS.orgContent(orgSlug), { expire: 0 })
-      }
-    }
-  }
+  // Same cache fan-out as updatePageForUser.
+  await invalidatePublicPageCaches(existingPage, updatedPage, userId)
 
   return {
     page: updatedPage,

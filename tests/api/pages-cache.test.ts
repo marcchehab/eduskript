@@ -37,6 +37,7 @@ vi.mock('@/lib/prisma', () => ({
     },
     site: {
       findUnique: vi.fn(),
+      findMany: vi.fn(),
       findFirst: vi.fn(),
     },
     skript: {
@@ -48,7 +49,7 @@ vi.mock('@/lib/prisma', () => ({
       update: vi.fn(),
     },
     pageLayoutItem: {
-      findFirst: vi.fn(),
+      findMany: vi.fn(),
     },
     pageVersion: {
       create: vi.fn(),
@@ -123,10 +124,27 @@ describe('PATCH /api/pages/[id] — cache invalidation contract', () => {
     } as never)
     // Resolves via the page's actual owning site (Collection.siteId), not the
     // caller's primary site — see resolveOwningSiteSlug in src/lib/services/pages.ts.
-    vi.mocked(prisma.site.findUnique).mockResolvedValue({
-      slug: 'teacher',
-    } as never)
+    vi.mocked(prisma.site.findMany).mockResolvedValue([{ slug: 'teacher' }] as never)
+    vi.mocked(prisma.pageLayoutItem.findMany).mockResolvedValue([] as never)
     vi.mocked(prisma.organizationMember.findMany).mockResolvedValue([])
+  })
+
+  it('invalidates every site that pins the skript in its layout, not just the first', async () => {
+    vi.mocked(prisma.pageLayoutItem.findMany).mockResolvedValue([
+      { pageLayout: { site: { slug: 'teacher' } } },
+      { pageLayout: { site: { slug: 'second-site' } } },
+    ] as never)
+
+    await PATCH(buildPatchRequest({ content: '# New content' }), {
+      params: Promise.resolve({ id: 'page-123' }),
+    })
+
+    const tagCalls = vi.mocked(revalidateTag).mock.calls.map((c) => c[0])
+    expect(tagCalls).toContain('page:teacher:algebra-1:old-slug')
+    expect(tagCalls).toContain('page:second-site:algebra-1:old-slug')
+    expect(tagCalls).toContain('teacher-content:second-site')
+    // Collection site and layout site are the same 'teacher' → deduped
+    expect(tagCalls.filter((t) => t === 'page:teacher:algebra-1:old-slug')).toHaveLength(1)
   })
 
   it('fires the 5 static revalidateTag calls + 2 revalidatePath on content change', async () => {
