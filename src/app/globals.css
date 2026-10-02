@@ -579,6 +579,21 @@ article.prose-theme > div > :first-child {
   text-rendering: geometricPrecision !important;
 }
 
+/* Phone reflow: 5em (~95px) is wider than one word fits in a ~350px column, so
+   `overflow-wrap: break-word` from .prose-theme split words mid-letter. Cap the
+   size by viewport width and hyphenate (uses <html lang>) instead — only words
+   of 12+ chars, so normal titles wrap at spaces (hyphenate-limit-chars is
+   ignored by Safari, which may then hyphenate shorter words too). Words
+   still too long after hyphenation fall back to break-word. Paper mode and
+   wider screens are untouched (fixed 1280px paper keeps annotation geometry). */
+@media (max-width: 639px) {
+  .reflow-mode .prose-theme h1 {
+    font-size: min(5em, 18vw);
+    hyphens: auto;
+    hyphenate-limit-chars: 12 4 4;
+  }
+}
+
 .prose-theme h2 {
   @apply mb-4;
   position: relative;
