@@ -252,6 +252,47 @@ describe('Bulk Import API', () => {
         expect(prisma.classMembership.createMany).toHaveBeenCalled()
       })
 
+      it('pre-authorizes existing student accounts instead of enrolling them with consent', async () => {
+        // A student who left the class (or never joined) and is re-added by email
+        // must join and consent again; no membership, no recorded consent.
+        vi.mocked(prisma.user.findMany).mockResolvedValue([
+          { id: 'student-2', email: 'student2@example.com', name: 'S2', accountType: 'student', studentPseudonym: 'stored-pseudo-2' },
+        ] as never)
+        vi.mocked(prisma.classMembership.findMany).mockResolvedValue([])
+        vi.mocked(prisma.preAuthorizedStudent.findMany).mockResolvedValue([])
+        vi.mocked(prisma.preAuthorizedStudent.createMany).mockResolvedValue({ count: 1 })
+
+        const request = createPostRequest('class-1', { emails: ['student2@example.com'] })
+        const response = await POST(request, mockParams('class-1'))
+
+        expect(response.status).toBe(200)
+        const data = await response.json()
+        expect(data.directlyAdded).toBe(0)
+        expect(data.imported).toBe(1)
+        expect(data.directlyAddedEmails).toEqual([])
+        expect(prisma.classMembership.createMany).not.toHaveBeenCalled()
+        expect(prisma.preAuthorizedStudent.createMany).toHaveBeenCalledWith({
+          data: [{ classId: 'class-1', pseudonym: 'stored-pseudo-2' }],
+        })
+      })
+
+      it('returns the emails it enrolled directly so the client can drop them from pending', async () => {
+        vi.mocked(prisma.user.findMany).mockResolvedValue([
+          { id: 'teacher-2', email: 'Colleague@example.com', name: 'T2', accountType: 'teacher', studentPseudonym: null },
+        ] as never)
+        vi.mocked(prisma.classMembership.findMany).mockResolvedValue([])
+        vi.mocked(prisma.preAuthorizedStudent.findMany).mockResolvedValue([])
+        vi.mocked(prisma.classMembership.createMany).mockResolvedValue({ count: 1 })
+        vi.mocked(prisma.preAuthorizedStudent.deleteMany).mockResolvedValue({ count: 0 })
+
+        const request = createPostRequest('class-1', { emails: ['colleague@example.com', 'new@example.com'] })
+        const response = await POST(request, mockParams('class-1'))
+
+        const data = await response.json()
+        expect(data.directlyAdded).toBe(1)
+        expect(data.directlyAddedEmails).toEqual(['colleague@example.com'])
+      })
+
       it('should skip already-member users', async () => {
         vi.mocked(prisma.user.findMany).mockResolvedValue([
           { id: 'user-1', email: 'member@example.com', name: 'Member' },

@@ -88,12 +88,24 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // === FEATURE: Direct add existing users with clear emails ===
     // Check which emails belong to existing users (teachers or students with stored emails)
     // Use case-insensitive matching to handle legacy non-normalized emails
-    const existingUsers = await prisma.user.findMany({
+    const matchedUsers = await prisma.user.findMany({
       where: {
         email: { in: normalizedEmails, mode: 'insensitive' }
       },
-      select: { id: true, email: true, name: true }
+      select: { id: true, email: true, name: true, accountType: true, studentPseudonym: true }
     })
+
+    // Student accounts are never direct-added: that would enrol them with
+    // identityConsent=true without the student ever consenting (e.g. a student
+    // who left an anonymous class and is re-added by email). They go through
+    // the pseudonym flow below and must join + consent themselves.
+    // Only legacy/seed students have a stored email at all (see privacy-adapter).
+    const existingUsers = matchedUsers.filter(u => u.accountType !== 'student')
+    const studentPseudonymByEmail = new Map(
+      matchedUsers
+        .filter(u => u.accountType === 'student' && u.studentPseudonym)
+        .map(u => [u.email!.toLowerCase(), u.studentPseudonym!])
+    )
 
     // Normalize email keys for proper matching (database might have mixed-case emails)
     const existingEmailMap = new Map(existingUsers.map(u => [u.email!.toLowerCase(), u]))
@@ -154,7 +166,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const pseudonyms: string[] = []
 
     for (const email of emailsToPreAuthorize) {
-      const pseudonym = generatePseudonym(email)
+      // Prefer the account's stored pseudonym so the join route matches it
+      // (identical to generatePseudonym(email) for normally created students).
+      const pseudonym = studentPseudonymByEmail.get(email) ?? generatePseudonym(email)
       emailPseudonymMap[email] = `student_${pseudonym}@eduskript.local`
       pseudonyms.push(pseudonym)
     }
@@ -242,6 +256,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // Return statistics
     return NextResponse.json({
       directlyAdded: usersToDirectAdd.length,
+      // Lets the client drop these from its local "Pending Invitations" list;
+      // they never resolve via resolve-emails (no studentPseudonym).
+      directlyAddedEmails: usersToDirectAdd.map(u => u.email!.toLowerCase()),
       imported: pseudonymsToAdd.length,
       alreadyMembers: alreadyMemberUserIds.size + existingPseudonyms.size,
       alreadyPreAuthorized: preAuthPseudonyms.size,
