@@ -69,8 +69,8 @@ export default function JoinClassPage() {
 
   const handleJoinClass = async () => {
     if (!session) {
-      // Redirect to student signin with callback to this page
-      router.push(`/auth/signin/student?callbackUrl=${encodeURIComponent(window.location.pathname)}`)
+      // Redirect to signin (single page for teachers and students) with callback to this page
+      router.push(`/auth/signin?callbackUrl=${encodeURIComponent(window.location.pathname)}`)
       return
     }
 
