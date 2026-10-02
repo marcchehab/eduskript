@@ -13,7 +13,6 @@ import {
   Plus,
   Users,
   Link as LinkIcon,
-  Link2Off,
   Check,
   ChevronDown,
   ChevronRight,
@@ -779,28 +778,54 @@ export default function ClassesPage() {
                               <Upload className="w-4 h-4" />
                               Add Students
                             </Label>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                if (classItem.allowAnonymous) {
+                            {/* Invite links only make sense for anonymous classes. In
+                                identity-required classes, added students get the
+                                invitation automatically on sign-in (ClassInvitationModal). */}
+                            {classItem.allowAnonymous && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={(e) => {
+                                  e.stopPropagation()
                                   copyInviteLink(classItem.inviteCode)
-                                }
-                              }}
-                              disabled={!classItem.allowAnonymous}
-                              className={!classItem.allowAnonymous ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}
-                              title={classItem.allowAnonymous ? 'Copy invite link' : 'Invite links are disabled for classes that require identity'}
-                            >
-                              {copiedCode === classItem.inviteCode ? (
-                                <Check className="w-4 h-4 text-green-600" />
-                              ) : classItem.allowAnonymous ? (
-                                <LinkIcon className="w-4 h-4" />
-                              ) : (
-                                <Link2Off className="w-4 h-4" />
-                              )}
-                            </Button>
+                                }}
+                                title="Copy invite link"
+                              >
+                                {copiedCode === classItem.inviteCode ? (
+                                  <Check className="w-4 h-4 text-green-600" />
+                                ) : (
+                                  <LinkIcon className="w-4 h-4" />
+                                )}
+                              </Button>
+                            )}
                           </div>
+                          {!classItem.allowAnonymous && (
+                            <div className="rounded-md border bg-muted/40 p-3 text-sm flex items-start justify-between gap-3">
+                              <p className="text-muted-foreground">
+                                This class requires identity, so there is no invite link. Add your
+                                students&apos; school emails below, then tell them to sign in with
+                                their school account — the class invitation pops up automatically.
+                              </p>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="shrink-0"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  navigator.clipboard.writeText(`${window.location.origin}/auth/signin`)
+                                  setCopiedCode(`signin-${classItem.id}`)
+                                  setTimeout(() => setCopiedCode(null), 2000)
+                                }}
+                              >
+                                {copiedCode === `signin-${classItem.id}` ? (
+                                  <Check className="w-4 h-4 mr-1 text-green-600" />
+                                ) : (
+                                  <LinkIcon className="w-4 h-4 mr-1" />
+                                )}
+                                Copy sign-in link
+                              </Button>
+                            </div>
+                          )}
                           <Textarea
                             value={emailInputs[classItem.id] || ''}
                             onChange={(e) =>
@@ -838,7 +863,9 @@ export default function ClassesPage() {
 
                           {students.length === 0 ? (
                             <p className="text-sm text-muted-foreground text-center py-4">
-                              No students enrolled yet. Add student emails above or share the invite link.
+                              {classItem.allowAnonymous
+                                ? 'No students enrolled yet. Add student emails above or share the invite link.'
+                                : 'No students enrolled yet. Add student emails above; students join when they sign in.'}
                             </p>
                           ) : (
                             <div className="border rounded-lg overflow-hidden">
