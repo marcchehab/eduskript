@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
+import { useUnsavedChangesGuard } from '@/components/dashboard/unsaved-changes-guard'
 import { CollapsibleDrawer } from '@/components/ui/collapsible-drawer'
 import { PublishToggle } from '@/components/dashboard/publish-toggle'
 import { VersionHistory } from '@/components/dashboard/version-history'
@@ -394,10 +395,11 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
     setTimeout(() => setSebLinkCopied(false), 2000)
   }
 
-  const handleSave = useCallback(async () => {
+  // Resolves true when the page was saved (used by the unsaved-changes guard).
+  const handleSave = useCallback(async (): Promise<boolean> => {
     if (!title.trim() || !slug.trim()) {
       alert.showError('Title and slug are required')
-      return
+      return false
     }
 
     setIsSaving(true)
@@ -431,8 +433,10 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
         if (slug !== originalSlug) {
           const newUrl = `/dashboard/skripts/${skript.slug}/pages/${slug}/edit`
           router.push(newUrl)
-          return // Don't continue with other updates since we're navigating
+          return true // Don't continue with other updates since we're navigating
         }
+        setIsSaving(false)
+        return true
       } else {
         const data = await response.json()
         alert.showError(data.error || 'Failed to save page')
@@ -442,6 +446,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
       alert.showError('Failed to save page')
     }
     setIsSaving(false)
+    return false
   }, [title, slug, description, pageType, examSettings, presentationPublic, page.id, page.slug, skript.slug, router, loadVersions, alert, completeStep])
 
   // Handle version restoration
@@ -468,6 +473,9 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
       alert.showError('Failed to restore version')
     }
   }
+
+  // Ask Save / Discard / Cancel on in-app link clicks, browser warning on unload.
+  const unsavedGuard = useUnsavedChangesGuard({ isDirty: hasUnsavedChanges, onSave: handleSave })
 
   // Auto-save every 30 seconds if there are unsaved changes
   useEffect(() => {
@@ -1068,6 +1076,8 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
         cancelText={alert.cancelText}
         destructive={alert.destructive}
       />
+
+      {unsavedGuard.dialog}
 
       {/* Move page to another skript dialog */}
       <Dialog open={movePageId !== null} onOpenChange={(open) => { if (!open) setMovePageId(null) }}>
