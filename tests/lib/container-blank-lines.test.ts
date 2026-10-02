@@ -96,4 +96,10 @@ describe('container tags are blank-line independent', () => {
       expect(out).not.toMatch(/<p[^>]*>\s*<answer/)
     }
   })
+
+  it('keeps an inline <nobr> in place inside <center> and parses its markdown', async () => {
+    const out = await html('<center>Aufgewacht ist nur einer: <nobr>**Der Wartungsroboter MOP-7**</nobr>.</center>')
+    expect(out).toMatch(/Aufgewacht ist nur einer: <nobr><strong>Der Wartungsroboter MOP-7<\/strong><\/nobr>\./)
+    expect(out).not.toContain('**')
+  })
 })

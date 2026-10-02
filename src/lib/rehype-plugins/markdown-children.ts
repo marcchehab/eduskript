@@ -35,6 +35,7 @@ const MARKDOWN_CHILDREN_ELEMENTS = new Set([
   'right',
   'answer',
   'banner',
+  'nobr',
 ])
 
 /**
@@ -42,7 +43,19 @@ const MARKDOWN_CHILDREN_ELEMENTS = new Set([
  * reparseOrdered, and a lone paragraph is unwrapped so `<answer>` text keeps
  * sitting on the radio row and `<banner>` stays a single bar.
  */
-const INLINE_CONTENT_ELEMENTS = new Set(['answer', 'banner'])
+const INLINE_CONTENT_ELEMENTS = new Set(['answer', 'banner', 'nobr'])
+
+/**
+ * Inline HTML an author may write inside a block container's text, e.g.
+ * `<center>… <nobr>**MOP-7**</nobr>.</center>`. When a container's text sits
+ * next to one of these, it is re-parsed in order (reparseOrdered) instead of
+ * text-only: the text-only path would move the element in front of all the
+ * re-parsed text.
+ */
+const PHRASING_TAGS = new Set([
+  'nobr', 'span', 'a', 'strong', 'b', 'em', 'i', 'u', 's', 'code', 'kbd',
+  'mark', 'small', 'sub', 'sup', 'abbr', 'br', 'img',
+])
 
 /**
  * `<question>` needs its own path. Its literal text child is the prompt, and
@@ -89,7 +102,10 @@ export function rehypeMarkdownChildren() {
     // Inline containers keep element order (remark may already have parsed a
     // link or formula when the tag was written inline) and end up with inline
     // nodes rather than a paragraph.
-    if (INLINE_CONTENT_ELEMENTS.has(node.tagName.toLowerCase())) {
+    const inlineChild = node.children.some(
+      (c) => c.type === 'element' && PHRASING_TAGS.has(c.tagName.toLowerCase())
+    )
+    if (INLINE_CONTENT_ELEMENTS.has(node.tagName.toLowerCase()) || inlineChild) {
       node.children = await reparseOrdered(node.children)
       return
     }
