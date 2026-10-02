@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { QuestSpotlight } from '@/components/onboarding/quest-spotlight'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
-import { Eye, EyeOff, Pencil, Code, Bold, Italic, Heading, MessageSquare, Heading1, Heading2, Heading3, List, ListOrdered, Link, Palette, Highlighter, Circle, Wand2, ChevronDown, FilePen, Minus, Plus, CircleHelp, TextQuote, Puzzle, Sigma, AlignLeft, AlignCenter, AlignRight, Compass, SeparatorHorizontal, ChartSpline, Table, Image as ImageIcon, Film, FileText, Columns2, Columns3, MoveHorizontal, Pin, AppWindow, Atom, FlaskConical, Terminal, Sparkles, MousePointerClick, ClipboardCheck, Music, Megaphone, Orbit } from 'lucide-react'
+import { Eye, EyeOff, Pencil, Code, Bold, Italic, Strikethrough, Heading, MessageSquare, Heading1, Heading2, Heading3, List, ListOrdered, Link, Palette, Highlighter, Circle, Wand2, ChevronDown, FilePen, Minus, Plus, CircleHelp, TextQuote, Puzzle, Sigma, AlignLeft, AlignCenter, AlignRight, Compass, SeparatorHorizontal, ChartSpline, Table, Image as ImageIcon, Film, FileText, Columns2, Columns3, MoveHorizontal, Pin, AppWindow, Atom, FlaskConical, Terminal, Sparkles, MousePointerClick, ClipboardCheck, Music, Megaphone, Orbit } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,8 +32,7 @@ import { Ribbon, RibbonGroup, RibbonBigButton, RibbonSmallButton, RibbonSmallSta
 import { createMarkdownCompletions, pageLinkCompletions, phetSimCompletions } from './markdown-completions'
 import type { EditorView } from '@codemirror/view'
 import type { ViewUpdate } from '@codemirror/view'
-import { fromMarkdown } from 'mdast-util-from-markdown'
-import type { Strong, Emphasis, Parent } from 'mdast'
+import { toggleInline, toggleStrikethrough, insertLink as insertLinkEdit, type FormatEdit } from './markdown-format-commands'
 import type { VideoInfo } from '@/lib/skript-files'
 import { classifyPaste, type PasteMenuOption } from '@/lib/paste-rules'
 import { planBlockInsert } from '@/lib/block-insert'
@@ -233,6 +232,9 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   onPasteMenuRef.current = onPasteMenu
   const onPasteImageUploadRef = useRef(onPasteImageUpload)
   onPasteImageUploadRef.current = onPasteImageUpload
+  // Same pattern for the formatting shortcuts (keymap built once at init);
+  // filled in below where the format helpers are defined.
+  const formatShortcutsRef = useRef<Record<string, () => void>>({})
 
   // Calculate visibility based on width
   const showEditor = editorWidth > 0
@@ -688,7 +690,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
         // Try to import CodeMirror modules one by one with better error handling
         const { basicSetup } = await import('codemirror')
         const { EditorView, keymap } = await import('@codemirror/view')
-        const { EditorState } = await import('@codemirror/state')
+        const { EditorState, Prec } = await import('@codemirror/state')
         const { indentWithTab } = await import('@codemirror/commands')
 
         // Toggle "> " prefix on all selected lines (Ctrl/Cmd+Shift+.)
@@ -758,6 +760,14 @@ const CodeMirrorEditor = function CodeMirrorEditor({
           extensions: [
             basicSetup,
             keymap.of([indentWithTab, { key: 'Mod-Shift-.', run: toggleBlockquoteCmd }]), // Tab + blockquote toggle
+            // Word-style formatting shortcuts. Prec.high: basicSetup binds
+            // Mod-i to selectParentSyntax. Handled keys are preventDefault'ed,
+            // so the browser's Ctrl+B/I/E/K (bookmarks, page info, search bar)
+            // don't fire while the editor has focus.
+            Prec.high(keymap.of(['Mod-b', 'Mod-i', 'Mod-e', 'Mod-Shift-x', 'Mod-k'].map(key => ({
+              key,
+              run: () => { formatShortcutsRef.current[key]?.(); return true },
+            })))),
             markdownExtension,
             autocompletion({
               override: [
@@ -1370,21 +1380,6 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   }
 
   // Formatting helpers
-  const wrapSelection = (prefix: string, suffix: string = prefix) => {
-    if (editorViewRef.current && !useSimpleEditor) {
-      const view = editorViewRef.current
-      const { from, to } = view.state.selection.main
-      const selectedText = view.state.doc.sliceString(from, to)
-      const wrappedText = `${prefix}${selectedText}${suffix}`
-
-      view.dispatch({
-        changes: { from, to, insert: wrappedText },
-        selection: { anchor: from + prefix.length, head: to + prefix.length }
-      })
-      view.focus()
-    }
-  }
-
   const insertAtCursor = (text: string) => {
     if (editorViewRef.current && !useSimpleEditor) {
       const view = editorViewRef.current
@@ -1475,141 +1470,19 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   const insertCta = () => insertBlockTemplate('<cta href="https://eduskript.org">Visit Eduskript</cta>\n')
   const insertAudio = () => insertBlockTemplate('<audio controls src=""></audio>\n')
 
-  /**
-   * Find an enclosing emphasis or strong node at the given cursor position.
-   * Returns the node and its absolute start/end offsets if found.
-   */
-  const findEnclosingFormatNode = (
-    doc: string,
-    cursorPos: number,
-    nodeType: 'strong' | 'emphasis'
-  ): { node: Strong | Emphasis; start: number; end: number } | null => {
-    try {
-      const tree = fromMarkdown(doc)
-
-      // Recursively search for the node type containing the cursor
-      const findNode = (
-        parent: Parent,
-        target: number
-      ): { node: Strong | Emphasis; start: number; end: number } | null => {
-        for (const child of parent.children) {
-          if (!child.position) continue
-
-          const start = child.position.start.offset ?? 0
-          const end = child.position.end.offset ?? 0
-
-          // Check if cursor is within this node's range
-          if (target >= start && target <= end) {
-            // If this is the node type we're looking for, return it
-            if (child.type === nodeType) {
-              return { node: child as Strong | Emphasis, start, end }
-            }
-
-            // If this node has children, search deeper
-            if ('children' in child) {
-              const found = findNode(child as Parent, target)
-              if (found) return found
-            }
-          }
-        }
-        return null
-      }
-
-      return findNode(tree, cursorPos)
-    } catch {
-      return null
-    }
-  }
-
-  /**
-   * Expand cursor position to word boundaries if cursor is inside a word.
-   * Returns original from/to if cursor is at a word boundary or there's a selection.
-   */
-  const expandToWord = (doc: string, from: number, to: number): { from: number; to: number } => {
-    // If there's already a selection, don't expand
-    if (from !== to) return { from, to }
-
-    const pos = from
-
-    // Check if cursor is inside a word (has word chars on both sides)
-    const charBefore = pos > 0 ? doc[pos - 1] : ''
-    const charAfter = pos < doc.length ? doc[pos] : ''
-
-    // Word character pattern (letters, numbers, unicode word chars)
-    const isWordChar = (c: string) => /\w/.test(c) || /[\u00C0-\u024F\u1E00-\u1EFF]/.test(c)
-
-    // Only expand if cursor is truly inside a word (word chars on both sides)
-    if (!isWordChar(charBefore) || !isWordChar(charAfter)) {
-      return { from, to }
-    }
-
-    // Find word start
-    let wordStart = pos
-    while (wordStart > 0 && isWordChar(doc[wordStart - 1])) {
-      wordStart--
-    }
-
-    // Find word end
-    let wordEnd = pos
-    while (wordEnd < doc.length && isWordChar(doc[wordEnd])) {
-      wordEnd++
-    }
-
-    return { from: wordStart, to: wordEnd }
-  }
-
-  /**
-   * Toggle bold/italic formatting. If cursor is inside the formatting, remove it.
-   * Otherwise, wrap the selection with the formatting markers.
-   * If cursor is inside a word with no selection, formats the entire word.
-   */
-  const toggleFormat = (marker: string, nodeType: 'strong' | 'emphasis') => {
+  // Apply a pure edit from markdown-format-commands.ts to the main selection
+  const applyFormat = (edit: (doc: string, from: number, to: number) => FormatEdit) => {
     if (!editorViewRef.current || useSimpleEditor) return
-
     const view = editorViewRef.current
-    let { from, to } = view.state.selection.main
-    const doc = view.state.doc.toString()
-
-    // Check if cursor/selection is inside an existing format node
-    const enclosing = findEnclosingFormatNode(doc, from, nodeType)
-
-    if (enclosing) {
-      // Remove the formatting by extracting the inner content
-      const markerLen = marker.length
-      const innerStart = enclosing.start + markerLen
-      const innerEnd = enclosing.end - markerLen
-      const innerContent = doc.slice(innerStart, innerEnd)
-
-      // Calculate new cursor position after removal
-      // If cursor was inside the formatted region, adjust it
-      let newCursorPos = from - markerLen
-      if (newCursorPos < enclosing.start) newCursorPos = enclosing.start
-
-      view.dispatch({
-        changes: { from: enclosing.start, to: enclosing.end, insert: innerContent },
-        selection: { anchor: newCursorPos }
-      })
-    } else {
-      // Expand to word if cursor is inside a word with no selection
-      const expanded = expandToWord(doc, from, to)
-      from = expanded.from
-      to = expanded.to
-
-      // Wrap selection with formatting
-      const selectedText = doc.slice(from, to)
-      const wrappedText = `${marker}${selectedText}${marker}`
-
-      view.dispatch({
-        changes: { from, to, insert: wrappedText },
-        selection: { anchor: from + marker.length, head: to + marker.length }
-      })
-    }
-
+    const { from, to } = view.state.selection.main
+    view.dispatch({ ...edit(view.state.doc.toString(), from, to), userEvent: 'input' })
     view.focus()
   }
 
-  const insertBold = () => toggleFormat('**', 'strong')
-  const insertItalic = () => toggleFormat('*', 'emphasis')
+  const insertBold = () => applyFormat((d, f, t) => toggleInline(d, f, t, 'strong'))
+  const insertItalic = () => applyFormat((d, f, t) => toggleInline(d, f, t, 'emphasis'))
+  const insertInlineCode = () => applyFormat((d, f, t) => toggleInline(d, f, t, 'inlineCode'))
+  const insertStrikethrough = () => applyFormat(toggleStrikethrough)
   // Set the current line's heading level. Replaces an existing heading
   // marker; same level toggles back to plain text.
   const insertHeading = (level: 1 | 2 | 3 = 2) => {
@@ -1693,7 +1566,14 @@ const CodeMirrorEditor = function CodeMirrorEditor({
 
   const insertBulletList = () => toggleList('bullet')
   const insertNumberedList = () => toggleList('numbered')
-  const insertLink = () => wrapSelection('[', '](url)')
+  const insertLink = () => applyFormat(insertLinkEdit)
+  formatShortcutsRef.current = {
+    'Mod-b': insertBold,
+    'Mod-i': insertItalic,
+    'Mod-e': insertInlineCode,
+    'Mod-Shift-x': insertStrikethrough,
+    'Mod-k': insertLink,
+  }
 
   // Wrap the current line(s) in an HTML alignment block:
   //
@@ -2006,6 +1886,8 @@ const CodeMirrorEditor = function CodeMirrorEditor({
                     <RibbonSmallRow>
                       <RibbonSmallButton icon={<Bold />} onClick={insertBold} title="Bold (Ctrl+B)" />
                       <RibbonSmallButton icon={<Italic />} onClick={insertItalic} title="Italic (Ctrl+I)" />
+                      <RibbonSmallButton icon={<Strikethrough />} onClick={insertStrikethrough} title="Strikethrough (Ctrl+Shift+X)" />
+                      <RibbonSmallButton icon={<Code />} onClick={insertInlineCode} title="Inline code (Ctrl+E)" />
                     </RibbonSmallRow>
                     <RibbonSmallRow>
                       <CustomColorPopover
@@ -2136,7 +2018,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
                   <RibbonBigButton icon={<FileText />} label="PDF" title="Embed a PDF (existing or upload)" onClick={() => setPdfDialogOpen(true)} />
                 </RibbonGroup>
                 <RibbonGroup caption="Links">
-                  <RibbonBigButton icon={<Link />} label="Link" onClick={insertLink} />
+                  <RibbonBigButton icon={<Link />} label="Link" title="Insert link (Ctrl+K)" onClick={insertLink} />
                   <RibbonBigButton icon={<MousePointerClick />} label="Button" title="Call-to-action link styled as a button" onClick={insertCta} />
                 </RibbonGroup>
                 <RibbonGroup caption="Interactive">
