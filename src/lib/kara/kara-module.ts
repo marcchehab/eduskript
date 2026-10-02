@@ -3,15 +3,29 @@
  * as `kara.py` for each Kara run (see runKaraCode in code-editor/index.tsx).
  *
  * The whole program runs to completion first; `_run` records a trace that the
- * main thread replays step by step (forward and backward). A step is one
- * executed line of the student's code (sys.settrace 'line' events on frames
- * compiled as `<student>`), carrying Kara's position, cell changes, sensor
- * results and printed text produced while that line ran. Lines in imported
- * helper modules are not traced; their Kara actions attach to the calling line.
+ * main thread replays step by step (forward and backward). A step opens on
+ * every executed line of the student's code (sys.settrace 'line' events on
+ * frames compiled as `<student>`) and carries Kara's position, cell changes,
+ * sensor results and printed text produced while it was current.
  *
- * Limits: MAX_STEPS lines, then StepLimitError (catches `while True:` loops;
- * the trace up to the limit stays replayable). settrace slows Python down
- * (~several x), irrelevant at this scale.
+ * One action per step: every action (move, turn, put, remove, press, read)
+ * that finds the current step already holding an action opens a new step with
+ * the same line `l` (`_act`). So `drei_vor()` from befehle.py replays as 3
+ * steps on the call line (`sub` 1..3), and `move(); move()` on one line as 2 —
+ * the line marker stays on the call (= step over). Lines in imported helper
+ * modules are not traced; an action made inside one records the innermost
+ * non-kara frame as `f` (file name), `fl` (line), `fn` (function name).
+ * `sub` is only set when a line made more than one action (1-based, the first
+ * step gets `sub: 1` retroactively). Sensors, prints and events stay on the
+ * step that is current when they happen (e.g. a sensor after the 2nd move of a
+ * line sits on that line's 2nd step).
+ *
+ * Limits: MAX_STEPS steps, then StepLimitError (catches `while True:` loops,
+ * also action loops inside helper modules; the trace up to the limit stays
+ * replayable). A helper-module loop that makes no action (`while True: pass`
+ * in befehle.py) opens no steps and is NOT caught. settrace slows Python down
+ * (~several x), irrelevant at this scale. The frame walk in `_act` is
+ * O(call depth) per action.
  *
  * Level result (only when the program did not raise): `goal` checks the
  * world after the run; `energy` counts actions, `memory` counts statements
@@ -110,8 +124,26 @@ def _sensed(name, result):
     return result
 
 
+_THIS_FILE = _sys._getframe().f_code.co_filename
+
+
 def _act():
+    """Count one action and give it its own step (see the header in kara-module.ts)."""
     _w.energy += 1
+    step = _cur_step()
+    if step.get('a'):
+        sub = step.setdefault('sub', 1)
+        _open_step(step['l'])
+        _cur['sub'] = sub + 1
+    _cur['a'] = True
+    # Innermost frame outside kara.py: the student's file or a helper module.
+    f = _sys._getframe(1)
+    while f is not None and f.f_code.co_filename == _THIS_FILE:
+        f = f.f_back
+    if f is not None and f.f_code.co_filename != _STUDENT:
+        _cur['f'] = f.f_code.co_filename.replace(chr(92), '/').rsplit('/', 1)[-1]
+        _cur['fl'] = f.f_lineno
+        _cur['fn'] = f.f_code.co_name
 
 
 # ─── Actions ─────────────────────────────────────────────
@@ -388,6 +420,7 @@ def _run(student_path='__kara_student.py', world_path='__kara_world.json'):
         _sys.stdout = old_out
     mask = ~(_DOORS | _LASERS)
     for step in _steps:
+        step.pop('a', None)
         for m in step.get('m', []):
             m[2] &= mask
             m[3] &= mask

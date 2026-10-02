@@ -269,6 +269,18 @@ export interface KaraStep {
   o?: string
   /** Story events during the step. */
   v?: KaraEvent[]
+  /**
+   * 1-based index of this step's action among the actions of one execution
+   * of line `l`; only set when that execution made more than one action
+   * (e.g. `drei_vor()` → steps with sub 1, 2, 3 on the call line).
+   */
+  sub?: number
+  /** Helper module the action ran in (e.g. 'befehle.py'); absent for the student's own file. */
+  f?: string
+  /** Line in `f`. */
+  fl?: number
+  /** Function in `f` the action ran in ('<module>' at import time). */
+  fn?: string
 }
 
 export interface KaraTrace {
@@ -304,6 +316,8 @@ export interface KaraReplay {
   /** All printed text; outputEnd[p] = its length after p steps. */
   output: string
   outputEnd: number[]
+  /** subTotal[i] = number of steps in step i's `sub` run (0 when step i has no `sub`). */
+  subTotal: number[]
 }
 
 export function buildReplay(world: KaraWorld, trace: KaraTrace): KaraReplay {
@@ -317,7 +331,14 @@ export function buildReplay(world: KaraWorld, trace: KaraTrace): KaraReplay {
     if (step.o) output += step.o
     outputEnd.push(output.length)
   }
-  return { length: trace.steps.length, kara, output, outputEnd }
+  const steps = trace.steps
+  const subTotal: number[] = new Array(steps.length).fill(0)
+  for (let i = steps.length - 1; i >= 0; i--) {
+    const s = steps[i], next = steps[i + 1]
+    if (!s.sub) continue
+    subTotal[i] = next && next.l === s.l && next.sub === s.sub + 1 ? subTotal[i + 1] : s.sub
+  }
+  return { length: steps.length, kara, output, outputEnd, subTotal }
 }
 
 /** Mutate `cells` from the state after `from` steps to the state after `to` steps. */

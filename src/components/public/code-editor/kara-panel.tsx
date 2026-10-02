@@ -8,9 +8,14 @@
  * editor via `onLine` (see kara-line-extension.ts), which also shows the
  * step's sensor results and the error message inline in the code.
  *
- * Position p ∈ [0, steps]: the world after p executed lines (0 = initial).
- * Canvas-rendered; the only animation is Kara sliding one cell on a single
- * forward step. World tiles: src/lib/kara/kara-tiles.ts. Kara sprite:
+ * Position p ∈ [0, steps]: the world after p steps (0 = initial). A step is
+ * one executed line or one action — a line that makes several actions (a
+ * toolbox call like `drei_vor()`) replays as several steps on the same line
+ * (step over; see kara-module.ts). The status shows `line 5 · 2/3`, and the
+ * editor note names the helper frame (`drei_vor() · befehle.py:3`).
+ * Canvas-rendered; on a single forward step Kara slides one cell or turns
+ * (horizontal squash between the two direction sprites, ~120 ms). Any other
+ * jump (scrubbing, torus wrap) is drawn without animation. World tiles: src/lib/kara/kara-tiles.ts. Kara sprite:
  * built-in default (4 directions); custom per-student sprites are not
  * implemented yet — `sprites` would take 4 image URLs.
  *
@@ -43,6 +48,7 @@ import {
   type KaraGoal,
   type KaraMessage,
   type KaraPos,
+  type KaraStep,
   type KaraTrace,
   type KaraWorld,
 } from '@/lib/kara/world'
@@ -111,6 +117,7 @@ function drawWorld(
   tile: number,
   tileset: KaraTileset,
   sprites: HTMLImageElement[] | null,
+  squashX = 1,
 ) {
   const dpr = window.devicePixelRatio || 1
   const w = world.cols * tile
@@ -130,11 +137,20 @@ function drawWorld(
   const sprite = sprites?.[kara.d]
   if (sprite && sprite.complete && sprite.naturalWidth) {
     const size = tile * 0.92
-    ctx.drawImage(sprite, kara.x * tile + (tile - size) / 2, kara.y * tile + (tile - size) / 2, size, size)
+    // squashX < 1: mid-turn (the sprites are side views, so a turn reads as a squash).
+    const w = size * Math.max(0.05, squashX)
+    ctx.drawImage(sprite, kara.x * tile + (tile - w) / 2, kara.y * tile + (tile - size) / 2, w, size)
   }
 }
 
 // ─── Component ────────────────────────────────────────────────────────────
+
+/** Editor note for an action made inside a helper module: 'drei_vor() · befehle.py:3'. */
+function helperFrame(step: KaraStep): string | undefined {
+  if (!step.f) return undefined
+  const fn = step.fn && !step.fn.startsWith('<') ? `${step.fn}() · ` : ''
+  return `${fn}${step.f}${step.fl ? `:${step.fl}` : ''}`
+}
 
 const SPEEDS = [1, 2, 5, 10, 25, 100] // steps per second
 
@@ -380,11 +396,12 @@ export function KaraPanel({ world, trace, maxTile, maxHeight, onLine, config, as
       const line = trace.error.line ?? last?.l
       // The failing line's own sensor calls stay visible next to the error.
       const sensors = last && last.l === line ? last.s : undefined
-      onLine(line ? { line, sensors, error: trace.error.message } : null)
+      onLine(line ? { line, sensors, error: trace.error.message, via: last && last.l === line ? helperFrame(last) : undefined } : null)
     } else if (pos === 0) {
       onLine(null)
     } else {
-      onLine({ line: steps[pos - 1].l, sensors: steps[pos - 1].s })
+      const s = steps[pos - 1]
+      onLine({ line: s.l, sensors: s.s, via: helperFrame(s) })
     }
   }, [pos, total, trace, steps, onLine])
 
@@ -396,7 +413,7 @@ export function KaraPanel({ world, trace, maxTile, maxHeight, onLine, config, as
     return Math.max(8, Math.min(maxTile, t))
   }, [width, height, fill, world.cols, world.rows, maxTile, maxHeight])
 
-  // Draw (with a one-cell slide on single forward steps).
+  // Draw (one-cell slide or turn on single forward steps).
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -414,16 +431,23 @@ export function KaraPanel({ world, trace, maxTile, maxHeight, onLine, config, as
     drawnRef.current = { pos, trace }
 
     const cells = state.cells
-    if (!from || Math.abs(from.x - to.x) + Math.abs(from.y - to.y) !== 1) {
+    const slide = !!from && Math.abs(from.x - to.x) + Math.abs(from.y - to.y) === 1
+    const turn = !!from && from.x === to.x && from.y === to.y && from.d !== to.d
+    if (!from || (!slide && !turn)) {
       drawWorld(canvas, world, cells, to, tile, tileset, sprites)
       return
     }
-    const duration = Math.min(250, 700 / speed)
+    const duration = slide ? Math.min(250, 700 / speed) : Math.min(120, 500 / speed)
     const start = performance.now()
     let raf = 0
     const frame = (now: number) => {
       const t = Math.min(1, (now - start) / duration)
-      drawWorld(canvas, world, cells, { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t, d: to.d }, tile, tileset, sprites)
+      if (slide) {
+        drawWorld(canvas, world, cells, { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t, d: to.d }, tile, tileset, sprites)
+      } else {
+        // First half: old sprite narrows; second half: new sprite widens.
+        drawWorld(canvas, world, cells, t < 0.5 ? from : to, tile, tileset, sprites, Math.abs(1 - 2 * t))
+      }
       if (t < 1) raf = requestAnimationFrame(frame)
     }
     raf = requestAnimationFrame(frame)
@@ -491,9 +515,10 @@ export function KaraPanel({ world, trace, maxTile, maxHeight, onLine, config, as
           className="flex-1 min-w-24 accent-primary"
           aria-label="Step"
         />
-        <span className="min-w-[11rem] text-right tabular-nums text-muted-foreground whitespace-nowrap">
+        <span className="min-w-[13rem] text-right tabular-nums text-muted-foreground whitespace-nowrap">
           {trace ? `Step ${pos} / ${total}` : 'Press Run'}
           {pos > 0 && steps[pos - 1] ? ` · line ${steps[pos - 1].l}` : ''}
+          {pos > 0 && steps[pos - 1]?.sub && replay ? ` · ${steps[pos - 1].sub}/${replay.subTotal[pos - 1]}` : ''}
         </span>
         {trace && pos === total && config.goals.length > 0 && !trace.error && (
           <span className="flex items-center" title={`Memory ${trace.memory}${config.memory ? `/${config.memory}` : ''} · Energy ${trace.energy}${config.energy ? `/${config.energy}` : ''}`}>
