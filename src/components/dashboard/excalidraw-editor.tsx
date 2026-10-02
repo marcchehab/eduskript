@@ -12,7 +12,7 @@ import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { useIsFreeTeacher } from '@/hooks/use-billing'
 import { Dialog, DialogPortal, DialogOverlay, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
-import { X, Save, Sparkles } from 'lucide-react'
+import { X, Save, Sparkles, Sun, Moon } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import { useTheme } from 'next-themes'
 import '@excalidraw/excalidraw/index.css'
@@ -141,6 +141,10 @@ export function ExcalidrawEditor({
   // Get the actual theme (resolve 'system' to actual theme)
   const resolvedTheme = theme === 'system' ? systemTheme : theme
   const isDark = resolvedTheme === 'dark'
+  // Canvas theme, independent of the app theme (e.g. edit a `lightonly`
+  // drawing on a light canvas while the app is dark). Only affects the
+  // editor view; both light and dark SVGs are exported on save regardless.
+  const [canvasDark, setCanvasDark] = useState(isDark)
 
   useEffect(() => {
     setMounted(true)
@@ -158,10 +162,11 @@ export function ExcalidrawEditor({
       lastSavedNameRef.current = initialData?.name
       setExcalidrawAPI(null) // Clear old API reference to prevent using stale API
       setShowAIPanel(false)
+      setCanvasDark(isDark)
       setAIPrompt('')
     }
     prevOpenRef.current = open
-  }, [open, initialData, suggestedName])
+  }, [open, initialData, suggestedName, isDark])
 
   const runGenerate = useCallback(async () => {
     const prompt = aiPrompt.trim()
@@ -397,6 +402,15 @@ export function ExcalidrawEditor({
                     </Button>
                   )}
                   <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setCanvasDark(v => !v)}
+                    title={canvasDark ? 'Show light canvas' : 'Show dark canvas'}
+                    aria-label="Toggle canvas theme"
+                  >
+                    {canvasDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                  </Button>
+                  <Button
                     onClick={handleSave}
                     disabled={isSaving || !drawingName.trim()}
                   >
@@ -448,7 +462,7 @@ export function ExcalidrawEditor({
                     appState: initialData.appState,
                     files: initialData.files,  // Include embedded images
                   } : undefined) as never}
-                  theme={isDark ? 'dark' : 'light'}
+                  theme={canvasDark ? 'dark' : 'light'}
                 />
               )}
             </div>
