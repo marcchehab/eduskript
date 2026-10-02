@@ -21,6 +21,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Check, X, Clock, RotateCcw, Trash2, Wand2, Loader2, AlertTriangle, Plus, Regex, Lock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { extractCriterionRegex, runCriterionCheck } from '@/lib/scoring/regex-check'
+import { isPointsInRange } from '@/lib/scoring/score-component'
 import { useComponentReview, type ComponentScoreSource } from '@/contexts/exam-review-context'
 import { createLogger } from '@/lib/logger'
 
@@ -134,8 +135,10 @@ function CriterionRow({
     const norm = raw.trim()
     if (norm === ptsStr) return
     if (norm === '') onSet({ points: null })
-    else { const v = Number(norm); if (Number.isFinite(v)) onSet({ points: v }) }
+    else { const v = Number(norm); if (isPointsInRange(v, max)) onSet({ points: v }) }
   }
+  // Out-of-range points (outside 0..criterion max) are never saved; hint instead.
+  const ptsOutOfRange = ptsDraft.trim() !== '' && !isPointsInRange(Number(ptsDraft), max)
   const saveCmt = (raw: string) => {
     if (raw === effComment) return
     onSet({ comment: raw.trim() === '' ? null : raw })
@@ -189,8 +192,11 @@ function CriterionRow({
           <input
             type="number"
             step="0.1"
+            min={0}
+            max={max}
             disabled={locked}
-            className={cn('h-7 w-12 rounded border bg-background px-1 text-right text-sm tabular-nums disabled:opacity-60', overridden && 'border-foreground/40')}
+            aria-invalid={ptsOutOfRange}
+            className={cn('h-7 w-12 rounded border bg-background px-1 text-right text-sm tabular-nums disabled:opacity-60', overridden && 'border-foreground/40', ptsOutOfRange && 'border-destructive')}
             value={ptsDraft}
             placeholder="–"
             title="Points this student gets"
@@ -209,6 +215,7 @@ function CriterionRow({
               <Regex className="h-2.5 w-2.5" /> regex
             </span>
           )}
+          {ptsOutOfRange && <span className="text-right text-[9px] leading-tight text-destructive">0–{fmt(max)} only</span>}
           {outOfSync && <span className="text-right text-[8px] leading-tight text-muted-foreground">save rubric to update</span>}
         </div>
         {overridden && !locked ? (
@@ -405,7 +412,8 @@ export function CodeScorePanel({
   const absFocused = useRef(false)
   const saveAbs = (raw: string) => {
     const v = raw.trim() === '' ? null : Number(raw)
-    if ((v === null || Number.isFinite(v)) && v !== overrideEarned) setOverride(v)
+    if (v !== null && !isPointsInRange(v, review?.max ?? 0)) return
+    if (v !== overrideEarned) setOverride(v)
   }
   useEffect(() => {
     if (absFocused.current) return
@@ -421,6 +429,8 @@ export function CodeScorePanel({
   if (!active || !review || mode !== 'grade') return null
 
   const max = review.max
+  // Out-of-range manual points (outside 0..max) are never saved; hint instead.
+  const absOutOfRange = absDraft.trim() !== '' && !isPointsInRange(Number(absDraft), max)
   const aiById = new Map((aiMeta?.criteria ?? []).map((c) => [c.id, c]))
   const ovById = new Map((((override?.meta as { criteria?: OverrideCriterion[] } | null)?.criteria) ?? []).map((c) => [c.id, c]))
   const passedCount = testResults?.filter((r) => r.passed).length ?? 0
@@ -697,8 +707,11 @@ export function CodeScorePanel({
                   <input
                     type="number"
                     step="0.1"
+                    min={0}
+                    max={max}
                     disabled={locked}
-                    className="h-7 w-12 rounded border bg-background px-1 text-right tabular-nums disabled:opacity-60"
+                    aria-invalid={absOutOfRange}
+                    className={cn('h-7 w-12 rounded border bg-background px-1 text-right tabular-nums disabled:opacity-60', absOutOfRange && 'border-destructive')}
                     value={absDraft}
                     onFocus={() => { absFocused.current = true }}
                     onChange={(e) => setAbsDraft(e.target.value)}
@@ -712,6 +725,7 @@ export function CodeScorePanel({
                   )}
                   <span className="ml-2 text-xs text-muted-foreground">or score manually without a rubric.</span>
                 </div>
+                {absOutOfRange && <p className="text-xs text-destructive">Allowed: 0–{fmt(max)} pts (not saved)</p>}
                 {aiErr && <p className="text-xs text-destructive">{aiErr}</p>}
               </div>
             )}

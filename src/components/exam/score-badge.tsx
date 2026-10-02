@@ -14,6 +14,7 @@ import { useEffect, useRef, useState } from 'react'
 import { RotateCcw, Regex } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { extractCriterionRegex, stripInlineRegex } from '@/lib/scoring/regex-check'
+import { isPointsInRange } from '@/lib/scoring/score-component'
 import { useComponentReview } from '@/contexts/exam-review-context'
 
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
@@ -50,7 +51,7 @@ export function ScoreBadge({ componentId }: { componentId: string }) {
   useEffect(() => {
     if (!review || draft === '') return
     const v = Number(draft)
-    if (!Number.isFinite(v) || v === review.earned) return
+    if (!Number.isFinite(v) || v === review.earned || !isPointsInRange(v, review.max)) return
     const t = setTimeout(() => setOverride(v), 400)
     return () => clearTimeout(t)
   }, [draft]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -163,9 +164,11 @@ export function ScoreBadge({ componentId }: { componentId: string }) {
   // grade mode
   const commit = () => {
     const v = draft === '' ? null : Number(draft)
-    if (v !== null && !Number.isFinite(v)) return
+    if (v !== null && !isPointsInRange(v, review.max)) return
     if (v !== review.earned) setOverride(v)
   }
+  // Out-of-range values are never saved; the field shows a hint instead.
+  const outOfRange = draft !== '' && !isPointsInRange(Number(draft), review.max)
   // What clearing the override falls back to: AI score if present, else check.
   const underlying = review.aiEarned ?? review.autoEarned
   const underlyingLabel = review.aiEarned != null ? 'AI' : 'auto'
@@ -179,7 +182,10 @@ export function ScoreBadge({ componentId }: { componentId: string }) {
           <input
             type="number"
             step="0.1"
-            className="w-12 h-7 rounded border bg-background px-1 text-right tabular-nums"
+            min={0}
+            max={review.max}
+            aria-invalid={outOfRange}
+            className={cn('w-12 h-7 rounded border bg-background px-1 text-right tabular-nums', outOfRange && 'border-destructive')}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onFocus={() => { ptsFocused.current = true }}
@@ -198,6 +204,9 @@ export function ScoreBadge({ componentId }: { componentId: string }) {
             <span className="ml-auto text-xs text-muted-foreground">{review.effectiveSource ?? 'auto'}</span>
           )}
         </div>
+        {outOfRange && (
+          <p className="px-0.5 text-[11px] text-destructive">Allowed: 0–{fmt(review.max)} pts (not saved)</p>
+        )}
         {/* Per-source breakdown: the effective source is emphasised. */}
         <div className="flex items-center gap-2 px-0.5 text-[11px] text-muted-foreground tabular-nums">
           <span className={review.effectiveSource === 'check' ? 'font-semibold text-foreground' : ''}>
