@@ -77,7 +77,7 @@ import { KaraIntro } from './kara-intro'
 import { karaLineHighlighting, showKaraLine, type KaraLineTarget } from './kara-line-extension'
 import { KARA_MODULE_SOURCE, KARA_RUNNER } from '@/lib/kara/kara-module'
 import { KARA_COMPLETIONS } from '@/lib/kara/completions'
-import { parseKaraLevel, type KaraTrace, type KaraWorld } from '@/lib/kara/world'
+import { karaRunInput, karaStars, parseKaraLevel, type KaraTrace } from '@/lib/kara/world'
 
 /**
  * Hard wall-clock cap on a single Pyodide run from the Run / Check buttons.
@@ -1265,8 +1265,9 @@ export const CodeEditor = memo(function CodeEditor({
 
   // Kara mode (see KaraPanel / kara-module.ts). The trace is session-only:
   // a reload shows the initial world until the next Run.
-  // Each Run picks one of the level's variants at random; until the first
-  // Run the first variant is shown.
+  // Run executes the variant picked in the panel (‹ ›, starts at the first);
+  // «Test all worlds» runs every variant in turn (karaSuite). Only a complete
+  // suite saves stars when the level has several variants (see KaraPanel).
   const karaLevel = useMemo(
     () => (karaWorldSource && language === 'python' ? parseKaraLevel(karaWorldSource) : null),
     [karaWorldSource, language],
@@ -1296,7 +1297,16 @@ export const CodeEditor = memo(function CodeEditor({
   // for the floating toolbar next to the file tabs: it gets its own row.
   const splitWidth = (isKara ? karaSide : canvasVisible && showGraphics && !graphicsStacked) ? (editorWidth / 100) * containerWidth : containerWidth
   const narrowCode = containerWidth > 0 && splitWidth < 380
-  const [karaRun, setKaraRun] = useState<{ world: KaraWorld; trace: KaraTrace } | null>(null)
+  const [karaVariant, setKaraVariant] = useState(0)
+  /** Replay shown in the panel; `variant` is the world it ran on. */
+  const [karaRun, setKaraRun] = useState<{ variant: number; trace: KaraTrace } | null>(null)
+  /** «Test all worlds»: one trace per variant (null = not run yet); `done` once every variant ran. */
+  const [karaSuite, setKaraSuite] = useState<{ traces: (KaraTrace | null)[]; done: boolean } | null>(null)
+  const pickKaraVariant = useCallback((v: number) => {
+    setKaraVariant(v)
+    const t = karaSuite?.traces[v]
+    setKaraRun(t ? { variant: v, trace: t } : null)
+  }, [karaSuite])
   // First pointer-down inside a Kara editor → KaraIntro may speak the briefing once.
   const karaIntroAutoplay = useRef<(() => void) | null>(null)
   const karaIntroPoked = useRef(false)
@@ -2579,6 +2589,7 @@ export const CodeEditor = memo(function CodeEditor({
             // Kara: an edited program no longer matches the replay; show the
             // starting world again so the student plans from where Kara begins.
             setKaraRun(null)
+            setKaraSuite(null)
             // Teacher editing a student's snapshot → mark dirty so Revert shows.
             // (Persistence is gated elsewhere; this is display-only.)
             if (isViewingSnapshotRef.current) setEditedSinceSnapshot(true)
@@ -3196,8 +3207,8 @@ export const CodeEditor = memo(function CodeEditor({
     view.dispatch(transaction)
   }, [activeFileIndex, activeTab, files, skriptImports, globalImports, importContent])
 
-  // Run code
-  const runCode = () => {
+  // Run code. `karaAll === true` (never a click event): Kara «Test all worlds».
+  const runCode = (karaAll: unknown = false) => {
     if (runStateRef.current === RunState.RUNNING) return
     if (!editorViewRef.current) return
 
@@ -3226,7 +3237,7 @@ export const CodeEditor = memo(function CodeEditor({
         // it if a helper tab is open.
         const onMain = activeTab.type === 'local' && activeTab.index === 0
         if (!onMain) { setActiveTab({ type: 'local', index: 0 }); setActiveFileIndex(0) }
-        runKaraCode(onMain ? code : filesRef.current[0]?.content ?? code)
+        runKaraCode(onMain ? code : filesRef.current[0]?.content ?? code, karaAll === true)
       } else if (hasTurtle || hasInput) {
         runPythonCode(code) // Use Skulpt for turtle and input() (native async suspension)
       } else {
@@ -3696,13 +3707,10 @@ export const CodeEditor = memo(function CodeEditor({
   // panel), so only stderr / runner failures reach the output panel.
   // Exam checks are NOT run here: the check harness doesn't know the kara
   // module, so python-check blocks don't work with Kara editors yet.
-  const runKaraCode = async (code: string) => {
-    if (!karaLevel) return
-    const karaWorld = karaLevel.variants[Math.floor(Math.random() * karaLevel.variants.length)]
-    setRunState(RunState.RUNNING)
-    setOutput([])
-    ensurePyodideLoaded()
-
+  // One variant → trace; null when stopped, timed out or the runner failed
+  // (reported in the output panel).
+  const runKaraVariant = async (code: string, v: number, signal: AbortSignal): Promise<KaraTrace | null> => {
+    if (!karaLevel) return null
     const localFiles = filesRef.current
     const importFiles = [...(skriptImportsRef.current?.files || []), ...(globalImportsRef.current?.files || [])]
     const textFiles = [
@@ -3710,29 +3718,63 @@ export const CodeEditor = memo(function CodeEditor({
       ...importFiles,
       { name: 'kara.py', content: KARA_MODULE_SOURCE },
       { name: '__kara_student.py', content: code },
-      { name: '__kara_world.json', content: JSON.stringify({ ...karaWorld, goals: karaLevel.config.goals, output: karaLevel.config.output }) },
+      { name: '__kara_world.json', content: JSON.stringify(karaRunInput(karaLevel, v)) },
     ]
+    const { result, stopped, timedOut } = await runPython({
+      code: KARA_RUNNER,
+      textFiles,
+      signal,
+      timeoutMs: STUDENT_PYODIDE_TIMEOUT_MS,
+      onStderr: (text) => addOutput(text, OutputLevel.ERROR),
+    })
+    if (stopped) { addOutput('Program stopped', OutputLevel.WARNING); return null }
+    if (timedOut) { addOutput('TimeoutError: Execution timed out', OutputLevel.ERROR); return null }
+    if (typeof result !== 'string') return null
+    const trace = JSON.parse(result) as KaraTrace
+    // AURORA's error.module line points at the toolbox tab; make it findable.
+    if (isToolboxModuleError(trace.error, toolboxName)) flashToolbox()
+    return trace
+  }
+
+  // Run a Kara program in the Pyodide worker. The `kara` module executes the
+  // whole program under sys.settrace and returns the trace as a JSON string;
+  // KaraPanel replays it. prints are part of the trace (shown per step in the
+  // panel), so only stderr / runner failures reach the output panel.
+  // `all`: run every variant one after the other (one worker call each, so
+  // N variants take N times as long) and show the worst one afterwards.
+  // Exam checks are NOT run here: the check harness doesn't know the kara
+  // module, so python-check blocks don't work with Kara editors yet.
+  const runKaraCode = async (code: string, all = false) => {
+    if (!karaLevel) return
+    setRunState(RunState.RUNNING)
+    setOutput([])
+    ensurePyodideLoaded()
 
     const controller = new AbortController()
     pyodideAbortControllerRef.current = controller
     try {
-      const { result, stopped, timedOut } = await runPython({
-        code: KARA_RUNNER,
-        textFiles,
-        signal: controller.signal,
-        timeoutMs: STUDENT_PYODIDE_TIMEOUT_MS,
-        onStderr: (text) => addOutput(text, OutputLevel.ERROR),
-      })
-      if (stopped) {
-        addOutput('Program stopped', OutputLevel.WARNING)
-      } else if (timedOut) {
-        addOutput('TimeoutError: Execution timed out', OutputLevel.ERROR)
-      } else if (typeof result === 'string') {
-        const trace = JSON.parse(result) as KaraTrace
-        setKaraRun({ world: karaWorld, trace })
-        // AURORA's error.module line points at the toolbox tab; make it findable.
-        if (isToolboxModuleError(trace.error, toolboxName)) flashToolbox()
+      if (!all) {
+        const trace = await runKaraVariant(code, karaVariant, controller.signal)
+        setKaraSuite(null)
+        if (trace) setKaraRun({ variant: karaVariant, trace })
+        return
       }
+      const traces: (KaraTrace | null)[] = karaLevel.variants.map(() => null)
+      setKaraRun(null)
+      setKaraSuite({ traces: [...traces], done: false })
+      for (let v = 0; v < traces.length; v++) {
+        const trace = await runKaraVariant(code, v, controller.signal)
+        // Stopped / timed out: an incomplete suite proves nothing; drop it.
+        if (!trace) { setKaraSuite(null); return }
+        traces[v] = trace
+        setKaraSuite({ traces: [...traces], done: false })
+      }
+      setKaraSuite({ traces, done: true })
+      // Replay the worst world (first one with the fewest stars).
+      const stars = traces.map(t => karaStars(t!, karaLevel.config))
+      const worst = stars.indexOf(Math.min(...stars))
+      setKaraVariant(worst)
+      setKaraRun({ variant: worst, trace: traces[worst]! })
     } catch (error: any) {
       addOutput(cleanPythonError(error.message || String(error)), OutputLevel.ERROR)
     } finally {
@@ -5281,8 +5323,14 @@ export const CodeEditor = memo(function CodeEditor({
         {karaLevel && (
           <div className={cn('min-w-0 shrink-0', karaSide && 'h-full')} style={karaSide ? { width: `${100 - editorWidth}%` } : undefined}>
           <KaraPanel
-            world={karaRun?.world ?? karaLevel.variants[0]}
-            trace={karaRun?.trace ?? null}
+            world={karaLevel.variants[karaVariant] ?? karaLevel.variants[0]}
+            trace={karaRun?.variant === karaVariant ? karaRun.trace : null}
+            variant={karaVariant}
+            variantCount={karaLevel.variants.length}
+            onVariant={pickKaraVariant}
+            suite={karaSuite}
+            busy={runState === RunState.RUNNING}
+            onTestAll={() => runCode(true)}
             config={karaLevel.config}
             assets={karaAssets}
             levelId={karaLevel.config.id ?? id}

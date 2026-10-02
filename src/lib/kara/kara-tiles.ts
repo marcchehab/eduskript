@@ -231,3 +231,45 @@ function drawChip(ctx: CanvasRenderingContext2D, px: number, py: number, s: numb
   ctx.fillRect(x0 + w * 0.3, y0 + w * 0.3, w * 0.4, w * 0.4)
   ctx.restore()
 }
+
+/**
+ * Facing indicator: a headlamp cone from MOP-7 into the cell in front, with a
+ * small chevron at its tip. Drawn before the sprite, so the sprite covers the
+ * cone's root. (x, y) may be fractional (slide animation); d: 0 = N … 3 = W.
+ * Near the world's edge the cone is clipped by the canvas (no torus wrap).
+ */
+export function drawKaraFacing(ctx: CanvasRenderingContext2D, x: number, y: number, d: number, s: number) {
+  const cx = (x + 0.5) * s
+  const cy = (y + 0.5) * s
+  const angle = (d - 1) * (Math.PI / 2) // 0 rad = east
+  ctx.save()
+  ctx.translate(cx, cy)
+  ctx.rotate(angle)
+  const r0 = s * 0.3, r1 = s * 1.05
+  const g = ctx.createLinearGradient(r0, 0, r1, 0)
+  g.addColorStop(0, 'rgba(253, 230, 138, 0.55)')
+  g.addColorStop(1, 'rgba(253, 230, 138, 0)')
+  ctx.fillStyle = g
+  ctx.beginPath()
+  ctx.moveTo(r0, -s * 0.12)
+  ctx.lineTo(r1, -s * 0.36)
+  ctx.lineTo(r1, s * 0.36)
+  ctx.lineTo(r0, s * 0.12)
+  ctx.closePath()
+  ctx.fill()
+  // Chevron in the front cell, outlined so it reads on light and dark tiles.
+  const t = s * 0.62, w = s * 0.11
+  ctx.beginPath()
+  ctx.moveTo(t - w, -w * 1.3)
+  ctx.lineTo(t + w * 0.6, 0)
+  ctx.lineTo(t - w, w * 1.3)
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  ctx.strokeStyle = 'rgba(28, 25, 23, 0.7)'
+  ctx.lineWidth = Math.max(2.5, s * 0.08)
+  ctx.stroke()
+  ctx.strokeStyle = '#fde047'
+  ctx.lineWidth = Math.max(1.5, s * 0.045)
+  ctx.stroke()
+  ctx.restore()
+}

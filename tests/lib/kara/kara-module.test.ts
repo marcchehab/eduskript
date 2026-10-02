@@ -9,7 +9,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import { KARA_MODULE_SOURCE } from '@/lib/kara/kara-module'
-import { parseKaraWorld, buildReplay, type KaraTrace } from '@/lib/kara/world'
+import { parseKaraWorld, parseKaraLevel, buildReplay, karaRunInput, karaStars, karaSuiteStars, type KaraTrace } from '@/lib/kara/world'
 
 const hasPython = (() => {
   try { execFileSync('python3', ['--version']); return true } catch { return false }
@@ -46,8 +46,8 @@ const world = parseKaraWorld(`
 #.......#
 #########`)
 
-function run(code: string): KaraTrace {
-  fs.writeFileSync(path.join(dir, '__kara_world.json'), JSON.stringify({ ...world, goals: [] }))
+function run(code: string, input: object = { ...world, goals: [] }): KaraTrace {
+  fs.writeFileSync(path.join(dir, '__kara_world.json'), JSON.stringify(input))
   fs.writeFileSync(path.join(dir, '__kara_student.py'), code)
   return JSON.parse(execFileSync('python3', ['-c', 'import kara; print(kara._run())'], { cwd: dir, maxBuffer: 64 * 1024 * 1024 }).toString())
 }
@@ -194,3 +194,37 @@ describe.skipIf(!hasPython)('kara.py lints', () => {
   })
 })
 
+
+describe.skipIf(!hasPython)('Test all worlds: per-variant output', () => {
+  beforeAll(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kara-suite-test-'))
+    fs.writeFileSync(path.join(dir, 'kara.py'), KARA_MODULE_SOURCE)
+  })
+  afterAll(() => fs.rmSync(dir, { recursive: true, force: true }))
+
+  // Count the barrels in the corridor and print the number (w1-l5 style).
+  const level = parseKaraLevel(`#>.*..*E#
+===
+#>*E#
+===
+#>***.*E#
+---
+output: 2 | 1 | 4`)
+  const suite = (code: string) => level.variants.map((_, v) => run(code, karaRunInput(level, v)))
+
+  it('a hardcoded print wins one world but not the suite', () => {
+    const traces = suite('print(2)\n')
+    expect(traces.map(t => karaStars(t, level.config) > 0)).toEqual([true, false, false])
+    expect(karaSuiteStars(traces, level.config)).toBe(0)
+  })
+
+  it('a counting program wins every world', () => {
+    const code = 'n = 0\nwhile not on_exit():\n    move()\n    if on_barrel():\n        n += 1\nprint(n)\n'
+    expect(karaSuiteStars(suite(code), level.config)).toBe(3)
+  })
+
+  it('a variant without an expected output never meets the output goal', () => {
+    const t = run('print("")\n', { ...level.variants[0], goals: ['output'] })
+    expect(t.goal).toEqual({ reached: false, missing: ['output'] })
+  })
+})

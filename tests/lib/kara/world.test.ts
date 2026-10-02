@@ -4,7 +4,7 @@ import { unified } from 'unified'
 import remarkParse from 'remark-parse'
 import remarkCodeEditor from '@/lib/remark-plugins/code-editor'
 import {
-  parseKaraConfig,
+  parseKaraConfig, karaOutput, karaRunInput, karaSuiteStars,
   parseKaraWorld, parseKaraLevel, buildReplay, seekCells, karaStars, karaAssetNames, karaSpeakers, karaMessages,
   BLOCK, ITEM, BOX, CHIP, DOOR, LASER, ACID, EXIT, SWITCH, TARGET, TERMINAL, type KaraTrace,
 } from '@/lib/kara/world'
@@ -199,5 +199,38 @@ describe('isAuroraDefault', () => {
     expect(isAuroraDefault('Zeile x: stufe ohne (). Sie haben den Befehl erwähnt, nicht ausgeführt.')).toBe(false)
     expect(isAuroraDefault('Zeile 1: a b ohne (). Sie haben den Befehl erwähnt, nicht ausgeführt.')).toBe(false)
     expect(isAuroraDefault('Irgendein Text.')).toBe(false)
+  })
+})
+
+describe('per-variant output and suite stars', () => {
+  const level = parseKaraLevel(`#>*#
+===
+#>**#
+===
+#>***#
+---
+output: 1 | 2 | 3
+memory: 4`)
+
+  it('maps `output: a | b | c` to variants by index', () => {
+    expect(level.config.output).toEqual(['1', '2', '3'])
+    expect(level.config.goals).toEqual(['output'])
+    expect([0, 1, 2, 3].map(v => karaOutput(level.config, v))).toEqual(['1', '2', '3', undefined])
+    expect(karaRunInput(level, 1)).toMatchObject({ cols: 5, goals: ['output'], output: '2' })
+  })
+
+  it('applies a single output value to every variant', () => {
+    const c = parseKaraConfig('output: 10')
+    expect([karaOutput(c, 0), karaOutput(c, 5)]).toEqual(['10', '10'])
+    expect(karaOutput(parseKaraConfig('goal: exit'), 0)).toBeUndefined()
+  })
+
+  it('suite stars are the minimum over all variants', () => {
+    const t = (memory: number, reached = true): KaraTrace => ({ steps: [], error: null, energy: 0, memory, goal: { reached, missing: [] } })
+    expect(karaSuiteStars([t(3), t(4)], level.config)).toBe(3)
+    expect(karaSuiteStars([t(3), t(9)], level.config)).toBe(2)
+    expect(karaSuiteStars([t(3), t(3, false)], level.config)).toBe(0)
+    expect(karaSuiteStars([t(3), null], level.config)).toBe(0)
+    expect(karaSuiteStars([], level.config)).toBe(0)
   })
 })

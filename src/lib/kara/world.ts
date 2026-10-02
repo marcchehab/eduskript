@@ -7,7 +7,9 @@
  * Block layout:
  *
  *   <grid>                 one or more grids; separate variants with a line `===`
- *   ===                    (each Run picks one variant at random)
+ *   ===                    (the panel picks one with ‹ › for Run; «Test all worlds»
+ *                          runs every variant, and stars count only then, as the
+ *                          minimum over all variants — see kara-panel.tsx)
  *   <grid>
  *   ---                    optional config after `---`, one `key: value` per line
  *   goal: exit, collect
@@ -32,6 +34,8 @@
  *   goal: exit, collect, boxes, chips, logs   all listed goals must hold at the end
  *                                         (logs = every terminal read via read_log())
  *   output: 7                             goal: the last printed line must equal this
+ *   output: 10 | 7 | 13                   per variant, by index (one value = every variant;
+ *                                         a variant without a value can never meet the goal)
  *   energy: N / memory: N                 limits for the 2nd/3rd star
  *   id: level-id                          key for saved progress (default: editor id)
  *   log: text | speaker=WEBER | audio=f.mp3        one per terminal, in reading order
@@ -113,8 +117,11 @@ export type KaraGoal = 'exit' | 'collect' | 'boxes' | 'chips' | 'logs' | 'output
 export interface KaraConfig {
   id?: string
   goals: KaraGoal[]
-  /** Expected last printed line (goal 'output'). */
-  output?: string
+  /**
+   * Expected last printed line (goal 'output'), per variant index. One value
+   * applies to every variant; see karaOutput.
+   */
+  output?: string[]
   energy?: number
   memory?: number
   /** Level briefing above the editor, in order (speaker always set, default AURORA). */
@@ -221,7 +228,7 @@ export function parseKaraConfig(src: string): KaraConfig {
     const value = m[2].trim()
     if (key === 'goal') config.goals = value.split(',').map(s => s.trim()).filter((g): g is KaraGoal => GOALS.has(g as KaraGoal))
     else if (key === 'energy' || key === 'memory') { const n = parseInt(value, 10); if (n > 0) config[key] = n }
-    else if (key === 'output') config.output = value
+    else if (key === 'output') config.output = value.split('|').map(s => s.trim())
     else if (key === 'id') config.id = value
     else if (key === 'music') config.music = value
     else if (key === 'intro') { const msg = message(value); config.intro.push({ ...msg, speaker: msg.speaker || 'AURORA' }) }
@@ -240,6 +247,22 @@ export function parseKaraLevel(src: string): KaraLevel {
   const config = sep === -1 ? '' : text.slice(sep).replace(/^---\s*$/m, '')
   const variants = grids.split(/^===\s*$/m).filter(g => g.trim()).map(parseKaraWorld)
   return { variants: variants.length ? variants : [parseKaraWorld('')], config: parseKaraConfig(config) }
+}
+
+/**
+ * Expected output for variant `v`: one value = all variants, else by index.
+ * undefined when the level has no output goal or no value for `v` (that
+ * variant's output goal then fails, which check.ts reports).
+ */
+export function karaOutput(config: KaraConfig, v: number): string | undefined {
+  const out = config.output
+  if (!out) return undefined
+  return out.length === 1 ? out[0] : out[v]
+}
+
+/** The JSON the Python `_run` reads (`__kara_world.json`) for variant `v`. Used by the editor and check.ts. */
+export function karaRunInput(level: KaraLevel, v: number): KaraWorld & { goals: KaraGoal[]; output?: string } {
+  return { ...level.variants[v], goals: level.config.goals, output: karaOutput(level.config, v) }
 }
 
 /** Every spoken line of a level: intro, logs, chips and AURORA events. */
@@ -334,6 +357,15 @@ export function karaStars(trace: KaraTrace, config: KaraConfig): number {
   if (!config.memory || trace.memory <= config.memory) stars++
   if (!config.energy || trace.energy <= config.energy) stars++
   return stars
+}
+
+/**
+ * Stars for a «Test all worlds» suite: the minimum over all variants (0 when
+ * any variant is missing, errors or misses the goal).
+ */
+export function karaSuiteStars(traces: (KaraTrace | null)[], config: KaraConfig): number {
+  if (!traces.length) return 0
+  return Math.min(...traces.map(t => (t ? karaStars(t, config) : 0)))
 }
 
 /**

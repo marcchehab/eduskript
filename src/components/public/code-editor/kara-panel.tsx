@@ -32,10 +32,18 @@
  * and every finding gets an inline chip at the end of the replay. Events only trigger when the replay steps onto them
  * (play / step forward); jumping or scrubbing skips them. Results are saved per student (stars,
  * evidence) as soon as a run reaches the goal, see src/lib/kara/progress.ts.
+ *
+ * Variants (levels with several `===` grids): a world bar picks the variant
+ * Run uses (‹ ›) and offers «Test all worlds», which the editor runs one
+ * variant after the other (`suite`, index.tsx runKaraCode). With more than
+ * one variant a single Run never saves stars (a hardcoded answer can win one
+ * world); a complete suite saves the minimum over all variants
+ * (karaSuiteStars). Evidence is saved from every run either way. Clicking a
+ * suite result replays that world's trace.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Music, Pause, Play, SkipBack, SkipForward, Star, StepBack, StepForward } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, ListChecks, Loader2, Music, Pause, Play, SkipBack, SkipForward, Star, StepBack, StepForward, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { recordKaraResult } from '@/lib/kara/progress'
 import { playVoice, stopVoice, ttsLineUrl } from '@/lib/kara/voice'
@@ -45,10 +53,11 @@ import { registerSoundSource, useMuted } from '@/lib/sound'
 import { DOOR, ITEM, LASER } from '@/lib/kara/world'
 import { karaPortrait } from '@/lib/kara/portraits'
 import type { KaraLineTarget } from './kara-line-extension'
-import { drawKaraTiles, loadKaraTileset, type KaraTileset } from '@/lib/kara/kara-tiles'
+import { drawKaraFacing, drawKaraTiles, loadKaraTileset, type KaraTileset } from '@/lib/kara/kara-tiles'
 import {
   buildReplay,
   karaStars,
+  karaSuiteStars,
   seekCells,
   type KaraConfig,
   type KaraEvidence,
@@ -142,6 +151,9 @@ function drawWorld(
   ctx.imageSmoothingQuality = 'high'
   drawKaraTiles(ctx, world, cells, tile, tileset)
 
+  // Facing cone under the sprite (playtests could not read the side-view sprites' direction).
+  // Mid-turn (squashX < 1) it is hidden, so it never points the wrong way.
+  if (squashX >= 1) drawKaraFacing(ctx, kara.x, kara.y, kara.d, tile)
   const sprite = sprites?.[kara.d]
   if (sprite && sprite.complete && sprite.naturalWidth) {
     const size = tile * 0.92
@@ -210,9 +222,23 @@ export interface KaraPanelProps {
    * height; the divider moves height between world and message bar.
    */
   fill?: boolean
+  /** Variant shown and used by Run (0-based) and the level's number of variants. */
+  variant?: number
+  variantCount?: number
+  onVariant?: (v: number) => void
+  /** «Test all worlds» results (null entries: not run yet); null before the first test. */
+  suite?: { traces: (KaraTrace | null)[]; done: boolean } | null
+  onTestAll?: () => void
+  /** A run is in progress (disables the world bar). */
+  busy?: boolean
 }
 
-export function KaraPanel({ world, trace, maxTile, maxHeight, onLine, config, assets, levelId, skriptId, fill }: KaraPanelProps) {
+export function KaraPanel({ world, trace, maxTile, maxHeight, onLine, config, assets, levelId, skriptId, fill, variant = 0, variantCount = 1, onVariant, suite, onTestAll, busy }: KaraPanelProps) {
+  const multi = variantCount > 1
+  /** The shown trace belongs to a complete «Test all worlds» suite. */
+  const inSuite = !!trace && !!suite?.done && suite.traces[variant] === trace
+  /** Stars count for this trace (single-variant level, or part of a complete suite). */
+  const starsCount = !multi || inSuite
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const outputRef = useRef<HTMLPreElement>(null)
@@ -275,12 +301,17 @@ export function KaraPanel({ world, trace, maxTile, maxHeight, onLine, config, as
   const [prevTrace, setPrevTrace] = useState(trace)
   /** Runs in a row that did not reach the goal (error, loop or goal missed); `aurora.fail.3`. Per mount, not saved. */
   const [failStreak, setFailStreak] = useState(0)
+  // Each trace counts once: replaying a suite world again (clicking its result) is not a new run.
+  const [counted] = useState(() => new WeakSet<KaraTrace>())
   if (trace !== prevTrace) {
     setPrevTrace(trace)
     setPos(0)
     setCards([])
     setPlaying(!!trace && trace.steps.length > 0)
-    if (trace && config.goals.length) setFailStreak(trace.error || !trace.goal?.reached ? failStreak + 1 : 0)
+    if (trace && config.goals.length && !counted.has(trace)) {
+      counted.add(trace)
+      setFailStreak(trace.error || !trace.goal?.reached ? failStreak + 1 : 0)
+    }
   }
 
   const stars = trace ? karaStars(trace, config) : 0
@@ -321,7 +352,11 @@ export function KaraPanel({ world, trace, maxTile, maxHeight, onLine, config, as
       return m ? { message: m } : null
     }
     if (!config.goals.length || !trace.goal) return null
-    if (trace.goal.reached) return { message: auroraLine(config, 'win')!, stars, detail: limits }
+    if (trace.goal.reached) {
+      return starsCount
+        ? { message: auroraLine(config, 'win')!, stars, detail: limits }
+        : { message: auroraLine(config, 'win')!, detail: `Won in this world – test all worlds for the stars · ${limits}` }
+    }
     // A level-specific fail text replaces the generic (English) goal list.
     return {
       message: auroraLine(config, 'fail', { failStreak })!,
@@ -329,7 +364,7 @@ export function KaraPanel({ world, trace, maxTile, maxHeight, onLine, config, as
         ? undefined
         : `Still to do: ${trace.goal.missing.map(g => GOAL_TEXT[g]).join(', ')}`,
     }
-  }, [trace, config, stars, failStreak, lints])
+  }, [trace, config, stars, failStreak, lints, starsCount])
 
   /** Sound effects for stepping from `to - 1` to `to` (and the result at the end). */
   const stepSfx = useCallback((to: number) => {
@@ -386,9 +421,15 @@ export function KaraPanel({ world, trace, maxTile, maxHeight, onLine, config, as
         if (log) found.push({ ...log, id: `${levelId}-log-${i}`, title: `Log${log.speaker ? `: ${log.speaker}` : ''}` })
       }
     }
-    const s = karaStars(trace, config)
+    // Several variants: stars only from a complete suite (effect below).
+    const s = multi ? 0 : karaStars(trace, config)
     if (s > 0 || found.length) void recordKaraResult(skriptId, levelId, s, found)
-  }, [trace, config, skriptId, levelId])
+  }, [trace, config, skriptId, levelId, multi])
+
+  const suiteStars = suite?.done ? karaSuiteStars(suite.traces, config) : 0
+  useEffect(() => {
+    if (skriptId && suiteStars > 0) void recordKaraResult(skriptId, levelId, suiteStars, [])
+  }, [suiteStars, skriptId, levelId])
 
   // Message bar: pending story event, else the result at the end, else the level's `aurora.start` idle line (the `intro:` briefing is KaraIntro above the editor).
   const startCard = useMemo((): KaraCard | null => (config.aurora.start ? { message: config.aurora.start } : null), [config])
@@ -528,6 +569,20 @@ export function KaraPanel({ world, trace, maxTile, maxHeight, onLine, config, as
         {musicSrc && <audio ref={musicRef} src={musicSrc} loop preload="none" />}
       </div>
 
+      {multi && (
+        <WorldBar
+          variant={variant}
+          count={variantCount}
+          suite={suite ?? null}
+          suiteStars={suiteStars}
+          config={config}
+          busy={!!busy}
+          onVariant={onVariant}
+          onTestAll={onTestAll}
+          btn={btn}
+        />
+      )}
+
       <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 px-2 py-1 border-t bg-muted/30 text-xs">
         <div className="flex items-center">
           <button className={btn} onClick={() => go(0)} disabled={!trace || pos === 0} title="To start">
@@ -561,7 +616,7 @@ export function KaraPanel({ world, trace, maxTile, maxHeight, onLine, config, as
           {pos > 0 && steps[pos - 1] ? ` · line ${steps[pos - 1].l}` : ''}
           {pos > 0 && steps[pos - 1]?.sub && replay ? ` · ${steps[pos - 1].sub}/${replay.subTotal[pos - 1]}` : ''}
         </span>
-        {trace && pos === total && config.goals.length > 0 && !trace.error && (
+        {trace && starsCount && pos === total && config.goals.length > 0 && !trace.error && (
           <span className="flex items-center" title={`Memory ${trace.memory}${config.memory ? `/${config.memory}` : ''} · Energy ${trace.energy}${config.energy ? `/${config.energy}` : ''}`}>
             {[1, 2, 3].map(n => (
               <Star key={n} className={cn('w-3.5 h-3.5', n <= stars ? 'fill-amber-400 text-amber-500' : 'text-muted-foreground/40')} />
@@ -599,6 +654,77 @@ export function KaraPanel({ world, trace, maxTile, maxHeight, onLine, config, as
           </div>
           <pre ref={outputRef} style={{ height: outputHeight }} className="shrink-0 overflow-auto px-2 py-1 text-xs font-mono whitespace-pre-wrap">{output}</pre>
         </>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Variant picker + «Test all worlds» + per-world results. A result shows a
+ * check and its stars when the world was won, a cross otherwise, a spinner
+ * while the suite still runs; clicking it selects (and replays) that world.
+ */
+function WorldBar({ variant, count, suite, suiteStars, config, busy, onVariant, onTestAll, btn }: {
+  variant: number
+  count: number
+  suite: { traces: (KaraTrace | null)[]; done: boolean } | null
+  suiteStars: number
+  config: KaraConfig
+  busy: boolean
+  onVariant?: (v: number) => void
+  onTestAll?: () => void
+  btn: string
+}) {
+  return (
+    <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-t bg-muted/30 px-2 py-1 text-xs">
+      <div className="flex items-center">
+        <button className={btn} onClick={() => onVariant?.(variant - 1)} disabled={busy || variant === 0} title="Previous world">
+          <ChevronLeft className="w-3.5 h-3.5" />
+        </button>
+        <span className="min-w-[4.5rem] text-center tabular-nums" title="Run uses this world">World {variant + 1}/{count}</span>
+        <button className={btn} onClick={() => onVariant?.(variant + 1)} disabled={busy || variant >= count - 1} title="Next world">
+          <ChevronRight className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      <button
+        onClick={onTestAll}
+        disabled={busy || !onTestAll}
+        className="flex h-6 items-center gap-1 rounded border bg-background px-2 hover:bg-muted disabled:opacity-50"
+        title="Run the program in every world; stars count only for all worlds"
+      >
+        <ListChecks className="w-3.5 h-3.5" /> Test all worlds
+      </button>
+      {suite && (
+        <div className="flex flex-wrap items-center gap-1" role="list" aria-label="Results per world">
+          {suite.traces.map((t, i) => {
+            const s = t ? karaStars(t, config) : 0
+            return (
+              <button
+                key={i}
+                role="listitem"
+                onClick={() => onVariant?.(i)}
+                disabled={busy || !t}
+                title={t ? `World ${i + 1}: ${s ? `${s} star${s > 1 ? 's' : ''}` : 'not solved'}` : `World ${i + 1}: running…`}
+                className={cn(
+                  'flex h-6 items-center gap-0.5 rounded border px-1.5 tabular-nums',
+                  !t ? 'text-muted-foreground'
+                    : s ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                    : 'border-red-500/50 bg-red-500/10 text-red-700 dark:text-red-300',
+                  i === variant && 'ring-1 ring-primary',
+                )}
+              >
+                {i + 1}
+                {!t ? <Loader2 className="w-3 h-3 animate-spin" /> : s ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
+                {s > 0 && <span className="flex">{[1, 2, 3].map(n => <Star key={n} className={cn('w-2.5 h-2.5', n <= s ? 'fill-amber-400 text-amber-500' : 'text-muted-foreground/40')} />)}</span>}
+              </button>
+            )
+          })}
+          {suite.done && (
+            <span className="ml-1 text-muted-foreground" title="Stars saved: the minimum over all worlds">
+              {suiteStars ? `All worlds: ${suiteStars}★` : 'Not every world solved'}
+            </span>
+          )}
+        </div>
       )}
     </div>
   )

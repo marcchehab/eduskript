@@ -391,7 +391,7 @@ def _error_sub(exc):
     return None
 
 
-_expected_output = ''
+_expected_output = None  # None: no value for this variant, the output goal cannot hold
 
 
 def _goal(goals):
@@ -409,7 +409,7 @@ def _goal(goals):
         missing.append('logs')
     if 'output' in goals:
         printed = ''.join(s.get('o', '') for s in _steps).strip().splitlines()
-        if not printed or printed[-1].strip() != str(_expected_output).strip():
+        if _expected_output is None or not printed or printed[-1].strip() != str(_expected_output).strip():
             missing.append('output')
     return {'reached': not missing, 'missing': missing}
 
@@ -531,7 +531,7 @@ def _run(student_path='__kara_student.py', world_path='__kara_world.json'):
     global _w, _steps, _cur, _expected_output
     with open(world_path) as f:
         data = _json.load(f)
-    _expected_output = data.get('output', '')
+    _expected_output = data.get('output')
     _w = _World(data)
     # Remember door / laser cells (static masks, stripped from the result).
     for i, c in enumerate(_w.cells):
