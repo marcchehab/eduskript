@@ -71,16 +71,25 @@ function InlineCodeHighlightedInner({ code, lang }: InlineCodeHighlightedProps) 
     setTokens(null)
 
     async function run() {
-      const [{ highlightTree, classHighlighter }, language] = await Promise.all([
+      const [{ highlightTree, classHighlighter, tagHighlighter, tags }, language] = await Promise.all([
         import('@lezer/highlight'),
         loadParser(lang),
       ])
       if (cancelled || !language) return
 
+      // classHighlighter has no class for function names, so `umdrehen()` came
+      // out as a plain variable (light blue) while CodeMirror's vscode theme
+      // colors function calls/definitions yellow. Add `tok-function` for those
+      // tags (most specific tag wins in highlightTree, so these override).
+      const functionHighlighter = tagHighlighter([
+        { tag: [tags.function(tags.variableName), tags.function(tags.propertyName)], class: 'tok-function' },
+        { tag: tags.definition(tags.function(tags.variableName)), class: 'tok-function tok-definition' },
+      ])
+      const highlighters = [classHighlighter, functionHighlighter]
       const tree = language.parser.parse(code)
       const parts: Token[] = []
       let pos = 0
-      highlightTree(tree, classHighlighter, (from, to, className) => {
+      highlightTree(tree, highlighters, (from, to, className) => {
         if (from > pos) parts.push({ text: code.slice(pos, from), className: '' })
         parts.push({ text: code.slice(from, to), className })
         pos = to

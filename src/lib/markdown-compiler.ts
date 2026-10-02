@@ -116,6 +116,7 @@ export const sanitizeSchema = {
     'spacer', // <spacer> author-placed writing area (blank/checkered/lines/dots)
     'evidence-board', // <evidence-board> Kara evidence collected in this skript
     'theme-toggle', // <theme-toggle> inline light/dark switch (same button as the page toolbar)
+    'page-nav', // <page-nav> previous/next page of the skript
     'flex', // <flex> layout container
     'flex-item', // <flex-item> child of flex
     'fullwidth', // Breaks out of #paper padding for edge-to-edge content

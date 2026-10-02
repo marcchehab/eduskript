@@ -16,6 +16,7 @@ import {
   MessageCircle,
   ListTodo,
   ChevronRight,
+  Bot,
 } from 'lucide-react'
 
 // Icon mapping for callout types
@@ -35,6 +36,7 @@ const calloutIcons: Record<string, React.ComponentType<{ className?: string }>> 
   solution: CheckCircle2,
   discuss: MessageCircle,
   todo: ListTodo,
+  mop7: Bot,
 }
 
 interface CalloutProps {

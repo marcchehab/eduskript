@@ -253,6 +253,7 @@ aurora.win: Beeindruckend.
 - Commands (no import needed): \`move()\`, \`turn_left()\`, \`turn_right()\`, \`put_barrel()\`, \`remove_barrel()\`, \`press_switch()\`, \`read_log()\`; sensors \`wall_front/left/right()\`, \`box_front()\`, \`door_front()\`, \`laser_front()\`, \`acid_front()\`, \`terminal_front()\`, \`on_barrel()\`, \`on_switch()\`, \`on_exit()\`, \`on_target()\`. camelCase aliases and the original Kara names (\`tree_front\`, \`on_leaf\`, …) work too.
 - \`<evidence-board title="Fallwand"></evidence-board>\` shows the evidence the student collected across the skript.
 - \`<theme-toggle></theme-toggle>\` renders the light/dark mode button inline (e.g. «Wir empfehlen den Darkmode: <theme-toggle></theme-toggle>»).
+- \`<page-nav></page-nav>\` (anywhere, typically at the bottom) shows previous / next page of the skript (published, not unlisted).
 - Limit: 50'000 executed lines. \`python-check\` does not work with Kara editors.
 
 ### Turtle auto-grading

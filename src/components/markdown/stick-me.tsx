@@ -185,7 +185,10 @@ export function StickMe({
 
   useEffect(() => {
     if (!enabled) return
-    const sc = document.getElementById('scroll-container')
+    // The page editor preview scrolls in its own pane: pin inside that pane
+    // (its edges act as viewport and paper). Elsewhere: #scroll-container.
+    const previewPane = slotRef.current?.closest<HTMLElement>('#markdown-preview-scroll-container') ?? null
+    const sc = previewPane ?? document.getElementById('scroll-container')
     let raf: number | null = null
 
     const clear = () => {
@@ -238,7 +241,7 @@ export function StickMe({
       }
 
       const z = getZoom() || 1
-      const paper = document.getElementById('paper')
+      const paper = previewPane ?? document.getElementById('paper')
       const pRect = paper && paper.offsetWidth > 0 ? paper.getBoundingClientRect() : scRect
       const paperWidth = pRect?.width ?? window.innerWidth
 
@@ -359,14 +362,15 @@ export function StickMe({
   }
   const onHandlePointerMove = (e: React.PointerEvent) => {
     if (!draggingRef.current) return
-    const paper = document.getElementById('paper')
+    const previewPane = slotRef.current?.closest<HTMLElement>('#markdown-preview-scroll-container') ?? null
+    const paper = previewPane ?? document.getElementById('paper')
     const pRect = paper?.getBoundingClientRect()
     if (!pRect || pRect.width <= 0) return
     // Match the pin anchor: right edge fixed at the viewport (scroll-container)
     // right edge, width grows leftward toward the pointer. Both terms are
     // on-screen px so the fraction is zoom-independent. Measuring from #paper's
     // right edge (off-screen when zoomed) made the width jump away from the cursor.
-    const sc = document.getElementById('scroll-container')
+    const sc = previewPane ?? document.getElementById('scroll-container')
     const anchorRight = (sc?.getBoundingClientRect().right ?? window.innerWidth) - TOP_MARGIN
     const onScreenWidth = anchorRight - e.clientX
     widthFractionRef.current = clampFraction(onScreenWidth / pRect.width)

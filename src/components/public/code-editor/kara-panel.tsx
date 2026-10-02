@@ -196,7 +196,7 @@ export function KaraPanel({ world, trace, maxTile, maxHeight, onLine, config, as
   const [resume, setResume] = useState(false)
   const [musicOn, setMusicOn] = useState(false)
   const [outputHeight, setOutputHeight] = useState(80)
-  const [barHeight, setBarHeight] = useState(84)
+  const [barHeight, setBarHeight] = useState(150)
   /** Drag handle above a box: dragging up makes the box below taller. */
   const dragAbove = (h0: number, set: (h: number) => void, min: number, max: number) => (e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault()

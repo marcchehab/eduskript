@@ -358,6 +358,11 @@ def _run(student_path='__kara_student.py', world_path='__kara_world.json'):
     _cur = None
     ns = {'__name__': '__main__', 'kara': _sys.modules[__name__]}
     ns.update({name: globals()[name] for name in __all__})
+    # Also as builtins, so helper files (e.g. a skript-wide befehle.py) can use
+    # move() etc. without 'from kara import *', like print().
+    import builtins as _builtins
+    for name in __all__:
+        setattr(_builtins, name, globals()[name])
     error = None
     memory = 0
     old_out = _sys.stdout

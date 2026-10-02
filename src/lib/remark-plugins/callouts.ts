@@ -22,6 +22,7 @@ export const calloutTypes: Record<string, string> = {
   missing: 'failure',
   error: 'danger',
   cite: 'quote',
+  'mop-7': 'mop7',
   // base types
   note: 'note',
   tip: 'tip',
@@ -40,6 +41,7 @@ export const calloutTypes: Record<string, string> = {
   discuss: 'discuss',
   idea: 'idea',
   code: 'code',
+  mop7: 'mop7', // MOP-7 Kara course: hazard-stripe header
 }
 
 // match breaks

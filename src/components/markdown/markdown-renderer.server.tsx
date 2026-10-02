@@ -4,6 +4,7 @@ import { createEmptySkriptFiles } from '@/lib/skript-files'
 import { getSkriptFiles } from '@/lib/skript-files.server'
 import { extractStableLinkIds } from '@/lib/page-stable-link'
 import { resolveStableLinks } from '@/lib/page-stable-link.server'
+import { getPageNeighbours } from '@/lib/page-nav.server'
 import { EagerImageLoader } from './eager-image-loader'
 import { FootnotePreview } from './footnote-preview'
 import { MarkdownErrorBoundary } from './markdown-error-boundary'
@@ -45,7 +46,9 @@ export async function ServerMarkdownRenderer({ content, skriptId, pageId, ownerP
   const files = skriptId ? await getSkriptFiles(skriptId) : createEmptySkriptFiles()
 
   // 2. Create components with files prop bound
-  const components = createMarkdownComponents(files, { pageId, ownerPageSlug, skriptId, organizationSlug, optimizeImages: true, isExam })
+  // <page-nav> needs the skript's page order; only queried when the page uses it.
+  const pageNav = skriptId && pageId && /<page-nav\b/.test(content) ? await getPageNeighbours(skriptId, pageId) : undefined
+  const components = createMarkdownComponents(files, { pageId, ownerPageSlug, skriptId, organizationSlug, optimizeImages: true, isExam, pageNav })
 
   // 3. Pre-resolve `/p/{id}` stable links to canonical URLs in one batched
   //    DB query so public HTML ships with real hrefs. Done here (server) so

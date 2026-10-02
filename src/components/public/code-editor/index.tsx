@@ -5,7 +5,7 @@ import { nanoid } from 'nanoid'
 import { createPortal } from 'react-dom'
 import { useTheme } from 'next-themes'
 import { EditorView, keymap } from '@codemirror/view'
-import { EditorState, Annotation, Compartment } from '@codemirror/state'
+import { EditorState, Annotation, Compartment, Prec } from '@codemirror/state'
 import { indentUnit } from '@codemirror/language'
 import { indentWithTab, undo } from '@codemirror/commands'
 import { python } from '@codemirror/lang-python'
@@ -26,7 +26,7 @@ import { userDataService, syncEngine } from '@/lib/userdata'
 import { registerEditor, getMountedIds, subscribeToMounted } from './mounted-registry'
 import { OrphanRow } from './orphan-row'
 import { postCheckpoint } from '@/lib/userdata/checkpoints'
-import { useSyncedUserData, type SyncedUserDataOptions } from '@/lib/userdata/provider'
+import { useSyncedUserData, useUserDataContext, type SyncedUserDataOptions } from '@/lib/userdata/provider'
 import { useTeacherClass } from '@/contexts/teacher-class-context'
 import { useStudentSnapshot } from '@/contexts/student-snapshot-context'
 import { ScoreBadge } from '@/components/exam/score-badge'
@@ -712,9 +712,13 @@ export const CodeEditor = memo(function CodeEditor({
   // Stable per-instance ID for pub/sub self-filtering
   const editorInstanceId = useRef(safeRandomUUID()).current
 
-  // Load import files from IndexedDB on mount + subscribe for cross-editor sync
+  // Load import files from IndexedDB on mount + subscribe for cross-editor sync.
+  // Waits for isDbReady: before that the logged-in user isn't set yet and the
+  // read hits the (empty) anonymous store — skript/global files then looked
+  // gone after a reload.
+  const { isDbReady } = useUserDataContext()
   useEffect(() => {
-    if (!isPython) return
+    if (!isPython || !isDbReady) return
     const loadImports = async () => {
       if (skriptId) {
         const record = await userDataService.get<GlobalImportsData>(skriptId, 'python-imports')
@@ -745,7 +749,7 @@ export const CodeEditor = memo(function CodeEditor({
     )
 
     return () => { unsubs.forEach(fn => fn()) }
-  }, [isPython, skriptId, editorInstanceId])
+  }, [isPython, skriptId, editorInstanceId, isDbReady])
 
   // Save helpers that write to IndexedDB directly (no React state update during typing)
   const saveSkriptImports = useCallback((data: GlobalImportsData) => {
@@ -789,7 +793,8 @@ export const CodeEditor = memo(function CodeEditor({
   const [renameBinaryValue, setRenameBinaryValue] = useState('')
 
   useEffect(() => {
-    if (!isPython) return
+    // Same isDbReady gate as the python-imports load above.
+    if (!isPython || !isDbReady) return
 
     const loadBinaries = async () => {
       const editorRec = await userDataService.get<BinaryFileData>(editorBinariesPageId, editorBinariesComponentId)
@@ -824,7 +829,7 @@ export const CodeEditor = memo(function CodeEditor({
     )
 
     return () => { unsubs.forEach(fn => fn()) }
-  }, [isPython, skriptId, editorInstanceId, editorBinariesPageId, editorBinariesComponentId])
+  }, [isPython, skriptId, editorInstanceId, editorBinariesPageId, editorBinariesComponentId, isDbReady])
 
   const saveEditorBinaries = useCallback((data: BinaryFileData) => {
     setEditorBinaries(data)
@@ -1229,6 +1234,9 @@ export const CodeEditor = memo(function CodeEditor({
   // Refs
   const editorRef = useRef<HTMLDivElement>(null)
   const editorViewRef = useRef<EditorView | null>(null)
+  // Latest runCode / runState for the Mod-Enter keybinding (see keymap).
+  const runCodeRef = useRef<() => void>(() => {})
+  const runStateRef = useRef<RunState>(RunState.STOPPED)
 
   // Kara mode (see KaraPanel / kara-module.ts). The trace is session-only:
   // a reload shows the initial world until the next Run.
@@ -2412,6 +2420,13 @@ export const CodeEditor = memo(function CodeEditor({
       : javascript()
 
     const extensions = [
+      // Ctrl/Cmd+Enter and Shift+Enter run the program. Prec.highest: basicSetup's
+      // default keymap binds Mod-Enter (insertBlankLine) and would win otherwise.
+      // Via ref: the keymap is built once, runCode changes every render.
+      Prec.highest(keymap.of([
+        { key: 'Mod-Enter', run: () => { runCodeRef.current(); return true } },
+        { key: 'Shift-Enter', run: () => { runCodeRef.current(); return true } },
+      ])),
       basicSetup,
       keymap.of([
         indentWithTab, // Enable Tab/Shift+Tab for indentation
@@ -3142,6 +3157,7 @@ export const CodeEditor = memo(function CodeEditor({
 
   // Run code
   const runCode = () => {
+    if (runStateRef.current === RunState.RUNNING) return
     if (!editorViewRef.current) return
 
     // Save current file before running
@@ -3181,6 +3197,9 @@ export const CodeEditor = memo(function CodeEditor({
       runJavaScriptCode(code)
     }
   }
+
+  runCodeRef.current = runCode
+  runStateRef.current = runState
 
   // Run JavaScript code in a Web Worker.
   // Multi-file: prepend sibling files (in tab order) above the active file's
@@ -4950,6 +4969,7 @@ export const CodeEditor = memo(function CodeEditor({
                   <Button
                     onClick={runCode}
                     size="sm"
+                    title="Run (Ctrl+Enter or Shift+Enter)"
                     variant={showSuccessFlash ? 'default' : 'default'}
                     className={`h-7 px-2 shadow-lg transition-colors ${
                       showSuccessFlash ? 'bg-green-600 hover:bg-green-600 text-white' : ''
@@ -5057,7 +5077,7 @@ export const CodeEditor = memo(function CodeEditor({
               <PanelLeftOpen className="w-4 h-4" />
             </Button>
             {runState === RunState.STOPPED ? (
-              <Button onClick={runCode} size="sm" className="h-7 w-7 p-0 shadow-lg" title="Run">
+              <Button onClick={runCode} size="sm" className="h-7 w-7 p-0 shadow-lg" title="Run (Ctrl+Enter or Shift+Enter)">
                 <Play className="w-3.5 h-3.5" />
               </Button>
             ) : (
