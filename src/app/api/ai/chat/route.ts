@@ -177,6 +177,9 @@ export async function POST(request: Request) {
           ],
           stream: true,
           ...(openrouterRouting(CHAT_MODEL) as Record<string, unknown>),
+        }, {
+          // Cancels the upstream OpenRouter request when the client disconnects.
+          signal: request.signal,
         })
 
         for await (const chunk of aiStream) {
@@ -195,9 +198,10 @@ export async function POST(request: Request) {
           error instanceof Error ? error.message : 'Unknown error'
         console.error('OpenRouter API error:', error)
         const data = JSON.stringify({ type: 'error', error: errorMessage })
-        await writer.write(encoder.encode(`data: ${data}\n\n`))
+        // Rejects if the client disconnected (stream already cancelled).
+        await writer.write(encoder.encode(`data: ${data}\n\n`)).catch(() => {})
       } finally {
-        await writer.close()
+        await writer.close().catch(() => { /* already closed by client abort */ })
       }
     })()
 
