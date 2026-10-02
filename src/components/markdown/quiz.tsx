@@ -443,6 +443,16 @@ function QuestionInner({
   // current answer; matches the persisted score when the answer is unedited).
   const textResult = autoCheck ? compareOutput(textAnswer, expected as string, compareOpts) : null
 
+  // Returned/graded exam: once the teacher set points by hand, the auto-check
+  // score below is no longer the result. Keep the box (the diff is still useful)
+  // but say it was overridden instead of showing its stale points; the grade
+  // badge underneath shows the teacher's points.
+  const { review: gradeReview } = useComponentReview(componentId ?? '')
+  const autoCheckOverridden = mode === 'review' && gradeReview?.overridden === true
+  // "Partially correct" only when the shown percentage is above 0 — a result
+  // that rounds to 0% reads "Incorrect".
+  const textPartial = textResult != null && Math.round(textResult.ratio * 100) > 0
+
   // The author's target, formatted for the reveal line in the slider panel.
   const sliderTarget: string | null = !sliderCheck
     ? null
@@ -529,7 +539,9 @@ function QuestionInner({
       <div
         className={cn(
           'rounded-lg border p-3 text-sm',
-          sliderRatio >= 1
+          autoCheckOverridden
+            ? 'border-border bg-muted/40'
+            : sliderRatio >= 1
             ? 'border-green-500/40 bg-green-500/10'
             : sliderRatio > 0
               ? 'border-amber-500/40 bg-amber-500/10'
@@ -557,7 +569,9 @@ function QuestionInner({
             </>
           )}
           <span className="ml-auto tabular-nums text-muted-foreground">
-            {scoreFromRatio(sliderRatio, maxPoints)} / {maxPoints} pts · {Math.round(sliderRatio * 100)}%
+            {autoCheckOverridden
+              ? 'Auto-check · overridden by teacher'
+              : `${scoreFromRatio(sliderRatio, maxPoints)} / ${maxPoints} pts · ${Math.round(sliderRatio * 100)}%`}
           </span>
         </div>
         {sliderBand && <div className="mt-2">{sliderBand.feedback}</div>}
@@ -677,9 +691,13 @@ function QuestionInner({
             <div
               className={cn(
                 'rounded-lg border p-3 text-sm',
-                textResult.exact
-                  ? 'border-green-500/40 bg-green-500/10'
-                  : 'border-amber-500/40 bg-amber-500/10'
+                autoCheckOverridden
+                  ? 'border-border bg-muted/40'
+                  : textResult.exact
+                    ? 'border-green-500/40 bg-green-500/10'
+                    : textPartial
+                      ? 'border-amber-500/40 bg-amber-500/10'
+                      : 'border-red-500/40 bg-red-500/10'
               )}
             >
               <div className="flex items-center gap-1.5 font-medium">
@@ -690,12 +708,22 @@ function QuestionInner({
                   </>
                 ) : (
                   <>
-                    <X className="w-4 h-4 text-amber-500" />
-                    <span className="text-amber-600 dark:text-amber-400">Partially correct</span>
+                    <X className={cn('w-4 h-4', textPartial ? 'text-amber-500' : 'text-red-500')} />
+                    <span
+                      className={
+                        textPartial
+                          ? 'text-amber-600 dark:text-amber-400'
+                          : 'text-red-600 dark:text-red-400'
+                      }
+                    >
+                      {textPartial ? 'Partially correct' : 'Incorrect'}
+                    </span>
                   </>
                 )}
                 <span className="ml-auto tabular-nums text-muted-foreground">
-                  {scoreFromRatio(textResult.ratio, maxPoints)} / {maxPoints} pts · {Math.round(textResult.ratio * 100)}%
+                  {autoCheckOverridden
+                    ? 'Auto-check · overridden by teacher'
+                    : `${scoreFromRatio(textResult.ratio, maxPoints)} / ${maxPoints} pts · ${Math.round(textResult.ratio * 100)}%`}
                 </span>
               </div>
               {/* The diff prints the expected output, i.e. the key: full reveal only. */}
