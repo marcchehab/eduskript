@@ -105,6 +105,7 @@ Other language identifiers (java, cpp, go, rust, php, css, json, yaml, xml, …)
 - \`file="name.py"\` - Multi-file editor: repeat the fence with the same \`id\` and a different \`file=\` to add a tab. \`\`\`python editor id="ex1" file="main.py"\`\`\` followed by \`\`\`python editor id="ex1" file="helper.py"\`\`\` merges into one two-tab editor. Not wired up for \`html\` yet (one file per HTML editor).
 - \`assets="a.csv,b.png"\` - Teacher-attached read-only files (resolved from skript file storage) the student's code can open, e.g. \`pd.read_csv('a.csv')\`. Python only.
 - \`allow-upload\` / \`accept="image/*,.csv"\` - Lets the student upload their own file into the editor (in-browser only, never sent to the server); \`accept\` restricts the file picker by MIME type/extension. Python only.
+- \`toolbox="befehle.py"\` - Pinned toolbox tab (cube icon, cannot be closed or renamed) bound to the skript-scoped file of that name: every editor in the skript with the same \`toolbox\` edits the same file, and any Python editor can \`from befehle import *\`. The file is created (\`# Ihre Werkzeugkiste\`) on the student's first edit; until then an import fails with ModuleNotFoundError, AURORA shows \`error.module\` and the tab flashes. Per student, on-device for anonymous visitors, synced when logged in. Works with \`single\` (the tab row then shows main + toolbox). Python only.
 - \`db="database.db"\` - For SQL: specify database file
 - \`solution="SELECT ..."\` - For SQL: expected solution query. Enables automatic pass/fail verification after each run. Multi-line solutions use \`\\n\` literals: \`solution="SELECT a, b\\nFROM t"\`
 - \`schema-image="name"\` - For SQL: override the auto-generated ER diagram with a specific Excalidraw/image asset instead of deriving it from \`db\`
@@ -880,7 +881,7 @@ export function getCondensedSyntaxReference(): string {
   - Collapsible: \`> [!type]-\` (closed) or \`> [!type]+\` (open)
   - WRONG: \`> [!tip]\\n> **Title**\` - NEVER put title on new line!
 
-**Code Editors:** \`\`\`language editor [single] [exam] [output-only] [id="x"] [file="name.py"] [assets="a.csv,b.png"] [allow-upload] [accept="..."] [db="file.db"] [solution="SELECT ..."] [schema-image="name"] [height="500"]\`\`\` — \`output-only\` auto-runs on load and shows just the output/plot (collapsed code, expandable); great for matplotlib figures.
+**Code Editors:** \`\`\`language editor [single] [exam] [output-only] [id="x"] [file="name.py"] [assets="a.csv,b.png"] [allow-upload] [accept="..."] [toolbox="befehle.py"] [db="file.db"] [solution="SELECT ..."] [schema-image="name"] [height="500"]\`\`\` — \`output-only\` auto-runs on load and shows just the output/plot (collapsed code, expandable); great for matplotlib figures.
   - Executable: python, javascript, sql, html. Other language IDs only get syntax highlighting.
   - \`html editor\` is special: split view with a sandboxed iframe live-preview (\`allow-scripts allow-modals allow-forms\`, no \`allow-same-origin\`). No exam/python-check pairing.
   - \`single\`: hides file tabs (single-file mode).
@@ -888,6 +889,7 @@ export function getCondensedSyntaxReference(): string {
   - \`exam\`: silent grading — pair with python-check; student runs code but never sees pass/fail feedback. Use for assessments, NOT practice. Default (no \`exam\`) shows feedback after each "Check" click.
   - \`file="name.py"\`: repeat the fence with the same \`id\` and a different \`file=\` to merge into one multi-tab editor (Python/JS/SQL only, not HTML yet).
   - \`assets="a.csv,b.png"\` / \`allow-upload\` + \`accept="..."\`: teacher-attached read-only files, or let the student upload their own (Python only).
+  - \`toolbox="befehle.py"\`: pinned tab for a skript-wide student file (created on first edit), importable from every Python editor of the skript (\`from befehle import *\`).
   - \`solution="SELECT ..."\`: SQL only — shows pass/fail after each run. Multi-line: use \`\\n\` literals inside the quotes. \`schema-image="name"\` overrides the auto-generated ER diagram.
   - \`height="500"\`: pixel height of the editor (any language); for HTML this is the editor + preview pane total (default 400).
 

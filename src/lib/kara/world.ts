@@ -314,7 +314,7 @@ export interface KaraTrace {
     kind?: 'loop' | 'kara' | 'python'
     /** Error class for AURORA's comment (null/absent: unclassified, e.g. ValueError). */
     sub?: KaraErrorSub | null
-    /** Forbidden name (sub 'forbidden'), e.g. 'exec'. */
+    /** Forbidden name (sub 'forbidden'), e.g. 'exec'; missing module (sub 'module'), e.g. 'befehle'. */
     name?: string
   } | null
   /** Static checks of the student's code (kara-module.ts `_lint`), sorted by line. */

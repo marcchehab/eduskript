@@ -13,6 +13,7 @@ import { CodeEditor } from '@/components/public/code-editor'
 import { HtmlPreviewEditor } from '@/components/public/code-editor/html-preview-editor'
 import { DeferredMount } from '@/components/public/code-editor/deferred-mount'
 import { CodeEditorPlaceholder } from '@/components/public/code-editor/code-editor-placeholder'
+import { parseToolboxName } from '@/components/public/code-editor/file-scopes'
 import { Tabs, TabItem } from '@/components/markdown/tabs'
 import { Youtube } from '@/components/markdown/youtube'
 import { MuxVideo } from '@/components/markdown/mux-video'
@@ -352,6 +353,7 @@ export function createMarkdownComponents(
     const karaWorldAttr = (props['dataKaraWorld'] as string) || (props['data-kara-world'] as string)
     const karaTileAttr = (props['dataKaraTile'] as string) || (props['data-kara-tile'] as string)
     const karaCodeWidthAttr = (props['dataKaraCodeWidth'] as string) || (props['data-kara-code-width'] as string)
+    const toolboxAttr = (props['dataToolbox'] as string) || (props['data-toolbox'] as string)
 
     // Parse multi-file data if present, otherwise fall back to single-file initialCode
     let initialFiles: { name: string; content: string }[] | undefined
@@ -545,6 +547,7 @@ export function createMarkdownComponents(
             karaAssets={karaAssets}
             karaCodeWidth={karaCodeWidthAttr ? Math.min(90, Math.max(10, parseInt(karaCodeWidthAttr, 10) || 50)) : undefined}
             karaTile={karaTileAttr ? parseInt(karaTileAttr, 10) || undefined : undefined}
+            toolbox={language === 'python' ? parseToolboxName(toolboxAttr) : undefined}
           />
         </DeferredMount>
       </div>

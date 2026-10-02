@@ -46,7 +46,14 @@ interface ParentNode extends Node {
  * # Students can upload images, CSVs, etc. and read them with PIL/pandas.
  * ```
  *
- * Note: `assets`/`allow-upload` are intended for the Python editor only.
+ * Pinned toolbox file (Python only), shared by every editor of the skript:
+ * ```python editor id="w2-l1" toolbox="befehle.py"
+ * from befehle import *
+ * ```
+ * Passed through as `data-toolbox` like any key=value; validated in
+ * markdown-components (parseToolboxName) and rendered by code-editor/index.tsx.
+ *
+ * Note: `assets`/`allow-upload`/`toolbox` are intended for the Python editor only.
  */
 export function remarkCodeEditor() {
   return (tree: Node) => {

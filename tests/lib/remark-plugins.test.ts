@@ -73,6 +73,15 @@ describe('Remark Plugins', () => {
       expect(getHtmlAttr(htmlNode?.value, 'data-height')).toBe('400')
     })
 
+    it('passes toolbox through as data-toolbox (id group path)', () => {
+      const markdown = '```python editor id="w2-l1" toolbox="befehle.py"\nfrom befehle import *\n```'
+      const processor = unified().use(remarkParse).use(remarkCodeEditor)
+      const tree = processor.parse(markdown)
+      processor.runSync(tree)
+      const htmlNode = findNode(tree, (node: any) => node.type === 'html' && node.value?.includes('code-editor'))
+      expect(getHtmlAttr(htmlNode?.value, 'data-toolbox')).toBe('befehle.py')
+    })
+
     it('should use language from code block', () => {
       const markdown = '```javascript editor\nconsole.log("test")\n```'
 

@@ -2776,3 +2776,18 @@ mark.text-highlight-orange {
   font-size: inherit;
   line-height: inherit;
 }
+
+/* ===== Code editor: toolbox tab flash ===== */
+/* Pinned toolbox tab (toolbox="befehle.py") after a run failed with
+   `No module named 'befehle'` — see code-editor/index.tsx flashToolbox. */
+@keyframes toolboxFlash {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(245 158 11 / 0); }
+  25%, 75% { box-shadow: 0 0 0 3px rgb(245 158 11 / 0.85); }
+  50%      { box-shadow: 0 0 0 1px rgb(245 158 11 / 0.4); }
+}
+.toolbox-flash {
+  animation: toolboxFlash 0.8s ease-in-out 3;
+}
+@media (prefers-reduced-motion: reduce) {
+  .toolbox-flash { animation: none; box-shadow: 0 0 0 2px rgb(245 158 11 / 0.85); }
+}

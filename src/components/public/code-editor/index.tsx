@@ -18,7 +18,7 @@ import { autocompletion } from '@codemirror/autocomplete'
 import { indentationMarkers } from '@replit/codemirror-indentation-markers'
 import { createPythonCompletions } from './python-completions'
 import { Button } from '@/components/ui/button'
-import { Play, Square, RotateCcw, Maximize2, Minimize2, Scan, X, Plus, FileText, Save, History, WrapText, Circle, CheckCircle2, Package, Trash2, Paperclip, Upload, Pencil, Cloud, HardDrive, PanelLeftClose, PanelRightClose, PanelLeftOpen, PanelRightOpen, Rows2, Columns2 } from 'lucide-react'
+import { Play, Square, RotateCcw, Maximize2, Minimize2, Scan, X, Plus, FileText, Box, Save, History, WrapText, Circle, CheckCircle2, Package, Trash2, Paperclip, Upload, Pencil, Cloud, HardDrive, PanelLeftClose, PanelRightClose, PanelLeftOpen, PanelRightOpen, Rows2, Columns2 } from 'lucide-react'
 import { useZoom } from '@/contexts/zoom-context'
 import { ZoomPill } from '@/components/ui/zoom-pill'
 import { useUserData, useCreateVersion, useVersionHistory, useRestoreVersion, useDeleteVersion, useUpdateVersionLabel, useOrphanedComponentIds, useReassignVersionHistory } from '@/lib/userdata/hooks'
@@ -63,6 +63,7 @@ import { PythonProgressBar } from './python-progress-bar'
 import { PythonTestResults } from './python-test-results'
 import { useCoupledVideo, parseTimecode } from '@/components/markdown/coupled-video-context'
 import type { PythonCheckResult } from './types'
+import { moveLocalToImports, upsertImportFile, isToolboxModuleError, TOOLBOX_DEFAULT_CONTENT } from './file-scopes'
 import { deferUntilIdle } from '@/lib/defer-until-idle'
 import { safeRandomUUID } from '@/lib/uuid'
 import {
@@ -172,6 +173,10 @@ interface CodeEditorProps {
   // audio/music file names as written in the level config, portraits as
   // `portrait:<speaker>`.
   karaAssets?: Record<string, string>
+  // Pinned skript-scope file (markdown `toolbox="befehle.py"`, Python only):
+  // always shown as a tab, created in the skript's python-imports record on
+  // first edit. Validated by parseToolboxName (file-scopes.ts).
+  toolbox?: string
 }
 
 /** One stage of a staged Python check (see CodeEditorProps.checkStages). */
@@ -351,6 +356,7 @@ export const CodeEditor = memo(function CodeEditor({
   karaWorld: karaWorldSource,
   karaTile = 48,
   karaCodeWidth,
+  toolbox,
   karaAssets,
 }: CodeEditorProps) {
   const { resolvedTheme } = useTheme()
@@ -707,8 +713,15 @@ export const CodeEditor = memo(function CodeEditor({
   // React state updates that cause CodeMirror focus loss (see commit 5d673d7).
   // The sync engine picks up dirty records automatically.
   const isPython = language === 'python'
+  // Toolbox needs a skript to scope the file to (absent in e.g. previews).
+  const toolboxName = isPython && skriptId ? toolbox : undefined
+  const isToolboxTab = (scope: 'skript' | 'global', name: string) => scope === 'skript' && name === toolboxName
   const [skriptImports, setSkriptImports] = useState<GlobalImportsData>({ files: [] })
   const [globalImports, setGlobalImports] = useState<GlobalImportsData>({ files: [] })
+  // Content of an import tab; a toolbox that was never edited shows its default.
+  const importContent = useCallback((store: GlobalImportsData | undefined, scope: 'skript' | 'global', name: string) =>
+    store?.files.find(f => f.name === name)?.content ?? (scope === 'skript' && name === toolboxName ? TOOLBOX_DEFAULT_CONTENT : ''),
+  [toolboxName])
 
   // Stable per-instance ID for pub/sub self-filtering
   const editorInstanceId = useRef(safeRandomUUID()).current
@@ -934,6 +947,15 @@ export const CodeEditor = memo(function CodeEditor({
   }, [pendingScopeChange, readBinariesForScope, writeBinariesForScope])
 
   // Which import files are currently open as tabs
+  // Toolbox tab flash after `No module named 'befehle'` (value = flash key, 0 = off).
+  const [toolboxFlash, setToolboxFlash] = useState(0)
+  const toolboxFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const flashToolbox = () => {
+    setToolboxFlash(k => k + 1)
+    if (toolboxFlashTimer.current) clearTimeout(toolboxFlashTimer.current)
+    toolboxFlashTimer.current = setTimeout(() => setToolboxFlash(0), 2400)
+  }
+  useEffect(() => () => { if (toolboxFlashTimer.current) clearTimeout(toolboxFlashTimer.current) }, [])
   const [openImports, setOpenImports] = useState<Array<{ name: string; scope: 'skript' | 'global' }>>([])
   // Active tab: either a local file or an import file
   const [activeTab, setActiveTab] = useState<
@@ -1028,7 +1050,7 @@ export const CodeEditor = memo(function CodeEditor({
   const currentCode = activeTab.type === 'local'
     ? (files[activeFileIndex]?.content || initialCode)
     : (activeTab.type === 'import'
-      ? ((activeTab.scope === 'skript' ? skriptImports : globalImports)?.files.find(f => f.name === activeTab.name)?.content || '')
+      ? importContent(activeTab.scope === 'skript' ? skriptImports : globalImports, activeTab.scope, activeTab.name)
       : initialCode)
   const hasTurtleModule = language === 'python' && /import\s+turtle|from\s+turtle/.test(currentCode)
   const hasMatplotlib = language === 'python' && /import\s+matplotlib|from\s+matplotlib/.test(currentCode)
@@ -1086,7 +1108,9 @@ export const CodeEditor = memo(function CodeEditor({
 
   // Calculate auto-height based on number of lines in the code (editor area only, output adds separately)
   const lineCount = currentCode.split('\n').length
-  const fileTabsHeight = singleFile ? 0 : 36 // height of file tabs row
+  // `single` hides the tabs row, unless a pinned toolbox tab needs it.
+  const showFileTabs = !singleFile || !!toolboxName
+  const fileTabsHeight = showFileTabs ? 36 : 0 // height of file tabs row
   const calculatedEditorHeight = Math.max(
     MIN_EDITOR_HEIGHT,
     Math.min(MAX_EDITOR_HEIGHT, lineCount * LINE_HEIGHT + fileTabsHeight + 60) // 60px for controls
@@ -1345,7 +1369,8 @@ export const CodeEditor = memo(function CodeEditor({
     if (currentTab.type === 'import') {
       const { scope, name } = currentTab
       const store = scope === 'skript' ? skriptImportsRef.current : globalImportsRef.current
-      const updatedFiles = store.files.map(f => f.name === name ? { ...f, content } : f)
+      // upsert: the toolbox file (toolbox="...") is created here on its first edit
+      const updatedFiles = upsertImportFile(store.files, name, content)
       // Update only the ref during typing to avoid re-renders,
       // persist directly to IndexedDB
       if (scope === 'skript') {
@@ -2394,6 +2419,7 @@ export const CodeEditor = memo(function CodeEditor({
     if (!isPython) return
     setOpenImports(prev => {
       const filtered = prev.filter(tab => {
+        if (isToolboxTab(tab.scope, tab.name)) return true // pinned, may not exist yet
         const store = tab.scope === 'skript' ? skriptImports : globalImports
         return store.files.some(f => f.name === tab.name)
       })
@@ -2401,7 +2427,7 @@ export const CodeEditor = memo(function CodeEditor({
       return filtered
     })
     // If the active tab is an import that was deleted, switch to local file 0
-    if (activeTab.type === 'import') {
+    if (activeTab.type === 'import' && !isToolboxTab(activeTab.scope, activeTab.name)) {
       const store = activeTab.scope === 'skript' ? skriptImports : globalImports
       if (!store.files.some(f => f.name === activeTab.name)) {
         setActiveTab({ type: 'local', index: 0 })
@@ -2816,6 +2842,7 @@ export const CodeEditor = memo(function CodeEditor({
 
   // Add output helper
   const addOutput = (message: string, level: OutputLevel = OutputLevel.OUTPUT) => {
+    if (level === OutputLevel.ERROR && isToolboxModuleError({ message }, toolboxName)) flashToolbox()
     setOutput((prev) => appendOutputCapped(prev, { message, level, timestamp: Date.now() }))
     setPanelVisible(true)
     setActivePanel('output')
@@ -2838,8 +2865,10 @@ export const CodeEditor = memo(function CodeEditor({
       const store = scope === 'skript' ? skriptImportsRef.current : globalImportsRef.current
       const updater = scope === 'skript' ? saveSkriptImports : saveGlobalImports
       if (store) {
-        const updatedFiles = store.files.map(f => f.name === name ? { ...f, content } : f)
-        updater({ files: updatedFiles })
+        const exists = store.files.some(f => f.name === name)
+        // An untouched toolbox tab is not written: the file is created on first edit.
+        if (!exists && !(isToolboxTab(scope, name) && content !== TOOLBOX_DEFAULT_CONTENT)) return
+        updater({ files: upsertImportFile(store.files, name, content) })
       }
     }
   }
@@ -2867,12 +2896,14 @@ export const CodeEditor = memo(function CodeEditor({
     if (activeTab.type === 'local') {
       return files[activeTab.index]?.content || initialCode
     }
-    const store = activeTab.scope === 'skript' ? skriptImports : globalImports
-    return store?.files.find(f => f.name === activeTab.name)?.content || ''
+    return importContent(activeTab.scope === 'skript' ? skriptImports : globalImports, activeTab.scope, activeTab.name)
   }
 
   // Add a new file
   const addNewFile = () => {
+    // Flush the open buffer first: setFiles(prev => ...) below starts from
+    // state, and the layout effect then copies that into filesRef.
+    saveCurrentFile()
     const fileNumber = files.length + 1
     const ext = getFileExtension(language)
     const newFile: PythonFile = {
@@ -2890,6 +2921,7 @@ export const CodeEditor = memo(function CodeEditor({
       addOutput('Cannot remove the last file', OutputLevel.WARNING)
       return
     }
+    saveCurrentFile() // see addNewFile
     setFiles(prev => prev.filter((_, idx) => idx !== index))
     if (activeFileIndex >= index && activeFileIndex > 0) {
       setActiveFileIndex(prev => prev - 1)
@@ -2900,27 +2932,31 @@ export const CodeEditor = memo(function CodeEditor({
     }
   }
 
-  // Move a local file to imports
+  // Move a local file to imports. Reads the LIVE buffer (filesRef / the open
+  // CodeMirror doc), not `files` state: typing only updates the ref, so state
+  // still held the starter text and the moved file came out as '# New file'.
+  // See file-scopes.ts.
   const makeImport = (fileIndex: number, scope: 'skript' | 'global') => {
-    const file = files[fileIndex]
-    if (!file) return
-    const store = scope === 'skript' ? skriptImports : globalImports
+    const store = scope === 'skript' ? skriptImportsRef.current : globalImportsRef.current
     const updater = scope === 'skript' ? saveSkriptImports : saveGlobalImports
     if (!store) return
-
-    // Check for duplicate name in target scope
-    if (store.files.some(f => f.name === file.name)) {
-      addOutput(`A file named "${file.name}" already exists in ${scope === 'skript' ? 'Skript' : 'Global'} scope`, OutputLevel.WARNING)
+    const live = editorViewRef.current && activeTab.type === 'local' && activeTab.index === fileIndex
+      ? editorViewRef.current.state.doc.toString()
+      : null
+    const result = moveLocalToImports(filesRef.current, fileIndex, live, store.files)
+    if (!result.ok) {
+      if (result.reason === 'duplicate') {
+        addOutput(`A file named "${filesRef.current[fileIndex].name}" already exists in ${scope === 'skript' ? 'Skript' : 'Global'} scope`, OutputLevel.WARNING)
+      }
       return
     }
 
-    // Add to import store
-    updater({ files: [...store.files, { name: file.name, content: file.content }] })
-    // Remove from local files
-    setFiles(prev => prev.filter((_, idx) => idx !== fileIndex))
+    updater({ files: result.importFiles })
+    filesRef.current = result.localFiles
+    setFiles(result.localFiles)
     // Open as import tab
-    setOpenImports(prev => [...prev, { name: file.name, scope }])
-    setActiveTab({ type: 'import', scope, name: file.name })
+    setOpenImports(prev => [...prev, { name: result.moved.name, scope }])
+    setActiveTab({ type: 'import', scope, name: result.moved.name })
     if (activeFileIndex >= fileIndex && activeFileIndex > 0) {
       setActiveFileIndex(prev => prev - 1)
     }
@@ -3098,6 +3134,7 @@ export const CodeEditor = memo(function CodeEditor({
       return
     }
 
+    saveCurrentFile() // see addNewFile
     setFiles(prev => prev.map((file, idx) =>
       idx === index ? { ...file, name: newName } : file
     ))
@@ -3144,7 +3181,7 @@ export const CodeEditor = memo(function CodeEditor({
     if (!editorViewRef.current) return
     const content = activeTab.type === 'local'
       ? (files[activeFileIndex]?.content || '')
-      : ((activeTab.scope === 'skript' ? skriptImports : globalImports)?.files.find(f => f.name === activeTab.name)?.content || '')
+      : importContent(activeTab.scope === 'skript' ? skriptImports : globalImports, activeTab.scope, activeTab.name)
     const view = editorViewRef.current
     // Skip if content matches — avoids cursor disruption on unrelated import changes
     if (view.state.doc.toString() === content) return
@@ -3157,7 +3194,7 @@ export const CodeEditor = memo(function CodeEditor({
       annotations: programmaticChange.of(true)
     })
     view.dispatch(transaction)
-  }, [activeFileIndex, activeTab, files, skriptImports, globalImports])
+  }, [activeFileIndex, activeTab, files, skriptImports, globalImports, importContent])
 
   // Run code
   const runCode = () => {
@@ -3691,7 +3728,10 @@ export const CodeEditor = memo(function CodeEditor({
       } else if (timedOut) {
         addOutput('TimeoutError: Execution timed out', OutputLevel.ERROR)
       } else if (typeof result === 'string') {
-        setKaraRun({ world: karaWorld, trace: JSON.parse(result) as KaraTrace })
+        const trace = JSON.parse(result) as KaraTrace
+        setKaraRun({ world: karaWorld, trace })
+        // AURORA's error.module line points at the toolbox tab; make it findable.
+        if (isToolboxModuleError(trace.error, toolboxName)) flashToolbox()
       }
     } catch (error: any) {
       addOutput(cleanPythonError(error.message || String(error)), OutputLevel.ERROR)
@@ -4721,8 +4761,8 @@ export const CodeEditor = memo(function CodeEditor({
               )}
             </div>
 
-            {/* File Tabs - hidden in single-file mode */}
-            {!singleFile && (
+            {/* File Tabs - hidden in single-file mode (unless a toolbox is pinned) */}
+            {showFileTabs && (
               <div
                 className="flex items-center gap-1 pl-2 border-b bg-muted/10 h-9"
                 style={{ paddingRight: narrowCode ? 8 : toolbarWidth + 8 }}
@@ -4801,8 +4841,28 @@ export const CodeEditor = memo(function CodeEditor({
                       </div>
                     ))}
 
+                    {/* Pinned toolbox tab (toolbox="befehle.py"): skript scope, no close,
+                        no rename/move menu — the markdown binds the name. */}
+                    {toolboxName && (() => {
+                      const isActive = activeTab.type === 'import' && isToolboxTab(activeTab.scope, activeTab.name)
+                      return (
+                        <Button
+                          key={`toolbox-${toolboxFlash}`}
+                          size="sm"
+                          variant={isActive ? 'secondary' : 'ghost'}
+                          onClick={() => switchToImport('skript', toolboxName)}
+                          className={`h-7 px-2 text-xs gap-1 ${isActive ? 'bg-amber-100 dark:bg-amber-900/30 hover:bg-amber-200 dark:hover:bg-amber-900/50' : 'text-amber-700 dark:text-amber-400'} ${toolboxFlash ? 'toolbox-flash' : ''}`}
+                          title={`Your toolbox · shared by every editor in this skript · import with: from ${toolboxName.replace(/\.py$/, '')} import *`}
+                          data-toolbox-tab={toolboxName}
+                        >
+                          <Box className="w-3 h-3" />
+                          {toolboxName}
+                        </Button>
+                      )
+                    })()}
+
                     {/* Open import tabs (visually distinct) */}
-                    {isPython && openImports.map((imp) => {
+                    {isPython && openImports.filter(imp => !isToolboxTab(imp.scope, imp.name)).map((imp) => {
                       const isActive = activeTab.type === 'import' && activeTab.scope === imp.scope && activeTab.name === imp.name
                       const isRenaming = renamingImport?.scope === imp.scope && renamingImport?.name === imp.name
                       return isRenaming ? (
@@ -4856,7 +4916,7 @@ export const CodeEditor = memo(function CodeEditor({
                       )
                     })}
 
-                    <Button
+                    {!singleFile && <Button
                       size="sm"
                       variant="ghost"
                       onClick={addNewFile}
@@ -4864,7 +4924,7 @@ export const CodeEditor = memo(function CodeEditor({
                       title="Add new file"
                     >
                       <Plus className="w-4 h-4" />
-                    </Button>
+                    </Button>}
                   </div>
               </div>
             )}

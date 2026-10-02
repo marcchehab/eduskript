@@ -125,6 +125,8 @@ describe.skipIf(!hasPython)('kara.py trace: one action per step', () => {
     expect(sub('read_log()\n')).toBe('no_terminal')
     expect(sub('mvoe()\n')).toBe('name')
     expect(sub('from befehel import *\n')).toBe('module')
+    // name lets the editor flash its toolbox tab (file-scopes.ts isToolboxModuleError)
+    expect(run('from befehel import *\n').error?.name).toBe('befehel')
     expect(sub('if True:\nmove()\n')).toBe('indent')
     expect(sub('move(\n')).toBe('syntax')
     expect(sub('move(3)\n')).toBe('type')

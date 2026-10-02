@@ -585,6 +585,9 @@ def _run(student_path='__kara_student.py', world_path='__kara_world.json'):
         error = {'line': _error_line(e), 'message': f'{type(e).__name__}: {e}', 'kind': 'kara', 'sub': e.code}
     except Exception as e:
         error = {'line': _error_line(e), 'message': f'{type(e).__name__}: {e}', 'kind': 'python', 'sub': _error_sub(e)}
+        if isinstance(e, ModuleNotFoundError) and e.name:
+            # The editor flashes its toolbox tab when this is the toolbox module.
+            error['name'] = e.name
     finally:
         _sys.stdout = old_out
     mask = ~(_DOORS | _LASERS)
