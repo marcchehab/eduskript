@@ -634,6 +634,11 @@ export const CodeEditor = memo(function CodeEditor({
   // reading offsetWidth in render forces a synchronous reflow on every render,
   // which with many editors on a page is a severe layout-thrash bottleneck.
   const [containerWidth, setContainerWidth] = useState(0)
+  // Narrow container (phones): panes stack vertically, each full width, instead
+  // of splitting side by side. 0 = not measured yet → treated as wide.
+  const narrowLayout = containerWidth > 0 && containerWidth < 640
+  // Height of the graphics pane when stacked under the code (narrowLayout).
+  const STACKED_GRAPHICS_HEIGHT = 300
 
   // Resizable output panel state (vertical splitter between main content and output)
   const [outputPanelHeight, setOutputPanelHeight] = useState(220) // default height in pixels
@@ -1031,8 +1036,9 @@ export const CodeEditor = memo(function CodeEditor({
   // Before measurement (width 0) default to showing both, matching prior behavior.
   // Width-based visibility (a pane dragged too narrow hides). Explicit `collapsed`
   // overrides it: a collapsed side is force-hidden, the other force-shown full width.
-  const widthShowEditor = containerWidth ? (editorWidth / 100) * containerWidth >= MIN_VISIBLE_WIDTH : true
-  const widthShowGraphics = containerWidth ? ((100 - editorWidth) / 100) * containerWidth >= MIN_VISIBLE_WIDTH : true
+  // Stacked (narrowLayout) panes are always full width, so editorWidth doesn't apply.
+  const widthShowEditor = containerWidth && !narrowLayout ? (editorWidth / 100) * containerWidth >= MIN_VISIBLE_WIDTH : true
+  const widthShowGraphics = containerWidth && !narrowLayout ? ((100 - editorWidth) / 100) * containerWidth >= MIN_VISIBLE_WIDTH : true
   const showEditor = collapsed === 'editor' ? false : collapsed === 'graphics' ? true : widthShowEditor
   const showGraphics = collapsed === 'graphics' ? false : collapsed === 'editor' ? true : widthShowGraphics
   const [canvasVisible, setCanvasVisible] = useState(false) // Start hidden, show only when graphics detected
@@ -1237,8 +1243,10 @@ export const CodeEditor = memo(function CodeEditor({
   const isKaraRef = useRef(isKara)
   isKaraRef.current = isKara
   // Kara layout: side by side (default) or code above the world. Per-browser
-  // preference (localStorage, all Kara editors share it).
-  const [karaSide, setKaraSide] = useState(true)
+  // preference (localStorage, all Kara editors share it). Only Kara editors are
+  // ever side by side, and never on a narrow screen (always stacked there).
+  const [karaSidePref, setKaraSide] = useState(true)
+  const karaSide = isKara && karaSidePref && !narrowLayout
   useEffect(() => {
     try { if (localStorage.getItem('kara-layout') === 'stacked') setKaraSide(false) } catch { /* storage blocked */ }
   }, [])
@@ -1249,9 +1257,11 @@ export const CodeEditor = memo(function CodeEditor({
     })
   }
   const karaStacked = isKara && !karaSide
+  // Graphics pane (turtle/matplotlib/SQL schema) below the code instead of beside it.
+  const graphicsStacked = !isKara && canvasVisible && narrowLayout
   // A narrow code pane (e.g. Kara side by side at code-width 20 %) has no room
   // for the floating toolbar next to the file tabs: it gets its own row.
-  const splitWidth = (isKara ? karaSide : canvasVisible && showGraphics) ? (editorWidth / 100) * containerWidth : containerWidth
+  const splitWidth = (isKara ? karaSide : canvasVisible && showGraphics && !graphicsStacked) ? (editorWidth / 100) * containerWidth : containerWidth
   const narrowCode = containerWidth > 0 && splitWidth < 380
   const [karaRun, setKaraRun] = useState<{ world: KaraWorld; trace: KaraTrace } | null>(null)
   // Drag handle between code and world: sets the code height (world keeps its
@@ -4149,23 +4159,28 @@ export const CodeEditor = memo(function CodeEditor({
         height: fullscreen ? '100vh'
           : karaSide ? `${manualHeight ?? Math.max(520, editorHeight)}px`
           : isKara ? (manualHeight != null ? `${manualHeight}px` : undefined)
-          : `${manualHeight ?? totalHeight}px`,
+          : `${manualHeight ?? totalHeight + (graphicsStacked && showGraphics && showEditor ? STACKED_GRAPHICS_HEIGHT : 0)}px`,
       }}
       data-dynamic-height="true"
     >
       {/* Main content area (Kara: stacked, code on top, world below) */}
-      <div ref={containerRef} className={cn('flex flex-1 overflow-hidden relative', karaStacked && 'flex-col')}>
+      <div ref={containerRef} className={cn('flex flex-1 overflow-hidden relative', (karaStacked || graphicsStacked) && 'flex-col')}>
         {/* Code Editor Panel — always mounted; hidden via display:none when
             collapsed so CodeMirror keeps running (output-only auto-run reads
             from it) and a re-expand doesn't remount/reinit the editor. */}
           <div
-            className={cn('flex flex-col relative', !karaStacked && 'border-r')}
+            className={cn('flex flex-col relative', !karaStacked && !graphicsStacked && 'border-r')}
             style={karaSide ? {
               display: showEditor ? 'flex' : 'none',
               width: `${editorWidth}%`,
             } : isKara ? {
               display: showEditor ? 'flex' : 'none',
               ...(fullscreen || manualHeight != null
+                ? { flex: '1 1 0', minHeight: 0 }
+                : { height: `${editorHeight}px`, flexShrink: 0 }),
+            } : graphicsStacked ? {
+              display: showEditor ? 'flex' : 'none',
+              ...(fullscreen || manualHeight != null || !showGraphics
                 ? { flex: '1 1 0', minHeight: 0 }
                 : { height: `${editorHeight}px`, flexShrink: 0 }),
             } : {
@@ -4198,7 +4213,7 @@ export const CodeEditor = memo(function CodeEditor({
               >
                 <WrapText className="w-3 h-3" />
               </button>
-              {isKara && (
+              {isKara && !narrowLayout && (
                 <button
                   onClick={toggleKaraLayout}
                   className="h-6 w-6 p-0 rounded-md flex items-center justify-center transition-colors hover:bg-accent hover:text-accent-foreground"
@@ -5031,7 +5046,7 @@ export const CodeEditor = memo(function CodeEditor({
         {/* Collapsed-editor rail: the only way back once the code panel is
             hidden, and it keeps Run/Stop reachable while collapsed. */}
         {!showEditor && (
-          <div className="flex flex-col items-center gap-1 border-r bg-muted/30 px-1 py-2 shrink-0">
+          <div className={cn('flex items-center gap-1 bg-muted/30 px-1 py-2 shrink-0', graphicsStacked ? 'flex-row border-b' : 'flex-col border-r')}>
             <Button
               onClick={expandPanels}
               size="sm"
@@ -5054,7 +5069,7 @@ export const CodeEditor = memo(function CodeEditor({
         )}
 
         {/* Draggable Splitter - wider touch target on mobile */}
-        {!isKara && showEditor && showGraphics && canvasVisible && (
+        {!isKara && !graphicsStacked && showEditor && showGraphics && canvasVisible && (
           <div
             onMouseDown={handleSplitterMouseDown}
             onTouchStart={handleSplitterTouchStart}
@@ -5077,8 +5092,13 @@ export const CodeEditor = memo(function CodeEditor({
             collapse/expand without a rerun. */}
         {!isKara && canvasVisible && (
           <div
-            className="flex flex-col relative"
-            style={{
+            className={cn('flex flex-col relative', graphicsStacked && showEditor && 'border-t')}
+            style={graphicsStacked ? {
+              display: showGraphics ? 'flex' : 'none',
+              ...(fullscreen || manualHeight != null || !showEditor
+                ? { flex: '1 1 0', minHeight: 0 }
+                : { height: `${STACKED_GRAPHICS_HEIGHT}px`, flexShrink: 0 }),
+            } : {
               display: showGraphics ? 'flex' : 'none',
               width: showEditor && showGraphics ? `${100 - editorWidth}%` : '100%',
             }}
@@ -5126,7 +5146,7 @@ export const CodeEditor = memo(function CodeEditor({
 
         {/* Collapsed-graphics rail: re-open the plot panel once it's hidden. */}
         {!isKara && canvasVisible && !showGraphics && (
-          <div className="flex flex-col items-center gap-1 border-l bg-muted/30 px-1 py-2 shrink-0">
+          <div className={cn('flex items-center gap-1 bg-muted/30 px-1 py-2 shrink-0', graphicsStacked ? 'flex-row border-t' : 'flex-col border-l')}>
             <Button
               onClick={expandPanels}
               size="sm"
