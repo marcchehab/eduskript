@@ -43,11 +43,20 @@
  *                                         line once the level is solved.
  *   aurora.<event>: text | audio=…        events: start, win, fail, error, loop
  *                                         (start = idle line in the bar under the world)
+ *   aurora.error.<sub>: text              per error class, sub = wall, terminal, door,
+ *                                         laser, box, acid, item, no_item, no_switch,
+ *                                         no_terminal, name, module, indent, syntax,
+ *                                         type, recursion. Lookup: error.<sub> → error →
+ *                                         course default (aurora-defaults.ts auroraLine)
+ *   aurora.fail.3: text                   replaces aurora.fail from the 3rd failed run
+ *                                         in a row (per page view, see kara-panel.tsx)
  *   music: file.mp3                       ambient loop (off until the student turns it on)
  *
  * The world is a torus like the original Kara: walking off one edge enters on
  * the opposite side. Close levels with `#`.
  */
+
+import type { KaraErrorSub } from './aurora-defaults'
 
 // Cell flags. Keep in sync with kara-module.ts.
 export const BLOCK = 1
@@ -202,7 +211,7 @@ function evidence(value: string): KaraEvidence {
 export function parseKaraConfig(src: string): KaraConfig {
   const config: KaraConfig = { goals: [], intro: [], logs: [], chips: [], aurora: {} }
   for (const raw of src.replace(/\r/g, '').split('\n')) {
-    const m = raw.match(/^\s*([a-z.]+)\s*:\s*(.*)$/i)
+    const m = raw.match(/^\s*([a-z][a-z0-9._]*)\s*:\s*(.*)$/i)
     if (!m) continue
     const key = m[1].toLowerCase()
     const value = m[2].trim()
@@ -227,13 +236,6 @@ export function parseKaraLevel(src: string): KaraLevel {
   const config = sep === -1 ? '' : text.slice(sep).replace(/^---\s*$/m, '')
   const variants = grids.split(/^===\s*$/m).filter(g => g.trim()).map(parseKaraWorld)
   return { variants: variants.length ? variants : [parseKaraWorld('')], config: parseKaraConfig(config) }
-}
-
-/** Built-in AURORA lines; levels override them with `aurora.<event>:`. */
-export const DEFAULT_AURORA: Record<string, string> = {
-  win: 'Task completed. I am almost impressed.',
-  fail: 'Program finished. Task not completed.',
-  loop: 'An endless loop. How… familiar.',
 }
 
 /** Every spoken line of a level: intro, logs, chips and AURORA events. */
@@ -294,7 +296,13 @@ export interface KaraStep {
 
 export interface KaraTrace {
   steps: KaraStep[]
-  error: { line: number | null; message: string; kind?: 'loop' | 'kara' | 'python' } | null
+  error: {
+    line: number | null
+    message: string
+    kind?: 'loop' | 'kara' | 'python'
+    /** Error class for AURORA's comment (null/absent: unclassified, e.g. ValueError). */
+    sub?: KaraErrorSub | null
+  } | null
   /** Level result; absent when the program raised. */
   goal?: { reached: boolean; missing: KaraGoal[] }
   /** Actions performed (moves, turns, put/remove, press, read). */

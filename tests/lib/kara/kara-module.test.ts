@@ -116,4 +116,19 @@ describe.skipIf(!hasPython)('kara.py trace: one action per step', () => {
     expect(runLogs('read_log()\nread_log()\n').goal?.reached).toBe(false)
     expect(runLogs('read_log()\nturn_left()\nturn_left()\nread_log()\n').goal).toEqual({ reached: true, missing: [] })
   })
+
+  it('classifies errors with error.sub', () => {
+    const sub = (code: string) => run(code).error?.sub
+    expect(run('turn_left()\nmove()\n').error).toMatchObject({ kind: 'kara', sub: 'wall', line: 2, message: "KaraError: MOP-7 can't move: there is a wall in front." })
+    expect(sub('remove_barrel()\n')).toBe('no_item')
+    expect(sub('press_switch()\n')).toBe('no_switch')
+    expect(sub('read_log()\n')).toBe('no_terminal')
+    expect(sub('mvoe()\n')).toBe('name')
+    expect(sub('from befehel import *\n')).toBe('module')
+    expect(sub('if True:\nmove()\n')).toBe('indent')
+    expect(sub('move(\n')).toBe('syntax')
+    expect(sub('move(3)\n')).toBe('type')
+    expect(sub('def f():\n    f()\nf()\n')).toBe('recursion')
+    expect(run('x = 1 / 0\n').error).toMatchObject({ kind: 'python', sub: null })
+  })
 })

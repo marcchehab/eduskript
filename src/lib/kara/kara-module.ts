@@ -34,6 +34,12 @@
  * started as a door/laser, tracked with two high bits that are stripped from
  * the returned mutations.
  *
+ * Errors: `error.kind` is 'kara' (KaraError: MOP-7 refused an action),
+ * 'loop' (StepLimitError) or 'python'; `error.sub` classifies it further
+ * (KaraError.code, or the Python exception type via `_error_sub`) so AURORA
+ * can comment per error class (src/lib/kara/aurora-defaults.ts). Messages
+ * stay English like real Python errors; AURORA's card is the translation.
+ *
  * Keep the direction encoding (0=N,1=E,2=S,3=W) and the trace shape in sync
  * with src/lib/kara/world.ts.
  */
@@ -60,7 +66,10 @@ _STUDENT = '<student>'
 
 
 class KaraError(Exception):
-    pass
+    """MOP-7 refused an action; code becomes error['sub'] (wall, door, ...)."""
+    def __init__(self, message='', code=None):
+        super().__init__(message)
+        self.code = code
 
 
 class StepLimitError(Exception):
@@ -155,25 +164,25 @@ def move():
     nx, ny = _w.ahead(_w.x, _w.y, _w.d)
     cell = _w.get(nx, ny)
     if cell & TERMINAL:
-        raise KaraError("Kara can't move: there is a terminal in front.")
+        raise KaraError("MOP-7 can't move: there is a terminal in front.", 'terminal')
     if cell & BLOCK:
-        raise KaraError("Kara can't move: there is a wall in front.")
+        raise KaraError("MOP-7 can't move: there is a wall in front.", 'wall')
     if cell & DOOR:
-        raise KaraError("Kara can't move: the door is closed.")
+        raise KaraError("MOP-7 can't move: the door is closed.", 'door')
     if cell & LASER:
-        raise KaraError("Kara can't move: the laser is on.")
+        raise KaraError("MOP-7 can't move: the laser is on.", 'laser')
     if cell & BOX:
         bx, by = _w.ahead(nx, ny, _w.d)
         behind = _w.get(bx, by)
         if behind & (BLOCK | BOX | DOOR | LASER | ACID):
-            raise KaraError("Kara can't push the box: something is behind it.")
+            raise KaraError("MOP-7 can't push the box: something is behind it.", 'box')
         _w.set(nx, ny, cell & ~BOX)
         _w.set(bx, by, behind | BOX)
         cell = _w.get(nx, ny)
     _w.x, _w.y = nx, ny
     _moved()
     if cell & ACID:
-        raise KaraError("Kara drove into the acid.")
+        raise KaraError("MOP-7 drove into the acid.", 'acid')
     if cell & CHIP:
         _w.set(nx, ny, cell & ~CHIP)
         if (nx, ny) in _w.chips:
@@ -196,7 +205,7 @@ def put_barrel():
     _act()
     cell = _w.get(_w.x, _w.y)
     if cell & ITEM:
-        raise KaraError("Kara can't put a barrel: there already is one.")
+        raise KaraError("MOP-7 can't put a barrel: there already is one.", 'item')
     _w.set(_w.x, _w.y, cell | ITEM)
 
 
@@ -204,7 +213,7 @@ def remove_barrel():
     _act()
     cell = _w.get(_w.x, _w.y)
     if not cell & ITEM:
-        raise KaraError("Kara can't remove a barrel: there is none here.")
+        raise KaraError("MOP-7 can't remove a barrel: there is none here.", 'no_item')
     _w.set(_w.x, _w.y, cell & ~ITEM)
 
 
@@ -212,7 +221,7 @@ def press_switch():
     """Toggle every door and laser in the level. Kara must stand on a switch."""
     _act()
     if not _w.get(_w.x, _w.y) & SWITCH:
-        raise KaraError("Kara can't press a switch: there is none here.")
+        raise KaraError("MOP-7 can't press a switch: there is none here.", 'no_switch')
     for y in range(_w.rows):
         for x in range(_w.cols):
             c = _w.get(x, y)
@@ -227,7 +236,7 @@ def read_log():
     _act()
     tx, ty = _w.ahead(_w.x, _w.y, _w.d)
     if not _w.get(tx, ty) & TERMINAL:
-        raise KaraError("Kara can't read a log: there is no terminal in front.")
+        raise KaraError("MOP-7 can't read a log: there is no terminal in front.", 'no_terminal')
     if (tx, ty) in _w.terminals:
         i = _w.terminals.index((tx, ty))
         _w.read.add(i)
@@ -343,6 +352,27 @@ def _error_line(exc):
     return line
 
 
+# Python exception type -> error['sub']. Order matters: TabError is an
+# IndentationError is a SyntaxError; ModuleNotFoundError is an ImportError.
+_PY_SUBS = (
+    (IndentationError, 'indent'),
+    (SyntaxError, 'syntax'),
+    (ModuleNotFoundError, 'module'),
+    (NameError, 'name'),
+    (RecursionError, 'recursion'),
+    (TypeError, 'type'),
+)
+
+
+def _error_sub(exc):
+    if isinstance(exc, KaraError):
+        return exc.code
+    for cls, sub in _PY_SUBS:
+        if isinstance(exc, cls):
+            return sub
+    return None
+
+
 _expected_output = ''
 
 
@@ -414,13 +444,16 @@ def _run(student_path='__kara_student.py', world_path='__kara_world.json'):
         finally:
             _sys.settrace(None)
     except SyntaxError as e:
-        error = {'line': e.lineno, 'message': f'{type(e).__name__}: {e.msg}', 'kind': 'python'}
+        # Raised by ast.parse for the student's file, or by exec when an
+        # imported helper (befehle.py) has a syntax error.
+        error = {'line': e.lineno if e.filename == _STUDENT else _error_line(e),
+                 'message': f'{type(e).__name__}: {e.msg}', 'kind': 'python', 'sub': _error_sub(e)}
     except StepLimitError as e:
         error = {'line': _error_line(e), 'message': f'{type(e).__name__}: {e}', 'kind': 'loop'}
     except KaraError as e:
-        error = {'line': _error_line(e), 'message': f'{type(e).__name__}: {e}', 'kind': 'kara'}
+        error = {'line': _error_line(e), 'message': f'{type(e).__name__}: {e}', 'kind': 'kara', 'sub': e.code}
     except Exception as e:
-        error = {'line': _error_line(e), 'message': f'{type(e).__name__}: {e}', 'kind': 'python'}
+        error = {'line': _error_line(e), 'message': f'{type(e).__name__}: {e}', 'kind': 'python', 'sub': _error_sub(e)}
     finally:
         _sys.stdout = old_out
     mask = ~(_DOORS | _LASERS)

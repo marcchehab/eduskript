@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest'
+import { AURORA_DEFAULTS, auroraLine } from '@/lib/kara/aurora-defaults'
 import { unified } from 'unified'
 import remarkParse from 'remark-parse'
 import remarkCodeEditor from '@/lib/remark-plugins/code-editor'
 import {
+  parseKaraConfig,
   parseKaraWorld, parseKaraLevel, buildReplay, seekCells, karaStars, karaAssetNames, karaSpeakers, karaMessages,
   BLOCK, ITEM, BOX, CHIP, DOOR, LASER, ACID, EXIT, SWITCH, TARGET, TERMINAL, type KaraTrace,
 } from '@/lib/kara/world'
@@ -139,5 +141,42 @@ describe('remarkCodeEditor kara-world', () => {
     const html: string = tree.children[0].value
     expect(html).toContain('data-kara-world="#&gt;.#"')
     expect(html).toContain('data-kara-tile="32"')
+  })
+})
+
+describe('auroraLine', () => {
+  const cfg = (src: string) => parseKaraConfig(src)
+  const text = (c: ReturnType<typeof cfg>, event: string, opts?: { sub?: string; failStreak?: number }) => auroraLine(c, event, opts)?.text
+
+  it('parses aurora.error.<sub> and aurora.fail.3 keys', () => {
+    const c = cfg('aurora.error.no_item: Leer.\naurora.fail.3: Dritter.')
+    expect(c.aurora['error.no_item']).toEqual({ text: 'Leer.', speaker: 'AURORA', audio: undefined })
+    expect(c.aurora['fail.3']?.text).toBe('Dritter.')
+  })
+
+  it('error: level sub → level error → default sub → default error', () => {
+    const both = cfg('aurora.error.wall: W.\naurora.error: E.')
+    expect(text(both, 'error', { sub: 'wall' })).toBe('W.')
+    expect(text(both, 'error', { sub: 'name' })).toBe('E.')
+    expect(text(both, 'error')).toBe('E.')
+    const none = cfg('')
+    expect(text(none, 'error', { sub: 'wall' })).toBe(AURORA_DEFAULTS['error.wall'])
+    expect(text(none, 'error', { sub: 'unknown' })).toBe(AURORA_DEFAULTS.error)
+    expect(text(none, 'error')).toBe(AURORA_DEFAULTS.error)
+  })
+
+  it('other events: level line, else German default, else undefined', () => {
+    expect(text(cfg('aurora.win: Ja.'), 'win')).toBe('Ja.')
+    expect(text(cfg(''), 'win')).toBe('Auftrag erledigt. Ich bin fast beeindruckt.')
+    expect(text(cfg(''), 'loop')).toBe(AURORA_DEFAULTS.loop)
+    expect(text(cfg(''), 'start')).toBeUndefined()
+  })
+
+  it('fail.3 replaces fail from the 3rd failed run in a row', () => {
+    const c = cfg('aurora.fail: F.\naurora.fail.3: F3.')
+    expect(text(c, 'fail', { failStreak: 2 })).toBe('F.')
+    expect(text(c, 'fail', { failStreak: 3 })).toBe('F3.')
+    expect(text(c, 'fail', { failStreak: 5 })).toBe('F3.')
+    expect(text(cfg(''), 'fail', { failStreak: 3 })).toBe(AURORA_DEFAULTS.fail)
   })
 })

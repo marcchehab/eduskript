@@ -4,7 +4,7 @@
  * Existing files (offline MP3 from voices.mts, or an earlier on-demand WAV)
  * are returned directly. A missing line is rendered on demand
  * (voice-tts.server.ts), but only when it is a real Kara line: a built-in
- * AURORA default, or a message with this exact speaker and text in a
+ * AURORA default (aurora-defaults.ts), or a message with this exact speaker and text in a
  * ```kara-world block of some page. The candidate pages come from a
  * `contains` scan over pages.content (no index, O(pages)); it runs only on
  * cache misses. Drafts count too, so authors hear lines while previewing.
@@ -13,14 +13,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { voiceLineUrl } from '@/lib/kara/voice-tts.server'
-import { DEFAULT_AURORA, karaMessages, parseKaraLevel } from '@/lib/kara/world'
+import { AURORA_DEFAULTS } from '@/lib/kara/aurora-defaults'
+import { karaMessages, parseKaraLevel } from '@/lib/kara/world'
 
 const MAX_TEXT = 600
 
 /** True when (speaker, text) is a line some Kara level or default actually speaks. */
 async function isKaraLine(speaker: string, text: string): Promise<boolean> {
   const who = speaker.toUpperCase()
-  if (who === 'AURORA' && Object.values(DEFAULT_AURORA).includes(text)) return true
+  if (who === 'AURORA' && Object.values(AURORA_DEFAULTS).includes(text)) return true
   const pages = await prisma.page.findMany({
     where: { AND: [{ content: { contains: text } }, { content: { contains: '```kara-world' } }] },
     select: { content: true },

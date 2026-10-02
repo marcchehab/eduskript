@@ -22,7 +22,11 @@
  * Story layer: a fixed-height message bar under the world shows story events
  * (terminal read, chip picked up — these pause playback until Continue), the
  * level result once the replay reaches the end, and otherwise the level's
- * `aurora.start` line. Events only trigger when the replay steps onto them
+ * `aurora.start` line. The result line comes from `auroraLine`
+ * (src/lib/kara/aurora-defaults.ts): level `aurora.*` first, then the German
+ * course defaults; errors pick a line per `error.sub` (wall, name, ...), and
+ * `aurora.fail.3` replaces `aurora.fail` from the 3rd non-winning run in a
+ * row (component state: resets on reload and on a win). Events only trigger when the replay steps onto them
  * (play / step forward); jumping or scrubbing skips them. Results are saved per student (stars,
  * evidence) as soon as a run reaches the goal, see src/lib/kara/progress.ts.
  */
@@ -32,7 +36,7 @@ import { Music, Pause, Play, SkipBack, SkipForward, Star, StepBack, StepForward 
 import { cn } from '@/lib/utils'
 import { recordKaraResult } from '@/lib/kara/progress'
 import { playVoice, stopVoice, ttsLineUrl } from '@/lib/kara/voice'
-import { DEFAULT_AURORA } from '@/lib/kara/world'
+import { auroraLine } from '@/lib/kara/aurora-defaults'
 import { playSfx } from '@/lib/kara/sfx'
 import { registerSoundSource, useMuted } from '@/lib/sound'
 import { DOOR, ITEM, LASER } from '@/lib/kara/world'
@@ -254,11 +258,14 @@ export function KaraPanel({ world, trace, maxTile, maxHeight, onLine, config, as
 
   // New run → rewind and play (state adjusted during render, not in an effect).
   const [prevTrace, setPrevTrace] = useState(trace)
+  /** Runs in a row that did not reach the goal (error, loop or goal missed); `aurora.fail.3`. Per mount, not saved. */
+  const [failStreak, setFailStreak] = useState(0)
   if (trace !== prevTrace) {
     setPrevTrace(trace)
     setPos(0)
     setCards([])
     setPlaying(!!trace && trace.steps.length > 0)
+    if (trace && config.goals.length) setFailStreak(trace.error || !trace.goal?.reached ? failStreak + 1 : 0)
   }
 
   const stars = trace ? karaStars(trace, config) : 0
@@ -277,22 +284,22 @@ export function KaraPanel({ world, trace, maxTile, maxHeight, onLine, config, as
   /** Result message, shown (without blocking) once the replay reaches the end. */
   const finalCard = useMemo((): KaraCard | null => {
     if (!trace) return null
-    const a = (key: string): KaraMessage | undefined =>
-      config.aurora[key] ?? (DEFAULT_AURORA[key] ? { text: DEFAULT_AURORA[key], speaker: 'AURORA' } : undefined)
     const limits = [
       config.memory ? `Memory ${trace.memory}/${config.memory}` : `Memory ${trace.memory}`,
       config.energy ? `Energy ${trace.energy}/${config.energy}` : `Energy ${trace.energy}`,
     ].join(' · ')
-    if (trace.error?.kind === 'loop') { const m = a('loop'); return m ? { message: m } : null }
-    if (trace.error) return config.aurora.error ? { message: config.aurora.error } : null
+    if (trace.error?.kind === 'loop') { const m = auroraLine(config, 'loop'); return m ? { message: m } : null }
+    if (trace.error) { const m = auroraLine(config, 'error', { sub: trace.error.sub ?? undefined }); return m ? { message: m } : null }
     if (!config.goals.length || !trace.goal) return null
-    if (trace.goal.reached) return { message: a('win')!, stars, detail: limits }
+    if (trace.goal.reached) return { message: auroraLine(config, 'win')!, stars, detail: limits }
     // A level-specific fail text replaces the generic (English) goal list.
     return {
-      message: a('fail')!,
-      detail: config.aurora.fail ? undefined : `Still to do: ${trace.goal.missing.map(g => GOAL_TEXT[g]).join(', ')}`,
+      message: auroraLine(config, 'fail', { failStreak })!,
+      detail: config.aurora.fail || (failStreak >= 3 && config.aurora['fail.3'])
+        ? undefined
+        : `Still to do: ${trace.goal.missing.map(g => GOAL_TEXT[g]).join(', ')}`,
     }
-  }, [trace, config, stars])
+  }, [trace, config, stars, failStreak])
 
   /** Sound effects for stepping from `to - 1` to `to` (and the result at the end). */
   const stepSfx = useCallback((to: number) => {
@@ -314,7 +321,7 @@ export function KaraPanel({ world, trace, maxTile, maxHeight, onLine, config, as
       else if (a && b && a.d !== b.d) playSfx('turn')
     }
     if (to === total) {
-      if (trace.error?.kind === 'kara') playSfx(/acid/i.test(trace.error.message) ? 'acid' : 'bump')
+      if (trace.error?.kind === 'kara') playSfx(trace.error.sub === 'acid' ? 'acid' : 'bump')
       else if (!trace.error && config.goals.length && trace.goal) playSfx(trace.goal.reached ? 'win' : 'fail')
     }
   }, [trace, replay, steps, total, config])
