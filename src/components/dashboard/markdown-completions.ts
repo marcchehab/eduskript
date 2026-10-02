@@ -532,14 +532,19 @@ export function createMarkdownCompletions(getFileList: () => FileListItem[]) {
     }
   }
 
-  // 5. Code-fence info string: ```lang flags…
+  // Fence state before this line. O(lines before cursor) per completion request.
+  const fence = openFenceAt(context.state.doc.sliceString(0, line.from))
+
+  // 5. Code-fence info string: ```lang flags… — only on an opening fence.
+  // A ``` line inside an open block closes it; offering kinds there let Enter
+  // turn the closing fence into a new opening one and swallow the rest.
   const fenceLine = textBefore.match(/^\s*```(.*)$/)
-  if (fenceLine && !/([\w-]+)="([^"]*)$/.test(textBefore)) {
-    return fenceInfoCompletions(context, fenceLine[1])
+  if (fenceLine) {
+    if (fence !== null) return null
+    if (!/([\w-]+)="([^"]*)$/.test(textBefore)) return fenceInfoCompletions(context, fenceLine[1])
   }
 
   // 6. Inside a ```plot body
-  const fence = openFenceAt(context.state.doc.sliceString(0, line.from))
   if (fence !== null) {
     return fence === 'plot' ? plotCompletions(context, textBefore) : null
   }
