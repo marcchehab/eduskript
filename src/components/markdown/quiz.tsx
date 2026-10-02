@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, ReactNode, ReactElement, Children } from 'react'
+import { useState, useEffect, useRef, useId, ReactNode, ReactElement, Children } from 'react'
 import { useSyncedUserData } from '@/lib/userdata'
 import type { QuizData } from '@/lib/userdata/types'
 import { cn } from '@/lib/utils'
@@ -302,6 +302,35 @@ function QuestionInner({
     }
   }
 
+  // Keyboard handling for the choice options, following the WAI-ARIA radio
+  // group / checkbox patterns: Space/Enter select (single) or toggle (multiple);
+  // in a radio group the arrow keys move focus to the previous/next option
+  // (wrapping) and select it. When locked, arrows still move focus but nothing
+  // changes. Siblings are found via the DOM (role="radio" in the same group),
+  // not refs — the option list is small, so the O(n) query per keypress is fine.
+  const optionIdBase = useId()
+  const handleOptionKeyDown = (e: React.KeyboardEvent<HTMLDivElement>, index: number) => {
+    if (e.key === ' ' || e.key === 'Enter') {
+      e.preventDefault()
+      handleSelect(index)
+      return
+    }
+    if (type !== 'single') return
+    const delta =
+      e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1
+        : e.key === 'ArrowUp' || e.key === 'ArrowLeft' ? -1
+          : 0
+    if (!delta) return
+    e.preventDefault()
+    const radios = Array.from(
+      e.currentTarget.parentElement?.querySelectorAll<HTMLElement>(':scope > [role="radio"]') ?? []
+    )
+    if (radios.length === 0) return
+    const next = (index + delta + radios.length) % radios.length
+    radios[next]?.focus()
+    handleSelect(next)
+  }
+
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     if (locked) return
     setTextAnswer(e.target.value)
@@ -577,7 +606,12 @@ function QuestionInner({
       {/* Single/Multiple Choice */}
       {(type === 'single' || type === 'multiple') && (
         <div className="space-y-2">
-          {prompt && <div className={PROMPT_CLASS}>{prompt}</div>}
+          {prompt && <div id={`${optionIdBase}-prompt`} className={PROMPT_CLASS}>{prompt}</div>}
+          <div
+            role={type === 'single' ? 'radiogroup' : 'group'}
+            aria-labelledby={prompt ? `${optionIdBase}-prompt` : undefined}
+            className="space-y-2"
+          >
           {/* Filter to <answer> children first so `index` is the dense 0..N-1
               option position that matches extractOptionsInfo / stored
               `selected`. Skips the prompt element and inter-answer whitespace. */}
@@ -592,9 +626,17 @@ function QuestionInner({
             return (
               <div
                 key={index}
+                role={type === 'single' ? 'radio' : 'checkbox'}
+                aria-checked={isSelected}
+                aria-disabled={locked || undefined}
+                aria-labelledby={`${optionIdBase}-opt-${index}`}
+                // Roving tabindex for the radio group: only the selected option
+                // (or the first, if none) is in the tab order. Checkboxes: all.
+                tabIndex={type === 'single' ? (index === (selected[0] ?? 0) ? 0 : -1) : 0}
                 onClick={() => handleSelect(index)}
+                onKeyDown={(e) => handleOptionKeyDown(e, index)}
                 className={cn(
-                  'p-4 border rounded-lg transition-colors',
+                  'p-4 border rounded-lg transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
                   locked ? 'cursor-default' : 'cursor-pointer hover:bg-accent/50',
                   isSelected && !showResult && 'border-primary bg-primary/5',
                   showResult && isSelected && optionIsCorrect && 'border-green-600 dark:border-green-500 bg-green-500/10',
@@ -627,7 +669,7 @@ function QuestionInner({
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       {/* Wrap: a multi-node label (text + <code>/<strong>) would otherwise become separate flex items and wrap into columns */}
-                      <div className="min-w-0">{label}</div>
+                      <div id={`${optionIdBase}-opt-${index}`} className="min-w-0">{label}</div>
                       {showResult && isSelected && (
                         optionIsCorrect
                           ? <Check className="w-4 h-4 text-green-600 dark:text-green-400" />
@@ -649,6 +691,7 @@ function QuestionInner({
               </div>
             )
           })}
+          </div>
         </div>
       )}
 
