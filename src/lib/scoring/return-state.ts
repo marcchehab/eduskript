@@ -46,6 +46,15 @@ export interface CurrentReturn extends ReturnStatus {
   snapshot: ReviewScores | null
 }
 
+/** Per-page status for the student's own list, plus the headline numbers read
+ *  from the frozen snapshot (null when not returned, or for legacy returns
+ *  stored without a snapshot — caller recomputes). */
+export interface StudentReturnStatus extends ReturnStatus {
+  grade: number | null
+  totalEarned: number | null
+  totalMax: number | null
+}
+
 interface LatestRow {
   page_id?: string
   student_id?: string
@@ -106,19 +115,34 @@ export async function getCurrentReturnsForPage(
   return map
 }
 
-/** Current-return status per page for ONE student (no snapshot). Powers the
- *  student "My Exams" list. */
-export async function getCurrentReturnsForStudent(studentId: string): Promise<Map<string, ReturnStatus>> {
-  const rows = await prisma.$queryRaw<LatestRow[]>(Prisma.sql`
-    SELECT DISTINCT ON (page_id) page_id, event, score, occurred_at, created_by
+/** Current-return status per page for ONE student. Powers the student "My Exams"
+ *  list. Doesn't fetch the whole snapshot — only grade/totalEarned/totalMax are
+ *  extracted from it in SQL (JSONB ->>). */
+export async function getCurrentReturnsForStudent(studentId: string): Promise<Map<string, StudentReturnStatus>> {
+  const rows = await prisma.$queryRaw<
+    (LatestRow & { grade: number | null; total_earned: number | null; total_max: number | null })[]
+  >(Prisma.sql`
+    SELECT DISTINCT ON (page_id) page_id, event, score, occurred_at, created_by,
+      (payload->>'grade')::float8 AS grade,
+      (payload->>'totalEarned')::float8 AS total_earned,
+      (payload->>'totalMax')::float8 AS total_max
     FROM exam_audit_logs
     WHERE student_id = ${studentId}
       AND event IN ('return', 'take_back', 'reopened')
     ORDER BY page_id, occurred_at DESC
   `)
-  const map = new Map<string, ReturnStatus>()
+  const map = new Map<string, StudentReturnStatus>()
   for (const r of rows) {
-    map.set(r.page_id!, { returned: isReturnedFromLatest(r.event), score: r.score, at: r.occurred_at, by: r.created_by })
+    const returned = isReturnedFromLatest(r.event)
+    map.set(r.page_id!, {
+      returned,
+      score: r.score,
+      at: r.occurred_at,
+      by: r.created_by,
+      grade: returned ? r.grade : null,
+      totalEarned: returned ? r.total_earned : null,
+      totalMax: returned ? r.total_max : null,
+    })
   }
   return map
 }
