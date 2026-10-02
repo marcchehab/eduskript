@@ -36,6 +36,7 @@ import { fromMarkdown } from 'mdast-util-from-markdown'
 import type { Strong, Emphasis, Parent } from 'mdast'
 import type { VideoInfo } from '@/lib/skript-files'
 import { classifyPaste, type PasteMenuOption } from '@/lib/paste-rules'
+import { planBlockInsert } from '@/lib/block-insert'
 
 interface CodeMirrorEditorProps {
   content: string
@@ -1179,56 +1180,14 @@ const CodeMirrorEditor = function CodeMirrorEditor({
     // which flips whenever the starter code changes and orphans the saves.
     const codeEditorTemplate = `\`\`\`python editor id="${generateId()}"\n# Write your Python code here\nprint("Hello, World!")\n\`\`\`\n`
 
-    if (editorViewRef.current && !useSimpleEditor) {
-      const view = editorViewRef.current
-      const insertPos = view.state.selection.main.head
-      const transaction = view.state.update({
-        changes: { from: insertPos, insert: codeEditorTemplate },
-        selection: { anchor: insertPos + codeEditorTemplate.length }
-      })
-      view.dispatch(transaction)
-      onChange(view.state.doc.toString())
-    } else if (useSimpleEditor) {
-      const textarea = document.querySelector('textarea') as HTMLTextAreaElement
-      if (textarea) {
-        const start = textarea.selectionStart
-        const newContent = textareaContent.substring(0, start) + codeEditorTemplate + textareaContent.substring(start)
-        setTextareaContent(newContent)
-        onChange(newContent)
-        setTimeout(() => {
-          textarea.selectionStart = textarea.selectionEnd = start + codeEditorTemplate.length
-          textarea.focus()
-        }, 0)
-      }
-    }
+    insertBlockTemplate(codeEditorTemplate)
   }
 
   // Insert quiz question block
   const insertQuiz = () => {
     const quizTemplate = `<question id="${generateId()}" type="single">\nQuestion text\n\n<answer correct>Correct answer</answer>\n<answer>Wrong answer</answer>\n</question>\n`
 
-    if (editorViewRef.current && !useSimpleEditor) {
-      const view = editorViewRef.current
-      const insertPos = view.state.selection.main.head
-      const transaction = view.state.update({
-        changes: { from: insertPos, insert: quizTemplate },
-        selection: { anchor: insertPos + quizTemplate.length }
-      })
-      view.dispatch(transaction)
-      onChange(view.state.doc.toString())
-    } else if (useSimpleEditor) {
-      const textarea = document.querySelector('textarea') as HTMLTextAreaElement
-      if (textarea) {
-        const start = textarea.selectionStart
-        const newContent = textareaContent.substring(0, start) + quizTemplate + textareaContent.substring(start)
-        setTextareaContent(newContent)
-        onChange(newContent)
-        setTimeout(() => {
-          textarea.selectionStart = textarea.selectionEnd = start + quizTemplate.length
-          textarea.focus()
-        }, 0)
-      }
-    }
+    insertBlockTemplate(quizTemplate)
   }
 
   // Insert a <spacer> writing area. An explicit id keys the round-trip
@@ -1238,28 +1197,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   const insertSpacer = (pattern: 'checkered' | 'blank' = 'checkered') => {
     const spacerTemplate = `<spacer id="${generateId()}" pattern="${pattern}" height="200" />\n`
 
-    if (editorViewRef.current && !useSimpleEditor) {
-      const view = editorViewRef.current
-      const insertPos = view.state.selection.main.head
-      const transaction = view.state.update({
-        changes: { from: insertPos, insert: spacerTemplate },
-        selection: { anchor: insertPos + spacerTemplate.length }
-      })
-      view.dispatch(transaction)
-      onChange(view.state.doc.toString())
-    } else if (useSimpleEditor) {
-      const textarea = document.querySelector('textarea') as HTMLTextAreaElement
-      if (textarea) {
-        const start = textarea.selectionStart
-        const newContent = textareaContent.substring(0, start) + spacerTemplate + textareaContent.substring(start)
-        setTextareaContent(newContent)
-        onChange(newContent)
-        setTimeout(() => {
-          textarea.selectionStart = textarea.selectionEnd = start + spacerTemplate.length
-          textarea.focus()
-        }, 0)
-      }
-    }
+    insertBlockTemplate(spacerTemplate)
   }
 
   // Insert a ```plot fence. The starters show the features an author would
@@ -1297,28 +1235,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   const insertPlugin = (pluginSrc: string, configHint: string) => {
     const pluginTag = `<plugin src="${pluginSrc}"${configHint} />\n`
 
-    if (editorViewRef.current && !useSimpleEditor) {
-      const view = editorViewRef.current
-      const insertPos = view.state.selection.main.head
-      const transaction = view.state.update({
-        changes: { from: insertPos, insert: pluginTag },
-        selection: { anchor: insertPos + pluginTag.length },
-      })
-      view.dispatch(transaction)
-      onChange(view.state.doc.toString())
-    } else if (useSimpleEditor) {
-      const textarea = document.querySelector('textarea') as HTMLTextAreaElement
-      if (textarea) {
-        const start = textarea.selectionStart
-        const newContent = textareaContent.substring(0, start) + pluginTag + textareaContent.substring(start)
-        setTextareaContent(newContent)
-        onChange(newContent)
-        setTimeout(() => {
-          textarea.selectionStart = textarea.selectionEnd = start + pluginTag.length
-          textarea.focus()
-        }, 0)
-      }
-    }
+    insertBlockTemplate(pluginTag)
   }
 
   const insertGeogebra = (materialId: string) => {
@@ -1330,30 +1247,9 @@ const CodeMirrorEditor = function CodeMirrorEditor({
     insertTagAtCursor(`<phet sim="${sim}" locale="${locale}" />\n\n`)
   }
 
-  /** Inserts `tag` at the cursor (CodeMirror or simple textarea) and moves the cursor past it. */
-  const insertTagAtCursor = (tag: string) => {
-    if (editorViewRef.current && !useSimpleEditor) {
-      const view = editorViewRef.current
-      const insertPos = view.state.selection.main.head
-      view.dispatch(view.state.update({
-        changes: { from: insertPos, insert: tag },
-        selection: { anchor: insertPos + tag.length },
-      }))
-      onChange(view.state.doc.toString())
-    } else if (useSimpleEditor) {
-      const textarea = document.querySelector('textarea') as HTMLTextAreaElement
-      if (textarea) {
-        const start = textarea.selectionStart
-        const newContent = textareaContent.substring(0, start) + tag + textareaContent.substring(start)
-        setTextareaContent(newContent)
-        onChange(newContent)
-        setTimeout(() => {
-          textarea.selectionStart = textarea.selectionEnd = start + tag.length
-          textarea.focus()
-        }, 0)
-      }
-    }
-  }
+  // Block tags (plot, geogebra, phet) go on their own lines like every Insert block.
+  const insertTagAtCursor = (tag: string) => insertBlockTemplate(tag)
+
 
   // Handle Excalidraw save
   const handleExcalidrawSave = async (
@@ -1502,33 +1398,41 @@ const CodeMirrorEditor = function CodeMirrorEditor({
     }
   }
 
-  // Insert a block template at the cursor. Unlike insertAtCursor this also
-  // works in the simple-textarea fallback (same pattern as insertQuiz).
+  // Insert a block template on its own lines (see planBlockInsert: mid-line
+  // cursor → after that line / callout, one blank line around the block).
+  // Also works in the simple-textarea fallback. `select` optionally selects a
+  // placeholder inside the template ([start, end) relative to the trimmed
+  // template body) for overtyping; otherwise the cursor goes after the block.
   // Templates should match markdown-completions.ts / syntax-reference.ts.
-  const insertBlockTemplate = (template: string) => {
+  const insertBlockTemplate = (template: string, select?: [number, number]) => {
     if (editorViewRef.current && !useSimpleEditor) {
       const view = editorViewRef.current
-      const insertPos = view.state.selection.main.head
+      const plan = planBlockInsert(view.state.doc.toString(), view.state.selection.main.head, template)
       view.dispatch({
-        changes: { from: insertPos, insert: template },
-        selection: { anchor: insertPos + template.length }
+        changes: { from: plan.from, insert: plan.insert },
+        selection: select
+          ? { anchor: plan.bodyStart + select[0], head: plan.bodyStart + select[1] }
+          : { anchor: plan.cursor },
+        scrollIntoView: true,
       })
       onChange(view.state.doc.toString())
       view.focus()
     } else if (useSimpleEditor) {
       const textarea = document.querySelector('textarea') as HTMLTextAreaElement
       if (textarea) {
-        const start = textarea.selectionStart
-        const newContent = textareaContent.substring(0, start) + template + textareaContent.substring(start)
+        const plan = planBlockInsert(textareaContent, textarea.selectionStart, template)
+        const newContent = textareaContent.substring(0, plan.from) + plan.insert + textareaContent.substring(plan.from)
         setTextareaContent(newContent)
         onChange(newContent)
         setTimeout(() => {
-          textarea.selectionStart = textarea.selectionEnd = start + template.length
+          textarea.selectionStart = select ? plan.bodyStart + select[0] : plan.cursor
+          textarea.selectionEnd = select ? plan.bodyStart + select[1] : plan.cursor
           textarea.focus()
         }, 0)
       }
     }
   }
+
 
   // Excel-style placeholder content (A1, B1… / A2, B2…) so the row/column
   // structure is obvious in the source.
@@ -1956,21 +1860,10 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   // [!type] (see CLAUDE.md). We select the placeholder title so the author
   // can type over it immediately.
   const insertCallout = (type: string) => {
-    if (!editorViewRef.current || useSimpleEditor) return
-    const view = editorViewRef.current
-    const pos = view.state.selection.main.head
-    const line = view.state.doc.lineAt(pos)
-    const insertPos = line.to
-    const before = `\n\n> [!${type}] `
-    const title = 'Title'
-    const after = `\n> Content\n`
-    const insertText = before + title + after
-    view.dispatch({
-      changes: { from: insertPos, insert: insertText },
-      selection: { anchor: insertPos + before.length, head: insertPos + before.length + title.length },
-    })
-    view.focus()
+    const head = `> [!${type}] `
+    insertBlockTemplate(`${head}Title\n> Content\n`, [head.length, head.length + 'Title'.length])
   }
+
 
   // Insert math. Inline wraps the current selection in $…$; display inserts a
   // $$…$$ block on its own lines and places the cursor between the delimiters.
@@ -1998,16 +1891,9 @@ const CodeMirrorEditor = function CodeMirrorEditor({
     view.focus()
   }
   const insertDisplayMath = (sample: string) => {
-    if (!editorViewRef.current || useSimpleEditor) return
-    const view = editorViewRef.current
-    const pos = view.state.selection.main.head
-    const insertText = `\n$$\n${sample}\n$$\n`
-    view.dispatch({
-      changes: { from: pos, insert: insertText },
-      selection: { anchor: pos + 4, head: pos + 4 + sample.length },
-    })
-    view.focus()
+    insertBlockTemplate(`$$\n${sample}\n$$\n`, [3, 3 + sample.length])
   }
+
 
   // Text color and highlight helpers.
   // Palette items use the *-ByName helpers (emit class-based spans that pick
