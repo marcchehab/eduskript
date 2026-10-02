@@ -61,6 +61,16 @@ describe('code fences', () => {
     expect(labels('```python\nx = <cta')).toBeNull()
   })
 
+  it('offers nothing on a closing fence line', () => {
+    expect(labels('```python editor\nprint(5/2)\n```')).toBeNull()
+    expect(labels('```plot\nf(x) = x^2\n```')).toBeNull()
+    expect(labels('```\ncode\n```', true)).toBeNull()
+  })
+
+  it('still suggests kinds on the fence after a closed block', () => {
+    expect(labels('```python\nx = 1\n```\n\n```')).toContain('python editor')
+  })
+
   it('resumes tag completion after a closed fence', () => {
     expect(labels('```python\nx = 1\n```\n\n<ct')).toContain('cta')
   })
