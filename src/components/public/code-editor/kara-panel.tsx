@@ -88,7 +88,7 @@ import { KaraPortrait, useSpeaking } from './kara-portrait'
 import { karaStepTarget, type KaraLineTarget, type KaraStepMode } from './kara-line-extension'
 import { FLOOD_MS, KaraCallStackOverlay, MAX_WINDOWS } from './kara-callstack'
 import { KaraVarsStrip } from './kara-vars'
-import { drawKaraFacing, drawKaraMarks, drawKaraTiles, loadKaraTileset, type KaraTileset } from '@/lib/kara/kara-tiles'
+import { drawKaraFacing, drawKaraMarks, drawKaraTiles, loadKaraTileset, WALL_EXIT_TOP, type KaraTileset } from '@/lib/kara/kara-tiles'
 import {
   buildCallStacks,
   buildReplay,
@@ -177,7 +177,7 @@ function drawWorld(
   squashX = 1,
   dark?: { seen: Float64Array; pos: number; r: number } | null,
   chipLooks?: (string | undefined)[],
-  /** 0..1: MOP-7 drives north into the wall hatch above it and disappears (exit animation). */
+  /** 0..1: MOP-7 drives north through the open wall door above it and disappears (exit animation). */
   vanish = 0,
 ) {
   const dpr = window.devicePixelRatio || 1
@@ -200,14 +200,15 @@ function drawWorld(
   if (squashX >= 1 && vanish === 0) drawKaraFacing(ctx, kara.x, kara.y, kara.d, tile)
   const sprite = sprites?.[vanish > 0 ? 0 : kara.d]
   if (vanish > 0 && sprite && sprite.complete && sprite.naturalWidth) {
-    // Clip at the cell's top edge (the wall line): the sprite slides up into the hatch.
+    // Clip at the doorway's top edge: the sprite drives up through the open door and disappears under it.
     const size = tile * 0.92
+    const top = kara.y * tile - tile * WALL_EXIT_TOP
     ctx.save()
     ctx.beginPath()
-    ctx.rect(kara.x * tile, kara.y * tile, tile, tile)
+    ctx.rect(kara.x * tile, top, tile, kara.y * tile + tile - top)
     ctx.clip()
-    ctx.globalAlpha = 1 - vanish * 0.4
-    ctx.drawImage(sprite, kara.x * tile + (tile - size) / 2, kara.y * tile + (tile - size) / 2 - vanish * tile, size, size)
+    const y0 = kara.y * tile + (tile - size) / 2
+    ctx.drawImage(sprite, kara.x * tile + (tile - size) / 2, y0 - vanish * (y0 + size - top), size, size)
     ctx.restore()
   } else if (sprite && sprite.complete && sprite.naturalWidth) {
     const size = tile * 0.92
@@ -686,7 +687,7 @@ export function KaraPanel({ world: levelWorld, trace: levelTrace, maxTile, maxHe
     const slide = !!from && Math.abs(from.x - to.x) + Math.abs(from.y - to.y) === 1
     const turn = !!from && from.x === to.x && from.y === to.y && from.d !== to.d
     // Won by reaching an exit in a wall: after the last step MOP-7 drives up into
-    // the hatch and disappears, then stars burst there (once per run; only when
+    // the open wall door and disappears, then stars burst there (once per run; only when
     // stepping onto the last step, not when jumping to it).
     const ci = to.y * world.cols + to.x
     const exitLeave = !!from && pos === total && levelWon && config.goals.includes('exit') && world.look[ci] === 'E'

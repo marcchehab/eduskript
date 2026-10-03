@@ -193,9 +193,9 @@ export function drawKaraTiles(ctx: CanvasRenderingContext2D, world: KaraWorld, c
       if (look === 's') drawSlime(ctx, x, y, px, py, tile)
       if (look === '~' && !(c & ACID)) drawBridge(ctx, x, y, px, py, tile)
       if (look === 'S' || look === 'm') drawSwitchPad(ctx, px, py, tile)
-      // An exit right below a wall is drawn as a hatch at the foot of that wall
+      // An exit right below a wall is drawn as an open door in that wall
       // (MOP-7 drives up into it); elsewhere it stays a floor hatch.
-      if (look === 'E' && y > 0 && WALL_LOOKS.has(world.look[i - world.cols])) drawWallHatch(ctx, set, px, py, tile)
+      if (look === 'E' && y > 0 && WALL_LOOKS.has(world.look[i - world.cols])) drawWallExit(ctx, set, px, py, tile)
       else if (FLOOR_OBJECTS[look]) drawObject(ctx, set, FLOOR_OBJECTS[look], px, py, tile)
       if (look === 'm') drawMusicNote(ctx, px, py, tile)
       if (c & BLOCK && OBSTACLES[look]) drawObject(ctx, set, OBSTACLES[look], px, py, tile)
@@ -379,23 +379,15 @@ function drawEvidence(ctx: CanvasRenderingContext2D, set: KaraTileset, look: str
   ctx.restore()
 }
 
-/** Exit hatch on the wall above cell (px, py): sits fully on the wall, its lower edge on the floor line. */
-function drawWallHatch(ctx: CanvasRenderingContext2D, set: KaraTileset, px: number, py: number, s: number) {
-  const w = s * 0.82
-  const h = s * 0.5
-  const x = px + (s - w) / 2
-  const y = py - h - s * 0.02
-  const img = set.get('exit')
-  ctx.save()
-  if (img) ctx.drawImage(img, x, y, w, h)
-  else { ctx.fillStyle = '#0b0f17'; ctx.fillRect(x, y, w, h) }
-  // Shadow cast onto the floor in front of the opening.
-  const g = ctx.createLinearGradient(0, py, 0, py + s * 0.25)
-  g.addColorStop(0, 'rgba(0, 0, 0, 0.3)')
-  g.addColorStop(1, 'rgba(0, 0, 0, 0)')
-  ctx.fillStyle = g
-  ctx.fillRect(x, py, w, s * 0.25)
-  ctx.restore()
+/**
+ * Wall exit: an open door drawn in the wall cell above (px, py), like a `d`
+ * door. The exit animation clips MOP-7 at WALL_EXIT_TOP tiles above the floor
+ * line, so it disappears inside the doorway.
+ */
+export const WALL_EXIT_TOP = 0.9
+
+function drawWallExit(ctx: CanvasRenderingContext2D, set: KaraTileset, px: number, py: number, s: number) {
+  drawCell(ctx, set, 'door-open', px, py - s, s)
 }
 
 function drawChip(ctx: CanvasRenderingContext2D, px: number, py: number, s: number) {
