@@ -23,6 +23,7 @@ import {
   DeleteObjectCommand,
   DeleteObjectsCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   ListObjectsV2Command,
 } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
@@ -430,16 +431,22 @@ export async function teacherFileExists(hash: string, extension: string): Promis
   const client = getS3Client()
   const key = `files/${hash}.${extension}`
 
+  // HEAD, not GET: a GetObject whose body stream is never read keeps its
+  // socket checked out, so every hit leaked one connection until the client's
+  // pool (50) was full and all S3 calls queued (seen locally: Kara voice
+  // lines check each line here, uploads then hung for minutes).
   try {
-    await client.send(new GetObjectCommand({
+    await client.send(new HeadObjectCommand({
       Bucket: SCALEWAY_TEACHER_BUCKET,
       Key: key,
     }))
     return true
   } catch (error: unknown) {
-    if (error && typeof error === 'object' && 'name' in error && error.name === 'NoSuchKey') {
+    if (error && typeof error === 'object' && 'name' in error && (error.name === 'NotFound' || error.name === 'NoSuchKey')) {
       return false
     }
+    const status = (error as { $metadata?: { httpStatusCode?: number } })?.$metadata?.httpStatusCode
+    if (status === 404) return false
     throw error
   }
 }

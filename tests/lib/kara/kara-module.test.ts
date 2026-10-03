@@ -187,6 +187,19 @@ describe.skipIf(!hasPython)('kara.py lints', () => {
     expect(lints('def a():\n    move()\ndef b():\n    a()\nb()\n')).toEqual([])
   })
 
+  it('toolbox_call: a call outside any def in befehle.py runs on import (found at run time)', () => {
+    fs.writeFileSync(path.join(dir, 'befehle.py'), 'def drei_vor():\n    move()\n    move()\n    move()\n\ndrei_vor()\n')
+    try {
+      const t = run('from befehle import *\nturn_right()\n')
+      expect(t.lints?.map(l => [l.line, l.code, l.name])).toEqual([[1, 'toolbox_call', 'befehle.py:6']])
+      expect(t.energy).toBe(4) // the import-time drei_vor() really moved MOP-7
+    } finally {
+      fs.writeFileSync(path.join(dir, 'befehle.py'), BEFEHLE)
+    }
+    // calls inside defs only: no finding
+    expect(lints('from befehle import *\ndrei_vor()\n')).toEqual([])
+  })
+
   it('tamper and locked loops refuse the run', () => {
     const t = run('kara._w.x = 5\nmove()\n')
     expect(t.error).toMatchObject({ kind: 'python', sub: 'tamper', name: '_w', line: 1 })

@@ -195,7 +195,7 @@ function drawWorld(
 // ─── Component ────────────────────────────────────────────────────────────
 
 /** AURORA comments on the first finding in this order: direct causes of a lost run before an unused def. */
-const LINT_ORDER: KaraLintCode[] = ['bare_call', 'sensor_no_call', 'no_return', 'indented_call', 'never_called']
+const LINT_ORDER: KaraLintCode[] = ['toolbox_call', 'bare_call', 'sensor_no_call', 'no_return', 'indented_call', 'never_called']
 
 /** Inline chip text per lint (English UI; AURORA's German comment is in the message bar). */
 const LINT_NOTE: Record<KaraLintCode, (name: string) => string> = {
@@ -204,6 +204,7 @@ const LINT_NOTE: Record<KaraLintCode, (name: string) => string> = {
   no_return: n => `${n}() returns None`,
   never_called: n => `${n}() is never called`,
   indented_call: n => `indented: still part of ${n}()`,
+  toolbox_call: n => `runs on import: call outside a def in ${n}`,
 }
 
 const SPEEDS = [1, 2, 5, 10, 25, 100] // steps per second

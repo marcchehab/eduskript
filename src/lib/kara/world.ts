@@ -87,7 +87,9 @@
  *   aurora.lint.<code>: text              AURORA's comment on a static finding when the run
  *                                         does not win; code = bare_call, never_called,
  *                                         sensor_no_call, no_return, indented_call (main program
- *                                         indented into the last def; {name} = that def). {line} and {name} are
+ *                                         indented into the last def; {name} = that def), toolbox_call
+ *                                         (a call outside any def in befehle.py ran on import; {name} =
+ *                                         'befehle.py:<line>', {line} = the import line). {line} and {name} are
  *                                         replaced (also in aurora.error.forbidden: {name};
  *                                         error.door_code: {name} {got} {want}; door_missing: {name})
  *   aurora.fail.3: text                   replaces aurora.fail from the 3rd failed run
@@ -113,6 +115,9 @@
  *     stairs steps=3..8 count=4           staircase down to the south-east (move, n × stufe, move)
  *                                         `seed=…` fixes the seed; default seed = level id
  *                                         (else the spec line). Same text → same worlds.
+ *   under: E                              the cell under Kara's start is this legend char in every
+ *                                         world (Kara starts on the exit, a switch, slime …); not for
+ *                                         blocking chars, terminals or chips
  *   place: c far                          in every generated world, put `c` (legend char) on the
  *                                         reachable cell farthest from Kara (BFS)
  *   aftermath: <generate spec>            hidden world the panel runs the student's program on once
@@ -223,6 +228,8 @@ export interface KaraConfig {
   generate: string[]
   /** `place: c far` — legend char put at the farthest reachable cell of every generated world. */
   place?: string
+  /** `under: E` — legend char of the cell under Kara's start in every world (e.g. start on the exit). */
+  under?: string
   /** `aftermath:` generate spec (the `=== aftermath` grid wins, see parseKaraLevel). */
   aftermath?: string
   /** `aftermath.text:` / `aftermath.end:` cards (speaker default AURORA). */
@@ -387,6 +394,7 @@ export function parseKaraConfig(src: string): KaraConfig {
     else if (key === 'music') config.music = value
     else if (key === 'generate') config.generate.push(value)
     else if (key === 'place') { const m = value.match(/^(\S)\s+far$/); if (m) config.place = m[1] }
+    else if (key === 'under') { const m = value.match(/^(\S)$/); if (m) config.under = m[1] }
     else if (key === 'intro') { const msg = message(value); config.intro.push({ ...msg, speaker: msg.speaker || 'AURORA' }) }
     else if (key === 'log') config.logs.push(message(value))
     else if (key === 'chip') config.chips.push(evidence(value))
@@ -432,7 +440,22 @@ export function parseKaraLevel(src: string): KaraLevel {
     aftermath = generateWorlds(cfg.aftermath, `${cfg.id ?? ''}-aftermath`)[0]
     if (aftermath && cfg.place) placeFar(aftermath, cfg.place)
   }
+  if (cfg.under) for (const w of [...variants, ...(aftermath ? [aftermath] : [])]) putUnderKara(w, cfg.under)
   return { variants: variants.length ? variants : [parseKaraWorld('')], config: cfg, ...(aftermath ? { aftermath } : {}) }
+}
+
+/**
+ * `under: E`: the cell under Kara's start becomes legend char `ch` (the grid
+ * can only draw Kara on floor). Blocking chars, terminals and chips are
+ * ignored: Kara cannot start inside a wall, and chips would shift the chip
+ * order (reading order). O(1).
+ */
+function putUnderKara(world: KaraWorld, ch: string): void {
+  const [flags, look] = cellFor(ch)
+  if (flags & (BLOCK | TERMINAL | CHIP)) return
+  const i = world.kara.y * world.cols + world.kara.x
+  world.cells[i] = flags
+  world.look[i] = look
 }
 
 /**

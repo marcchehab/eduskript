@@ -67,7 +67,12 @@
  * test or operand of and/or/not: always truthy), `no_return` (a student def
  * that prints but never returns a value, called in a condition or comparison),
  * `never_called` (a top-level def whose name is never loaded outside its own
- * body and that no door.ask names), `indented_call` (see below). "Student function" = a def anywhere in the file or a name from
+ * body and that no door.ask names), `indented_call` (see below), and
+ * `toolbox_call`, found at RUN time, not by `_lint`: an action ran while a
+ * helper file's top level was being imported, i.e. befehle.py holds a call
+ * outside any def (line = the import line in the student file, name =
+ * 'befehle.py:<line>'; one per helper file; only actions count, a top-level
+ * print() is not caught). "Student function" = a def anywhere in the file or a name from
  * `from x import name`; `from befehle import *` names are unknown here, so
  * `if drei_vor:` after a star import is not caught.
  *
@@ -199,6 +204,7 @@ class _World:
 _w = None
 _steps = []
 _cur = None
+_toolbox_calls = {}  # helper file -> lint dict: an action ran while that file was being imported
 
 
 def _open_step(line):
@@ -355,6 +361,18 @@ def _act():
         _cur['f'] = f.f_code.co_filename.replace(chr(92), '/').rsplit('/', 1)[-1]
         _cur['fl'] = f.f_lineno
         _cur['fn'] = f.f_code.co_name
+        # Lint toolbox_call: a call at the top level of a helper file runs on
+        # every import (W2: drei_vor() typed under its def in befehle.py).
+        # O(call depth), only while the action runs inside a helper file.
+        g = f
+        while g is not None and g.f_code.co_filename != _STUDENT:
+            if g.f_code.co_name == '<module>' and _is_user_file(g.f_code.co_filename):
+                name = g.f_code.co_filename.replace(chr(92), '/').rsplit('/', 1)[-1]
+                if name not in _toolbox_calls:
+                    _toolbox_calls[name] = {'line': _cur.get('l') or 0, 'code': 'toolbox_call',
+                                            'name': f'{name}:{g.f_lineno}'}
+                break
+            g = g.f_back
 
 
 # ─── Actions ─────────────────────────────────────────────
@@ -998,6 +1016,7 @@ def _data_value(name, text):
 
 def _run(student_path='__kara_student.py', world_path='__kara_world.json'):
     global _w, _steps, _cur, _expected_output, _door_ask, _asking, _ns, _max_steps, _callstack, _cs_repr
+    _toolbox_calls.clear()
     with open(world_path) as f:
         data = _json.load(f)
     _callstack = bool(data.get('callstack'))
@@ -1090,6 +1109,8 @@ def _run(student_path='__kara_student.py', world_path='__kara_world.json'):
         for m in step.get('m', []):
             m[2] &= mask
             m[3] &= mask
+    if _toolbox_calls:
+        lints = sorted(lints + list(_toolbox_calls.values()), key=lambda d: d['line'])
     result = {'steps': _steps, 'error': error, 'energy': _w.energy, 'memory': memory, 'lints': lints}
     if _w.looks:
         result['looks'] = _w.looks

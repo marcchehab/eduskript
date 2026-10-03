@@ -90,6 +90,22 @@ intro: Er meint: bitte.`)
   })
 })
 
+describe('under: (cell under Kara\'s start)', () => {
+  it('puts the legend char under Kara in every variant; ignores blocking chars and chips', () => {
+    const level = parseKaraLevel('#>..#\n===\n#.>.#\n---\ngoal: exit\nunder: E')
+    expect(level.config.under).toBe('E')
+    for (const w of level.variants) {
+      const i = w.kara.y * w.cols + w.kara.x
+      expect(w.cells[i] & EXIT).toBeTruthy()
+      expect(w.look[i]).toBe('E')
+    }
+    for (const ch of ['#', 'c', 't']) {
+      const w = parseKaraLevel(`#>.#\n---\nunder: ${ch}`).variants[0]
+      expect(w.cells[1]).toBe(0)
+    }
+  })
+})
+
 describe('karaStars', () => {
   const config = parseKaraLevel('>\n---\ngoal: exit\nenergy: 10\nmemory: 3').config
   const run = (over: Partial<KaraTrace>): KaraTrace => ({ steps: [], error: null, energy: 5, memory: 3, goal: { reached: true, missing: [] }, ...over })

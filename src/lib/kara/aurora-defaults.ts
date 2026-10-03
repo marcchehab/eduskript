@@ -23,7 +23,7 @@ export type KaraErrorSub =
   | 'forbidden' | 'tamper' | 'locked'
 
 /** Static findings kara-module.ts `_lint` reports as `lints[].code`. */
-export type KaraLintCode = 'bare_call' | 'never_called' | 'sensor_no_call' | 'no_return' | 'indented_call'
+export type KaraLintCode = 'bare_call' | 'never_called' | 'sensor_no_call' | 'no_return' | 'indented_call' | 'toolbox_call'
 
 export const AURORA_DEFAULTS: Record<string, string> = {
   'win': 'Auftrag erledigt. Ich bin fast beeindruckt.',
@@ -56,6 +56,7 @@ export const AURORA_DEFAULTS: Record<string, string> = {
   'lint.sensor_no_call': 'Sie haben den Sensor nicht gefragt. Sie haben nur bestätigt, dass er existiert.',
   'lint.no_return': 'Ihre Funktion zeigt etwas an. Zurückgeben tut sie nichts. Die Bedingung bekommt None.',
   'lint.indented_call': 'Zeile {line} ist eingerückt und gehört darum noch zu {name}(). Ihr Hauptprogramm steckt in der Funktion. Shift+Tab rückt die Aufrufe an den linken Rand.',
+  'lint.toolbox_call': 'Ihre Werkzeugkiste arbeitet von selbst: In {name} steht ein Aufruf ausserhalb jeder Funktion. Er läuft bei jedem Import mit. In befehle.py gehören nur def-Blöcke, die Aufrufe gehören in main.py.',
 }
 
 /** `{want}` in error.door_code: the trace's error.want (kara-module.ts `_door_want`) in AURORA's words. */
