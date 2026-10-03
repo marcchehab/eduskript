@@ -61,7 +61,22 @@ const PRONOUNCE: [RegExp, string][] = [
   [/\bTerminal(s?)\b/g, 'Törminel$1'],
 ]
 
-/** Text the TTS model reads aloud: directions removed, PRONOUNCE respellings applied. */
+/**
+ * A remark in round brackets is read as a separate hint:
+ * «Hallo miteinander (ich meine auch Chris).» → «Hallo miteinander. Hinweis: Ich meine auch Chris.»
+ * Only brackets after a space with a letter inside, so calls like `read_log()`
+ * or `print(...)` stay as they are.
+ */
+function bracketsAsHints(text: string): string {
+  // Mid-sentence («A (B), C») ends the hint with a full stop and capitalises C.
+  return text.replace(/\s+\(([^()]*\p{L}[^()]*)\)(?:([.!?…])|[,;:])?(\s*)(\p{L})?/gu,
+    (_, inner: string, end: string | undefined, space: string, next: string | undefined) => {
+      const hint = inner.trim()
+      return `. Hinweis: ${hint.charAt(0).toUpperCase()}${hint.slice(1)}${end ?? '.'}${next ? ` ${next.toUpperCase()}` : space}`
+    })
+}
+
+/** Text the TTS model reads aloud: directions removed, (remarks) as hints, PRONOUNCE respellings applied. */
 export function spokenText(text: string): string {
-  return PRONOUNCE.reduce((t, [re, say]) => t.replace(re, say), displayText(text))
+  return PRONOUNCE.reduce((t, [re, say]) => t.replace(re, say), bracketsAsHints(displayText(text)))
 }
