@@ -49,7 +49,7 @@ const OBSTACLES: Record<string, string> = {
   T: 'table', P: 'desk', L: 'locker', R: 'barrel-red', Y: 'barrel-yellow', t: 'terminal',
 }
 /** Static floor objects drawn from `look` (not flags). */
-const FLOOR_OBJECTS: Record<string, string> = { S: 'switch', m: 'switch', E: 'exit' }
+const FLOOR_OBJECTS: Record<string, string> = { S: 'switch', m: 'switch' }
 
 const TILE_NAMES = [
   'floor', 'grate', 'face', 'face-alt', 'face-sign', 'item', 'box',
@@ -193,9 +193,9 @@ export function drawKaraTiles(ctx: CanvasRenderingContext2D, world: KaraWorld, c
       if (look === 's') drawSlime(ctx, x, y, px, py, tile)
       if (look === '~' && !(c & ACID)) drawBridge(ctx, x, y, px, py, tile)
       if (look === 'S' || look === 'm') drawSwitchPad(ctx, px, py, tile)
-      // An exit in a wall row (floor below it) is an open door MOP-7 drives up
-      // into; elsewhere it stays a floor hatch.
-      if (look === 'E' && isWallExit(world, x, y)) { drawCell(ctx, set, 'door-open', px, py, tile); continue }
+      // The only kind of exit: an open door in a wall row, entered from below
+      // (see isWallExit; check.ts rejects any other placement).
+      if (look === 'E') { drawCell(ctx, set, 'door-open', px, py, tile); continue }
       if (FLOOR_OBJECTS[look]) drawObject(ctx, set, FLOOR_OBJECTS[look], px, py, tile)
       if (look === 'm') drawMusicNote(ctx, px, py, tile)
       if (c & BLOCK && OBSTACLES[look]) drawObject(ctx, set, OBSTACLES[look], px, py, tile)
