@@ -168,8 +168,35 @@ describe.skipIf(!hasPython)('kara.py lints', () => {
 
   it('never_called: a top-level def nobody calls (own recursion does not count)', () => {
     expect(lints('def umdrehen():\n    turn_left()\n    turn_left()\n')).toEqual([[1, 'never_called', 'umdrehen']])
-    expect(lints('def f():\n    f()\n')).toEqual([[1, 'never_called', 'f']])
+    expect(lints('def f():\n    f()\n')).toEqual([[1, 'never_called', 'f'], [2, 'indented_call', 'f']])
     expect(lints('def a():\n    move()\ndef b():\n    a()\nb()\n')).toEqual([])
+  })
+
+  it('indented_call: the main program indented into the last def (Enter, Enter keeps the indent)', () => {
+    // w1-l4: stufe() typed under the body after a blank line
+    const stufe = 'def stufe():\n    move()\n    turn_right()\n    move()\n    turn_left()\n'
+    expect(lints(stufe + '\n    stufe()\n    stufe()\n')).toEqual([[1, 'never_called', 'stufe'], [7, 'indented_call', 'stufe']])
+    // no gap, but a call of an own def
+    expect(lints(stufe + '    stufe()\n')).toEqual([[1, 'never_called', 'stufe'], [6, 'indented_call', 'stufe']])
+    // w1-l3: calls of the other def after a comment line
+    const l3 = 'def umdrehen():\n    turn_left()\n    turn_left()\n\ndef vor():\n    move()\n    umdrehen()\n    move()\n\n    # Ihre Aufrufe:\n    vor()\n    move()\n'
+    expect(lints(l3)).toEqual([[5, 'never_called', 'vor'], [11, 'indented_call', 'vor']])
+    // a real call at module level: no finding
+    expect(lints(stufe + '\nstufe()\n')).toEqual([])
+    // a def calling another def, no gap, but the module calls something: fine
+    expect(lints('def a():\n    move()\ndef b():\n    a()\nb()\n')).toEqual([])
+  })
+
+  it('tamper and locked loops refuse the run', () => {
+    const t = run('kara._w.x = 5\nmove()\n')
+    expect(t.error).toMatchObject({ kind: 'python', sub: 'tamper', name: '_w', line: 1 })
+    expect(t.steps).toEqual([])
+    expect(run('from kara import _w\n').error?.sub).toBe('tamper')
+    const loop = (code: string) => run(code, { ...world, goals: [], forbid: ['for', 'while'] }).error
+    expect(loop('move()\nfor i in range(3):\n    move()\n')).toMatchObject({ sub: 'locked', name: 'for', line: 2 })
+    expect(loop('while not wall_front():\n    move()\n')).toMatchObject({ sub: 'locked', name: 'while', line: 1 })
+    expect(loop('x = [move() for i in range(2)]\n')).toMatchObject({ sub: 'locked', name: 'for', line: 1 })
+    expect(run('for i in range(2):\n    move()\n').error).toBeNull()
   })
 
   it('sensor_no_call: a sensor or own function as a bare condition', () => {

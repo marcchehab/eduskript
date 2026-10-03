@@ -3709,69 +3709,72 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
         </>
       )}
 
-      {/* Toolbar */}
-      <AnnotationToolbar
-        mode={mode}
-        onModeChange={setMode}
-        onClear={handleClearAll}
-        hasAnnotations={hasAnnotations || (spacersData?.spacers?.length ?? 0) > 0 || (snapsData?.snaps?.length ?? 0) > 0 || stickyNoteCount > 0}
-        pens={pens}
-        activePenId={activePenId}
-        onPenSelect={handlePenSelect}
-        onPenColorChange={handlePenColorChange}
-        onPenSizeChange={handlePenSizeChange}
-        onPenAdd={handlePenAdd}
-        onPenRemove={handlePenRemove}
-        onPensReorder={handlePensReorder}
-        isBroadcasting={isBroadcasting}
-        onResetZoom={handleResetZoom}
-        // Layer controls for students (broadcasted teacher annotations)
-        layers={toolbarLayers}
-        onLayerToggle={toggleLayerVisibility}
-        onLayerDelete={handleLayerDelete}
-        // Layer badges visibility (controlled by layers dropdown hover)
-        showLayerBadges={showLayerBadges}
-        onShowLayerBadgesChange={setShowLayerBadges}
-        // My annotations controls (person icon - always controls personal annotations)
-        myAnnotationsVisible={myAnnotationsVisible}
-        myAnnotationsActive={myAnnotationsActive}
-        onMyAnnotationsToggle={toggleMyAnnotationsVisibility}
-        onMyAnnotationsDelete={handleClearPersonalAnnotations}
-        // Broadcast controls for teachers
-        isTeacher={isTeacher}
-        // Page author broadcast controls (checked server-side via prop)
-        isPageAuthor={isPageAuthor}
-        broadcastToPage={broadcastToPage}
-        onBroadcastToPageChange={setBroadcastToPage}
-        hasPageBroadcastAnnotations={hasPageBroadcastAnnotations}
-        onPageBroadcastDelete={deletePageBroadcastData}
-        pageBroadcastVisible={pageBroadcastVisible}
-        onPageBroadcastToggle={togglePageBroadcastVisibility}
-        // Class broadcast controls
-        classBroadcastVisible={classBroadcastVisible}
-        onClassBroadcastToggle={toggleClassBroadcastVisibility}
-        onClassBroadcastDelete={deleteClassBroadcastData}
-        hasClassBroadcastAnnotations={hasClassBroadcastAnnotations}
-        studentFeedbackVisible={studentFeedbackVisible}
-        onStudentFeedbackToggle={toggleStudentFeedbackVisibility}
-        onStudentFeedbackDelete={deleteStudentFeedbackData}
-        hasStudentFeedbackAnnotations={hasStudentFeedbackAnnotations}
-        classes={teacherClasses}
-        selectedClass={selectedClass}
-        onClassSelect={setSelectedClass}
-        students={classStudents}
-        selectedStudent={selectedStudent}
-        onStudentSelect={setSelectedStudent}
-        lastSelectedStudent={lastSelectedStudent}
-        onClearLastSelectedStudent={() => setLastSelectedStudent(null)}
-        spacerPattern={spacerPattern}
-        onSpacerPatternChange={setSpacerPattern}
-        spacerDeleteAnnotations={spacerDeleteAnnotations}
-        onSpacerDeleteAnnotationsChange={handleSpacerDeleteAnnotationsChange}
-        stickyNotePlacementMode={stickyNotePlacementMode}
-        onStickyNotePlacementToggle={handleStickyNotePlacementToggle}
-        stickyNoteCount={stickyNoteCount}
-      />
+      {/* Toolbar: logged-in viewers only. For anonymous visitors the floating bar
+          was unwanted and covered page content (e.g. Kara editor buttons). */}
+      {session?.user && (
+        <AnnotationToolbar
+          mode={mode}
+          onModeChange={setMode}
+          onClear={handleClearAll}
+          hasAnnotations={hasAnnotations || (spacersData?.spacers?.length ?? 0) > 0 || (snapsData?.snaps?.length ?? 0) > 0 || stickyNoteCount > 0}
+          pens={pens}
+          activePenId={activePenId}
+          onPenSelect={handlePenSelect}
+          onPenColorChange={handlePenColorChange}
+          onPenSizeChange={handlePenSizeChange}
+          onPenAdd={handlePenAdd}
+          onPenRemove={handlePenRemove}
+          onPensReorder={handlePensReorder}
+          isBroadcasting={isBroadcasting}
+          onResetZoom={handleResetZoom}
+          // Layer controls for students (broadcasted teacher annotations)
+          layers={toolbarLayers}
+          onLayerToggle={toggleLayerVisibility}
+          onLayerDelete={handleLayerDelete}
+          // Layer badges visibility (controlled by layers dropdown hover)
+          showLayerBadges={showLayerBadges}
+          onShowLayerBadgesChange={setShowLayerBadges}
+          // My annotations controls (person icon - always controls personal annotations)
+          myAnnotationsVisible={myAnnotationsVisible}
+          myAnnotationsActive={myAnnotationsActive}
+          onMyAnnotationsToggle={toggleMyAnnotationsVisibility}
+          onMyAnnotationsDelete={handleClearPersonalAnnotations}
+          // Broadcast controls for teachers
+          isTeacher={isTeacher}
+          // Page author broadcast controls (checked server-side via prop)
+          isPageAuthor={isPageAuthor}
+          broadcastToPage={broadcastToPage}
+          onBroadcastToPageChange={setBroadcastToPage}
+          hasPageBroadcastAnnotations={hasPageBroadcastAnnotations}
+          onPageBroadcastDelete={deletePageBroadcastData}
+          pageBroadcastVisible={pageBroadcastVisible}
+          onPageBroadcastToggle={togglePageBroadcastVisibility}
+          // Class broadcast controls
+          classBroadcastVisible={classBroadcastVisible}
+          onClassBroadcastToggle={toggleClassBroadcastVisibility}
+          onClassBroadcastDelete={deleteClassBroadcastData}
+          hasClassBroadcastAnnotations={hasClassBroadcastAnnotations}
+          studentFeedbackVisible={studentFeedbackVisible}
+          onStudentFeedbackToggle={toggleStudentFeedbackVisibility}
+          onStudentFeedbackDelete={deleteStudentFeedbackData}
+          hasStudentFeedbackAnnotations={hasStudentFeedbackAnnotations}
+          classes={teacherClasses}
+          selectedClass={selectedClass}
+          onClassSelect={setSelectedClass}
+          students={classStudents}
+          selectedStudent={selectedStudent}
+          onStudentSelect={setSelectedStudent}
+          lastSelectedStudent={lastSelectedStudent}
+          onClearLastSelectedStudent={() => setLastSelectedStudent(null)}
+          spacerPattern={spacerPattern}
+          onSpacerPatternChange={setSpacerPattern}
+          spacerDeleteAnnotations={spacerDeleteAnnotations}
+          onSpacerDeleteAnnotationsChange={handleSpacerDeleteAnnotationsChange}
+          stickyNotePlacementMode={stickyNotePlacementMode}
+          onStickyNotePlacementToggle={handleStickyNotePlacementToggle}
+          stickyNoteCount={stickyNoteCount}
+        />
+      )}
 
       {/* Spacer click-to-place overlay - portaled into paper, captures pointer events (touch + stylus) */}
       {paperElement && mode === 'spacer' && createPortal(

@@ -80,15 +80,26 @@
  *   aurora.error.<sub>: text              per error class, sub = wall, terminal, door,
  *                                         laser, box, acid, item, no_item, no_switch,
  *                                         no_terminal, door_code, door_missing, name, module,
- *                                         indent, syntax, type, recursion, forbidden. Lookup: error.<sub> → error →
+ *                                         indent, syntax, type, recursion, forbidden, tamper
+ *                                         (attribute starting with _, e.g. kara._w), locked
+ *                                         (a loop the level forbids). Lookup: error.<sub> → error →
  *                                         course default (aurora-defaults.ts auroraLine)
  *   aurora.lint.<code>: text              AURORA's comment on a static finding when the run
  *                                         does not win; code = bare_call, never_called,
- *                                         sensor_no_call, no_return. {line} and {name} are
+ *                                         sensor_no_call, no_return, indented_call (main program
+ *                                         indented into the last def; {name} = that def). {line} and {name} are
  *                                         replaced (also in aurora.error.forbidden: {name};
  *                                         error.door_code: {name} {got} {want}; door_missing: {name})
  *   aurora.fail.3: text                   replaces aurora.fail from the 3rd failed run
  *                                         in a row (per page view, see kara-panel.tsx)
+ *   aurora.fail.<goal>: text              replaces aurora.fail when <goal> is the FIRST missing
+ *                                         goal (order: exit, collect, boxes, chips, logs, output),
+ *                                         so fail.logs may assume Kara is at the exit; the
+ *                                         goal list always shows below
+ *   aurora.win.memory / aurora.win.energy replaces aurora.win when the run reached the goal
+ *                                         but went over that limit (a star short)
+ *   forbid: for, while                    refuse runs using these loops (error sub locked,
+ *                                         {name} = the keyword); e.g. week 1 before for exists
  *   music: file.mp3                       ambient loop (off until the student turns it on)
  *   generate: <kind> key=value …          repeatable; appends generated variants after the
  *                                         hand-drawn grids (generate.ts). Ranges `a..b` or `a`:
@@ -225,6 +236,8 @@ export interface KaraConfig {
   debug?: 'into' | 'over'
   /** `callstack: on` — record the call stack per step (KaraStep.cs) and show it (kara-callstack.tsx). */
   callstack?: boolean
+  /** `forbid: for, while` — refuse runs that use these loops (kara-module.ts `_lint`, error sub 'locked'). */
+  forbid?: ('for' | 'while')[]
 }
 
 export interface KaraLevel {
@@ -386,6 +399,10 @@ export function parseKaraConfig(src: string): KaraConfig {
     else if (key === 'archive') config.archive = /^(true|yes|1|on)$/i.test(value)
     else if (key === 'debug') { const v = value.toLowerCase(); if (v === 'into' || v === 'over') config.debug = v }
     else if (key === 'callstack') config.callstack = /^(true|yes|1|on)$/i.test(value)
+    else if (key === 'forbid') {
+      const kw = value.split(',').map(s => s.trim().toLowerCase()).filter((k): k is 'for' | 'while' => k === 'for' || k === 'while')
+      if (kw.length) config.forbid = kw
+    }
     else if (key.startsWith('aurora.')) config.aurora[key.slice(7)] = { ...message(value), speaker: 'AURORA' }
   }
   if (config.output !== undefined && !config.goals.includes('output')) config.goals.push('output')
@@ -465,6 +482,8 @@ export type KaraRunInput = KaraWorld & {
   costs?: Record<string, number>
   /** Record the call stack per step (`callstack: on`, kara-module.ts `_cs_update`). */
   callstack?: boolean
+  /** Locked loop keywords (`forbid:`). */
+  forbid?: ('for' | 'while')[]
 }
 
 /**
@@ -481,6 +500,7 @@ export function karaRunInput(level: KaraLevel, v: number, files?: Record<string,
     data: karaData(level.config, v, files),
     ...(level.config.costs ? { costs: level.config.costs } : {}),
     ...(level.config.callstack ? { callstack: true } : {}),
+    ...(level.config.forbid ? { forbid: level.config.forbid } : {}),
   }
 }
 
@@ -499,6 +519,7 @@ export function karaAftermathInput(level: KaraLevel, files?: Record<string, stri
     data: karaData(level.config, 0, files),
     ...(level.config.costs ? { costs: level.config.costs } : {}),
     ...(level.config.callstack ? { callstack: true } : {}),
+    ...(level.config.forbid ? { forbid: level.config.forbid } : {}),
     max_steps: level.config.aftermathSteps ?? AFTERMATH_STEPS,
   }
 }

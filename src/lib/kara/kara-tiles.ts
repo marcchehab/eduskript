@@ -180,6 +180,7 @@ export function drawKaraTiles(ctx: CanvasRenderingContext2D, world: KaraWorld, c
       if (look === 'q') drawBrokenSensor(ctx, px, py, tile)
       if (look === 's') drawSlime(ctx, x, y, px, py, tile)
       if (look === '~' && !(c & ACID)) drawBridge(ctx, x, y, px, py, tile)
+      if (look === 'S' || look === 'm') drawSwitchPad(ctx, px, py, tile)
       if (FLOOR_OBJECTS[look]) drawObject(ctx, set, FLOOR_OBJECTS[look], px, py, tile)
       if (look === 'm') drawMusicNote(ctx, px, py, tile)
       if (c & BLOCK && OBSTACLES[look]) drawObject(ctx, set, OBSTACLES[look], px, py, tile)
@@ -244,6 +245,24 @@ function drawBridge(ctx: CanvasRenderingContext2D, x: number, y: number, px: num
     const oy = ((h >> (k * 4 + 2)) % 56) / 100 + 0.22
     ctx.beginPath(); ctx.arc(px + ox * s, py + oy * s, s * 0.07, 0, Math.PI * 2); ctx.fill()
   }
+  ctx.restore()
+}
+
+/**
+ * Floor pad under a switch: a yellow ring on the floor, so the switch reads
+ * as «stand on it» next to a terminal («stand in front of it»); both tiles
+ * are a panel on a pole in the art pack (playtest w1-l2).
+ */
+function drawSwitchPad(ctx: CanvasRenderingContext2D, px: number, py: number, s: number) {
+  ctx.save()
+  ctx.beginPath()
+  ctx.ellipse(px + s / 2, py + s * 0.72, s * 0.4, s * 0.2, 0, 0, Math.PI * 2)
+  ctx.fillStyle = 'rgba(250, 204, 21, 0.35)'
+  ctx.fill()
+  ctx.lineWidth = Math.max(1.5, s * 0.05)
+  ctx.strokeStyle = '#facc15'
+  ctx.setLineDash([s * 0.1, s * 0.07])
+  ctx.stroke()
   ctx.restore()
 }
 

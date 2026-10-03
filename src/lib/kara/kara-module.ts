@@ -67,7 +67,7 @@
  * test or operand of and/or/not: always truthy), `no_return` (a student def
  * that prints but never returns a value, called in a condition or comparison),
  * `never_called` (a top-level def whose name is never loaded outside its own
- * body and that no door.ask names). "Student function" = a def anywhere in the file or a name from
+ * body and that no door.ask names), `indented_call` (see below). "Student function" = a def anywhere in the file or a name from
  * `from x import name`; `from befehle import *` names are unknown here, so
  * `if drei_vor:` after a star import is not caught.
  *
@@ -76,6 +76,15 @@
  * error sub 'forbidden' (closes "exec('move()\n' * 20)" beating the memory
  * star). This is a speed bump for copy-paste tricks, not a sandbox:
  * `getattr(__builtins__, 'ex' + 'ec')` or a helper module still get through.
+ * Also refused before the run: an attribute starting with '_' (`kara._w.x = 9`
+ * teleports MOP-7; sub 'tamper', name = the attribute) and, when the level
+ * sets `forbid: for, while` (world JSON 'forbid'), those loops (sub 'locked',
+ * name 'for'/'while'; comprehensions count as for). Same speed-bump caveat:
+ * getattr(kara, '_w') is not caught.
+ *
+ * Lint `indented_call` (`_indented_call`): the module level calls nothing and
+ * the last def's body holds a call after a blank/comment line or a call of a
+ * student def: the main program was probably indented into the function.
  *
  * Broken targets ('q' in world.ts: TARGET | BROKEN): on_target() is False
  * there; the 'boxes' goal still counts them as targets. Airlock cells
@@ -841,27 +850,38 @@ def _no_return(fn):
     return prints
 
 
-def _lint(tree):
+_LOCKABLE = {'for': (_ast.For, _ast.AsyncFor, _ast.comprehension), 'while': (_ast.While,)}
+
+
+def _lint(tree, locked=()):
     """Static checks before the run (see the header in kara-module.ts).
 
-    Returns (lints, forbidden): lints = [{line, code, name}] sorted by line,
-    forbidden = the first node using a name in _FORBIDDEN (or None).
+    Returns (lints, banned): lints = [{line, code, name}] sorted by line,
+    banned = (node, sub, name) for the first node that refuses the run, or
+    None: a name in _FORBIDDEN (sub 'forbidden'), an attribute starting with
+    '_' such as kara._w (sub 'tamper'), or a keyword the level locks with
+    \`forbid: for, while\` (sub 'locked', name = the keyword).
     One ast.walk per top-level statement (O(nodes)), plus one walk per def
     that is called inside a condition (_no_return)."""
     defs = {}        # every def in the file (also nested): name -> node
     imported = set()  # names from 'from x import name' (not '*')
     refs = {}        # name -> top-level defs (None = module level) that load it
     bare, tests, compared = [], [], []
-    forbidden = None
+    banned = None
+    lock_types = tuple(t for k in locked for t in _LOCKABLE.get(k, ()))
 
-    def ban(node):
-        nonlocal forbidden
-        if forbidden is None or node.lineno < forbidden.lineno:
-            forbidden = node
+    def ban(node, sub='forbidden', name=None):
+        nonlocal banned
+        line = getattr(node, 'lineno', None) or getattr(getattr(node, 'target', None), 'lineno', 0)
+        if banned is None or line < banned[0].lineno:
+            node.lineno = line
+            banned = (node, sub, name)
 
     for top in tree.body:
         owner = top.name if isinstance(top, (_ast.FunctionDef, _ast.AsyncFunctionDef)) else None
         for node in _ast.walk(top):
+            if lock_types and isinstance(node, lock_types):
+                ban(node, 'locked', 'while' if isinstance(node, _ast.While) else 'for')
             if isinstance(node, _ast.Name):
                 if node.id in _FORBIDDEN:
                     ban(node)
@@ -870,12 +890,16 @@ def _lint(tree):
             elif isinstance(node, _ast.Attribute):
                 if node.attr in _FORBIDDEN:
                     ban(node)
+                elif node.attr.startswith('_'):
+                    ban(node, 'tamper', node.attr)
             elif isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
                 defs[node.name] = node
             elif isinstance(node, _ast.ImportFrom):
                 for a in node.names:
                     if a.name in _FORBIDDEN:
                         ban(node)
+                    elif a.name.startswith('_') and node.module == 'kara':
+                        ban(node, 'tamper', a.name)
                     if a.name != '*':
                         imported.add(a.asname or a.name)
             elif isinstance(node, _ast.Expr):
@@ -891,8 +915,8 @@ def _lint(tree):
             elif isinstance(node, _ast.Compare):
                 compared.append(node.left)
                 compared.extend(node.comparators)
-    if forbidden is not None:
-        return [], forbidden
+    if banned is not None:
+        return [], banned
 
     commands = set(__all__) - {'KaraError'}
     callables = commands | set(defs) | imported
@@ -920,9 +944,41 @@ def _lint(tree):
         if (isinstance(top, (_ast.FunctionDef, _ast.AsyncFunctionDef)) and top.name not in asked
                 and not refs.get(top.name, set()) - {top.name}):
             add(top, 'never_called', top.name)
+    indented = _indented_call(tree, defs)
+    if indented is not None:
+        add(*indented)
     lints = [{'line': line, 'code': code, 'name': name} for line, code, name in found]
     lints.sort(key=lambda d: d['line'])
     return lints, None
+
+
+def _indented_call(tree, defs):
+    """(node, 'indented_call', def name) when the main program is probably
+    indented into the last def: the module level calls nothing at all, and the
+    last top-level def's body has a call statement that follows a blank or
+    comment line (Enter, Enter keeps the indent in the editor), or calls a
+    student def without such a gap (e.g. stufe() right under stufe's body).
+    The node is that statement. Heuristic, O(nodes); a def whose body really
+    has a blank line before a call still matches, but then nothing runs anyway."""
+    tops = [t for t in tree.body if not isinstance(t, (_ast.FunctionDef, _ast.AsyncFunctionDef, _ast.Import, _ast.ImportFrom))]
+    if any(isinstance(n, _ast.Call) for t in tops for n in _ast.walk(t)):
+        return None
+    last = None
+    for t in tree.body:
+        if isinstance(t, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
+            last = t
+    if last is None:
+        return None
+    body = last.body
+    calls = [i for i, st in enumerate(body) if isinstance(st, _ast.Expr) and isinstance(st.value, _ast.Call)]
+    for i in calls:
+        if i > 0 and body[i].lineno > (body[i - 1].end_lineno or body[i - 1].lineno) + 1:
+            return body[i], 'indented_call', last.name
+    for i in calls:
+        f = body[i].value.func
+        if isinstance(f, _ast.Name) and f.id in defs:
+            return body[i], 'indented_call', last.name
+    return None
 
 
 def _data_value(name, text):
@@ -988,12 +1044,18 @@ def _run(student_path='__kara_student.py', world_path='__kara_world.json'):
             ns[name] = _data_value(name, text)
         tree = _ast.parse(source, _STUDENT)
         memory = _statements(tree)
-        lints, banned = _lint(tree)
+        lints, banned = _lint(tree, data.get('forbid') or ())
         if banned is not None:
-            name = getattr(banned, 'id', None) or getattr(banned, 'attr', None) or next(
-                a.name for a in banned.names if a.name in _FORBIDDEN)
-            e = ForbiddenError(f'{name} is not available in Kara programs.')
-            e.name, e.lineno = name, banned.lineno
+            node, sub, name = banned
+            if sub == 'tamper':
+                e = ForbiddenError(f"{name} is MOP-7's internal memory. Programs may only use the commands.")
+            elif sub == 'locked':
+                e = ForbiddenError(f'{name} loops are locked in this level.')
+            else:
+                name = getattr(node, 'id', None) or getattr(node, 'attr', None) or next(
+                    a.name for a in node.names if a.name in _FORBIDDEN)
+                e = ForbiddenError(f'{name} is not available in Kara programs.')
+            e.name, e.lineno, e.sub = name, node.lineno, sub
             raise e
         code = compile(tree, _STUDENT, 'exec')
         _sys.settrace(_global_trace)
@@ -1008,7 +1070,7 @@ def _run(student_path='__kara_student.py', world_path='__kara_world.json'):
                  'message': f'{type(e).__name__}: {e.msg}', 'kind': 'python', 'sub': _error_sub(e)}
     except ForbiddenError as e:
         error = {'line': e.lineno, 'message': f'{type(e).__name__}: {e}', 'kind': 'python',
-                 'sub': 'forbidden', 'name': e.name}
+                 'sub': e.sub, 'name': e.name}
     except StepLimitError as e:
         error = {'line': _error_line(e), 'message': f'{type(e).__name__}: {e}', 'kind': 'loop'}
     except KaraError as e:

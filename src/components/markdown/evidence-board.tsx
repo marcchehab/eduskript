@@ -51,7 +51,7 @@ export function EvidenceBoard({ skriptId, title = 'Evidence board', assets, leve
     <div className="not-prose my-6 rounded-lg border bg-muted/20 p-4" data-interactive="true">
       <div className="mb-3 flex items-baseline justify-between gap-2">
         <h3 className="text-lg font-semibold">{title}</h3>
-        <span className="text-xs text-muted-foreground">{items.length} evidence · {levels} levels solved</span>
+        <span className="text-xs text-muted-foreground">{items.length} {items.length === 1 ? 'clue' : 'clues'} · {levels} {levels === 1 ? 'level' : 'levels'} solved</span>
       </div>
       {!skriptId && <p className="text-sm text-muted-foreground">Only available inside a skript.</p>}
       {skriptId && items.length === 0 && <p className="text-sm text-muted-foreground">Nothing found yet.</p>}

@@ -195,7 +195,7 @@ function drawWorld(
 // ─── Component ────────────────────────────────────────────────────────────
 
 /** AURORA comments on the first finding in this order: direct causes of a lost run before an unused def. */
-const LINT_ORDER: KaraLintCode[] = ['bare_call', 'sensor_no_call', 'no_return', 'never_called']
+const LINT_ORDER: KaraLintCode[] = ['bare_call', 'sensor_no_call', 'no_return', 'indented_call', 'never_called']
 
 /** Inline chip text per lint (English UI; AURORA's German comment is in the message bar). */
 const LINT_NOTE: Record<KaraLintCode, (name: string) => string> = {
@@ -203,6 +203,7 @@ const LINT_NOTE: Record<KaraLintCode, (name: string) => string> = {
   sensor_no_call: n => `${n} without () is always true`,
   no_return: n => `${n}() returns None`,
   never_called: n => `${n}() is never called`,
+  indented_call: n => `indented: still part of ${n}()`,
 }
 
 const SPEEDS = [1, 2, 5, 10, 25, 100] // steps per second
@@ -404,16 +405,19 @@ export function KaraPanel({ world: levelWorld, trace: levelTrace, maxTile, maxHe
     if (!config.goals.length || !trace.goal) return null
     if (showAftermath) return null
     if (trace.goal.reached) {
+      // A star short: say which limit (detail) and let the level comment (aurora.win.memory / .energy).
+      const over: ('memory' | 'energy')[] = []
+      if (config.memory && trace.memory > config.memory) over.push('memory')
+      if ((config.energy && trace.energy > config.energy) || (config.looks && (trace.looks ?? 0) > config.looks)) over.push('energy')
+      const short = over.length ? ` · ${over.map(k => `${k} over the limit`).join(', ')}` : ''
       return starsCount
-        ? { message: auroraLine(config, 'win')!, stars, detail: limits }
+        ? { message: auroraLine(config, 'win', { over })!, stars, detail: limits + short }
         : { message: auroraLine(config, 'win')!, detail: `Won in this world – test all worlds for the stars · ${limits}` }
     }
-    // A level-specific fail text replaces the generic (English) goal list.
+    // The goal list always shows (level fail texts point to it); aurora.fail.<goal> comments on the first missing goal.
     return {
-      message: auroraLine(config, 'fail', { failStreak })!,
-      detail: config.aurora.fail || (failStreak >= 3 && config.aurora['fail.3'])
-        ? undefined
-        : `Still to do: ${trace.goal.missing.map(g => GOAL_TEXT[g]).join(', ')}`,
+      message: auroraLine(config, 'fail', { failStreak, missing: trace.goal.missing })!,
+      detail: `Still to do: ${trace.goal.missing.map(g => GOAL_TEXT[g]).join(', ')}`,
     }
   }, [trace, config, stars, failStreak, lints, starsCount, showAftermath])
 

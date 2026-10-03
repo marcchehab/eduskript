@@ -36,7 +36,7 @@ describe('EvidenceBoard levels filter', () => {
     render(<EvidenceBoard skriptId="sk" />)
     await waitFor(() => expect(screen.getByText('Laborbuch')).toBeTruthy())
     expect(screen.getByText('Dienstplan')).toBeTruthy()
-    expect(screen.getByText('3 evidence · 3 levels solved')).toBeTruthy()
+    expect(screen.getByText('3 clues · 3 levels solved')).toBeTruthy()
   })
 
   it('filters by level-id prefix (w1- does not match w10-)', async () => {
@@ -44,7 +44,7 @@ describe('EvidenceBoard levels filter', () => {
     await waitFor(() => expect(screen.getByText('Dienstplan')).toBeTruthy())
     expect(screen.queryByText('Laborbuch')).toBeNull()
     expect(screen.queryByText('Spam')).toBeNull()
-    expect(screen.getByText('1 evidence · 1 levels solved')).toBeTruthy()
+    expect(screen.getByText('1 clue · 1 level solved')).toBeTruthy()
   })
 
   it('accepts several prefixes', async () => {

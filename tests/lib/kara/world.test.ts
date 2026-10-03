@@ -147,7 +147,7 @@ describe('remarkCodeEditor kara-world', () => {
 
 describe('auroraLine', () => {
   const cfg = (src: string) => parseKaraConfig(src)
-  const text = (c: ReturnType<typeof cfg>, event: string, opts?: { sub?: string; failStreak?: number }) => auroraLine(c, event, opts)?.text
+  const text = (c: ReturnType<typeof cfg>, event: string, opts?: Parameters<typeof auroraLine>[2]) => auroraLine(c, event, opts)?.text
 
   it('parses aurora.error.<sub> and aurora.fail.3 keys', () => {
     const c = cfg('aurora.error.no_item: Leer.\naurora.fail.3: Dritter.')
@@ -179,6 +179,18 @@ describe('auroraLine', () => {
     expect(text(c, 'fail', { failStreak: 3 })).toBe('F3.')
     expect(text(c, 'fail', { failStreak: 5 })).toBe('F3.')
     expect(text(cfg(''), 'fail', { failStreak: 3 })).toBe(AURORA_DEFAULTS.fail)
+  })
+
+  it('fail.<goal> per first missing goal with a line; win.<limit> only from the level', () => {
+    const c = cfg('aurora.fail: F.\naurora.fail.logs: L.\naurora.fail.3: F3.\naurora.win: W.\naurora.win.energy: E.')
+    expect(text(c, 'fail', { missing: ['logs'] })).toBe('L.')
+    expect(text(c, 'fail', { missing: ['exit', 'logs'] })).toBe('F.')
+    expect(text(c, 'fail', { missing: ['exit'] })).toBe('F.')
+    expect(text(c, 'fail', { missing: ['logs'], failStreak: 3 })).toBe('F3.')
+    expect(text(c, 'win', { over: ['energy'] })).toBe('E.')
+    expect(text(c, 'win', { over: ['memory'] })).toBe('W.')
+    expect(text(cfg(''), 'win', { over: ['energy'] })).toBe(AURORA_DEFAULTS.win)
+    expect(parseKaraConfig('forbid: for, while, if').forbid).toEqual(['for', 'while'])
   })
 
   it('lint.<code>: level override, placeholders {line} / {name} filled', () => {
