@@ -51,7 +51,7 @@ export interface KaraLineTarget {
   /** Current step's line; absent when only lint notes are shown (run without steps). */
   line?: number
   /** Sensor calls made while this line ran: [name, result]. */
-  sensors?: [string, boolean][]
+  sensors?: [string, boolean | string][]
   /** Door code asked on this step: [function, repr(answer), accepted] (KaraStep.q). */
   door?: [string, string, boolean]
   /** Set on the error step (last position of a run that raised). */
@@ -97,7 +97,7 @@ class KaraLintWidget extends WidgetType {
 
 class KaraNotesWidget extends WidgetType {
   constructor(
-    readonly sensors: [string, boolean][],
+    readonly sensors: [string, boolean | string][],
     readonly error: string | undefined,
     readonly via: string | undefined,
     readonly door: [string, string, boolean] | undefined,
@@ -123,8 +123,14 @@ class KaraNotesWidget extends WidgetType {
     }
     for (const [name, result] of this.sensors) {
       const chip = document.createElement('span')
-      chip.className = result ? 'cm-kara-note cm-kara-note-true' : 'cm-kara-note cm-kara-note-false'
-      chip.textContent = `${name}() → ${result ? 'True' : 'False'}`
+      if (typeof result === 'string') {
+        // Data sensor (scan, position, ship_map, look_at): repr of the value.
+        chip.className = 'cm-kara-note cm-kara-note-value'
+        chip.textContent = `${name}() → ${result}`
+      } else {
+        chip.className = result ? 'cm-kara-note cm-kara-note-true' : 'cm-kara-note cm-kara-note-false'
+        chip.textContent = `${name}() → ${result ? 'True' : 'False'}`
+      }
       wrap.appendChild(chip)
     }
     if (this.door) {
@@ -191,6 +197,8 @@ const karaLineTheme = EditorView.baseTheme({
   '&dark .cm-kara-note-true': { backgroundColor: 'rgba(20, 83, 45, 0.6)', color: '#86efac' },
   '&light .cm-kara-note-false': { backgroundColor: '#e2e8f0', color: '#334155' },
   '&dark .cm-kara-note-false': { backgroundColor: '#1e293b', color: '#cbd5e1' },
+  '&light .cm-kara-note-value': { backgroundColor: '#e0f2fe', color: '#075985' },
+  '&dark .cm-kara-note-value': { backgroundColor: 'rgba(12, 74, 110, 0.6)', color: '#7dd3fc' },
   '&light .cm-kara-note-door-wrong': { backgroundColor: '#fee2e2', color: '#991b1b' },
   '&dark .cm-kara-note-door-wrong': { backgroundColor: 'rgba(127, 29, 29, 0.5)', color: '#fca5a5' },
   '.cm-kara-note-via': { fontFamily: 'sans-serif', fontStyle: 'italic' },

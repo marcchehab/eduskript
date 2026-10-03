@@ -75,6 +75,7 @@ import { drawKaraFacing, drawKaraTiles, loadKaraTileset, type KaraTileset } from
 import {
   buildReplay,
   karaStars,
+  karaLimits,
   karaSuiteStars,
   seekCells,
   type KaraConfig,
@@ -373,10 +374,7 @@ export function KaraPanel({ world: levelWorld, trace: levelTrace, maxTile, maxHe
   const finalCard = useMemo((): KaraCard | null => {
     if (!trace) return null
     if (showAftermath && config.aftermathEnd) return { message: config.aftermathEnd, title: 'Airlock test' }
-    const limits = [
-      config.memory ? `Memory ${trace.memory}/${config.memory}` : `Memory ${trace.memory}`,
-      config.energy ? `Energy ${trace.energy}/${config.energy}` : `Energy ${trace.energy}`,
-    ].join(' · ')
+    const limits = karaLimits(trace, config)
     // A static finding explains a lost run better than its symptom (loop, wall, goal missed).
     if (lints.length) {
       const first = [...lints].sort((a, b) => LINT_ORDER.indexOf(a.code) - LINT_ORDER.indexOf(b.code) || a.line - b.line)[0]
@@ -717,7 +715,7 @@ export function KaraPanel({ world: levelWorld, trace: levelTrace, maxTile, maxHe
           </button>
         )}
         {trace && starsCount && pos === total && config.goals.length > 0 && !trace.error && (
-          <span className="flex items-center" title={`Memory ${trace.memory}${config.memory ? `/${config.memory}` : ''} · Energy ${trace.energy}${config.energy ? `/${config.energy}` : ''}`}>
+          <span className="flex items-center" title={karaLimits(trace, config)}>
             {[1, 2, 3].map(n => (
               <Star key={n} className={cn('w-3.5 h-3.5', n <= stars ? 'fill-amber-400 text-amber-500' : 'text-muted-foreground/40')} />
             ))}

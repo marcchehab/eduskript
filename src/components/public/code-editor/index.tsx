@@ -77,7 +77,7 @@ import { KaraIntro } from './kara-intro'
 import { karaLineHighlighting, showKaraLine, type KaraLineTarget } from './kara-line-extension'
 import { KARA_MODULE_SOURCE, KARA_RUNNER } from '@/lib/kara/kara-module'
 import { KARA_COMPLETIONS } from '@/lib/kara/completions'
-import { karaAftermathInput, karaRunInput, karaStars, parseKaraLevel, type KaraTrace, type KaraWorld } from '@/lib/kara/world'
+import { karaAftermathInput, karaDataFiles, karaRunInput, karaStars, parseKaraLevel, type KaraTrace, type KaraWorld } from '@/lib/kara/world'
 
 /**
  * Hard wall-clock cap on a single Pyodide run from the Run / Check buttons.
@@ -1298,6 +1298,8 @@ export const CodeEditor = memo(function CodeEditor({
   const splitWidth = (isKara ? karaSide : canvasVisible && showGraphics && !graphicsStacked) ? (editorWidth / 100) * containerWidth : containerWidth
   const narrowCode = containerWidth > 0 && splitWidth < 380
   const [karaVariant, setKaraVariant] = useState(0)
+  // Contents of the level's `data: x = @file.json` files (loadKaraDataFiles).
+  const karaDataFilesRef = useRef<Record<string, string> | null>(null)
   /**
    * Replay shown in the panel; `variant` is the world it ran on, `code` the
    * program (archive: true levels save it on a win), `aftermath` the same
@@ -3770,14 +3772,33 @@ export const CodeEditor = memo(function CodeEditor({
   // (reported in the output panel).
   const runKaraVariant = async (code: string, v: number, signal: AbortSignal): Promise<KaraTrace | null> => {
     if (!karaLevel) return null
-    return runKaraInput(code, karaRunInput(karaLevel, v), signal)
+    return runKaraInput(code, karaRunInput(karaLevel, v, await loadKaraDataFiles()), signal)
   }
   // The same, on the level's hidden aftermath world (see KaraPanel); null when it has none.
   const runKaraAftermath = async (code: string, signal: AbortSignal): Promise<{ world: KaraWorld; trace: KaraTrace } | null> => {
-    const input = karaLevel ? karaAftermathInput(karaLevel) : null
+    const input = karaLevel ? karaAftermathInput(karaLevel, await loadKaraDataFiles()) : null
     if (!karaLevel?.aftermath || !input) return null
     const trace = await runKaraInput(code, input, signal)
     return trace ? { world: karaLevel.aftermath, trace } : null
+  }
+  // `data: x = @file.json` files (karaDataFiles), fetched once per page view
+  // from their skript URLs (karaAssets). A file without URL or a failed fetch
+  // is left out; the run then stops with the ValueError from kara.py.
+  const loadKaraDataFiles = async (): Promise<Record<string, string>> => {
+    if (karaDataFilesRef.current) return karaDataFilesRef.current
+    const files: Record<string, string> = {}
+    const names = karaLevel ? karaDataFiles(karaLevel.config) : []
+    await Promise.all(names.map(async name => {
+      const url = karaAssets?.[name]
+      if (!url) return
+      try {
+        const res = await fetch(url)
+        if (res.ok) files[name] = await res.text()
+      } catch { /* missing data file: ValueError in the run */ }
+    }))
+    // Cache only a complete set, so a transient fetch error is retried on the next run.
+    if (names.every(n => n in files)) karaDataFilesRef.current = files
+    return files
   }
   const runKaraInput = async (code: string, input: object, signal: AbortSignal): Promise<KaraTrace | null> => {
     const localFiles = filesRef.current

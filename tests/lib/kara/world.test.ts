@@ -7,7 +7,7 @@ import {
   parseKaraConfig, karaOutput, karaRunInput, karaSuiteStars, karaDoorAsk,
   parseKaraWorld, parseKaraLevel, buildReplay, seekCells, karaStars, karaAssetNames, karaSpeakers, karaMessages,
   BLOCK, ITEM, BOX, CHIP, DOOR, LASER, ACID, EXIT, SWITCH, TARGET, TERMINAL, BROKEN, AIRLOCK,
-  AFTERMATH_STEPS, AFTERMATH_TEXT, karaAftermathInput, type KaraTrace,
+  AFTERMATH_STEPS, AFTERMATH_TEXT, karaAftermathInput, splitData, karaData, karaDataFiles, karaLimits, type KaraTrace,
 } from '@/lib/kara/world'
 
 describe('parseKaraWorld', () => {
@@ -298,5 +298,33 @@ describe('debug config', () => {
     expect(parseKaraLevel('#>E#\n---\ndebug: Over').config.debug).toBe('over')
     expect(parseKaraLevel('#>E#\n---\ndebug: maybe').config.debug).toBeUndefined()
     expect(parseKaraLevel('#>E#\n---\ngoal: exit').config.debug).toBeUndefined()
+  })
+})
+
+describe('data: and looks: config', () => {
+  it('splits data values on | only outside quotes and brackets', () => {
+    expect(splitData('["a|b", "c"] | [1, 2] | \'x|y\' | @f.json')).toEqual(['["a|b", "c"]', '[1, 2]', "'x|y'", '@f.json'])
+  })
+
+  it('parses data lines per variant and resolves @files', () => {
+    const c = parseKaraConfig('data: postfach = ["A"] | ["B", "C"]\ndata: m = @m1.json | @m2.json\ndata: n = 3\nlooks: 40\ndata: 1kaputt = 2')
+    expect(c.looks).toBe(40)
+    expect(c.data.map(d => d.name)).toEqual(['postfach', 'm', 'n'])
+    expect(karaDataFiles(c)).toEqual(['m1.json', 'm2.json'])
+    expect(karaData(c, 1, { 'm2.json': '{"k": 1}' })).toEqual([['postfach', '["B", "C"]'], ['m', '{"k": 1}'], ['n', '3']])
+    expect(karaData(c, 0)).toEqual([['postfach', '["A"]'], ['m', null], ['n', '3']])
+    expect(karaData(c, 2)).toEqual([['postfach', null], ['m', null], ['n', '3']])
+    const level = parseKaraLevel('#>E#\n---\ngoal: exit\ndata: m = @m1.json')
+    expect(karaAssetNames(level)).toEqual(['m1.json'])
+    expect(karaRunInput(level, 0, { 'm1.json': '[1]' }).data).toEqual([['m', '[1]']])
+  })
+
+  it('looks limit is part of the energy star; karaLimits shows it', () => {
+    const config = parseKaraConfig('goal: exit\nenergy: 10\nlooks: 5')
+    const t: KaraTrace = { steps: [], error: null, energy: 8, memory: 3, goal: { reached: true, missing: [] }, looks: 6 }
+    expect(karaStars(t, config)).toBe(2)
+    expect(karaStars({ ...t, looks: 5 }, config)).toBe(3)
+    expect(karaLimits(t, config)).toBe('Memory 3 · Energy 8/10 · Looks 6/5')
+    expect(karaLimits({ ...t, looks: undefined }, parseKaraConfig('goal: exit'))).toBe('Memory 3 · Energy 8')
   })
 })

@@ -442,7 +442,7 @@ export function createMarkdownComponents(
       if (resolved.length > 0) attachedFiles = resolved
     }
 
-    // Kara: resolve the level's audio/music names and speaker portraits
+    // Kara: resolve the level's audio/music/data file names and speaker portraits
     // (`portrait-<speaker>.png`) against the skript files, like `assets=`.
     const karaWorld = karaWorldAttr ? decodeHtmlEntities(karaWorldAttr) : undefined
     let karaAssets: Record<string, string> | undefined

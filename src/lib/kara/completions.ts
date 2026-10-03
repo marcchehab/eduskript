@@ -23,4 +23,8 @@ export const KARA_COMPLETIONS: { label: string; type: string; info: string }[] =
   { label: 'on_switch', type: 'function', info: 'on_switch() -> bool — standing on a switch?' },
   { label: 'on_exit', type: 'function', info: 'on_exit() -> bool — standing on the exit?' },
   { label: 'on_target', type: 'function', info: 'on_target() -> bool — standing on a box target?' },
+  { label: 'scan', type: 'function', info: "scan() -> list[str] — what lies ahead up to the next wall, e.g. ['leer', 'fass', 'kiste']" },
+  { label: 'position', type: 'function', info: "position() -> (x, y, direction) — e.g. (3, 1, 'O'); direction 'N', 'O', 'S' or 'W'" },
+  { label: 'ship_map', type: 'function', info: 'ship_map() -> list[str] — the whole world as rows of legend chars: karte[y][x]' },
+  { label: 'look_at', type: 'function', info: 'look_at(x, y) -> str — legend char of one cell (counts as a look)' },
 ]

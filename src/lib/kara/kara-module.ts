@@ -82,6 +82,21 @@
  * (AIRLOCK, 'a'): a box pushed onto one is removed (one mutation, the box
  * vanishes); MOP-7 drives over them like floor.
  *
+ * Data sensors (0 energy; record `s` entries as [name, repr(value)] cut to 80
+ * chars, where the bool sensors record [name, bool]): `scan()` → list of
+ * German cell names in front of MOP-7 up to the next wall (wall excluded; a
+ * terminal or closed door is the last entry; at most one torus lap);
+ * `position()` → (x, y, 'N'|'O'|'S'|'W'); `ship_map()` → list of row strings
+ * in legend chars of the CURRENT world (`_legend`: pushed boxes, opened doors
+ * and removed barrels show their new state; MOP-7 is not drawn, its cell shows
+ * what lies under it; obstacles keep their char x/T/P/...; O(cols·rows));
+ * `look_at(x, y)` → one legend char, out of range = IndexError (no torus wrap),
+ * counts `looks` (result['looks'], only when > 0; `looks:` limit in world.ts).
+ * Level data (`data` in the world JSON, from `data:` lines in world.ts):
+ * [[name, text]] → globals in the student's namespace (not in helper modules),
+ * parsed by `_data_value` as JSON, else as a Python literal; text None or
+ * unparsable raises ValueError before the student's code runs.
+ *
  * Keep the direction encoding (0=N,1=E,2=S,3=W) and the trace shape in sync
  * with src/lib/kara/world.ts.
  */
@@ -92,6 +107,7 @@ Actions (cost 1 energy each): move, turn_left, turn_right, put_barrel,
 remove_barrel, press_switch, read_log.
 Sensors (free): wall_front/left/right, box_front, door_front, laser_front,
 acid_front, terminal_front, on_barrel, on_switch, on_exit, on_target.
+Data sensors (free): scan(), position(), ship_map(), look_at(x, y).
 camelCase aliases (turnLeft, wallFront, ...) and the original Kara names
 (tree_front, on_leaf, put_leaf, mushroom_front, ...) work too."""
 import sys as _sys
@@ -130,8 +146,10 @@ class _World:
         self.x, self.y, self.d = k['x'], k['y'], k['d']
         self.terminals = [tuple(t) for t in data.get('terminals', [])]
         self.chips = [tuple(c) for c in data.get('chips', [])]
+        self.look = data.get('look') or ['.'] * (self.cols * self.rows)
         self.read = set()  # terminal indices read via read_log() (goal 'logs')
         self.energy = 0
+        self.looks = 0  # look_at() calls
 
     def ahead(self, x, y, d):
         return (x + _DX[d]) % self.cols, (y + _DY[d]) % self.rows
@@ -442,6 +460,114 @@ for _name, _read in _SENSORS.items():
 for _name, _target in _SENSOR_ALIASES.items():
     globals()[_name] = _make_sensor(_name, _SENSORS[_target])
 
+# ─── Data sensors (free, see the header in kara-module.ts) ───────────────
+# They return Python data instead of a bool: lists / tuples / strings for the
+# list, string and 2D weeks. Recorded as sensor results with repr(value).
+
+_SCAN_NAMES = (  # first matching flag wins
+    (BOX, 'kiste'), (ITEM, 'fass'), (TERMINAL, 'terminal'), (DOOR, 'tuer'),
+    (LASER, 'laser'), (ACID, 'saeure'), (CHIP, 'chip'), (EXIT, 'ausgang'),
+    (SWITCH, 'schalter'), (TARGET, 'ziel'), (AIRLOCK, 'schleuse'),
+)
+
+
+def _scan_name(x, y):
+    c = _w.get(x, y)
+    for flag, name in _SCAN_NAMES:
+        if c & flag:
+            return name
+    return 'schleim' if _w.look[y * _w.cols + x] == 's' else 'leer'
+
+
+def _legend(x, y):
+    """Legend char of a cell in its CURRENT state (what the author would draw now).
+    MOP-7 itself is not drawn: its cell shows what lies under it."""
+    c = _w.get(x, y)
+    look = _w.look[y * _w.cols + x]
+    if c & TERMINAL:
+        return 't'
+    if c & BLOCK:
+        return look if look not in ('.', 's') else '#'
+    if c & BOX:
+        return 'O' if c & TARGET else 'B'
+    if c & ITEM:
+        return '*'
+    if c & CHIP:
+        return 'c'
+    if c & DOOR:
+        return 'D'
+    if look == 'D':
+        return 'd'
+    if c & LASER:
+        return look
+    if c & ACID:
+        return '~'
+    if c & EXIT:
+        return 'E'
+    if c & SWITCH:
+        return 'S'
+    if c & TARGET:
+        return 'q' if c & BROKEN else 'o'
+    if c & AIRLOCK:
+        return 'a'
+    return 's' if look == 's' else '.'
+
+
+def _shown(name, value):
+    """Record a data sensor (repr cut to 80 chars) and return the value."""
+    r = repr(value)
+    if len(r) > 80:
+        r = r[:79] + '…'
+    _cur_step().setdefault('s', []).append([name, r])
+    return value
+
+
+def scan():
+    """List of what lies in front of MOP-7, nearest first, up to the next wall
+    (the wall itself is not in the list). A terminal or closed door ends the
+    list too (they are its last entry). Names: leer, fass, kiste, schleim, tuer,
+    laser, saeure, terminal, chip, ausgang, schalter, ziel, schleuse.
+    At most one lap around the ship (the world is a torus). O(cols or rows)."""
+    out = []
+    x, y = _w.x, _w.y
+    for _ in range(_w.cols if _w.d % 2 else _w.rows):
+        x, y = _w.ahead(x, y, _w.d)
+        if (x, y) == (_w.x, _w.y):
+            break
+        c = _w.get(x, y)
+        if c & BLOCK and not c & TERMINAL:
+            break
+        out.append(_scan_name(x, y))
+        if c & (TERMINAL | DOOR):
+            break
+    return _shown('scan', out)
+
+
+def position():
+    """(x, y, direction) of MOP-7; x to the right, y down, (0, 0) top left;
+    direction 'N', 'O', 'S' or 'W'."""
+    return _shown('position', (_w.x, _w.y, 'NOSW'[_w.d]))
+
+
+def ship_map():
+    """The whole world as a list of strings in legend chars, one per row:
+    karte = ship_map(); karte[y][x]. A copy: changing it changes nothing."""
+    return _shown('ship_map', [''.join(_legend(x, y) for x in range(_w.cols)) for y in range(_w.rows)])
+
+
+def look_at(x, y):
+    """Legend char of cell (x, y), like ship_map()[y][x]. Counts as one look
+    (result detail 'Looks N'; a level's looks: limit costs a star)."""
+    if not (isinstance(x, int) and isinstance(y, int)) or isinstance(x, bool) or isinstance(y, bool):
+        raise TypeError(f'look_at() needs two whole numbers, got {x!r}, {y!r}')
+    if not (0 <= x < _w.cols and 0 <= y < _w.rows):
+        raise IndexError(f'look_at({x}, {y}) is outside the ship ({_w.cols} x {_w.rows})')
+    _w.looks += 1
+    return _shown('look_at', _legend(x, y))
+
+
+shipMap, lookAt = ship_map, look_at
+
 turnLeft, turnRight, putBarrel, removeBarrel = turn_left, turn_right, put_barrel, remove_barrel
 pressSwitch, readLog = press_switch, read_log
 put_leaf, remove_leaf, putLeaf, removeLeaf = put_barrel, remove_barrel, put_barrel, remove_barrel
@@ -451,6 +577,7 @@ __all__ = [
     'turnLeft', 'turnRight', 'putBarrel', 'removeBarrel', 'pressSwitch', 'readLog',
     'put_leaf', 'remove_leaf', 'putLeaf', 'removeLeaf',
     *_SENSORS, *_SENSOR_ALIASES,
+    'scan', 'position', 'ship_map', 'look_at', 'shipMap', 'lookAt',
     'KaraError',
 ]
 
@@ -649,6 +776,21 @@ def _lint(tree):
     return lints, None
 
 
+def _data_value(name, text):
+    """One data: value: JSON first, else a Python literal (single quotes,
+    tuples, True/None). None text = no value for this variant / missing file."""
+    if text is None:
+        raise ValueError(f'The level has no data for {name} in this world.')
+    try:
+        return _json.loads(text)
+    except ValueError:
+        pass
+    try:
+        return _ast.literal_eval(text)
+    except (ValueError, SyntaxError):
+        raise ValueError(f'The level data for {name} is not valid JSON or a Python literal.') from None
+
+
 def _run(student_path='__kara_student.py', world_path='__kara_world.json'):
     global _w, _steps, _cur, _expected_output, _door_ask, _asking, _ns, _max_steps
     with open(world_path) as f:
@@ -682,6 +824,9 @@ def _run(student_path='__kara_student.py', world_path='__kara_world.json'):
     old_out = _sys.stdout
     _sys.stdout = _Out()
     try:
+        # Level data (data: lines in world.ts): globals for the student's file only.
+        for name, text in data.get('data') or []:
+            ns[name] = _data_value(name, text)
         tree = _ast.parse(source, _STUDENT)
         memory = _statements(tree)
         lints, banned = _lint(tree)
@@ -723,6 +868,8 @@ def _run(student_path='__kara_student.py', world_path='__kara_world.json'):
             m[2] &= mask
             m[3] &= mask
     result = {'steps': _steps, 'error': error, 'energy': _w.energy, 'memory': memory, 'lints': lints}
+    if _w.looks:
+        result['looks'] = _w.looks
     if error is None:
         result['goal'] = _goal(data.get('goals', []))
     return _json.dumps(result)

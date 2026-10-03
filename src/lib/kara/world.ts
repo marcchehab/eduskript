@@ -50,6 +50,15 @@
  *                                         asks the i-th line (the last line covers the rest).
  *                                         Every door of the level asks, also switch-closed ones.
  *   energy: N / memory: N                 limits for the 2nd/3rd star
+ *   looks: N                              limit of look_at() calls; the energy star needs
+ *                                         both energy and looks within their limits
+ *   data: postfach = ["a", "b"] | ["c"]  global variable for the student's code, per variant
+ *                                         by index like output (one value = every variant).
+ *                                         Value: JSON or a Python literal (('x', 1), 'a', True),
+ *                                         or `@name.json` = a skript file with JSON in it.
+ *                                         `|` inside quotes/brackets does not split. Repeatable
+ *                                         (one line per variable). A variant without a value or
+ *                                         a missing file stops the run with a ValueError.
  *   id: level-id                          key for saved progress (default: editor id)
  *   log: text | speaker=WEBER | audio=f.mp3        one per terminal, in reading order
  *   chip: id | title | text | speaker=… | audio=…  one per chip, in reading order
@@ -174,6 +183,10 @@ export interface KaraConfig {
   doorAsk: { fn: string; expected: string[] }[]
   energy?: number
   memory?: number
+  /** `looks:` limit of look_at() calls (part of the energy star, see karaStars). */
+  looks?: number
+  /** `data:` lines: a global per line, raw value text per variant (see karaData). */
+  data: { name: string; values: string[] }[]
   /** Level briefing above the editor, in order (speaker always set, default AURORA). */
   intro: KaraMessage[]
   logs: KaraMessage[]
@@ -268,6 +281,30 @@ export function parseKaraWorld(src: string): KaraWorld {
   return { cols, rows, cells, look, kara, terminals, chips }
 }
 
+/**
+ * Split on `|` outside quotes and brackets (`["a|b"] | [1]` → 2 parts), for
+ * `data:` values. O(length). Unbalanced brackets just keep everything after
+ * them in one part.
+ */
+export function splitData(value: string): string[] {
+  const parts: string[] = []
+  let depth = 0
+  let quote = ''
+  let start = 0
+  for (let i = 0; i < value.length; i++) {
+    const ch = value[i]
+    if (quote) {
+      if (ch === '\\') i++
+      else if (ch === quote) quote = ''
+    } else if (ch === '"' || ch === "'") quote = ch
+    else if ('[({'.includes(ch)) depth++
+    else if (')]}'.includes(ch)) depth = Math.max(0, depth - 1)
+    else if (ch === '|' && depth === 0) { parts.push(value.slice(start, i).trim()); start = i + 1 }
+  }
+  parts.push(value.slice(start).trim())
+  return parts
+}
+
 /** `a | b | key=value` → positional fields + named fields. */
 function splitFields(value: string): { pos: string[]; named: Record<string, string> } {
   const pos: string[] = []
@@ -292,14 +329,18 @@ function evidence(value: string): KaraEvidence {
 }
 
 export function parseKaraConfig(src: string): KaraConfig {
-  const config: KaraConfig = { goals: [], doorAsk: [], intro: [], logs: [], chips: [], aurora: {}, generate: [] }
+  const config: KaraConfig = { goals: [], doorAsk: [], data: [], intro: [], logs: [], chips: [], aurora: {}, generate: [] }
   for (const raw of src.replace(/\r/g, '').split('\n')) {
     const m = raw.match(/^\s*([a-z][a-z0-9._]*)\s*:\s*(.*)$/i)
     if (!m) continue
     const key = m[1].toLowerCase()
     const value = m[2].trim()
     if (key === 'goal') config.goals = value.split(',').map(s => s.trim()).filter((g): g is KaraGoal => GOALS.has(g as KaraGoal))
-    else if (key === 'energy' || key === 'memory') { const n = parseInt(value, 10); if (n > 0) config[key] = n }
+    else if (key === 'energy' || key === 'memory' || key === 'looks') { const n = parseInt(value, 10); if (n > 0) config[key] = n }
+    else if (key === 'data') {
+      const m = value.match(/^([A-Za-z_]\w*)\s*=\s*(.+)$/)
+      if (m) config.data.push({ name: m[1], values: splitData(m[2]) })
+    }
     else if (key === 'output') config.output = value.split('|').map(s => s.trim())
     else if (key === 'id') config.id = value
     else if (key === 'door.ask') {
@@ -372,23 +413,60 @@ export function karaDoorAsk(config: KaraConfig, v: number): [string, string | nu
   return config.doorAsk.map(({ fn, expected }) => [fn, (expected.length === 1 ? expected[0] : expected[v]) ?? null])
 }
 
-/** The JSON the Python `_run` reads (`__kara_world.json`) for variant `v`. Used by the editor and check.ts. */
-export function karaRunInput(level: KaraLevel, v: number): KaraWorld & { goals: KaraGoal[]; output?: string; door_ask: [string, string | null][] } {
-  return { ...level.variants[v], goals: level.config.goals, output: karaOutput(level.config, v), door_ask: karaDoorAsk(level.config, v) }
+/** Skript files the level's `data:` lines read (`@name.json`), without the @. */
+export function karaDataFiles(config: KaraConfig): string[] {
+  return [...new Set(config.data.flatMap(d => d.values).filter(t => t.startsWith('@')).map(t => t.slice(1).trim()))]
 }
 
 /**
- * Run input for the aftermath world (`aftermath:`): same goals and door
- * codes as variant 0, plus a low step limit (`max_steps`, kara-module.ts).
+ * `data:` values for variant `v`: [name, text] per line, text = the inline
+ * value or the content of `@file` from `files` (file name → text). null when
+ * the line has no value for `v` or the file is not in `files`; the Python
+ * side then raises ValueError (kara-module.ts `_data_value`).
+ */
+export function karaData(config: KaraConfig, v: number, files: Record<string, string> = {}): [string, string | null][] {
+  return config.data.map(({ name, values }) => {
+    const raw = (values.length === 1 ? values[0] : values[v]) ?? null
+    if (raw === null || !raw.startsWith('@')) return [name, raw]
+    return [name, files[raw.slice(1).trim()] ?? null]
+  })
+}
+
+export type KaraRunInput = KaraWorld & {
+  goals: KaraGoal[]
+  output?: string
+  door_ask: [string, string | null][]
+  data: [string, string | null][]
+}
+
+/**
+ * The JSON the Python `_run` reads (`__kara_world.json`) for variant `v`.
+ * Used by the editor and check.ts. `files`: contents of the `@file` data
+ * files (karaDataFiles), fetched by the caller.
+ */
+export function karaRunInput(level: KaraLevel, v: number, files?: Record<string, string>): KaraRunInput {
+  return {
+    ...level.variants[v],
+    goals: level.config.goals,
+    output: karaOutput(level.config, v),
+    door_ask: karaDoorAsk(level.config, v),
+    data: karaData(level.config, v, files),
+  }
+}
+
+/**
+ * Run input for the aftermath world (`aftermath:`): same goals, door
+ * codes and data as variant 0, plus a low step limit (`max_steps`, kara-module.ts).
  * null when the level has none.
  */
-export function karaAftermathInput(level: KaraLevel): (ReturnType<typeof karaRunInput> & { max_steps: number }) | null {
+export function karaAftermathInput(level: KaraLevel, files?: Record<string, string>): (KaraRunInput & { max_steps: number }) | null {
   if (!level.aftermath) return null
   return {
     ...level.aftermath,
     goals: level.config.goals,
     output: karaOutput(level.config, 0),
     door_ask: karaDoorAsk(level.config, 0),
+    data: karaData(level.config, 0, files),
     max_steps: level.config.aftermathSteps ?? AFTERMATH_STEPS,
   }
 }
@@ -402,12 +480,13 @@ export function karaMessages(level: KaraLevel): KaraMessage[] {
   return [...config.intro, ...config.logs, ...config.chips, ...Object.values(config.aurora), ...aftermath]
 }
 
-/** Asset file names a level references (audio, music), for resolving to URLs. */
+/** Asset file names a level references (audio, music, `data: x = @f.json`), for resolving to URLs. */
 export function karaAssetNames(level: KaraLevel): string[] {
   const { config } = level
   const msgs = karaMessages(level)
   const names = msgs.map(m => m.audio).filter((a): a is string => !!a)
   if (config.music) names.push(config.music)
+  names.push(...karaDataFiles(config))
   return [...new Set(names)]
 }
 
@@ -432,8 +511,11 @@ export interface KaraStep {
   k?: [number, number, number]
   /** Cell changes made during the step. */
   m?: KaraMutation[]
-  /** Sensor calls during the step: [name, result]. */
-  s?: [string, boolean][]
+  /**
+   * Sensor calls during the step: [name, result]. Bool sensors give the bool;
+   * data sensors (scan, position, ship_map, look_at) give repr(value), ≤ 80 chars.
+   */
+  s?: [string, boolean | string][]
   /** Door code asked on this step: [function, repr(answer), answer accepted]. */
   q?: [string, string, boolean]
   /** Printed text during the step. */
@@ -487,17 +569,30 @@ export interface KaraTrace {
   energy: number
   /** Statements in the student's program (Python AST). */
   memory: number
+  /** look_at() calls; absent when 0. */
+  looks?: number
 }
 
 export type KaraDoorWant = 'bool' | 'number' | 'text'
 
-/** Stars: 1 = goal reached, +1 memory within limit, +1 energy within limit (no limit = star). */
+/**
+ * Stars: 1 = goal reached, +1 memory within limit, +1 energy AND looks within
+ * their limits (no limit = within).
+ */
 export function karaStars(trace: KaraTrace, config: KaraConfig): number {
   if (trace.error || !trace.goal?.reached) return 0
   let stars = 1
   if (!config.memory || trace.memory <= config.memory) stars++
-  if (!config.energy || trace.energy <= config.energy) stars++
+  if ((!config.energy || trace.energy <= config.energy) && (!config.looks || (trace.looks ?? 0) <= config.looks)) stars++
   return stars
+}
+
+/** Result detail line: 'Memory 5/6 · Energy 12/14' (+ ' · Looks 40/50' when the level counts looks). */
+export function karaLimits(trace: KaraTrace, config: KaraConfig): string {
+  const part = (label: string, n: number, max?: number) => (max ? `${label} ${n}/${max}` : `${label} ${n}`)
+  const parts = [part('Memory', trace.memory, config.memory), part('Energy', trace.energy, config.energy)]
+  if (config.looks || trace.looks) parts.push(part('Looks', trace.looks ?? 0, config.looks))
+  return parts.join(' · ')
 }
 
 /**

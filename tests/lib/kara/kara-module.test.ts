@@ -369,3 +369,93 @@ aftermath.steps: 120`)
     expect(t.error).toBeNull()
   })
 })
+
+describe.skipIf(!hasPython)('kara.py data sensors and level data', () => {
+  beforeAll(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kara-data-test-'))
+    fs.writeFileSync(path.join(dir, 'kara.py'), KARA_MODULE_SOURCE)
+  })
+  afterAll(() => fs.rmSync(dir, { recursive: true, force: true }))
+
+  const level = parseKaraLevel(`
+##########
+#>.*Bs~=t#
+#.xD.S.E.#
+##########
+===
+#####
+#v..#
+#*..#
+#####
+---
+goal: output
+output: ok
+looks: 3
+data: postfach = ["Rechnung", "Spam|Gerald"] | ['Spam']
+data: wo = (2, 1)
+data: manifest = @m.json`)
+
+  it('scan(), position(), ship_map() and look_at() return data and record repr chips', () => {
+    const files = { 'm.json': '{"kisten": 4}' }
+    const code = [
+      'print(scan())',
+      'print(position())',
+      'karte = ship_map()',
+      'print(karte[1], karte[2][3])',
+      'print(look_at(4, 1), look_at(0, 0))',
+      'move()\nmove()\nmove()',
+      'print(ship_map()[1])',
+      'print("ok")',
+    ].join('\n')
+    const t = run(code, karaRunInput(level, 0, files))
+    expect(t.error).toBeNull()
+    const out = t.steps.map(s => s.o ?? '').join('').split('\n')
+    expect(out[0]).toBe("['leer', 'fass', 'kiste', 'schleim', 'saeure', 'laser', 'terminal']")
+    expect(out[1]).toBe("(1, 1, 'O')")
+    expect(out[2]).toBe('#..*Bs~=t# D') // MOP-7 not drawn: its own cell shows floor
+    expect(out[3]).toBe('B #')
+    // MOP-7 pushed the box onto the slime cell: the map shows the current state.
+    expect(out[4]).toBe('#..*.B~=t#')
+    expect(t.looks).toBe(2)
+    expect(t.energy).toBe(3)
+    const chips = t.steps.flatMap(s => s.s ?? [])
+    expect(chips[0]).toEqual(['scan', "['leer', 'fass', 'kiste', 'schleim', 'saeure', 'laser', 'terminal']"])
+    expect(chips[1]).toEqual(['position', "(1, 1, 'O')"])
+    expect(chips.find(c => c[0] === 'ship_map')![1]).toBe("['##########', '#..*Bs~=t#', '#.xD.S.E.#', '##########']")
+    expect(chips.filter(c => c[0] === 'look_at')).toEqual([['look_at', "'B'"], ['look_at', "'#'"]])
+  })
+
+  it('scan() stops at a closed door (last entry) and position() reports the direction letter', () => {
+    const t = run('turn_right()\nprint(position())\nprint(scan())\nturn_left()\nprint(scan())', karaRunInput(parseKaraLevel('#####\n#.>D.#\n#...E#\n#####'), 0))
+    const out = t.steps.map(s => s.o ?? '').join('').split('\n')
+    expect(out[0]).toBe("(2, 1, 'S')")
+    expect(out[1]).toBe("['leer']")
+    expect(out[2]).toBe("['tuer']")
+  })
+
+  it('injects data: per variant, JSON or Python literal, | inside a string does not split, @file from files', () => {
+    const files = { 'm.json': '{"kisten": 4}' }
+    const code = 'print(postfach, wo, manifest["kisten"])\nprint("ok")\n'
+    const out0 = run(code, karaRunInput(level, 0, files)).steps.map(s => s.o ?? '').join('')
+    expect(out0.split('\n')[0]).toBe("['Rechnung', 'Spam|Gerald'] (2, 1) 4")
+    const out1 = run(code, karaRunInput(level, 1, files)).steps.map(s => s.o ?? '').join('')
+    expect(out1.split('\n')[0]).toBe("['Spam'] (2, 1) 4")
+  })
+
+  it('a missing @file stops the run with a ValueError naming the variable', () => {
+    const t = run('print("ok")\n', karaRunInput(level, 0))
+    expect(t.error).toMatchObject({ kind: 'python' })
+    expect(t.error?.message).toContain('manifest')
+    expect(t.steps.length).toBe(0)
+  })
+
+  it('look_at() outside the grid is an IndexError; looks over the limit cost the energy star', () => {
+    const t = run('look_at(10, 0)\n', karaRunInput(level, 0, { 'm.json': '1' }))
+    expect(t.error?.message).toMatch(/^IndexError: look_at\(10, 0\) is outside the ship \(10 x 4\)/)
+    const many = run('for i in range(4):\n    look_at(i, 0)\nprint("ok")\n', karaRunInput(level, 0, { 'm.json': '1' }))
+    expect(many.looks).toBe(4)
+    expect(karaStars(many, level.config)).toBe(2)
+    const few = run('look_at(0, 0)\nprint("ok")\n', karaRunInput(level, 0, { 'm.json': '1' }))
+    expect(karaStars(few, level.config)).toBe(3)
+  })
+})
