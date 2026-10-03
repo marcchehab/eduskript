@@ -570,6 +570,51 @@ export function karaAftermathInput(level: KaraLevel, files?: Record<string, stri
   }
 }
 
+/** A clue of a level: a chip (own id) or a terminal log (id `<level>-log-<n>`). */
+export interface KaraClue extends KaraEvidence {
+  level: string
+  kind: 'chip' | 'log'
+}
+
+/**
+ * The clues of one level, in reading order. The single definition of a
+ * clue's id, title and text: KaraPanel saves only the ids it found, and the
+ * evidence board shows these definitions (pageKaraClues), so a board can
+ * never show a stale copy of a level's text.
+ */
+export function karaClues(config: KaraConfig, levelId: string): KaraClue[] {
+  return [
+    ...config.chips.map(c => ({ ...c, level: levelId, kind: 'chip' as const })),
+    ...config.logs.map((l, i) => ({ ...l, id: `${levelId}-log-${i}`, title: `Log${l.speaker ? `: ${l.speaker}` : ''}`, level: levelId, kind: 'log' as const })),
+  ]
+}
+
+/** A page clue plus the heading of the section its level is in (for «not found yet» cards). */
+export interface KaraPageClue extends KaraClue {
+  section?: string
+}
+
+/**
+ * Every clue defined in the ```kara-world blocks of a page's markdown, in page
+ * order. Level id = `id:` in the config, else the block's `for=` editor id.
+ * O(page length); parses each block once.
+ */
+export function pageKaraClues(markdown: string): KaraPageClue[] {
+  const out: KaraPageClue[] = []
+  let section: string | undefined
+  // Fences first, so `# comments` inside code blocks are not taken for headings.
+  const re = /^```([^\n]*)\n([\s\S]*?)^```|^#{1,6}\s+(.+)$/gm
+  for (const m of markdown.matchAll(re)) {
+    if (m[3] !== undefined) { section = m[3].trim(); continue }
+    if (!/^kara-world\b/.test(m[1])) continue
+    const level = parseKaraLevel(m[2])
+    const id = level.config.id ?? m[1].match(/for="([^"]+)"/)?.[1]
+    if (!id) continue
+    for (const c of karaClues(level.config, id)) out.push({ ...c, section })
+  }
+  return out
+}
+
 /** Every spoken line of a level: intro, logs, chips, AURORA events and the aftermath cards. */
 export function karaMessages(level: KaraLevel): KaraMessage[] {
   const { config } = level

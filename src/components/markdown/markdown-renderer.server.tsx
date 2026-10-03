@@ -1,4 +1,5 @@
 import { compileMarkdown, footnoteLabelForLang } from '@/lib/markdown-compiler'
+import { pageKaraClues } from '@/lib/kara/world'
 import { createMarkdownComponents } from '@/lib/markdown-components'
 import { createEmptySkriptFiles } from '@/lib/skript-files'
 import { getSkriptFiles } from '@/lib/skript-files.server'
@@ -48,7 +49,9 @@ export async function ServerMarkdownRenderer({ content, skriptId, pageId, ownerP
   // 2. Create components with files prop bound
   // <page-nav> needs the skript's page order; only queried when the page uses it.
   const pageNav = skriptId && pageId && /<page-nav\b/.test(content) ? await getPageNeighbours(skriptId, pageId) : undefined
-  const components = createMarkdownComponents(files, { pageId, ownerPageSlug, skriptId, organizationSlug, optimizeImages: true, isExam, pageNav })
+  // <evidence-board> shows the clue definitions of this page's levels.
+  const karaClues = /<evidence-board\b/.test(content) ? pageKaraClues(content) : undefined
+  const components = createMarkdownComponents(files, { pageId, ownerPageSlug, skriptId, organizationSlug, optimizeImages: true, isExam, pageNav, karaClues })
 
   // 3. Pre-resolve `/p/{id}` stable links to canonical URLs in one batched
   //    DB query so public HTML ships with real hrefs. Done here (server) so

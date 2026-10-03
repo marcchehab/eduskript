@@ -11,6 +11,7 @@ import { MarkdownErrorBoundary } from './markdown-error-boundary'
 import { SurveyProvider } from './survey-provider'
 import { CoupledVideoProvider } from './coupled-video-context'
 import { StickMeProvider } from './stick-me'
+import { pageKaraClues } from '@/lib/kara/world'
 import { fencedRanges } from '@/lib/markdown-fences'
 import { getAiFeedbackSolution, setAiFeedbackSolution } from '@/lib/ai-feedback-solution-source'
 
@@ -196,11 +197,14 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
   // Callbacks are stable (empty deps) so they don't bust the memo.
   // The callbacks read refs internally but only when invoked from event handlers,
   // never during the useMemo computation itself.
+  // <evidence-board> shows the clue definitions of this page's levels (pageKaraClues).
+  const karaClues = useMemo(() => (/<evidence-board\b/.test(deferredContent) ? pageKaraClues(deferredContent) : undefined), [deferredContent])
   const components = useMemo(() => {
     // eslint-disable-next-line react-hooks/refs -- callbacks read refs in event handlers, not during render
     return createMarkdownComponents(files, {
       pageId,
       skriptId,
+      karaClues,
       onImageWidthChange: stableOnImageWidthChange,
       onExcalidrawEdit: stableOnExcalidrawEdit,
       onSpacerChange: stableOnSpacerChange,
@@ -208,7 +212,7 @@ function MarkdownRendererInner({ content, fileList, videoList, pageId, skriptId,
       onMoleculeChange: stableOnMoleculeChange,
       aiFeedbackSolution: isEditable ? aiFeedbackSolution : undefined,
     })
-  }, [files, pageId, skriptId, stableOnImageWidthChange, stableOnExcalidrawEdit, stableOnSpacerChange, stableOnMuxVideoChange, stableOnMoleculeChange, aiFeedbackSolution, isEditable])
+  }, [files, pageId, skriptId, karaClues, stableOnImageWidthChange, stableOnExcalidrawEdit, stableOnSpacerChange, stableOnMuxVideoChange, stableOnMoleculeChange, aiFeedbackSolution, isEditable])
 
   // Capture scroll position before any DOM changes
   useLayoutEffect(() => {

@@ -52,6 +52,7 @@ import { AIFeedback } from '@/components/markdown/ai-feedback'
 import { AiFeedbackSolutionGizmo, type AiFeedbackSolutionApi } from '@/components/markdown/ai-feedback-solution-gizmo'
 import { parseKaraLevel, karaAssetNames, karaSpeakers } from '@/lib/kara/world'
 import { EvidenceBoard } from '@/components/markdown/evidence-board'
+import type { KaraPageClue } from '@/lib/kara/world'
 import { KaraArchive } from '@/components/markdown/kara-archive'
 import { PublicThemeToggle } from '@/components/public/theme-toggle'
 import { PageNav } from '@/components/markdown/page-nav'
@@ -238,6 +239,7 @@ interface CreateMarkdownComponentsOptions {
   ownerPageSlug?: string  // Page owner's pageSlug — scopes <onlyfor students|class>
   skriptId?: string  // For Python global imports (shared across editors in a skript)
   pageNav?: { prev: PageNavLink | null; next: PageNavLink | null }  // <page-nav> neighbours (server renderer only)
+  karaClues?: KaraPageClue[]  // <evidence-board>: clue definitions of the page's Kara levels (pageKaraClues)
   onImageWidthChange?: (srcForMatching: string, newMarkdown: string) => void  // Stable callback for image resize
   organizationSlug?: string  // For organization pages (OurTeachers component)
   onExcalidrawEdit?: (filename: string, fileId: string) => void  // Callback to edit Excalidraw drawings
@@ -259,7 +261,7 @@ export function createMarkdownComponents(
   files: SkriptFilesData,
   options?: CreateMarkdownComponentsOptions
 ): Record<string, ComponentType<any>> {
-  const { pageId, ownerPageSlug, skriptId, onImageWidthChange, organizationSlug, onExcalidrawEdit, onSpacerChange, onMuxVideoChange, onMoleculeChange, aiFeedbackSolution, optimizeImages, isExam, pageNav } = options ?? {}
+  const { pageId, ownerPageSlug, skriptId, onImageWidthChange, organizationSlug, onExcalidrawEdit, onSpacerChange, onMuxVideoChange, onMoleculeChange, aiFeedbackSolution, optimizeImages, isExam, pageNav, karaClues } = options ?? {}
 
   // Img element handler - handles <img> elements from markdown with data-* attributes
   function ImgElementComponent({ src, alt, title, style, ...props }: React.ImgHTMLAttributes<HTMLImageElement>) {
@@ -1028,6 +1030,7 @@ export function createMarkdownComponents(
           title={typeof props.title === 'string' ? props.title : undefined}
           levels={typeof props.levels === 'string' ? props.levels : undefined}
           assets={assets}
+          clues={karaClues ?? []}
         />
       )
     },

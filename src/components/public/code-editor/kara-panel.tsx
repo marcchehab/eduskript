@@ -82,7 +82,7 @@ import { playVoice, stopVoice, ttsLineUrl } from '@/lib/kara/voice'
 import { AURORA_WANT, auroraLine, type KaraLintCode } from '@/lib/kara/aurora-defaults'
 import { playSfx } from '@/lib/kara/sfx'
 import { registerSoundSource, useMuted } from '@/lib/sound'
-import { AFTERMATH_TEXT, DOOR, ITEM, LASER } from '@/lib/kara/world'
+import { AFTERMATH_TEXT, DOOR, ITEM, LASER, karaClues } from '@/lib/kara/world'
 import { KaraPortrait, useSpeaking } from './kara-portrait'
 import { karaStepTarget, type KaraLineTarget, type KaraStepMode } from './kara-line-extension'
 import { FLOOD_MS, KaraCallStackOverlay, MAX_WINDOWS } from './kara-callstack'
@@ -538,12 +538,15 @@ export function KaraPanel({ world: levelWorld, trace: levelTrace, maxTile, maxHe
   // read — even if the level is not solved), stars when solved.
   useEffect(() => {
     if (!skriptId || !levelTrace) return
+    // Ids and titles come from karaClues, the same definition the evidence board shows.
+    const clues = karaClues(config, levelId)
+    const chipClues = clues.filter(c => c.kind === 'chip')
+    const logClues = clues.filter(c => c.kind === 'log')
     const found: KaraEvidence[] = []
     for (const step of levelTrace.steps) {
       for (const [kind, i] of step.v ?? []) {
-        if (kind === 'chip' && config.chips[i]) found.push(config.chips[i])
-        const log = kind === 'log' ? config.logs[i] : undefined
-        if (log) found.push({ ...log, id: `${levelId}-log-${i}`, title: `Log${log.speaker ? `: ${log.speaker}` : ''}` })
+        const clue = kind === 'chip' ? chipClues[i] : kind === 'log' ? logClues[i] : undefined
+        if (clue) found.push(clue)
       }
     }
     // Several variants: stars only from a complete suite (effect below).
