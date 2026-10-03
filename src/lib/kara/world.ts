@@ -25,7 +25,8 @@
  *   O             box on a target       c   evidence chip (picked up by walking over it)
  *   D             closed door           d   open door
  *   =  or |       laser (on)            S   switch: press_switch() toggles ALL doors and lasers
- *   ~             acid (Kara falls in)  E   exit
+ *   ~             acid (Kara falls in)  E   exit: sits in a wall row above a floor cell,
+ *                                         entered moving north (drawn as an open door)
  *   t             terminal (blocks; read_log() while facing it)
  *   q             broken box target: drawn and scored like `o`, but on_target()
  *                 is always False there (week 5 aftermath)

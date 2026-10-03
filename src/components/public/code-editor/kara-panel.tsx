@@ -88,7 +88,7 @@ import { KaraPortrait, useSpeaking } from './kara-portrait'
 import { karaStepTarget, type KaraLineTarget, type KaraStepMode } from './kara-line-extension'
 import { FLOOD_MS, KaraCallStackOverlay, MAX_WINDOWS } from './kara-callstack'
 import { KaraVarsStrip } from './kara-vars'
-import { drawKaraFacing, drawKaraMarks, drawKaraTiles, loadKaraTileset, WALL_EXIT_TOP, type KaraTileset } from '@/lib/kara/kara-tiles'
+import { drawKaraFacing, drawKaraMarks, drawKaraTiles, isWallExit, loadKaraTileset, WALL_EXIT_TOP, type KaraTileset } from '@/lib/kara/kara-tiles'
 import {
   buildCallStacks,
   buildReplay,
@@ -177,7 +177,7 @@ function drawWorld(
   squashX = 1,
   dark?: { seen: Float64Array; pos: number; r: number } | null,
   chipLooks?: (string | undefined)[],
-  /** 0..1: MOP-7 drives north through the open wall door above it and disappears (exit animation). */
+  /** 0..1: MOP-7, standing in the exit door, drives on north and disappears under the doorway (exit animation). */
   vanish = 0,
 ) {
   const dpr = window.devicePixelRatio || 1
@@ -202,7 +202,7 @@ function drawWorld(
   if (vanish > 0 && sprite && sprite.complete && sprite.naturalWidth) {
     // Clip at the doorway's top edge: the sprite drives up through the open door and disappears under it.
     const size = tile * 0.92
-    const top = kara.y * tile - tile * WALL_EXIT_TOP
+    const top = kara.y * tile + tile * (1 - WALL_EXIT_TOP)
     ctx.save()
     ctx.beginPath()
     ctx.rect(kara.x * tile, top, tile, kara.y * tile + tile - top)
@@ -691,7 +691,7 @@ export function KaraPanel({ world: levelWorld, trace: levelTrace, maxTile, maxHe
     // stepping onto the last step, not when jumping to it).
     const ci = to.y * world.cols + to.x
     const exitLeave = !!from && pos === total && levelWon && config.goals.includes('exit') && world.look[ci] === 'E'
-      && to.y > 0 && (world.look[ci - world.cols] === '#' || world.look[ci - world.cols] === 'D') && exitDoneRef.current !== trace
+      && isWallExit(world, to.x, to.y) && exitDoneRef.current !== trace
     let raf = 0
     const leave = () => {
       exitDoneRef.current = trace
@@ -701,7 +701,7 @@ export function KaraPanel({ world: levelWorld, trace: levelTrace, maxTile, maxHe
         drawWorld(canvas, world, cells, to, tile, tileset, sprites, marks, 1, darkAt(pos), chipLooks, k * k)
         if (k < 1) { raf = requestAnimationFrame(step); return }
         const r = canvas.getBoundingClientRect()
-        void playEffect(4, canvas, new DOMRect(r.left + to.x * tile, r.top + (to.y - 0.5) * tile, tile, tile)).catch(() => {})
+        void playEffect(4, canvas, new DOMRect(r.left + to.x * tile, r.top + to.y * tile, tile, tile)).catch(() => {})
       }
       raf = requestAnimationFrame(step)
     }

@@ -88,8 +88,8 @@ export function loadKaraTileset(): Promise<KaraTileset> {
   return tilesetPromise
 }
 
-// Doors sit inside walls, so they count as wall for the autotiler.
-const WALL_LOOKS = new Set(['#', 'D'])
+// Doors and exits sit inside walls, so they count as wall for the autotiler.
+const WALL_LOOKS = new Set(['#', 'D', 'E'])
 
 // Deterministic per-cell variation (wall faces), stable across redraws.
 const cellHash = (x: number, y: number) => ((x * 73856093) ^ (y * 19349663)) >>> 0
@@ -193,10 +193,10 @@ export function drawKaraTiles(ctx: CanvasRenderingContext2D, world: KaraWorld, c
       if (look === 's') drawSlime(ctx, x, y, px, py, tile)
       if (look === '~' && !(c & ACID)) drawBridge(ctx, x, y, px, py, tile)
       if (look === 'S' || look === 'm') drawSwitchPad(ctx, px, py, tile)
-      // An exit right below a wall is drawn as an open door in that wall
-      // (MOP-7 drives up into it); elsewhere it stays a floor hatch.
-      if (look === 'E' && y > 0 && WALL_LOOKS.has(world.look[i - world.cols])) drawWallExit(ctx, set, px, py, tile)
-      else if (FLOOR_OBJECTS[look]) drawObject(ctx, set, FLOOR_OBJECTS[look], px, py, tile)
+      // An exit in a wall row (floor below it) is an open door MOP-7 drives up
+      // into; elsewhere it stays a floor hatch.
+      if (look === 'E' && isWallExit(world, x, y)) { drawCell(ctx, set, 'door-open', px, py, tile); continue }
+      if (FLOOR_OBJECTS[look]) drawObject(ctx, set, FLOOR_OBJECTS[look], px, py, tile)
       if (look === 'm') drawMusicNote(ctx, px, py, tile)
       if (c & BLOCK && OBSTACLES[look]) drawObject(ctx, set, OBSTACLES[look], px, py, tile)
       if (c & CHIP) drawEvidence(ctx, set, lookAt.get(i), px, py, tile)
@@ -380,14 +380,17 @@ function drawEvidence(ctx: CanvasRenderingContext2D, set: KaraTileset, look: str
 }
 
 /**
- * Wall exit: an open door drawn in the wall cell above (px, py), like a `d`
- * door. The exit animation clips MOP-7 at WALL_EXIT_TOP tiles above the floor
- * line, so it disappears inside the doorway.
+ * Exits sit in a wall row and are entered from the floor cell below (moving
+ * north). Drawn as an open door; the exit animation clips MOP-7 at
+ * WALL_EXIT_TOP tiles above the exit cell's floor line, inside the doorway.
  */
 export const WALL_EXIT_TOP = 0.9
 
-function drawWallExit(ctx: CanvasRenderingContext2D, set: KaraTileset, px: number, py: number, s: number) {
-  drawCell(ctx, set, 'door-open', px, py - s, s)
+/** True when the `E` at (x, y) is a wall exit: floor below it, wall (or the edge) above. */
+export function isWallExit(world: KaraWorld, x: number, y: number): boolean {
+  const below = y + 1 < world.rows ? world.look[(y + 1) * world.cols + x] : '#'
+  const above = y > 0 ? world.look[(y - 1) * world.cols + x] : '#'
+  return below !== '#' && (above === '#' || y === 0)
 }
 
 function drawChip(ctx: CanvasRenderingContext2D, px: number, py: number, s: number) {

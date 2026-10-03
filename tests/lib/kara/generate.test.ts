@@ -42,7 +42,7 @@ describe('generateWorlds', () => {
       expect(w.cols - 2).toBeLessThanOrEqual(14)
       expect(w.rows).toBe(3)
       expect(w.kara).toEqual({ x: 1, y: 1, d: 1 })
-      expect(exitOf(w)).toBe(w.cols + w.cols - 2)
+      expect(exitOf(w)).toBe(w.cols - 2) // in the top wall, above the last floor cell
       expect(reachable(w, exitOf(w))).toBe(true)
       const items = w.cells.filter(c => c & ITEM).length
       expect(items).toBeLessThanOrEqual(3)
@@ -111,8 +111,8 @@ describe('placeFar / parseKaraLevel with generate', () => {
   it('puts the chip on the farthest non-exit cell', () => {
     const [w] = generateWorlds('corridor len=8 count=1', 's')
     placeFar(w, 'c')
-    expect(w.chips).toEqual([[7, 1]]) // exit at x=8, chip one before
-    expect(w.cells[w.cols + 7] & CHIP).toBe(CHIP)
+    expect(w.chips).toEqual([[8, 1]]) // exit in the wall above x=8, chip on the last floor cell
+    expect(w.cells[w.cols + 8] & CHIP).toBe(CHIP)
   })
 
   it('maze: the right-hand rule picks up the far chip before the exit', () => {

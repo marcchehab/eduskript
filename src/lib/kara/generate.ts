@@ -94,13 +94,13 @@ function walls(cols: number, rows: number): string[][] {
   return Array.from({ length: rows }, () => new Array<string>(cols).fill('#'))
 }
 
-/** 1-row corridor: Kara at the west end facing east, exit at the east end, optional green barrels in between. */
+/** 1-row corridor: Kara at the west end facing east, exit in the wall above the east end (enter facing north), optional green barrels in between. */
 function corridor(rng: Rng, o: Record<string, string>, count: number): KaraWorld[] {
   const items = range(o.items, [0, 0], 0, 60)
   return rng.spread(range(o.len, [5, 14], 2, 60), count).map(len => {
     const g = walls(len + 2, 3)
     for (let x = 1; x <= len; x++) g[1][x] = '.'
-    g[1][len] = 'E'
+    g[0][len] = 'E'
     const free = rng.shuffle(Array.from({ length: Math.max(0, len - 2) }, (_, i) => i + 2))
     for (const x of free.slice(0, rng.int2(items))) g[1][x] = '*'
     return toWorld(g, 1, 1, 1)
