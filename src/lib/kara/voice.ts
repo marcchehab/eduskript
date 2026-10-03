@@ -88,21 +88,27 @@ export function onVoiceStop(cb: () => void): () => void {
 const AD_JINGLE = '/kara/sfx/werbung.mp3'
 const AD_VOLUME = 0.1
 const AD_FADE_IN = 1.5 // seconds
+const AD_FADE_OUT = 2 // seconds; also after the line ends
+const AD_FADE_CUT = 0.4 // seconds, when another line or Stop interrupts
 /** Voice gain while the ad runs (a limiter after it keeps peaks below 0 dBFS). */
 const AD_VOICE_BOOST = 1.35
 let ad: { el: HTMLAudioElement; timers: number[]; gain: GainNode } | null = null
 
-function stopAd() {
+/** End the ad: music fades out over `fade` seconds, the voice gain returns to 1. */
+function stopAd(fade = AD_FADE_OUT) {
   if (!ad) return
   const { el, timers, gain } = ad
   ad = null
   timers.forEach(t => clearTimeout(t))
   gain.gain.setTargetAtTime(1, gain.context.currentTime, 0.15)
-  // Short fade so it does not cut off mid-note.
+  const from = el.volume
+  const t0 = performance.now()
   const step = () => {
-    if (el.volume > 0.02) { el.volume = Math.max(0, el.volume - 0.03); setTimeout(step, 30) } else el.pause()
+    const k = Math.min(1, (performance.now() - t0) / (fade * 1000))
+    el.volume = from * (1 - k) * (1 - k) // ease out
+    if (k < 1) requestAnimationFrame(step); else el.pause()
   }
-  step()
+  requestAnimationFrame(step)
 }
 
 /**
@@ -131,7 +137,7 @@ function scheduleAd(el: HTMLAudioElement, text: string, gain: GainNode) {
   }
   const timers = [
     window.setTimeout(fadeIn, real(span.from)),
-    ...(span.to < 1 ? [window.setTimeout(stopAd, real(span.to))] : []),
+    ...(span.to < 1 ? [window.setTimeout(() => stopAd(), real(span.to))] : []),
   ]
   ad = { el: music, timers, gain }
 }
@@ -140,7 +146,7 @@ export function stopVoice() {
   stopListeners.forEach(cb => cb())
   seq++
   if (current) { current.el.pause(); current.stop(); current = null }
-  stopAd()
+  stopAd(AD_FADE_CUT)
   setSpeaking(null)
 }
 
