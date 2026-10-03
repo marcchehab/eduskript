@@ -74,6 +74,15 @@ describe.skipIf(!hasPython)('kara.py trace: one action per step', () => {
     expect(t.steps.some(s => 'a' in s)).toBe(false)
   })
 
+  it('steps record the call depth (d): helper and recursive student functions', () => {
+    const t = run('from befehle import *\n\ndrei_vor()\n')
+    expect(t.steps.filter(s => s.l === 3).map(s => s.d)).toEqual([1, 1, 1])
+    expect(t.steps.filter(s => s.l === 1).every(s => s.d === undefined)).toBe(true)
+    const r = run('def rec(n):\n    if n > 0:\n        move()\n        rec(n - 1)\n\nrec(3)\n')
+    expect(r.steps.filter(s => s.l === 3).map(s => s.d)).toEqual([1, 2, 3])
+    expect(r.steps.find(s => s.l === 6)?.d).toBeUndefined()
+  })
+
   it('stufe() yields 4 steps, each moving at most one cell or turning once', () => {
     const t = run('from befehle import *\nstufe()\n')
     const calls = t.steps.filter(s => s.l === 2)

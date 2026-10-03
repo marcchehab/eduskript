@@ -15,6 +15,10 @@
  * the line marker stays on the call (= step over). Lines in imported helper
  * modules are not traced; an action made inside one records the innermost
  * non-kara frame as `f` (file name), `fl` (line), `fn` (function name).
+ * Every step also records `d`, the call depth (user function frames on the
+ * stack: student file + helper modules, see `_depth`; omitted when 0); a step
+ * holding an action gets the depth the action ran at. The panel shows it
+ * ('depth 3') and its «Step into» mode moves the marker to `f`:`fl`.
  * `sub` is only set when a line made more than one action (1-based, the first
  * step gets `sub: 1` retroactively). Sensors, prints and events stay on the
  * step that is current when they happen (e.g. a sensor after the 2nd move of a
@@ -91,6 +95,7 @@ acid_front, terminal_front, on_barrel, on_switch, on_exit, on_target.
 camelCase aliases (turnLeft, wallFront, ...) and the original Kara names
 (tree_front, on_leaf, put_leaf, mushroom_front, ...) work too."""
 import sys as _sys
+import os as _os
 import json as _json
 import ast as _ast
 
@@ -152,7 +157,24 @@ def _open_step(line):
     if len(_steps) >= _max_steps:
         raise StepLimitError(f'Stopped after {_max_steps} steps. Is there an endless loop?')
     _cur = {'l': line}
+    d = _depth()
+    if d:
+        _cur['d'] = d
     _steps.append(_cur)
+
+
+def _depth():
+    """Call depth for the replay ('depth 3'): user function frames on the stack.
+    User = the student's file or a module next to kara.py (befehle.py, ...);
+    '<module>', '<lambda>', '<listcomp>' etc. are not counted. O(stack) per step."""
+    n = 0
+    f = _sys._getframe(2)
+    while f is not None:
+        c = f.f_code
+        if not c.co_name.startswith('<') and _is_user_file(c.co_filename):
+            n += 1
+        f = f.f_back
+    return n
 
 
 def _cur_step():
@@ -175,6 +197,17 @@ def _sensed(name, result):
 
 
 _THIS_FILE = _sys._getframe().f_code.co_filename
+_HERE = _os.path.dirname(_os.path.abspath(_THIS_FILE))  # helper modules are written next to kara.py
+_user_files = {}  # filename -> is user code (cache for _depth)
+
+
+def _is_user_file(name):
+    r = _user_files.get(name)
+    if r is None:
+        r = name == _STUDENT or (name != _THIS_FILE and not name.startswith('<')
+                                 and _os.path.dirname(_os.path.abspath(name)) == _HERE)
+        _user_files[name] = r
+    return r
 
 
 def _act():
@@ -186,6 +219,12 @@ def _act():
         _open_step(step['l'])
         _cur['sub'] = sub + 1
     _cur['a'] = True
+    # The tracer opened this step at the call line; the action runs deeper.
+    d = _depth()
+    if d:
+        _cur['d'] = d
+    else:
+        _cur.pop('d', None)
     # Innermost frame outside kara.py: the student's file or a helper module.
     f = _sys._getframe(1)
     while f is not None and f.f_code.co_filename == _THIS_FILE:

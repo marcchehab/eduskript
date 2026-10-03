@@ -1338,8 +1338,26 @@ export const CodeEditor = memo(function CodeEditor({
     document.addEventListener('touchmove', move, { passive: false })
     document.addEventListener('touchend', up)
   }
+  // Kara replay marker. A target in another file (step into: `file` =
+  // 'befehle.py') or a main.py target while a helper tab is open switches the
+  // tab first (karaTabRef, set below next to switchToImport); the target is
+  // applied by an effect after the tab's content is in the view, because the
+  // content swap is a doc change and would clear it (kara-line-extension.ts).
+  const pendingKaraLineRef = useRef<KaraLineTarget | null>(null)
+  /** 'here': the view shows the target's file; 'switched': tab switch started; 'missing': no tab has that name. */
+  const karaTabRef = useRef<(file?: string, switchTab?: boolean) => 'here' | 'switched' | 'missing'>(() => 'here')
   const onKaraLine = useCallback((target: KaraLineTarget | null) => {
-    if (editorViewRef.current) showKaraLine(editorViewRef.current, target)
+    pendingKaraLineRef.current = null
+    let t = target
+    if (t?.line) {
+      const tab = karaTabRef.current(t.file)
+      // No tab with that name (helper only in a global/hidden scope): fall back to step over on main.py.
+      if (tab === 'missing') {
+        t = { ...t, file: undefined, ...t.over }
+        if (karaTabRef.current(undefined) === 'switched') { pendingKaraLineRef.current = t; return }
+      } else if (tab === 'switched') { pendingKaraLineRef.current = t; return }
+    }
+    if (editorViewRef.current) showKaraLine(editorViewRef.current, t)
   }, [])
   const createVersionSnapshotRef = useRef<(isManualSave?: boolean) => Promise<void>>(() => Promise.resolve())
 
@@ -2906,6 +2924,31 @@ export const CodeEditor = memo(function CodeEditor({
     })
   }
 
+  // Kara step into (see onKaraLine): show the tab named `file` (main.py =
+  // local tab 0 when absent). Lookup order = which copy Python imported:
+  // runKaraInput writes local tabs, then skript files, then global files, so
+  // on a name clash the later one is on disk. The pinned toolbox tab counts as
+  // a skript file. `switchTab` false: only report ('switched' = «not here yet»).
+  karaTabRef.current = (file, switchTab = true) => {
+    const cur = activeTabRef.current
+    const has = (store: { files: { name: string }[] } | null | undefined) => !!store?.files.some(f => f.name === file)
+    const local = file ? filesRef.current.findIndex(f => f.name === file) : 0
+    const scope = !file ? null
+      : has(globalImportsRef.current) ? 'global'
+      : has(skriptImportsRef.current) ? 'skript'
+      : local > 0 ? null
+      : file === toolboxName ? 'skript' : undefined
+    if (scope === undefined) return 'missing'
+    if (scope === null) {
+      if (cur.type === 'local' && cur.index === local) return 'here'
+      if (switchTab) switchToFile(local)
+      return 'switched'
+    }
+    if (cur.type === 'import' && cur.scope === scope && cur.name === file) return 'here'
+    if (switchTab) switchToImport(scope, file!)
+    return 'switched'
+  }
+
   // Get the content for the currently active tab
   const getActiveContent = (): string => {
     if (activeTab.type === 'local') {
@@ -3210,6 +3253,18 @@ export const CodeEditor = memo(function CodeEditor({
     })
     view.dispatch(transaction)
   }, [activeFileIndex, activeTab, files, skriptImports, globalImports, importContent])
+
+  // Apply a Kara marker that waited for its tab (onKaraLine). Declared after
+  // the content-sync effect above so it runs after the doc swap; a local tab
+  // switch recreates the view in the editor-setup effect, which also runs
+  // earlier in this commit.
+  useEffect(() => {
+    const t = pendingKaraLineRef.current
+    if (!t || !editorViewRef.current) return
+    if (karaTabRef.current(t.file, false) !== 'here') return
+    pendingKaraLineRef.current = null
+    showKaraLine(editorViewRef.current, t)
+  }, [activeFileIndex, activeTab, files, skriptImports, globalImports])
 
   // Run code. `karaAll === true` (never a click event): Kara «Test all worlds».
   const runCode = (karaAll: unknown = false) => {

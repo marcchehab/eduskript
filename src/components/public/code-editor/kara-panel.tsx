@@ -12,7 +12,11 @@
  * one executed line or one action — a line that makes several actions (a
  * toolbox call like `drei_vor()`) replays as several steps on the same line
  * (step over; see kara-module.ts). The status shows `line 5 · 2/3`, and the
- * editor note names the helper frame (`drei_vor() · befehle.py:3`).
+ * editor note names the helper frame (`drei_vor() · befehle.py:3`). A
+ * «Step over / Step into» toggle (shown when an action ran in a helper file,
+ * or the level sets `debug:`) switches the target: into = the editor jumps to
+ * the helper tab and marks the action's line there (karaStepTarget). The
+ * status adds `depth N` (KaraStep.d) once the run called any function.
  * Canvas-rendered; on a single forward step Kara slides one cell or turns
  * (horizontal squash between the two direction sprites, ~120 ms). Any other
  * jump (scrubbing, torus wrap) is drawn without animation. World tiles: src/lib/kara/kara-tiles.ts. Kara sprite:
@@ -57,7 +61,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Check, ChevronLeft, ChevronRight, ListChecks, Loader2, Music, Pause, Play, Rocket, SkipBack, SkipForward, Star, StepBack, StepForward, Undo2, X } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, CornerDownRight, ListChecks, Loader2, Music, Pause, Play, Rocket, SkipBack, SkipForward, Star, StepBack, StepForward, Redo2, Undo2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { recordKaraResult } from '@/lib/kara/progress'
 import { playVoice, stopVoice, ttsLineUrl } from '@/lib/kara/voice'
@@ -66,7 +70,7 @@ import { playSfx } from '@/lib/kara/sfx'
 import { registerSoundSource, useMuted } from '@/lib/sound'
 import { AFTERMATH_TEXT, DOOR, ITEM, LASER } from '@/lib/kara/world'
 import { karaPortrait } from '@/lib/kara/portraits'
-import type { KaraLineTarget } from './kara-line-extension'
+import { karaStepTarget, type KaraLineTarget, type KaraStepMode } from './kara-line-extension'
 import { drawKaraFacing, drawKaraTiles, loadKaraTileset, type KaraTileset } from '@/lib/kara/kara-tiles'
 import {
   buildReplay,
@@ -79,7 +83,6 @@ import {
   type KaraLint,
   type KaraMessage,
   type KaraPos,
-  type KaraStep,
   type KaraTrace,
   type KaraWorld,
 } from '@/lib/kara/world'
@@ -178,13 +181,6 @@ function drawWorld(
 }
 
 // ─── Component ────────────────────────────────────────────────────────────
-
-/** Editor note for an action made inside a helper module: 'drei_vor() · befehle.py:3'. */
-function helperFrame(step: KaraStep): string | undefined {
-  if (!step.f) return undefined
-  const fn = step.fn && !step.fn.startsWith('<') ? `${step.fn}() · ` : ''
-  return `${fn}${step.f}${step.fl ? `:${step.fl}` : ''}`
-}
 
 /** AURORA comments on the first finding in this order: direct causes of a lost run before an unused def. */
 const LINT_ORDER: KaraLintCode[] = ['bare_call', 'sensor_no_call', 'no_return', 'never_called']
@@ -310,6 +306,12 @@ export function KaraPanel({ world: levelWorld, trace: levelTrace, maxTile, maxHe
 
   const steps = useMemo(() => trace?.steps ?? [], [trace])
   const replay = useMemo(() => (trace ? buildReplay(world, trace) : null), [world, trace])
+  /** «Step into» follows helper-module actions into their file (kara-line-extension.ts); level `debug: into` starts there. */
+  const [stepMode, setStepMode] = useState<KaraStepMode>(config.debug === 'into' ? 'into' : 'over')
+  /** The toggle only does something when an action ran in a helper module (befehle.py). */
+  const hasHelperSteps = useMemo(() => steps.some(s => s.f && s.fl), [steps])
+  /** 'depth N' is shown once the run called any function (d ≥ 1 on some step). */
+  const hasDepth = useMemo(() => steps.some(s => s.d), [steps])
   const total = replay?.length ?? 0
 
   // Cell state tracks the drawn position incrementally (see seekCells).
@@ -538,18 +540,25 @@ export function KaraPanel({ world: levelWorld, trace: levelTrace, maxTile, maxHe
     if (pos === total && trace.error) {
       const last = steps[total - 1]
       const line = trace.error.line ?? last?.l
-      // The failing line's own sensor calls stay visible next to the error.
-      const sensors = last && last.l === line ? last.s : undefined
-      onLine(line || lintNotes ? { line: line ?? undefined, sensors, door: last && last.l === line ? last.q : undefined, error: trace.error.message, via: last && last.l === line ? helperFrame(last) : undefined, lints: lintNotes } : null)
+      if (last && last.l === line) {
+        // The failing step's own sensor calls stay visible next to the error;
+        // step into: the error shows on the helper line that raised it.
+        const t = karaStepTarget(last, stepMode)
+        onLine({ ...t, sensors: last.s, door: last.q, error: trace.error.message, lints: t.file ? undefined : lintNotes })
+      } else {
+        onLine(line || lintNotes ? { line: line ?? undefined, error: trace.error.message, lints: lintNotes } : null)
+      }
     } else if (lintNotes && pos === 0) {
       onLine({ lints: lintNotes })
     } else if (pos === 0) {
       onLine(null)
     } else {
       const s = steps[pos - 1]
-      onLine({ line: s.l, sensors: s.s, door: s.q, via: helperFrame(s), lints: lintNotes })
+      const t = karaStepTarget(s, stepMode)
+      // Lints belong to main.py; a helper-file target drops them.
+      onLine({ ...t, sensors: s.s, door: s.q, lints: t.file ? undefined : lintNotes })
     }
-  }, [pos, total, trace, steps, onLine, lints])
+  }, [pos, total, trace, steps, onLine, lints, stepMode])
 
   const tile = useMemo(() => {
     let t = width ? Math.floor(width / world.cols) : maxTile
@@ -687,7 +696,26 @@ export function KaraPanel({ world: levelWorld, trace: levelTrace, maxTile, maxHe
           {trace ? `Step ${pos} / ${total}` : 'Press Run'}
           {pos > 0 && steps[pos - 1] ? ` · line ${steps[pos - 1].l}` : ''}
           {pos > 0 && steps[pos - 1]?.sub && replay ? ` · ${steps[pos - 1].sub}/${replay.subTotal[pos - 1]}` : ''}
+          {pos > 0 && hasDepth && steps[pos - 1] ? <span title="Call depth: how many functions are running right now"> · depth {steps[pos - 1].d ?? 0}</span> : ''}
         </span>
+        {(hasHelperSteps || config.debug) && (
+          <button
+            className={cn(
+              'flex h-6 items-center gap-1 rounded border px-1.5 text-[11px] whitespace-nowrap',
+              stepMode === 'into'
+                ? 'border-amber-400/70 bg-amber-100 text-amber-900 dark:border-amber-500/50 dark:bg-amber-900/30 dark:text-amber-200'
+                : 'bg-background text-muted-foreground hover:bg-muted',
+            )}
+            onClick={() => setStepMode(m => (m === 'into' ? 'over' : 'into'))}
+            aria-pressed={stepMode === 'into'}
+            title={stepMode === 'into'
+              ? 'Step into: the editor follows each action into the helper file (e.g. befehle.py). Click for step over.'
+              : 'Step over: the marker stays on the call in main.py. Click to step into helper files.'}
+          >
+            {stepMode === 'into' ? <CornerDownRight className="h-3 w-3" /> : <Redo2 className="h-3 w-3" />}
+            {stepMode === 'into' ? 'Step into' : 'Step over'}
+          </button>
+        )}
         {trace && starsCount && pos === total && config.goals.length > 0 && !trace.error && (
           <span className="flex items-center" title={`Memory ${trace.memory}${config.memory ? `/${config.memory}` : ''} · Energy ${trace.energy}${config.energy ? `/${config.energy}` : ''}`}>
             {[1, 2, 3].map(n => (

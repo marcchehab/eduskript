@@ -6,9 +6,40 @@
  * Static findings (lints) get a violet tint and a chip on their own lines.
  * Driven by KaraPanel via `setKaraLine`; any document edit clears it (the
  * trace no longer matches the code).
+ *
+ * Step over / step into (`karaStepTarget`): in «over» mode the marker stays on
+ * the student's call line in main.py; in «into» mode a step whose action ran
+ * in a helper module targets that file (`file`, e.g. 'befehle.py') and line
+ * `fl`. The code editor (index.tsx onKaraLine) switches to the tab of that
+ * name and applies the target after the switch; when no tab has that name it
+ * stays on main.py. Lines inside helper modules are not traced
+ * (kara-module.ts), so «into» only shows lines that made an action.
  */
 import { StateEffect, StateField } from '@codemirror/state'
 import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view'
+import type { KaraStep } from '@/lib/kara/world'
+
+export type KaraStepMode = 'over' | 'into'
+
+/** Editor note for an action made inside a helper module: 'drei_vor() · befehle.py:3'. */
+export function helperFrame(step: Pick<KaraStep, 'f' | 'fl' | 'fn'>): string | undefined {
+  if (!step.f) return undefined
+  const fn = step.fn && !step.fn.startsWith('<') ? `${step.fn}() · ` : ''
+  return `${fn}${step.f}${step.fl ? `:${step.fl}` : ''}`
+}
+
+/**
+ * Where the marker goes for one replay step. `file` absent = the student's
+ * main file. «into» needs both `f` and `fl`; otherwise it falls back to «over».
+ */
+export function karaStepTarget(step: Pick<KaraStep, 'l' | 'f' | 'fl' | 'fn'>, mode: KaraStepMode): Pick<KaraLineTarget, 'line' | 'file' | 'via' | 'over'> {
+  const over = { line: step.l, via: helperFrame(step) }
+  if (mode === 'into' && step.f && step.fl) {
+    const fn = step.fn && !step.fn.startsWith('<') ? `${step.fn}() · ` : ''
+    return { line: step.fl, file: step.f, via: `${fn}called from line ${step.l}`, over }
+  }
+  return over
+}
 
 export interface KaraLintNote {
   line: number
@@ -25,8 +56,12 @@ export interface KaraLineTarget {
   door?: [string, string, boolean]
   /** Set on the error step (last position of a run that raised). */
   error?: string
-  /** Helper frame the step's action ran in, e.g. 'drei_vor() · befehle.py:3'. */
+  /** Helper frame the step's action ran in, e.g. 'drei_vor() · befehle.py:3' (step into: 'drei_vor() · called from line 5'). */
   via?: string
+  /** File the line belongs to (step into, e.g. 'befehle.py'); absent = the student's main file. */
+  file?: string
+  /** With `file`: the step-over target, used when the editor has no tab named `file`. */
+  over?: { line: number; via?: string }
   /** Static findings (end of a run that did not win): own line tint + chip. */
   lints?: KaraLintNote[]
 }
@@ -66,10 +101,11 @@ class KaraNotesWidget extends WidgetType {
     readonly error: string | undefined,
     readonly via: string | undefined,
     readonly door: [string, string, boolean] | undefined,
+    readonly into: boolean,
   ) { super() }
 
   eq(other: KaraNotesWidget) {
-    return other.error === this.error && other.via === this.via
+    return other.error === this.error && other.via === this.via && other.into === this.into
       && JSON.stringify(other.sensors) === JSON.stringify(this.sensors) && JSON.stringify(other.door) === JSON.stringify(this.door)
   }
 
@@ -79,8 +115,10 @@ class KaraNotesWidget extends WidgetType {
     if (this.via) {
       const via = document.createElement('span')
       via.className = 'cm-kara-note cm-kara-note-via'
-      via.textContent = `↳ ${this.via}`
-      via.title = 'Running inside this function (step over: the marker stays on the call)'
+      via.textContent = this.into ? `↰ ${this.via}` : `↳ ${this.via}`
+      via.title = this.into
+        ? 'Step into: this helper line made the action; the call is in main.py'
+        : 'Running inside this function (step over: the marker stays on the call)'
       wrap.appendChild(via)
     }
     for (const [name, result] of this.sensors) {
@@ -122,7 +160,7 @@ const karaLineField = StateField.define<DecorationSet>({
         const line = doc.line(t.line)
         ranges.push((t.error ? errorLine : stepLine).range(line.from))
         if (t.sensors?.length || t.error || t.via || t.door) {
-          ranges.push(Decoration.widget({ widget: new KaraNotesWidget(t.sensors ?? [], t.error, t.via, t.door), side: 1 }).range(line.to))
+          ranges.push(Decoration.widget({ widget: new KaraNotesWidget(t.sensors ?? [], t.error, t.via, t.door, !!t.file), side: 1 }).range(line.to))
         }
       }
       // Lint notes grouped per line; the lint tint only where no step/error tint is.

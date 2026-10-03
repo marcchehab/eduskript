@@ -291,3 +291,12 @@ describe('aftermath + archive config', () => {
     expect(karaMessages(level).some(m => m.text === AFTERMATH_TEXT)).toBe(false)
   })
 })
+
+describe('debug config', () => {
+  it('parses debug: into / over, ignores other values', () => {
+    expect(parseKaraLevel('#>E#\n---\ngoal: exit\ndebug: into').config.debug).toBe('into')
+    expect(parseKaraLevel('#>E#\n---\ndebug: Over').config.debug).toBe('over')
+    expect(parseKaraLevel('#>E#\n---\ndebug: maybe').config.debug).toBeUndefined()
+    expect(parseKaraLevel('#>E#\n---\ngoal: exit').config.debug).toBeUndefined()
+  })
+})

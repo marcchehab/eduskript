@@ -99,6 +99,9 @@
  *                                         loop ends after a few seconds of replay)
  *   archive: true                         save the student's code on a win (progress.ts), shown
  *                                         later by <kara-archive of="<level id>">
+ *   debug: into                           replay starts in «Step into» mode: the editor follows
+ *                                         actions into helper files (befehle.py); default `over`
+ *                                         (marker stays on the call). The toggle is always there.
  *
  * The world is a torus like the original Kara: walking off one edge enters on
  * the opposite side. Close levels with `#`.
@@ -190,6 +193,8 @@ export interface KaraConfig {
   aftermathSteps?: number
   /** `archive: true` — save the winning code (progress.ts, <kara-archive>). */
   archive?: boolean
+  /** `debug: into` — the replay starts in «Step into» mode (kara-panel.tsx); absent = step over. */
+  debug?: 'into' | 'over'
 }
 
 export interface KaraLevel {
@@ -314,6 +319,7 @@ export function parseKaraConfig(src: string): KaraConfig {
     }
     else if (key === 'aftermath.steps') { const n = parseInt(value, 10); if (n > 0) config.aftermathSteps = n }
     else if (key === 'archive') config.archive = /^(true|yes|1|on)$/i.test(value)
+    else if (key === 'debug') { const v = value.toLowerCase(); if (v === 'into' || v === 'over') config.debug = v }
     else if (key.startsWith('aurora.')) config.aurora[key.slice(7)] = { ...message(value), speaker: 'AURORA' }
   }
   if (config.output !== undefined && !config.goals.includes('output')) config.goals.push('output')
@@ -446,6 +452,8 @@ export interface KaraStep {
   fl?: number
   /** Function in `f` the action ran in ('<module>' at import time). */
   fn?: string
+  /** Call depth: user function frames (student file + helper modules) on the stack; absent = 0 (top level). */
+  d?: number
 }
 
 /** One static finding; AURORA comments on it with `lint.<code>` (aurora-defaults.ts). */
