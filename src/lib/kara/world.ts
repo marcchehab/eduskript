@@ -59,12 +59,27 @@
  *   aurora.fail.3: text                   replaces aurora.fail from the 3rd failed run
  *                                         in a row (per page view, see kara-panel.tsx)
  *   music: file.mp3                       ambient loop (off until the student turns it on)
+ *   generate: <kind> key=value …          repeatable; appends generated variants after the
+ *                                         hand-drawn grids (generate.ts). Ranges `a..b` or `a`:
+ *     corridor len=5..14 items=0..3 count=6   1-row corridor, Kara west facing east, exit at
+ *                                         the east end, `items` green barrels in between
+ *     room w=3..7 h=2..5 slime=all count=5    closed w×h room, Kara top-left facing east,
+ *                                         barrels on every cell (slime=all) or each with p (slime=0.3)
+ *     maze w=9 h=9 loops=0 count=6        perfect DFS maze (odd size), Kara (1,1) facing east,
+ *                                         exit at the farthest dead end; loops=k removes k walls
+ *                                         and puts the exit where no wall follower ever comes
+ *     stairs steps=3..8 count=4           staircase down to the south-east (move, n × stufe, move)
+ *                                         `seed=…` fixes the seed; default seed = level id
+ *                                         (else the spec line). Same text → same worlds.
+ *   place: c far                          in every generated world, put `c` (legend char) on the
+ *                                         reachable cell farthest from Kara (BFS)
  *
  * The world is a torus like the original Kara: walking off one edge enters on
  * the opposite side. Close levels with `#`.
  */
 
 import type { KaraErrorSub, KaraLintCode } from './aurora-defaults'
+import { generateWorlds, placeFar } from './generate'
 
 // Cell flags. Keep in sync with kara-module.ts.
 export const BLOCK = 1
@@ -130,6 +145,10 @@ export interface KaraConfig {
   chips: KaraEvidence[]
   aurora: Record<string, KaraMessage>
   music?: string
+  /** `generate:` lines (generate.ts), in order; their worlds follow the hand-drawn ones. */
+  generate: string[]
+  /** `place: c far` — legend char put at the farthest reachable cell of every generated world. */
+  place?: string
 }
 
 export interface KaraLevel {
@@ -220,7 +239,7 @@ function evidence(value: string): KaraEvidence {
 }
 
 export function parseKaraConfig(src: string): KaraConfig {
-  const config: KaraConfig = { goals: [], intro: [], logs: [], chips: [], aurora: {} }
+  const config: KaraConfig = { goals: [], intro: [], logs: [], chips: [], aurora: {}, generate: [] }
   for (const raw of src.replace(/\r/g, '').split('\n')) {
     const m = raw.match(/^\s*([a-z][a-z0-9._]*)\s*:\s*(.*)$/i)
     if (!m) continue
@@ -231,6 +250,8 @@ export function parseKaraConfig(src: string): KaraConfig {
     else if (key === 'output') config.output = value.split('|').map(s => s.trim())
     else if (key === 'id') config.id = value
     else if (key === 'music') config.music = value
+    else if (key === 'generate') config.generate.push(value)
+    else if (key === 'place') { const m = value.match(/^(\S)\s+far$/); if (m) config.place = m[1] }
     else if (key === 'intro') { const msg = message(value); config.intro.push({ ...msg, speaker: msg.speaker || 'AURORA' }) }
     else if (key === 'log') config.logs.push(message(value))
     else if (key === 'chip') config.chips.push(evidence(value))
@@ -246,7 +267,14 @@ export function parseKaraLevel(src: string): KaraLevel {
   const grids = sep === -1 ? text : text.slice(0, sep)
   const config = sep === -1 ? '' : text.slice(sep).replace(/^---\s*$/m, '')
   const variants = grids.split(/^===\s*$/m).filter(g => g.trim()).map(parseKaraWorld)
-  return { variants: variants.length ? variants : [parseKaraWorld('')], config: parseKaraConfig(config) }
+  const cfg = parseKaraConfig(config)
+  for (const spec of cfg.generate) {
+    for (const w of generateWorlds(spec, cfg.id ?? '')) {
+      if (cfg.place) placeFar(w, cfg.place)
+      variants.push(w)
+    }
+  }
+  return { variants: variants.length ? variants : [parseKaraWorld('')], config: cfg }
 }
 
 /**
