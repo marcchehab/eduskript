@@ -97,6 +97,25 @@
  * parsed by `_data_value` as JSON, else as a Python literal; text None or
  * unparsable raises ValueError before the student's code runs.
  *
+ * Marks (BFS / Dijkstra made visible, 0 energy): `mark(v)` writes a label on
+ * MOP-7's cell, `mark_at(x, y, v)` on any cell (no move, no look), `marked()`
+ * reads the current cell's mark (the value as given, so an int stays an int;
+ * None when unmarked). str(v) must be at most 3 chars; v None or '' clears
+ * the mark. Each change records `mk` [x, y, before, after] (str or None) on the
+ * current step, so the replay grows the wave line by line. A mark_at() loop in
+ * a helper module (no traced lines) puts all its marks on one step.
+ *
+ * Field costs (`costs` in the world JSON, from `costs: s=3` in world.ts):
+ * {legend char of the cell's look: energy}. A move() that ends on such a cell
+ * costs that much instead of 1 (also into acid: the fall is charged). Turns
+ * and all other actions stay 1. Only the static look counts ('s' slime, 'o',
+ * 'a', '~', ...), not boxes or barrels on the cell.
+ *
+ * Music switch ('m', look 'm', flag SWITCH): press_switch() there toggles
+ * every cell whose look is '~' between acid and a walkable slime bridge
+ * (Gerald). Doors and lasers stay as they are. A plain 'S' does not touch
+ * acid. ship_map()/look_at() show a bridged cell as 'g', scan() as 'bruecke'.
+ *
  * Keep the direction encoding (0=N,1=E,2=S,3=W) and the trace shape in sync
  * with src/lib/kara/world.ts.
  */
@@ -108,6 +127,7 @@ remove_barrel, press_switch, read_log.
 Sensors (free): wall_front/left/right, box_front, door_front, laser_front,
 acid_front, terminal_front, on_barrel, on_switch, on_exit, on_target.
 Data sensors (free): scan(), position(), ship_map(), look_at(x, y).
+Marks (free): mark(v), mark_at(x, y, v), marked().
 camelCase aliases (turnLeft, wallFront, ...) and the original Kara names
 (tree_front, on_leaf, put_leaf, mushroom_front, ...) work too."""
 import sys as _sys
@@ -150,6 +170,8 @@ class _World:
         self.read = set()  # terminal indices read via read_log() (goal 'logs')
         self.energy = 0
         self.looks = 0  # look_at() calls
+        self.marks = {}  # cell index -> value given to mark()/mark_at()
+        self.costs = data.get('costs') or {}  # look char -> energy of a move() onto it
 
     def ahead(self, x, y, d):
         return (x + _DX[d]) % self.cols, (y + _DY[d]) % self.rows
@@ -284,6 +306,9 @@ def move():
         cell = _w.get(nx, ny)
     _w.x, _w.y = nx, ny
     _moved()
+    cost = _w.costs.get(_w.look[ny * _w.cols + nx])
+    if cost is not None:
+        _w.energy += cost - 1  # _act() already counted 1
     if cell & ACID:
         raise KaraError("MOP-7 drove into the acid.", 'acid')
     if cell & CHIP:
@@ -378,6 +403,11 @@ def press_switch():
     _act()
     if not _w.get(_w.x, _w.y) & SWITCH:
         raise KaraError("MOP-7 can't press a switch: there is none here.", 'no_switch')
+    if _w.look[_w.y * _w.cols + _w.x] == 'm':  # music switch: Gerald bridges the acid
+        for i, look in enumerate(_w.look):
+            if look == '~':
+                _w.set(i % _w.cols, i // _w.cols, _w.cells[i] ^ ACID)
+        return
     for y in range(_w.rows):
         for x in range(_w.cols):
             c = _w.get(x, y)
@@ -476,7 +506,10 @@ def _scan_name(x, y):
     for flag, name in _SCAN_NAMES:
         if c & flag:
             return name
-    return 'schleim' if _w.look[y * _w.cols + x] == 's' else 'leer'
+    look = _w.look[y * _w.cols + x]
+    if look == '~':
+        return 'bruecke'  # acid cell without ACID: bridged by the music switch
+    return 'schleim' if look == 's' else 'leer'
 
 
 def _legend(x, y):
@@ -502,10 +535,12 @@ def _legend(x, y):
         return look
     if c & ACID:
         return '~'
+    if look == '~':
+        return 'g'  # bridged acid (music switch)
     if c & EXIT:
         return 'E'
     if c & SWITCH:
-        return 'S'
+        return 'm' if look == 'm' else 'S'
     if c & TARGET:
         return 'q' if c & BROKEN else 'o'
     if c & AIRLOCK:
@@ -526,7 +561,7 @@ def scan():
     """List of what lies in front of MOP-7, nearest first, up to the next wall
     (the wall itself is not in the list). A terminal or closed door ends the
     list too (they are its last entry). Names: leer, fass, kiste, schleim, tuer,
-    laser, saeure, terminal, chip, ausgang, schalter, ziel, schleuse.
+    laser, saeure, terminal, chip, ausgang, schalter, ziel, schleuse, bruecke.
     At most one lap around the ship (the world is a torus). O(cols or rows)."""
     out = []
     x, y = _w.x, _w.y
@@ -566,7 +601,47 @@ def look_at(x, y):
     return _shown('look_at', _legend(x, y))
 
 
-shipMap, lookAt = ship_map, look_at
+# ─── Marks (free, see the header in kara-module.ts) ─────────────────────
+
+def _mark_set(x, y, value):
+    if value is not None and value != '':
+        label = str(value)
+        if len(label) > 3:
+            raise ValueError(f'A mark has at most 3 characters, got {label!r}')
+    else:
+        value, label = None, None
+    i = y * _w.cols + x
+    old = _w.marks.get(i)
+    before = None if old is None else str(old)
+    if value is None:
+        _w.marks.pop(i, None)
+    else:
+        _w.marks[i] = value
+    if before != label:
+        _cur_step().setdefault('mk', []).append([x, y, before, label])
+
+
+def mark(value):
+    """Write a short label (at most 3 characters, e.g. a distance) on MOP-7's
+    cell. mark(None) or mark('') wipes it. Costs no energy."""
+    _mark_set(_w.x, _w.y, value)
+
+
+def mark_at(x, y, value):
+    """Like mark(), but on cell (x, y) without moving there. Costs no energy."""
+    if not (isinstance(x, int) and isinstance(y, int)) or isinstance(x, bool) or isinstance(y, bool):
+        raise TypeError(f'mark_at() needs two whole numbers, got {x!r}, {y!r}')
+    if not (0 <= x < _w.cols and 0 <= y < _w.rows):
+        raise IndexError(f'mark_at({x}, {y}) is outside the ship ({_w.cols} x {_w.rows})')
+    _mark_set(x, y, value)
+
+
+def marked():
+    """The mark on MOP-7's cell, as it was given (3 stays an int), or None."""
+    return _shown('marked', _w.marks.get(_w.y * _w.cols + _w.x))
+
+
+shipMap, lookAt, markAt = ship_map, look_at, mark_at
 
 turnLeft, turnRight, putBarrel, removeBarrel = turn_left, turn_right, put_barrel, remove_barrel
 pressSwitch, readLog = press_switch, read_log
@@ -578,6 +653,7 @@ __all__ = [
     'put_leaf', 'remove_leaf', 'putLeaf', 'removeLeaf',
     *_SENSORS, *_SENSOR_ALIASES,
     'scan', 'position', 'ship_map', 'look_at', 'shipMap', 'lookAt',
+    'mark', 'mark_at', 'marked', 'markAt',
     'KaraError',
 ]
 

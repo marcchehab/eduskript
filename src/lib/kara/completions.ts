@@ -27,4 +27,7 @@ export const KARA_COMPLETIONS: { label: string; type: string; info: string }[] =
   { label: 'position', type: 'function', info: "position() -> (x, y, direction) — e.g. (3, 1, 'O'); direction 'N', 'O', 'S' or 'W'" },
   { label: 'ship_map', type: 'function', info: 'ship_map() -> list[str] — the whole world as rows of legend chars: karte[y][x]' },
   { label: 'look_at', type: 'function', info: 'look_at(x, y) -> str — legend char of one cell (counts as a look)' },
+  { label: 'mark', type: 'function', info: 'mark(v) — write a label (≤ 3 chars, e.g. a distance) on the current cell; free' },
+  { label: 'mark_at', type: 'function', info: 'mark_at(x, y, v) — write a label on cell (x, y) without moving; free' },
+  { label: 'marked', type: 'function', info: 'marked() -> value or None — the mark on the current cell' },
 ]

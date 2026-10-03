@@ -9,7 +9,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import { KARA_MODULE_SOURCE } from '@/lib/kara/kara-module'
-import { parseKaraWorld, parseKaraLevel, buildReplay, karaAftermathInput, karaRunInput, karaStars, karaSuiteStars, DOOR, type KaraTrace } from '@/lib/kara/world'
+import { parseKaraWorld, parseKaraLevel, buildReplay, karaAftermathInput, karaRunInput, karaStars, karaSuiteStars, seekMarks, DOOR, type KaraTrace } from '@/lib/kara/world'
 
 const hasPython = (() => {
   try { execFileSync('python3', ['--version']); return true } catch { return false }
@@ -457,5 +457,90 @@ data: manifest = @m.json`)
     expect(karaStars(many, level.config)).toBe(2)
     const few = run('look_at(0, 0)\nprint("ok")\n', karaRunInput(level, 0, { 'm.json': '1' }))
     expect(karaStars(few, level.config)).toBe(3)
+  })
+})
+
+describe.skipIf(!hasPython)('kara.py marks, field costs, music switch', () => {
+  beforeAll(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kara-marks-test-'))
+    fs.writeFileSync(path.join(dir, 'kara.py'), KARA_MODULE_SOURCE)
+  })
+  afterAll(() => fs.rmSync(dir, { recursive: true, force: true }))
+
+  const level = parseKaraLevel(`
+#######
+#>ss.E#
+#.....#
+#######
+---
+goal: exit
+costs: s=3, o=2`)
+
+  it('parses costs and passes them to the runner', () => {
+    expect(level.config.costs).toEqual({ s: 3, o: 2 })
+    expect(karaRunInput(level, 0).costs).toEqual({ s: 3, o: 2 })
+    expect(karaRunInput(parseKaraLevel('#>E#'), 0)).not.toHaveProperty('costs')
+  })
+
+  it('a move onto slime costs 3, turns stay 1; the detour is cheaper', () => {
+    const straight = run('for i in range(4):\n    move()\n', karaRunInput(level, 0))
+    expect(straight.goal?.reached).toBe(true)
+    expect(straight.energy).toBe(3 + 3 + 1 + 1)
+    const detour = run('turn_right()\nmove()\nturn_left()\nfor i in range(4):\n    move()\nturn_left()\nmove()\n', karaRunInput(level, 0))
+    expect(detour.goal?.reached).toBe(true)
+    expect(detour.energy).toBe(1 + 1 + 1 + 4 + 1 + 1)
+    // a refused move costs only the 1 of the action
+    const wall = run('turn_left()\nmove()\n', karaRunInput(level, 0))
+    expect(wall.error?.sub).toBe('wall')
+    expect(wall.energy).toBe(2)
+  })
+
+  it('mark / mark_at / marked: free, recorded per step, replayable with seekMarks', () => {
+    const code = 'mark(0)\nfor x in range(2, 5):\n    mark_at(x, 1, x - 1)\nprint(marked())\nmove()\nprint(marked())\nmark(None)\n'
+    const t = run(code, karaRunInput(level, 0))
+    expect(t.error).toBeNull()
+    expect(t.energy).toBe(3) // only the move onto slime
+    const out = t.steps.map(s => s.o ?? '').join('')
+    expect(out).toBe('0\n1\n')
+    const changes = t.steps.flatMap(s => s.mk ?? [])
+    expect(changes).toEqual([[1, 1, null, '0'], [2, 1, null, '1'], [3, 1, null, '2'], [4, 1, null, '3'], [2, 1, '1', null]])
+    // every mark_at sits on its own loop-line step: the wave grows line by line
+    expect(t.steps.filter(s => s.mk).length).toBe(5)
+    const w = level.variants[0]
+    const marks = new Array<string | null>(w.cells.length).fill(null)
+    seekMarks(marks, w.cols, t.steps, 0, t.steps.length)
+    expect([marks[w.cols + 1], marks[w.cols + 2], marks[w.cols + 4]]).toEqual(['0', null, '3'])
+    seekMarks(marks, w.cols, t.steps, t.steps.length, 0)
+    expect(marks.every(m => m === null)).toBe(true)
+    expect(t.steps.find(s => s.s?.some(([n]) => n === 'marked'))?.s).toEqual([['marked', '0']])
+  })
+
+  it('mark rejects long labels and cells outside the ship', () => {
+    expect(run('mark(1000)\n', karaRunInput(level, 0)).error?.message).toMatch(/^ValueError: A mark has at most 3 characters/)
+    expect(run('mark_at(7, 0, 1)\n', karaRunInput(level, 0)).error?.message).toMatch(/^IndexError: mark_at\(7, 0\)/)
+    expect(run('mark_at(1.5, 0, 1)\n', karaRunInput(level, 0)).error?.sub).toBe('type')
+  })
+
+  it('a music switch bridges the acid (scan bruecke, ship_map g); a plain switch does not', () => {
+    const music = parseKaraLevel(`
+#######
+#>m~~E#
+#######
+---
+goal: exit`)
+    const ok = run('move()\npress_switch()\nprint(scan())\nprint(ship_map()[1])\nfor i in range(3):\n    move()\n', karaRunInput(music, 0))
+    expect(ok.error).toBeNull()
+    expect(ok.goal?.reached).toBe(true)
+    const out = ok.steps.map(s => s.o ?? '').join('').split('\n')
+    expect(out[0]).toBe("['bruecke', 'bruecke', 'ausgang']")
+    expect(out[1]).toBe('#.mggE#')
+    expect(run('move()\nmove()\nmove()\n', karaRunInput(music, 0)).error?.sub).toBe('acid')
+    // pressed twice: acid again
+    expect(run('move()\npress_switch()\npress_switch()\nmove()\n', karaRunInput(music, 0)).error?.sub).toBe('acid')
+    const plain = parseKaraLevel('#####\n#>S~E#\n#####')
+    expect(run('move()\npress_switch()\nmove()\n', karaRunInput(plain, 0)).error?.sub).toBe('acid')
+    // 'g' starts bridged
+    const pre = parseKaraLevel('#####\n#>gE#\n#####\n---\ngoal: exit')
+    expect(run('move()\nmove()\n', karaRunInput(pre, 0)).goal?.reached).toBe(true)
   })
 })

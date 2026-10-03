@@ -14,7 +14,7 @@
  * neighbour combinations; the rest use the closest piece (see pickWall).
  */
 
-import { BLOCK, BOX, CHIP, DOOR, ITEM, LASER, type KaraWorld } from './world'
+import { ACID, BLOCK, BOX, CHIP, DOOR, ITEM, LASER, type KaraWorld } from './world'
 
 export const KARA_TILESET_URL = (process.env.NEXT_PUBLIC_KARA_TILESET_URL || '').replace(/\/$/, '')
 
@@ -49,7 +49,7 @@ const OBSTACLES: Record<string, string> = {
   T: 'table', P: 'desk', L: 'locker', R: 'barrel-red', Y: 'barrel-yellow', t: 'terminal',
 }
 /** Static floor objects drawn from `look` (not flags). */
-const FLOOR_OBJECTS: Record<string, string> = { S: 'switch', E: 'exit' }
+const FLOOR_OBJECTS: Record<string, string> = { S: 'switch', m: 'switch', E: 'exit' }
 
 const TILE_NAMES = [
   'floor', 'grate', 'face', 'face-alt', 'face-sign', 'item', 'box',
@@ -159,7 +159,8 @@ function drawObject(ctx: CanvasRenderingContext2D, set: KaraTileset, name: strin
 
 /**
  * Draw the world (without Kara). `cells` is the current flag state (items and
- * boxes move); walls/obstacles come from the static `world.look`.
+ * boxes move); walls/obstacles come from the static `world.look`. Marks are
+ * drawn separately (drawKaraMarks), after MOP-7's sprite.
  */
 export function drawKaraTiles(ctx: CanvasRenderingContext2D, world: KaraWorld, cells: number[], tile: number, set: KaraTileset) {
   for (let y = 0; y < world.rows; y++) {
@@ -178,13 +179,88 @@ export function drawKaraTiles(ctx: CanvasRenderingContext2D, world: KaraWorld, c
       if (look === 'o' || look === 'q') drawTarget(ctx, px, py, tile)
       if (look === 'q') drawBrokenSensor(ctx, px, py, tile)
       if (look === 's') drawSlime(ctx, x, y, px, py, tile)
+      if (look === '~' && !(c & ACID)) drawBridge(ctx, x, y, px, py, tile)
       if (FLOOR_OBJECTS[look]) drawObject(ctx, set, FLOOR_OBJECTS[look], px, py, tile)
+      if (look === 'm') drawMusicNote(ctx, px, py, tile)
       if (c & BLOCK && OBSTACLES[look]) drawObject(ctx, set, OBSTACLES[look], px, py, tile)
       if (c & CHIP) drawChip(ctx, px, py, tile)
       if (c & ITEM) drawObject(ctx, set, 'item', px, py, tile)
       if (c & BOX) drawObject(ctx, set, 'box', px, py, tile)
     }
   }
+}
+
+/**
+ * Mark labels (mark / mark_at, row-major, null = none): a translucent cyan
+ * sonar tint on the cell and the label in a dark pill at the bottom right.
+ * Call it after the sprite so the label stays readable on MOP-7's cell.
+ * The canvas has the same colours in light and dark mode. O(cells).
+ */
+export function drawKaraMarks(ctx: CanvasRenderingContext2D, world: KaraWorld, marks: (string | null)[], s: number) {
+  ctx.save()
+  const font = Math.max(8, Math.round(s * 0.3))
+  ctx.font = `600 ${font}px ui-monospace, SFMono-Regular, Menlo, monospace`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  for (let i = 0; i < marks.length; i++) {
+    const label = marks[i]
+    if (label == null) continue
+    const px = (i % world.cols) * s
+    const py = Math.floor(i / world.cols) * s
+    ctx.fillStyle = 'rgba(34, 211, 238, 0.22)'
+    ctx.fillRect(px + 1, py + 1, s - 2, s - 2)
+    const w = Math.max(font * 0.9, ctx.measureText(label).width + font * 0.5)
+    const h = font * 1.15
+    const bx = px + s - w - s * 0.04
+    const by = py + s - h - s * 0.04
+    ctx.fillStyle = 'rgba(8, 47, 73, 0.85)'
+    ctx.beginPath(); ctx.roundRect(bx, by, w, h, h * 0.35); ctx.fill()
+    ctx.strokeStyle = 'rgba(103, 232, 249, 0.9)'
+    ctx.lineWidth = Math.max(1, s * 0.025)
+    ctx.stroke()
+    ctx.fillStyle = '#cffafe'
+    ctx.fillText(label, bx + w / 2, by + h / 2 + 0.5)
+  }
+  ctx.restore()
+}
+
+/**
+ * Bridged acid (music switch, look '~' without the ACID flag): Gerald, a
+ * yellow-green slime mold, spans the cell — a blobby band with a few
+ * darker cores. Drawn over the acid tile, so the acid still shows at the edges.
+ */
+function drawBridge(ctx: CanvasRenderingContext2D, x: number, y: number, px: number, py: number, s: number) {
+  const h = cellHash(x, y)
+  ctx.save()
+  ctx.fillStyle = 'rgba(234, 179, 8, 0.92)'
+  ctx.strokeStyle = 'rgba(113, 63, 18, 0.8)'
+  ctx.lineWidth = Math.max(1, s * 0.03)
+  ctx.beginPath()
+  ctx.roundRect(px + s * 0.06, py + s * 0.06, s * 0.88, s * 0.88, s * 0.3)
+  ctx.fill(); ctx.stroke()
+  ctx.fillStyle = 'rgba(161, 98, 7, 0.75)'
+  for (let k = 0; k < 4; k++) {
+    const ox = ((h >> (k * 4)) % 56) / 100 + 0.22
+    const oy = ((h >> (k * 4 + 2)) % 56) / 100 + 0.22
+    ctx.beginPath(); ctx.arc(px + ox * s, py + oy * s, s * 0.07, 0, Math.PI * 2); ctx.fill()
+  }
+  ctx.restore()
+}
+
+/** Music switch ('m'): a glowing note above the switch plate. */
+function drawMusicNote(ctx: CanvasRenderingContext2D, px: number, py: number, s: number) {
+  ctx.save()
+  ctx.font = `700 ${Math.round(s * 0.42)}px sans-serif`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.shadowColor = '#e879f9'
+  ctx.shadowBlur = s * 0.2
+  ctx.lineWidth = Math.max(2, s * 0.06)
+  ctx.strokeStyle = 'rgba(28, 25, 23, 0.8)'
+  ctx.strokeText('\u266A', px + s * 0.72, py + s * 0.28)
+  ctx.fillStyle = '#f0abfc'
+  ctx.fillText('\u266A', px + s * 0.72, py + s * 0.28)
+  ctx.restore()
 }
 
 // ─── Vector overlays (no matching art in the pack) ────────────────────────

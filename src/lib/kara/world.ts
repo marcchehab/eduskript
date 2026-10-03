@@ -31,6 +31,10 @@
  *                 is always False there (week 5 aftermath)
  *   a             open airlock: a box pushed onto it is gone (sucked out); Kara
  *                 itself can drive over it like floor
+ *   m             music switch: press_switch() there toggles every `~` cell
+ *                 between acid and a walkable slime bridge (Gerald); doors and
+ *                 lasers stay. A plain `S` never touches acid.
+ *   g             acid that starts bridged (walkable; `m` turns it back into acid)
  *   > < ^ v       Kara, facing east / west / north / south
  *
  * Config keys (values: positional fields separated by `|`, then optional
@@ -52,6 +56,9 @@
  *   energy: N / memory: N                 limits for the 2nd/3rd star
  *   looks: N                              limit of look_at() calls; the energy star needs
  *                                         both energy and looks within their limits
+ *   costs: s=3, o=2                       field costs: a move() ending on a cell with this
+ *                                         legend char (static look: s, o, a, ~, E, S, m, …)
+ *                                         costs N energy instead of 1; turns stay 1
  *   data: postfach = ["a", "b"] | ["c"]  global variable for the student's code, per variant
  *                                         by index like output (one value = every variant).
  *                                         Value: JSON or a Python literal (('x', 1), 'a', True),
@@ -185,6 +192,8 @@ export interface KaraConfig {
   memory?: number
   /** `looks:` limit of look_at() calls (part of the energy star, see karaStars). */
   looks?: number
+  /** `costs: s=3` — energy of a move() onto a cell by its look char (kara-module.ts move). */
+  costs?: Record<string, number>
   /** `data:` lines: a global per line, raw value text per variant (see karaData). */
   data: { name: string; values: string[] }[]
   /** Level briefing above the editor, in order (speaker always set, default AURORA). */
@@ -239,6 +248,8 @@ function cellFor(ch: string): [number, string] {
     case 'd': return [0, 'D']
     case '=': case '|': return [LASER, ch]
     case '~': return [ACID, '~']
+    case 'g': return [0, '~']
+    case 'm': return [SWITCH, 'm']
     case 'E': return [EXIT, 'E']
     case 'S': return [SWITCH, 'S']
     case 't': return [BLOCK | TERMINAL, 't']
@@ -341,6 +352,11 @@ export function parseKaraConfig(src: string): KaraConfig {
       const m = value.match(/^([A-Za-z_]\w*)\s*=\s*(.+)$/)
       if (m) config.data.push({ name: m[1], values: splitData(m[2]) })
     }
+    else if (key === 'costs') {
+      const costs: Record<string, number> = {}
+      for (const m of value.matchAll(/(\S)\s*=\s*(\d+)/g)) costs[m[1]] = parseInt(m[2], 10)
+      if (Object.keys(costs).length) config.costs = costs
+    }
     else if (key === 'output') config.output = value.split('|').map(s => s.trim())
     else if (key === 'id') config.id = value
     else if (key === 'door.ask') {
@@ -437,6 +453,7 @@ export type KaraRunInput = KaraWorld & {
   output?: string
   door_ask: [string, string | null][]
   data: [string, string | null][]
+  costs?: Record<string, number>
 }
 
 /**
@@ -451,6 +468,7 @@ export function karaRunInput(level: KaraLevel, v: number, files?: Record<string,
     output: karaOutput(level.config, v),
     door_ask: karaDoorAsk(level.config, v),
     data: karaData(level.config, v, files),
+    ...(level.config.costs ? { costs: level.config.costs } : {}),
   }
 }
 
@@ -467,6 +485,7 @@ export function karaAftermathInput(level: KaraLevel, files?: Record<string, stri
     output: karaOutput(level.config, 0),
     door_ask: karaDoorAsk(level.config, 0),
     data: karaData(level.config, 0, files),
+    ...(level.config.costs ? { costs: level.config.costs } : {}),
     max_steps: level.config.aftermathSteps ?? AFTERMATH_STEPS,
   }
 }
@@ -501,6 +520,9 @@ export function karaSpeakers(level: KaraLevel): string[] {
 /** [x, y, before, after] — one cell change. */
 export type KaraMutation = [number, number, number, number]
 
+/** [x, y, before, after] — one mark change; labels are ≤ 3 chars, null = unmarked. */
+export type KaraMarkChange = [number, number, string | null, string | null]
+
 /** ['log', terminal index] | ['chip', chip index] | ['door', door index] (door code accepted) */
 export type KaraEvent = ['log' | 'chip' | 'door', number]
 
@@ -511,9 +533,11 @@ export interface KaraStep {
   k?: [number, number, number]
   /** Cell changes made during the step. */
   m?: KaraMutation[]
+  /** Mark changes (mark / mark_at) during the step: [x, y, before, after], null = no mark. */
+  mk?: KaraMarkChange[]
   /**
    * Sensor calls during the step: [name, result]. Bool sensors give the bool;
-   * data sensors (scan, position, ship_map, look_at) give repr(value), ≤ 80 chars.
+   * data sensors (scan, position, ship_map, look_at, marked) give repr(value), ≤ 80 chars.
    */
   s?: [string, boolean | string][]
   /** Door code asked on this step: [function, repr(answer), answer accepted]. */
@@ -640,6 +664,26 @@ export function buildReplay(world: KaraWorld, trace: KaraTrace): KaraReplay {
     subTotal[i] = next && next.l === s.l && next.sub === s.sub + 1 ? subTotal[i + 1] : s.sub
   }
   return { length: steps.length, kara, output, outputEnd, subTotal }
+}
+
+/**
+ * Same as seekCells for the marks (row-major labels, null = none). O(|Δsteps|).
+ * Callers start from an all-null array: levels have no initial marks.
+ */
+export function seekMarks(marks: (string | null)[], cols: number, steps: KaraStep[], from: number, to: number): void {
+  if (to > from) {
+    for (let i = from; i < to; i++) {
+      for (const [x, y, , after] of steps[i].mk ?? []) marks[y * cols + x] = after
+    }
+  } else {
+    for (let i = from - 1; i >= to; i--) {
+      const mk = steps[i].mk ?? []
+      for (let j = mk.length - 1; j >= 0; j--) {
+        const [x, y, before] = mk[j]
+        marks[y * cols + x] = before
+      }
+    }
+  }
 }
 
 /** Mutate `cells` from the state after `from` steps to the state after `to` steps. */

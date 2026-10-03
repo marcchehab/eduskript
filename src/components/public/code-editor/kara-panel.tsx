@@ -71,13 +71,14 @@ import { registerSoundSource, useMuted } from '@/lib/sound'
 import { AFTERMATH_TEXT, DOOR, ITEM, LASER } from '@/lib/kara/world'
 import { karaPortrait } from '@/lib/kara/portraits'
 import { karaStepTarget, type KaraLineTarget, type KaraStepMode } from './kara-line-extension'
-import { drawKaraFacing, drawKaraTiles, loadKaraTileset, type KaraTileset } from '@/lib/kara/kara-tiles'
+import { drawKaraFacing, drawKaraMarks, drawKaraTiles, loadKaraTileset, type KaraTileset } from '@/lib/kara/kara-tiles'
 import {
   buildReplay,
   karaStars,
   karaLimits,
   karaSuiteStars,
   seekCells,
+  seekMarks,
   type KaraConfig,
   type KaraEvidence,
   type KaraGoal,
@@ -152,6 +153,7 @@ function drawWorld(
   tile: number,
   tileset: KaraTileset,
   sprites: HTMLImageElement[] | null,
+  marks: (string | null)[] | null,
   squashX = 1,
 ) {
   const dpr = window.devicePixelRatio || 1
@@ -179,6 +181,7 @@ function drawWorld(
     const w = size * Math.max(0.05, squashX)
     ctx.drawImage(sprite, kara.x * tile + (tile - w) / 2, kara.y * tile + (tile - size) / 2, w, size)
   }
+  if (marks) drawKaraMarks(ctx, world, marks, tile)
 }
 
 // ─── Component ────────────────────────────────────────────────────────────
@@ -316,7 +319,8 @@ export function KaraPanel({ world: levelWorld, trace: levelTrace, maxTile, maxHe
   const total = replay?.length ?? 0
 
   // Cell state tracks the drawn position incrementally (see seekCells).
-  const cellsRef = useRef<{ cells: number[]; pos: number; trace: KaraTrace | null; world: KaraWorld } | null>(null)
+  // Marks (mark / mark_at) the same way; null until the trace has any (most levels never mark).
+  const cellsRef = useRef<{ cells: number[]; marks: (string | null)[] | null; pos: number; trace: KaraTrace | null; world: KaraWorld } | null>(null)
   const drawnRef = useRef<{ pos: number; trace: KaraTrace | null }>({ pos: 0, trace: null })
 
   useEffect(() => { void loadDefaultSprites().then(setSprites) }, [])
@@ -572,10 +576,12 @@ export function KaraPanel({ world: levelWorld, trace: levelTrace, maxTile, maxHe
     if (!canvas) return
     let state = cellsRef.current
     if (!state || state.trace !== trace || state.world !== world) {
-      state = { cells: [...world.cells], pos: 0, trace, world }
+      const marks = steps.some(s => s.mk) ? new Array<string | null>(world.cells.length).fill(null) : null
+      state = { cells: [...world.cells], marks, pos: 0, trace, world }
       cellsRef.current = state
     }
     seekCells(state.cells, world.cols, steps, state.pos, pos)
+    if (state.marks) seekMarks(state.marks, world.cols, steps, state.pos, pos)
     state.pos = pos
 
     const to: KaraPos = replay?.kara[pos] ?? world.kara
@@ -584,10 +590,11 @@ export function KaraPanel({ world: levelWorld, trace: levelTrace, maxTile, maxHe
     drawnRef.current = { pos, trace }
 
     const cells = state.cells
+    const marks = state.marks
     const slide = !!from && Math.abs(from.x - to.x) + Math.abs(from.y - to.y) === 1
     const turn = !!from && from.x === to.x && from.y === to.y && from.d !== to.d
     if (!from || (!slide && !turn)) {
-      drawWorld(canvas, world, cells, to, tile, tileset, sprites)
+      drawWorld(canvas, world, cells, to, tile, tileset, sprites, marks)
       return
     }
     const duration = slide ? Math.min(250, 700 / speed) : Math.min(120, 500 / speed)
@@ -596,10 +603,10 @@ export function KaraPanel({ world: levelWorld, trace: levelTrace, maxTile, maxHe
     const frame = (now: number) => {
       const t = Math.min(1, (now - start) / duration)
       if (slide) {
-        drawWorld(canvas, world, cells, { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t, d: to.d }, tile, tileset, sprites)
+        drawWorld(canvas, world, cells, { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t, d: to.d }, tile, tileset, sprites, marks)
       } else {
         // First half: old sprite narrows; second half: new sprite widens.
-        drawWorld(canvas, world, cells, t < 0.5 ? from : to, tile, tileset, sprites, Math.abs(1 - 2 * t))
+        drawWorld(canvas, world, cells, t < 0.5 ? from : to, tile, tileset, sprites, marks, Math.abs(1 - 2 * t))
       }
       if (t < 1) raf = requestAnimationFrame(frame)
     }
