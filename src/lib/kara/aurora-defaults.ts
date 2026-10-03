@@ -32,7 +32,7 @@ export const AURORA_DEFAULTS: Record<string, string> = {
   'error.wall': 'Wand. Python meldet es auf Englisch, ich übersetze: Wand. Die Zeile ist markiert.',
   'error.terminal': 'Vor dem Inventar steht ein Terminal. Terminals liest man, man fährt nicht durch.',
   'error.door': 'Die Tür ist zu. Erst der Schalter, dann die Tür. Reihenfolge ist alles.',
-  'error.door_code': 'Die Tür hat {name}() gefragt. Antwort: {got}. Erwartet war {want}.',
+  'error.door_code': 'Die Tür hat {name}() gefragt. Antwort: {got}. Erwartet war {want}. Idealerweise die richtige.',
   'error.door_missing': 'Die Tür fragt nach {name}(). Diese Funktion gibt es nicht. Noch nicht.',
   'error.laser': 'Laser. Das Inventar ist hineingefahren. Wir verbuchen das als Feldtest. Der Laser hat bestanden.',
   'error.box': 'Die Kiste klemmt: Dahinter ist kein Platz. Kisten lassen sich nur schieben, nicht stapeln.',

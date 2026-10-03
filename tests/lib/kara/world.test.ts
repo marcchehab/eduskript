@@ -249,10 +249,10 @@ describe('door.ask', () => {
   it('AURORA names the function, the answer and the expected kind; voice only for plain answers', () => {
     const vars = { name: 'zaehle_faesser', got: 'None', want: AURORA_WANT.number }
     const line = auroraLine(parseKaraConfig(''), 'error', { sub: 'door_code', vars })?.text
-    expect(line).toBe('Die Tür hat zaehle_faesser() gefragt. Antwort: None. Erwartet war eine Zahl.')
+    expect(line).toBe('Die Tür hat zaehle_faesser() gefragt. Antwort: None. Erwartet war eine Zahl. Idealerweise die richtige.')
     expect(isAuroraDefault(line!)).toBe(true)
-    expect(isAuroraDefault('Die Tür hat wand() gefragt. Antwort: 1. Erwartet war True oder False.')).toBe(true)
-    expect(isAuroraDefault("Die Tür hat f() gefragt. Antwort: 'Hallo Welt'. Erwartet war eine Zahl.")).toBe(false)
+    expect(isAuroraDefault('Die Tür hat wand() gefragt. Antwort: 1. Erwartet war True oder False. Idealerweise die richtige.')).toBe(true)
+    expect(isAuroraDefault("Die Tür hat f() gefragt. Antwort: 'Hallo Welt'. Erwartet war eine Zahl. Idealerweise die richtige.")).toBe(false)
     expect(auroraLine(parseKaraConfig(''), 'error', { sub: 'door_missing', vars: { name: 'f' } })?.text)
       .toBe('Die Tür fragt nach f(). Diese Funktion gibt es nicht. Noch nicht.')
     expect(auroraLine(parseKaraConfig(''), 'door.ok')).toBeUndefined()

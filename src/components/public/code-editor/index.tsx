@@ -1111,9 +1111,14 @@ export const CodeEditor = memo(function CodeEditor({
   // `single` hides the tabs row, unless a pinned toolbox tab needs it.
   const showFileTabs = !singleFile || !!toolboxName
   const fileTabsHeight = showFileTabs ? 36 : 0 // height of file tabs row
+  // Kara: CodeMirror's measured content height (wrapped lines + inline chip /
+  // error widgets), so the floating Run button does not cover the last line in
+  // the stacked layout. Updated only on non-typing geometry changes (see the
+  // updateListener in the editor setup); 0 for other editors.
+  const [karaContentHeight, setKaraContentHeight] = useState(0)
   const calculatedEditorHeight = Math.max(
     MIN_EDITOR_HEIGHT,
-    Math.min(MAX_EDITOR_HEIGHT, lineCount * LINE_HEIGHT + fileTabsHeight + 60) // 60px for controls
+    Math.min(MAX_EDITOR_HEIGHT, Math.max(lineCount * LINE_HEIGHT, karaContentHeight) + fileTabsHeight + 60) // 60px for controls
   )
   // User-adjusted editor height (set when dragging horizontal splitter, keeps total constant)
   const [userEditorHeight, setUserEditorHeight] = useState<number | null>(null)
@@ -2573,6 +2578,16 @@ export const CodeEditor = memo(function CodeEditor({
     // Add code highlighting extension
     extensions.push(...codeHighlighting())
     extensions.push(...karaLineHighlighting())
+    // Kara: track the rendered content height (karaContentHeight). Skips
+    // transactions that change the doc, so typing never sets React state here
+    // (focus-loss rule above); replay markers / inline notes do.
+    if (karaWorldSource) {
+      extensions.push(EditorView.updateListener.of((update) => {
+        if (!update.geometryChanged || update.docChanged) return
+        const h = Math.round(update.view.contentHeight)
+        setKaraContentHeight(prev => (Math.abs(prev - h) > 4 ? h : prev))
+      }))
+    }
 
     // Sync highlight positions back to React state when the document changes.
     extensions.push(
