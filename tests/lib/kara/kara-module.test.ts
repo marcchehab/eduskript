@@ -9,7 +9,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import { KARA_MODULE_SOURCE } from '@/lib/kara/kara-module'
-import { parseKaraWorld, parseKaraLevel, buildReplay, karaRunInput, karaStars, karaSuiteStars, DOOR, type KaraTrace } from '@/lib/kara/world'
+import { parseKaraWorld, parseKaraLevel, buildReplay, karaAftermathInput, karaRunInput, karaStars, karaSuiteStars, DOOR, type KaraTrace } from '@/lib/kara/world'
 
 const hasPython = (() => {
   try { execFileSync('python3', ['--version']); return true } catch { return false }
@@ -315,5 +315,48 @@ door.ask: antwort = 4 | 7`)
 
   it('a level without door.ask keeps the closed-door error', () => {
     expect(run(walk, karaRunInput(parseKaraLevel('#>D.E#\n---\ngoal: exit'), 0)).error?.sub).toBe('door')
+  })
+})
+
+describe.skipIf(!hasPython)('kara.py aftermath: broken target, airlock, step limit', () => {
+  beforeAll(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kara-aftermath-test-'))
+    fs.writeFileSync(path.join(dir, 'kara.py'), KARA_MODULE_SOURCE)
+  })
+  afterAll(() => { fs.rmSync(dir, { recursive: true, force: true }) })
+
+  const level = parseKaraLevel(`
+#######
+#>B..o#
+#######
+=== aftermath
+.>B.q.a.
+---
+goal: boxes
+aftermath.steps: 120`)
+  const loop = 'while not on_target():\n    move()\n'
+
+  it('wins the level, then loops in the aftermath: on_target() is False on q, the box is gone in the airlock', () => {
+    const win = run('move()\nmove()\nmove()\n', karaRunInput(level, 0))
+    expect(win.goal?.reached).toBe(true)
+    const input = karaAftermathInput(level)!
+    expect(input.max_steps).toBe(120)
+    const t = run(loop, input)
+    expect(t.error).toMatchObject({ kind: 'loop' })
+    expect(t.error?.message).toContain('120 steps')
+    expect(t.steps.length).toBe(120)
+    // Sensor on the broken target cell (x=4) said False.
+    const onQ = t.steps.find(s => s.k?.[0] === 4)
+    const after = t.steps[t.steps.indexOf(onQ!) + 1]
+    expect(after.s).toEqual([['on_target', false]])
+    // The box was pushed onto the airlock (x=6) and removed: no mutation ever sets a box there.
+    const boxes = t.steps.flatMap(s => s.m ?? []).filter(([, , b, a]) => (b ^ a) & 4)
+    expect(boxes.some(([x, , , a]) => x === 5 && !(a & 4))).toBe(true)
+    expect(boxes.some(([x, , , a]) => x === 6 && a & 4)).toBe(false)
+  })
+
+  it('without max_steps the normal limit applies', () => {
+    const t = run('move()\n', karaRunInput(level, 0))
+    expect(t.error).toBeNull()
   })
 })

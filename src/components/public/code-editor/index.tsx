@@ -77,7 +77,7 @@ import { KaraIntro } from './kara-intro'
 import { karaLineHighlighting, showKaraLine, type KaraLineTarget } from './kara-line-extension'
 import { KARA_MODULE_SOURCE, KARA_RUNNER } from '@/lib/kara/kara-module'
 import { KARA_COMPLETIONS } from '@/lib/kara/completions'
-import { karaRunInput, karaStars, parseKaraLevel, type KaraTrace } from '@/lib/kara/world'
+import { karaAftermathInput, karaRunInput, karaStars, parseKaraLevel, type KaraTrace, type KaraWorld } from '@/lib/kara/world'
 
 /**
  * Hard wall-clock cap on a single Pyodide run from the Run / Check buttons.
@@ -1298,10 +1298,14 @@ export const CodeEditor = memo(function CodeEditor({
   const splitWidth = (isKara ? karaSide : canvasVisible && showGraphics && !graphicsStacked) ? (editorWidth / 100) * containerWidth : containerWidth
   const narrowCode = containerWidth > 0 && splitWidth < 380
   const [karaVariant, setKaraVariant] = useState(0)
-  /** Replay shown in the panel; `variant` is the world it ran on. */
-  const [karaRun, setKaraRun] = useState<{ variant: number; trace: KaraTrace } | null>(null)
+  /**
+   * Replay shown in the panel; `variant` is the world it ran on, `code` the
+   * program (archive: true levels save it on a win), `aftermath` the same
+   * program on the level's hidden aftermath world (only after a win).
+   */
+  const [karaRun, setKaraRun] = useState<{ variant: number; trace: KaraTrace; code?: string; aftermath?: { world: KaraWorld; trace: KaraTrace } | null } | null>(null)
   /** «Test all worlds»: one trace per variant (null = not run yet); `done` once every variant ran. */
-  const [karaSuite, setKaraSuite] = useState<{ traces: (KaraTrace | null)[]; done: boolean } | null>(null)
+  const [karaSuite, setKaraSuite] = useState<{ traces: (KaraTrace | null)[]; done: boolean; code?: string } | null>(null)
   const pickKaraVariant = useCallback((v: number) => {
     setKaraVariant(v)
     const t = karaSuite?.traces[v]
@@ -3711,6 +3715,16 @@ export const CodeEditor = memo(function CodeEditor({
   // (reported in the output panel).
   const runKaraVariant = async (code: string, v: number, signal: AbortSignal): Promise<KaraTrace | null> => {
     if (!karaLevel) return null
+    return runKaraInput(code, karaRunInput(karaLevel, v), signal)
+  }
+  // The same, on the level's hidden aftermath world (see KaraPanel); null when it has none.
+  const runKaraAftermath = async (code: string, signal: AbortSignal): Promise<{ world: KaraWorld; trace: KaraTrace } | null> => {
+    const input = karaLevel ? karaAftermathInput(karaLevel) : null
+    if (!karaLevel?.aftermath || !input) return null
+    const trace = await runKaraInput(code, input, signal)
+    return trace ? { world: karaLevel.aftermath, trace } : null
+  }
+  const runKaraInput = async (code: string, input: object, signal: AbortSignal): Promise<KaraTrace | null> => {
     const localFiles = filesRef.current
     const importFiles = [...(skriptImportsRef.current?.files || []), ...(globalImportsRef.current?.files || [])]
     const textFiles = [
@@ -3718,7 +3732,7 @@ export const CodeEditor = memo(function CodeEditor({
       ...importFiles,
       { name: 'kara.py', content: KARA_MODULE_SOURCE },
       { name: '__kara_student.py', content: code },
-      { name: '__kara_world.json', content: JSON.stringify(karaRunInput(karaLevel, v)) },
+      { name: '__kara_world.json', content: JSON.stringify(input) },
     ]
     const { result, stopped, timedOut } = await runPython({
       code: KARA_RUNNER,
@@ -3755,8 +3769,11 @@ export const CodeEditor = memo(function CodeEditor({
     try {
       if (!all) {
         const trace = await runKaraVariant(code, karaVariant, controller.signal)
+        // A single run only counts as a win on a one-world level (see KaraPanel).
+        const won = !!trace && karaLevel.variants.length === 1 && karaStars(trace, karaLevel.config) > 0
+        const aftermath = won ? await runKaraAftermath(code, controller.signal) : null
         setKaraSuite(null)
-        if (trace) setKaraRun({ variant: karaVariant, trace })
+        if (trace) setKaraRun({ variant: karaVariant, trace, code, aftermath })
         return
       }
       const traces: (KaraTrace | null)[] = karaLevel.variants.map(() => null)
@@ -3769,12 +3786,13 @@ export const CodeEditor = memo(function CodeEditor({
         traces[v] = trace
         setKaraSuite({ traces: [...traces], done: false })
       }
-      setKaraSuite({ traces, done: true })
       // Replay the worst world (first one with the fewest stars).
       const stars = traces.map(t => karaStars(t!, karaLevel.config))
       const worst = stars.indexOf(Math.min(...stars))
+      const aftermath = stars[worst] > 0 ? await runKaraAftermath(code, controller.signal) : null
+      setKaraSuite({ traces, done: true, code })
       setKaraVariant(worst)
-      setKaraRun({ variant: worst, trace: traces[worst]! })
+      setKaraRun({ variant: worst, trace: traces[worst]!, code, aftermath })
     } catch (error: any) {
       addOutput(cleanPythonError(error.message || String(error)), OutputLevel.ERROR)
     } finally {
@@ -5325,6 +5343,8 @@ export const CodeEditor = memo(function CodeEditor({
           <KaraPanel
             world={karaLevel.variants[karaVariant] ?? karaLevel.variants[0]}
             trace={karaRun?.variant === karaVariant ? karaRun.trace : null}
+            code={karaSuite?.code ?? karaRun?.code}
+            aftermath={karaRun?.variant === karaVariant ? karaRun.aftermath : null}
             variant={karaVariant}
             variantCount={karaLevel.variants.length}
             onVariant={pickKaraVariant}

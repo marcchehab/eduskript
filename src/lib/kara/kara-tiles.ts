@@ -171,10 +171,12 @@ export function drawKaraTiles(ctx: CanvasRenderingContext2D, world: KaraWorld, c
       const py = y * tile
       if (look === '#') { drawCell(ctx, set, wallTile(world, x, y), px, py, tile); continue }
       // `x` (crate) is the pack's floor grate; it reads as a crate, so it blocks.
+      if (look === 'a') { drawAirlock(ctx, x, y, px, py, tile); if (c & BOX) drawObject(ctx, set, 'box', px, py, tile); continue }
       drawCell(ctx, set, look === 'x' ? 'grate' : look === '~' ? 'acid' : 'floor', px, py, tile)
       if (look === 'D') drawCell(ctx, set, c & DOOR ? 'door-closed' : 'door-open', px, py, tile)
       if ((look === '=' || look === '|') && c & LASER) drawCell(ctx, set, look === '=' ? 'laser-h' : 'laser-v', px, py, tile)
-      if (look === 'o') drawTarget(ctx, px, py, tile)
+      if (look === 'o' || look === 'q') drawTarget(ctx, px, py, tile)
+      if (look === 'q') drawBrokenSensor(ctx, px, py, tile)
       if (look === 's') drawSlime(ctx, x, y, px, py, tile)
       if (FLOOR_OBJECTS[look]) drawObject(ctx, set, FLOOR_OBJECTS[look], px, py, tile)
       if (c & BLOCK && OBSTACLES[look]) drawObject(ctx, set, OBSTACLES[look], px, py, tile)
@@ -193,6 +195,50 @@ function drawTarget(ctx: CanvasRenderingContext2D, px: number, py: number, s: nu
   ctx.lineWidth = Math.max(1.5, s * 0.05)
   ctx.setLineDash([s * 0.12, s * 0.08])
   ctx.strokeRect(px + s * 0.14, py + s * 0.14, s * 0.72, s * 0.72)
+  ctx.restore()
+}
+
+/**
+ * Broken target sensor ('q'): a small dark sensor box in the corner with a
+ * red status LED. Deliberately subtle, the class should notice it (or not).
+ */
+function drawBrokenSensor(ctx: CanvasRenderingContext2D, px: number, py: number, s: number) {
+  ctx.save()
+  const w = s * 0.16
+  ctx.fillStyle = '#1e293b'
+  ctx.fillRect(px + s * 0.08, py + s * 0.08, w, w)
+  ctx.fillStyle = '#ef4444'
+  ctx.shadowColor = '#ef4444'
+  ctx.shadowBlur = s * 0.12
+  ctx.beginPath(); ctx.arc(px + s * 0.08 + w / 2, py + s * 0.08 + w / 2, w * 0.28, 0, Math.PI * 2); ctx.fill()
+  ctx.restore()
+}
+
+/** Open airlock ('a'): space with a few stars, framed by hazard stripes. */
+function drawAirlock(ctx: CanvasRenderingContext2D, x: number, y: number, px: number, py: number, s: number) {
+  ctx.save()
+  ctx.fillStyle = '#020617'
+  ctx.fillRect(px, py, s, s)
+  const h = cellHash(x, y)
+  ctx.fillStyle = '#e2e8f0'
+  for (let k = 0; k < 5; k++) {
+    const ox = ((h >> (k * 3)) % 80) / 100 + 0.1
+    const oy = ((h >> (k * 3 + 5)) % 80) / 100 + 0.1
+    ctx.fillRect(px + ox * s, py + oy * s, Math.max(1, s * 0.03), Math.max(1, s * 0.03))
+  }
+  // Hazard stripes along the cell border (clipped to a frame ring).
+  const b = s * 0.09
+  ctx.beginPath()
+  ctx.rect(px, py, s, s)
+  ctx.rect(px + b, py + b, s - 2 * b, s - 2 * b)
+  ctx.clip('evenodd')
+  ctx.fillStyle = '#facc15'
+  ctx.fillRect(px, py, s, s)
+  ctx.strokeStyle = '#1c1917'
+  ctx.lineWidth = s * 0.07
+  for (let o = -s; o < s * 2; o += s * 0.2) {
+    ctx.beginPath(); ctx.moveTo(px + o, py); ctx.lineTo(px + o - s, py + s); ctx.stroke()
+  }
   ctx.restore()
 }
 

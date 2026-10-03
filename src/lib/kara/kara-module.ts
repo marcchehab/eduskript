@@ -20,7 +20,8 @@
  * step that is current when they happen (e.g. a sensor after the 2nd move of a
  * line sits on that line's 2nd step).
  *
- * Limits: MAX_STEPS steps, then StepLimitError (catches `while True:` loops,
+ * Limits: MAX_STEPS steps (the world JSON's `max_steps` overrides it; the
+ * aftermath run in world.ts karaAftermathInput uses a low one), then StepLimitError (catches `while True:` loops,
  * also action loops inside helper modules; the trace up to the limit stays
  * replayable). A helper-module loop that makes no action (`while True: pass`
  * in befehle.py) opens no steps and is NOT caught. settrace slows Python down
@@ -72,6 +73,11 @@
  * star). This is a speed bump for copy-paste tricks, not a sandbox:
  * `getattr(__builtins__, 'ex' + 'ec')` or a helper module still get through.
  *
+ * Broken targets ('q' in world.ts: TARGET | BROKEN): on_target() is False
+ * there; the 'boxes' goal still counts them as targets. Airlock cells
+ * (AIRLOCK, 'a'): a box pushed onto one is removed (one mutation, the box
+ * vanishes); MOP-7 drives over them like floor.
+ *
  * Keep the direction encoding (0=N,1=E,2=S,3=W) and the trace shape in sync
  * with src/lib/kara/world.ts.
  */
@@ -89,11 +95,12 @@ import json as _json
 import ast as _ast
 
 # Cell flags — keep in sync with src/lib/kara/world.ts
-BLOCK, ITEM, BOX, CHIP, DOOR, LASER, ACID, EXIT, SWITCH, TARGET, TERMINAL = (
-    1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024)
+BLOCK, ITEM, BOX, CHIP, DOOR, LASER, ACID, EXIT, SWITCH, TARGET, TERMINAL, BROKEN, AIRLOCK = (
+    1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096)
 _DX = (0, 1, 0, -1)
 _DY = (-1, 0, 1, 0)
 MAX_STEPS = 50000
+_max_steps = MAX_STEPS  # per run: world JSON 'max_steps' (see _run)
 _STUDENT = '<student>'
 
 
@@ -142,8 +149,8 @@ _cur = None
 
 def _open_step(line):
     global _cur
-    if len(_steps) >= MAX_STEPS:
-        raise StepLimitError(f'Stopped after {MAX_STEPS} steps. Is there an endless loop?')
+    if len(_steps) >= _max_steps:
+        raise StepLimitError(f'Stopped after {_max_steps} steps. Is there an endless loop?')
     _cur = {'l': line}
     _steps.append(_cur)
 
@@ -215,7 +222,8 @@ def move():
         if behind & (BLOCK | BOX | DOOR | LASER | ACID):
             raise KaraError("MOP-7 can't push the box: something is behind it.", 'box')
         _w.set(nx, ny, cell & ~BOX)
-        _w.set(bx, by, behind | BOX)
+        if not behind & AIRLOCK:  # pushed into an open airlock: gone
+            _w.set(bx, by, behind | BOX)
         cell = _w.get(nx, ny)
     _w.x, _w.y = nx, ny
     _moved()
@@ -364,7 +372,7 @@ _SENSORS = {
     'on_barrel': lambda: bool(_here() & ITEM),
     'on_switch': lambda: bool(_here() & SWITCH),
     'on_exit': lambda: bool(_here() & EXIT),
-    'on_target': lambda: bool(_here() & TARGET),
+    'on_target': lambda: bool(_here() & TARGET) and not _here() & BROKEN,
 }
 
 
@@ -603,9 +611,10 @@ def _lint(tree):
 
 
 def _run(student_path='__kara_student.py', world_path='__kara_world.json'):
-    global _w, _steps, _cur, _expected_output, _door_ask, _asking, _ns
+    global _w, _steps, _cur, _expected_output, _door_ask, _asking, _ns, _max_steps
     with open(world_path) as f:
         data = _json.load(f)
+    _max_steps = data.get('max_steps') or MAX_STEPS
     _expected_output = data.get('output')
     _door_ask = data.get('door_ask') or []
     _asking = False

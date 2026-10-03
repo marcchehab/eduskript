@@ -27,6 +27,10 @@
  *   =  or |       laser (on)            S   switch: press_switch() toggles ALL doors and lasers
  *   ~             acid (Kara falls in)  E   exit
  *   t             terminal (blocks; read_log() while facing it)
+ *   q             broken box target: drawn and scored like `o`, but on_target()
+ *                 is always False there (week 5 aftermath)
+ *   a             open airlock: a box pushed onto it is gone (sucked out); Kara
+ *                 itself can drive over it like floor
  *   > < ^ v       Kara, facing east / west / north / south
  *
  * Config keys (values: positional fields separated by `|`, then optional
@@ -84,6 +88,17 @@
  *                                         (else the spec line). Same text → same worlds.
  *   place: c far                          in every generated world, put `c` (legend char) on the
  *                                         reachable cell farthest from Kara (BFS)
+ *   aftermath: <generate spec>            hidden world the panel runs the student's program on once
+ *     or a grid after a line `=== aftermath` more after a win (all worlds); never counts for stars.
+ *                                         The grid wins over the spec (spec: the first generated world).
+ *   aftermath.text: text | speaker=…      card before the aftermath plays (default: AURORA's
+ *                                         «Ich habe Ihr Programm kurz in der Schleuse getestet. Nur kurz.»)
+ *   aftermath.end: text                   card when the aftermath replay ends (default: the
+ *                                         normal result line, e.g. aurora.loop on the step limit)
+ *   aftermath.steps: N                    step limit for the aftermath run (default 300, so a
+ *                                         loop ends after a few seconds of replay)
+ *   archive: true                         save the student's code on a win (progress.ts), shown
+ *                                         later by <kara-archive of="<level id>">
  *
  * The world is a torus like the original Kara: walking off one edge enters on
  * the opposite side. Close levels with `#`.
@@ -104,6 +119,10 @@ export const EXIT = 128
 export const SWITCH = 256
 export const TARGET = 512
 export const TERMINAL = 1024
+/** With TARGET: on_target() is always False here ('q'). */
+export const BROKEN = 2048
+/** Open airlock ('a'): boxes pushed onto it vanish. */
+export const AIRLOCK = 4096
 
 /** 0 = north, 1 = east, 2 = south, 3 = west (clockwise, matches the Python module). */
 export type KaraDir = 0 | 1 | 2 | 3
@@ -162,12 +181,26 @@ export interface KaraConfig {
   generate: string[]
   /** `place: c far` — legend char put at the farthest reachable cell of every generated world. */
   place?: string
+  /** `aftermath:` generate spec (the `=== aftermath` grid wins, see parseKaraLevel). */
+  aftermath?: string
+  /** `aftermath.text:` / `aftermath.end:` cards (speaker default AURORA). */
+  aftermathText?: KaraMessage
+  aftermathEnd?: KaraMessage
+  /** `aftermath.steps:` step limit of the aftermath run. */
+  aftermathSteps?: number
+  /** `archive: true` — save the winning code (progress.ts, <kara-archive>). */
+  archive?: boolean
 }
 
 export interface KaraLevel {
   variants: KaraWorld[]
   config: KaraConfig
+  /** Hidden world for the after-win replay (`aftermath:`); never a variant. */
+  aftermath?: KaraWorld
 }
+
+export const AFTERMATH_TEXT = 'Ich habe Ihr Programm kurz in der Schleuse getestet. Nur kurz.'
+export const AFTERMATH_STEPS = 300
 
 const DIR_CHARS: Record<string, KaraDir> = { '^': 0, '>': 1, 'v': 2, '<': 3 }
 const OBSTACLES = new Set(['#', 'x', 'T', 'P', 'L', 'R', 'Y'])
@@ -180,6 +213,8 @@ function cellFor(ch: string): [number, string] {
     case '*': return [ITEM, '.']
     case 'B': case 'M': return [BOX, '.']
     case 'o': return [TARGET, 'o']
+    case 'q': return [TARGET | BROKEN, 'q']
+    case 'a': return [AIRLOCK, 'a']
     case 'O': return [BOX | TARGET, 'o']
     case 'c': return [CHIP, '.']
     case 'D': return [DOOR, 'D']
@@ -272,6 +307,13 @@ export function parseKaraConfig(src: string): KaraConfig {
     else if (key === 'intro') { const msg = message(value); config.intro.push({ ...msg, speaker: msg.speaker || 'AURORA' }) }
     else if (key === 'log') config.logs.push(message(value))
     else if (key === 'chip') config.chips.push(evidence(value))
+    else if (key === 'aftermath') config.aftermath = value
+    else if (key === 'aftermath.text' || key === 'aftermath.end') {
+      const msg = message(value)
+      config[key === 'aftermath.text' ? 'aftermathText' : 'aftermathEnd'] = { ...msg, speaker: msg.speaker || 'AURORA' }
+    }
+    else if (key === 'aftermath.steps') { const n = parseInt(value, 10); if (n > 0) config.aftermathSteps = n }
+    else if (key === 'archive') config.archive = /^(true|yes|1|on)$/i.test(value)
     else if (key.startsWith('aurora.')) config.aurora[key.slice(7)] = { ...message(value), speaker: 'AURORA' }
   }
   if (config.output !== undefined && !config.goals.includes('output')) config.goals.push('output')
@@ -283,7 +325,11 @@ export function parseKaraLevel(src: string): KaraLevel {
   const sep = text.search(/^---\s*$/m)
   const grids = sep === -1 ? text : text.slice(0, sep)
   const config = sep === -1 ? '' : text.slice(sep).replace(/^---\s*$/m, '')
-  const variants = grids.split(/^===\s*$/m).filter(g => g.trim()).map(parseKaraWorld)
+  // `=== aftermath`: everything after it (up to `---`) is the aftermath grid, not a variant.
+  const am = grids.search(/^===\s*aftermath\s*$/m)
+  const variantText = am === -1 ? grids : grids.slice(0, am)
+  const aftermathText = am === -1 ? '' : grids.slice(am).replace(/^===\s*aftermath\s*$/m, '')
+  const variants = variantText.split(/^===\s*$/m).filter(g => g.trim()).map(parseKaraWorld)
   const cfg = parseKaraConfig(config)
   for (const spec of cfg.generate) {
     for (const w of generateWorlds(spec, cfg.id ?? '')) {
@@ -291,7 +337,13 @@ export function parseKaraLevel(src: string): KaraLevel {
       variants.push(w)
     }
   }
-  return { variants: variants.length ? variants : [parseKaraWorld('')], config: cfg }
+  let aftermath: KaraWorld | undefined
+  if (aftermathText.trim()) aftermath = parseKaraWorld(aftermathText)
+  else if (cfg.aftermath) {
+    aftermath = generateWorlds(cfg.aftermath, `${cfg.id ?? ''}-aftermath`)[0]
+    if (aftermath && cfg.place) placeFar(aftermath, cfg.place)
+  }
+  return { variants: variants.length ? variants : [parseKaraWorld('')], config: cfg, ...(aftermath ? { aftermath } : {}) }
 }
 
 /**
@@ -319,10 +371,29 @@ export function karaRunInput(level: KaraLevel, v: number): KaraWorld & { goals: 
   return { ...level.variants[v], goals: level.config.goals, output: karaOutput(level.config, v), door_ask: karaDoorAsk(level.config, v) }
 }
 
-/** Every spoken line of a level: intro, logs, chips and AURORA events. */
+/**
+ * Run input for the aftermath world (`aftermath:`): same goals and door
+ * codes as variant 0, plus a low step limit (`max_steps`, kara-module.ts).
+ * null when the level has none.
+ */
+export function karaAftermathInput(level: KaraLevel): (ReturnType<typeof karaRunInput> & { max_steps: number }) | null {
+  if (!level.aftermath) return null
+  return {
+    ...level.aftermath,
+    goals: level.config.goals,
+    output: karaOutput(level.config, 0),
+    door_ask: karaDoorAsk(level.config, 0),
+    max_steps: level.config.aftermathSteps ?? AFTERMATH_STEPS,
+  }
+}
+
+/** Every spoken line of a level: intro, logs, chips, AURORA events and the aftermath cards. */
 export function karaMessages(level: KaraLevel): KaraMessage[] {
   const { config } = level
-  return [...config.intro, ...config.logs, ...config.chips, ...Object.values(config.aurora)]
+  const aftermath = level.aftermath
+    ? [config.aftermathText ?? { text: AFTERMATH_TEXT, speaker: 'AURORA' }, ...(config.aftermathEnd ? [config.aftermathEnd] : [])]
+    : []
+  return [...config.intro, ...config.logs, ...config.chips, ...Object.values(config.aurora), ...aftermath]
 }
 
 /** Asset file names a level references (audio, music), for resolving to URLs. */

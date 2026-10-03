@@ -52,6 +52,7 @@ import { AIFeedback } from '@/components/markdown/ai-feedback'
 import { AiFeedbackSolutionGizmo, type AiFeedbackSolutionApi } from '@/components/markdown/ai-feedback-solution-gizmo'
 import { parseKaraLevel, karaAssetNames, karaSpeakers } from '@/lib/kara/world'
 import { EvidenceBoard } from '@/components/markdown/evidence-board'
+import { KaraArchive } from '@/components/markdown/kara-archive'
 import { PublicThemeToggle } from '@/components/public/theme-toggle'
 import { PageNav } from '@/components/markdown/page-nav'
 import type { PageNavLink } from '@/lib/page-nav.server'
@@ -1022,6 +1023,26 @@ export function createMarkdownComponents(
         else if (/\.(mp3|wav|ogg)$/i.test(f.name)) assets[f.name] = f.url
       }
       return <EvidenceBoard skriptId={skriptId} title={typeof props.title === 'string' ? props.title : undefined} assets={assets} />
+    },
+    // <kara-archive of="w5-l3">: the student's archived winning code of a Kara
+    // level (archive: true); fallback = `fallback` attr or the children's text.
+    'kara-archive': (props: Record<string, unknown>) => {
+      const extractText = (node: unknown): string => {
+        if (typeof node === 'string') return node
+        if (Array.isArray(node)) return node.map(extractText).join('')
+        if (node && typeof node === 'object' && 'props' in node) return extractText((node as { props?: { children?: unknown } }).props?.children)
+        return ''
+      }
+      const str = (k: string) => (typeof props[k] === 'string' ? (props[k] as string) : undefined)
+      const children = extractText(props.children)
+      return (
+        <KaraArchive
+          skriptId={skriptId}
+          of={str('of') ?? ''}
+          title={str('title')}
+          fallback={children.trim() ? children : str('fallback')}
+        />
+      )
     },
     // <theme-toggle>: the toolbar's light/dark button, inline in the text.
     // <page-nav>: prev/next page; data comes from the server renderer (none in previews).

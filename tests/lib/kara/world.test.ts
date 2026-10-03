@@ -6,7 +6,8 @@ import remarkCodeEditor from '@/lib/remark-plugins/code-editor'
 import {
   parseKaraConfig, karaOutput, karaRunInput, karaSuiteStars, karaDoorAsk,
   parseKaraWorld, parseKaraLevel, buildReplay, seekCells, karaStars, karaAssetNames, karaSpeakers, karaMessages,
-  BLOCK, ITEM, BOX, CHIP, DOOR, LASER, ACID, EXIT, SWITCH, TARGET, TERMINAL, type KaraTrace,
+  BLOCK, ITEM, BOX, CHIP, DOOR, LASER, ACID, EXIT, SWITCH, TARGET, TERMINAL, BROKEN, AIRLOCK,
+  AFTERMATH_STEPS, AFTERMATH_TEXT, karaAftermathInput, type KaraTrace,
 } from '@/lib/kara/world'
 
 describe('parseKaraWorld', () => {
@@ -256,5 +257,37 @@ describe('door.ask', () => {
       .toBe('Die Tür fragt nach f(). Diese Funktion gibt es nicht. Noch nicht.')
     expect(auroraLine(parseKaraConfig(''), 'door.ok')).toBeUndefined()
     expect(auroraLine(parseKaraConfig('aurora.door.ok: Korrekt. Leider.'), 'door.ok')?.text).toBe('Korrekt. Leider.')
+  })
+})
+
+describe('aftermath + archive config', () => {
+  it('a grid after `=== aftermath` is the aftermath, not a variant', () => {
+    const level = parseKaraLevel(`#>.E#\n===\n#>..E#\n=== aftermath\n.>B.q.a.\n---\ngoal: exit\naftermath.text: Nur kurz. | speaker=AURORA\naftermath.end: Wie vertraut.\naftermath.steps: 80\narchive: true`)
+    expect(level.variants).toHaveLength(2)
+    expect(level.aftermath?.cols).toBe(8)
+    expect(level.aftermath?.look[4]).toBe('q')
+    expect(level.aftermath!.cells[4] & (TARGET | BROKEN)).toBe(TARGET | BROKEN)
+    expect(level.aftermath!.cells[6] & AIRLOCK).toBe(AIRLOCK)
+    expect(level.config.aftermathText).toEqual({ text: 'Nur kurz.', speaker: 'AURORA', audio: undefined })
+    expect(level.config.aftermathEnd?.text).toBe('Wie vertraut.')
+    expect(level.config.archive).toBe(true)
+    expect(karaAftermathInput(level)).toMatchObject({ max_steps: 80, goals: ['exit'], cols: 8 })
+    expect(karaMessages(level).map(m => m.text)).toEqual(expect.arrayContaining(['Nur kurz.', 'Wie vertraut.']))
+  })
+
+  it('`aftermath:` takes a generate spec; the default card text is speakable', () => {
+    const level = parseKaraLevel('#>.E#\n---\nid: w5-l3\naftermath: corridor len=6 count=3')
+    expect(level.variants).toHaveLength(1)
+    expect(level.aftermath?.cols).toBe(8) // len 6 + walls
+    expect(karaAftermathInput(level)?.max_steps).toBe(AFTERMATH_STEPS)
+    expect(karaMessages(level)).toContainEqual({ text: AFTERMATH_TEXT, speaker: 'AURORA' })
+    expect(level.config.archive).toBeUndefined()
+  })
+
+  it('no aftermath: no input, no extra messages', () => {
+    const level = parseKaraLevel('#>.E#\n---\ngoal: exit')
+    expect(level.aftermath).toBeUndefined()
+    expect(karaAftermathInput(level)).toBeNull()
+    expect(karaMessages(level).some(m => m.text === AFTERMATH_TEXT)).toBe(false)
   })
 })

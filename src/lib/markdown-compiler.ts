@@ -115,6 +115,7 @@ export const sanitizeSchema = {
     'excali', // <excali> shorthand for excalidraw drawings
     'spacer', // <spacer> author-placed writing area (blank/checkered/lines/dots)
     'evidence-board', // <evidence-board> Kara evidence collected in this skript
+    'kara-archive', // <kara-archive of="level"> student's archived winning Kara code (kara-archive.tsx)
     'theme-toggle', // <theme-toggle> inline light/dark switch (same button as the page toolbar)
     'page-nav', // <page-nav> previous/next page of the skript
     'flex', // <flex> layout container
@@ -172,6 +173,7 @@ export const sanitizeSchema = {
     // <spacer> writing area. id keys the round-trip find/replace on edit.
     'spacer': ['id', 'height', 'pattern'],
     'evidence-board': ['title'],
+    'kara-archive': ['of', 'title', 'fallback'],
     // <image> component attributes (src, alt, width, align, wrap, invert, saturate)
     'image': ['src', 'alt', 'width', 'align', 'wrap', 'invert', 'saturate'],
     // Plugin: intrinsic attrs the React PluginContainer reads as named props.
@@ -445,7 +447,7 @@ function normalizeQuestionSpacing(markdown: string): string {
  */
 const CONTAINER_TAGS = [
   'flex', 'flex-item', 'tabs-container', 'tab-item',
-  'fullwidth', 'stickme', 'left', 'center', 'right', 'question',
+  'fullwidth', 'stickme', 'left', 'center', 'right', 'question', 'kara-archive',
 ]
 
 /**

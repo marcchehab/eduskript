@@ -41,17 +41,30 @@
  * world); a complete suite saves the minimum over all variants
  * (karaSuiteStars). Evidence is saved from every run either way. Clicking a
  * suite result replays that world's trace.
+ *
+ * Aftermath (`aftermath:` in the level, world.ts): after a win (single-world
+ * level, or the worst world of a won suite) the editor also runs the program
+ * on the hidden aftermath world and passes `aftermath`. Once the win replay
+ * has reached its end, the panel waits AFTERMATH_DELAY ms (so the win line can
+ * be heard), then shows the `aftermath.text` card; Continue switches the panel
+ * to the aftermath world and plays it at ≥ 25 steps/s. Nothing in aftermath
+ * mode counts or saves (stars, evidence, fail streak). It plays automatically
+ * once per mount; afterwards the «Airlock test» button replays it, and «Back to
+ * level» (or a new run) returns to the level's trace.
+ *
+ * Archive (`archive: true`): the save effects pass `code` (the program of the
+ * shown run, from the editor) along with the stars, see progress.ts.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Check, ChevronLeft, ChevronRight, ListChecks, Loader2, Music, Pause, Play, SkipBack, SkipForward, Star, StepBack, StepForward, X } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, ListChecks, Loader2, Music, Pause, Play, Rocket, SkipBack, SkipForward, Star, StepBack, StepForward, Undo2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { recordKaraResult } from '@/lib/kara/progress'
 import { playVoice, stopVoice, ttsLineUrl } from '@/lib/kara/voice'
 import { AURORA_WANT, auroraLine, type KaraLintCode } from '@/lib/kara/aurora-defaults'
 import { playSfx } from '@/lib/kara/sfx'
 import { registerSoundSource, useMuted } from '@/lib/sound'
-import { DOOR, ITEM, LASER } from '@/lib/kara/world'
+import { AFTERMATH_TEXT, DOOR, ITEM, LASER } from '@/lib/kara/world'
 import { karaPortrait } from '@/lib/kara/portraits'
 import type { KaraLineTarget } from './kara-line-extension'
 import { drawKaraFacing, drawKaraTiles, loadKaraTileset, type KaraTileset } from '@/lib/kara/kara-tiles'
@@ -185,6 +198,9 @@ const LINT_NOTE: Record<KaraLintCode, (name: string) => string> = {
 }
 
 const SPEEDS = [1, 2, 5, 10, 25, 100] // steps per second
+/** Pause between the end of a win replay and the aftermath card (lets the win line play). */
+const AFTERMATH_DELAY = 3500
+const AFTERMATH_SPEED = 25
 
 const GOAL_TEXT: Record<KaraGoal, string> = {
   exit: 'reach the exit',
@@ -200,6 +216,8 @@ interface KaraCard {
   title?: string
   stars?: number
   detail?: string
+  /** Called when the student continues past this card (aftermath intro). */
+  onClose?: () => void
 }
 
 export interface KaraPanelProps {
@@ -232,14 +250,28 @@ export interface KaraPanelProps {
   onTestAll?: () => void
   /** A run is in progress (disables the world bar). */
   busy?: boolean
+  /** The program of the shown run / suite; saved on a win of an `archive: true` level. */
+  code?: string
+  /** The same program run on the level's hidden aftermath world (only after a win). */
+  aftermath?: { world: KaraWorld; trace: KaraTrace } | null
 }
 
-export function KaraPanel({ world, trace, maxTile, maxHeight, onLine, config, assets, levelId, skriptId, fill, variant = 0, variantCount = 1, onVariant, suite, onTestAll, busy }: KaraPanelProps) {
+export function KaraPanel({ world: levelWorld, trace: levelTrace, maxTile, maxHeight, onLine, config, assets, levelId, skriptId, fill, variant = 0, variantCount = 1, onVariant, suite, onTestAll, busy, code, aftermath }: KaraPanelProps) {
   const multi = variantCount > 1
+  // Aftermath mode shows the aftermath world + trace instead of the level's (see header).
+  const [inAftermath, setInAftermath] = useState(false)
+  const [prevLevelTrace, setPrevLevelTrace] = useState(levelTrace)
+  if (levelTrace !== prevLevelTrace) {
+    setPrevLevelTrace(levelTrace)
+    setInAftermath(false)
+  }
+  const showAftermath = inAftermath && !!aftermath
+  const world = showAftermath ? aftermath.world : levelWorld
+  const trace = showAftermath ? aftermath.trace : levelTrace
   /** The shown trace belongs to a complete «Test all worlds» suite. */
   const inSuite = !!trace && !!suite?.done && suite.traces[variant] === trace
   /** Stars count for this trace (single-variant level, or part of a complete suite). */
-  const starsCount = !multi || inSuite
+  const starsCount = !showAftermath && (!multi || inSuite)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const outputRef = useRef<HTMLPreElement>(null)
@@ -309,7 +341,7 @@ export function KaraPanel({ world, trace, maxTile, maxHeight, onLine, config, as
     setPos(0)
     setCards([])
     setPlaying(!!trace && trace.steps.length > 0)
-    if (trace && config.goals.length && !counted.has(trace)) {
+    if (trace && config.goals.length && !counted.has(trace) && !showAftermath) {
       counted.add(trace)
       setFailStreak(trace.error || !trace.goal?.reached ? failStreak + 1 : 0)
     }
@@ -338,6 +370,7 @@ export function KaraPanel({ world, trace, maxTile, maxHeight, onLine, config, as
   /** Result message, shown (without blocking) once the replay reaches the end. */
   const finalCard = useMemo((): KaraCard | null => {
     if (!trace) return null
+    if (showAftermath && config.aftermathEnd) return { message: config.aftermathEnd, title: 'Airlock test' }
     const limits = [
       config.memory ? `Memory ${trace.memory}/${config.memory}` : `Memory ${trace.memory}`,
       config.energy ? `Energy ${trace.energy}/${config.energy}` : `Energy ${trace.energy}`,
@@ -348,13 +381,14 @@ export function KaraPanel({ world, trace, maxTile, maxHeight, onLine, config, as
       const m = auroraLine(config, `lint.${first.code}`, { vars: first })
       if (m) return { message: m, detail: lints.length > 1 ? `${lints.length - 1} more marked in the code` : undefined }
     }
-    if (trace.error?.kind === 'loop') { const m = auroraLine(config, 'loop'); return m ? { message: m } : null }
+    if (trace.error?.kind === 'loop') { const m = auroraLine(config, 'loop'); return m ? { message: m, title: showAftermath ? 'Airlock test' : undefined } : null }
     if (trace.error) {
       const { sub, name, got, want } = trace.error
       const m = auroraLine(config, 'error', { sub: sub ?? undefined, vars: { name, got, want: want && AURORA_WANT[want] } })
       return m ? { message: m } : null
     }
     if (!config.goals.length || !trace.goal) return null
+    if (showAftermath) return null
     if (trace.goal.reached) {
       return starsCount
         ? { message: auroraLine(config, 'win')!, stars, detail: limits }
@@ -367,7 +401,7 @@ export function KaraPanel({ world, trace, maxTile, maxHeight, onLine, config, as
         ? undefined
         : `Still to do: ${trace.goal.missing.map(g => GOAL_TEXT[g]).join(', ')}`,
     }
-  }, [trace, config, stars, failStreak, lints, starsCount])
+  }, [trace, config, stars, failStreak, lints, starsCount, showAftermath])
 
   /** Sound effects for stepping from `to - 1` to `to` (and the result at the end). */
   const stepSfx = useCallback((to: number) => {
@@ -412,14 +446,37 @@ export function KaraPanel({ world, trace, maxTile, maxHeight, onLine, config, as
     const rest = cards.slice(1)
     setCards(rest)
     if (!rest.length && resume) setPlaying(true)
+    cards[0]?.onClose?.()
   }, [cards, resume])
+
+  const enterAftermath = useCallback(() => {
+    setInAftermath(true)
+    setSpeed(s => Math.max(s, AFTERMATH_SPEED))
+  }, [])
+
+  // The level's win (not the aftermath's) is what unlocks the aftermath.
+  const levelWon = !!levelTrace && !levelTrace.error && !!levelTrace.goal?.reached && config.goals.length > 0
+  const [aftermathAuto, setAftermathAuto] = useState(false)
+  useEffect(() => {
+    if (!aftermath || aftermathAuto || showAftermath || !levelWon || pos !== total || cards.length) return
+    const t = setTimeout(() => {
+      setAftermathAuto(true)
+      setResume(false)
+      setCards([{
+        message: config.aftermathText ?? { text: AFTERMATH_TEXT, speaker: 'AURORA' },
+        title: 'Airlock test',
+        onClose: enterAftermath,
+      }])
+    }, AFTERMATH_DELAY)
+    return () => clearTimeout(t)
+  }, [aftermath, aftermathAuto, showAftermath, levelWon, pos, total, cards.length, config, enterAftermath])
 
   // Save progress: evidence found in this run (chips picked up, terminal logs
   // read — even if the level is not solved), stars when solved.
   useEffect(() => {
-    if (!skriptId || !trace) return
+    if (!skriptId || !levelTrace) return
     const found: KaraEvidence[] = []
-    for (const step of trace.steps) {
+    for (const step of levelTrace.steps) {
       for (const [kind, i] of step.v ?? []) {
         if (kind === 'chip' && config.chips[i]) found.push(config.chips[i])
         const log = kind === 'log' ? config.logs[i] : undefined
@@ -427,14 +484,16 @@ export function KaraPanel({ world, trace, maxTile, maxHeight, onLine, config, as
       }
     }
     // Several variants: stars only from a complete suite (effect below).
-    const s = multi ? 0 : karaStars(trace, config)
-    if (s > 0 || found.length) void recordKaraResult(skriptId, levelId, s, found)
-  }, [trace, config, skriptId, levelId, multi])
+    const s = multi ? 0 : karaStars(levelTrace, config)
+    if (s > 0 || found.length) void recordKaraResult(skriptId, levelId, s, found, config.archive ? code : undefined)
+  }, [levelTrace, config, skriptId, levelId, multi, code])
 
   const suiteStars = suite?.done ? karaSuiteStars(suite.traces, config) : 0
+  // Keyed on the suite object, so a second winning suite (same stars, new code) still archives.
+  const doneSuite = suite?.done ? suite : null
   useEffect(() => {
-    if (skriptId && suiteStars > 0) void recordKaraResult(skriptId, levelId, suiteStars, [])
-  }, [suiteStars, skriptId, levelId])
+    if (skriptId && doneSuite && suiteStars > 0) void recordKaraResult(skriptId, levelId, suiteStars, [], config.archive ? code : undefined)
+  }, [doneSuite, suiteStars, skriptId, levelId, config.archive, code])
 
   // Message bar: pending story event, else the result at the end, else the level's `aurora.start` idle line (the `intro:` briefing is KaraIntro above the editor).
   const startCard = useMemo((): KaraCard | null => (config.aurora.start ? { message: config.aurora.start } : null), [config])
@@ -572,6 +631,14 @@ export function KaraPanel({ world, trace, maxTile, maxHeight, onLine, config, as
       <div ref={wrapRef} className={cn('relative flex justify-center overflow-hidden', fill ? 'min-h-0 flex-1 items-center' : 'shrink-0 p-2')}>
         <canvas ref={canvasRef} className="block rounded" />
         {musicSrc && <audio ref={musicRef} src={musicSrc} loop preload="none" />}
+        {showAftermath && (
+          <div className="absolute inset-x-2 top-2 flex items-center justify-between gap-2 rounded bg-slate-950/80 px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-amber-300 shadow">
+            <span className="flex items-center gap-1.5"><Rocket className="h-3.5 w-3.5" /> Airlock test · not scored</span>
+            <button onClick={() => setInAftermath(false)} className="flex items-center gap-1 rounded px-1.5 py-0.5 normal-case tracking-normal text-slate-200 hover:bg-white/10" title="Back to your level">
+              <Undo2 className="h-3.5 w-3.5" /> Back to level
+            </button>
+          </div>
+        )}
       </div>
 
       {multi && (
@@ -627,6 +694,11 @@ export function KaraPanel({ world, trace, maxTile, maxHeight, onLine, config, as
               <Star key={n} className={cn('w-3.5 h-3.5', n <= stars ? 'fill-amber-400 text-amber-500' : 'text-muted-foreground/40')} />
             ))}
           </span>
+        )}
+        {aftermath && aftermathAuto && !showAftermath && (
+          <button className={btn} onClick={() => { setCards([]); enterAftermath() }} title="Airlock test: replay your program in the airlock">
+            <Rocket className="w-3.5 h-3.5" />
+          </button>
         )}
         {musicSrc && (
           <button className={cn(btn, musicOn && 'bg-muted')} onClick={() => setMusicOn(m => !m)} title={musicOn ? 'Music off' : 'Music on'}>

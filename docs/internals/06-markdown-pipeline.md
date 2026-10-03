@@ -210,6 +210,20 @@ nodes.
 the raw attribute stays as a fallback. A child of `<answer>` never disturbs the dense indexing —
 which is exactly why the parsed prompt needed its own `<question-prompt>` wrapper instead.
 
+## Kara story components (`<evidence-board>`, `<kara-archive>`)
+
+Both are lowercase raw-HTML tags, allowlisted in `markdown-compiler.ts` (`tagNames` +
+`attributes`) and mapped in `markdown-components.tsx`; both read the student's Kara progress
+record (`src/lib/kara/progress.ts`, userData key `kara-progress` under the skriptId).
+
+- `<evidence-board title="…">` — evidence collected in this skript (`evidence-board.tsx`).
+- `<kara-archive of="<level id>" title="…" fallback="…">` — the code saved at the latest win of
+  a level with `archive: true` (`kara-archive.tsx`), read-only in a terminal frame. It is in
+  `CONTAINER_TAGS` (blank line before the opening / after the closing tag) but NOT in
+  `rehypeMarkdownChildren`: its children are fallback code, not markdown. The mapper flattens
+  the children to text (a fenced block inside → its code); a fence that stayed literal text
+  (no blank line after the opening tag) is unwrapped by `karaArchiveFallback`.
+
 ## Function plots (```plot)
 
 `remarkPlot` (`src/lib/remark-plugins/plot.ts`) rewrites a ```` ```plot ```` fence to
