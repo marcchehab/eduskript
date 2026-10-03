@@ -86,14 +86,18 @@ export function onVoiceStop(cb: () => void): () => void {
 
 /** Ad jingle under a `{werbung}` part of the playing line (adSpan). */
 const AD_JINGLE = '/kara/sfx/werbung.mp3'
-const AD_VOLUME = 0.18
-let ad: { el: HTMLAudioElement; timers: number[] } | null = null
+const AD_VOLUME = 0.1
+const AD_FADE_IN = 1.5 // seconds
+/** Voice gain while the ad runs (a limiter after it keeps peaks below 0 dBFS). */
+const AD_VOICE_BOOST = 1.35
+let ad: { el: HTMLAudioElement; timers: number[]; gain: GainNode } | null = null
 
 function stopAd() {
   if (!ad) return
-  const { el, timers } = ad
+  const { el, timers, gain } = ad
   ad = null
   timers.forEach(t => clearTimeout(t))
+  gain.gain.setTargetAtTime(1, gain.context.currentTime, 0.15)
   // Short fade so it does not cut off mid-note.
   const step = () => {
     if (el.volume > 0.02) { el.volume = Math.max(0, el.volume - 0.03); setTimeout(step, 30) } else el.pause()
@@ -101,19 +105,35 @@ function stopAd() {
   step()
 }
 
-/** Schedule the jingle for the line `text`, voiced by `el` (call once it plays). */
-function scheduleAd(el: HTMLAudioElement, text: string) {
+/**
+ * Schedule the jingle for the line `text`, voiced by `el` through `gain`
+ * (call once it plays): music fades in to AD_VOLUME over AD_FADE_IN while the
+ * voice rises to AD_VOICE_BOOST; both return at the end of the ad span.
+ */
+function scheduleAd(el: HTMLAudioElement, text: string, gain: GainNode) {
   const span = adSpan(text)
   if (!span || !Number.isFinite(el.duration)) return
   const real = (t: number) => (t * el.duration * 1000) / (el.playbackRate || 1) // media → wall-clock ms
   const music = new Audio(AD_JINGLE)
   music.loop = true
-  music.volume = AD_VOLUME
+  music.volume = 0
+  const fadeIn = () => {
+    gain.gain.setTargetAtTime(AD_VOICE_BOOST, gain.context.currentTime, 0.2)
+    void music.play().catch(() => {})
+    const t0 = performance.now()
+    const step = () => {
+      if (ad?.el !== music) return
+      const k = Math.min(1, (performance.now() - t0) / (AD_FADE_IN * 1000))
+      music.volume = AD_VOLUME * k * k // ease in
+      if (k < 1) requestAnimationFrame(step)
+    }
+    requestAnimationFrame(step)
+  }
   const timers = [
-    window.setTimeout(() => { void music.play().catch(() => {}) }, real(span.from)),
+    window.setTimeout(fadeIn, real(span.from)),
     ...(span.to < 1 ? [window.setTimeout(stopAd, real(span.to))] : []),
   ]
-  ad = { el: music, timers }
+  ad = { el: music, timers, gain }
 }
 
 export function stopVoice() {
@@ -142,7 +162,16 @@ export async function playVoice(url: string, speaker?: string, onEnded?: () => v
   el.preservesPitch = true
   el.playbackRate = fx?.rate ?? 1
   const src = c.createMediaElementSource(el)
-  const stop = fx ? await connectVoiceFx(c, src, c.destination, fx) : (src.connect(c.destination), () => {})
+  // Line gain (raised during a `{werbung}` part) → limiter → speakers.
+  const gain = c.createGain()
+  const limiter = c.createDynamicsCompressor()
+  limiter.threshold.value = -3
+  limiter.ratio.value = 20
+  limiter.attack.value = 0.003
+  limiter.release.value = 0.1
+  gain.connect(limiter).connect(c.destination)
+  const fxStop = fx ? await connectVoiceFx(c, src, gain, fx) : (src.connect(gain), () => {})
+  const stop = () => { fxStop(); gain.disconnect(); limiter.disconnect() }
   if (token !== seq) { stop(); return }
   if (!analyser) { analyser = c.createAnalyser(); analyser.fftSize = 512; levelBuf = new Float32Array(analyser.fftSize) }
   src.connect(analyser)
@@ -155,7 +184,7 @@ export async function playVoice(url: string, speaker?: string, onEnded?: () => v
   await el.play()
   if (token === seq) {
     setSpeaking(speaker?.toUpperCase() ?? '')
-    if (text) scheduleAd(el, text)
+    if (text) scheduleAd(el, text, gain)
   }
 }
 
