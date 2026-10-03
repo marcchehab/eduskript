@@ -80,7 +80,7 @@ export function KaraIntro({ lines, assets, levelId, skriptId, autoplayRef, block
       const finished = await new Promise<boolean>(resolve => {
         // playVoice() stops the previous line synchronously, so subscribing
         // afterwards only catches interruptions of this line.
-        const started = playVoice(url, speaker, () => { off(); resolve(true) })
+        const started = playVoice(url, speaker, () => { off(); resolve(true) }, text)
         const off = onVoiceStop(() => { off(); resolve(false) })
         started.catch(() => { off(); resolve(false) })
       })

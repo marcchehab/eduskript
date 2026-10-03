@@ -11,6 +11,7 @@
 
 let ctx: AudioContext | null = null
 import { connectVoiceFx, VOICE_FX } from './voice-fx'
+import { adSpan } from './voice-directions'
 import { isMuted, onMuteChange } from '@/lib/sound'
 
 // Lines play through an <audio> element (pitch-preserving `playbackRate`)
@@ -83,19 +84,53 @@ export function onVoiceStop(cb: () => void): () => void {
   return () => { stopListeners.delete(cb) }
 }
 
+/** Ad jingle under a `{werbung}` part of the playing line (adSpan). */
+const AD_JINGLE = '/kara/sfx/werbung.mp3'
+const AD_VOLUME = 0.18
+let ad: { el: HTMLAudioElement; timers: number[] } | null = null
+
+function stopAd() {
+  if (!ad) return
+  const { el, timers } = ad
+  ad = null
+  timers.forEach(t => clearTimeout(t))
+  // Short fade so it does not cut off mid-note.
+  const step = () => {
+    if (el.volume > 0.02) { el.volume = Math.max(0, el.volume - 0.03); setTimeout(step, 30) } else el.pause()
+  }
+  step()
+}
+
+/** Schedule the jingle for the line `text`, voiced by `el` (call once it plays). */
+function scheduleAd(el: HTMLAudioElement, text: string) {
+  const span = adSpan(text)
+  if (!span || !Number.isFinite(el.duration)) return
+  const real = (t: number) => (t * el.duration * 1000) / (el.playbackRate || 1) // media → wall-clock ms
+  const music = new Audio(AD_JINGLE)
+  music.loop = true
+  music.volume = AD_VOLUME
+  const timers = [
+    window.setTimeout(() => { void music.play().catch(() => {}) }, real(span.from)),
+    ...(span.to < 1 ? [window.setTimeout(stopAd, real(span.to))] : []),
+  ]
+  ad = { el: music, timers }
+}
+
 export function stopVoice() {
   stopListeners.forEach(cb => cb())
   seq++
   if (current) { current.el.pause(); current.stop(); current = null }
+  stopAd()
   setSpeaking(null)
 }
 
 /**
  * Play `url`, with the speaker's voice effect and speed (VOICE_FX) if it has one.
  * `onEnded` runs when the line finishes on its own (not when another line or
- * stopVoice() cuts it off, and not when muted).
+ * stopVoice() cuts it off, and not when muted). `text`: the line as written,
+ * for the `{werbung}` jingle (adSpan).
  */
-export async function playVoice(url: string, speaker?: string, onEnded?: () => void): Promise<void> {
+export async function playVoice(url: string, speaker?: string, onEnded?: () => void, text?: string): Promise<void> {
   stopVoice()
   if (isMuted()) return
   const token = seq
@@ -113,12 +148,15 @@ export async function playVoice(url: string, speaker?: string, onEnded?: () => v
   src.connect(analyser)
   el.onended = () => {
     stop(); src.disconnect()
-    if (current?.el === el) { current = null; setSpeaking(null) }
+    if (current?.el === el) { current = null; setSpeaking(null); stopAd() }
     onEnded?.()
   }
   current = { el, stop }
   await el.play()
-  if (token === seq) setSpeaking(speaker?.toUpperCase() ?? '')
+  if (token === seq) {
+    setSpeaking(speaker?.toUpperCase() ?? '')
+    if (text) scheduleAd(el, text)
+  }
 }
 
 // Muting the page stops a line that is already playing.

@@ -40,7 +40,7 @@ export function directionsNote(text: string): string | null {
   const body = text.replace(/^\s*\[[^\]]*\]\s*/, '')
   for (const m of body.matchAll(/\{([^}]*)\}/g)) {
     const dir = m[1].trim()
-    if (!dir || dir === '/') continue
+    if (!dir || dir === '/' || /^\/?werbung$/i.test(dir)) continue // {werbung}: background music, not a direction
     // Words the direction applies to: up to `{/}`, the next marker or the sentence end.
     const rest = body.slice(m.index! + m[0].length)
     const span = displayText(rest.split(/\{\/\}|\{/)[0].match(/^[^.!?…]*[.!?…]?/)?.[0] ?? '')
@@ -80,4 +80,23 @@ function bracketsAsHints(text: string): string {
 /** Text the TTS model reads aloud: directions removed, (remarks) as hints, PRONOUNCE respellings applied. */
 export function spokenText(text: string): string {
   return PRONOUNCE.reduce((t, [re, say]) => t.replace(re, say), bracketsAsHints(displayText(text)))
+}
+
+/**
+ * `{werbung}` … `{/werbung}` marks an ad: the browser plays the ad jingle
+ * (public/kara/sfx/werbung.mp3) softly under that part (voice.ts). Without
+ * `{/werbung}` it runs to the end of the line. The TTS audio has no word
+ * timings, so the span is estimated from the share of on-screen characters
+ * before/after the markers: roughly right, not exact.
+ * Returns fractions of the line's duration (0..1), or null without marker.
+ */
+export function adSpan(text: string): { from: number; to: number } | null {
+  const body = text.replace(/^\s*\[[^\]]*\]\s*/, '')
+  const start = body.search(/\{werbung\}/i)
+  if (start === -1) return null
+  const total = displayText(body).length || 1
+  const endAt = body.search(/\{\/werbung\}/i)
+  const from = displayText(body.slice(0, start)).length / total
+  const to = endAt === -1 ? 1 : displayText(body.slice(0, endAt)).length / total
+  return { from: Math.min(1, from), to: Math.max(from, Math.min(1, to)) }
 }

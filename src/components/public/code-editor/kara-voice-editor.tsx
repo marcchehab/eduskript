@@ -26,7 +26,7 @@ const SPEAKER = 'AURORA'
 /** Runtime placeholders are filled when the line is spoken; such lines get no stored voice. */
 const PLACEHOLDER = /\{(line|name|got|want)\}/
 
-interface Take { url: string; n: number }
+interface Take { url: string; n: number; text: string }
 
 const lineId = (l: VoiceLine) => `${l.key}#${l.index}`
 
@@ -65,7 +65,7 @@ function LineRow({ line, block, pageId, onSaved }: { line: VoiceLine; block: str
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   // Off = play raw (no voice effect, no tempo change), to tell file artefacts from the effect chain.
   const [fx, setFx] = useState(true)
-  const play = (url: string) => void playVoice(url, fx ? SPEAKER : undefined)
+  const play = (url: string, text: string) => void playVoice(url, fx ? SPEAKER : undefined, undefined, text)
   // A refresh after saving brings the new block: follow the saved text.
   useEffect(() => { setDraft(line.text) }, [line.text])
   // Revoke take URLs on unmount only (a cleanup per takes change would revoke the older ones).
@@ -105,10 +105,10 @@ function LineRow({ line, block, pageId, onSaved }: { line: VoiceLine; block: str
         body: JSON.stringify({ pageId, speaker: SPEAKER, text: draft.trim() }),
       })
       if (!r.ok) { setMsg({ ok: false, text: await errorOf(r) }); return }
-      const take = { url: URL.createObjectURL(await r.blob()), n: takes.length + 1 }
+      const take = { url: URL.createObjectURL(await r.blob()), n: takes.length + 1, text: draft.trim() }
       urls.current.push(take.url)
       setTakes(ts => [...ts, take])
-      play(take.url)
+      play(take.url, take.text)
     } finally { setBusy(null) }
   }
 
@@ -137,7 +137,7 @@ function LineRow({ line, block, pageId, onSaved }: { line: VoiceLine; block: str
 
   async function onPlayCurrent() {
     const url = await ttsLineUrl(SPEAKER, line.text)
-    if (url) play(url)
+    if (url) play(url, line.text)
     else setMsg({ ok: false, text: 'No voice for this line yet.' })
   }
 
@@ -175,7 +175,7 @@ function LineRow({ line, block, pageId, onSaved }: { line: VoiceLine; block: str
         )}
         {takes.map(t => (
           <span key={t.n} className="flex items-center overflow-hidden rounded border text-xs">
-            <button onClick={() => play(t.url)} className="flex h-7 items-center gap-1 px-2 hover:bg-muted" title={`Play take ${t.n}`}>
+            <button onClick={() => play(t.url, t.text)} className="flex h-7 items-center gap-1 px-2 hover:bg-muted" title={`Play take ${t.n}`}>
               <Play className="h-3 w-3" /> {t.n}
             </button>
             <button onClick={() => void onUse(t)} disabled={busy !== null} className="flex h-7 items-center gap-1 border-l px-2 hover:bg-muted disabled:opacity-50" title="Save the text and use this take as the line's voice">

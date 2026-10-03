@@ -582,7 +582,7 @@ export function KaraPanel({ world: levelWorld, trace: levelTrace, maxTile, maxHe
     let cancelled = false
     void (async () => {
       const url = (audio && assets?.[audio]) || (speaker ? await ttsLineUrl(speaker, text) : null)
-      if (url && !cancelled) await playVoice(url, speaker).catch(() => {})
+      if (url && !cancelled) await playVoice(url, speaker, undefined, text).catch(() => {})
     })()
     return () => { cancelled = true }
   }, [spoken, assets])

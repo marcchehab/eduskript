@@ -20,7 +20,7 @@ export function AuroraLab({ voices }: { voices: Record<string, string> }) {
   const [error, setError] = useState('')
   const [takes, setTakes] = useState<Take[]>([])
 
-  const play = (t: Take) => void playVoice(t.url, t.fx ? t.speaker : undefined)
+  const play = (t: Take) => void playVoice(t.url, t.fx ? t.speaker : undefined, undefined, t.text)
   const patch = (id: number, saved: Take['saved']) => setTakes(ts => ts.map(t => (t.id === id ? { ...t, saved } : t)))
 
   /** Make this take the voice of the level line with exactly this text. */
