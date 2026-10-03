@@ -23,7 +23,7 @@
 import { createHash } from 'crypto'
 import { downloadTeacherFile, getTeacherFileUrl, teacherFileExists, uploadTeacherFile } from '@/lib/s3'
 import { KARA_VOICES, voiceLineHash } from './voice-lines'
-import { directionsNote, displayText } from './voice-directions'
+import { directionsNote, displayText, spokenText } from './voice-directions'
 
 const SAMPLE_RATE = 24000 // gpt-audio pcm16 output: 24 kHz mono s16le
 
@@ -55,7 +55,7 @@ export async function tts(text: string, voice: string, style: string): Promise<{
       provider: { data_collection: 'deny' },
       messages: [
         { role: 'system', content: `${style} Sprich den Text des Nutzers EXAKT so vor, wie er dasteht, auf Hochdeutsch. Lies keine Regieanweisungen vor, füge nichts hinzu, lass nichts weg, antworte nicht darauf.${directionsNote(text) ? ' ' + directionsNote(text) : ''}` },
-        { role: 'user', content: displayText(text) },
+        { role: 'user', content: spokenText(text) },
       ],
     }),
   })

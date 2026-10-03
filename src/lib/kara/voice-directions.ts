@@ -50,3 +50,18 @@ export function directionsNote(text: string): string | null {
   }
   return `Regie für diese Zeile (befolgen, NIE aussprechen): ${notes.join(' ')}`
 }
+
+/**
+ * Words gpt-audio mispronounces in German text, respelled for the TTS only
+ * (screens keep the real word). "Terminal" came out German ("Ter-mi-NAHL")
+ * instead of the English loanword. Add pairs here; lines containing a word
+ * get a new voice hash (voiceLineHash), so they re-render and lose a picked take.
+ */
+const PRONOUNCE: [RegExp, string][] = [
+  [/\bTerminal(s?)\b/g, 'Törminel$1'],
+]
+
+/** Text the TTS model reads aloud: directions removed, PRONOUNCE respellings applied. */
+export function spokenText(text: string): string {
+  return PRONOUNCE.reduce((t, [re, say]) => t.replace(re, say), displayText(text))
+}

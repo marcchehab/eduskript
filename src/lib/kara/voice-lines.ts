@@ -8,6 +8,7 @@
  */
 
 import { createHash } from 'crypto'
+import { displayText, spokenText } from './voice-directions'
 
 export interface KaraVoice {
   /** openai/gpt-audio voice */
@@ -33,5 +34,9 @@ export const KARA_VOICES: Record<string, KaraVoice> = {
 export function voiceLineHash(speaker: string, text: string): string | null {
   const v = KARA_VOICES[speaker.toUpperCase()]
   if (!v) return null
-  return createHash('sha256').update(`gpt-audio|${v.voice}|${v.style}|fx:${v.fx}|${text}`).digest('hex')
+  // Respelled lines (PRONOUNCE) hash with the spoken form, so changing a
+  // respelling re-renders them; all other lines keep their hash.
+  const said = spokenText(text)
+  const extra = said !== displayText(text) ? `|say:${said}` : ''
+  return createHash('sha256').update(`gpt-audio|${v.voice}|${v.style}|fx:${v.fx}|${text}${extra}`).digest('hex')
 }
