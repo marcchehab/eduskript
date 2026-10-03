@@ -691,12 +691,19 @@ function QuestionInner({
                       )}
                     </div>
 
-                    {/* Feedback */}
+                    {/* Feedback: own selections after a check; with the full key
+                        (revealed) also the unselected options, so a "why not" written
+                        for a wrong option is read even by those who left it out. */}
                     {showResult && feedback && isSelected && (
                       <div className="mt-2 p-2 rounded text-sm bg-muted/50">
                         <span className={optionIsCorrect ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
                           {optionIsCorrect ? '✓ ' : '✗ '}
                         </span>
+                        {feedback}
+                      </div>
+                    )}
+                    {revealed && feedback && !isSelected && (
+                      <div className="mt-2 p-2 rounded text-sm bg-muted/30 text-muted-foreground">
                         {feedback}
                       </div>
                     )}

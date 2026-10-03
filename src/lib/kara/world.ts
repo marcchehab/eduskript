@@ -82,14 +82,18 @@
  *                                         no_terminal, door_code, door_missing, name, module,
  *                                         indent, syntax, type, recursion, forbidden, tamper
  *                                         (attribute starting with _, e.g. kara._w), locked
- *                                         (a loop the level forbids). Lookup: error.<sub> → error →
+ *                                         (a loop the level forbids), toolbox_syntax / toolbox_indent
+ *                                         (that error inside befehle.py; the editor opens its tab).
+ *                                         Lookup: error.<sub> → error →
  *                                         course default (aurora-defaults.ts auroraLine)
  *   aurora.lint.<code>: text              AURORA's comment on a static finding when the run
  *                                         does not win; code = bare_call, never_called,
  *                                         sensor_no_call, no_return, indented_call (main program
  *                                         indented into the last def; {name} = that def), toolbox_call
  *                                         (a call outside any def in befehle.py ran on import; {name} =
- *                                         'befehle.py:<line>', {line} = the import line). {line} and {name} are
+ *                                         'befehle.py:<line>', {line} = the import line; the run never wins),
+ *                                         toolbox_bare (move without () in befehle.py; {name} = move).
+ *                                         {line} and {name} are
  *                                         replaced (also in aurora.error.forbidden: {name};
  *                                         error.door_code: {name} {got} {want}; door_missing: {name})
  *   aurora.fail.3: text                   replaces aurora.fail from the 3rd failed run
@@ -644,6 +648,9 @@ export interface KaraTrace {
     sub?: KaraErrorSub | null
     /** Forbidden name (sub 'forbidden'), e.g. 'exec'; missing module (sub 'module'), e.g. 'befehle'; door function (door_code / door_missing). */
     name?: string
+    /** Error inside a helper (sub toolbox_*): its file name, e.g. 'befehle.py', and line there. */
+    f?: string
+    fl?: number
     /** door_code: repr of the wrong answer, e.g. 'None' (cut to 40 chars). */
     got?: string
     /** door_code: what kind of answer the door expected. */

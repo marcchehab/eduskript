@@ -193,11 +193,40 @@ describe.skipIf(!hasPython)('kara.py lints', () => {
       const t = run('from befehle import *\nturn_right()\n')
       expect(t.lints?.map(l => [l.line, l.code, l.name])).toEqual([[1, 'toolbox_call', 'befehle.py:6']])
       expect(t.energy).toBe(4) // the import-time drei_vor() really moved MOP-7
+      // such a run never wins (main.py = the import line would beat the memory star)
+      expect(t.error).toMatchObject({ line: 1, kind: 'python' })
     } finally {
       fs.writeFileSync(path.join(dir, 'befehle.py'), BEFEHLE)
     }
     // calls inside defs only: no finding
     expect(lints('from befehle import *\ndrei_vor()\n')).toEqual([])
+  })
+
+  it('toolbox_bare: move without () inside befehle.py is linted on the import line', () => {
+    fs.writeFileSync(path.join(dir, 'befehle.py'), 'def vor(n):\n    for i in range(n):\n        move\n')
+    try {
+      const t = run('from befehle import *\n\nvor(3)\n')
+      expect(t.lints?.map(l => [l.line, l.code, l.name])).toEqual([[1, 'toolbox_bare', 'move']])
+      expect(t.energy).toBe(0)
+    } finally {
+      fs.writeFileSync(path.join(dir, 'befehle.py'), BEFEHLE)
+    }
+    expect(lints('from befehle import *\ndrei_vor()\n')).toEqual([])
+  })
+
+  it('a syntax / indentation error in befehle.py points at its own file and line', () => {
+    fs.writeFileSync(path.join(dir, 'befehle.py'), 'def drei_vor()\n    move()\n')
+    try {
+      const t = run('from befehle import *\ndrei_vor()\n')
+      expect(t.error).toMatchObject({ line: 1, sub: 'toolbox_syntax', f: 'befehle.py', fl: 1 })
+      expect(t.error?.message).toContain('befehle.py, line 1')
+      fs.writeFileSync(path.join(dir, 'befehle.py'), 'def vor(n):\n    for i in range(n):\n    move()\n')
+      expect(run('from befehle import *\nvor(2)\n').error).toMatchObject({ line: 1, sub: 'toolbox_indent', f: 'befehle.py', fl: 3 })
+    } finally {
+      fs.writeFileSync(path.join(dir, 'befehle.py'), BEFEHLE)
+    }
+    // the student's own syntax error keeps its line and plain sub
+    expect(run('move(\n').error).toMatchObject({ sub: 'syntax' })
   })
 
   it('tamper and locked loops refuse the run', () => {

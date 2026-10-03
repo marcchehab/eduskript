@@ -18,12 +18,14 @@ export type KaraErrorSub =
   | 'door_code' | 'door_missing'
   // Python exception types
   | 'name' | 'module' | 'indent' | 'syntax' | 'type' | 'recursion'
+  // syntax / indentation error inside an imported helper (befehle.py)
+  | 'toolbox_syntax' | 'toolbox_indent'
   // run refused before it started (kara-module.ts _lint: exec, eval, ...;
   // kara._w & co.; a loop the level locks with `forbid:`)
   | 'forbidden' | 'tamper' | 'locked'
 
 /** Static findings kara-module.ts `_lint` reports as `lints[].code`. */
-export type KaraLintCode = 'bare_call' | 'never_called' | 'sensor_no_call' | 'no_return' | 'indented_call' | 'toolbox_call'
+export type KaraLintCode = 'bare_call' | 'never_called' | 'sensor_no_call' | 'no_return' | 'indented_call' | 'toolbox_call' | 'toolbox_bare'
 
 export const AURORA_DEFAULTS: Record<string, string> = {
   'win': 'Auftrag erledigt. Ich bin fast beeindruckt.',
@@ -46,6 +48,8 @@ export const AURORA_DEFAULTS: Record<string, string> = {
   'error.module': 'Sie importieren eine Werkzeugkiste, die es nicht gibt. Öffnen Sie den Tab befehle.py.',
   'error.indent': 'Die Einrückung stimmt nicht. Eine Ebene pro Doppelpunkt.',
   'error.syntax': 'Python versteht diese Zeile nicht. Klammern, Doppelpunkt, Anführungszeichen: eines fehlt meistens.',
+  'error.toolbox_syntax': 'Der Fehler steckt in der Werkzeugkiste, nicht in main.py. Ich habe den Tab befehle.py geöffnet, die Zeile ist markiert. Klammern, Doppelpunkt: eines fehlt meistens.',
+  'error.toolbox_indent': 'Der Fehler steckt in der Werkzeugkiste, nicht in main.py. Ich habe den Tab befehle.py geöffnet, die Zeile ist markiert. Unter jeder Zeile mit Doppelpunkt rückt der Körper eine Stufe ein.',
   'error.type': 'Falsche Anzahl oder Art von Argumenten. Vergleichen Sie den Aufruf mit der def-Zeile.',
   'error.recursion': 'Rekursion ohne Abbruch. Wie mein Kundendienst.',
   'error.forbidden': '{name}? Mikroweich nennt das Lizenzverletzung. Schreiben Sie es aus.',
@@ -56,6 +60,7 @@ export const AURORA_DEFAULTS: Record<string, string> = {
   'lint.sensor_no_call': 'Sie haben den Sensor nicht gefragt. Sie haben nur bestätigt, dass er existiert.',
   'lint.no_return': 'Ihre Funktion zeigt etwas an. Zurückgeben tut sie nichts. Die Bedingung bekommt None.',
   'lint.indented_call': 'Zeile {line} ist eingerückt und gehört darum noch zu {name}(). Ihr Hauptprogramm steckt in der Funktion. Shift+Tab rückt die Aufrufe an den linken Rand.',
+  'lint.toolbox_bare': 'In der Werkzeugkiste steht {name} ohne (). Dort erwähnt, nicht ausgeführt. Darum steht das Inventar still.',
   'lint.toolbox_call': 'Ihre Werkzeugkiste arbeitet von selbst: In {name} steht ein Aufruf ausserhalb jeder Funktion. Er läuft bei jedem Import mit. In befehle.py gehören nur def-Blöcke, die Aufrufe gehören in main.py.',
 }
 

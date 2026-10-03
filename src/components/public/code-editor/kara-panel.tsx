@@ -195,7 +195,7 @@ function drawWorld(
 // ─── Component ────────────────────────────────────────────────────────────
 
 /** AURORA comments on the first finding in this order: direct causes of a lost run before an unused def. */
-const LINT_ORDER: KaraLintCode[] = ['toolbox_call', 'bare_call', 'sensor_no_call', 'no_return', 'indented_call', 'never_called']
+const LINT_ORDER: KaraLintCode[] = ['toolbox_call', 'bare_call', 'toolbox_bare', 'sensor_no_call', 'no_return', 'indented_call', 'never_called']
 
 /** Inline chip text per lint (English UI; AURORA's German comment is in the message bar). */
 const LINT_NOTE: Record<KaraLintCode, (name: string) => string> = {
@@ -205,6 +205,7 @@ const LINT_NOTE: Record<KaraLintCode, (name: string) => string> = {
   never_called: n => `${n}() is never called`,
   indented_call: n => `indented: still part of ${n}()`,
   toolbox_call: n => `runs on import: call outside a def in ${n}`,
+  toolbox_bare: n => `${n} without () in the toolbox`,
 }
 
 const SPEEDS = [1, 2, 5, 10, 25, 100] // steps per second
@@ -566,7 +567,10 @@ export function KaraPanel({ world: levelWorld, trace: levelTrace, maxTile, maxHe
     if (pos === total && trace.error) {
       const last = steps[total - 1]
       const line = trace.error.line ?? last?.l
-      if (last && last.l === line) {
+      if (trace.error.f && trace.error.fl) {
+        // Syntax error inside the toolbox: open its tab on that line (main.py's import line if the tab is missing).
+        onLine({ line: trace.error.fl, file: trace.error.f, over: { line: line ?? 1 }, error: trace.error.message })
+      } else if (last && last.l === line) {
         // The failing step's own sensor calls stay visible next to the error;
         // step into: the error shows on the helper line that raised it.
         const t = karaStepTarget(last, stepMode)

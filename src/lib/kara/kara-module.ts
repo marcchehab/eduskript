@@ -60,7 +60,7 @@
  * stay English like real Python errors; AURORA's card is the translation.
  *
  * Lints (`_lint`, before the program runs; student file only, helper modules
- * like befehle.py are not checked): `result.lints = [{line, code, name}]`,
+ * like befehle.py only get `toolbox_bare` and `toolbox_call`): `result.lints = [{line, code, name}]`,
  * shown by kara-panel.tsx when the run does not win. Codes: `bare_call`
  * (`turn_right` as a statement, no parentheses), `sensor_no_call` (a command,
  * sensor or student function without () as an if/elif/while/assert/ternary
@@ -72,7 +72,11 @@
  * helper file's top level was being imported, i.e. befehle.py holds a call
  * outside any def (line = the import line in the student file, name =
  * 'befehle.py:<line>'; one per helper file; only actions count, a top-level
- * print() is not caught). "Student function" = a def anywhere in the file or a name from
+ * print() is not caught; such a run never wins: `_run` turns it into an error
+ * without sub, so no stars). `toolbox_bare` (`_lint_helpers`): a command or
+ * helper def named without () as a statement inside a helper module the
+ * student imports (`move` in befehle.py's vor(n)); line = the import line,
+ * name = the bare name. "Student function" = a def anywhere in the file or a name from
  * `from x import name`; `from befehle import *` names are unknown here, so
  * `if drei_vor:` after a star import is not caught.
  *
@@ -970,6 +974,42 @@ def _lint(tree, locked=()):
     return lints, None
 
 
+def _lint_helpers(tree):
+    """Lint toolbox_bare for each helper module the student file imports at
+    top level (a .py next to kara.py, e.g. befehle.py): a command or a def of
+    that module written as a bare statement (\`move\` instead of \`move()\`).
+    One lint per distinct name per import line, on the import line (lint chips
+    live on main.py). Parses each imported file once, O(nodes); a helper with a
+    syntax error is skipped, the import raises it later (see _run)."""
+    commands = set(__all__) - {'KaraError'}
+    out, seen = [], set()
+    for top in tree.body:
+        if isinstance(top, _ast.ImportFrom) and top.module and not top.level:
+            mods = [top.module]
+        elif isinstance(top, _ast.Import):
+            mods = [a.name for a in top.names]
+        else:
+            continue
+        for mod in mods:
+            if mod == 'kara':
+                continue
+            path = _os.path.join(_HERE, mod.replace('.', '/') + '.py')
+            if not _os.path.isfile(path):
+                continue
+            try:
+                with open(path) as f:
+                    helper = _ast.parse(f.read(), path)
+            except (SyntaxError, ValueError, OSError):
+                continue
+            names = commands | {n.name for n in _ast.walk(helper) if isinstance(n, (_ast.FunctionDef, _ast.AsyncFunctionDef))}
+            for n in _ast.walk(helper):
+                if (isinstance(n, _ast.Expr) and isinstance(n.value, _ast.Name) and n.value.id in names
+                        and (top.lineno, n.value.id) not in seen):
+                    seen.add((top.lineno, n.value.id))
+                    out.append({'line': top.lineno, 'code': 'toolbox_bare', 'name': n.value.id})
+    return out
+
+
 def _indented_call(tree, defs):
     """(node, 'indented_call', def name) when the main program is probably
     indented into the last def: the module level calls nothing at all, and the
@@ -1064,6 +1104,8 @@ def _run(student_path='__kara_student.py', world_path='__kara_world.json'):
         tree = _ast.parse(source, _STUDENT)
         memory = _statements(tree)
         lints, banned = _lint(tree, data.get('forbid') or ())
+        if banned is None:
+            lints = sorted(lints + _lint_helpers(tree), key=lambda d: d['line'])
         if banned is not None:
             node, sub, name = banned
             if sub == 'tamper':
@@ -1085,8 +1127,14 @@ def _run(student_path='__kara_student.py', world_path='__kara_world.json'):
     except SyntaxError as e:
         # Raised by ast.parse for the student's file, or by exec when an
         # imported helper (befehle.py) has a syntax error.
-        error = {'line': e.lineno if e.filename == _STUDENT else _error_line(e),
-                 'message': f'{type(e).__name__}: {e.msg}', 'kind': 'python', 'sub': _error_sub(e)}
+        if e.filename == _STUDENT or not e.filename:
+            error = {'line': e.lineno, 'message': f'{type(e).__name__}: {e.msg}', 'kind': 'python', 'sub': _error_sub(e)}
+        else:
+            # In a helper: the line is the import line in the student file;
+            # f / fl point the editor at the helper's tab and line.
+            f = e.filename.replace(chr(92), '/').rsplit('/', 1)[-1]
+            error = {'line': _error_line(e), 'message': f'{type(e).__name__} in {f}, line {e.lineno}: {e.msg}',
+                     'kind': 'python', 'sub': 'toolbox_' + (_error_sub(e) or 'syntax'), 'f': f, 'fl': e.lineno}
     except ForbiddenError as e:
         error = {'line': e.lineno, 'message': f'{type(e).__name__}: {e}', 'kind': 'python',
                  'sub': e.sub, 'name': e.name}
@@ -1111,6 +1159,12 @@ def _run(student_path='__kara_student.py', world_path='__kara_world.json'):
             m[3] &= mask
     if _toolbox_calls:
         lints = sorted(lints + list(_toolbox_calls.values()), key=lambda d: d['line'])
+        if error is None:
+            # A toolbox that acts on import must not win (it would also beat
+            # the memory star: main.py = the import line only).
+            first = min(_toolbox_calls.values(), key=lambda d: d['line'])
+            error = {'line': first['line'] or None, 'kind': 'python', 'sub': None,
+                     'message': f"Call outside a def in {first['name']}: it runs on every import."}
     result = {'steps': _steps, 'error': error, 'energy': _w.energy, 'memory': memory, 'lints': lints}
     if _w.looks:
         result['looks'] = _w.looks
