@@ -176,7 +176,7 @@ function LineRow({ line, block, pageId, onSaved }: { line: VoiceLine; block: str
           className="flex h-7 items-center gap-1 rounded bg-amber-400 px-2 text-xs font-medium text-amber-950 hover:bg-amber-300 disabled:opacity-50"
           title={voiceless ? 'Lines with {line}/{name}/{got}/{want} are filled in at runtime and get no stored voice' : 'Render a fresh take of the text above (costs credits)'}
         >
-          {busy === 'take' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mic className="h-3.5 w-3.5" />} New take{count > 1 ? `s (${count})` : ''}
+          {busy === 'take' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mic className="h-3.5 w-3.5" />} New take
         </button>
         <input
           type="number"
