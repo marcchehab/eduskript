@@ -59,6 +59,7 @@ export function directionsNote(text: string): string | null {
  */
 const PRONOUNCE: [RegExp, string][] = [
   [/\bTerminal(s?)\b/g, 'Törminel$1'],
+  [/\bTab(s?)\b/g, 'Täb$1'],
 ]
 
 /**
