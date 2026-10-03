@@ -13,6 +13,7 @@
  * the same way.
  */
 
+import { displayText } from '@/lib/kara/voice-directions'
 import { useEffect, useState } from 'react'
 import { Volume2 } from 'lucide-react'
 import { karaPortrait } from '@/lib/kara/portraits'
@@ -76,7 +77,7 @@ export function EvidenceBoard({ skriptId, title = 'Evidence board', assets, leve
                   )}
                 </div>
                 {e.speaker && <div className="text-xs text-muted-foreground">{e.speaker}</div>}
-                <p className="mt-1 text-sm whitespace-pre-wrap">{e.text}</p>
+                <p className="mt-1 text-sm whitespace-pre-wrap">{displayText(e.text)}</p>
               </div>
             </div>
           )

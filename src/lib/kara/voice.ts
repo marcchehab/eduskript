@@ -17,6 +17,34 @@ import { isMuted, onMuteChange } from '@/lib/sound'
 // routed into Web Audio for the effect chain. Needs CORS on the file host
 // (the teacher bucket allows *).
 let current: { el: HTMLAudioElement; stop: () => void } | null = null
+// Taps the playing line (before the effect chain) for voiceLevel(); portraits
+// pulse with it (aurora-mark.tsx).
+let analyser: AnalyserNode | null = null
+let levelBuf: Float32Array<ArrayBuffer> | null = null
+/** Upper-case speaker of the line playing right now, null when silent. */
+let speakingNow: string | null = null
+const speakingListeners = new Set<() => void>()
+function setSpeaking(s: string | null) {
+  if (speakingNow === s) return
+  speakingNow = s
+  speakingListeners.forEach(cb => cb())
+}
+
+/** Speaker of the line playing right now (upper-case), null when silent. */
+export function voiceSpeaker(): string | null { return speakingNow }
+export function onVoiceSpeakerChange(cb: () => void): () => void {
+  speakingListeners.add(cb)
+  return () => { speakingListeners.delete(cb) }
+}
+
+/** Loudness of the playing line, roughly 0..1 (RMS, scaled). 0 when silent. */
+export function voiceLevel(): number {
+  if (!analyser || !levelBuf || !speakingNow) return 0
+  analyser.getFloatTimeDomainData(levelBuf)
+  let sum = 0
+  for (const v of levelBuf) sum += v * v
+  return Math.min(1, Math.sqrt(sum / levelBuf.length) * 4)
+}
 let seq = 0 // latest playVoice call wins
 const urlCache = new Map<string, Promise<string | null>>()
 
@@ -54,6 +82,7 @@ export function stopVoice() {
   stopListeners.forEach(cb => cb())
   seq++
   if (current) { current.el.pause(); current.stop(); current = null }
+  setSpeaking(null)
 }
 
 /**
@@ -75,9 +104,16 @@ export async function playVoice(url: string, speaker?: string, onEnded?: () => v
   const src = c.createMediaElementSource(el)
   const stop = fx ? await connectVoiceFx(c, src, c.destination, fx) : (src.connect(c.destination), () => {})
   if (token !== seq) { stop(); return }
-  el.onended = () => { stop(); src.disconnect(); if (current?.el === el) current = null; onEnded?.() }
+  if (!analyser) { analyser = c.createAnalyser(); analyser.fftSize = 512; levelBuf = new Float32Array(analyser.fftSize) }
+  src.connect(analyser)
+  el.onended = () => {
+    stop(); src.disconnect()
+    if (current?.el === el) { current = null; setSpeaking(null) }
+    onEnded?.()
+  }
   current = { el, stop }
   await el.play()
+  if (token === seq) setSpeaking(speaker?.toUpperCase() ?? '')
 }
 
 // Muting the page stops a line that is already playing.

@@ -73,6 +73,7 @@
  * FLOOD_MS for it.
  */
 
+import { displayText } from '@/lib/kara/voice-directions'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Check, ChevronLeft, ChevronRight, CornerDownRight, ListChecks, Loader2, Music, Pause, Play, Rocket, SkipBack, SkipForward, Star, StepBack, StepForward, Undo2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -82,7 +83,7 @@ import { AURORA_WANT, auroraLine, type KaraLintCode } from '@/lib/kara/aurora-de
 import { playSfx } from '@/lib/kara/sfx'
 import { registerSoundSource, useMuted } from '@/lib/sound'
 import { AFTERMATH_TEXT, DOOR, ITEM, LASER } from '@/lib/kara/world'
-import { karaPortrait } from '@/lib/kara/portraits'
+import { KaraPortrait, useSpeaking } from './kara-portrait'
 import { karaStepTarget, type KaraLineTarget, type KaraStepMode } from './kara-line-extension'
 import { FLOOD_MS, KaraCallStackOverlay, MAX_WINDOWS } from './kara-callstack'
 import { KaraVarsStrip } from './kara-vars'
@@ -931,24 +932,19 @@ function WorldBar({ variant, count, suite, suiteStars, config, busy, onVariant, 
 /** Dialogue bar under the world: at least `minHeight` (draggable divider above), grows with long text, fills spare height side by side. */
 function MessageBar({ card, assets, onContinue, more, minHeight, fixed }: { card: KaraCard | null; assets?: Record<string, string>; onContinue?: () => void; more: number; minHeight: number; fixed?: boolean }) {
   const speaker = card?.message.speaker
-  const portrait = speaker ? karaPortrait(speaker, assets) : undefined
+  const speaking = useSpeaking(speaker)
   return (
     // items-center-safe: when the text is taller than a fixed bar, align to the top so it can
     // scroll (plain items-center pushes the first lines above the scroll origin, unreachable).
     <div style={fixed ? { height: minHeight } : { minHeight }} className={cn('flex shrink-0 items-center-safe gap-3 overflow-y-auto px-3 text-sm', onContinue ? 'bg-amber-50 dark:bg-amber-950/30' : 'bg-muted/20')}>
-      {card && speaker && (
-        portrait
-          // eslint-disable-next-line @next/next/no-img-element -- skript file URL, sized by CSS
-          ? <img src={portrait} alt={speaker} className="h-14 w-14 shrink-0 rounded-md object-cover" />
-          : <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-md bg-muted text-lg font-bold">{speaker[0]}</div>
-      )}
+      {card && speaker && <KaraPortrait speaker={speaker} assets={assets} speaking={speaking} className="h-14 w-14" />}
       <div className="min-w-0 flex-1 py-2">
         {card ? (
           <>
             <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               {[card.title, speaker].filter(Boolean).join(' · ')}
             </div>
-            <p className="leading-snug whitespace-pre-wrap">{card.message.text}</p>
+            <p className="leading-snug whitespace-pre-wrap">{displayText(card.message.text)}</p>
             {(card.stars !== undefined || card.detail) && (
               <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
                 {card.stars !== undefined && (

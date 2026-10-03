@@ -3,7 +3,7 @@
 /**
  * Level briefing above a Kara editor (`intro:` lines of the kara-world block,
  * see src/lib/kara/world.ts). Several lines render as a short stacked
- * dialogue with portraits (karaPortrait). The play button speaks the lines in
+ * dialogue with portraits (KaraPortrait; AURORA's mark animates while she speaks). Listen also unfolds a collapsed card. The play button speaks the lines in
  * order (skript `audio=` file, else the cached TTS line; speakers without a
  * voice are skipped). Nothing plays on page load: the editor calls
  * `autoplayRef` on the student's first pointer-down inside it, which plays the
@@ -15,10 +15,11 @@
  * up while the student watches the replay.
  */
 
+import { displayText } from '@/lib/kara/voice-directions'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, Square, Volume2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { karaPortrait } from '@/lib/kara/portraits'
+import { KaraPortrait } from './kara-portrait'
 import { loadKaraProgress } from '@/lib/kara/progress'
 import { onVoiceStop, playVoice, stopVoice, ttsLineUrl } from '@/lib/kara/voice'
 import { isMuted, registerSoundSource, useMuted } from '@/lib/sound'
@@ -83,7 +84,7 @@ export function KaraIntro({ lines, assets, levelId, skriptId, autoplayRef }: Kar
   useEffect(() => () => { if (active.current) { run.current++; stopVoice() } }, [])
 
   const toggle = () => {
-    if (speaking !== null) { run.current++; active.current = false; stopVoice(); setSpeaking(null) } else void play()
+    if (speaking !== null) { run.current++; active.current = false; stopVoice(); setSpeaking(null) } else { setOpen(true); void play() }
   }
 
   // The editor calls this on the student's first pointer-down inside it.
@@ -107,12 +108,15 @@ export function KaraIntro({ lines, assets, levelId, skriptId, autoplayRef }: Kar
         >
           {open ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
           <span className="shrink-0">Briefing · {speakers}</span>
-          {!open && <span className="min-w-0 truncate font-normal normal-case tracking-normal">{solved ? '✓ ' : ''}{first.text}</span>}
+          {!open && <span className="min-w-0 truncate font-normal normal-case tracking-normal">{solved ? '✓ ' : ''}{displayText(first.text)}</span>}
         </button>
         {!muted && (
           <button
             onClick={toggle}
-            className={cn('flex h-7 shrink-0 items-center gap-1 rounded px-2 text-xs hover:bg-muted', speaking !== null && 'bg-muted')}
+            className={cn(
+              'flex h-7 shrink-0 items-center gap-1 rounded px-2 text-xs font-medium',
+              speaking !== null ? 'bg-muted hover:bg-muted/80' : 'bg-amber-400 text-amber-950 hover:bg-amber-300',
+            )}
             title={speaking !== null ? 'Stop' : 'Play briefing'}
           >
             {speaking !== null ? <Square className="h-3 w-3" /> : <Volume2 className="h-3.5 w-3.5" />}
@@ -124,16 +128,12 @@ export function KaraIntro({ lines, assets, levelId, skriptId, autoplayRef }: Kar
         <div className="flex flex-col gap-2 px-3 pb-3">
           {lines.map((line, i) => {
             const speaker = line.speaker ?? 'AURORA'
-            const portrait = karaPortrait(speaker, assets)
             return (
               <div key={i} className={cn('flex items-start gap-3 rounded-md transition-colors', speaking === i && 'bg-amber-50 dark:bg-amber-950/30')}>
-                {portrait
-                  // eslint-disable-next-line @next/next/no-img-element -- skript file URL, sized by CSS
-                  ? <img src={portrait} alt={speaker} className="h-12 w-12 shrink-0 rounded-md object-cover sm:h-14 sm:w-14" />
-                  : <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-muted text-lg font-bold sm:h-14 sm:w-14">{speaker[0]}</div>}
+                <KaraPortrait speaker={speaker} assets={assets} speaking={speaking === i} className="h-12 w-12 sm:h-14 sm:w-14" />
                 <div className="min-w-0 flex-1">
                   <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{speaker}</div>
-                  <p className="m-0 leading-snug whitespace-pre-wrap break-words">{line.text}</p>
+                  <p className="m-0 leading-snug whitespace-pre-wrap break-words">{displayText(line.text)}</p>
                 </div>
               </div>
             )

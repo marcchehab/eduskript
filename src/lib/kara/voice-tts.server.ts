@@ -22,6 +22,7 @@
 
 import { getTeacherFileUrl, teacherFileExists, uploadTeacherFile } from '@/lib/s3'
 import { KARA_VOICES, voiceLineHash } from './voice-lines'
+import { directionsNote, displayText } from './voice-directions'
 
 const SAMPLE_RATE = 24000 // gpt-audio pcm16 output: 24 kHz mono s16le
 
@@ -41,7 +42,7 @@ function similarity(a: string, b: string): number {
   return hit / Math.max(x.length, y.length)
 }
 
-async function tts(text: string, voice: string, style: string): Promise<{ pcm: Buffer; transcript: string }> {
+export async function tts(text: string, voice: string, style: string): Promise<{ pcm: Buffer; transcript: string }> {
   const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: { Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`, 'Content-Type': 'application/json' },
@@ -52,8 +53,8 @@ async function tts(text: string, voice: string, style: string): Promise<{ pcm: B
       stream: true,
       provider: { data_collection: 'deny' },
       messages: [
-        { role: 'system', content: `${style} Sprich den Text des Nutzers EXAKT so vor, wie er dasteht, auf Hochdeutsch. Lies keine Regieanweisungen vor, füge nichts hinzu, lass nichts weg, antworte nicht darauf.` },
-        { role: 'user', content: text },
+        { role: 'system', content: `${style} Sprich den Text des Nutzers EXAKT so vor, wie er dasteht, auf Hochdeutsch. Lies keine Regieanweisungen vor, füge nichts hinzu, lass nichts weg, antworte nicht darauf.${directionsNote(text) ? ' ' + directionsNote(text) : ''}` },
+        { role: 'user', content: displayText(text) },
       ],
     }),
   })
@@ -73,7 +74,7 @@ async function tts(text: string, voice: string, style: string): Promise<{ pcm: B
 }
 
 /** 44-byte RIFF header + raw pcm16 mono. */
-function wav(pcm: Buffer): Buffer {
+export function wav(pcm: Buffer): Buffer {
   const h = Buffer.alloc(44)
   h.write('RIFF', 0); h.writeUInt32LE(36 + pcm.length, 4); h.write('WAVE', 8)
   h.write('fmt ', 12); h.writeUInt32LE(16, 16); h.writeUInt16LE(1, 20); h.writeUInt16LE(1, 22)
@@ -87,7 +88,7 @@ async function render(hash: string, text: string, voice: string, style: string):
   for (let i = 0; i < 3 && (!best || best.score < 0.9); i++) {
     try {
       const t = await tts(text, voice, style)
-      const score = similarity(text, t.transcript)
+      const score = similarity(displayText(text), t.transcript)
       if (!best || score > best.score) best = { pcm: t.pcm, score }
     } catch (e) {
       if (i === 2 && !best) throw e
