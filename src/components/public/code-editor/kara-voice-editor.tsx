@@ -65,6 +65,9 @@ function LineRow({ line, block, pageId, onSaved }: { line: VoiceLine; block: str
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   // Off = play raw (no voice effect, no tempo change), to tell file artefacts from the effect chain.
   const [fx, setFx] = useState(true)
+  /** Takes rendered per click (parallel requests). */
+  const [count, setCount] = useState(1)
+  const takeNo = useRef(0)
   const play = (url: string, text: string) => void playVoice(url, fx ? SPEAKER : undefined, undefined, text)
   // A refresh after saving brings the new block: follow the saved text.
   useEffect(() => { setDraft(line.text) }, [line.text])
@@ -96,19 +99,26 @@ function LineRow({ line, block, pageId, onSaved }: { line: VoiceLine; block: str
     if (saved !== null) setMsg({ ok: true, text: 'Saved.' })
   }
 
+  /** Render `count` takes in parallel; each is added as it arrives, the first one plays. */
   async function onTake() {
     setBusy('take'); setMsg(null)
-    try {
+    const text = draft.trim()
+    let played = false
+    const one = async () => {
       const r = await fetch('/api/kara/voice-take', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ pageId, speaker: SPEAKER, text: draft.trim() }),
+        body: JSON.stringify({ pageId, speaker: SPEAKER, text }),
       })
       if (!r.ok) { setMsg({ ok: false, text: await errorOf(r) }); return }
-      const take = { url: URL.createObjectURL(await r.blob()), n: takes.length + 1, text: draft.trim() }
-      urls.current.push(take.url)
+      const url = URL.createObjectURL(await r.blob())
+      urls.current.push(url)
+      const take = { url, n: ++takeNo.current, text }
       setTakes(ts => [...ts, take])
-      play(take.url, take.text)
+      if (!played) { played = true; play(url, text) }
+    }
+    try {
+      await Promise.all(Array.from({ length: count }, () => one().catch(() => setMsg({ ok: false, text: 'Voice rendering failed. Try again.' }))))
     } finally { setBusy(null) }
   }
 
@@ -166,8 +176,18 @@ function LineRow({ line, block, pageId, onSaved }: { line: VoiceLine; block: str
           className="flex h-7 items-center gap-1 rounded bg-amber-400 px-2 text-xs font-medium text-amber-950 hover:bg-amber-300 disabled:opacity-50"
           title={voiceless ? 'Lines with {line}/{name}/{got}/{want} are filled in at runtime and get no stored voice' : 'Render a fresh take of the text above (costs credits)'}
         >
-          {busy === 'take' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mic className="h-3.5 w-3.5" />} New take
+          {busy === 'take' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mic className="h-3.5 w-3.5" />} New take{count > 1 ? `s (${count})` : ''}
         </button>
+        <input
+          type="number"
+          min={1}
+          max={10}
+          value={count}
+          onChange={e => setCount(Math.min(10, Math.max(1, Number(e.target.value) || 1)))}
+          className="h-7 w-12 rounded border bg-background px-1 text-xs"
+          title="How many takes to render at once (1–10)"
+          aria-label="Takes per click"
+        />
         {dirty && (
           <button onClick={() => void onSave()} disabled={busy !== null} className="flex h-7 items-center gap-1 rounded border px-2 text-xs hover:bg-muted disabled:opacity-50" title="Save the text into the page (voice is rendered on first play)">
             {busy === 'save' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Save text
