@@ -77,6 +77,7 @@ import { displayText } from '@/lib/kara/voice-directions'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Check, ChevronLeft, ChevronRight, CornerDownRight, ListChecks, Loader2, Music, Pause, Play, Rocket, SkipBack, SkipForward, Star, StepBack, StepForward, Undo2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { playEffect } from './celebrations'
 import { recordKaraResult } from '@/lib/kara/progress'
 import { playVoice, stopVoice, ttsLineUrl } from '@/lib/kara/voice'
 import { AURORA_WANT, auroraLine, type KaraLintCode } from '@/lib/kara/aurora-defaults'
@@ -176,6 +177,8 @@ function drawWorld(
   squashX = 1,
   dark?: { seen: Float64Array; pos: number; r: number } | null,
   chipLooks?: (string | undefined)[],
+  /** 0..1: MOP-7 drives north into the wall hatch above it and disappears (exit animation). */
+  vanish = 0,
 ) {
   const dpr = window.devicePixelRatio || 1
   const w = world.cols * tile
@@ -194,9 +197,19 @@ function drawWorld(
 
   // Facing cone under the sprite (playtests could not read the side-view sprites' direction).
   // Mid-turn (squashX < 1) it is hidden, so it never points the wrong way.
-  if (squashX >= 1) drawKaraFacing(ctx, kara.x, kara.y, kara.d, tile)
-  const sprite = sprites?.[kara.d]
-  if (sprite && sprite.complete && sprite.naturalWidth) {
+  if (squashX >= 1 && vanish === 0) drawKaraFacing(ctx, kara.x, kara.y, kara.d, tile)
+  const sprite = sprites?.[vanish > 0 ? 0 : kara.d]
+  if (vanish > 0 && sprite && sprite.complete && sprite.naturalWidth) {
+    // Clip at the cell's top edge (the wall line): the sprite slides up into the hatch.
+    const size = tile * 0.92
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(kara.x * tile, kara.y * tile, tile, tile)
+    ctx.clip()
+    ctx.globalAlpha = 1 - vanish * 0.4
+    ctx.drawImage(sprite, kara.x * tile + (tile - size) / 2, kara.y * tile + (tile - size) / 2 - vanish * tile, size, size)
+    ctx.restore()
+  } else if (sprite && sprite.complete && sprite.naturalWidth) {
     const size = tile * 0.92
     // squashX < 1: mid-turn (the sprites are side views, so a turn reads as a squash).
     const w = size * Math.max(0.05, squashX)
@@ -380,6 +393,8 @@ export function KaraPanel({ world: levelWorld, trace: levelTrace, maxTile, maxHe
   // Marks (mark / mark_at) the same way; null until the trace has any (most levels never mark).
   const cellsRef = useRef<{ cells: number[]; marks: (string | null)[] | null; pos: number; trace: KaraTrace | null; world: KaraWorld } | null>(null)
   const drawnRef = useRef<{ pos: number; trace: KaraTrace | null }>({ pos: 0, trace: null })
+  /** Trace whose exit animation already ran (see the draw effect). */
+  const exitDoneRef = useRef<KaraTrace | null>(null)
 
   useEffect(() => { void loadDefaultSprites().then(setSprites) }, [])
   useEffect(() => { void loadKaraTileset().then(setTileset) }, [])
@@ -670,13 +685,32 @@ export function KaraPanel({ world: levelWorld, trace: levelTrace, maxTile, maxHe
     const darkAt = (p: number) => (seen && config.dark !== undefined ? { seen, pos: p, r: config.dark } : null)
     const slide = !!from && Math.abs(from.x - to.x) + Math.abs(from.y - to.y) === 1
     const turn = !!from && from.x === to.x && from.y === to.y && from.d !== to.d
+    // Won by reaching an exit in a wall: after the last step MOP-7 drives up into
+    // the hatch and disappears, then stars burst there (once per run; only when
+    // stepping onto the last step, not when jumping to it).
+    const ci = to.y * world.cols + to.x
+    const exitLeave = !!from && pos === total && levelWon && config.goals.includes('exit') && world.look[ci] === 'E'
+      && to.y > 0 && (world.look[ci - world.cols] === '#' || world.look[ci - world.cols] === 'D') && exitDoneRef.current !== trace
+    let raf = 0
+    const leave = () => {
+      exitDoneRef.current = trace
+      const t0 = performance.now()
+      const step = (now: number) => {
+        const k = Math.min(1, (now - t0) / 550)
+        drawWorld(canvas, world, cells, to, tile, tileset, sprites, marks, 1, darkAt(pos), chipLooks, k * k)
+        if (k < 1) { raf = requestAnimationFrame(step); return }
+        const r = canvas.getBoundingClientRect()
+        void playEffect(4, canvas, new DOMRect(r.left + to.x * tile, r.top + (to.y - 0.5) * tile, tile, tile)).catch(() => {})
+      }
+      raf = requestAnimationFrame(step)
+    }
     if (!from || (!slide && !turn)) {
       drawWorld(canvas, world, cells, to, tile, tileset, sprites, marks, 1, darkAt(pos), chipLooks)
-      return
+      if (exitLeave) leave()
+      return () => cancelAnimationFrame(raf)
     }
     const duration = slide ? Math.min(250, 700 / speed) : Math.min(120, 500 / speed)
     const start = performance.now()
-    let raf = 0
     const frame = (now: number) => {
       const t = Math.min(1, (now - start) / duration)
       if (slide) {
@@ -686,10 +720,11 @@ export function KaraPanel({ world: levelWorld, trace: levelTrace, maxTile, maxHe
         drawWorld(canvas, world, cells, t < 0.5 ? from : to, tile, tileset, sprites, marks, Math.abs(1 - 2 * t), darkAt(pos), chipLooks)
       }
       if (t < 1) raf = requestAnimationFrame(frame)
+      else if (exitLeave) leave()
     }
     raf = requestAnimationFrame(frame)
     return () => cancelAnimationFrame(raf)
-  }, [pos, trace, world, steps, replay, tile, tileset, sprites, speed, seen, config.dark, chipLooks])
+  }, [pos, trace, world, steps, replay, tile, tileset, sprites, speed, seen, config.dark, config.goals, chipLooks, total, levelWon])
 
   const output = replay ? replay.output.slice(0, replay.outputEnd[pos]) : ''
   useEffect(() => {
