@@ -133,12 +133,17 @@ export function KaraIntro({ lines, assets, levelId, skriptId, autoplayRef, block
         {lines.map((line, i) => {
           const speaker = line.speaker ?? 'AURORA'
           const sameAsBefore = i > 0 && (lines[i - 1].speaker ?? 'AURORA') === speaker
+          // The portrait is drawn once per run of lines by the same speaker; it
+          // animates while any line of that run is spoken.
+          let runEnd = i
+          while (runEnd + 1 < lines.length && (lines[runEnd + 1].speaker ?? 'AURORA') === speaker) runEnd++
+          const runSpeaking = speaking !== null && speaking >= i && speaking <= runEnd
           return (
             <div key={i} className="flex items-start gap-3">
               <div className="flex w-14 shrink-0 flex-col items-center gap-1 sm:w-16">
                 {!sameAsBefore && (
                   <>
-                    <KaraPortrait speaker={speaker} assets={assets} speaking={speaking === i} className="h-12 w-12 sm:h-14 sm:w-14" />
+                    <KaraPortrait speaker={speaker} assets={assets} speaking={runSpeaking} className="h-12 w-12 sm:h-14 sm:w-14" />
                     <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{speaker}</span>
                   </>
                 )}
