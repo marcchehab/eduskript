@@ -8,8 +8,8 @@
  * voice, style, fx and text, so editing a line or a voice renders anew; old
  * files stay in the bucket (no cleanup).
  *
- * Offline renders from voices.mts (MP3, see voice-lines.ts) are still found
- * first. Lines with a baked-in offline `fx` are not rendered here, because
+ * A take picked in the AURORA lab (saveVoiceTake) wins over everything.
+ * Offline renders from voices.mts (MP3, see voice-lines.ts) come next. Lines with a baked-in offline `fx` are not rendered here, because
  * applying it needs ffmpeg.
  *
  * Known limitations:
@@ -20,7 +20,8 @@
  *   it stays below the threshold.
  */
 
-import { getTeacherFileUrl, teacherFileExists, uploadTeacherFile } from '@/lib/s3'
+import { createHash } from 'crypto'
+import { downloadTeacherFile, getTeacherFileUrl, teacherFileExists, uploadTeacherFile } from '@/lib/s3'
 import { KARA_VOICES, voiceLineHash } from './voice-lines'
 import { directionsNote, displayText } from './voice-directions'
 
@@ -101,6 +102,30 @@ async function render(hash: string, text: string, voice: string, style: string):
 const inflight = new Map<string, Promise<string>>()
 
 /**
+ * A take chosen in the AURORA lab. Bucket files are served with a one-year
+ * immutable cache header, so the take cannot replace `<lineHash>.wav` in
+ * place: it is stored content-addressed (`files/<sha256 of the WAV>.wav`) and
+ * `files/<lineHash>.pick` holds that key. The pointer is read server-side
+ * only, so its own cache header does not matter. Costs one extra HEAD per
+ * lookup.
+ */
+async function pickedUrl(hash: string): Promise<string | null> {
+  if (!(await teacherFileExists(hash, 'pick'))) return null
+  const key = (await downloadTeacherFile(`files/${hash}.pick`)).toString('utf8').trim()
+  return key ? getTeacherFileUrl(key) : null
+}
+
+/** Store `wavFile` as the voice of (speaker, text); later lookups return it first. */
+export async function saveVoiceTake(speaker: string, text: string, wavFile: Buffer): Promise<string> {
+  const hash = voiceLineHash(speaker, text)
+  if (!hash) throw new Error(`no voice for speaker ${speaker}`)
+  const content = createHash('sha256').update(wavFile).digest('hex')
+  await uploadTeacherFile(content, 'wav', wavFile, 'audio/wav')
+  await uploadTeacherFile(hash, 'pick', Buffer.from(`files/${content}.wav`), 'text/plain')
+  return getTeacherFileUrl(`files/${content}.wav`)
+}
+
+/**
  * URL of the voice line: an existing offline MP3 or on-demand WAV, otherwise
  * rendered now when `render` is true. null = speaker has no voice, or the line
  * is missing and rendering was not allowed.
@@ -108,6 +133,8 @@ const inflight = new Map<string, Promise<string>>()
 export async function voiceLineUrl(speaker: string, text: string, opts: { render: boolean }): Promise<string | null> {
   const hash = voiceLineHash(speaker, text)
   if (!hash) return null
+  const picked = await pickedUrl(hash)
+  if (picked) return picked
   if (await teacherFileExists(hash, 'mp3')) return getTeacherFileUrl(`files/${hash}.mp3`)
   if (await teacherFileExists(hash, 'wav')) return getTeacherFileUrl(`files/${hash}.wav`)
   const v = KARA_VOICES[speaker.toUpperCase()]

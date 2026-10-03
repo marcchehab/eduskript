@@ -1,12 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { Loader2, Play, Copy } from 'lucide-react'
+import { Check, Copy, Loader2, Play, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { playVoice, stopVoice } from '@/lib/kara/voice'
 import { displayText } from '@/lib/kara/voice-directions'
 
-interface Take { id: number; speaker: string; text: string; style: string; url: string; transcript: string; fx: boolean }
+interface Take { id: number; speaker: string; text: string; style: string; url: string; transcript: string; fx: boolean; saved?: 'busy' | 'ok' | string }
 
 const EXAMPLE = '[trocken, gelangweilt] Programm beendet. {Pause} Ziel nicht erreicht. {schnell, beiläufig} Wie immer eigentlich. {/}'
 
@@ -21,6 +21,26 @@ export function AuroraLab({ voices }: { voices: Record<string, string> }) {
   const [takes, setTakes] = useState<Take[]>([])
 
   const play = (t: Take) => void playVoice(t.url, t.fx ? t.speaker : undefined)
+  const patch = (id: number, saved: Take['saved']) => setTakes(ts => ts.map(t => (t.id === id ? { ...t, saved } : t)))
+
+  /** Make this take the voice of the level line with exactly this text. */
+  async function storeForPage(t: Take) {
+    patch(t.id, 'busy')
+    try {
+      const bytes = new Uint8Array(await (await fetch(t.url)).arrayBuffer())
+      let bin = ''
+      for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+      const r = await fetch('/api/dev/voice-save', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ speaker: t.speaker, text: t.text, audio: btoa(bin) }),
+      })
+      const j = await r.json().catch(() => null)
+      patch(t.id, r.ok ? 'ok' : (j?.error ?? `HTTP ${r.status}`))
+    } catch (e) {
+      patch(t.id, e instanceof Error ? e.message : String(e))
+    }
+  }
 
   async function render() {
     if (busy || !text.trim()) return
@@ -49,7 +69,7 @@ export function AuroraLab({ voices }: { voices: Record<string, string> }) {
       <div>
         <h1 className="text-2xl font-semibold">AURORA lab</h1>
         <p className="text-sm text-muted-foreground">
-          <code>[…]</code> at the start = whole line (tone, tempo). <code>{'{…}'}</code> in the text = from here until <code>{'{/}'}</code> or the end of the sentence, e.g. <code>{'{Pause}'}</code>, <code>{'{schnell}'}</code>, <code>{'{flüsternd}'}</code>, <code>{'{betont: Wort}'}</code>. Every render is a fresh take (paid).
+          <code>[…]</code> at the start = whole line (tone, tempo). <code>{'{…}'}</code> in the text = from here until <code>{'{/}'}</code> or the end of the sentence, e.g. <code>{'{Pause}'}</code>, <code>{'{schnell}'}</code>, <code>{'{flüsternd}'}</code>, <code>{'{betont: Wort}'}</code>. Every render is a fresh take (paid). «Use for page» stores a take as the voice of the level line; the text must match the level line exactly.
         </p>
       </div>
 
@@ -90,7 +110,13 @@ export function AuroraLab({ voices }: { voices: Record<string, string> }) {
             <div className="min-w-0 flex-1 text-sm">
               <p className="font-mono">{t.text}</p>
               <p className="text-muted-foreground">heard: {t.transcript || '—'}</p>
+              {t.saved && t.saved !== 'busy' && t.saved !== 'ok' && <p className="text-destructive">{t.saved}</p>}
+              {t.saved === 'ok' && <p className="text-green-600 dark:text-green-400">The level now plays this take (reload the level page).</p>}
             </div>
+            <Button size="sm" variant="outline" onClick={() => void storeForPage(t)} disabled={t.saved === 'busy'} title="Store this take as the voice of the level line with exactly this text">
+              {t.saved === 'busy' ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : t.saved === 'ok' ? <Check className="mr-1 h-4 w-4" /> : <Upload className="mr-1 h-4 w-4" />}
+              Use for page
+            </Button>
             <Button size="icon" variant="ghost" onClick={() => void navigator.clipboard.writeText(t.text)} title="Copy line"><Copy className="h-4 w-4" /></Button>
           </div>
         ))}
