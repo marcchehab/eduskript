@@ -353,12 +353,16 @@ export const CodeEditor = memo(function CodeEditor({
   acceptUploads,
   height: explicitHeight,
   outputOnly = false,
-  karaWorld: karaWorldSource,
+  karaWorld: karaWorldProp,
   karaTile = 48,
   karaCodeWidth,
   toolbox,
   karaAssets,
 }: CodeEditorProps) {
+  // An author's in-place voice-line edit (KaraVoiceEditor) replaces the block
+  // locally right after saving, so briefing and panel show it without a reload.
+  const [karaWorldEdited, setKaraWorldEdited] = useState<string | null>(null)
+  const karaWorldSource = karaWorldEdited ?? karaWorldProp
   const { resolvedTheme } = useTheme()
   const { data: session } = useSession()
   const { selectedClass, selectedStudent, isTeacher } = useTeacherClass()
@@ -4366,13 +4370,16 @@ export const CodeEditor = memo(function CodeEditor({
     {/* Kara level briefing (`intro:` lines) sits above the editor box, outside
         it, so it never takes height from the side-by-side layout. Not shown in
         fullscreen (the wrapper is the fullscreen element). */}
-    {karaLevel && karaLevel.config.intro.length > 0 && (
+    {karaLevel && (
       <KaraIntro
         lines={karaLevel.config.intro}
         assets={karaAssets}
         levelId={karaLevel.config.id ?? id}
         skriptId={skriptId}
         autoplayRef={karaIntroAutoplay}
+        block={karaWorldSource}
+        pageId={pageId}
+        onBlockChange={setKaraWorldEdited}
       />
     )}
     <div

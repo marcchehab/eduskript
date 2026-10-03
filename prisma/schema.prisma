@@ -446,7 +446,8 @@ model PageVersion {
   authorId   String
   pageId     String
   // Attribution for AI-assisted edits — null = direct dashboard edit.
-  // editSource is "mcp" (claude.ai / Cursor / Claude Code via /api/mcp) or "ai-edit"
+  // editSource is "mcp" (claude.ai / Cursor / Claude Code via /api/mcp), "inline"
+  // (exact-text replace from the public page, /api/pages/[id]/replace) or "ai-edit"
   // (in-product AI Edit feature). editClient snapshots OAuthClient.name when source=mcp.
   editSource String?  @map("edit_source")
   editClient String?  @map("edit_client")

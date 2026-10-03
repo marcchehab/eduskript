@@ -70,6 +70,11 @@ export function ttsLineUrl(speaker: string, text: string): Promise<string | null
   return p
 }
 
+/** Drop a cached line URL, e.g. after an author picked a new take for it. */
+export function forgetTtsLine(speaker: string, text: string) {
+  urlCache.delete(`${speaker}|${text}`)
+}
+
 const stopListeners = new Set<() => void>()
 
 /** Called whenever a playing (or loading) line is cut off, including by the next playVoice(). */

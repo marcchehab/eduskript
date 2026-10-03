@@ -17,9 +17,11 @@
 
 import { displayText } from '@/lib/kara/voice-directions'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ChevronDown, ChevronRight, Square, Volume2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Pencil, Square, Volume2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { KaraPortrait } from './kara-portrait'
+import { KaraVoiceEditor } from './kara-voice-editor'
+import { usePageCanEdit } from '@/hooks/use-page-can-edit'
 import { loadKaraProgress } from '@/lib/kara/progress'
 import { onVoiceStop, playVoice, stopVoice, ttsLineUrl } from '@/lib/kara/voice'
 import { isMuted, registerSoundSource, useMuted } from '@/lib/sound'
@@ -32,9 +34,16 @@ interface KaraIntroProps {
   skriptId?: string
   /** Set by KaraIntro; the editor calls it once, on the first pointer-down inside it. */
   autoplayRef: React.RefObject<(() => void) | null>
+  /** Raw kara-world block and page: page authors get the voice-line editor (kara-voice-editor.tsx). */
+  block?: string
+  pageId?: string
+  /** Called with the saved block after an in-place edit. */
+  onBlockChange?: (block: string) => void
 }
 
-export function KaraIntro({ lines, assets, levelId, skriptId, autoplayRef }: KaraIntroProps) {
+export function KaraIntro({ lines, assets, levelId, skriptId, autoplayRef, block, pageId, onBlockChange }: KaraIntroProps) {
+  const canEdit = usePageCanEdit(block ? pageId : undefined)
+  const [editing, setEditing] = useState(false)
   const [solved, setSolved] = useState(false)
   const [open, setOpen] = useState(true)
   /** Index of the line being spoken, null when silent. */
@@ -93,8 +102,8 @@ export function KaraIntro({ lines, assets, levelId, skriptId, autoplayRef }: Kar
     return () => { autoplayRef.current = null }
   }, [autoplayRef, solved, play])
 
-  if (!lines.length) return null
-  const first = lines[0]
+  if (!lines.length && !canEdit) return null
+  const first = lines[0] ?? { text: '', speaker: 'AURORA' }
   const speakers = [...new Set(lines.map(l => l.speaker ?? 'AURORA'))].join(' · ')
 
   return (
@@ -110,7 +119,18 @@ export function KaraIntro({ lines, assets, levelId, skriptId, autoplayRef }: Kar
           <span className="shrink-0">Briefing · {speakers}</span>
           {!open && <span className="min-w-0 truncate font-normal normal-case tracking-normal">{solved ? '✓ ' : ''}{displayText(first.text)}</span>}
         </button>
-        {!muted && (
+        {canEdit && (
+          <button
+            onClick={() => { setEditing(e => !e); setOpen(true) }}
+            className={cn('flex h-7 shrink-0 items-center gap-1 rounded px-2 text-xs hover:bg-muted', editing && 'bg-muted')}
+            title="Edit AURORA's lines of this level (authors only)"
+            aria-pressed={editing}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Voice lines</span>
+          </button>
+        )}
+        {!muted && lines.length > 0 && (
           <button
             onClick={toggle}
             className={cn(
@@ -140,6 +160,7 @@ export function KaraIntro({ lines, assets, levelId, skriptId, autoplayRef }: Kar
           })}
         </div>
       )}
+      {editing && canEdit && block && pageId && <KaraVoiceEditor block={block} pageId={pageId} onBlockChange={onBlockChange} />}
     </div>
   )
 }

@@ -83,8 +83,10 @@ interface ActorContext {
    * Attribution for the version row this write produces. `null`/undefined →
    * direct dashboard edit. `"mcp"` → set by the MCP transport on tool calls.
    * `"ai-edit"` → set by the dashboard AI Edit "Apply" flow.
+   * `"inline"` → an exact-text replace from the public page
+   * (/api/pages/[id]/replace, e.g. editing Kara voice lines in a level).
    */
-  editSource?: 'mcp' | 'ai-edit'
+  editSource?: 'mcp' | 'ai-edit' | 'inline'
   /** Snapshot of OAuthClient.name; only meaningful when editSource === 'mcp'. */
   editClient?: string
   /**
