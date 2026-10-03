@@ -63,6 +63,9 @@ function LineRow({ line, block, pageId, onSaved }: { line: VoiceLine; block: str
   const [takes, setTakes] = useState<Take[]>([])
   const [busy, setBusy] = useState<'take' | 'save' | number | null>(null)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  // Off = play raw (no voice effect, no tempo change), to tell file artefacts from the effect chain.
+  const [fx, setFx] = useState(true)
+  const play = (url: string) => void playVoice(url, fx ? SPEAKER : undefined)
   // A refresh after saving brings the new block: follow the saved text.
   useEffect(() => { setDraft(line.text) }, [line.text])
   // Revoke take URLs on unmount only (a cleanup per takes change would revoke the older ones).
@@ -105,7 +108,7 @@ function LineRow({ line, block, pageId, onSaved }: { line: VoiceLine; block: str
       const take = { url: URL.createObjectURL(await r.blob()), n: takes.length + 1 }
       urls.current.push(take.url)
       setTakes(ts => [...ts, take])
-      void playVoice(take.url, SPEAKER)
+      play(take.url)
     } finally { setBusy(null) }
   }
 
@@ -134,7 +137,7 @@ function LineRow({ line, block, pageId, onSaved }: { line: VoiceLine; block: str
 
   async function onPlayCurrent() {
     const url = await ttsLineUrl(SPEAKER, line.text)
-    if (url) void playVoice(url, SPEAKER)
+    if (url) play(url)
     else setMsg({ ok: false, text: 'No voice for this line yet.' })
   }
 
@@ -172,7 +175,7 @@ function LineRow({ line, block, pageId, onSaved }: { line: VoiceLine; block: str
         )}
         {takes.map(t => (
           <span key={t.n} className="flex items-center overflow-hidden rounded border text-xs">
-            <button onClick={() => void playVoice(t.url, SPEAKER)} className="flex h-7 items-center gap-1 px-2 hover:bg-muted" title={`Play take ${t.n}`}>
+            <button onClick={() => play(t.url)} className="flex h-7 items-center gap-1 px-2 hover:bg-muted" title={`Play take ${t.n}`}>
               <Play className="h-3 w-3" /> {t.n}
             </button>
             <button onClick={() => void onUse(t)} disabled={busy !== null} className="flex h-7 items-center gap-1 border-l px-2 hover:bg-muted disabled:opacity-50" title="Save the text and use this take as the line's voice">
@@ -181,7 +184,12 @@ function LineRow({ line, block, pageId, onSaved }: { line: VoiceLine; block: str
           </span>
         ))}
       </div>
-      {msg && <div className={cn('mt-1 text-xs', msg.ok ? 'text-green-600 dark:text-green-400' : 'text-destructive')}>{msg.text}</div>}
+      <div className="mt-1 flex items-start gap-2">
+        {msg && <div className={cn('flex-1 text-xs', msg.ok ? 'text-green-600 dark:text-green-400' : 'text-destructive')}>{msg.text}</div>}
+        <label className="ml-auto flex shrink-0 cursor-pointer items-center gap-1 text-[11px] text-muted-foreground" title="Off: play the raw recording, without voice effect and tempo change">
+          <input type="checkbox" checked={fx} onChange={e => setFx(e.target.checked)} className="h-3 w-3" /> voice effect
+        </label>
+      </div>
     </div>
   )
 }
