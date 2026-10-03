@@ -70,7 +70,8 @@
  *                                         a missing file stops the run with a ValueError.
  *   id: level-id                          key for saved progress (default: editor id)
  *   log: text | speaker=WEBER | audio=f.mp3        one per terminal, in reading order
- *   chip: id | title | text | speaker=… | audio=…  one per chip, in reading order
+ *   chip: id | title | text | speaker=… | audio=… | look=cup   one per chip, in reading order;
+ *                                         look = map sprite (cup note logbook datachip camera bottle)
  *   intro: text | speaker=BRANDT | audio=f.mp3     repeatable; the level briefing,
  *                                         shown as a card above the code editor
  *                                         (several lines = a short dialogue, in order;
@@ -210,6 +211,8 @@ export interface KaraMessage {
 export interface KaraEvidence extends KaraMessage {
   id: string
   title: string
+  /** Map sprite (`look=cup`): public/kara/evidence/<look>.png; default = data chip. */
+  look?: string
 }
 
 export type KaraGoal = 'exit' | 'target' | 'collect' | 'boxes' | 'chips' | 'logs' | 'output'
@@ -382,7 +385,7 @@ function message(value: string): KaraMessage {
 
 function evidence(value: string): KaraEvidence {
   const { pos, named } = splitFields(value)
-  return { id: pos[0] ?? '', title: pos[1] ?? pos[0] ?? '', text: pos.slice(2).join(' | '), speaker: named.speaker, audio: named.audio }
+  return { id: pos[0] ?? '', title: pos[1] ?? pos[0] ?? '', text: pos.slice(2).join(' | '), speaker: named.speaker, audio: named.audio, look: named.look }
 }
 
 export function parseKaraConfig(src: string): KaraConfig {

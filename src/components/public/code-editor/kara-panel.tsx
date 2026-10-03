@@ -175,6 +175,7 @@ function drawWorld(
   marks: (string | null)[] | null,
   squashX = 1,
   dark?: { seen: Float64Array; pos: number; r: number } | null,
+  chipLooks?: (string | undefined)[],
 ) {
   const dpr = window.devicePixelRatio || 1
   const w = world.cols * tile
@@ -189,7 +190,7 @@ function drawWorld(
   if (!ctx) return
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   ctx.imageSmoothingQuality = 'high'
-  drawKaraTiles(ctx, world, cells, tile, tileset)
+  drawKaraTiles(ctx, world, cells, tile, tileset, chipLooks)
 
   // Facing cone under the sprite (playtests could not read the side-view sprites' direction).
   // Mid-turn (squashX < 1) it is hidden, so it never points the wrong way.
@@ -317,6 +318,7 @@ export function KaraPanel({ world: levelWorld, trace: levelTrace, maxTile, maxHe
   }
   const showAftermath = inAftermath && !!aftermath
   const world = showAftermath ? aftermath.world : levelWorld
+  const chipLooks = useMemo(() => config.chips.map(c => c.look), [config])
   const trace = showAftermath ? aftermath.trace : levelTrace
   /** The shown trace belongs to a complete «Test all worlds» suite. */
   const inSuite = !!trace && !!suite?.done && suite.traces[variant] === trace
@@ -669,7 +671,7 @@ export function KaraPanel({ world: levelWorld, trace: levelTrace, maxTile, maxHe
     const slide = !!from && Math.abs(from.x - to.x) + Math.abs(from.y - to.y) === 1
     const turn = !!from && from.x === to.x && from.y === to.y && from.d !== to.d
     if (!from || (!slide && !turn)) {
-      drawWorld(canvas, world, cells, to, tile, tileset, sprites, marks, 1, darkAt(pos))
+      drawWorld(canvas, world, cells, to, tile, tileset, sprites, marks, 1, darkAt(pos), chipLooks)
       return
     }
     const duration = slide ? Math.min(250, 700 / speed) : Math.min(120, 500 / speed)
@@ -678,16 +680,16 @@ export function KaraPanel({ world: levelWorld, trace: levelTrace, maxTile, maxHe
     const frame = (now: number) => {
       const t = Math.min(1, (now - start) / duration)
       if (slide) {
-        drawWorld(canvas, world, cells, { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t, d: to.d }, tile, tileset, sprites, marks, 1, darkAt(pos))
+        drawWorld(canvas, world, cells, { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t, d: to.d }, tile, tileset, sprites, marks, 1, darkAt(pos), chipLooks)
       } else {
         // First half: old sprite narrows; second half: new sprite widens.
-        drawWorld(canvas, world, cells, t < 0.5 ? from : to, tile, tileset, sprites, marks, Math.abs(1 - 2 * t), darkAt(pos))
+        drawWorld(canvas, world, cells, t < 0.5 ? from : to, tile, tileset, sprites, marks, Math.abs(1 - 2 * t), darkAt(pos), chipLooks)
       }
       if (t < 1) raf = requestAnimationFrame(frame)
     }
     raf = requestAnimationFrame(frame)
     return () => cancelAnimationFrame(raf)
-  }, [pos, trace, world, steps, replay, tile, tileset, sprites, speed, seen, config.dark])
+  }, [pos, trace, world, steps, replay, tile, tileset, sprites, speed, seen, config.dark, chipLooks])
 
   const output = replay ? replay.output.slice(0, replay.outputEnd[pos]) : ''
   useEffect(() => {

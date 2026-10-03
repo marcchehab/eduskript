@@ -60,19 +60,29 @@ const TILE_NAMES = [
 
 export type KaraTileset = Map<string, HTMLImageElement>
 
+/**
+ * Evidence sprites (own Blender renders, ~/coding/mop7-trailer/scripts/evidence.py),
+ * shipped in public/kara/evidence/ like the MOP-7 sprites, so they load
+ * without the licensed tileset. Stored in the tileset as `evidence-<look>`.
+ */
+export const EVIDENCE_LOOKS = ['cup', 'note', 'logbook', 'datachip', 'camera', 'bottle']
+
 let tilesetPromise: Promise<KaraTileset> | null = null
 
 /** Loads every tile once per page. Missing files are simply absent (→ placeholder). */
 export function loadKaraTileset(): Promise<KaraTileset> {
   tilesetPromise ??= (async () => {
     const set: KaraTileset = new Map()
-    if (!KARA_TILESET_URL) return set
-    await Promise.all(TILE_NAMES.map(name => new Promise<void>((resolve) => {
+    const load = (name: string, src: string) => new Promise<void>((resolve) => {
       const img = new Image()
       img.onload = () => { set.set(name, img); resolve() }
       img.onerror = () => resolve()
-      img.src = `${KARA_TILESET_URL}/${name}.png`
-    })))
+      img.src = src
+    })
+    await Promise.all([
+      ...EVIDENCE_LOOKS.map(l => load(`evidence-${l}`, `/kara/evidence/${l}.png`)),
+      ...(KARA_TILESET_URL ? TILE_NAMES.map(name => load(name, `${KARA_TILESET_URL}/${name}.png`)) : []),
+    ])
     return set
   })()
   return tilesetPromise
@@ -162,7 +172,9 @@ function drawObject(ctx: CanvasRenderingContext2D, set: KaraTileset, name: strin
  * boxes move); walls/obstacles come from the static `world.look`. Marks are
  * drawn separately (drawKaraMarks), after MOP-7's sprite.
  */
-export function drawKaraTiles(ctx: CanvasRenderingContext2D, world: KaraWorld, cells: number[], tile: number, set: KaraTileset) {
+export function drawKaraTiles(ctx: CanvasRenderingContext2D, world: KaraWorld, cells: number[], tile: number, set: KaraTileset, chipLooks?: (string | undefined)[]) {
+  // Chip cell → its `look=` (chips are numbered in reading order, like config.chips).
+  const lookAt = new Map<number, string | undefined>(world.chips.map(([cx, cy], k) => [cy * world.cols + cx, chipLooks?.[k]]))
   for (let y = 0; y < world.rows; y++) {
     for (let x = 0; x < world.cols; x++) {
       const i = y * world.cols + x
@@ -184,7 +196,7 @@ export function drawKaraTiles(ctx: CanvasRenderingContext2D, world: KaraWorld, c
       if (FLOOR_OBJECTS[look]) drawObject(ctx, set, FLOOR_OBJECTS[look], px, py, tile)
       if (look === 'm') drawMusicNote(ctx, px, py, tile)
       if (c & BLOCK && OBSTACLES[look]) drawObject(ctx, set, OBSTACLES[look], px, py, tile)
-      if (c & CHIP) drawChip(ctx, px, py, tile)
+      if (c & CHIP) drawEvidence(ctx, set, lookAt.get(i), px, py, tile)
       if (c & ITEM) drawObject(ctx, set, 'item', px, py, tile)
       if (c & BOX) drawObject(ctx, set, 'box', px, py, tile)
     }
@@ -346,6 +358,21 @@ function drawSlime(ctx: CanvasRenderingContext2D, x: number, y: number, px: numb
     const oy = ((h >> (k * 4 + 2)) % 60) / 100 + 0.2
     ctx.beginPath(); ctx.ellipse(px + ox * s, py + oy * s, s * 0.16, s * 0.1, (h % 7) / 3, 0, Math.PI * 2); ctx.fill()
   }
+  ctx.restore()
+}
+
+/**
+ * An evidence item: its `look` sprite (else the data-chip sprite, else the
+ * drawn chip), with a soft cyan glow so it reads as «pick me up».
+ */
+function drawEvidence(ctx: CanvasRenderingContext2D, set: KaraTileset, look: string | undefined, px: number, py: number, s: number) {
+  const img = set.get(`evidence-${look ?? 'datachip'}`) ?? set.get('evidence-datachip')
+  if (!img) { drawChip(ctx, px, py, s); return }
+  const size = s * 0.8
+  ctx.save()
+  ctx.shadowColor = 'rgba(34, 211, 238, 0.85)'
+  ctx.shadowBlur = s * 0.18
+  ctx.drawImage(img, px + (s - size) / 2, py + (s - size) / 2, size, size)
   ctx.restore()
 }
 
