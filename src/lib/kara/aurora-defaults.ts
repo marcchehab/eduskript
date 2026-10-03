@@ -8,12 +8,14 @@
  * real Kara line, so on-demand voice rendering works for them.
  */
 
-import type { KaraConfig, KaraMessage } from './world'
+import type { KaraConfig, KaraDoorWant, KaraMessage } from './world'
 
 /** Error classes the Python runner reports as `error.sub`. */
 export type KaraErrorSub =
   // MOP-7 refused an action (KaraError.code)
   | 'wall' | 'terminal' | 'door' | 'laser' | 'box' | 'acid' | 'item' | 'no_item' | 'no_switch' | 'no_terminal'
+  // door codes (`door.ask:`): wrong answer / the asked function does not exist
+  | 'door_code' | 'door_missing'
   // Python exception types
   | 'name' | 'module' | 'indent' | 'syntax' | 'type' | 'recursion'
   // run refused before it started (kara-module.ts _lint: exec, eval, ...)
@@ -30,6 +32,8 @@ export const AURORA_DEFAULTS: Record<string, string> = {
   'error.wall': 'Wand. Python meldet es auf Englisch, ich übersetze: Wand. Die Zeile ist markiert.',
   'error.terminal': 'Vor dem Inventar steht ein Terminal. Terminals liest man, man fährt nicht durch.',
   'error.door': 'Die Tür ist zu. Erst der Schalter, dann die Tür. Reihenfolge ist alles.',
+  'error.door_code': 'Die Tür hat {name}() gefragt. Antwort: {got}. Erwartet war {want}.',
+  'error.door_missing': 'Die Tür fragt nach {name}(). Diese Funktion gibt es nicht. Noch nicht.',
   'error.laser': 'Laser. Das Inventar ist hineingefahren. Wir verbuchen das als Feldtest. Der Laser hat bestanden.',
   'error.box': 'Die Kiste klemmt: Dahinter ist kein Platz. Kisten lassen sich nur schieben, nicht stapeln.',
   'error.acid': 'Säure. Das Inventar ist nicht säurefest. Das stand in den Nutzungsbedingungen, Seite 288.',
@@ -50,17 +54,31 @@ export const AURORA_DEFAULTS: Record<string, string> = {
   'lint.no_return': 'Ihre Funktion zeigt etwas an. Zurückgeben tut sie nichts. Die Bedingung bekommt None.',
 }
 
-/** Placeholders a line may contain: {line} (lints) and {name} (lints, error.forbidden). */
-export type AuroraVars = { line?: number; name?: string }
+/** `{want}` in error.door_code: the trace's error.want (kara-module.ts `_door_want`) in AURORA's words. */
+export const AURORA_WANT: Record<KaraDoorWant, string> = {
+  number: 'eine Zahl',
+  bool: 'True oder False',
+  text: 'ein Text',
+}
+
+/**
+ * Placeholders a line may contain: {line} (lints), {name} (lints,
+ * error.forbidden, error.door_*), {got} / {want} (error.door_code; want is
+ * already the German phrase from AURORA_WANT).
+ */
+export type AuroraVars = { line?: number; name?: string; got?: string; want?: string }
 
 function fill(text: string, vars: AuroraVars | undefined): string {
   if (!vars) return text
-  return text.replace(/\{(line|name)\}/g, (m, k: 'line' | 'name') => (vars[k] !== undefined ? String(vars[k]) : m))
+  return text.replace(/\{(line|name|got|want)\}/g, (m, k: keyof AuroraVars) => (vars[k] !== undefined ? String(vars[k]) : m))
 }
 
 /**
  * True when `text` is a built-in default, also with its placeholders filled
- * ({line} = digits, {name} = a Python identifier). Used by the TTS route to
+ * ({line} = digits, {name} = a Python identifier, {got} = a number, True,
+ * False or None, {want} = an AURORA_WANT phrase). A door answer that is a
+ * string or list does not match, so the student cannot make AURORA's voice
+ * say arbitrary text; that card stays silent. Used by the TTS route to
  * allow on-demand rendering; every distinct filled text is its own voice file.
  */
 export function isAuroraDefault(text: string): boolean {
@@ -68,6 +86,7 @@ export function isAuroraDefault(text: string): boolean {
     if (t === text) return true
     if (!t.includes('{')) return false
     const re = t.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\{line\}/g, '\\d{1,5}').replace(/\{name\}/g, '[A-Za-z_][A-Za-z0-9_]{0,40}')
+      .replace(/\{got\}/g, '(?:-?\\d{1,12}(?:\\.\\d{1,6})?|True|False|None)').replace(/\{want\}/g, `(?:${Object.values(AURORA_WANT).join('|')})`)
     return new RegExp(`^${re}$`).test(text)
   })
 }

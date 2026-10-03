@@ -20,7 +20,8 @@
  * implemented yet — `sprites` would take 4 image URLs.
  *
  * Story layer: a fixed-height message bar under the world shows story events
- * (terminal read, chip picked up — these pause playback until Continue), the
+ * (terminal read, chip picked up, door code accepted when the level has
+ * `aurora.door.ok` — these pause playback until Continue), the
  * level result once the replay reaches the end, and otherwise the level's
  * `aurora.start` line. The result line comes from `auroraLine`
  * (src/lib/kara/aurora-defaults.ts): level `aurora.*` first, then the German
@@ -47,7 +48,7 @@ import { Check, ChevronLeft, ChevronRight, ListChecks, Loader2, Music, Pause, Pl
 import { cn } from '@/lib/utils'
 import { recordKaraResult } from '@/lib/kara/progress'
 import { playVoice, stopVoice, ttsLineUrl } from '@/lib/kara/voice'
-import { auroraLine, type KaraLintCode } from '@/lib/kara/aurora-defaults'
+import { AURORA_WANT, auroraLine, type KaraLintCode } from '@/lib/kara/aurora-defaults'
 import { playSfx } from '@/lib/kara/sfx'
 import { registerSoundSource, useMuted } from '@/lib/sound'
 import { DOOR, ITEM, LASER } from '@/lib/kara/world'
@@ -329,6 +330,7 @@ export function KaraPanel({ world, trace, maxTile, maxHeight, onLine, config, as
     if (to === from + 1) for (const [kind, i] of steps[to - 1]?.v ?? []) {
       if (kind === 'log' && config.logs[i]) out.push({ message: config.logs[i], title: 'Log' })
       if (kind === 'chip' && config.chips[i]) out.push({ message: config.chips[i], title: `Evidence: ${config.chips[i].title}` })
+      if (kind === 'door' && config.aurora['door.ok']) out.push({ message: config.aurora['door.ok'], title: 'Door code accepted' })
     }
     return out
   }, [trace, steps, config])
@@ -348,7 +350,8 @@ export function KaraPanel({ world, trace, maxTile, maxHeight, onLine, config, as
     }
     if (trace.error?.kind === 'loop') { const m = auroraLine(config, 'loop'); return m ? { message: m } : null }
     if (trace.error) {
-      const m = auroraLine(config, 'error', { sub: trace.error.sub ?? undefined, vars: { name: trace.error.name } })
+      const { sub, name, got, want } = trace.error
+      const m = auroraLine(config, 'error', { sub: sub ?? undefined, vars: { name, got, want: want && AURORA_WANT[want] } })
       return m ? { message: m } : null
     }
     if (!config.goals.length || !trace.goal) return null
@@ -378,10 +381,12 @@ export function KaraPanel({ world, trace, maxTile, maxHeight, onLine, config, as
         if ((before ^ after) & LASER) laser = true
         if ((before ^ after) & ITEM) barrel = true
       }
-      if (door || laser) playSfx('switch')
+      // A door opened by its code (event 'door') has no switch click.
+      const coded = step.v?.some(([kind]) => kind === 'door')
+      if ((door && !coded) || laser) playSfx('switch')
       if (door) playSfx('door')
       if (barrel) playSfx('barrel')
-      for (const [kind] of step.v ?? []) playSfx(kind === 'chip' ? 'chip' : 'log')
+      for (const [kind] of step.v ?? []) if (kind !== 'door') playSfx(kind === 'chip' ? 'chip' : 'log')
       if (a && b && (a.x !== b.x || a.y !== b.y)) playSfx('move')
       else if (a && b && a.d !== b.d) playSfx('turn')
     }
@@ -476,14 +481,14 @@ export function KaraPanel({ world, trace, maxTile, maxHeight, onLine, config, as
       const line = trace.error.line ?? last?.l
       // The failing line's own sensor calls stay visible next to the error.
       const sensors = last && last.l === line ? last.s : undefined
-      onLine(line || lintNotes ? { line: line ?? undefined, sensors, error: trace.error.message, via: last && last.l === line ? helperFrame(last) : undefined, lints: lintNotes } : null)
+      onLine(line || lintNotes ? { line: line ?? undefined, sensors, door: last && last.l === line ? last.q : undefined, error: trace.error.message, via: last && last.l === line ? helperFrame(last) : undefined, lints: lintNotes } : null)
     } else if (lintNotes && pos === 0) {
       onLine({ lints: lintNotes })
     } else if (pos === 0) {
       onLine(null)
     } else {
       const s = steps[pos - 1]
-      onLine({ line: s.l, sensors: s.s, via: helperFrame(s), lints: lintNotes })
+      onLine({ line: s.l, sensors: s.s, door: s.q, via: helperFrame(s), lints: lintNotes })
     }
   }, [pos, total, trace, steps, onLine, lints])
 

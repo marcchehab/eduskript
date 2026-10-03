@@ -36,6 +36,15 @@
  *   output: 7                             goal: the last printed line must equal this
  *   output: 10 | 7 | 13                   per variant, by index (one value = every variant;
  *                                         a variant without a value can never meet the goal)
+ *   door.ask: zaehle_faesser = 4 | 2 | 7   door code: a move() into a closed door first calls
+ *                                         the student's zaehle_faesser() (no arguments, traced,
+ *                                         costs energy); the door opens when the answer matches
+ *                                         this variant's value (by index like output; True/False
+ *                                         must be a bool, anything else compares as str()).
+ *                                         Wrong answer: error sub door_code; no such function:
+ *                                         door_missing. Repeatable: the i-th door in reading order
+ *                                         asks the i-th line (the last line covers the rest).
+ *                                         Every door of the level asks, also switch-closed ones.
  *   energy: N / memory: N                 limits for the 2nd/3rd star
  *   id: level-id                          key for saved progress (default: editor id)
  *   log: text | speaker=WEBER | audio=f.mp3        one per terminal, in reading order
@@ -45,17 +54,19 @@
  *                                         (several lines = a short dialogue, in order;
  *                                         speaker defaults to AURORA). Collapses to one
  *                                         line once the level is solved.
- *   aurora.<event>: text | audio=…        events: start, win, fail, error, loop
+ *   aurora.<event>: text | audio=…        events: start, win, fail, error, loop, door.ok
+ *                                         (door.ok = card when a door code was right; no default)
  *                                         (start = idle line in the bar under the world)
  *   aurora.error.<sub>: text              per error class, sub = wall, terminal, door,
  *                                         laser, box, acid, item, no_item, no_switch,
- *                                         no_terminal, name, module, indent, syntax,
- *                                         type, recursion, forbidden. Lookup: error.<sub> → error →
+ *                                         no_terminal, door_code, door_missing, name, module,
+ *                                         indent, syntax, type, recursion, forbidden. Lookup: error.<sub> → error →
  *                                         course default (aurora-defaults.ts auroraLine)
  *   aurora.lint.<code>: text              AURORA's comment on a static finding when the run
  *                                         does not win; code = bare_call, never_called,
  *                                         sensor_no_call, no_return. {line} and {name} are
- *                                         replaced (also in aurora.error.forbidden: {name})
+ *                                         replaced (also in aurora.error.forbidden: {name};
+ *                                         error.door_code: {name} {got} {want}; door_missing: {name})
  *   aurora.fail.3: text                   replaces aurora.fail from the 3rd failed run
  *                                         in a row (per page view, see kara-panel.tsx)
  *   music: file.mp3                       ambient loop (off until the student turns it on)
@@ -137,6 +148,8 @@ export interface KaraConfig {
    * applies to every variant; see karaOutput.
    */
   output?: string[]
+  /** `door.ask:` lines in order: function name + expected answer per variant (see karaDoorAsk). */
+  doorAsk: { fn: string; expected: string[] }[]
   energy?: number
   memory?: number
   /** Level briefing above the editor, in order (speaker always set, default AURORA). */
@@ -239,7 +252,7 @@ function evidence(value: string): KaraEvidence {
 }
 
 export function parseKaraConfig(src: string): KaraConfig {
-  const config: KaraConfig = { goals: [], intro: [], logs: [], chips: [], aurora: {}, generate: [] }
+  const config: KaraConfig = { goals: [], doorAsk: [], intro: [], logs: [], chips: [], aurora: {}, generate: [] }
   for (const raw of src.replace(/\r/g, '').split('\n')) {
     const m = raw.match(/^\s*([a-z][a-z0-9._]*)\s*:\s*(.*)$/i)
     if (!m) continue
@@ -249,6 +262,10 @@ export function parseKaraConfig(src: string): KaraConfig {
     else if (key === 'energy' || key === 'memory') { const n = parseInt(value, 10); if (n > 0) config[key] = n }
     else if (key === 'output') config.output = value.split('|').map(s => s.trim())
     else if (key === 'id') config.id = value
+    else if (key === 'door.ask') {
+      const m = value.match(/^([A-Za-z_]\w*)\s*(?:\(\s*\))?\s*=\s*(.+)$/)
+      if (m) config.doorAsk.push({ fn: m[1], expected: m[2].split('|').map(s => s.trim()) })
+    }
     else if (key === 'music') config.music = value
     else if (key === 'generate') config.generate.push(value)
     else if (key === 'place') { const m = value.match(/^(\S)\s+far$/); if (m) config.place = m[1] }
@@ -288,9 +305,18 @@ export function karaOutput(config: KaraConfig, v: number): string | undefined {
   return out.length === 1 ? out[0] : out[v]
 }
 
+/**
+ * Door codes for variant `v`: [function, expected] per `door.ask:` line.
+ * One value = all variants, else by index; null when a line has no value for
+ * `v` (that door can never open, check.ts then reports a door_code error).
+ */
+export function karaDoorAsk(config: KaraConfig, v: number): [string, string | null][] {
+  return config.doorAsk.map(({ fn, expected }) => [fn, (expected.length === 1 ? expected[0] : expected[v]) ?? null])
+}
+
 /** The JSON the Python `_run` reads (`__kara_world.json`) for variant `v`. Used by the editor and check.ts. */
-export function karaRunInput(level: KaraLevel, v: number): KaraWorld & { goals: KaraGoal[]; output?: string } {
-  return { ...level.variants[v], goals: level.config.goals, output: karaOutput(level.config, v) }
+export function karaRunInput(level: KaraLevel, v: number): KaraWorld & { goals: KaraGoal[]; output?: string; door_ask: [string, string | null][] } {
+  return { ...level.variants[v], goals: level.config.goals, output: karaOutput(level.config, v), door_ask: karaDoorAsk(level.config, v) }
 }
 
 /** Every spoken line of a level: intro, logs, chips and AURORA events. */
@@ -319,8 +345,8 @@ export function karaSpeakers(level: KaraLevel): string[] {
 /** [x, y, before, after] — one cell change. */
 export type KaraMutation = [number, number, number, number]
 
-/** ['log', terminal index] | ['chip', chip index] */
-export type KaraEvent = ['log' | 'chip', number]
+/** ['log', terminal index] | ['chip', chip index] | ['door', door index] (door code accepted) */
+export type KaraEvent = ['log' | 'chip' | 'door', number]
 
 export interface KaraStep {
   /** Student-code line that was executed in this step (1-based). */
@@ -331,6 +357,8 @@ export interface KaraStep {
   m?: KaraMutation[]
   /** Sensor calls during the step: [name, result]. */
   s?: [string, boolean][]
+  /** Door code asked on this step: [function, repr(answer), answer accepted]. */
+  q?: [string, string, boolean]
   /** Printed text during the step. */
   o?: string
   /** Story events during the step. */
@@ -365,8 +393,12 @@ export interface KaraTrace {
     kind?: 'loop' | 'kara' | 'python'
     /** Error class for AURORA's comment (null/absent: unclassified, e.g. ValueError). */
     sub?: KaraErrorSub | null
-    /** Forbidden name (sub 'forbidden'), e.g. 'exec'; missing module (sub 'module'), e.g. 'befehle'. */
+    /** Forbidden name (sub 'forbidden'), e.g. 'exec'; missing module (sub 'module'), e.g. 'befehle'; door function (door_code / door_missing). */
     name?: string
+    /** door_code: repr of the wrong answer, e.g. 'None' (cut to 40 chars). */
+    got?: string
+    /** door_code: what kind of answer the door expected. */
+    want?: KaraDoorWant
   } | null
   /** Static checks of the student's code (kara-module.ts `_lint`), sorted by line. */
   lints?: KaraLint[]
@@ -377,6 +409,8 @@ export interface KaraTrace {
   /** Statements in the student's program (Python AST). */
   memory: number
 }
+
+export type KaraDoorWant = 'bool' | 'number' | 'text'
 
 /** Stars: 1 = goal reached, +1 memory within limit, +1 energy within limit (no limit = star). */
 export function karaStars(trace: KaraTrace, config: KaraConfig): number {

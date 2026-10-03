@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { AURORA_DEFAULTS, auroraLine, isAuroraDefault } from '@/lib/kara/aurora-defaults'
+import { AURORA_DEFAULTS, AURORA_WANT, auroraLine, isAuroraDefault } from '@/lib/kara/aurora-defaults'
 import { unified } from 'unified'
 import remarkParse from 'remark-parse'
 import remarkCodeEditor from '@/lib/remark-plugins/code-editor'
 import {
-  parseKaraConfig, karaOutput, karaRunInput, karaSuiteStars,
+  parseKaraConfig, karaOutput, karaRunInput, karaSuiteStars, karaDoorAsk,
   parseKaraWorld, parseKaraLevel, buildReplay, seekCells, karaStars, karaAssetNames, karaSpeakers, karaMessages,
   BLOCK, ITEM, BOX, CHIP, DOOR, LASER, ACID, EXIT, SWITCH, TARGET, TERMINAL, type KaraTrace,
 } from '@/lib/kara/world'
@@ -232,5 +232,29 @@ memory: 4`)
     expect(karaSuiteStars([t(3), t(3, false)], level.config)).toBe(0)
     expect(karaSuiteStars([t(3), null], level.config)).toBe(0)
     expect(karaSuiteStars([], level.config)).toBe(0)
+  })
+})
+
+describe('door.ask', () => {
+  it('parses function = values (optional parentheses), repeatable, per variant', () => {
+    const c = parseKaraConfig('door.ask: zaehle_faesser = 4 | 2 | 7\ndoor.ask: wand_hinten() = True\ndoor.ask: kaputt')
+    expect(c.doorAsk).toEqual([{ fn: 'zaehle_faesser', expected: ['4', '2', '7'] }, { fn: 'wand_hinten', expected: ['True'] }])
+    expect(karaDoorAsk(c, 1)).toEqual([['zaehle_faesser', '2'], ['wand_hinten', 'True']])
+    expect(karaDoorAsk(c, 3)).toEqual([['zaehle_faesser', null], ['wand_hinten', 'True']])
+    expect(c.aurora).toEqual({})
+    expect(karaRunInput(parseKaraLevel('>D.'), 0).door_ask).toEqual([])
+  })
+
+  it('AURORA names the function, the answer and the expected kind; voice only for plain answers', () => {
+    const vars = { name: 'zaehle_faesser', got: 'None', want: AURORA_WANT.number }
+    const line = auroraLine(parseKaraConfig(''), 'error', { sub: 'door_code', vars })?.text
+    expect(line).toBe('Die Tür hat zaehle_faesser() gefragt. Antwort: None. Erwartet war eine Zahl.')
+    expect(isAuroraDefault(line!)).toBe(true)
+    expect(isAuroraDefault('Die Tür hat wand() gefragt. Antwort: 1. Erwartet war True oder False.')).toBe(true)
+    expect(isAuroraDefault("Die Tür hat f() gefragt. Antwort: 'Hallo Welt'. Erwartet war eine Zahl.")).toBe(false)
+    expect(auroraLine(parseKaraConfig(''), 'error', { sub: 'door_missing', vars: { name: 'f' } })?.text)
+      .toBe('Die Tür fragt nach f(). Diese Funktion gibt es nicht. Noch nicht.')
+    expect(auroraLine(parseKaraConfig(''), 'door.ok')).toBeUndefined()
+    expect(auroraLine(parseKaraConfig('aurora.door.ok: Korrekt. Leider.'), 'door.ok')?.text).toBe('Korrekt. Leider.')
   })
 })

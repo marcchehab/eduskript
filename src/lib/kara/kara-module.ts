@@ -34,6 +34,20 @@
  * started as a door/laser, tracked with two high bits that are stripped from
  * the returned mutations.
  *
+ * Door codes (`door_ask` in the world JSON, from `door.ask:` in world.ts): a
+ * move() into a closed door first calls the student's function the door asks
+ * (`_ask_door`: no arguments, looked up in the student's namespace only, so a
+ * befehle.py function needs `from befehle import ...`; `import befehle` alone
+ * does not count). The call runs like any other code: its lines are traced,
+ * its actions cost energy and move MOP-7. Afterwards one step on the move()
+ * line carries `q = [function, repr(answer), ok]`; a right answer opens that
+ * door (mutation + event 'door'), the next step is the move itself, starting
+ * from wherever the function left MOP-7. A wrong answer raises KaraError
+ * 'door_code' (error gets name/got/want), a missing function 'door_missing'.
+ * Doors are numbered in reading order (cells that started as 'D' or 'd');
+ * door i asks door_ask[min(i, len - 1)]. While a door function runs, a move
+ * into another closed door is the plain 'door' error (no nested asking).
+ *
  * Errors: `error.kind` is 'kara' (KaraError: MOP-7 refused an action),
  * 'loop' (StepLimitError) or 'python'; `error.sub` classifies it further
  * (KaraError.code, or the Python exception type via `_error_sub`) so AURORA
@@ -48,7 +62,7 @@
  * test or operand of and/or/not: always truthy), `no_return` (a student def
  * that prints but never returns a value, called in a condition or comparison),
  * `never_called` (a top-level def whose name is never loaded outside its own
- * body). "Student function" = a def anywhere in the file or a name from
+ * body and that no door.ask names). "Student function" = a def anywhere in the file or a name from
  * `from x import name`; `from befehle import *` names are unknown here, so
  * `if drei_vor:` after a star import is not caught.
  *
@@ -85,9 +99,10 @@ _STUDENT = '<student>'
 
 class KaraError(Exception):
     """MOP-7 refused an action; code becomes error['sub'] (wall, door, ...)."""
-    def __init__(self, message='', code=None):
+    def __init__(self, message='', code=None, **extra):
         super().__init__(message)
         self.code = code
+        self.extra = extra  # merged into error (door codes: name, got, want)
 
 
 class StepLimitError(Exception):
@@ -177,7 +192,12 @@ def _act():
 # ─── Actions ─────────────────────────────────────────────
 
 def move():
-    """Move one cell forward. A box in front is pushed; chips are picked up."""
+    """Move one cell forward. A box in front is pushed; chips are picked up.
+    A closed door in a level with door codes asks its function first."""
+    if _door_ask and not _asking:
+        nx, ny = _w.ahead(_w.x, _w.y, _w.d)
+        if _w.get(nx, ny) & DOOR:
+            _ask_door(nx, ny)
     _act()
     nx, ny = _w.ahead(_w.x, _w.y, _w.d)
     cell = _w.get(nx, ny)
@@ -205,6 +225,59 @@ def move():
         _w.set(nx, ny, cell & ~CHIP)
         if (nx, ny) in _w.chips:
             _event('chip', _w.chips.index((nx, ny)))
+
+
+_door_ask = []   # [[function name, expected str or None], ...] per door, reading order
+_asking = False  # True while a door function runs (no nested door asking)
+_ns = {}         # the student's namespace (door functions are looked up here)
+
+
+def _door_want(expected):
+    """What kind of answer a door expects: 'bool', 'number', 'text' (for AURORA)."""
+    if expected in ('True', 'False'):
+        return 'bool'
+    try:
+        float(expected)
+        return 'number'
+    except (TypeError, ValueError):
+        return 'text'
+
+
+def _door_ok(got, expected):
+    if expected is None:
+        return False
+    if expected in ('True', 'False'):
+        return isinstance(got, bool) and got == (expected == 'True')
+    return str(got) == expected
+
+
+def _ask_door(x, y):
+    """Call the function the door at (x, y) asks; open it or raise (see header)."""
+    global _asking
+    doors = [i for i, c in enumerate(_w.cells) if c & _DOORS]
+    i = doors.index(y * _w.cols + x)
+    fn, expected = _door_ask[min(i, len(_door_ask) - 1)]
+    line = _cur_step()['l']
+    f = _ns.get(fn)
+    if f is None:
+        raise KaraError(f"The door asks {fn}(), but there is no such function.", 'door_missing', name=fn)
+    _asking = True
+    try:
+        got = f()
+    finally:
+        _asking = False
+    ok = _door_ok(got, expected)
+    answer = repr(got)
+    if len(answer) > 40:
+        answer = answer[:39] + '…'
+    _open_step(line)
+    _cur['q'] = [fn, answer, ok]
+    if not ok:
+        raise KaraError(f"The door asked {fn}() and got {answer}.", 'door_code',
+                        name=fn, got=answer, want=_door_want(expected))
+    _w.set(x, y, _w.get(x, y) & ~DOOR)
+    _event('door', i)
+    _open_step(line)
 
 
 def turn_left():
@@ -519,8 +592,10 @@ def _lint(tree):
                 silent[name] = _no_return(defs[name])
             if silent[name]:
                 add(t, 'no_return', name)
+    asked = {fn for fn, _ in _door_ask}  # a door calls these (door.ask): not "never called"
     for top in tree.body:
-        if isinstance(top, (_ast.FunctionDef, _ast.AsyncFunctionDef)) and not refs.get(top.name, set()) - {top.name}:
+        if (isinstance(top, (_ast.FunctionDef, _ast.AsyncFunctionDef)) and top.name not in asked
+                and not refs.get(top.name, set()) - {top.name}):
             add(top, 'never_called', top.name)
     lints = [{'line': line, 'code': code, 'name': name} for line, code, name in found]
     lints.sort(key=lambda d: d['line'])
@@ -528,10 +603,12 @@ def _lint(tree):
 
 
 def _run(student_path='__kara_student.py', world_path='__kara_world.json'):
-    global _w, _steps, _cur, _expected_output
+    global _w, _steps, _cur, _expected_output, _door_ask, _asking, _ns
     with open(world_path) as f:
         data = _json.load(f)
     _expected_output = data.get('output')
+    _door_ask = data.get('door_ask') or []
+    _asking = False
     _w = _World(data)
     # Remember door / laser cells (static masks, stripped from the result).
     for i, c in enumerate(_w.cells):
@@ -545,6 +622,7 @@ def _run(student_path='__kara_student.py', world_path='__kara_world.json'):
     _cur = None
     ns = {'__name__': '__main__', 'kara': _sys.modules[__name__]}
     ns.update({name: globals()[name] for name in __all__})
+    _ns = ns
     # Also as builtins, so helper files (e.g. a skript-wide befehle.py) can use
     # move() etc. without 'from kara import *', like print().
     import builtins as _builtins
@@ -582,7 +660,7 @@ def _run(student_path='__kara_student.py', world_path='__kara_world.json'):
     except StepLimitError as e:
         error = {'line': _error_line(e), 'message': f'{type(e).__name__}: {e}', 'kind': 'loop'}
     except KaraError as e:
-        error = {'line': _error_line(e), 'message': f'{type(e).__name__}: {e}', 'kind': 'kara', 'sub': e.code}
+        error = {'line': _error_line(e), 'message': f'{type(e).__name__}: {e}', 'kind': 'kara', 'sub': e.code, **e.extra}
     except Exception as e:
         error = {'line': _error_line(e), 'message': f'{type(e).__name__}: {e}', 'kind': 'python', 'sub': _error_sub(e)}
         if isinstance(e, ModuleNotFoundError) and e.name:

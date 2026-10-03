@@ -1,7 +1,8 @@
 /**
  * Marks the line of the current Kara replay step in CodeMirror and shows the
  * step's helper frame (an action inside e.g. befehle.py: '↳ drei_vor() ·
- * befehle.py:3'), sensor results and error message inline at the end of that line.
+ * befehle.py:3'), sensor results, a door-code answer ('door: zaehle_faesser() → 4')
+ * and error message inline at the end of that line.
  * Static findings (lints) get a violet tint and a chip on their own lines.
  * Driven by KaraPanel via `setKaraLine`; any document edit clears it (the
  * trace no longer matches the code).
@@ -20,6 +21,8 @@ export interface KaraLineTarget {
   line?: number
   /** Sensor calls made while this line ran: [name, result]. */
   sensors?: [string, boolean][]
+  /** Door code asked on this step: [function, repr(answer), accepted] (KaraStep.q). */
+  door?: [string, string, boolean]
   /** Set on the error step (last position of a run that raised). */
   error?: string
   /** Helper frame the step's action ran in, e.g. 'drei_vor() · befehle.py:3'. */
@@ -58,10 +61,16 @@ class KaraLintWidget extends WidgetType {
 }
 
 class KaraNotesWidget extends WidgetType {
-  constructor(readonly sensors: [string, boolean][], readonly error: string | undefined, readonly via: string | undefined) { super() }
+  constructor(
+    readonly sensors: [string, boolean][],
+    readonly error: string | undefined,
+    readonly via: string | undefined,
+    readonly door: [string, string, boolean] | undefined,
+  ) { super() }
 
   eq(other: KaraNotesWidget) {
-    return other.error === this.error && other.via === this.via && JSON.stringify(other.sensors) === JSON.stringify(this.sensors)
+    return other.error === this.error && other.via === this.via
+      && JSON.stringify(other.sensors) === JSON.stringify(this.sensors) && JSON.stringify(other.door) === JSON.stringify(this.door)
   }
 
   toDOM() {
@@ -78,6 +87,14 @@ class KaraNotesWidget extends WidgetType {
       const chip = document.createElement('span')
       chip.className = result ? 'cm-kara-note cm-kara-note-true' : 'cm-kara-note cm-kara-note-false'
       chip.textContent = `${name}() → ${result ? 'True' : 'False'}`
+      wrap.appendChild(chip)
+    }
+    if (this.door) {
+      const [name, answer, ok] = this.door
+      const chip = document.createElement('span')
+      chip.className = ok ? 'cm-kara-note cm-kara-note-true' : 'cm-kara-note cm-kara-note-door-wrong'
+      chip.textContent = `door: ${name}() → ${answer} ${ok ? '✓' : '✗'}`
+      chip.title = ok ? 'The door asked this function and accepted the answer' : 'The door asked this function and rejected the answer'
       wrap.appendChild(chip)
     }
     if (this.error) {
@@ -104,8 +121,8 @@ const karaLineField = StateField.define<DecorationSet>({
       if (t.line && t.line >= 1 && t.line <= doc.lines) {
         const line = doc.line(t.line)
         ranges.push((t.error ? errorLine : stepLine).range(line.from))
-        if (t.sensors?.length || t.error || t.via) {
-          ranges.push(Decoration.widget({ widget: new KaraNotesWidget(t.sensors ?? [], t.error, t.via), side: 1 }).range(line.to))
+        if (t.sensors?.length || t.error || t.via || t.door) {
+          ranges.push(Decoration.widget({ widget: new KaraNotesWidget(t.sensors ?? [], t.error, t.via, t.door), side: 1 }).range(line.to))
         }
       }
       // Lint notes grouped per line; the lint tint only where no step/error tint is.
@@ -136,6 +153,8 @@ const karaLineTheme = EditorView.baseTheme({
   '&dark .cm-kara-note-true': { backgroundColor: 'rgba(20, 83, 45, 0.6)', color: '#86efac' },
   '&light .cm-kara-note-false': { backgroundColor: '#e2e8f0', color: '#334155' },
   '&dark .cm-kara-note-false': { backgroundColor: '#1e293b', color: '#cbd5e1' },
+  '&light .cm-kara-note-door-wrong': { backgroundColor: '#fee2e2', color: '#991b1b' },
+  '&dark .cm-kara-note-door-wrong': { backgroundColor: 'rgba(127, 29, 29, 0.5)', color: '#fca5a5' },
   '.cm-kara-note-via': { fontFamily: 'sans-serif', fontStyle: 'italic' },
   '&light .cm-kara-note-via': { color: '#92400e', backgroundColor: 'rgba(250, 204, 21, 0.25)' },
   '&dark .cm-kara-note-via': { color: '#fcd34d', backgroundColor: 'rgba(250, 204, 21, 0.12)' },

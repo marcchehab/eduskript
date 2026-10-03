@@ -9,7 +9,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import { KARA_MODULE_SOURCE } from '@/lib/kara/kara-module'
-import { parseKaraWorld, parseKaraLevel, buildReplay, karaRunInput, karaStars, karaSuiteStars, type KaraTrace } from '@/lib/kara/world'
+import { parseKaraWorld, parseKaraLevel, buildReplay, karaRunInput, karaStars, karaSuiteStars, DOOR, type KaraTrace } from '@/lib/kara/world'
 
 const hasPython = (() => {
   try { execFileSync('python3', ['--version']); return true } catch { return false }
@@ -226,5 +226,94 @@ output: 2 | 1 | 4`)
   it('a variant without an expected output never meets the output goal', () => {
     const t = run('print("")\n', { ...level.variants[0], goals: ['output'] })
     expect(t.goal).toEqual({ reached: false, missing: ['output'] })
+  })
+})
+
+describe.skipIf(!hasPython)('door codes (door.ask)', () => {
+  beforeAll(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kara-door-test-'))
+    fs.writeFileSync(path.join(dir, 'kara.py'), KARA_MODULE_SOURCE)
+    fs.writeFileSync(path.join(dir, 'befehle.py'), 'def antwort():\n    return 4\n')
+  })
+  afterAll(() => fs.rmSync(dir, { recursive: true, force: true }))
+
+  // MOP-7 two cells west of the door; the exit is behind it.
+  const level = parseKaraLevel(`#>.D.E#
+===
+#>.D.E#
+---
+goal: exit
+door.ask: antwort = 4 | 7`)
+  const at = (v: number) => karaRunInput(level, v)
+  const walk = 'while not on_exit():\n    move()\n'
+
+  it('passes the per-variant expected answer to the runner', () => {
+    expect(at(0).door_ask).toEqual([['antwort', '4']])
+    expect(at(1).door_ask).toEqual([['antwort', '7']])
+  })
+
+  it('a right answer opens the door: one step with the answer, then the move', () => {
+    const t = run(`def antwort():\n    return 4\n\n${walk}`, at(0))
+    expect(t.error).toBeNull()
+    expect(t.goal?.reached).toBe(true)
+    const i = t.steps.findIndex(s => s.q)
+    expect(t.steps[i]).toMatchObject({ l: 5, q: ['antwort', '4', true], v: [['door', 0]] })
+    expect(t.steps[i].m).toEqual([[3, 0, DOOR, 0]])
+    expect(t.steps[i].k).toBeUndefined()
+    expect(t.steps[i + 1]).toMatchObject({ l: 5, k: [3, 0, 1] })
+    expect(t.steps.filter(s => s.q)).toHaveLength(1) // the open door does not ask again
+    expect(t.energy).toBe(4)
+    expect(t.lints).toEqual([]) // only the door calls antwort(): not never_called
+    expect(run('def antwort():\n    return 4\n', { ...level.variants[0], goals: [] }).lints?.[0]?.code).toBe('never_called')
+  })
+
+  it('the same hardcoded answer fails in the other world (door_code with got/want)', () => {
+    const t = run(`def antwort():\n    return 4\n\n${walk}`, at(1))
+    expect(t.error).toMatchObject({ kind: 'kara', sub: 'door_code', name: 'antwort', got: '4', want: 'number', line: 5 })
+    expect(t.steps.at(-1)).toMatchObject({ l: 5, q: ['antwort', '4', false] })
+  })
+
+  it('print instead of return answers None', () => {
+    const t = run(`def antwort():\n    print(7)\n\n${walk}`, at(1))
+    expect(t.error).toMatchObject({ sub: 'door_code', got: 'None', want: 'number' })
+    expect(t.steps.some(s => s.o === '7\n' && s.l === 2)).toBe(true) // the function body was traced
+  })
+
+  it('a missing function is door_missing', () => {
+    const t = run(walk, at(0))
+    expect(t.error).toMatchObject({ kind: 'kara', sub: 'door_missing', name: 'antwort', line: 2 })
+    expect(t.energy).toBe(1) // the refused move costs nothing
+  })
+
+  it('finds a function imported from befehle.py', () => {
+    const t = run(`from befehle import antwort\n${walk}`, at(0))
+    expect(t.goal?.reached).toBe(true)
+  })
+
+  it('actions inside the function cost energy and their side effects stay', () => {
+    // Turns around and does not turn back: the door opens, the move goes west.
+    const t = run('def antwort():\n    turn_left()\n    turn_left()\n    return 4\n\nmove()\nmove()\n', at(0))
+    expect(t.error).toBeNull()
+    expect(t.energy).toBe(4)
+    expect(t.steps.at(-1)?.k).toEqual([1, 0, 3])
+    expect(t.steps.filter(s => s.l === 2 || s.l === 3).map(s => s.k?.[2])).toEqual([0, 3])
+  })
+
+  it('True/False must be a bool; a door function moving into another door is the plain door error', () => {
+    const bool = parseKaraLevel('#>D.E#\n---\ngoal: exit\ndoor.ask: wand = True')
+    expect(run(`def wand():\n    return 1\n\n${walk}`, karaRunInput(bool, 0)).error).toMatchObject({ sub: 'door_code', got: '1', want: 'bool' })
+    expect(run(`def wand():\n    return wall_front() or True\n\n${walk}`, karaRunInput(bool, 0)).goal?.reached).toBe(true)
+    expect(run(`def wand():\n    move()\n    return True\n\n${walk}`, karaRunInput(bool, 0)).error).toMatchObject({ sub: 'door', line: 2 })
+  })
+
+  it('several doors ask the door.ask lines in reading order; the last line covers the rest', () => {
+    const two = parseKaraLevel('#>D.D.D.E#\n---\ngoal: exit\ndoor.ask: eins = 1\ndoor.ask: zwei = 2')
+    const t = run(`def eins():\n    return 1\n\ndef zwei():\n    return 2\n\n${walk}`, karaRunInput(two, 0))
+    expect(t.goal?.reached).toBe(true)
+    expect(t.steps.filter(s => s.q).map(s => s.q)).toEqual([['eins', '1', true], ['zwei', '2', true], ['zwei', '2', true]])
+  })
+
+  it('a level without door.ask keeps the closed-door error', () => {
+    expect(run(walk, karaRunInput(parseKaraLevel('#>D.E#\n---\ngoal: exit'), 0)).error?.sub).toBe('door')
   })
 })
