@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   moveLocalToImports, upsertImportFile, parseToolboxName, isToolboxModuleError, toolboxModule,
+  withToolboxDefault, TOOLBOX_DEFAULT_CONTENT,
 } from '@/components/public/code-editor/file-scopes'
 
 describe('moveLocalToImports', () => {
@@ -51,5 +52,16 @@ describe('toolbox helpers', () => {
     expect(isToolboxModuleError({ message: "No module named 'befehle2'" }, 'befehle.py')).toBe(false)
     expect(isToolboxModuleError({ message: "No module named 'befehle'" }, undefined)).toBe(false)
     expect(isToolboxModuleError(null, 'befehle.py')).toBe(false)
+  })
+})
+
+// Regression (MOP-7 playtest W3): fresh profile, `from befehle import *` raised
+// ModuleNotFoundError because the toolbox file only exists after a first edit.
+describe('withToolboxDefault', () => {
+  it('adds the default toolbox file only when it is missing', () => {
+    expect(withToolboxDefault([], 'befehle.py')).toEqual([{ name: 'befehle.py', content: TOOLBOX_DEFAULT_CONTENT }])
+    const own = [{ name: 'befehle.py', content: 'def x():\n    move()\n' }]
+    expect(withToolboxDefault(own, 'befehle.py')).toBe(own)
+    expect(withToolboxDefault([], undefined)).toEqual([])
   })
 })

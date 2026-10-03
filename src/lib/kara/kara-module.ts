@@ -787,6 +787,23 @@ def _global_trace(frame, event, arg):
     return None
 
 
+def _helper_error(exc):
+    """(file, line) of the innermost traceback frame when it is in an imported
+    helper (befehle.py), not in the student file or this module; else None."""
+    last = None
+    tb = exc.__traceback__
+    while tb is not None:
+        last = tb
+        tb = tb.tb_next
+    if last is None:
+        return None
+    fn = last.tb_frame.f_code.co_filename
+    base = fn.replace(chr(92), '/').rsplit('/', 1)[-1]
+    if fn == _STUDENT or fn.startswith('<') or base == 'kara.py' or not base.endswith('.py'):
+        return None
+    return base, last.tb_lineno
+
+
 def _error_line(exc):
     line = None
     tb = exc.__traceback__
@@ -1144,6 +1161,12 @@ def _run(student_path='__kara_student.py', world_path='__kara_world.json'):
         error = {'line': _error_line(e), 'message': f'{type(e).__name__}: {e}', 'kind': 'kara', 'sub': e.code, **e.extra}
     except Exception as e:
         error = {'line': _error_line(e), 'message': f'{type(e).__name__}: {e}', 'kind': 'python', 'sub': _error_sub(e)}
+        helper = _helper_error(e) if isinstance(e, NameError) else None
+        if helper:
+            # NameError inside befehle.py (e.g. a helper calls umdrehen() that
+            # was never defined): open that tab on the line, not the import.
+            error.update({'sub': 'toolbox_name', 'f': helper[0], 'fl': helper[1],
+                          'message': f'NameError in {helper[0]}, line {helper[1]}: {e}'})
         if isinstance(e, ModuleNotFoundError) and e.name:
             # The editor flashes its toolbox tab when this is the toolbox module.
             error['name'] = e.name

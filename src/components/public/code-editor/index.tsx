@@ -63,7 +63,7 @@ import { PythonProgressBar } from './python-progress-bar'
 import { PythonTestResults } from './python-test-results'
 import { useCoupledVideo, parseTimecode } from '@/components/markdown/coupled-video-context'
 import type { PythonCheckResult } from './types'
-import { moveLocalToImports, upsertImportFile, isToolboxModuleError, TOOLBOX_DEFAULT_CONTENT } from './file-scopes'
+import { moveLocalToImports, upsertImportFile, isToolboxModuleError, withToolboxDefault, TOOLBOX_DEFAULT_CONTENT } from './file-scopes'
 import { deferUntilIdle } from '@/lib/defer-until-idle'
 import { safeRandomUUID } from '@/lib/uuid'
 import {
@@ -3635,7 +3635,7 @@ export const CodeEditor = memo(function CodeEditor({
 
     // Collect text aux files (local extras + skript + global imports).
     const localFiles = filesRef.current
-    const importFiles = [...(skriptImportsRef.current?.files || []), ...(globalImportsRef.current?.files || [])]
+    const importFiles = [...withToolboxDefault(skriptImportsRef.current?.files || [], toolboxName), ...(globalImportsRef.current?.files || [])]
     const textFiles = [...(localFiles.length > 1 ? localFiles : []), ...importFiles]
 
     // Collect binary aux files. Precedence: editor → skript → global → teacher.
@@ -3817,7 +3817,7 @@ export const CodeEditor = memo(function CodeEditor({
   }
   const runKaraInput = async (code: string, input: object, signal: AbortSignal): Promise<KaraTrace | null> => {
     const localFiles = filesRef.current
-    const importFiles = [...(skriptImportsRef.current?.files || []), ...(globalImportsRef.current?.files || [])]
+    const importFiles = [...withToolboxDefault(skriptImportsRef.current?.files || [], toolboxName), ...(globalImportsRef.current?.files || [])]
     const textFiles = [
       ...(localFiles.length > 1 ? localFiles : []),
       ...importFiles,
@@ -3939,7 +3939,7 @@ export const CodeEditor = memo(function CodeEditor({
 
     // Collect auxiliary files
     const localFiles = filesRef.current
-    const importFiles = [...(skriptImportsRef.current?.files || []), ...(globalImportsRef.current?.files || [])]
+    const importFiles = [...withToolboxDefault(skriptImportsRef.current?.files || [], toolboxName), ...(globalImportsRef.current?.files || [])]
     const allAuxFiles = [...(localFiles.length > 1 ? localFiles : []), ...importFiles]
 
     // Stop button + hard timeout terminate the worker; the worker module

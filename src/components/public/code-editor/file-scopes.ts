@@ -51,6 +51,17 @@ export function isToolboxModuleError(
 }
 
 /** Replace the content of `name` in an import store, appending the file when it does not exist yet. */
+/**
+ * Skript import files for a run, plus the toolbox's default content when the
+ * toolbox file was never edited (it is only created on first edit). Without
+ * this, `from befehle import *` fails with ModuleNotFoundError for anyone
+ * with a fresh profile, even after opening the (placeholder) tab.
+ */
+export function withToolboxDefault(files: PythonFile[], toolbox: string | undefined): PythonFile[] {
+  if (!toolbox || files.some(f => f.name === toolbox)) return files
+  return [...files, { name: toolbox, content: TOOLBOX_DEFAULT_CONTENT }]
+}
+
 export function upsertImportFile(files: PythonFile[], name: string, content: string): PythonFile[] {
   return files.some(f => f.name === name)
     ? files.map(f => (f.name === name ? { ...f, content } : f))

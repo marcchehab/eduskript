@@ -20,6 +20,8 @@ export type KaraErrorSub =
   | 'name' | 'module' | 'indent' | 'syntax' | 'type' | 'recursion'
   // syntax / indentation error inside an imported helper (befehle.py)
   | 'toolbox_syntax' | 'toolbox_indent'
+  // NameError raised inside befehle.py (a helper uses a name nobody defined)
+  | 'toolbox_name'
   // run refused before it started (kara-module.ts _lint: exec, eval, ...;
   // kara._w & co.; a loop the level locks with `forbid:`)
   | 'forbidden' | 'tamper' | 'locked'
@@ -50,6 +52,7 @@ export const AURORA_DEFAULTS: Record<string, string> = {
   'error.syntax': 'Python versteht diese Zeile nicht. Klammern, Doppelpunkt, Anführungszeichen: eines fehlt meistens.',
   'error.toolbox_syntax': 'Der Fehler steckt in der Werkzeugkiste, nicht in main.py. Ich habe den Tab befehle.py geöffnet, die Zeile ist markiert. Klammern, Doppelpunkt: eines fehlt meistens.',
   'error.toolbox_indent': 'Der Fehler steckt in der Werkzeugkiste, nicht in main.py. Ich habe den Tab befehle.py geöffnet, die Zeile ist markiert. Unter jeder Zeile mit Doppelpunkt rückt der Körper eine Stufe ein.',
+  'error.toolbox_name': 'Der Fehler steckt in der Werkzeugkiste, nicht in main.py. Ich habe den Tab befehle.py geöffnet: Eine Funktion dort benutzt einen Namen, den Python nicht kennt. Steht dieser Befehl auch in der Kiste, genau so geschrieben?',
   'error.type': 'Falsche Anzahl oder Art von Argumenten. Vergleichen Sie den Aufruf mit der def-Zeile.',
   'error.recursion': 'Rekursion ohne Abbruch. Wie mein Kundendienst.',
   'error.forbidden': '{name}? Mikroweich nennt das Lizenzverletzung. Schreiben Sie es aus.',

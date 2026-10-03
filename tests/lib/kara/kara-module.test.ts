@@ -229,6 +229,19 @@ describe.skipIf(!hasPython)('kara.py lints', () => {
     expect(run('move(\n').error).toMatchObject({ sub: 'syntax' })
   })
 
+  it('a NameError raised inside befehle.py opens its tab on that line', () => {
+    fs.writeFileSync(path.join(dir, 'befehle.py'), 'def nische():\n    turn_left()\n    umdrehen()\n')
+    try {
+      const t = run('from befehle import *\nnische()\n')
+      expect(t.error).toMatchObject({ line: 2, sub: 'toolbox_name', f: 'befehle.py', fl: 3 })
+      expect(t.error?.message).toContain('befehle.py, line 3')
+    } finally {
+      fs.writeFileSync(path.join(dir, 'befehle.py'), BEFEHLE)
+    }
+    // the student's own NameError keeps the plain sub
+    expect(run('umdrehen()\n').error).toMatchObject({ sub: 'name', line: 1 })
+  })
+
   it('tamper and locked loops refuse the run', () => {
     const t = run('kara._w.x = 5\nmove()\n')
     expect(t.error).toMatchObject({ kind: 'python', sub: 'tamper', name: '_w', line: 1 })

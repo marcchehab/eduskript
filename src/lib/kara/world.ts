@@ -83,7 +83,8 @@
  *                                         indent, syntax, type, recursion, forbidden, tamper
  *                                         (attribute starting with _, e.g. kara._w), locked
  *                                         (a loop the level forbids), toolbox_syntax / toolbox_indent
- *                                         (that error inside befehle.py; the editor opens its tab).
+ *                                         (that error inside befehle.py; the editor opens its tab),
+ *                                         toolbox_name (NameError raised inside befehle.py; same).
  *                                         Lookup: error.<sub> → error →
  *                                         course default (aurora-defaults.ts auroraLine)
  *   aurora.lint.<code>: text              AURORA's comment on a static finding when the run

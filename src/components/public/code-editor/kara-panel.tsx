@@ -13,7 +13,7 @@
  * toolbox call like `drei_vor()`) replays as several steps on the same line
  * (step over; see kara-module.ts). The status shows `line 5 · 2/3`, and the
  * editor note names the helper frame (`drei_vor() · befehle.py:3`). A
- * «Step over / Step into» toggle (shown when an action ran in a helper file,
+ * «Step into» toggle (pressed = into; shown when an action ran in a helper file,
  * or the level sets `debug:`) switches the target: into = the editor jumps to
  * the helper tab and marks the action's line there (karaStepTarget). The
  * status adds `depth N` (KaraStep.d) once the run called any function.
@@ -67,7 +67,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Check, ChevronLeft, ChevronRight, CornerDownRight, ListChecks, Loader2, Music, Pause, Play, Rocket, SkipBack, SkipForward, Star, StepBack, StepForward, Redo2, Undo2, X } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, CornerDownRight, ListChecks, Loader2, Music, Pause, Play, Rocket, SkipBack, SkipForward, Star, StepBack, StepForward, Undo2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { recordKaraResult } from '@/lib/kara/progress'
 import { playVoice, stopVoice, ttsLineUrl } from '@/lib/kara/voice'
@@ -568,7 +568,7 @@ export function KaraPanel({ world: levelWorld, trace: levelTrace, maxTile, maxHe
       const last = steps[total - 1]
       const line = trace.error.line ?? last?.l
       if (trace.error.f && trace.error.fl) {
-        // Syntax error inside the toolbox: open its tab on that line (main.py's import line if the tab is missing).
+        // Syntax / name error inside the toolbox: open its tab on that line (main.py's import line if the tab is missing).
         onLine({ line: trace.error.fl, file: trace.error.f, over: { line: line ?? 1 }, error: trace.error.message })
       } else if (last && last.l === line) {
         // The failing step's own sensor calls stay visible next to the error;
@@ -756,11 +756,12 @@ export function KaraPanel({ world: levelWorld, trace: levelTrace, maxTile, maxHe
             onClick={() => setStepMode(m => (m === 'into' ? 'over' : 'into'))}
             aria-pressed={stepMode === 'into'}
             title={stepMode === 'into'
-              ? 'Step into: the editor follows each action into the helper file (e.g. befehle.py). Click for step over.'
-              : 'Step over: the marker stays on the call in main.py. Click to step into helper files.'}
+              ? 'Step into is on: the editor follows each action into the helper file (e.g. befehle.py). Click to turn it off (step over).'
+              : 'Step into is off: the marker stays on the call in main.py. Click to follow actions into helper files.'}
           >
-            {stepMode === 'into' ? <CornerDownRight className="h-3 w-3" /> : <Redo2 className="h-3 w-3" />}
-            {stepMode === 'into' ? 'Step into' : 'Step over'}
+            {/* Fixed label + pressed state (a toggle names its feature, not its current mode). */}
+            <CornerDownRight className="h-3 w-3" />
+            Step into
           </button>
         )}
         {trace && starsCount && pos === total && config.goals.length > 0 && !trace.error && (
@@ -887,7 +888,9 @@ function MessageBar({ card, assets, onContinue, more, minHeight, fixed }: { card
   const speaker = card?.message.speaker
   const portrait = speaker ? karaPortrait(speaker, assets) : undefined
   return (
-    <div style={fixed ? { height: minHeight } : { minHeight }} className={cn('flex shrink-0 items-center gap-3 overflow-y-auto px-3 text-sm', onContinue ? 'bg-amber-50 dark:bg-amber-950/30' : 'bg-muted/20')}>
+    // items-center-safe: when the text is taller than a fixed bar, align to the top so it can
+    // scroll (plain items-center pushes the first lines above the scroll origin, unreachable).
+    <div style={fixed ? { height: minHeight } : { minHeight }} className={cn('flex shrink-0 items-center-safe gap-3 overflow-y-auto px-3 text-sm', onContinue ? 'bg-amber-50 dark:bg-amber-950/30' : 'bg-muted/20')}>
       {card && speaker && (
         portrait
           // eslint-disable-next-line @next/next/no-img-element -- skript file URL, sized by CSS
