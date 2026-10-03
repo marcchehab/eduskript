@@ -58,6 +58,12 @@
  *
  * Archive (`archive: true`): the save effects pass `code` (the program of the
  * shown run, from the editor) along with the stars, see progress.ts.
+ *
+ * Call stack (`callstack: on`): KaraCallStackOverlay (kara-callstack.tsx)
+ * draws the stack of the shown position over the world as retro dialog
+ * windows. A run that ends in a RecursionError floods the world with windows
+ * at the end of the replay; the result card (AURORA's recursion line) waits
+ * FLOOD_MS for it.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -71,8 +77,10 @@ import { registerSoundSource, useMuted } from '@/lib/sound'
 import { AFTERMATH_TEXT, DOOR, ITEM, LASER } from '@/lib/kara/world'
 import { karaPortrait } from '@/lib/kara/portraits'
 import { karaStepTarget, type KaraLineTarget, type KaraStepMode } from './kara-line-extension'
+import { FLOOD_MS, KaraCallStackOverlay, MAX_WINDOWS } from './kara-callstack'
 import { drawKaraFacing, drawKaraMarks, drawKaraTiles, loadKaraTileset, type KaraTileset } from '@/lib/kara/kara-tiles'
 import {
+  buildCallStacks,
   buildReplay,
   karaStars,
   karaLimits,
@@ -317,6 +325,8 @@ export function KaraPanel({ world: levelWorld, trace: levelTrace, maxTile, maxHe
   /** 'depth N' is shown once the run called any function (d ≥ 1 on some step). */
   const hasDepth = useMemo(() => steps.some(s => s.d), [steps])
   const total = replay?.length ?? 0
+  /** Stack per position (`callstack: on` only); null otherwise. O(steps · MAX_WINDOWS). */
+  const callStacks = useMemo(() => (config.callstack && trace ? buildCallStacks(steps, MAX_WINDOWS) : null), [config.callstack, trace, steps])
 
   // Cell state tracks the drawn position incrementally (see seekCells).
   // Marks (mark / mark_at) the same way; null until the trace has any (most levels never mark).
@@ -501,7 +511,16 @@ export function KaraPanel({ world: levelWorld, trace: levelTrace, maxTile, maxHe
 
   // Message bar: pending story event, else the result at the end, else the level's `aurora.start` idle line (the `intro:` briefing is KaraIntro above the editor).
   const startCard = useMemo((): KaraCard | null => (config.aurora.start ? { message: config.aurora.start } : null), [config])
-  const card = cards[0] ?? (trace && pos === total ? finalCard : null) ?? (pos === 0 ? startCard : null)
+  // RecursionError with `callstack: on`: the window flood plays first, then AURORA's line.
+  const flood = !!callStacks && !!trace && trace.error?.sub === 'recursion' && pos === total
+  const [floodDone, setFloodDone] = useState<KaraTrace | null>(null)
+  useEffect(() => {
+    if (!flood) return
+    const t = setTimeout(() => setFloodDone(trace), FLOOD_MS)
+    return () => clearTimeout(t)
+  }, [flood, trace])
+  const holdFinal = flood && floodDone !== trace
+  const card = cards[0] ?? (trace && pos === total && !holdFinal ? finalCard : null) ?? (pos === 0 ? startCard : null)
   // Voice only for events and results (never on page load).
   const spoken = card && card !== startCard ? card : null
   // A skript audio file wins; otherwise the cached TTS line (speakers with a voice only).
@@ -643,7 +662,21 @@ export function KaraPanel({ world: levelWorld, trace: levelTrace, maxTile, maxHe
   return (
     <div className="flex h-full flex-col border-t bg-background outline-none" tabIndex={0} onKeyDown={onKeyDown}>
       <div ref={wrapRef} className={cn('relative flex justify-center overflow-hidden', fill ? 'min-h-0 flex-1 items-center' : 'shrink-0 p-2')}>
-        <canvas ref={canvasRef} className="block rounded" />
+        <div className="relative">
+          <canvas ref={canvasRef} className="block rounded" />
+          {callStacks && (
+            <KaraCallStackOverlay
+              stack={callStacks[Math.min(pos, callStacks.length - 1)]}
+              pos={pos}
+              width={world.cols * tile}
+              height={world.rows * tile}
+              kara={replay?.kara[pos] ?? world.kara}
+              tile={tile}
+              flood={flood}
+              assets={assets}
+            />
+          )}
+        </div>
         {musicSrc && <audio ref={musicRef} src={musicSrc} loop preload="none" />}
         {showAftermath && (
           <div className="absolute inset-x-2 top-2 flex items-center justify-between gap-2 rounded bg-slate-950/80 px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-amber-300 shadow">

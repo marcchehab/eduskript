@@ -4,9 +4,15 @@
  * renders). Unknown speakers without a file get none (the bar shows an initial).
  */
 
-const BUILT_IN = new Set(['aurora', 'brandt', 'jonas', 'lenz', 'pavel', 'tanaka', 'weber'])
+const BUILT_IN = new Set(['aurora', 'brandt', 'bueroklaemmerli', 'jonas', 'lenz', 'pavel', 'tanaka', 'weber'])
+
+/** 'BÜROKLÄMMERLI' → 'bueroklaemmerli' (built-in file names are ASCII). */
+function asciiKey(key: string): string {
+  return key.replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue')
+}
 
 export function karaPortrait(speaker: string, assets?: Record<string, string>): string | undefined {
   const key = speaker.toLowerCase()
-  return assets?.[`portrait:${key}`] ?? (BUILT_IN.has(key) ? `/kara/portraits/${key}.png` : undefined)
+  const builtIn = asciiKey(key)
+  return assets?.[`portrait:${key}`] ?? (BUILT_IN.has(builtIn) ? `/kara/portraits/${builtIn}.png` : undefined)
 }

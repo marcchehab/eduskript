@@ -9,7 +9,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import { KARA_MODULE_SOURCE } from '@/lib/kara/kara-module'
-import { parseKaraWorld, parseKaraLevel, buildReplay, karaAftermathInput, karaRunInput, karaStars, karaSuiteStars, seekMarks, DOOR, type KaraTrace } from '@/lib/kara/world'
+import { parseKaraWorld, parseKaraLevel, buildReplay, buildCallStacks, karaAftermathInput, karaRunInput, karaStars, karaSuiteStars, seekMarks, DOOR, type KaraTrace } from '@/lib/kara/world'
 
 const hasPython = (() => {
   try { execFileSync('python3', ['--version']); return true } catch { return false }
@@ -542,5 +542,56 @@ goal: exit`)
     // 'g' starts bridged
     const pre = parseKaraLevel('#####\n#>gE#\n#####\n---\ngoal: exit')
     expect(run('move()\nmove()\n', karaRunInput(pre, 0)).goal?.reached).toBe(true)
+  })
+
+  describe('callstack: on', () => {
+    beforeAll(() => fs.writeFileSync(path.join(dir, 'befehle.py'), BEFEHLE))
+    const cs = (code: string) => {
+      const level = parseKaraLevel('#########\n#>......#\n#.......#\n#########\n---\ncallstack: on')
+      return run(code, karaRunInput(level, 0))
+    }
+
+    it('records one frame per recursive call with its arguments, and pops on return', () => {
+      const t = cs('def treppe(n):\n    if n == 0:\n        return\n    move()\n    treppe(n - 1)\n\ntreppe(3)\nmove()\n')
+      expect(t.error).toBeNull()
+      const stacks = buildCallStacks(t.steps)
+      const at = (line: number) => t.steps.map((s, i) => [s, stacks[i + 1]] as const).filter(([s]) => s.l === line).map(([, st]) => st.top)
+      expect(at(2)).toEqual([
+        ['treppe(n=3)'],
+        ['treppe(n=3)', 'treppe(n=2)'],
+        ['treppe(n=3)', 'treppe(n=2)', 'treppe(n=1)'],
+        ['treppe(n=3)', 'treppe(n=2)', 'treppe(n=1)', 'treppe(n=0)'],
+      ])
+      // Deltas only: a push keeps the caller's frames, the step after the return keeps none.
+      expect(t.steps.filter(s => s.cs).map(s => s.cs![0])).toEqual([0, 1, 2, 3, 0])
+      expect(stacks.at(-1)).toEqual({ depth: 0, top: [] })
+      // d is the stack length
+      t.steps.forEach((s, i) => expect(s.d ?? 0).toBe(stacks[i + 1].depth))
+    })
+
+    it('helper frames (befehle.py) and long argument reprs, cut to 20 chars', () => {
+      const t = cs('from befehle import *\n\ndef los(liste, *rest, schritt=1):\n    drei_vor()\n\nlos(list(range(100)), "abcdefghijklmnopqrstuvwxyz", schritt=2)\n')
+      const stacks = buildCallStacks(t.steps)
+      const deepest = stacks.reduce((a, b) => (b.depth > a.depth ? b : a))
+      expect(deepest.top[1]).toBe('drei_vor()')
+      const [label] = deepest.top
+      expect(label.startsWith('los(liste=[0, 1, 2, ...], schritt=2, rest=')).toBe(true)
+      for (const arg of label.slice(4, -1).split(/, (?=\w+=)/)) expect(arg.split('=').slice(1).join('=').length).toBeLessThanOrEqual(20)
+    })
+
+    it('RecursionError: the last step holds the deep stack', () => {
+      const t = cs('def f(n):\n    f(n + 1)\n\nf(0)\n')
+      expect(t.error?.sub).toBe('recursion')
+      const stacks = buildCallStacks(t.steps, 12)
+      const last = stacks.at(-1)!
+      expect(last.depth).toBeGreaterThan(100)
+      expect(last.top).toHaveLength(12)
+      expect(stacks[0]).toEqual({ depth: 0, top: [] })
+    })
+
+    it('without callstack: no cs on any step', () => {
+      const t = run('def rec(n):\n    if n > 0:\n        rec(n - 1)\n\nrec(3)\n')
+      expect(t.steps.some(s => s.cs)).toBe(false)
+    })
   })
 })

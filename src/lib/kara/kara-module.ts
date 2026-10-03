@@ -193,14 +193,84 @@ _cur = None
 
 
 def _open_step(line):
-    global _cur
+    global _cur, _cs_base, _cs_keep
     if len(_steps) >= _max_steps:
         raise StepLimitError(f'Stopped after {_max_steps} steps. Is there an endless loop?')
     _cur = {'l': line}
-    d = _depth()
-    if d:
-        _cur['d'] = d
+    if _callstack:
+        _cs_base = _cs_keep = len(_cs_frames)
+        _cs_update()
+    else:
+        d = _depth()
+        if d:
+            _cur['d'] = d
     _steps.append(_cur)
+
+
+# Call stack (\`callstack: on\`, see the header in kara-module.ts).
+_callstack = False
+_cs_frames = []  # user frames of the current step, outermost first (kept alive, so ids stay unique)
+_cs_labels = []  # 'treppe(n=3)' per frame in _cs_frames
+_cs_index = {}   # id(frame) -> index in _cs_frames
+_cs_base = 0     # stack length when the current step opened
+_cs_keep = 0     # shortest common prefix with that stack during the current step
+_cs_repr = None  # reprlib.Repr, set in _run
+
+
+def _cs_label(f):
+    c = f.f_code
+    n = c.co_argcount + c.co_kwonlyargcount + (1 if c.co_flags & 4 else 0) + (1 if c.co_flags & 8 else 0)
+    loc = f.f_locals
+    args = []
+    for name in c.co_varnames[:n]:
+        try:
+            r = _cs_repr.repr(loc[name]) if name in loc else '?'
+        except Exception:
+            r = '?'
+        if len(r) > 20:
+            r = r[:19] + '…'
+        args.append(f'{name}={r}')
+    return f"{c.co_name}({', '.join(args)})"
+
+
+def _cs_update():
+    """Sync _cs_frames with the live stack and write the current step's 'cs' and 'd'.
+
+    Walks up from the caller only until it meets a frame already in
+    _cs_frames: a live frame's callers never change, so everything below it
+    is unchanged. O(new frames + kara.py frames) per call, not O(depth).
+    (Generators break that assumption: a resumed generator frame can get a
+    new caller; the stack then shows the old one.)"""
+    global _cs_keep
+    f = _sys._getframe(1)
+    new = []
+    keep = 0
+    while f is not None:
+        i = _cs_index.get(id(f))
+        if i is not None and _cs_frames[i] is f:
+            keep = i + 1
+            break
+        c = f.f_code
+        if not c.co_name.startswith('<') and _is_user_file(c.co_filename):
+            new.append(f)
+        f = f.f_back
+    for g in _cs_frames[keep:]:
+        del _cs_index[id(g)]
+    del _cs_frames[keep:]
+    del _cs_labels[keep:]
+    for g in reversed(new):
+        _cs_index[id(g)] = len(_cs_frames)
+        _cs_frames.append(g)
+        _cs_labels.append(_cs_label(g))
+    _cs_keep = min(_cs_keep, keep)
+    if _cs_keep == _cs_base and len(_cs_frames) == _cs_base:
+        _cur.pop('cs', None)
+    else:
+        _cur['cs'] = [_cs_keep, *_cs_labels[_cs_keep:]]
+    if _cs_frames:
+        _cur['d'] = len(_cs_frames)
+    else:
+        _cur.pop('d', None)
 
 
 def _depth():
@@ -260,11 +330,14 @@ def _act():
         _cur['sub'] = sub + 1
     _cur['a'] = True
     # The tracer opened this step at the call line; the action runs deeper.
-    d = _depth()
-    if d:
-        _cur['d'] = d
+    if _callstack:
+        _cs_update()
     else:
-        _cur.pop('d', None)
+        d = _depth()
+        if d:
+            _cur['d'] = d
+        else:
+            _cur.pop('d', None)
     # Innermost frame outside kara.py: the student's file or a helper module.
     f = _sys._getframe(1)
     while f is not None and f.f_code.co_filename == _THIS_FILE:
@@ -868,9 +941,19 @@ def _data_value(name, text):
 
 
 def _run(student_path='__kara_student.py', world_path='__kara_world.json'):
-    global _w, _steps, _cur, _expected_output, _door_ask, _asking, _ns, _max_steps
+    global _w, _steps, _cur, _expected_output, _door_ask, _asking, _ns, _max_steps, _callstack, _cs_repr
     with open(world_path) as f:
         data = _json.load(f)
+    _callstack = bool(data.get('callstack'))
+    _cs_frames.clear()
+    _cs_labels.clear()
+    _cs_index.clear()
+    if _callstack:
+        import reprlib as _reprlib
+        _cs_repr = _reprlib.Repr()
+        _cs_repr.maxstring = _cs_repr.maxother = 20
+        _cs_repr.maxlist = _cs_repr.maxtuple = _cs_repr.maxset = _cs_repr.maxdict = 3
+        _cs_repr.maxlevel = 2
     _max_steps = data.get('max_steps') or MAX_STEPS
     _expected_output = data.get('output')
     _door_ask = data.get('door_ask') or []
@@ -937,6 +1020,8 @@ def _run(student_path='__kara_student.py', world_path='__kara_world.json'):
             error['name'] = e.name
     finally:
         _sys.stdout = old_out
+    _cs_frames.clear()  # drop the frame references (and their locals)
+    _cs_index.clear()
     mask = ~(_DOORS | _LASERS)
     for step in _steps:
         step.pop('a', None)

@@ -118,6 +118,12 @@
  *   debug: into                           replay starts in «Step into» mode: the editor follows
  *                                         actions into helper files (befehle.py); default `over`
  *                                         (marker stays on the call). The toggle is always there.
+ *   callstack: on                         recursion week: every step records the call stack
+ *                                         (KaraStep.cs); the panel draws it as stacked retro
+ *                                         dialog windows over the world's top-right corner
+ *                                         ('treppe(n=3)' …, newest on top, Büroklämmerli on the
+ *                                         top one, at most 12 + '+ N more'); a RecursionError
+ *                                         floods the world with windows before AURORA's line.
  *
  * The world is a torus like the original Kara: walking off one edge enters on
  * the opposite side. Close levels with `#`.
@@ -217,6 +223,8 @@ export interface KaraConfig {
   archive?: boolean
   /** `debug: into` — the replay starts in «Step into» mode (kara-panel.tsx); absent = step over. */
   debug?: 'into' | 'over'
+  /** `callstack: on` — record the call stack per step (KaraStep.cs) and show it (kara-callstack.tsx). */
+  callstack?: boolean
 }
 
 export interface KaraLevel {
@@ -377,6 +385,7 @@ export function parseKaraConfig(src: string): KaraConfig {
     else if (key === 'aftermath.steps') { const n = parseInt(value, 10); if (n > 0) config.aftermathSteps = n }
     else if (key === 'archive') config.archive = /^(true|yes|1|on)$/i.test(value)
     else if (key === 'debug') { const v = value.toLowerCase(); if (v === 'into' || v === 'over') config.debug = v }
+    else if (key === 'callstack') config.callstack = /^(true|yes|1|on)$/i.test(value)
     else if (key.startsWith('aurora.')) config.aurora[key.slice(7)] = { ...message(value), speaker: 'AURORA' }
   }
   if (config.output !== undefined && !config.goals.includes('output')) config.goals.push('output')
@@ -454,6 +463,8 @@ export type KaraRunInput = KaraWorld & {
   door_ask: [string, string | null][]
   data: [string, string | null][]
   costs?: Record<string, number>
+  /** Record the call stack per step (`callstack: on`, kara-module.ts `_cs_update`). */
+  callstack?: boolean
 }
 
 /**
@@ -469,6 +480,7 @@ export function karaRunInput(level: KaraLevel, v: number, files?: Record<string,
     door_ask: karaDoorAsk(level.config, v),
     data: karaData(level.config, v, files),
     ...(level.config.costs ? { costs: level.config.costs } : {}),
+    ...(level.config.callstack ? { callstack: true } : {}),
   }
 }
 
@@ -486,6 +498,7 @@ export function karaAftermathInput(level: KaraLevel, files?: Record<string, stri
     door_ask: karaDoorAsk(level.config, 0),
     data: karaData(level.config, 0, files),
     ...(level.config.costs ? { costs: level.config.costs } : {}),
+    ...(level.config.callstack ? { callstack: true } : {}),
     max_steps: level.config.aftermathSteps ?? AFTERMATH_STEPS,
   }
 }
@@ -560,6 +573,13 @@ export interface KaraStep {
   fn?: string
   /** Call depth: user function frames (student file + helper modules) on the stack; absent = 0 (top level). */
   d?: number
+  /**
+   * Call stack change (only with `callstack: on`; absent = same stack as the
+   * previous step): [keep, ...labels] = keep the first `keep` frames of the
+   * previous step's stack, then push these ('treppe(n=2)', argument reprs
+   * cut to 20 chars). Outermost first. Decode with buildCallStacks.
+   */
+  cs?: [number, ...string[]]
 }
 
 /** One static finding; AURORA comments on it with `lint.<code>` (aurora-defaults.ts). */
@@ -664,6 +684,34 @@ export function buildReplay(world: KaraWorld, trace: KaraTrace): KaraReplay {
     subTotal[i] = next && next.l === s.l && next.sub === s.sub + 1 ? subTotal[i + 1] : s.sub
   }
   return { length: steps.length, kara, output, outputEnd, subTotal }
+}
+
+/** Call stack after p steps, for the overlay: total depth and the newest `cap` frames (outermost first). */
+export interface KaraCallStack {
+  depth: number
+  top: string[]
+}
+
+/**
+ * Decodes the `cs` deltas: result[p] = stack after p steps ([0] = empty).
+ * O(steps · cap) time and memory (only the newest `cap` labels are kept per
+ * position; the full stack lives in one working array). Consecutive
+ * positions with an unchanged stack share one object.
+ */
+export function buildCallStacks(steps: KaraStep[], cap = 12): KaraCallStack[] {
+  const stack: string[] = []
+  let cur: KaraCallStack = { depth: 0, top: [] }
+  const out = [cur]
+  for (const step of steps) {
+    if (step.cs) {
+      const [keep, ...push] = step.cs
+      stack.length = Math.min(stack.length, keep)
+      stack.push(...push)
+      cur = { depth: stack.length, top: stack.slice(-cap) }
+    }
+    out.push(cur)
+  }
+  return out
 }
 
 /**

@@ -4,7 +4,7 @@ import { unified } from 'unified'
 import remarkParse from 'remark-parse'
 import remarkCodeEditor from '@/lib/remark-plugins/code-editor'
 import {
-  parseKaraConfig, karaOutput, karaRunInput, karaSuiteStars, karaDoorAsk,
+  parseKaraConfig, karaOutput, karaRunInput, buildCallStacks, karaSuiteStars, karaDoorAsk,
   parseKaraWorld, parseKaraLevel, buildReplay, seekCells, karaStars, karaAssetNames, karaSpeakers, karaMessages,
   BLOCK, ITEM, BOX, CHIP, DOOR, LASER, ACID, EXIT, SWITCH, TARGET, TERMINAL, BROKEN, AIRLOCK,
   AFTERMATH_STEPS, AFTERMATH_TEXT, karaAftermathInput, splitData, karaData, karaDataFiles, karaLimits, type KaraTrace,
@@ -328,3 +328,31 @@ describe('data: and looks: config', () => {
     expect(karaLimits({ ...t, looks: undefined }, parseKaraConfig('goal: exit'))).toBe('Memory 3 · Energy 8')
   })
 })
+
+describe('callstack config', () => {
+  it('parses callstack: on and passes it to the runner', () => {
+    const level = parseKaraLevel('#>E#\n---\ngoal: exit\ncallstack: on')
+    expect(level.config.callstack).toBe(true)
+    expect(karaRunInput(level, 0).callstack).toBe(true)
+    const off = parseKaraLevel('#>E#\n---\ngoal: exit')
+    expect(off.config.callstack).toBeUndefined()
+    expect('callstack' in karaRunInput(off, 0)).toBe(false)
+    expect(parseKaraLevel('#>E#\n---\ncallstack: off').config.callstack).toBe(false)
+  })
+
+  it('buildCallStacks decodes deltas and keeps only the newest cap labels', () => {
+    const steps = [
+      { l: 1 },
+      { l: 2, cs: [0, 'a(n=3)'] as [number, ...string[]] },
+      { l: 3, cs: [1, 'a(n=2)', 'a(n=1)'] as [number, ...string[]] },
+      { l: 4 },
+      { l: 5, cs: [1] as [number, ...string[]] },
+    ]
+    const st = buildCallStacks(steps, 2)
+    expect(st.map(s => s.depth)).toEqual([0, 0, 1, 3, 3, 1])
+    expect(st[3].top).toEqual(['a(n=2)', 'a(n=1)'])
+    expect(st[4]).toBe(st[3])
+    expect(st[5].top).toEqual(['a(n=3)'])
+  })
+})
+

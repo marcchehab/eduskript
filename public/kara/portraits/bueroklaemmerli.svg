@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- Büroklämmerli (MOP-7 course): own drawing, a bent paperclip with eyes. Source of bueroklaemmerli.png (rsvg-convert -w 256). -->
+  <defs>
+    <linearGradient id="wire" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f4f6f8"/>
+      <stop offset="0.45" stop-color="#a9b3bd"/>
+      <stop offset="0.7" stop-color="#e3e8ec"/>
+      <stop offset="1" stop-color="#7d8792"/>
+    </linearGradient>
+    <radialGradient id="eye" cx="0.4" cy="0.35" r="0.7">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#dfe3e8"/>
+    </radialGradient>
+  </defs>
+  <ellipse cx="128" cy="236" rx="56" ry="8" fill="#000" opacity="0.12"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M112 178 V96 A16 16 0 0 1 144 96 V200 A26 26 0 0 1 92 200 V70 A36 36 0 0 1 164 70 V176" stroke="#4b5563" stroke-width="13"/>
+    <path d="M112 178 V96 A16 16 0 0 1 144 96 V200 A26 26 0 0 1 92 200 V70 A36 36 0 0 1 164 70 V176" stroke="url(#wire)" stroke-width="8"/>
+    <path d="M95 70 A33 33 0 0 1 120 38" stroke="#fff" stroke-width="2.5" opacity="0.8"/>
+  </g>
+  <!-- eyes sit on the wire, slightly cross-eyed with helpfulness -->
+  <ellipse cx="106" cy="92" rx="17" ry="20" fill="url(#eye)" stroke="#374151" stroke-width="3"/>
+  <ellipse cx="150" cy="92" rx="17" ry="20" fill="url(#eye)" stroke="#374151" stroke-width="3"/>
+  <circle cx="111" cy="96" r="7.5" fill="#111827"/>
+  <circle cx="145" cy="96" r="7.5" fill="#111827"/>
+  <circle cx="113.5" cy="93" r="2.4" fill="#fff"/>
+  <circle cx="147.5" cy="93" r="2.4" fill="#fff"/>
+  <path d="M88 62 Q104 50 120 60" fill="none" stroke="#1f2937" stroke-width="5" stroke-linecap="round"/>
+  <path d="M136 56 Q152 44 168 58" fill="none" stroke="#1f2937" stroke-width="5" stroke-linecap="round"/>
+</svg>
