@@ -1022,7 +1022,14 @@ export function createMarkdownComponents(
         if (portrait) assets[`portrait:${portrait[1].toLowerCase()}`] = f.url
         else if (/\.(mp3|wav|ogg)$/i.test(f.name)) assets[f.name] = f.url
       }
-      return <EvidenceBoard skriptId={skriptId} title={typeof props.title === 'string' ? props.title : undefined} assets={assets} />
+      return (
+        <EvidenceBoard
+          skriptId={skriptId}
+          title={typeof props.title === 'string' ? props.title : undefined}
+          levels={typeof props.levels === 'string' ? props.levels : undefined}
+          assets={assets}
+        />
+      )
     },
     // <kara-archive of="w5-l3">: the student's archived winning code of a Kara
     // level (archive: true); fallback = `fallback` attr or the children's text.

@@ -6,6 +6,11 @@
  * src/lib/kara/progress.ts). Only collected items are shown — the board has no
  * list of what exists on other pages. Live-updates when a level on the same
  * page saves new evidence.
+ *
+ * `levels="w1-,w2-"` (optional): show only evidence whose level id starts with
+ * one of these prefixes, so an early page's board does not spoil evidence a
+ * student already found on later pages. The «levels solved» count is filtered
+ * the same way.
  */
 
 import { useEffect, useState } from 'react'
@@ -19,9 +24,11 @@ export interface EvidenceBoardProps {
   title?: string
   /** Resolved skript files: audio names and `portrait:<speaker>`. */
   assets?: Record<string, string>
+  /** Comma-separated level-id prefixes; empty = every level of the skript. */
+  levels?: string
 }
 
-export function EvidenceBoard({ skriptId, title = 'Evidence board', assets }: EvidenceBoardProps) {
+export function EvidenceBoard({ skriptId, title = 'Evidence board', assets, levels: levelFilter }: EvidenceBoardProps) {
   const [progress, setProgress] = useState<KaraProgress | null>(null)
   // Read only once the user-data DB is ready: before that, the logged-in user
   // isn't set yet and the read would hit the (empty) anonymous store.
@@ -35,8 +42,10 @@ export function EvidenceBoard({ skriptId, title = 'Evidence board', assets }: Ev
     return () => { alive = false; unsubscribe() }
   }, [skriptId, isDbReady])
 
-  const items = Object.values(progress?.evidence ?? {}).sort((a, b) => a.level.localeCompare(b.level) || a.id.localeCompare(b.id))
-  const levels = Object.keys(progress?.levels ?? {}).length
+  const prefixes = (levelFilter ?? '').split(',').map(p => p.trim()).filter(Boolean)
+  const shown = (level: string) => !prefixes.length || prefixes.some(p => level.startsWith(p))
+  const items = Object.values(progress?.evidence ?? {}).filter(e => shown(e.level)).sort((a, b) => a.level.localeCompare(b.level) || a.id.localeCompare(b.id))
+  const levels = Object.keys(progress?.levels ?? {}).filter(shown).length
 
   return (
     <div className="not-prose my-6 rounded-lg border bg-muted/20 p-4" data-interactive="true">

@@ -172,7 +172,7 @@ export const sanitizeSchema = {
     'excali': ['src', 'alt', 'width', 'align', 'wrap', 'lightonly'],
     // <spacer> writing area. id keys the round-trip find/replace on edit.
     'spacer': ['id', 'height', 'pattern'],
-    'evidence-board': ['title'],
+    'evidence-board': ['title', 'levels'],
     'kara-archive': ['of', 'title', 'fallback'],
     // <image> component attributes (src, alt, width, align, wrap, invert, saturate)
     'image': ['src', 'alt', 'width', 'align', 'wrap', 'invert', 'saturate'],
