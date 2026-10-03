@@ -59,6 +59,13 @@
  * Archive (`archive: true`): the save effects pass `code` (the program of the
  * shown run, from the editor) along with the stars, see progress.ts.
  *
+ * Darkness (`dark: r`): drawDark veils every cell MOP-7 has not been within r
+ * of (karaSeen in world.ts); visited surroundings stay dimly visible.
+ *
+ * Variables: KaraVarsStrip (kara-vars.tsx) shows the program's variables
+ * after the shown position as labelled drawers, whenever the run watched any
+ * (kara-module.ts `_watch`, decoded by world.ts buildVars).
+ *
  * Call stack (`callstack: on`): KaraCallStackOverlay (kara-callstack.tsx)
  * draws the stack of the shown position over the world as retro dialog
  * windows. A run that ends in a RecursionError floods the world with windows
@@ -78,10 +85,13 @@ import { AFTERMATH_TEXT, DOOR, ITEM, LASER } from '@/lib/kara/world'
 import { karaPortrait } from '@/lib/kara/portraits'
 import { karaStepTarget, type KaraLineTarget, type KaraStepMode } from './kara-line-extension'
 import { FLOOD_MS, KaraCallStackOverlay, MAX_WINDOWS } from './kara-callstack'
+import { KaraVarsStrip } from './kara-vars'
 import { drawKaraFacing, drawKaraMarks, drawKaraTiles, loadKaraTileset, type KaraTileset } from '@/lib/kara/kara-tiles'
 import {
   buildCallStacks,
   buildReplay,
+  buildVars,
+  karaSeen,
   karaStars,
   karaLimits,
   karaSuiteStars,
@@ -163,6 +173,7 @@ function drawWorld(
   sprites: HTMLImageElement[] | null,
   marks: (string | null)[] | null,
   squashX = 1,
+  dark?: { seen: Float64Array; pos: number; r: number } | null,
 ) {
   const dpr = window.devicePixelRatio || 1
   const w = world.cols * tile
@@ -190,6 +201,32 @@ function drawWorld(
     ctx.drawImage(sprite, kara.x * tile + (tile - w) / 2, kara.y * tile + (tile - size) / 2, w, size)
   }
   if (marks) drawKaraMarks(ctx, world, marks, tile)
+  if (dark) drawDark(ctx, world, kara, tile, dark)
+}
+
+/**
+ * Darkness overlay (`dark: r`): black where MOP-7 has not been near yet, a dim
+ * veil where it has been (seen[i] ≤ pos), clear within r of its (possibly
+ * mid-slide) position. Per cell, O(cols · rows) per frame.
+ */
+function drawDark(
+  ctx: CanvasRenderingContext2D,
+  world: KaraWorld,
+  kara: { x: number; y: number },
+  tile: number,
+  { seen, pos, r }: { seen: Float64Array; pos: number; r: number },
+) {
+  for (let y = 0; y < world.rows; y++) {
+    for (let x = 0; x < world.cols; x++) {
+      const d = Math.max(Math.abs(x - kara.x), Math.abs(y - kara.y))
+      const lit = Math.max(0, Math.min(1, r + 1 - d)) // 1 inside the lamp, fades over the next cell while sliding
+      const base = seen[y * world.cols + x] <= pos ? 0.62 : 0.96
+      const a = base * (1 - lit)
+      if (a <= 0.01) continue
+      ctx.fillStyle = `rgba(3, 5, 10, ${a.toFixed(3)})`
+      ctx.fillRect(x * tile, y * tile, tile, tile)
+    }
+  }
 }
 
 // ─── Component ────────────────────────────────────────────────────────────
@@ -215,6 +252,7 @@ const AFTERMATH_SPEED = 25
 
 const GOAL_TEXT: Record<KaraGoal, string> = {
   exit: 'reach the exit',
+  target: 'stop on the marked cell',
   collect: 'collect every barrel',
   boxes: 'push every box onto a target',
   chips: 'pick up every chip',
@@ -321,6 +359,10 @@ export function KaraPanel({ world: levelWorld, trace: levelTrace, maxTile, maxHe
 
   const steps = useMemo(() => trace?.steps ?? [], [trace])
   const replay = useMemo(() => (trace ? buildReplay(world, trace) : null), [world, trace])
+  /** Darkness (`dark: r`): first position each cell was lit; before a run only the start is lit. */
+  const seen = useMemo(() => (config.dark === undefined ? null : karaSeen(world, replay?.kara ?? [world.kara], config.dark)), [config.dark, world, replay])
+  /** Variable drawers (KaraVarsStrip); null when the program watched no variable. */
+  const vars = useMemo(() => (trace ? buildVars(trace) : null), [trace])
   /** «Step into» follows helper-module actions into their file (kara-line-extension.ts); level `debug: into` starts there. */
   const [stepMode, setStepMode] = useState<KaraStepMode>(config.debug === 'into' ? 'into' : 'over')
   /** The toggle only does something when an action ran in a helper module (befehle.py). */
@@ -619,10 +661,11 @@ export function KaraPanel({ world: levelWorld, trace: levelTrace, maxTile, maxHe
 
     const cells = state.cells
     const marks = state.marks
+    const darkAt = (p: number) => (seen && config.dark !== undefined ? { seen, pos: p, r: config.dark } : null)
     const slide = !!from && Math.abs(from.x - to.x) + Math.abs(from.y - to.y) === 1
     const turn = !!from && from.x === to.x && from.y === to.y && from.d !== to.d
     if (!from || (!slide && !turn)) {
-      drawWorld(canvas, world, cells, to, tile, tileset, sprites, marks)
+      drawWorld(canvas, world, cells, to, tile, tileset, sprites, marks, 1, darkAt(pos))
       return
     }
     const duration = slide ? Math.min(250, 700 / speed) : Math.min(120, 500 / speed)
@@ -631,16 +674,16 @@ export function KaraPanel({ world: levelWorld, trace: levelTrace, maxTile, maxHe
     const frame = (now: number) => {
       const t = Math.min(1, (now - start) / duration)
       if (slide) {
-        drawWorld(canvas, world, cells, { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t, d: to.d }, tile, tileset, sprites, marks)
+        drawWorld(canvas, world, cells, { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t, d: to.d }, tile, tileset, sprites, marks, 1, darkAt(pos))
       } else {
         // First half: old sprite narrows; second half: new sprite widens.
-        drawWorld(canvas, world, cells, t < 0.5 ? from : to, tile, tileset, sprites, marks, Math.abs(1 - 2 * t))
+        drawWorld(canvas, world, cells, t < 0.5 ? from : to, tile, tileset, sprites, marks, Math.abs(1 - 2 * t), darkAt(pos))
       }
       if (t < 1) raf = requestAnimationFrame(frame)
     }
     raf = requestAnimationFrame(frame)
     return () => cancelAnimationFrame(raf)
-  }, [pos, trace, world, steps, replay, tile, tileset, sprites, speed])
+  }, [pos, trace, world, steps, replay, tile, tileset, sprites, speed, seen, config.dark])
 
   const output = replay ? replay.output.slice(0, replay.outputEnd[pos]) : ''
   useEffect(() => {
@@ -710,6 +753,8 @@ export function KaraPanel({ world: levelWorld, trace: levelTrace, maxTile, maxHe
           btn={btn}
         />
       )}
+
+      {vars && <KaraVarsStrip vars={vars} pos={pos} />}
 
       <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 px-2 py-1 border-t bg-muted/30 text-xs">
         <div className="flex items-center">

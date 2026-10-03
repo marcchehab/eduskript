@@ -40,7 +40,9 @@
  * Config keys (values: positional fields separated by `|`, then optional
  * `key=value` fields):
  *   goal: exit, collect, boxes, chips, logs   all listed goals must hold at the end
- *                                         (logs = every terminal read via read_log())
+ *                                         (logs = every terminal read via read_log();
+ *                                         target = MOP-7 ends on a target cell `o`/`O`, e.g. a
+ *                                         charging pad, the cell on_target() asks about)
  *   output: 7                             goal: the last printed line must equal this
  *   output: 10 | 7 | 13                   per variant, by index (one value = every variant;
  *                                         a variant without a value can never meet the goal)
@@ -100,7 +102,7 @@
  *   aurora.fail.3: text                   replaces aurora.fail from the 3rd failed run
  *                                         in a row (per page view, see kara-panel.tsx)
  *   aurora.fail.<goal>: text              replaces aurora.fail when <goal> is the FIRST missing
- *                                         goal (order: exit, collect, boxes, chips, logs, output),
+ *                                         goal (order: exit, target, collect, boxes, chips, logs, output),
  *                                         so fail.logs may assume Kara is at the exit; the
  *                                         goal list always shows below
  *   aurora.win.memory / aurora.win.energy replaces aurora.win when the run reached the goal
@@ -132,6 +134,13 @@
  *                                         «Ich habe Ihr Programm kurz in der Schleuse getestet. Nur kurz.»)
  *   aftermath.end: text                   card when the aftermath replay ends (default: the
  *                                         normal result line, e.g. aurora.loop on the step limit)
+ *   steps: N                              step limit of every run of this level (default 50000);
+ *                                         a loop level sets a low one (e.g. 400) so an endless
+ *                                         loop ends after a short replay with aurora.loop
+ *   dark: N                               darkness (drawing only, the simulation is unchanged): only
+ *                                         cells within N (Chebyshev distance) of MOP-7 are lit; cells
+ *                                         lit earlier in the replay stay dimly visible, the rest is
+ *                                         black (karaSeen, kara-panel.tsx). dark: 0 = only MOP-7's cell
  *   aftermath.steps: N                    step limit for the aftermath run (default 300, so a
  *                                         loop ends after a few seconds of replay)
  *   archive: true                         save the student's code on a win (progress.ts), shown
@@ -203,7 +212,7 @@ export interface KaraEvidence extends KaraMessage {
   title: string
 }
 
-export type KaraGoal = 'exit' | 'collect' | 'boxes' | 'chips' | 'logs' | 'output'
+export type KaraGoal = 'exit' | 'target' | 'collect' | 'boxes' | 'chips' | 'logs' | 'output'
 
 export interface KaraConfig {
   id?: string
@@ -250,6 +259,10 @@ export interface KaraConfig {
   callstack?: boolean
   /** `forbid: for, while` — refuse runs that use these loops (kara-module.ts `_lint`, error sub 'locked'). */
   forbid?: ('for' | 'while')[]
+  /** `steps: N` — step limit of a run (default MAX_STEPS = 50000 in kara-module.ts); loop levels use a low one. */
+  steps?: number
+  /** `dark: N` — the world is dark except within N cells of MOP-7 (and dimly where it has been); see karaSeen. Drawing only. */
+  dark?: number
 }
 
 export interface KaraLevel {
@@ -264,7 +277,7 @@ export const AFTERMATH_STEPS = 300
 
 const DIR_CHARS: Record<string, KaraDir> = { '^': 0, '>': 1, 'v': 2, '<': 3 }
 const OBSTACLES = new Set(['#', 'x', 'T', 'P', 'L', 'R', 'Y'])
-const GOALS = new Set<KaraGoal>(['exit', 'collect', 'boxes', 'chips', 'logs', 'output'])
+const GOALS = new Set<KaraGoal>(['exit', 'target', 'collect', 'boxes', 'chips', 'logs', 'output'])
 
 /** Legend char → [flags, look]. Kara chars and unknown chars are floor. */
 function cellFor(ch: string): [number, string] {
@@ -409,6 +422,8 @@ export function parseKaraConfig(src: string): KaraConfig {
       config[key === 'aftermath.text' ? 'aftermathText' : 'aftermathEnd'] = { ...msg, speaker: msg.speaker || 'AURORA' }
     }
     else if (key === 'aftermath.steps') { const n = parseInt(value, 10); if (n > 0) config.aftermathSteps = n }
+    else if (key === 'steps') { const n = parseInt(value, 10); if (n > 0) config.steps = n }
+    else if (key === 'dark') { const n = parseInt(value, 10); if (n >= 0 && n <= 9) config.dark = n }
     else if (key === 'archive') config.archive = /^(true|yes|1|on)$/i.test(value)
     else if (key === 'debug') { const v = value.toLowerCase(); if (v === 'into' || v === 'over') config.debug = v }
     else if (key === 'callstack') config.callstack = /^(true|yes|1|on)$/i.test(value)
@@ -512,6 +527,8 @@ export type KaraRunInput = KaraWorld & {
   callstack?: boolean
   /** Locked loop keywords (`forbid:`). */
   forbid?: ('for' | 'while')[]
+  /** Step limit (`steps:`); absent = MAX_STEPS in kara-module.ts. */
+  max_steps?: number
 }
 
 /**
@@ -529,6 +546,7 @@ export function karaRunInput(level: KaraLevel, v: number, files?: Record<string,
     ...(level.config.costs ? { costs: level.config.costs } : {}),
     ...(level.config.callstack ? { callstack: true } : {}),
     ...(level.config.forbid ? { forbid: level.config.forbid } : {}),
+    ...(level.config.steps ? { max_steps: level.config.steps } : {}),
   }
 }
 
@@ -629,6 +647,12 @@ export interface KaraStep {
    * cut to 20 chars). Outermost first. Decode with buildCallStacks.
    */
   cs?: [number, ...string[]]
+  /**
+   * Variable changes made by this step's line (kara-module.ts `_watch`):
+   * name → repr of the new value, null = the variable is gone (a function's
+   * locals after it returned). Locals are keyed 'fn.name'. Decode with buildVars.
+   */
+  w?: Record<string, string | null>
 }
 
 /** One static finding; AURORA comments on it with `lint.<code>` (aurora-defaults.ts). */
@@ -665,6 +689,8 @@ export interface KaraTrace {
   energy: number
   /** Statements in the student's program (Python AST). */
   memory: number
+  /** Watched variables before the first step (`data:` globals), see KaraStep.w. */
+  w0?: Record<string, string>
   /** look_at() calls; absent when 0. */
   looks?: number
 }
@@ -736,6 +762,79 @@ export function buildReplay(world: KaraWorld, trace: KaraTrace): KaraReplay {
     subTotal[i] = next && next.l === s.l && next.sub === s.sub + 1 ? subTotal[i + 1] : s.sub
   }
   return { length: steps.length, kara, output, outputEnd, subTotal }
+}
+
+/**
+ * Darkness (`dark: r`): seen[i] = the first replay position p at which cell i
+ * was within Chebyshev distance r of MOP-7 (kara[p]), Infinity = never.
+ * O(positions · r²); consecutive equal positions are skipped.
+ */
+export function karaSeen(world: KaraWorld, kara: KaraPos[], r: number): Float64Array {
+  const seen = new Float64Array(world.cols * world.rows).fill(Infinity)
+  let lx = -1, ly = -1
+  kara.forEach((k, p) => {
+    if (k.x === lx && k.y === ly) return
+    lx = k.x; ly = k.y
+    for (let y = Math.max(0, k.y - r); y <= Math.min(world.rows - 1, k.y + r); y++) {
+      for (let x = Math.max(0, k.x - r); x <= Math.min(world.cols - 1, k.x + r); x++) {
+        const i = y * world.cols + x
+        if (seen[i] > p) seen[i] = p
+      }
+    }
+  })
+  return seen
+}
+
+/** Variable drawers for the replay (kara-panel.tsx KaraVarsStrip). */
+export interface KaraVars {
+  /** Every variable the run ever had, in order of first appearance (stable layout while stepping). */
+  names: string[]
+  /** Values after p steps (absent = not defined at that point). O(log changes). */
+  at(p: number): Record<string, string>
+  /** Names step p (1-based, = steps[p - 1]) changed; empty at p = 0. */
+  changed(p: number): string[]
+}
+
+/**
+ * Decodes the `w` deltas (kara-module.ts `_watch`) into snapshots, stored
+ * only at the positions where something changed. O(steps + changes · vars)
+ * time and memory. null when the run watched no variable.
+ */
+export function buildVars(trace: KaraTrace): KaraVars | null {
+  const names: string[] = []
+  const seen = new Set<string>()
+  const add = (n: string) => { if (!seen.has(n)) { seen.add(n); names.push(n) } }
+  let cur: Record<string, string> = { ...(trace.w0 ?? {}) }
+  Object.keys(cur).forEach(add)
+  const pos: number[] = [0]
+  const snaps: Record<string, string>[] = [cur]
+  trace.steps.forEach((s, i) => {
+    if (!s.w) return
+    cur = { ...cur }
+    for (const [k, v] of Object.entries(s.w)) {
+      if (v === null) delete cur[k]
+      else { cur[k] = v; add(k) }
+    }
+    pos.push(i + 1)
+    snaps.push(cur)
+  })
+  if (!names.length) return null
+  return {
+    names,
+    at(p: number) {
+      let lo = 0, hi = pos.length - 1
+      while (lo < hi) {
+        const mid = (lo + hi + 1) >> 1
+        if (pos[mid] <= p) lo = mid
+        else hi = mid - 1
+      }
+      return snaps[lo]
+    },
+    changed(p: number) {
+      const w = p > 0 ? trace.steps[p - 1]?.w : undefined
+      return w ? Object.keys(w).filter(k => w[k] !== null) : []
+    },
+  }
 }
 
 /** Call stack after p steps, for the overlay: total depth and the newest `cap` frames (outermost first). */

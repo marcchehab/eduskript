@@ -119,7 +119,7 @@ interface AuroraOpts {
  *   event 'error' with sub:  level error.<sub> → level error → default error.<sub> → default error
  *   event 'fail', failStreak ≥ 3:  level fail.3 → (as 'fail')
  *   event 'fail':            level fail.<first missing goal> → level fail → default fail
- *                            (goal order of kara-module.ts _goal: exit, collect, boxes, chips, logs, output)
+ *                            (goal order of kara-module.ts _goal: exit, target, collect, boxes, chips, logs, output)
  *   event 'win', over limits: level win.<limit> (memory first) → (as 'win'); no
  *                            defaults, so a story win line stays unless the level asks
  *   other events:            level <event> → default <event>

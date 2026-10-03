@@ -9,7 +9,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import { KARA_MODULE_SOURCE } from '@/lib/kara/kara-module'
-import { parseKaraWorld, parseKaraLevel, buildReplay, buildCallStacks, karaAftermathInput, karaRunInput, karaStars, karaSuiteStars, seekMarks, DOOR, type KaraTrace } from '@/lib/kara/world'
+import { parseKaraWorld, parseKaraLevel, buildReplay, buildCallStacks, buildVars, karaAftermathInput, karaRunInput, karaStars, karaSuiteStars, seekMarks, DOOR, type KaraTrace } from '@/lib/kara/world'
 
 const hasPython = (() => {
   try { execFileSync('python3', ['--version']); return true } catch { return false }
@@ -112,6 +112,45 @@ describe.skipIf(!hasPython)('kara.py trace: one action per step', () => {
     const t = run('from befehle import *\nendlos()\n')
     expect(t.error?.kind).toBe('loop')
     expect(t.error?.line).toBe(2)
+  })
+
+  it('variable drawers: w deltas per line, locals as fn.name, data globals in w0', () => {
+    const t = run('felder = 0\nwhile felder < 3:\n    move()\n    felder = felder + 1\n')
+    const v = buildVars(t)!
+    expect(v.names).toEqual(['felder'])
+    expect(v.at(0)).toEqual({})
+    expect(v.at(1)).toEqual({ felder: '0' })
+    expect(v.at(t.steps.length)).toEqual({ felder: '3' })
+    // each increment is recorded on the step of its own line
+    const inc = t.steps.map((s, i) => (s.w ? [s.l, s.w.felder, i] : null)).filter(Boolean)
+    expect(inc.map(x => x![0])).toEqual([1, 4, 4, 4])
+    expect(v.changed(inc[1]![2] + 1)).toEqual(['felder'])
+
+    const f = run('def f(n):\n    k = n * 2\n    return k\nx = f(3)\n')
+    const fv = buildVars(f)!
+    expect(fv.names).toEqual(['f.n', 'f.k', 'x'])
+    expect(fv.at(f.steps.length)).toEqual({ x: '6' })
+
+    const level = parseKaraLevel('#####\n#>..#\n#####\n---\ndata: zahlen = [1, 2]')
+    const d = run('summe = 0\n', karaRunInput(level, 0))
+    expect(d.w0).toEqual({ zahlen: '[1, 2]' })
+    expect(buildVars(d)!.names).toEqual(['zahlen', 'summe'])
+    // nothing assigned: no watching at all
+    expect(buildVars(run('move()\n'))).toBeNull()
+  })
+
+  it("goal 'target': Kara must end on a target cell", () => {
+    const level = parseKaraLevel('######\n#>.o.#\n######\n---\ngoal: target')
+    expect(run('move()\nmove()\n', karaRunInput(level, 0)).goal).toEqual({ reached: true, missing: [] })
+    expect(run('move()\nmove()\nmove()\n', karaRunInput(level, 0)).goal).toEqual({ reached: false, missing: ['target'] })
+  })
+
+  it('steps: N limits a run (endless while loop ends as kind loop)', () => {
+    const level = parseKaraLevel('#####\n#>..#\n#####\n---\ngoal: exit\nsteps: 120')
+    const t = run('felder = 0\nwhile felder < 5:\n    if not wall_front():\n        move()\n', karaRunInput(level, 0))
+    expect(t.error?.kind).toBe('loop')
+    expect(t.steps.length).toBe(120)
+    expect(buildVars(t)!.at(120)).toEqual({ felder: '0' })
   })
 
   it("goal 'logs' needs every terminal read", () => {

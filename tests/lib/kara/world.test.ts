@@ -4,7 +4,7 @@ import { unified } from 'unified'
 import remarkParse from 'remark-parse'
 import remarkCodeEditor from '@/lib/remark-plugins/code-editor'
 import {
-  parseKaraConfig, karaOutput, karaRunInput, buildCallStacks, karaSuiteStars, karaDoorAsk,
+  parseKaraConfig, karaSeen, karaOutput, karaRunInput, buildCallStacks, karaSuiteStars, karaDoorAsk,
   parseKaraWorld, parseKaraLevel, buildReplay, seekCells, karaStars, karaAssetNames, karaSpeakers, karaMessages,
   BLOCK, ITEM, BOX, CHIP, DOOR, LASER, ACID, EXIT, SWITCH, TARGET, TERMINAL, BROKEN, AIRLOCK,
   AFTERMATH_STEPS, AFTERMATH_TEXT, karaAftermathInput, splitData, karaData, karaDataFiles, karaLimits, type KaraTrace,
@@ -384,3 +384,21 @@ describe('callstack config', () => {
   })
 })
 
+describe('dark: and steps:', () => {
+  it('parses dark and steps; steps becomes max_steps of the run input', () => {
+    const level = parseKaraLevel('#####\n#>..#\n#####\n---\ndark: 1\nsteps: 300')
+    expect(level.config.dark).toBe(1)
+    expect(karaRunInput(level, 0).max_steps).toBe(300)
+    expect(karaRunInput(parseKaraLevel('###\n#>#\n###'), 0).max_steps).toBeUndefined()
+  })
+
+  it('karaSeen: first position a cell came within r of MOP-7', () => {
+    const w = parseKaraWorld('#######\n#>....#\n#######')
+    const seen = karaSeen(w, [w.kara, { x: 2, y: 1, d: 1 }, { x: 3, y: 1, d: 1 }], 1)
+    const at = (x: number, y: number) => seen[y * w.cols + x]
+    expect(at(0, 0)).toBe(0)
+    expect(at(3, 1)).toBe(1)
+    expect(at(4, 1)).toBe(2)
+    expect(at(5, 1)).toBe(Infinity)
+  })
+})

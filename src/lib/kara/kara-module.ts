@@ -24,8 +24,21 @@
  * step that is current when they happen (e.g. a sensor after the 2nd move of a
  * line sits on that line's 2nd step).
  *
- * Limits: MAX_STEPS steps (the world JSON's `max_steps` overrides it; the
- * aftermath run in world.ts karaAftermathInput uses a low one), then StepLimitError (catches `while True:` loops,
+ * Variable drawers (`w`): on every traced line the tracer diffs the student's
+ * variables (`_watch`) and writes the changes onto the step that just ran:
+ * `{name: repr, 'fn.name': repr, gone: null}`. Watched = names the student's
+ * file assigns (Store targets, for targets, parameters) plus `data:` globals,
+ * at most 12, no `_names`; values only of plain types (numbers, str, bool,
+ * None, list/tuple/dict/set), repr cut to ~24 chars (reprlib). Globals are
+ * read from the student's namespace; locals only of the student function the
+ * current line runs in (key 'fn.name'), so a caller's locals vanish while a
+ * deeper function runs. Values the student's code never assigned under a
+ * watched name (e.g. a global set inside befehle.py) are not seen. `result.w0`
+ * holds the state before the first step (data: globals). Programs that assign
+ * nothing skip all of this. O(watched names) per line.
+ *
+ * Limits: MAX_STEPS steps (the world JSON's `max_steps` overrides it: the
+ * level key `steps:` and the aftermath run in world.ts), then StepLimitError (catches `while True:` loops,
  * also action loops inside helper modules; the trace up to the limit stays
  * replayable). A helper-module loop that makes no action (`while True: pass`
  * in befehle.py) opens no steps and is NOT caught. settrace slows Python down
@@ -775,10 +788,90 @@ class _Out:
         pass
 
 
+# Variable drawers (KaraStep.w, see the header): names the student's file
+# assigns or takes as parameters, plus data: globals. Set per run in _run.
+_watch_names = ()
+_watch_last = {}
+_watch_init = None   # snapshot before the first step (data: globals) -> result['w0']
+_watch_repr = None   # reprlib.Repr, values cut to ~24 chars
+_WATCH_MAX = 12
+_WATCH_TYPES = (int, float, str, bool, type(None), list, tuple, dict, set)
+_NOPE = object()
+
+
+def _watch(frame):
+    """Diff the student's variables and write the changes onto the step that
+    just ran (_cur): {'name': repr, 'fn.name': repr (locals of the student
+    function frame runs in), gone: None}. O(watched names) per line."""
+    global _watch_last, _watch_init
+    now = {}
+    g = _ns
+    for n in _watch_names:
+        v = g.get(n, _NOPE)
+        if v is not _NOPE and isinstance(v, _WATCH_TYPES):
+            now[n] = _watch_repr.repr(v)
+    if frame is not None and frame.f_code.co_name != '<module>' and frame.f_code.co_filename == _STUDENT:
+        loc = frame.f_locals
+        fn = frame.f_code.co_name
+        for n in _watch_names:
+            if n in loc:
+                v = loc[n]
+                if isinstance(v, _WATCH_TYPES):
+                    now[fn + '.' + n] = _watch_repr.repr(v)
+    if _cur is None:
+        _watch_init = now
+    else:
+        diff = {k: v for k, v in now.items() if _watch_last.get(k) != v}
+        for k in _watch_last:
+            if k not in now:
+                diff[k] = None
+        if diff:
+            w = _cur.setdefault('w', {})
+            w.update(diff)
+    _watch_last = now
+
+
 def _local_trace(frame, event, arg):
     if event == 'line':
+        if _watch_names:
+            _watch(frame)
         _open_step(frame.f_lineno)
     return _local_trace
+
+
+def _watch_setup(tree, data_names):
+    """Names to watch: Store targets and parameters in the student's file, then
+    data: globals; no _private names; at most _WATCH_MAX, in source order."""
+    global _watch_names, _watch_last, _watch_init, _watch_repr
+    found = []
+    for node in _ast.walk(tree):
+        n = None
+        if isinstance(node, _ast.Name) and isinstance(node.ctx, _ast.Store):
+            n = node.id
+        elif isinstance(node, _ast.arg):
+            n = node.arg
+        if n and not n.startswith('_') and n not in found:
+            found.append(n)
+    # ast.walk is breadth-first: sort by first source position for a stable order.
+    pos = {}
+    for node in _ast.walk(tree):
+        n = node.id if isinstance(node, _ast.Name) and isinstance(node.ctx, _ast.Store) else (
+            node.arg if isinstance(node, _ast.arg) else None)
+        if n in found:
+            p = (getattr(node, 'lineno', 0), getattr(node, 'col_offset', 0))
+            if n not in pos or p < pos[n]:
+                pos[n] = p
+    found.sort(key=lambda n: pos.get(n, (0, 0)))
+    names = [n for n in data_names if not n.startswith('_')] + [n for n in found if n not in data_names]
+    _watch_names = tuple(names[:_WATCH_MAX])
+    _watch_last = {}
+    _watch_init = None
+    if _watch_names and _watch_repr is None:
+        import reprlib as _reprlib
+        _watch_repr = _reprlib.Repr()
+        _watch_repr.maxstring = _watch_repr.maxother = 24
+        _watch_repr.maxlist = _watch_repr.maxtuple = _watch_repr.maxset = _watch_repr.maxdict = 6
+        _watch_repr.maxlevel = 2
 
 
 def _global_trace(frame, event, arg):
@@ -843,6 +936,8 @@ def _goal(goals):
     cells = _w.cells
     if 'exit' in goals and not _here() & EXIT:
         missing.append('exit')
+    if 'target' in goals and not _here() & TARGET:
+        missing.append('target')
     if 'collect' in goals and any(c & ITEM for c in cells):
         missing.append('collect')
     if 'boxes' in goals and any(c & TARGET and not c & BOX for c in cells):
@@ -1074,6 +1169,7 @@ def _data_value(name, text):
 def _run(student_path='__kara_student.py', world_path='__kara_world.json'):
     global _w, _steps, _cur, _expected_output, _door_ask, _asking, _ns, _max_steps, _callstack, _cs_repr
     _toolbox_calls.clear()
+    _watch_setup(_ast.parse(''), [])
     with open(world_path) as f:
         data = _json.load(f)
     _callstack = bool(data.get('callstack'))
@@ -1136,11 +1232,16 @@ def _run(student_path='__kara_student.py', world_path='__kara_world.json'):
             e.name, e.lineno, e.sub = name, node.lineno, sub
             raise e
         code = compile(tree, _STUDENT, 'exec')
+        _watch_setup(tree, [name for name, _text in data.get('data') or []])
+        if _watch_names:
+            _watch(None)
         _sys.settrace(_global_trace)
         try:
             exec(code, ns)
         finally:
             _sys.settrace(None)
+            if _watch_names and _cur is not None:
+                _watch(None)  # the last line's changes (module scope only)
     except SyntaxError as e:
         # Raised by ast.parse for the student's file, or by exec when an
         # imported helper (befehle.py) has a syntax error.
@@ -1189,6 +1290,8 @@ def _run(student_path='__kara_student.py', world_path='__kara_world.json'):
             error = {'line': first['line'] or None, 'kind': 'python', 'sub': None,
                      'message': f"Call outside a def in {first['name']}: it runs on every import."}
     result = {'steps': _steps, 'error': error, 'energy': _w.energy, 'memory': memory, 'lints': lints}
+    if _watch_init:
+        result['w0'] = _watch_init
     if _w.looks:
         result['looks'] = _w.looks
     if error is None:
