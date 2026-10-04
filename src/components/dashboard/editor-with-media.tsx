@@ -246,17 +246,17 @@ export function EditorWithMedia({
   // window height minus the app bar and the status row below, so that once
   // the page is scrolled to the editor it fills the screen. Dragging the bar
   // sets a manual height (kept per browser); double-click returns to "fit".
-  const [manualHeight, setManualHeight] = useState<number | null>(() => {
-    if (typeof window === 'undefined') return null
-    try {
-      const saved = parseInt(localStorage.getItem(EDITOR_HEIGHT_STORAGE_KEY) ?? '', 10)
-      return Number.isFinite(saved) && saved >= MIN_EDITOR_HEIGHT ? saved : null
-    } catch {
-      return null
-    }
-  })
+  // Both read after mount, not in a useState initializer: this component is
+  // server-rendered, and React does not patch a style mismatch on hydration —
+  // the DOM kept the default height while state held the saved one, so the
+  // bar jumped on the first drag.
+  const [manualHeight, setManualHeight] = useState<number | null>(null)
   const [fitHeight, setFitHeight] = useState(DEFAULT_EDITOR_HEIGHT)
   useEffect(() => {
+    try {
+      const saved = parseInt(localStorage.getItem(EDITOR_HEIGHT_STORAGE_KEY) ?? '', 10)
+      if (Number.isFinite(saved) && saved >= MIN_EDITOR_HEIGHT) setManualHeight(saved)
+    } catch { /* private mode */ }
     const update = () => setFitHeight(Math.max(MIN_FIT_HEIGHT, window.innerHeight - FIT_HEIGHT_RESERVE))
     update()
     window.addEventListener('resize', update)
