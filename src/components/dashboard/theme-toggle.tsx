@@ -11,7 +11,9 @@ import { Button } from '@/components/ui/button'
 // row purely so it round-trips through /api/user/data-export. We deliberately
 // do NOT fetch the server preference back on mount: that fetch was the cause
 // of a post-paint setTheme flash whenever localStorage and the DB disagreed.
-export function ThemeToggle() {
+/** variant 'bordered': same look as the public sidebar's square buttons. */
+export function ThemeToggle({ variant = 'ghost' }: { variant?: 'ghost' | 'bordered' } = {}) {
+  const borderedClass = 'p-2 rounded-md border border-border bg-card hover:bg-muted transition-colors'
   const { setTheme, resolvedTheme } = useTheme()
   const { data: session } = useSession()
   const [mounted, setMounted] = useState(false)
@@ -35,6 +37,13 @@ export function ThemeToggle() {
   }
 
   if (!mounted) {
+    if (variant === 'bordered') {
+      return (
+        <button type="button" className={borderedClass} disabled>
+          <div className="w-4 h-4" />
+        </button>
+      )
+    }
     return (
       <Button variant="ghost" size="sm" className="w-10 h-10 p-0" disabled>
         <Sun className="w-5 h-5" />
@@ -64,6 +73,19 @@ export function ThemeToggle() {
 
   const getThemeLabel = () => {
     return resolvedTheme === 'dark' ? 'Dark' : 'Light'
+  }
+
+  if (variant === 'bordered') {
+    return (
+      <button
+        type="button"
+        onClick={cycleTheme}
+        className={borderedClass}
+        title={`Switch to ${resolvedTheme === 'dark' ? 'light' : 'dark'} mode`}
+      >
+        {resolvedTheme === 'dark' ? <Sun className="w-4 h-4 text-foreground" /> : <Moon className="w-4 h-4 text-foreground" />}
+      </button>
+    )
   }
 
   return (

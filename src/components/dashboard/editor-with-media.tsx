@@ -190,10 +190,15 @@ export function EditorWithMedia({
   const [videoList, setVideoList] = useState<VideoInfo[]>([])
   const [fileListLoading, setFileListLoading] = useState(false)
 
-  const [activeTab, setActiveTab] = useState<string | null>(() => {
-    if (typeof window === 'undefined') return null
-    return localStorage.getItem(tabStorageKey) || null
-  })
+  // Restored after mount (not in the initializer): the server renders with no
+  // tab open, and a different first client render is a hydration mismatch.
+  const [activeTab, setActiveTab] = useState<string | null>(null)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(tabStorageKey)
+      if (saved) setActiveTab(saved)
+    } catch { /* private mode */ }
+  }, [tabStorageKey])
   const { completeStep } = useQuestStep()
 
   const [insertionMenuFile, setInsertionMenuFile] = useState<{

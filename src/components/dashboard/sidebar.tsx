@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { useSession, signOut } from 'next-auth/react'
 import { cn } from '@/lib/utils'
-import { BookOpen, Settings, Users, ChevronLeft, ChevronRight, Shield, GraduationCap, User, Camera, CornerUpLeft, Globe, BarChart3, CreditCard, Lock, Tag, Puzzle, ClipboardCheck, LogOut } from 'lucide-react'
+import { BookOpen, Settings, Users, ChevronLeft, ChevronRight, Shield, GraduationCap, User, Camera, CornerUpLeft, Globe, BarChart3, CreditCard, Lock, Tag, Puzzle, ClipboardCheck, LogOut, NotebookPen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ThemeToggle } from './theme-toggle'
 
@@ -148,6 +148,21 @@ export function DashboardSidebar() {
   // Get user's display name
   const userName = session?.user?.name || 'My Account'
 
+  // Brand at the top: students see the teacher site they came from (as the
+  // old top bar did), everyone else Eduskript.
+  const brandName = isStudent && lastTeacherPage ? lastTeacherPage.name : 'Eduskript'
+  const brandHref = isStudent && lastTeacherPage ? (lastTeacherPage.href || `/${lastTeacherPage.slug}`) : '/dashboard'
+  const brandIcon = isStudent && lastTeacherPage?.pageIcon && lastTeacherPage.pageIcon !== 'default' ? (
+    <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-background">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={lastTeacherPage.pageIcon} alt="" className="w-full h-full object-cover" />
+    </div>
+  ) : (
+    <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
+      <NotebookPen className="w-6 h-6 text-muted-foreground" />
+    </div>
+  )
+
   // Students go back to the teacher site they came from; everyone else home.
   const signOutUrl = isStudent
     ? (lastTeacherPage ? `/${lastTeacherPage.slug}` : session?.user?.signedUpFromPageSlug ? `/${session.user.signedUpFromPageSlug}` : '/')
@@ -158,72 +173,72 @@ export function DashboardSidebar() {
       "bg-card border-r border-border h-full transition-all duration-300 flex flex-col",
       isCollapsed ? "w-16 min-w-16" : "w-52"
     )}>
-      <div className="p-4 flex-1 min-h-0 flex flex-col">
-        {/* Top bar: back link (students) + collapse toggle.
-            Expanded: row with back link left, chevron right.
-            Collapsed (with back link): column with chevron on top, back icon below. */}
-        <div className={cn(
-          "mb-4 flex items-center",
-          isCollapsed && isStudent && lastTeacherPage
-            ? "flex-col gap-2"
-            : "justify-between"
-        )}>
-          {isStudent && lastTeacherPage ? (
-            <Link
-              href={lastTeacherPage.href || `/${lastTeacherPage.slug}`}
-              className={cn(
-                'flex items-center px-2 py-1 text-sm rounded-lg transition-colors',
-                'text-muted-foreground hover:bg-muted hover:text-foreground',
-                isCollapsed ? 'justify-center order-last' : 'gap-3'
-              )}
-              title={`Back to ${lastTeacherPage.name}`}
+      {/* Header — same structure and styling as the public sidebar
+          (components/public/layout.tsx): brand row, then a row of bordered
+          square controls with the collapse chevron on the right, then a
+          divider. The dashboard has no top bar. */}
+      <div className={cn('border-b border-border', isCollapsed ? 'p-3' : 'p-5')}>
+        {isCollapsed ? (
+          <div className="flex flex-col items-center gap-2">
+            <Link href={brandHref} title={brandName} className="cursor-pointer">
+              {brandIcon}
+            </Link>
+            <ThemeToggle variant="bordered" />
+            <button
+              type="button"
+              onClick={() => signOut({ callbackUrl: signOutUrl })}
+              title={`Sign out (${userName})`}
+              className="p-2 rounded-md border border-border bg-card hover:bg-muted transition-colors"
             >
-              <CornerUpLeft className="w-4 h-4 shrink-0" />
-              {!isCollapsed && <span className="truncate max-w-36">Back to {lastTeacherPage.name}</span>}
-            </Link>
-          ) : !isCollapsed ? (
-            // Brand / home link — the dashboard has no top bar any more
-            // (same as the public pages: everything lives in the sidebar).
-            <Link href="/dashboard" className="px-2 text-lg font-bold text-foreground">
-              Eduskript
-            </Link>
-          ) : (
-            <div />
-          )}
-          <Button
-            variant="ghost"
-            size="sm"
-            title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            className={cn(
-              "p-2",
-              isCollapsed && isStudent && lastTeacherPage ? "order-first" : ""
-            )}
-          >
-            {isCollapsed ? (
+              <LogOut className="w-4 h-4 text-foreground" />
+            </button>
+            <Button variant="ghost" size="sm" onClick={() => setIsCollapsed(false)} title="Expand sidebar" className="p-2">
               <ChevronRight className="w-5 h-5" />
-            ) : (
-              <ChevronLeft className="w-5 h-5" />
-            )}
-          </Button>
-        </div>
+            </Button>
+          </div>
+        ) : (
+          <>
+            <Link href={brandHref} className="flex items-center justify-center gap-3 w-full" title={brandName}>
+              {brandIcon}
+              <div className="text-2xl font-bold text-foreground truncate font-heading">{brandName}</div>
+            </Link>
+            <div className="flex items-center mt-5">
+              {/* Spacer to balance the collapse button */}
+              <div className="w-9" />
+              <div className="flex-1 flex items-center justify-center gap-2">
+                <ThemeToggle variant="bordered" />
+                <button
+                  type="button"
+                  onClick={() => signOut({ callbackUrl: signOutUrl })}
+                  title={`Sign out (${userName})`}
+                  className="p-2 rounded-md border border-border bg-card hover:bg-muted transition-colors"
+                >
+                  <LogOut className="w-4 h-4 text-foreground" />
+                </button>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => setIsCollapsed(true)} title="Collapse sidebar" className="p-2">
+                <ChevronLeft className="w-5 h-5" />
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
 
-        {/* Account controls (formerly the top bar), at the top like the
-            public sidebar: theme toggle and sign out; the name is the
-            tooltip. Collapsed: stacked icons. */}
-        <div className={cn('mb-3 flex items-center', isCollapsed ? 'flex-col gap-1' : 'gap-1 px-1')}>
-          <ThemeToggle />
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => signOut({ callbackUrl: signOutUrl })}
-            title={`Sign out (${userName})`}
-            className={cn('text-muted-foreground hover:text-foreground', isCollapsed ? 'w-10 h-10 p-0' : 'gap-2')}
+      <div className="p-4 flex-1 min-h-0 flex flex-col">
+        {isStudent && lastTeacherPage && (
+          <Link
+            href={lastTeacherPage.href || `/${lastTeacherPage.slug}`}
+            className={cn(
+              'mb-3 flex items-center px-2 py-1 text-sm rounded-lg transition-colors',
+              'text-muted-foreground hover:bg-muted hover:text-foreground',
+              isCollapsed ? 'justify-center' : 'gap-3'
+            )}
+            title={`Back to ${lastTeacherPage.name}`}
           >
-            <LogOut className="w-4 h-4" />
-            {!isCollapsed && <span>Sign out</span>}
-          </Button>
-        </div>
+            <CornerUpLeft className="w-4 h-4 shrink-0" />
+            {!isCollapsed && <span className="truncate max-w-36">Back to {lastTeacherPage.name}</span>}
+          </Link>
+        )}
 
         <nav className="space-y-1 flex-1 min-h-0 overflow-y-auto">
           {/* Student Navigation */}
