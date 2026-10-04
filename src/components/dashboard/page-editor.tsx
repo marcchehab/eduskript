@@ -18,7 +18,8 @@ import { EditorWithMedia, type ExtraManageTab } from '@/components/dashboard/edi
 import { AIEditChatModal } from '@/components/ai/ai-edit-chat-modal'
 import { useIsFreeTeacher } from '@/hooks/use-billing'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
-import { AlertCircle, ArrowLeft, ArrowRightLeft, Save, History, Eye, EyeOff, Check, Shield, Globe, Maximize2, Minimize2, BookA, BookOpen, FileText, FilePenLine, GripVertical, Trash2, Users, Loader2, CircleCheckBig, CircleMinus, Presentation, Link2, GraduationCap, Wand2, Settings2 } from 'lucide-react'
+import { AlertCircle, ArrowLeft, ArrowRightLeft, Save, History, Eye, EyeOff, Check, Shield, Globe, Maximize2, Minimize2, BookA, BookOpen, FileText, FilePenLine, GripVertical, Trash2, Users, Loader2, CircleCheckBig, CircleMinus, Presentation, Link2, GraduationCap, Wand2 } from 'lucide-react'
+import { PageCog } from '@/components/icons/settings-icons'
 import { ExamStateStepper } from '@/components/exam/exam-state-stepper'
 import type { ExamLifecycleState } from '@/lib/exam-state'
 import {
@@ -30,6 +31,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -106,6 +108,10 @@ interface PageEditorProps {
   currentUserId: string
 }
 
+// The whole-skript AI Edit chat (skript header) is hidden for now — the
+// in-editor AI Edit tab covers the page. Kept, not deleted (2026-10-04).
+const SHOW_SKRIPT_AI_EDIT = false
+
 export function PageEditor({ skript, page, canEdit, userPermissions, currentUserId }: PageEditorProps) {
   const [title, setTitle] = useState(page.title || '')
   const [slug, setSlug] = useState(page.slug || '')
@@ -115,9 +121,14 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
   // AI Edit ribbon tab inside the editor.
   const [skriptAiOpen, setSkriptAiOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const isFreePlan = useIsFreeTeacher()
 
   const [isSaving, setIsSaving] = useState(false)
+  // Brief "Saved ✓" on the Save button after a successful save (also gives
+  // Ctrl+S visible feedback when nothing had changed).
+  const [justSaved, setJustSaved] = useState(false)
+  const justSavedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
@@ -431,6 +442,9 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
       if (response.ok) {
         setLastSaved(new Date())
         setHasUnsavedChanges(false)
+        setJustSaved(true)
+        if (justSavedTimer.current) clearTimeout(justSavedTimer.current)
+        justSavedTimer.current = setTimeout(() => setJustSaved(false), 1500)
         // Keep the Pages tab list in sync (it's seeded from server props once)
         setPages(prev => prev.map(p => p.id === page.id ? { ...p, title: title.trim(), slug: slug.trim(), pageType } : p))
         completeStep('edit_page_content')
@@ -535,7 +549,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
   // Pages tab content (drag-to-reorder list of pages with the current one
   // highlighted) — passed to the shared shell as an extra "Pages" tab.
   const pagesTabContent = (
-    <div className="p-3">
+    <div className="p-3 max-w-3xl">
       {pages.map((p, idx) => (
         <Fragment key={p.id}>
           <div className={`h-0.5 mx-2 rounded transition-colors ${dragOverIdx === idx ? 'bg-primary' : 'bg-transparent'}`} />
@@ -590,7 +604,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                 const color = state === 'draft' ? 'text-red-600 dark:text-red-400' : state === 'unlisted' ? 'text-violet-500' : 'text-success'
                 const label = state === 'draft' ? 'Draft' : state === 'unlisted' ? 'Unlisted' : 'Published'
                 return (
-                  <span className={`ml-auto shrink-0 ${color}`} title={label} aria-label={label}>
+                  <span className={`shrink-0 ${color}`} title={label} aria-label={label}>
                     <Icon className="w-3.5 h-3.5" />
                   </span>
                 )
@@ -683,7 +697,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                 <BookA className="w-4 h-4" />
               </Button>
             </Link>
-            <Button
+            {SHOW_SKRIPT_AI_EDIT && <Button
               variant="ghost"
               size="sm"
               onClick={() => setSkriptAiOpen(true)}
@@ -692,7 +706,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
             >
               <Wand2 className="w-4 h-4" />
               <span className="hidden sm:inline text-xs">AI Edit</span>
-            </Button>
+            </Button>}
             <ExportSkriptModal skriptId={skript.id} skriptTitle={skript.title} />
             <Button
               variant="ghost"
@@ -760,7 +774,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
           // can flex-1 into the remaining space and let its internal panes
           // (CodeMirror scroller + preview pane) handle their own scroll.
           // No `overflow-auto` here — that would push the toolbar offscreen.
-          ? 'fixed inset-0 z-50 bg-background p-6 flex flex-col gap-4'
+          ? 'fixed inset-0 z-50 bg-background p-3 flex flex-col gap-2'
           // Fills the dashboard's scroll area so the page card (and its
           // editor) take all remaining height — no page scroll, no resize bar.
           : 'flex h-full flex-col gap-4'
@@ -808,7 +822,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
           <div className="space-y-3">
             {/* Page title row — always visible (Save/Fullscreen toggle live here). */}
             <div className="space-y-1">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <Input
                   type="text"
                   value={title}
@@ -817,71 +831,128 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                     setHasUnsavedChanges(true)
                   }}
                   placeholder="Page title"
-                  className="flex-1 min-w-0 h-9 text-xl font-semibold border-transparent hover:border-border focus:border-border"
+                  className="flex-1 min-w-[140px] h-9 text-lg md:text-xl font-semibold border-transparent hover:border-border focus:border-border"
                 />
-                <div className="flex gap-2 items-center shrink-0">
-                  {!isFullscreen && (
+                <div className="flex gap-1 md:gap-2 items-center shrink-0">
+                  {(
                     // Description + slug: edited rarely, so they live behind a
                     // settings button instead of taking a full row above the
                     // editor (≈84px measured in the layout test, 2026-10-04).
-                    <Popover>
+                    <Popover open={settingsOpen} onOpenChange={setSettingsOpen}>
                       <PopoverTrigger asChild>
-                        <Button variant="ghost" size="sm" title="Page settings: description and URL" className="gap-1.5">
-                          <Settings2 className="w-4 h-4" />
-                          <span className="hidden lg:inline text-xs">Settings</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          title="Page settings: type, description, URL, slides, delete"
+                          className={settingsOpen ? 'bg-blue-500/15 text-blue-700 hover:bg-blue-500/20 dark:text-blue-300' : ''}
+                        >
+                          <PageCog className="w-4 h-4" />
                         </Button>
                       </PopoverTrigger>
-                      <PopoverContent align="end" className="w-96 space-y-3">
-                        <div className="space-y-1">
-                          <Label htmlFor="page-description" className="text-xs">Description <span className="text-muted-foreground font-normal">(optional, shown in search results and link previews)</span></Label>
-                          <Input
-                            id="page-description"
-                            type="text"
-                            value={description}
-                            onChange={(e) => {
-                              setDescription(e.target.value)
-                              setHasUnsavedChanges(true)
-                            }}
-                            placeholder="One sentence about this page"
-                            className="text-sm"
-                          />
+                      <PopoverContent align="end" style={{ width: 'min(420px, 92vw)' }} className="border-blue-400/70 p-0 shadow-lg dark:border-blue-500/60">
+                        <div className="flex items-center gap-3 border-b px-4 py-3">
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm font-medium">Page type</span>
+                            <span className="block text-xs text-muted-foreground">
+                              {pageType === 'exam'
+                                ? 'Exam: students take it under exam rules.'
+                                : 'Normal: a regular page of the skript.'}
+                            </span>
+                          </span>
+                          <div className="inline-flex shrink-0 overflow-hidden rounded-md border text-xs" role="radiogroup" aria-label="Page type">
+                            {(['normal', 'exam'] as const).map((t, i) => (
+                              <button
+                                key={t}
+                                type="button"
+                                role="radio"
+                                aria-checked={pageType === t}
+                                onClick={() => {
+                                  if (pageType === t) return
+                                  setPageType(t)
+                                  setHasUnsavedChanges(true)
+                                }}
+                                className={`flex items-center gap-1 px-2.5 py-1 ${i > 0 ? 'border-l' : ''} ${
+                                  pageType === t ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+                                }`}
+                              >
+                                {t === 'exam' ? <GraduationCap className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
+                                {t === 'exam' ? 'Exam' : 'Normal'}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                        <div className="space-y-1">
-                          <Label htmlFor="page-slug" className="text-xs">URL slug</Label>
-                          <Input
-                            id="page-slug"
-                            type="text"
-                            value={slug}
-                            onChange={(e) => {
-                              setSlug(e.target.value)
-                              setHasUnsavedChanges(true)
-                            }}
-                            placeholder="page-slug"
-                            className="text-sm font-mono"
-                          />
-                          <p className="text-xs text-muted-foreground break-all">
-                            …/{skript.slug}/<span className="font-mono text-foreground">{slug || 'page-slug'}</span>
-                          </p>
+                        <div className="space-y-3 p-4">
+                          <div className="space-y-1.5">
+                            <Label htmlFor="page-description" className="text-xs font-medium">Description</Label>
+                            <Input
+                              id="page-description"
+                              type="text"
+                              value={description}
+                              onChange={(e) => {
+                                setDescription(e.target.value)
+                                setHasUnsavedChanges(true)
+                              }}
+                              placeholder="One sentence about this page"
+                              className="h-8 text-sm"
+                            />
+                            <p className="text-xs text-muted-foreground">Optional. Shown in search results and link previews.</p>
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="page-slug" className="text-xs font-medium">URL</Label>
+                            <div className="flex h-8 items-center overflow-hidden rounded-md border bg-background text-sm focus-within:ring-2 focus-within:ring-ring">
+                              <span className="max-w-[45%] shrink-0 truncate border-r bg-muted px-2 py-1.5 text-xs text-muted-foreground" title={`…/${skript.slug}/`}>…/{skript.slug}/</span>
+                              <input
+                                id="page-slug"
+                                type="text"
+                                value={slug}
+                                onChange={(e) => {
+                                  setSlug(e.target.value)
+                                  setHasUnsavedChanges(true)
+                                }}
+                                placeholder="page-slug"
+                                className="min-w-0 flex-1 bg-transparent px-2 font-mono text-sm outline-none"
+                              />
+                            </div>
+                          </div>
+                          <p className="text-xs text-muted-foreground">Description and URL are saved with the page (Save / Ctrl+S).</p>
                         </div>
-                        <p className="text-xs text-muted-foreground">Changes are saved with the page (Save / Ctrl+S).</p>
+                        {pageType !== 'exam' && (
+                          <label htmlFor="page-presentation" className="flex cursor-pointer items-center gap-3 border-t px-4 py-3">
+                            <Presentation className="h-4 w-4 shrink-0 text-muted-foreground" />
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-sm font-medium">Slide presentation</span>
+                              <span className="block text-xs text-muted-foreground">
+                                {presentationPublic
+                                  ? 'On: all viewers can open it as slides.'
+                                  : 'Off: only teachers can open it as slides.'}
+                              </span>
+                            </span>
+                            <Switch
+                              id="page-presentation"
+                              checked={presentationPublic}
+                              onCheckedChange={(checked) => {
+                                setPresentationPublic(checked)
+                                setHasUnsavedChanges(true)
+                              }}
+                            />
+                          </label>
+                        )}
+                        {canEdit && (
+                          <div className="flex items-center justify-between gap-3 border-t px-4 py-3">
+                            <span className="text-xs text-muted-foreground">Removes the page from this skript.</span>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => { setSettingsOpen(false); void handleDeletePage(page.id, page.title) }}
+                              className="h-7 shrink-0 gap-1.5 border-red-300 text-xs text-red-600 hover:bg-red-500/10 hover:text-red-600 dark:border-red-900 dark:text-red-400"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" /> Delete page
+                            </Button>
+                          </div>
+                        )}
                       </PopoverContent>
                     </Popover>
                   )}
-                  <Select
-                    value={pageType}
-                    onValueChange={(value) => {
-                      setPageType(value)
-                      setHasUnsavedChanges(true)
-                    }}
-                  >
-                    <SelectTrigger className="w-[90px] h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="normal">Normal</SelectItem>
-                      <SelectItem value="exam">Exam</SelectItem>
-                    </SelectContent>
-                  </Select>
                   <PublishToggle
                     type="page"
                     itemId={page.id}
@@ -921,30 +992,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                       </Button>
                     )
                   )}
-                  {pageType !== 'exam' && !isFullscreen && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setPresentationPublic(!presentationPublic)
-                        setHasUnsavedChanges(true)
-                      }}
-                      title={presentationPublic ? 'Anyone can present this page as slides (click to restrict to teachers)' : 'Let anyone present this page as slides'}
-                    >
-                      <Presentation className={`w-4 h-4 ${presentationPublic ? 'text-primary' : ''}`} />
-                    </Button>
-                  )}
-                  {canEdit && !isFullscreen && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDeletePage(page.id, page.title)}
-                      title="Delete page"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  )}
-                  {!isFullscreen && (
+                  {(
                     <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
                       <PopoverTrigger asChild>
                         <Button
@@ -956,7 +1004,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                           <History className="w-4 h-4" />
                         </Button>
                       </PopoverTrigger>
-                      <PopoverContent align="end" className="w-[min(640px,90vw)] max-h-[70vh] overflow-y-auto border-blue-400/70 p-2 shadow-lg dark:border-blue-500/60">
+                      <PopoverContent align="end" onOpenAutoFocus={(e) => e.preventDefault()} className="w-[min(640px,90vw)] max-h-[70vh] overflow-y-auto border-blue-400/70 p-2 shadow-lg dark:border-blue-500/60">
                         <VersionHistory
                           pageId={page.id}
                           versions={versions}
@@ -967,15 +1015,18 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                     </Popover>
                   )}
                   <QuestSpotlight step="edit_page_content" label="Try this!">
+                    {/* Primary + dot when there's something to save; quiet
+                        outline "Saved" otherwise, so the state is readable. */}
                     <Button
                       onClick={handleSave}
                       disabled={isSaving}
                       size="sm"
-                      className="relative"
-                      title={isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save changes (Ctrl+S)' : 'No changes to save'}
+                      variant={hasUnsavedChanges || isSaving ? 'default' : 'outline'}
+                      className={`relative ${!hasUnsavedChanges && !isSaving ? (justSaved ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground') : ''}`}
+                      title={isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save changes (Ctrl+S)' : 'All changes saved (Ctrl+S)'}
                     >
-                      <Save className="w-4 h-4 mr-2" />
-                      {isSaving ? 'Saving...' : 'Save'}
+                      {!hasUnsavedChanges && !isSaving ? <Check className="w-4 h-4 mr-1.5" /> : <Save className="w-4 h-4 mr-1.5" />}
+                      {isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save' : 'Saved'}
                       {hasUnsavedChanges && (
                         <div className="absolute top-1 right-1 w-2 h-2 bg-warning rounded-full" />
                       )}

@@ -92,7 +92,8 @@ export function AIEditPanel({
   }
 
   return (
-    <div className="flex w-full min-w-0 flex-col" style={{ height }}>
+    // Capped width on big screens so the chat stays readable (centered).
+    <div className="mx-auto flex w-full max-w-5xl min-w-0 flex-col" style={{ height }}>
     <div className="flex min-h-0 flex-1 gap-3 py-1.5">
       {/* Conversation + composer */}
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
@@ -217,9 +218,9 @@ export function AIEditPanel({
         aria-label="Resize AI Edit panel"
         title="Drag to resize"
         onPointerDown={startDrag}
-        className="group flex h-2.5 shrink-0 cursor-row-resize items-center justify-center"
+        className="group flex h-3 shrink-0 cursor-row-resize items-center justify-center rounded hover:bg-blue-500/10"
       >
-        <div className="h-1 w-12 rounded-full bg-border transition-colors group-hover:bg-primary/60" />
+        <div className="h-1.5 w-16 rounded-full bg-muted-foreground/40 transition-colors group-hover:bg-blue-500/70" />
       </div>
     </div>
   )

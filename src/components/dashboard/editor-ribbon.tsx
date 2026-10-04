@@ -8,11 +8,15 @@
  * Word can transfer that spatial memory 1:1. Used by codemirror-editor.tsx,
  * which assembles the actual tab contents from its insert/format handlers.
  *
- * Behavior copied from Word:
- * - Tab bar with the active tab underlined; panel below shows that tab.
- * - Double-clicking the active tab (or the chevron) collapses the panel to
- *   the tab bar only; clicking any tab expands it again. Collapsed state
- *   persists in localStorage.
+ * Behavior ("auto-hide ribbon", like Word's collapsed ribbon):
+ * - Only the tab bar is visible while editing. Clicking a tab opens its panel
+ *   as an overlay over the editor (nothing below moves); clicking outside it
+ *   (e.g. back into the editor) or Escape closes it. Clicking the open tab
+ *   again closes it too.
+ * - Tabs marked `pinned` (AI Edit) open inline instead and stay open: their
+ *   panel is used side by side with the editor below.
+ * - Tabs marked align 'right' sit outside the scrollable tab strip, so they
+ *   stay reachable on narrow screens.
  * - Groups are separated by vertical dividers with a small centered caption.
  * - Signature actions get big buttons (icon over label); dense controls get
  *   small square buttons in stacked rows.
@@ -21,10 +25,8 @@
  * (DropdownMenuTrigger clones them and injects onClick/aria/ref props).
  */
 
-import { useState, useCallback, type ReactNode, type ButtonHTMLAttributes } from 'react'
-import { ChevronDown, ChevronUp } from 'lucide-react'
-
-const COLLAPSE_KEY = 'eduskript:ribbon-collapsed'
+import { useState, useEffect, useRef, type ReactNode, type ButtonHTMLAttributes } from 'react'
+import { ChevronDown } from 'lucide-react'
 
 export interface RibbonTabDef {
   id: string
@@ -37,6 +39,8 @@ export interface RibbonTabDef {
   icon?: ReactNode
   /** Render at the right end of the tab bar (e.g. AI Edit) instead of in sequence. */
   align?: 'right'
+  /** Open inline and stay open (doesn't auto-hide on outside click). */
+  pinned?: boolean
 }
 
 interface RibbonProps {
@@ -46,71 +50,85 @@ interface RibbonProps {
 }
 
 export function Ribbon({ tabs, tabBarRight }: RibbonProps) {
-  const [activeId, setActiveId] = useState(tabs[0]?.id)
-  const [collapsed, setCollapsed] = useState(() => {
-    try { return localStorage.getItem(COLLAPSE_KEY) === '1' } catch { return false }
-  })
+  const [activeId, setActiveId] = useState<string | null>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const active = tabs.find(t => t.id === activeId) ?? null
+  const overlayOpen = !!active && !active.pinned
 
-  const setCollapsedPersist = useCallback((value: boolean) => {
-    setCollapsed(value)
-    try { localStorage.setItem(COLLAPSE_KEY, value ? '1' : '0') } catch { /* private mode */ }
-  }, [])
+  // Auto-hide: outside pointerdown / Escape closes an overlay panel. Clicks in
+  // Radix portals (dropdowns, color pickers opened from the panel) count as
+  // inside, otherwise the panel would vanish under an open menu.
+  useEffect(() => {
+    if (!overlayOpen) return
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Element | null
+      if (!t || rootRef.current?.contains(t)) return
+      if (t.closest('[data-radix-popper-content-wrapper], [role="menu"], [role="dialog"], [role="listbox"]')) return
+      setActiveId(null)
+    }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setActiveId(null) }
+    document.addEventListener('pointerdown', onDown, true)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onDown, true)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [overlayOpen])
 
-  const active = tabs.find(t => t.id === activeId) ?? tabs[0]
+  const tabButton = (tab: RibbonTabDef) => {
+    const isActive = tab.id === activeId
+    return (
+      <button
+        key={tab.id}
+        type="button"
+        aria-expanded={isActive}
+        onClick={() => setActiveId(isActive ? null : tab.id)}
+        className={`shrink-0 px-3 py-1 rounded-t-md border-b-2 transition-colors ${
+          isActive
+            ? tab.accent
+              ? `font-medium ${tab.accent.active}`
+              : 'border-primary text-primary font-medium'
+            : tab.accent
+              ? `border-transparent hover:bg-accent/50 ${tab.accent.idle}`
+              : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-accent/50'
+        } ${tab.icon ? 'flex items-center gap-1.5' : ''}`}
+      >
+        {tab.icon}
+        {tab.label}
+      </button>
+    )
+  }
+
+  // Word-style tinted panel: a soft top-to-bottom gradient in the active
+  // tab's color (neutral tabs: gray), on an opaque card background so the
+  // overlay hides the editor beneath it.
+  const panel = active && (
+    <div className="rounded-md bg-card">
+      <div
+        className={`flex items-stretch overflow-x-auto rounded-md px-2 py-1 bg-linear-to-b ${
+          active.accent?.fill ?? 'from-muted-foreground/15 to-muted-foreground/[0.03]'
+        }`}
+      >
+        {active.content}
+      </div>
+    </div>
+  )
 
   return (
-    <div className="border-b border-border select-none">
-      {/* Tab bar */}
-      <div className="flex items-center gap-0.5 overflow-x-auto whitespace-nowrap px-2 pt-1 text-sm">
-        {[...tabs.filter(t => t.align !== 'right'), null, ...tabs.filter(t => t.align === 'right')].map(tab => tab === null ? (
-          <div key="__spacer" className="flex-1" />
-        ) : (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => {
-              setActiveId(tab.id)
-              if (collapsed) setCollapsedPersist(false)
-            }}
-            onDoubleClick={() => {
-              if (tab.id === active?.id) setCollapsedPersist(!collapsed)
-            }}
-            className={`px-3 py-1 rounded-t-md border-b-2 transition-colors ${
-              tab.id === active?.id && !collapsed
-                ? tab.accent
-                  ? `font-medium ${tab.accent.active}`
-                  : 'border-primary text-primary font-medium'
-                : tab.accent
-                  ? `border-transparent hover:bg-accent/50 ${tab.accent.idle}`
-                  : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-accent/50'
-            } ${tab.icon ? 'flex items-center gap-1.5' : ''}`}
-          >
-            {tab.icon}
-            {tab.label}
-          </button>
-        ))}
-        {tabBarRight}
-        <button
-          type="button"
-          onClick={() => setCollapsedPersist(!collapsed)}
-          title={collapsed ? 'Expand the ribbon' : 'Collapse the ribbon'}
-          className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent/50"
-        >
-          {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
-        </button>
-      </div>
-      {/* Panel */}
-      {!collapsed && (
-        <div
-          // Word-style tinted panel: a soft top-to-bottom gradient in the
-          // active tab's color (neutral tabs: gray).
-          className={`mx-2 mb-2 mt-1 flex items-stretch overflow-x-auto rounded-md px-2 py-1 bg-linear-to-b ${
-            active?.accent?.fill ?? 'from-muted-foreground/15 to-muted-foreground/[0.03]'
-          }`}
-        >
-          {active?.content}
+    <div ref={rootRef} className="relative border-b border-border select-none">
+      {/* Tab bar: left tabs scroll on narrow screens; right tabs stay put. */}
+      <div className="flex items-center gap-0.5 px-2 pt-1 text-sm">
+        <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto whitespace-nowrap">
+          {tabs.filter(t => t.align !== 'right').map(tabButton)}
         </div>
-      )}
+        {tabs.filter(t => t.align === 'right').map(tabButton)}
+        {tabBarRight}
+      </div>
+      {active && (active.pinned ? (
+        <div className="mx-2 mb-2 mt-1">{panel}</div>
+      ) : (
+        <div className="absolute inset-x-2 top-full z-30 mt-1 rounded-md border border-border shadow-lg">{panel}</div>
+      ))}
     </div>
   )
 }

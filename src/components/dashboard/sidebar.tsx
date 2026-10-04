@@ -6,20 +6,23 @@ import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { useSession, signOut } from 'next-auth/react'
 import { cn } from '@/lib/utils'
-import { BookOpen, Settings, Users, ChevronLeft, ChevronRight, Shield, GraduationCap, User, Camera, CornerUpLeft, Globe, BarChart3, CreditCard, Lock, Tag, Puzzle, ClipboardCheck, LogOut, NotebookPen } from 'lucide-react'
+import { BookOpen, Settings, Users, ChevronLeft, ChevronRight, Shield, GraduationCap, User, Camera, CornerUpLeft, Globe, BarChart3, CreditCard, Lock, Tag, Puzzle, ClipboardCheck, LogOut, NotebookPen, UserCog } from 'lucide-react'
+import { NotebookCog } from '@/components/icons/settings-icons'
 import { Button } from '@/components/ui/button'
 import { ThemeToggle } from './theme-toggle'
+
+const SIDEBAR_COLLAPSED_KEY = 'eduskript:dashboard-sidebar-collapsed'
 
 // Per-site authoring items (site-scoped URLs). A teacher normally has one
 // site; superadmin-granted extra sites each get their own stacked block.
 const siteNavItems = [
   { name: 'Page Builder', suffix: '/page-builder', icon: BookOpen },
-  { name: 'Settings', suffix: '/settings', icon: Settings },
+  { name: 'Settings', suffix: '/settings', icon: NotebookCog },
 ]
 
 // Account-level items — user-wide, not tied to a single site.
 const accountNavigation = [
-  { name: 'Settings', href: '/dashboard/settings', icon: Settings },
+  { name: 'Settings', href: '/dashboard/settings', icon: UserCog },
   { name: 'Plugins', href: '/dashboard/plugins', icon: Puzzle },
   { name: 'Collaborate', href: '/dashboard/collaborate', icon: Users },
   { name: 'My Classes', href: '/dashboard/classes', icon: GraduationCap },
@@ -69,7 +72,21 @@ function SectionHeader({ title, isCollapsed }: { title: string; isCollapsed: boo
 
 export function DashboardSidebar() {
   const pathname = usePathname()
-  const [isCollapsed, setIsCollapsed] = useState(false)
+  // Collapsed state is remembered per browser; without a saved choice the
+  // sidebar starts collapsed below 1024px. Read after mount (SSR renders
+  // expanded; reading in the initializer would be a hydration mismatch).
+  const [isCollapsed, setIsCollapsedState] = useState(false)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(SIDEBAR_COLLAPSED_KEY)
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setIsCollapsedState(saved !== null ? saved === '1' : window.innerWidth < 1024)
+    } catch { /* private mode */ }
+  }, [])
+  const setIsCollapsed = (value: boolean) => {
+    setIsCollapsedState(value)
+    try { localStorage.setItem(SIDEBAR_COLLAPSED_KEY, value ? '1' : '0') } catch { /* private mode */ }
+  }
   const { data: session } = useSession()
   const [lastTeacherPage, setLastTeacherPage] = useState<{ slug: string; name: string; pageIcon?: string | null; href?: string } | null>(null)
   const [adminOrgs, setAdminOrgs] = useState<OrgWithRole[]>([])

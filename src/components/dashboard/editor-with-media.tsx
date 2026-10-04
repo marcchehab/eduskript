@@ -201,15 +201,27 @@ export function EditorWithMedia({
   const [videoList, setVideoList] = useState<VideoInfo[]>([])
   const [fileListLoading, setFileListLoading] = useState(false)
 
-  // Restored after mount (not in the initializer): the server renders with no
-  // tab open, and a different first client render is a hydration mismatch.
+  // Manage tabs (Pages/Files/Videos/Access) open as an overlay over the editor
+  // and close on outside click — so they always start closed (no restore).
   const [activeTab, setActiveTab] = useState<string | null>(null)
+  const manageRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(tabStorageKey)
-      if (saved) setActiveTab(saved)
-    } catch { /* private mode */ }
-  }, [tabStorageKey])
+    if (!activeTab) return
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Element | null
+      if (!t || manageRef.current?.contains(t)) return
+      // Menus/dialogs opened from inside the panel live in portals.
+      if (t.closest('[data-radix-popper-content-wrapper], [role="menu"], [role="dialog"], [role="alertdialog"], [role="listbox"]')) return
+      setActiveTab(null)
+    }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setActiveTab(null) }
+    document.addEventListener('pointerdown', onDown, true)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onDown, true)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [activeTab])
   const { completeStep } = useQuestStep()
 
   const [insertionMenuFile, setInsertionMenuFile] = useState<{
@@ -304,16 +316,8 @@ export function EditorWithMedia({
   }, [])
 
   const handleTabClick = useCallback((tab: string) => {
-    setActiveTab(prev => {
-      const next = prev === tab ? null : tab
-      if (next) {
-        localStorage.setItem(tabStorageKey, next)
-      } else {
-        localStorage.removeItem(tabStorageKey)
-      }
-      return next
-    })
-  }, [tabStorageKey])
+    setActiveTab(prev => (prev === tab ? null : tab))
+  }, [])
 
   // Fetch files + videos. No-op when skriptId is missing (no file storage yet).
   const loadedOnceRef = useRef(false)
@@ -609,7 +613,7 @@ export function EditorWithMedia({
       {!fullscreen && (headerContent || skriptId) && (
       // Wrapper so the folder tab isn't a child of the divide-y section
       // (it would get a divider line under it).
-      <div className={fillHeight ? 'relative shrink-0' : 'relative'}>
+      <div ref={manageRef} className={fillHeight ? 'relative shrink-0' : 'relative'}>
       {/* belowBorder: the wrapper's top edge IS the card border, so shift the
           tab down 1px to keep the border line visible (the page card's tab
           sits inside its border box and needs no offset). */}
@@ -639,10 +643,10 @@ export function EditorWithMedia({
                       // like every other tab — it's still part of the skript-scope strip.
                       ? activeTab === tab.id
                         ? 'bg-background text-orange-600 dark:text-orange-400 shadow-xs border-b-2 border-primary'
-                        : 'text-orange-600/80 dark:text-orange-400/80 hover:text-orange-600 dark:hover:text-orange-400 bg-muted/50'
+                        : 'border-b-2 border-transparent text-orange-600/80 dark:text-orange-400/80 hover:text-orange-600 dark:hover:text-orange-400 bg-muted/50'
                       : activeTab === tab.id
                         ? 'bg-background text-foreground shadow-xs border-b-2 border-primary'
-                        : 'text-muted-foreground hover:text-foreground bg-muted/50'
+                        : 'border-b-2 border-transparent text-muted-foreground hover:text-foreground bg-muted/50'
                   }`}
                 >
                   {tab.icon}
@@ -659,9 +663,16 @@ export function EditorWithMedia({
             })}
           </div>
 
-          {/* Tab content — built-in panels rendered here, extras render their own JSX */}
+        </div>
+        )}
+      </section>
+      {/* Manage tab content as an overlay over the page below (nothing moves);
+          closes on outside click / Escape (effect above). */}
+      {activeTab && (
+        <div className="absolute inset-x-0 top-full z-40 mt-1 max-h-[60vh] overflow-y-auto rounded-lg border border-blue-400/70 bg-card shadow-lg dark:border-blue-500/60">
+          
           {activeTab === 'files' && (
-            <div className="border-t">
+            <div>
               <p className="px-3 pt-2 text-xs text-muted-foreground">Drag an item into the editor to insert it, or click it to insert at the cursor.</p>
               <FileBrowser
                 skriptId={skriptId}
@@ -679,7 +690,7 @@ export function EditorWithMedia({
           )}
 
           {activeTab === 'videos' && (
-            <div className="border-t">
+            <div>
               <p className="px-3 pt-2 text-xs text-muted-foreground">Drag an item into the editor to insert it, or click it to insert at the cursor.</p>
               <VideoBrowser
                 videos={videoList}
@@ -698,8 +709,7 @@ export function EditorWithMedia({
             </div>
           ))}
         </div>
-        )}
-      </section>
+      )}
       </div>
       )}
 
