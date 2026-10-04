@@ -101,7 +101,7 @@ export function Ribbon({ tabs, tabBarRight }: RibbonProps) {
       </div>
       {/* Panel */}
       {!collapsed && (
-        <div className="flex items-stretch px-2 py-1 bg-muted/30 overflow-x-auto">
+        <div className="mx-2 mb-2 mt-1 flex items-stretch overflow-x-auto rounded-md border border-border/70 bg-muted/30 px-2 py-1">
           {active?.content}
         </div>
       )}
