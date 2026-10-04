@@ -59,6 +59,8 @@ export interface ChangeCard {
   // For a NEW page applied in auto mode: the id of the created page, so Reject
   // can DELETE it. Null until the create succeeds.
   createdPageId?: string | null
+  // True when a card was applied and then undone (vs. discarded unapplied).
+  undone?: boolean
 }
 
 export interface Turn {
@@ -67,7 +69,13 @@ export interface Turn {
   text: string
   cardIds: string[]
   pending?: boolean // assistant turn still generating / awaiting user action
+  planTotal?: number // number of planned changes in this turn (for "change k of N")
 }
+
+// What the assistant is doing right now, for the waiting indicator.
+//   planning: the agent call (deciding what to change) is in flight
+//   writing:  a change card is being generated
+export type BusyPhase = 'planning' | 'writing' | null
 
 interface PlanState {
   jobId: string
@@ -96,8 +104,15 @@ interface UseAIEditChatReturn {
   turns: Turn[]
   cards: Record<string, ChangeCard>
   isBusy: boolean
+  phase: BusyPhase
+  // Date.now() when the current phase started, for an elapsed-seconds display.
+  phaseSince: number | null
   error: string | null
-  sendInstruction: (text: string) => Promise<void>
+  // Machine-readable error code from the server, e.g. 'paid_only' (402).
+  errorCode: string | null
+  // Resolves false when the request failed; the user turn is then removed
+  // again so the caller can put the text back into the composer.
+  sendInstruction: (text: string) => Promise<boolean>
   acceptCard: (cardId: string) => Promise<void>
   rejectCard: (cardId: string) => Promise<void>
   respondToCard: (cardId: string, feedback: string) => Promise<void>
@@ -126,6 +141,13 @@ export function useAIEditChat({
   const [cards, setCards] = useState<Record<string, ChangeCard>>({})
   const [isBusy, setIsBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [errorCode, setErrorCode] = useState<string | null>(null)
+  const [phase, setPhaseState] = useState<BusyPhase>(null)
+  const [phaseSince, setPhaseSince] = useState<number | null>(null)
+  const setPhase = useCallback((p: BusyPhase) => {
+    setPhaseState(p)
+    setPhaseSince(p ? Date.now() : null)
+  }, [])
 
   // Per-assistant-turn plan cursors (jobId + remaining page pointer).
   const plansRef = useRef<Record<string, PlanState>>({})
@@ -336,6 +358,7 @@ export function useAIEditChat({
       while (plan.nextIndex < plan.pages.length) {
         if (stopRef.current) {
           setTurnPending(turnId, false)
+          setPhase(null)
           return
         }
         const pageIndex = plan.nextIndex
@@ -360,6 +383,7 @@ export function useAIEditChat({
         }
         setCards(prev => ({ ...prev, [cardId]: card }))
         setTurns(prev => prev.map(t => (t.id === turnId ? { ...t, cardIds: [...t.cardIds, cardId] } : t)))
+        setPhase('writing')
 
         try {
           const gen = await generate(plan.jobId, pageIndex)
@@ -369,6 +393,7 @@ export function useAIEditChat({
             patchCard(cardId, { status: 'stopped' })
             setTurnPending(turnId, false)
             setIsBusy(false)
+            setPhase(null)
             return
           }
           const filled: ChangeCard = {
@@ -400,6 +425,7 @@ export function useAIEditChat({
             setCards(prev => ({ ...prev, [cardId]: filled }))
             setTurnPending(turnId, false)
             setIsBusy(false)
+            setPhase(null)
             return
           }
         } catch (err) {
@@ -408,6 +434,7 @@ export function useAIEditChat({
             patchCard(cardId, { status: 'stopped' })
             setTurnPending(turnId, false)
             setIsBusy(false)
+            setPhase(null)
             return
           }
           patchCard(cardId, { status: 'failed', error: err instanceof Error ? err.message : 'Generation failed' })
@@ -415,6 +442,7 @@ export function useAIEditChat({
           if (modeRef.current === 'ask') {
             setTurnPending(turnId, false)
             setIsBusy(false)
+            setPhase(null)
             return
           }
         }
@@ -423,8 +451,9 @@ export function useAIEditChat({
       // Queue drained.
       setTurnPending(turnId, false)
       setIsBusy(false)
+      setPhase(null)
     },
-    [generate, writeApply, patchCard, setTurnPending]
+    [generate, writeApply, patchCard, setTurnPending, setPhase]
   )
 
   // --- Public actions ------------------------------------------------------
@@ -432,10 +461,12 @@ export function useAIEditChat({
   const sendInstruction = useCallback(
     async (text: string) => {
       const instruction = text.trim()
-      if (!instruction || isBusy) return
+      if (!instruction || isBusy) return false
 
       setError(null)
+      setErrorCode(null)
       setIsBusy(true)
+      setPhase('planning')
       stopRef.current = false
 
       const userTurnId = newId()
@@ -462,6 +493,7 @@ export function useAIEditChat({
         const raw = await res.text()
         let data: {
           content?: string
+          code?: string
           jobId?: string | null
           plan?: {
             totalEdits: number
@@ -475,7 +507,10 @@ export function useAIEditChat({
         } catch {
           throw new Error('Server returned an invalid response.')
         }
-        if (!res.ok) throw new Error(data.error || 'Failed to reach the assistant')
+        if (!res.ok) {
+          if (data.code) setErrorCode(data.code)
+          throw new Error(data.error || 'Failed to reach the assistant')
+        }
 
         const assistantTurnId = newId()
         const assistantText = data.content ?? data.plan?.overallSummary ?? ''
@@ -494,12 +529,13 @@ export function useAIEditChat({
         if (!data.jobId || !data.plan || data.plan.totalEdits === 0) {
           setTurns(prev => [...prev, { id: assistantTurnId, role: 'assistant', text: assistantText || 'Let me know what you would like to change.', cardIds: [] }])
           setIsBusy(false)
-          return
+          setPhase(null)
+          return true
         }
 
         setTurns(prev => [
           ...prev,
-          { id: assistantTurnId, role: 'assistant', text: assistantText, cardIds: [], pending: true },
+          { id: assistantTurnId, role: 'assistant', text: assistantText, cardIds: [], pending: true, planTotal: data.plan?.pages.length },
         ])
         plansRef.current[assistantTurnId] = {
           jobId: data.jobId,
@@ -507,14 +543,21 @@ export function useAIEditChat({
           nextIndex: 0,
         }
         await drive(assistantTurnId)
+        return true
       } catch (err) {
         const message = err instanceof Error ? err.message : 'An error occurred'
         log.error('sendInstruction failed:', message)
+        // Drop the failed message from the transcript and the model history:
+        // the caller puts the text back into the composer for a retry.
+        setTurns(prev => prev.filter(t => t.id !== userTurnId))
+        historyRef.current = historyRef.current.slice(0, -1)
         setError(message)
         setIsBusy(false)
+        setPhase(null)
+        return false
       }
     },
-    [isBusy, target, drive]
+    [isBusy, target, drive, setPhase]
   )
 
   const acceptCard = useCallback(
@@ -551,7 +594,7 @@ export function useAIEditChat({
         patchCard(cardId, { status: 'reverting' })
         try {
           await writeRevert(card)
-          patchCard(cardId, { status: 'rejected' })
+          patchCard(cardId, { status: 'rejected', undone: true })
         } catch (err) {
           patchCard(cardId, { status: 'applied', error: err instanceof Error ? err.message : 'Revert failed' })
           return
@@ -573,13 +616,16 @@ export function useAIEditChat({
 
   const respondToCard = useCallback(
     async (cardId: string, feedback: string) => {
+      // Empty feedback = plain retry (e.g. after a failed generation).
       const card = cards[cardId]
       const fb = feedback.trim()
-      if (!card || !fb) return
+      if (!card) return
       const wasApplied = card.status === 'applied'
       patchCard(cardId, { status: 'generating', error: undefined })
+      setIsBusy(true)
+      setPhase('writing')
       try {
-        const gen = await generate(card.jobId, card.pageIndex, fb)
+        const gen = await generate(card.jobId, card.pageIndex, fb || undefined)
         const next: Partial<ChangeCard> = {
           proposedContent: gen.proposedContent,
           originalContent: gen.originalContent,
@@ -596,9 +642,12 @@ export function useAIEditChat({
         }
       } catch (err) {
         patchCard(cardId, { status: wasApplied ? 'applied' : 'failed', error: err instanceof Error ? err.message : 'Revision failed' })
+      } finally {
+        setIsBusy(false)
+        setPhase(null)
       }
     },
-    [cards, patchCard, generate, writeApply]
+    [cards, patchCard, generate, writeApply, setPhase]
   )
 
   const updateCardContent = useCallback(
@@ -613,8 +662,9 @@ export function useAIEditChat({
     stopRef.current = true
     abortRef.current?.abort()
     setIsBusy(false)
+    setPhase(null)
     setTurns(prev => prev.map(t => (t.pending ? { ...t, pending: false } : t)))
-  }, [])
+  }, [setPhase])
 
   const reset = useCallback(() => {
     plansRef.current = {}
@@ -624,14 +674,19 @@ export function useAIEditChat({
     setTurns([])
     setCards({})
     setIsBusy(false)
+    setPhase(null)
     setError(null)
-  }, [currentContent])
+    setErrorCode(null)
+  }, [currentContent, setPhase])
 
   return {
     turns,
     cards,
     isBusy,
+    phase,
+    phaseSince,
     error,
+    errorCode,
     sendInstruction,
     acceptCard,
     rejectCard,

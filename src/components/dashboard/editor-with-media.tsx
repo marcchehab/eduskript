@@ -24,7 +24,6 @@ import type { AIEditTarget } from '@/hooks/use-ai-edit'
 import { useIsFreeTeacher } from '@/hooks/use-billing'
 import { QuestSpotlight } from '@/components/onboarding/quest-spotlight'
 import { useQuestStep } from '@/lib/onboarding-quest/use-quest-step'
-import { useRouter } from 'next/navigation'
 import type { VideoInfo } from '@/lib/skript-files'
 import { extractAndUploadPdfPages } from '@/lib/pdf-extract'
 import type { PasteMenuOption } from '@/lib/paste-rules'
@@ -168,7 +167,6 @@ export function EditorWithMedia({
 }: EditorWithMediaProps) {
   const alert = useAlertDialog()
   const isFreePlan = useIsFreeTeacher()
-  const router = useRouter()
 
   const [fileList, setFileList] = useState<Array<{
     id: string
@@ -712,10 +710,7 @@ export function EditorWithMedia({
               videoList={videoList}
               fileListLoading={fileListLoading}
               onFileUpload={refreshFileList}
-              onAIEdit={aiEdit ? () => {
-                if (isFreePlan) router.push('/dashboard/billing')
-                else setAiEditModalOpen(true)
-              } : undefined}
+              onAIEdit={aiEdit ? () => setAiEditModalOpen(true) : undefined}
               aiEditLocked={Boolean(aiEdit) && isFreePlan}
               onExcalidrawEdit={(filename, fileId) => handleExcalidrawEdit({ id: fileId, name: filename })}
             />
@@ -1069,6 +1064,9 @@ export function EditorWithMedia({
           targetSubtitle={aiEdit.targetSubtitle}
           currentContent={content}
           onEditsApplied={onAIEditApplied}
+          locked={isFreePlan}
+          fileList={fileList}
+          videoList={videoList}
         />
       )}
 

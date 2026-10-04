@@ -16,9 +16,16 @@ interface MergeEditorProps {
   proposed: string
   onChange: (content: string) => void
   className?: string
+  /**
+   * Review layout (AI Edit chat cards): no per-chunk accept/revert buttons and
+   * no toolbar — the card's Apply/Discard is the only decision. Unchanged
+   * stretches are collapsed and the view opens at the first change.
+   */
+  reviewMode?: boolean
+  readOnly?: boolean
 }
 
-export function MergeEditor({ original, proposed, onChange, className = '' }: MergeEditorProps) {
+export function MergeEditor({ original, proposed, onChange, className = '', reviewMode = false, readOnly = false }: MergeEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
   // Store onChange in a ref to avoid recreating the editor when it changes
@@ -107,9 +114,11 @@ export function MergeEditor({ original, proposed, onChange, className = '' }: Me
               borderRight: isDark ? '1px solid #333' : '1px solid #ddd',
             },
           }),
+          readOnly ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : [],
           unifiedMergeView({
             original: normalizedOriginal,
-            mergeControls: true,
+            mergeControls: !reviewMode,
+            ...(reviewMode ? { collapseUnchanged: { margin: 3, minSize: 6 } } : {}),
             highlightChanges: true,
             gutter: true,
             // Default scanLimit (500) makes the Myers diff give up on larger
@@ -131,10 +140,22 @@ export function MergeEditor({ original, proposed, onChange, className = '' }: Me
 
     viewRef.current = view
 
+    // Open at the first change instead of line 1 — on a long page the edit
+    // can otherwise sit far below the visible window.
+    if (reviewMode) {
+      const first = getChunks(view.state)?.chunks[0]
+      if (first) {
+        requestAnimationFrame(() => {
+          if (viewRef.current !== view) return
+          view.dispatch({ effects: EditorView.scrollIntoView(first.fromB, { y: 'start', yMargin: 24 }) })
+        })
+      }
+    }
+
     return () => {
       view.destroy()
     }
-  }, [normalizedOriginal, normalizedProposed, isNoop, isDark])
+  }, [normalizedOriginal, normalizedProposed, isNoop, isDark, reviewMode, readOnly])
 
   // Hand the normalized proposed text up on mount/change so the parent
   // doesn't save the pre-normalization version when there's no diff.
@@ -159,7 +180,8 @@ export function MergeEditor({ original, proposed, onChange, className = '' }: Me
     <div className={`flex flex-col ${className}`}>
       {/* Toolbar — note that "accept" is the *default*: the editor starts
           with the AI's suggested text. The user only needs to act if they
-          want to revert something. */}
+          want to revert something. Hidden in review mode. */}
+      {!reviewMode && (
       <div className="flex items-center gap-2 px-2 py-1.5 border-b bg-muted/30">
         <Button
           variant="ghost"
@@ -174,6 +196,7 @@ export function MergeEditor({ original, proposed, onChange, className = '' }: Me
           Suggestions are kept by default — use the gutter buttons to revert individual changes.
         </span>
       </div>
+      )}
 
       {/* Editor */}
       <div
@@ -191,9 +214,10 @@ interface SimpleEditorProps {
   content: string
   onChange: (content: string) => void
   className?: string
+  readOnly?: boolean
 }
 
-export function SimpleEditor({ content, onChange, className = '' }: SimpleEditorProps) {
+export function SimpleEditor({ content, onChange, className = '', readOnly = false }: SimpleEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
   const onChangeRef = useRef(onChange)
@@ -221,6 +245,7 @@ export function SimpleEditor({ content, onChange, className = '' }: SimpleEditor
           markdown(),
           isDark ? oneDark : [],
           EditorView.lineWrapping,
+          readOnly ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : [],
           EditorView.theme({
             '&': {
               fontSize: '13px',
@@ -252,7 +277,7 @@ export function SimpleEditor({ content, onChange, className = '' }: SimpleEditor
     return () => {
       view.destroy()
     }
-  }, [content, isDark])
+  }, [content, isDark, readOnly])
 
   return (
     <div className={`flex flex-col ${className}`}>

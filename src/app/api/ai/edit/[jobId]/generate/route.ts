@@ -362,9 +362,11 @@ export async function POST(
       },
     })
 
+    // The raw message is provider/SDK text (status codes, model ids, JSON
+    // fragments) — logged above, not shown to the teacher.
     return Response.json({
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to generate edit',
+      error: 'The AI could not write this change. Please try again.',
       pageIndex,
     }, { status: 500 })
   }

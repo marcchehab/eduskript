@@ -31,6 +31,15 @@ export const PAYWALL_COPY = {
     aiDiagramTitle: 'Diagramme mit KI erstellen gehört zu Classroom. Freischalten unter Billing.',
     aiDiagramLabel: 'Mit KI erstellen (Classroom)',
     aiEditTitle: 'AI Edit gehört zu Classroom. Klicken zum Freischalten.',
+    aiEditLockedTitle: 'AI Edit gehört zu Classroom',
+    aiEditLockedBody:
+      'Beschreib in einem Satz, was sich ändern soll. Die KI schlägt die Änderung vor, du siehst sie als Vorschau und übernimmst sie mit einem Klick.',
+    aiEditLockedExamples: [
+      'Füge nach den Reaktionsgleichungen eine Übung mit aufklappbarer Lösung hinzu.',
+      'Vereinfache die Sprache für 14-Jährige.',
+      'Mach aus diesem Abschnitt drei Quizfragen.',
+    ],
+    aiEditLockedCta: 'Classroom ansehen',
   },
   en: {
     title: 'Upgrade Required',
@@ -41,6 +50,15 @@ export const PAYWALL_COPY = {
     aiDiagramTitle: 'AI generation is a paid feature. Upgrade in Billing.',
     aiDiagramLabel: 'Generate with AI (paid)',
     aiEditTitle: 'AI Edit is a paid feature — click to upgrade',
+    aiEditLockedTitle: 'AI Edit is part of Classroom',
+    aiEditLockedBody:
+      'Describe the change in one sentence. The AI proposes it, you see a preview and apply it with one click.',
+    aiEditLockedExamples: [
+      'Add a practice exercise with a collapsible solution after the equations.',
+      'Simplify the language for 14-year-olds.',
+      'Turn this section into three quiz questions.',
+    ],
+    aiEditLockedCta: 'See Classroom',
   },
 } as const
 

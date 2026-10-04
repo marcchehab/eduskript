@@ -22,6 +22,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { DockedPanel, DOCKED_PANEL_BORDER } from "@/components/docked-panel";
 import { UiLocaleSwitcher, useUiLocale } from "@/lib/i18n/client";
+import { useIsFreeTeacher } from "@/hooks/use-billing";
 import type { UiLocale } from "@/lib/i18n/locale";
 import {
   fetchQuestState,
@@ -99,6 +100,21 @@ const STEP_LABELS: Record<UiLocale, Record<QuestStep, string>> = {
     view_via_eye_icon: "Preview a page with the eye icon",
     return_via_edit_link: "Return to page editor",
     use_ai_edit: "Use AI edit to add a page",
+  },
+};
+
+// Free plan: AI Edit is a Classroom feature, so the last step can't be done
+// as written. Marked instead of hidden so the checklist stays the same length.
+const AI_EDIT_PAID_LABEL: Record<UiLocale, { suffix: string; description: string }> = {
+  de: {
+    suffix: " (Classroom)",
+    description:
+      'AI Edit gehört zu Classroom. Klick auf "AI Edit", um zu sehen, was es kann.',
+  },
+  en: {
+    suffix: " (Classroom)",
+    description:
+      'AI Edit is part of Classroom. Click "AI Edit" to see what it does.',
   },
 };
 
@@ -193,6 +209,7 @@ export function OnboardingQuestWidget() {
   const { completeStep, dismissQuest, jumpToStep } = useQuestStep();
   const locale = useUiLocale();
   const t = COPY[locale];
+  const isFreePlan = useIsFreeTeacher();
   const [state, setState] = useState<QuestState | null>(null);
   const [justGrantedBanner, setJustGrantedBanner] = useState(false);
   const [stepVideos, setStepVideos] = useState<
@@ -348,12 +365,15 @@ export function OnboardingQuestWidget() {
                 }
               >
                 {STEP_LABELS[locale][step]}
+                {step === "use_ai_edit" && isFreePlan && AI_EDIT_PAID_LABEL[locale].suffix}
               </span>
             </div>
             {active && (
               <>
                 <p className="text-xs text-blue-600 dark:text-blue-400">
-                  {STEP_DESCRIPTIONS[locale][step]}
+                  {step === "use_ai_edit" && isFreePlan
+                    ? AI_EDIT_PAID_LABEL[locale].description
+                    : STEP_DESCRIPTIONS[locale][step]}
                 </p>
                 {stepVideos[step] && (
                   <div className="mt-1.5">
