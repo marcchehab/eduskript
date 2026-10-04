@@ -2166,6 +2166,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
             label: 'Maths',
             accent: {
               active: 'border-violet-500 text-violet-700 dark:text-violet-300',
+              fill: 'from-violet-500/15 to-violet-500/[0.02]',
               idle: 'text-violet-600/70 dark:text-violet-400/70 hover:text-violet-700 dark:hover:text-violet-300',
             },
             content: (
@@ -2209,6 +2210,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
             label: 'Physics',
             accent: {
               active: 'border-orange-500 text-orange-700 dark:text-orange-300',
+              fill: 'from-orange-500/15 to-orange-500/[0.02]',
               idle: 'text-orange-600/70 dark:text-orange-400/70 hover:text-orange-700 dark:hover:text-orange-300',
             },
             content: (
@@ -2253,6 +2255,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
             label: 'Chemistry',
             accent: {
               active: 'border-emerald-500 text-emerald-700 dark:text-emerald-300',
+              fill: 'from-emerald-500/15 to-emerald-500/[0.02]',
               idle: 'text-emerald-600/70 dark:text-emerald-400/70 hover:text-emerald-700 dark:hover:text-emerald-300',
             },
             content: (
@@ -2277,6 +2280,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
             label: 'Computer Science',
             accent: {
               active: 'border-cyan-500 text-cyan-700 dark:text-cyan-300',
+              fill: 'from-cyan-500/15 to-cyan-500/[0.02]',
               idle: 'text-cyan-600/70 dark:text-cyan-400/70 hover:text-cyan-700 dark:hover:text-cyan-300',
             },
             content: (
@@ -2372,6 +2376,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
             align: 'right' as const,
             accent: {
               active: 'border-violet-500 text-violet-600 dark:text-violet-400',
+              fill: 'from-violet-500/15 to-violet-500/[0.02]',
               idle: 'text-violet-600/80 dark:text-violet-400/80',
             },
             content: (

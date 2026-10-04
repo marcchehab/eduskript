@@ -32,7 +32,7 @@ export interface RibbonTabDef {
   content: ReactNode
   /** Word-contextual-tab-style coloring (e.g. subject tabs): tailwind classes
       for the active and idle tab label. Neutral tabs omit it. */
-  accent?: { active: string; idle: string }
+  accent?: { active: string; idle: string; fill?: string }
   /** Small icon before the label. */
   icon?: ReactNode
   /** Render at the right end of the tab bar (e.g. AI Edit) instead of in sequence. */
@@ -101,7 +101,13 @@ export function Ribbon({ tabs, tabBarRight }: RibbonProps) {
       </div>
       {/* Panel */}
       {!collapsed && (
-        <div className="mx-2 mb-2 mt-1 flex items-stretch overflow-x-auto rounded-md border border-border/70 bg-muted/30 px-2 py-1">
+        <div
+          // Word-style tinted panel: a soft top-to-bottom gradient in the
+          // active tab's color (neutral tabs: primary).
+          className={`mx-2 mb-2 mt-1 flex items-stretch overflow-x-auto rounded-md px-2 py-1 bg-linear-to-b ${
+            active?.accent?.fill ?? 'from-primary/12 to-primary/[0.02]'
+          }`}
+        >
           {active?.content}
         </div>
       )}
