@@ -4,10 +4,11 @@ import Link from 'next/link'
 import { TERMS_DATE } from '@/components/legal-footer'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
-import { useSession } from 'next-auth/react'
+import { useSession, signOut } from 'next-auth/react'
 import { cn } from '@/lib/utils'
-import { BookOpen, Settings, Users, ChevronLeft, ChevronRight, Shield, GraduationCap, User, Camera, CornerUpLeft, Globe, BarChart3, CreditCard, Lock, Tag, Puzzle, ClipboardCheck } from 'lucide-react'
+import { BookOpen, Settings, Users, ChevronLeft, ChevronRight, Shield, GraduationCap, User, Camera, CornerUpLeft, Globe, BarChart3, CreditCard, Lock, Tag, Puzzle, ClipboardCheck, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ThemeToggle } from './theme-toggle'
 
 // Per-site authoring items (site-scoped URLs). A teacher normally has one
 // site; superadmin-granted extra sites each get their own stacked block.
@@ -147,6 +148,11 @@ export function DashboardSidebar() {
   // Get user's display name
   const userName = session?.user?.name || 'My Account'
 
+  // Students go back to the teacher site they came from; everyone else home.
+  const signOutUrl = isStudent
+    ? (lastTeacherPage ? `/${lastTeacherPage.slug}` : session?.user?.signedUpFromPageSlug ? `/${session.user.signedUpFromPageSlug}` : '/')
+    : '/'
+
   return (
     <div className={cn(
       "bg-card border-r border-border h-full transition-all duration-300 flex flex-col",
@@ -175,12 +181,19 @@ export function DashboardSidebar() {
               <CornerUpLeft className="w-4 h-4 shrink-0" />
               {!isCollapsed && <span className="truncate max-w-36">Back to {lastTeacherPage.name}</span>}
             </Link>
+          ) : !isCollapsed ? (
+            // Brand / home link — the dashboard has no top bar any more
+            // (same as the public pages: everything lives in the sidebar).
+            <Link href="/dashboard" className="px-2 text-lg font-bold text-foreground">
+              Eduskript
+            </Link>
           ) : (
             <div />
           )}
           <Button
             variant="ghost"
             size="sm"
+            title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             onClick={() => setIsCollapsed(!isCollapsed)}
             className={cn(
               "p-2",
@@ -405,9 +418,31 @@ export function DashboardSidebar() {
           )}
         </nav>
 
+        {/* Account: who is signed in, theme, sign out (formerly the top bar). */}
+        <div className={cn('mt-2 border-t border-border pt-3', isCollapsed ? 'flex flex-col items-center gap-1' : '')}>
+          {!isCollapsed && (
+            <div className="px-2 pb-1 text-xs text-muted-foreground truncate" title={session?.user?.email ?? undefined}>
+              Signed in as <span className="text-foreground">{userName}</span>
+            </div>
+          )}
+          <div className={cn('flex items-center', isCollapsed ? 'flex-col gap-1' : 'gap-1')}>
+            <ThemeToggle />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => signOut({ callbackUrl: signOutUrl })}
+              title="Sign out"
+              className={cn('text-muted-foreground hover:text-foreground', isCollapsed ? 'w-10 h-10 p-0' : 'gap-2')}
+            >
+              <LogOut className="w-4 h-4" />
+              {!isCollapsed && <span>Sign out</span>}
+            </Button>
+          </div>
+        </div>
+
         {/* Legal links - bottom of sidebar */}
         {!isCollapsed && (
-          <div className="px-3 py-3 text-center text-[11px] text-muted-foreground/40">
+          <div className="px-3 pt-2 text-center text-[11px] text-muted-foreground/40">
             <Link href="/impressum" className="hover:text-muted-foreground">Legal</Link>
             <span className="mx-1.5">·</span>
             <Link href="/datenschutz" className="hover:text-muted-foreground">Privacy</Link>

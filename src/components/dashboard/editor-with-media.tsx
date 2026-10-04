@@ -137,8 +137,9 @@ const DEFAULT_EDITOR_HEIGHT = 500
 const MIN_EDITOR_HEIGHT = 240
 /** Lowest auto-fit height; below this small screens scroll the page instead. */
 const MIN_FIT_HEIGHT = 420
-/** App bar (≈73px) + status row and margins below the editor box. */
-const FIT_HEIGHT_RESERVE = 130
+/** Status row + resize bar + margins below the editor box (no app bar since
+ *  the dashboard moved theme/sign-out into the sidebar). */
+const FIT_HEIGHT_RESERVE = 70
 const EDITOR_HEIGHT_STORAGE_KEY = 'eduskript:editor-height'
 
 /** Derive an image file extension from a pasted blob.

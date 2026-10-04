@@ -1,7 +1,6 @@
 import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
 import { authOptions } from '@/lib/auth'
-import { DashboardNav } from '@/components/dashboard/nav'
 import { DashboardSidebar } from '@/components/dashboard/sidebar'
 import { ErrorProvider } from '@/contexts/error-context'
 import { TrialBanner } from '@/components/dashboard/trial-banner'
@@ -30,7 +29,6 @@ export default async function DashboardLayout({
   return (
     <ErrorProvider>
       <div className="h-screen flex flex-col bg-background overflow-hidden">
-        <DashboardNav />
         <TrialBanner userId={session.user.id} />
         <div className="flex flex-1 overflow-hidden">
           <DashboardSidebar />
