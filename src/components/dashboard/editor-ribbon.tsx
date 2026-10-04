@@ -103,9 +103,9 @@ export function Ribbon({ tabs, tabBarRight }: RibbonProps) {
       {!collapsed && (
         <div
           // Word-style tinted panel: a soft top-to-bottom gradient in the
-          // active tab's color (neutral tabs: primary).
+          // active tab's color (neutral tabs: gray).
           className={`mx-2 mb-2 mt-1 flex items-stretch overflow-x-auto rounded-md px-2 py-1 bg-linear-to-b ${
-            active?.accent?.fill ?? 'from-primary/12 to-primary/[0.02]'
+            active?.accent?.fill ?? 'from-muted-foreground/15 to-muted-foreground/[0.03]'
           }`}
         >
           {active?.content}
