@@ -810,6 +810,8 @@ export const getOrgPublishedPage = (
               isUnlisted: true,
               pageType: true,
               examSettings: true,
+              forkedFromPageId: true,
+              forkedFromAuthorId: true,
               createdAt: true,
               updatedAt: true,
             }

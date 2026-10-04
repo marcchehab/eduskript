@@ -3,6 +3,7 @@ import { currentSlugForAlias } from '@/lib/site-slugs'
 import { PublicSiteLayout } from '@/components/public/layout'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
 import { ReflowGate } from '@/components/public/reflow-gate'
+import { ForkAttribution } from '@/components/public/fork-attribution'
 import { getPublicLayers } from '@/lib/public-page-data'
 import { ClassToolbar } from '@/components/teacher/class-toolbar'
 import type { Metadata } from 'next'
@@ -165,7 +166,15 @@ export default async function OrgTeacherContentPage({ params }: PageProps) {
   const currentPath = `/${skriptSlug}/${contentPageSlug}`
 
   const body = (
-    <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border">
+    <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border relative">
+      {(page.forkedFromPageId || page.forkedFromAuthorId) && (
+        <div className="absolute top-16 right-16">
+          <ForkAttribution
+            forkedFromPageId={page.forkedFromPageId}
+            forkedFromAuthorId={page.forkedFromAuthorId}
+          />
+        </div>
+      )}
       <article className="prose-theme">
         <ReflowGate pageId={page.id} content={page.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes}>
           <ServerMarkdownRenderer

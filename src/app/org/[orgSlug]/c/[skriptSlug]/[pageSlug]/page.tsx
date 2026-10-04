@@ -7,6 +7,7 @@ import { ReflowGate } from '@/components/public/reflow-gate'
 import type { Metadata } from 'next'
 import { prisma } from '@/lib/prisma'
 import { getOrgPublishedPage } from '@/lib/cached-queries'
+import { ForkAttribution } from '@/components/public/fork-attribution'
 import { getOrgSidebarData } from '@/lib/sidebar-items'
 import { CurrentSiteProvider } from '@/contexts/current-site-context'
 import { buildSiteStructure } from '@/lib/site-structure'
@@ -287,7 +288,15 @@ export default async function OrgPublicPage({ params }: PageProps) {
           />
         </Suspense>
       )}
-      <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border">
+      <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border relative">
+        {(page.forkedFromPageId || page.forkedFromAuthorId) && (
+          <div className="absolute top-16 right-16">
+            <ForkAttribution
+              forkedFromPageId={page.forkedFromPageId}
+              forkedFromAuthorId={page.forkedFromAuthorId}
+            />
+          </div>
+        )}
         <article className="prose-theme">
           <ReflowGate pageId={page.id} content={page.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes}>
             <ServerMarkdownRenderer
