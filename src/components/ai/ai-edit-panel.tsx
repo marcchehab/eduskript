@@ -139,7 +139,7 @@ export function AIEditPanel({
             </div>
           </div>
         )}
-        <div className="flex items-end gap-2">
+        <div className="flex items-stretch gap-2">
           <Textarea
             value={input}
             onChange={e => setInput(e.target.value)}
@@ -150,15 +150,15 @@ export function AIEditPanel({
               }
             }}
             placeholder={pendingChanges > 0 ? 'Review the marked changes first, or ask for a different version…' : 'Describe the change you want… (Enter to send, Shift+Enter for a new line)'}
-            rows={3}
-            className="min-h-[76px] resize-y bg-background text-sm"
+            rows={2}
+            className="min-h-[52px] resize-y bg-background text-sm"
           />
           {chat.isBusy ? (
-            <Button variant="destructive" size="icon" onClick={chat.stop} title="Stop" className="h-[76px] w-[44px] shrink-0">
+            <Button variant="destructive" size="icon" onClick={chat.stop} title="Stop" className="h-auto min-h-[52px] w-[44px] shrink-0">
               <Square className="h-4 w-4 fill-current" />
             </Button>
           ) : (
-            <Button size="icon" onClick={() => void send()} disabled={!input.trim()} title="Send (Enter)" className="h-[76px] w-[44px] shrink-0">
+            <Button size="icon" onClick={() => void send()} disabled={!input.trim()} title="Send (Enter)" className="h-auto min-h-[52px] w-[44px] shrink-0">
               <Send className="h-4 w-4" />
             </Button>
           )}
