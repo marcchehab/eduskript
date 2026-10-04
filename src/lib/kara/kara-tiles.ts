@@ -67,6 +67,9 @@ export type KaraTileset = Map<string, HTMLImageElement>
  */
 export const EVIDENCE_LOOKS = ['cup', 'note', 'logbook', 'datachip', 'camera', 'bottle']
 
+/** Own obstacle sprites in public/kara/obstacles/ (Blender, ~/coding/mop7-trailer/scripts/crates.py). */
+const OWN_OBSTACLES = ['coffee-1', 'coffee-2', 'coffee-3']
+
 let tilesetPromise: Promise<KaraTileset> | null = null
 
 /** Loads every tile once per page. Missing files are simply absent (→ placeholder). */
@@ -81,6 +84,7 @@ export function loadKaraTileset(): Promise<KaraTileset> {
     })
     await Promise.all([
       ...EVIDENCE_LOOKS.map(l => load(`evidence-${l}`, `/kara/evidence/${l}.png`)),
+      ...OWN_OBSTACLES.map(n => load(n, `/kara/obstacles/${n}.png`)),
       ...(KARA_TILESET_URL ? TILE_NAMES.map(name => load(name, `${KARA_TILESET_URL}/${name}.png`)) : []),
     ])
     return set
@@ -199,6 +203,8 @@ export function drawKaraTiles(ctx: CanvasRenderingContext2D, world: KaraWorld, c
       if (FLOOR_OBJECTS[look]) drawObject(ctx, set, FLOOR_OBJECTS[look], px, py, tile)
       if (look === 'm') drawMusicNote(ctx, px, py, tile)
       if (c & BLOCK && OBSTACLES[look]) drawObject(ctx, set, OBSTACLES[look], px, py, tile)
+      // `K`: coffee crates, one of three stacks picked per cell (stable across redraws).
+      if (c & BLOCK && look === 'K') drawObject(ctx, set, OWN_OBSTACLES[cellHash(x, y) % OWN_OBSTACLES.length], px, py, tile)
       if (c & CHIP) drawEvidence(ctx, set, lookAt.get(i), px, py, tile)
       if (c & ITEM) drawObject(ctx, set, 'item', px, py, tile)
       if (c & BOX) drawObject(ctx, set, 'box', px, py, tile)

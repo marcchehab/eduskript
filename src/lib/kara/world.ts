@@ -17,6 +17,7 @@
  *
  * Grid legend (one char per cell, rows padded with floor):
  *   .  or space   floor                 s   slime trail (decoration)
+ *   K             coffee crates (stacked cargo, blocks; 3 sprite variants)
  *   #             wall (autotiled)      x T P L R Y  crate / table / desk (PC) /
  *                                                    locker / red / yellow barrel —
  *                                                    obstacles, block like walls
@@ -280,7 +281,7 @@ export const AFTERMATH_TEXT = 'Ich habe Ihr Programm kurz in der Schleuse getest
 export const AFTERMATH_STEPS = 300
 
 const DIR_CHARS: Record<string, KaraDir> = { '^': 0, '>': 1, 'v': 2, '<': 3 }
-const OBSTACLES = new Set(['#', 'x', 'T', 'P', 'L', 'R', 'Y'])
+const OBSTACLES = new Set(['#', 'x', 'T', 'P', 'L', 'R', 'Y', 'K'])
 const GOALS = new Set<KaraGoal>(['exit', 'target', 'collect', 'boxes', 'chips', 'logs', 'output'])
 
 /** Legend char → [flags, look]. Kara chars and unknown chars are floor. */
