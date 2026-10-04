@@ -33,6 +33,10 @@ export interface RibbonTabDef {
   /** Word-contextual-tab-style coloring (e.g. subject tabs): tailwind classes
       for the active and idle tab label. Neutral tabs omit it. */
   accent?: { active: string; idle: string }
+  /** Small icon before the label. */
+  icon?: ReactNode
+  /** Render at the right end of the tab bar (e.g. AI Edit) instead of in sequence. */
+  align?: 'right'
 }
 
 interface RibbonProps {
@@ -58,7 +62,9 @@ export function Ribbon({ tabs, tabBarRight }: RibbonProps) {
     <div className="border-b border-border select-none">
       {/* Tab bar */}
       <div className="flex items-center gap-0.5 px-2 pt-1 text-sm">
-        {tabs.map(tab => (
+        {[...tabs.filter(t => t.align !== 'right'), null, ...tabs.filter(t => t.align === 'right')].map(tab => tab === null ? (
+          <div key="__spacer" className="flex-1" />
+        ) : (
           <button
             key={tab.id}
             type="button"
@@ -77,12 +83,12 @@ export function Ribbon({ tabs, tabBarRight }: RibbonProps) {
                 : tab.accent
                   ? `border-transparent hover:bg-accent/50 ${tab.accent.idle}`
                   : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-accent/50'
-            }`}
+            } ${tab.icon ? 'flex items-center gap-1.5' : ''}`}
           >
+            {tab.icon}
             {tab.label}
           </button>
         ))}
-        <div className="flex-1" />
         {tabBarRight}
         <button
           type="button"

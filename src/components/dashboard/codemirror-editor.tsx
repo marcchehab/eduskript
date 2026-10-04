@@ -2368,6 +2368,8 @@ const CodeMirrorEditor = function CodeMirrorEditor({
           ...(aiInline && !useSimpleEditor && skriptId && pageId ? [{
             id: 'ai',
             label: 'AI Edit',
+            icon: <Wand2 className="w-4 h-4" />,
+            align: 'right' as const,
             accent: {
               active: 'border-violet-500 text-violet-600 dark:text-violet-400',
               idle: 'text-violet-600/80 dark:text-violet-400/80',
