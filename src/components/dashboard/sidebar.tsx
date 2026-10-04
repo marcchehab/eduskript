@@ -208,6 +208,23 @@ export function DashboardSidebar() {
           </Button>
         </div>
 
+        {/* Account controls (formerly the top bar), at the top like the
+            public sidebar: theme toggle and sign out; the name is the
+            tooltip. Collapsed: stacked icons. */}
+        <div className={cn('mb-3 flex items-center', isCollapsed ? 'flex-col gap-1' : 'gap-1 px-1')}>
+          <ThemeToggle />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => signOut({ callbackUrl: signOutUrl })}
+            title={`Sign out (${userName})`}
+            className={cn('text-muted-foreground hover:text-foreground', isCollapsed ? 'w-10 h-10 p-0' : 'gap-2')}
+          >
+            <LogOut className="w-4 h-4" />
+            {!isCollapsed && <span>Sign out</span>}
+          </Button>
+        </div>
+
         <nav className="space-y-1 flex-1 min-h-0 overflow-y-auto">
           {/* Student Navigation */}
           {isStudent && (
@@ -418,31 +435,9 @@ export function DashboardSidebar() {
           )}
         </nav>
 
-        {/* Account: who is signed in, theme, sign out (formerly the top bar). */}
-        <div className={cn('mt-2 border-t border-border pt-3', isCollapsed ? 'flex flex-col items-center gap-1' : '')}>
-          {!isCollapsed && (
-            <div className="px-2 pb-1 text-xs text-muted-foreground truncate" title={session?.user?.email ?? undefined}>
-              Signed in as <span className="text-foreground">{userName}</span>
-            </div>
-          )}
-          <div className={cn('flex items-center', isCollapsed ? 'flex-col gap-1' : 'gap-1')}>
-            <ThemeToggle />
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => signOut({ callbackUrl: signOutUrl })}
-              title="Sign out"
-              className={cn('text-muted-foreground hover:text-foreground', isCollapsed ? 'w-10 h-10 p-0' : 'gap-2')}
-            >
-              <LogOut className="w-4 h-4" />
-              {!isCollapsed && <span>Sign out</span>}
-            </Button>
-          </div>
-        </div>
-
         {/* Legal links - bottom of sidebar */}
         {!isCollapsed && (
-          <div className="px-3 pt-2 text-center text-[11px] text-muted-foreground/40">
+          <div className="px-3 py-3 text-center text-[11px] text-muted-foreground/40">
             <Link href="/impressum" className="hover:text-muted-foreground">Legal</Link>
             <span className="mx-1.5">·</span>
             <Link href="/datenschutz" className="hover:text-muted-foreground">Privacy</Link>
