@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button'
 import { MarkdownRenderer } from '@/components/markdown/markdown-renderer.client'
 import { useUiLocale, UiLocaleSwitcher } from '@/lib/i18n/client'
 import { pick } from '@/lib/i18n/locale'
+import { ThemeToggle } from '@/components/theme-toggle'
 import type { ImportWarnings } from '@/lib/script-import/service'
 
 interface Props {
@@ -87,7 +88,10 @@ export function ImportPreview(props: Props) {
   const header = (
     <header className="flex items-center justify-between gap-4 px-4 sm:px-8 py-3 border-b border-border">
       <Link href="/import" className="font-semibold text-lg">Eduskript</Link>
-      <UiLocaleSwitcher />
+      <div className="flex items-center gap-2">
+        <UiLocaleSwitcher />
+        <ThemeToggle />
+      </div>
     </header>
   )
 
@@ -129,6 +133,18 @@ export function ImportPreview(props: Props) {
   const page = pages[Math.min(active, pages.length - 1)]
   const w = props.warnings
   const notices = [
+    w?.source === 'pdf'
+      ? t(
+          `Aus PDF gelesen: Text und Formeln hat die KI vom Seitenbild abgelesen${w.pdfFigures ? `, ${w.pdfFigures} Abbildungen wurden ausgeschnitten` : ''}. Bitte prüfen – aus der Word-Datei wäre es genauer.`,
+          `Read from PDF: the AI read text and formulas off the page images${w.pdfFigures ? `, ${w.pdfFigures} figures were cut out` : ''}. Please check – the Word file would be more accurate.`
+        )
+      : null,
+    w?.pagesAsImages
+      ? t(
+          `${w.pagesAsImages} Seiten konnten nicht gelesen werden und erscheinen als Bild.`,
+          `${w.pagesAsImages} pages could not be read and are shown as pictures.`
+        )
+      : null,
     w?.formulasTranscribed
       ? t(
           `${w.formulasTranscribed} Formeln lagen im alten Word-Formeleditor vor und wurden automatisch abgelesen. Bitte stichprobenartig prüfen.`,

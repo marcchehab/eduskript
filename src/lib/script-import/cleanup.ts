@@ -44,9 +44,20 @@ function client() {
 }
 const model = () => process.env.SCRIPT_IMPORT_MODEL ?? 'google/gemini-3.8-flash'
 
-export const CLEANUP_SYSTEM = `Du bereitest ein Unterrichtsskript, das aus Word (.docx) automatisch nach Markdown konvertiert wurde, für die Plattform Eduskript auf. Du bekommst einen Abschnitt davon.
+export type ImportSource = 'docx' | 'pdf' | 'text'
 
-Ziel: Gleicher Inhalt, sauberes Eduskript-Markdown. Du änderst die Form, nicht den Inhalt.
+const SOURCE_INTRO: Record<ImportSource, string> = {
+  docx: 'Du bereitest ein Unterrichtsskript, das aus Word (.docx) automatisch nach Markdown konvertiert wurde, für die Plattform Eduskript auf. Du bekommst einen Abschnitt davon.',
+  text: 'Du bereitest Text für die Plattform Eduskript auf, den eine Lehrperson eingefügt hat (Markdown, Klartext, oder aus LaTeX/HTML nach Markdown konvertiert). Du bekommst einen Abschnitt davon.',
+  pdf: 'Du bereitest ein Unterrichtsskript für die Plattform Eduskript auf, das aus einer PDF-Datei gelesen wurde.',
+}
+
+/** System prompt for one source; the rules after the intro are shared (also by convert-pdf.ts). */
+export function cleanupSystem(source: ImportSource): string {
+  return `${SOURCE_INTRO[source]}\n\n${CLEANUP_RULES}`
+}
+
+export const CLEANUP_RULES = `Ziel: Gleicher Inhalt, sauberes Eduskript-Markdown. Du änderst die Form, nicht den Inhalt.
 
 Pflicht:
 - Jeden Satz, jede Aufgabe, jede Formel, jede Tabellenzeile und jedes Bild behalten. Nichts kürzen, zusammenfassen, umformulieren, ergänzen oder übersetzen. Keine eigenen Erklärungen oder Lösungen hinzufügen.
@@ -65,11 +76,16 @@ Textfelder: Inhalt zwischen den Zeilen TEXTFELD-ANFANG und TEXTFELD-ENDE stand i
 
 Formelbilder: Referenzen \`![](formula-N.png)\` sind Formeln aus dem alten Word-Formeleditor. Das Bild jeder solchen Referenz ist der Nachricht beigefügt, jeweils nach einer Zeile «formula-N.png:». Ersetze die Referenz durch die abgelesene Formel in LaTeX: $…$ im Fliesstext, $$…$$ wenn die Formel allein auf einer Zeile steht. Genau abschreiben, nichts vereinfachen oder ausrechnen. Ist ein Bild unleserlich oder keine Formel, lass die Referenz unverändert.
 
+Symbolbilder: Referenzen \`![](symbol-N.png)\` sind kleine Grafiken mitten im Text (z.B. Reaktionspfeil, Gleichgewichtspfeil, Häkchen, Symbol). Ihr Bild ist ebenfalls beigefügt. Ersetze sie durch das passende Zeichen oder LaTeX. Steht der Pfeil in einer Reaktionsgleichung, schreibe die ganze Gleichung in mhchem, z.B. «SO<sub>2</sub> + H<sub>2</sub>O ![](symbol-1.png) H<sub>2</sub>SO<sub>3</sub>» → $\\ce{SO2 + H2O <=> H2SO3}$. Ist die Grafik kein Zeichen (z.B. ein kleines Foto), lass die Referenz unverändert.
+
 Antworte ausschliesslich mit dem Markdown des Abschnitts, ohne Einleitung, ohne umschliessenden Codeblock.
 
 ${getCondensedSyntaxReference()}`
 
-const FORMULA_REF = /!\[[^\]]*\]\((formula-\d+\.png)\)/g
+export const CLEANUP_SYSTEM = cleanupSystem('docx')
+
+/** Pictures the model should read: legacy formulas (formula-N) and tiny inline symbols (symbol-N). */
+const FORMULA_REF = /!\[[^\]]*\]\(((?:formula|symbol)-\d+\.png)\)/g
 const formulaCount = (s: string) => (s.match(FORMULA_REF) ?? []).length
 
 /**
@@ -123,7 +139,7 @@ const imageRefs = (s: string) =>
     ...Array.from(s.matchAll(/!\[[^\]]*\]\(([^)\s]+)\)/g), (m) => m[1]),
     ...Array.from(s.matchAll(/<img\b[^>]*\bsrc="([^"]+)"/g), (m) => m[1]),
   ]
-    .filter((ref) => !ref.startsWith('formula-'))
+    .filter((ref) => !/^(formula|symbol)-/.test(ref))
     .sort()
 
 /** True if the cleaned chunk plausibly kept all content of the original. */
@@ -165,15 +181,35 @@ function chunkContent(chunk: string, images: Images): OpenAI.Chat.ChatCompletion
 // with finish_reason "error" and no tokens, or a 5xx; one retry clears most.
 const ATTEMPTS = 2
 
-async function cleanChunk(chunk: string, images: Images): Promise<{ text: string; cost: number; ok: boolean }> {
+/**
+ * One model call (OpenRouter, Gemini on Vertex, zero retention), retried once
+ * on a provider error. Cost accumulates over attempts. Shared with convert-pdf.ts.
+ */
+export async function callImportModel(
+  system: string,
+  content: OpenAI.Chat.ChatCompletionContentPart[],
+  maxTokens = 16000
+): Promise<{ text: string; finish: string; cost: number }> {
   let cost = 0
   for (let attempt = 1; ; attempt++) {
     try {
-      const r = await callModel(chunk, images)
-      cost += r.cost
-      if (r.finish !== 'error' || attempt >= ATTEMPTS) {
-        const ok = r.finish === 'stop' && keptContent(chunk, r.text)
-        return { text: ok ? r.text : chunk, cost, ok }
+      const res = await client().chat.completions.create({
+        model: model(),
+        max_tokens: maxTokens,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content },
+        ],
+        // OpenRouter extras: cost in the usage block; Vertex-only zero-retention routing.
+        // Low reasoning: this is a markup rewrite, not a reasoning task (cost + latency).
+        ...({ usage: { include: true }, reasoning: { effort: 'low' }, ...OPENROUTER_GEMINI_STUDENT_DATA } as Record<string, unknown>),
+      })
+      const choice = res.choices[0]
+      cost += (res.usage as { cost?: number } | undefined)?.cost ?? 0
+      const finish = String(choice?.finish_reason ?? 'error')
+      if (finish !== 'error' || attempt >= ATTEMPTS) {
+        const text = (choice?.message?.content ?? '').replace(/^```(?:markdown|md)?\n([\s\S]*)\n```\s*$/, '$1').trim()
+        return { text, finish, cost }
       }
     } catch (err) {
       if (attempt >= ATTEMPTS) throw err
@@ -181,43 +217,37 @@ async function cleanChunk(chunk: string, images: Images): Promise<{ text: string
   }
 }
 
-async function callModel(chunk: string, images: Images) {
-  const res = await client().chat.completions.create({
-    model: model(),
-    max_tokens: 16000,
-    messages: [
-      { role: 'system', content: CLEANUP_SYSTEM },
-      { role: 'user', content: chunkContent(chunk, images) },
-    ],
-    // OpenRouter extras: cost in the usage block; Vertex-only zero-retention routing.
-    // Low reasoning: this is a markup rewrite, not a reasoning task (cost + latency).
-    ...({ usage: { include: true }, reasoning: { effort: 'low' }, ...OPENROUTER_GEMINI_STUDENT_DATA } as Record<string, unknown>),
-  })
-  const choice = res.choices[0]
-  return {
-    text: (choice?.message?.content ?? '').replace(/^```(?:markdown|md)?\n([\s\S]*)\n```\s*$/, '$1').trim(),
-    finish: String(choice?.finish_reason ?? 'error'),
-    cost: (res.usage as { cost?: number } | undefined)?.cost ?? 0,
+/** Runs fn over items with at most `limit` in flight; results keep input order. */
+export async function mapConcurrent<T, R>(items: T[], fn: (item: T, index: number) => Promise<R>, limit = CONCURRENCY): Promise<R[]> {
+  const results: R[] = new Array(items.length)
+  let next = 0
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++
+      results[i] = await fn(items[i], i)
+    }
   }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
+  return results
+}
+
+async function cleanChunk(chunk: string, images: Images, source: ImportSource): Promise<{ text: string; cost: number; ok: boolean }> {
+  const r = await callImportModel(cleanupSystem(source), chunkContent(chunk, images))
+  const ok = r.finish === 'stop' && keptContent(chunk, r.text)
+  return { text: ok ? r.text : chunk, cost: r.cost, ok }
 }
 
 /** `images`: formula-N.png name → PNG bytes, sent to the model for transcription. */
-export async function cleanupMarkdown(md: string, images: Images = new Map()): Promise<CleanupResult> {
+export async function cleanupMarkdown(md: string, images: Images = new Map(), source: ImportSource = 'docx'): Promise<CleanupResult> {
   const chunks = chunkMarkdown(md)
-  const results: { text: string; cost: number; ok: boolean }[] = new Array(chunks.length)
-  let next = 0
-  const worker = async () => {
-    while (next < chunks.length) {
-      const i = next++
-      try {
-        results[i] = await cleanChunk(chunks[i], images)
-      } catch (err) {
-        console.error('[script-import] cleanup chunk failed, keeping pandoc output:', err)
-        results[i] = { text: chunks[i], cost: 0, ok: false }
-      }
+  const results = await mapConcurrent(chunks, async (chunk) => {
+    try {
+      return await cleanChunk(chunk, images, source)
+    } catch (err) {
+      console.error('[script-import] cleanup chunk failed, keeping unprocessed text:', err)
+      return { text: chunk, cost: 0, ok: false }
     }
-  }
-  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, chunks.length) }, worker))
+  })
   return {
     markdown: stripTextboxMarkers(results.map((r) => r.text).join('\n\n')),
     costUsd: results.reduce((s, r) => s + r.cost, 0),

@@ -152,11 +152,17 @@ const nextConfig: NextConfig = {
       './node_modules/katex/dist/fonts/KaTeX_Math-Italic.ttf',
       './node_modules/dejavu-fonts-ttf/ttf/DejaVuSans*.ttf',
       './node_modules/dejavu-fonts-ttf/ttf/DejaVuSerif*.ttf',
+      // PDF import (convert-pdf.ts): pdfjs loads its worker, standard fonts
+      // and CMaps from node_modules at runtime.
+      './node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
+      './node_modules/pdfjs-dist/standard_fonts/*',
+      './node_modules/pdfjs-dist/cmaps/*',
     ],
   },
   serverExternalPackages: [
     '@prisma/client',
     'pandoc-wasm', // loads its .wasm via fs relative to the module; don't bundle
+    'pdfjs-dist', // PDF import renders pages in Node (legacy build + worker file)
     '@napi-rs/canvas', // native .node binary (WMF rendering, src/lib/script-import/wmf-render.ts)
     'sql.js', // SQL.js uses Node.js 'fs' module which should not be bundled for server
   ],

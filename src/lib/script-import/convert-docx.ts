@@ -66,7 +66,7 @@ export const UNSUPPORTED_IMAGE_NOTE = '*[Grafik nicht übernommen (Word-Vektorgr
 // Markdown writer: CommonMark + pipe tables + $-math. Pandoc extensions that
 // Eduskript does not render (attributes, ~sub~/^sup^, fenced divs, bracketed
 // spans) are switched off so pandoc falls back to plain HTML (<sub>, <sup>).
-const PANDOC_TO =
+export const PANDOC_TO =
   'commonmark_x-attributes-subscript-superscript-bracketed_spans-fenced_divs-raw_attribute-implicit_figures-smart'
 
 interface DocxInfo {
@@ -218,6 +218,7 @@ export async function convertDocx(original: Buffer): Promise<DocxConversion> {
   const renamed = new Map<string, string | null>() // pandoc path → new name, null = unsupported
   let images = 0
   let formulas = 0
+  let symbols = 0
   let unsupported = 0
   for (const [path, blob] of Object.entries(result.mediaFiles as Record<string, Blob>)) {
     const ext = path.split('.').pop()?.toLowerCase() ?? ''
@@ -246,7 +247,17 @@ export async function convertDocx(original: Buffer): Promise<DocxConversion> {
     }
     // pandoc path is media/<zip path relative to word/>, e.g. media/media/image3.wmf
     const isFormula = info.formulaMedia.has(path)
-    const name = isFormula ? `formula-${++formulas}.${outExt}` : `image-${++images}.${outExt}`
+    // Tiny pictures (≤ SYMBOL_MAX_PCT of the text width: arrows, ⇌, symbols
+    // pasted as images) are usually part of a line of text; cleanup.ts gets
+    // them as images to replace with the character/LaTeX they show.
+    const width = info.widths.get(path)
+    const pct = width ? widthPercent(`width:${width}`) : null
+    const isSymbol = !isFormula && pct !== null && pct <= SYMBOL_MAX_PCT
+    const name = isFormula
+      ? `formula-${++formulas}.${outExt}`
+      : isSymbol
+        ? `symbol-${++symbols}.${outExt}`
+        : `image-${++images}.${outExt}`
     renamed.set(path, name)
     assets.push({ name, contentType, data })
   }
@@ -256,6 +267,9 @@ export async function convertDocx(original: Buffer): Promise<DocxConversion> {
   )
   return { markdown, assets, pageCount: info.pageCount, formulaImages: formulas, unsupportedImages: unsupported, textboxes, drawings, drawingsRendered: rendered }
 }
+
+/** Pictures at most this wide (% of text width) are treated as inline symbols (symbol-N). */
+const SYMBOL_MAX_PCT = 12
 
 /** Word's usable text width (A4, 2.5 cm margins) in inches; image widths are relative to it. */
 const TEXT_WIDTH_IN = 6.3
@@ -276,7 +290,8 @@ export function widthPercent(style: string): number | null {
  * - `![alt](media/media/rIdN.png)` (unsized)
  * Images narrower than 90% of the page keep their Word size as
  * `<img src alt style="width: N%" />`; others become `![alt](name)`. Formula
- * pictures always become `![](formula-N.png)` (cleanup.ts transcribes those).
+ * and symbol pictures always become `![](formula-N.png)` / `![](symbol-N.png)`
+ * (cleanup.ts transcribes those).
  * Unsupported formats become UNSUPPORTED_IMAGE_NOTE. O(n) regex passes.
  */
 export function rewriteImages(
@@ -290,7 +305,7 @@ export function rewriteImages(
     if (name === undefined) return `![${alt}](${src})`
     if (name === null) return UNSUPPORTED_IMAGE_NOTE
     const cleanAlt = alt.replace(/[[\]"<>]/g, '')
-    const pct = name.startsWith('formula-') ? null : widthPercent(style)
+    const pct = /^(formula|symbol)-/.test(name) ? null : widthPercent(style)
     return pct ? `<img src="${name}" alt="${cleanAlt}" style="width: ${pct}%" />` : `![${cleanAlt}](${name})`
   }
   const attr = (tag: string, key: string) =>

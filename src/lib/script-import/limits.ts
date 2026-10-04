@@ -22,6 +22,9 @@ export const GLOBAL_PER_DAY = Number(process.env.SCRIPT_IMPORT_PER_DAY ?? 100)
 export const BUDGET_USD_PER_DAY = Number(process.env.SCRIPT_IMPORT_BUDGET_USD_PER_DAY ?? 25)
 export const RETENTION_DAYS = 7
 
+/** User-facing (English) failure of an import; other errors are logged and shown generically. */
+export class ImportError extends Error {}
+
 export function hashIp(ip: string): string {
   return createHash('sha256')
     .update(`${process.env.NEXTAUTH_SECRET ?? ''}:script-import:${ip}`)

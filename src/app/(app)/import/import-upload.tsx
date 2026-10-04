@@ -10,10 +10,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { FileText, Loader2, ShieldCheck, Upload } from 'lucide-react'
+import { ClipboardPaste, FileText, Loader2, ShieldCheck, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useUiLocale, UiLocaleSwitcher } from '@/lib/i18n/client'
 import { pick } from '@/lib/i18n/locale'
+import { ThemeToggle } from '@/components/theme-toggle'
 
 interface Challenge {
   salt: string
@@ -25,7 +26,8 @@ interface Challenge {
 const MAX_MB = 20
 
 type Locale = 'de' | 'en'
-type Hint = { title: string; body: string; steps: string[] }
+/** proceed: the file is still accepted (PDF), the hint is advice only. */
+type Hint = { title: string; body: string; steps: string[]; proceed?: boolean }
 
 /**
  * Friendly explanations for formats we don't import (yet). Only .docx is
@@ -84,16 +86,19 @@ function formatHint(ext: string, locale: Locale): Hint | null {
         ? { title: 'Pages-Dateien können wir (noch) nicht lesen.', body: 'Exportieren Sie sie als Word-Datei:', steps: [resave[2]] }
         : { title: "We can't read Pages files (yet).", body: 'Export it as a Word file:', steps: [resave[2]] }
     case 'pdf':
+      // Not blocking: the PDF is imported (convert-pdf.ts), but the original is better.
       return de
         ? {
-            title: 'PDF kommt in Phase 2 – versprochen.',
-            body: 'Aus einem PDF lassen sich Formeln und Tabellen nur mühsam zurückgewinnen. Haben Sie die Word-Datei, aus der das PDF entstanden ist? Die klappt schon heute.',
+            title: 'PDF geht – aber haben Sie die Originaldatei?',
+            body: 'Aus der Originaldatei gelingt das Skript meist genauer, weil Formeln, Tabellen und Bilder direkt übernommen werden können: eine Word-Datei hochladen oder LaTeX- bzw. Markdown-Text einfügen. Aus einem PDF liest die KI den Inhalt vom Seitenbild ab und schneidet Abbildungen aus – das klappt oft gut, aber nicht immer.',
             steps: [],
+            proceed: true,
           }
         : {
-            title: 'PDF is coming in phase 2 – promise.',
-            body: 'Formulas and tables are hard to recover from a PDF. Do you have the Word file the PDF was made from? That works today.',
+            title: 'PDF works – but do you have the original file?',
+            body: 'The original file usually gives a more accurate skript, because formulas, tables and images can be taken over directly: upload a Word file or paste LaTeX or Markdown text. From a PDF the AI reads the content off the page images and cuts out figures – this often works well, but not always.',
             steps: [],
+            proceed: true,
           }
     case 'docx':
       return null
@@ -138,6 +143,11 @@ export function ImportUpload() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [hint, setHint] = useState<Hint | null>(null)
+  const [mode, setMode] = useState<'file' | 'text'>('file')
+  const [text, setText] = useState('')
+  /** HTML flavour of the last paste (Word, Google Docs, websites): keeps headings, tables. */
+  const [pastedHtml, setPastedHtml] = useState<string | null>(null)
+  const ready = mode === 'file' ? !!file : !!text.trim()
 
   useEffect(() => {
     const signal = { cancelled: false }
@@ -160,9 +170,11 @@ export function ImportUpload() {
       if (!f) return
       const formatProblem = formatHint(f.name.split('.').pop()?.toLowerCase() ?? '', locale)
       if (formatProblem) {
-        setFile(null)
         setHint(formatProblem)
-        return
+        if (!formatProblem.proceed) {
+          setFile(null)
+          return
+        }
       }
       if (f.size > MAX_MB * 1024 * 1024) {
         setError(t(`Die Datei ist grösser als ${MAX_MB} MB.`, `The file is larger than ${MAX_MB} MB.`))
@@ -176,11 +188,15 @@ export function ImportUpload() {
 
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    if (!file || !pow) return
+    if (!ready || !pow) return
     setSubmitting(true)
     setError('')
     const form = new FormData(e.currentTarget)
-    form.set('file', file)
+    if (mode === 'file' && file) form.set('file', file)
+    else {
+      form.set('text', text)
+      if (pastedHtml) form.set('html', pastedHtml)
+    }
     form.set('challenge', JSON.stringify(pow.challenge))
     form.set('nonce', pow.nonce)
     try {
@@ -198,7 +214,10 @@ export function ImportUpload() {
     <div className="min-h-screen bg-background">
       <header className="flex items-center justify-between px-4 sm:px-8 py-4 border-b border-border">
         <Link href="/" className="font-semibold text-lg">Eduskript</Link>
-        <UiLocaleSwitcher />
+        <div className="flex items-center gap-2">
+          <UiLocaleSwitcher />
+          <ThemeToggle />
+        </div>
       </header>
       <main className="max-w-2xl mx-auto px-4 py-10 sm:py-16">
         <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">
@@ -206,14 +225,63 @@ export function ImportUpload() {
         </h1>
         <p className="mt-4 text-muted-foreground text-lg">
           {t(
-            'Laden Sie ein Arbeitsblatt oder Skript als Word-Datei hoch. Nach etwa einer Minute sehen Sie es als Eduskript-Skript: mit Formeln, Tabellen, Bildern und Aufgaben. Ohne Account.',
-            'Upload a worksheet or script as a Word file. After about a minute you see it as an Eduskript skript: with formulas, tables, images and exercises. No account needed.'
+            'Laden Sie ein Arbeitsblatt oder Skript als Word-Datei oder PDF hoch, oder fügen Sie Text ein. Nach etwa einer Minute sehen Sie es als Eduskript-Skript: mit Formeln, Tabellen, Bildern und Aufgaben. Ohne Account.',
+            'Upload a worksheet or script as a Word file or PDF, or paste text. After about a minute you see it as an Eduskript skript: with formulas, tables, images and exercises. No account needed.'
           )}
         </p>
 
         <form onSubmit={submit} className="mt-8 space-y-4">
           {/* Honeypot: hidden from humans, bots tend to fill every field. */}
           <input type="text" name="website" tabIndex={-1} autoComplete="off" aria-hidden="true" className="hidden" />
+          <div role="tablist" className="inline-flex rounded-lg border border-border p-1 text-sm">
+            {(['file', 'text'] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                role="tab"
+                aria-selected={mode === m}
+                onClick={() => {
+                  setMode(m)
+                  setError('')
+                  setHint(null)
+                }}
+                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 ${mode === m ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+              >
+                {m === 'file' ? <Upload className="w-4 h-4" /> : <ClipboardPaste className="w-4 h-4" />}
+                {m === 'file' ? t('Datei hochladen', 'Upload file') : t('Text einfügen', 'Paste text')}
+              </button>
+            ))}
+          </div>
+          {mode === 'text' ? (
+            <div className="space-y-2">
+              <textarea
+                value={text}
+                onChange={(e) => {
+                  setText(e.target.value)
+                  if (!e.target.value.trim()) setPastedHtml(null)
+                }}
+                onPaste={(e) => {
+                  const html = e.clipboardData.getData('text/html')
+                  setPastedHtml(html && html.trim() ? html : null)
+                }}
+                rows={14}
+                maxLength={150_000}
+                placeholder={t(
+                  'Text hier einfügen: aus Word, Google Docs, einer Webseite, oder als Markdown bzw. LaTeX …',
+                  'Paste text here: from Word, Google Docs, a website, or as Markdown or LaTeX …'
+                )}
+                className="w-full rounded-xl border border-border bg-background p-4 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+              />
+              {pastedHtml && (
+                <p className="text-xs text-muted-foreground">
+                  {t('Formatierung aus der Zwischenablage erkannt (Überschriften, Tabellen, Bilder werden übernommen).', 'Formatting detected in the clipboard (headings, tables and images are kept).')}{' '}
+                  <button type="button" className="underline" onClick={() => setPastedHtml(null)}>
+                    {t('Nur Text verwenden', 'Use plain text only')}
+                  </button>
+                </p>
+              )}
+            </div>
+          ) : (
           <div
             role="button"
             tabIndex={0}
@@ -235,10 +303,10 @@ export function ImportUpload() {
           >
             {file ? <FileText className="w-10 h-10 text-primary" /> : <Upload className="w-10 h-10 text-muted-foreground" />}
             <span className="font-medium text-center break-all">
-              {file ? file.name : t('Word-Datei hierher ziehen oder klicken', 'Drop a Word file here or click')}
+              {file ? file.name : t('Word-Datei oder PDF hierher ziehen oder klicken', 'Drop a Word file or PDF here or click')}
             </span>
             <span className="text-sm text-muted-foreground">
-              {t(`.docx, bis ${MAX_MB} MB, bis ca. 30 Seiten`, `.docx, up to ${MAX_MB} MB, about 30 pages`)}
+              {t(`.docx oder .pdf, bis ${MAX_MB} MB, bis 30 Seiten`, `.docx or .pdf, up to ${MAX_MB} MB, up to 30 pages`)}
             </span>
             <input
               ref={inputRef}
@@ -249,6 +317,7 @@ export function ImportUpload() {
               onChange={(e) => pickFile(e.target.files?.[0])}
             />
           </div>
+          )}
 
           <div className="flex gap-3 rounded-lg bg-muted/50 p-4 text-sm text-muted-foreground">
             <ShieldCheck className="w-5 h-5 shrink-0 mt-0.5" />
@@ -261,7 +330,7 @@ export function ImportUpload() {
             </p>
           </div>
 
-          {hint && (
+          {hint && mode === 'file' && (
             <div role="alert" className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm space-y-2">
               <p className="font-medium">{hint.title}</p>
               <p>{hint.body}</p>
@@ -277,13 +346,15 @@ export function ImportUpload() {
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 
-          <Button type="submit" size="lg" className="w-full" disabled={!file || !pow || submitting}>
-            {submitting || (file && !pow) ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+          <Button type="submit" size="lg" className="w-full" disabled={!ready || !pow || submitting}>
+            {submitting || (ready && !pow) ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
             {submitting
               ? t('Wird hochgeladen …', 'Uploading …')
-              : file && !pow
+              : ready && !pow
                 ? t('Einen Moment …', 'One moment …')
-                : t('Skript umwandeln', 'Convert script')}
+                : mode === 'file' && hint?.proceed
+                  ? t('PDF trotzdem umwandeln', 'Convert the PDF anyway')
+                  : t('Skript umwandeln', 'Convert script')}
           </Button>
         </form>
       </main>

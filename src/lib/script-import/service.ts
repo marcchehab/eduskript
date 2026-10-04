@@ -18,14 +18,24 @@ import { saveFile } from '@/lib/file-storage'
 import { createSkriptForUser } from '@/lib/services/skripts'
 import { createPageForUser, ConflictError } from '@/lib/services/pages'
 import { convertDocx } from './convert-docx'
+import { convertPdf } from './convert-pdf'
+import { convertText } from './convert-text'
 import { cleanupMarkdown } from './cleanup'
 import { pageSlug, splitIntoPages, type ImportPage } from './split'
-import { MAX_MARKDOWN_CHARS, MAX_WORD_PAGES, RETENTION_DAYS } from './limits'
+import { ImportError, MAX_MARKDOWN_CHARS, MAX_WORD_PAGES, RETENTION_DAYS } from './limits'
 
 export const IMPORT_COOKIE = 'eduskript_script_import'
 
 /** Shown in the preview so the teacher knows what to check. Stored as ScriptImport.warnings. */
 export interface ImportWarnings {
+  /** Where the content came from; the preview explains PDF limits. Absent on imports before 2026-10. */
+  source?: ImportInput['kind']
+  /** Pasted text: detected format. */
+  textFormat?: 'latex' | 'html' | 'markdown'
+  /** PDF: pages kept as a full-page picture because reading them failed. */
+  pagesAsImages?: number
+  /** PDF: figures cut out of the pages. */
+  pdfFigures?: number
   /** Legacy (Equation Editor/MathType) formulas read from their picture by the model. */
   formulasTranscribed: number
   /** Legacy formulas the model couldn't read; kept as pictures. */
@@ -57,45 +67,97 @@ export async function createImport(opts: { fileName: string; ipHash: string; pow
   })
 }
 
-/** User-facing (English) failure; other errors are logged and shown generically. */
-class ImportError extends Error {}
 
-export async function processImport(id: string, docx: Buffer, fileName: string): Promise<void> {
-  const started = Date.now()
-  try {
-    const converted = await convertDocx(docx)
+/** What was uploaded: a Word file, a PDF, or pasted text (+ the clipboard's HTML flavour). */
+export type ImportInput =
+  | { kind: 'docx'; buf: Buffer }
+  | { kind: 'pdf'; buf: Buffer }
+  | { kind: 'text'; text: string; html?: string | null }
+
+/** Source-specific conversion → Markdown + assets; all sources then share split/save below. */
+async function convertSource(input: ImportInput) {
+  if (input.kind === 'docx') {
+    const converted = await convertDocx(input.buf)
     if (converted.pageCount && converted.pageCount > MAX_WORD_PAGES) {
       throw new ImportError(`The document has ${converted.pageCount} pages; the limit is ${MAX_WORD_PAGES}.`)
     }
-    if (converted.markdown.length > MAX_MARKDOWN_CHARS) {
-      throw new ImportError(`The document is too long (limit about ${MAX_WORD_PAGES} pages).`)
-    }
-    if (!converted.markdown.trim()) throw new ImportError('The document contains no text.')
-
+    checkSize(converted.markdown)
     const formulaImages = new Map(
-      converted.assets.filter((a) => a.name.startsWith('formula-')).map((a) => [a.name, a.data])
+      converted.assets.filter((a) => /^(formula|symbol)-/.test(a.name)).map((a) => [a.name, a.data])
     )
-    const cleaned = await cleanupMarkdown(converted.markdown, formulaImages)
-    const fallbackTitle = fileName.replace(/\.docx$/i, '').replace(/[_-]+/g, ' ').trim() || 'Imported skript'
-    // Formula pictures the model didn't transcribe (or all, if cleanup failed)
-    // stay images; size them to the text line instead of full width.
-    const markdown = cleaned.markdown.replace(
-      /!\[[^\]]*\]\((formula-\d+\.png)\)/g,
-      '<img src="$1" alt="Formel" style="height: 1.4em; vertical-align: middle" />'
+    const cleaned = await cleanupMarkdown(converted.markdown, formulaImages, 'docx')
+    return {
+      raw: converted.markdown,
+      markdown: cleaned.markdown,
+      assets: converted.assets,
+      costUsd: cleaned.costUsd,
+      warnings: {
+        imagesDropped: converted.unsupportedImages,
+        drawingsDropped: converted.drawings,
+        drawingsRendered: converted.drawingsRendered,
+        chunksUncleaned: cleaned.fallbacks,
+      },
+    }
+  }
+  if (input.kind === 'text') {
+    const converted = await convertText(input.text, input.html)
+    checkSize(converted.markdown)
+    const cleaned = await cleanupMarkdown(converted.markdown, new Map(), 'text')
+    return {
+      raw: converted.markdown,
+      markdown: cleaned.markdown,
+      assets: converted.assets,
+      costUsd: cleaned.costUsd,
+      warnings: { imagesDropped: converted.unsupportedImages, chunksUncleaned: cleaned.fallbacks, textFormat: converted.format },
+    }
+  }
+  // PDF: the model reads the pages and already applies the cleanup rules (convert-pdf.ts).
+  const converted = await convertPdf(input.buf, MAX_WORD_PAGES)
+  checkSize(converted.markdown)
+  return {
+    raw: converted.markdown,
+    markdown: converted.markdown,
+    assets: converted.assets,
+    costUsd: converted.costUsd,
+    warnings: { imagesDropped: 0, chunksUncleaned: 0, pagesAsImages: converted.failedPages, pdfFigures: converted.figures },
+  }
+}
+
+function checkSize(markdown: string) {
+  if (markdown.length > MAX_MARKDOWN_CHARS) {
+    throw new ImportError(`The document is too long (limit about ${MAX_WORD_PAGES} pages).`)
+  }
+  if (!markdown.trim()) throw new ImportError('The document contains no text.')
+}
+
+const FAILURE: Record<ImportInput['kind'], string> = {
+  docx: 'The document could not be converted. Is it a valid Word (.docx) file?',
+  pdf: 'The PDF could not be converted.',
+  text: 'The text could not be converted.',
+}
+
+export async function processImport(id: string, input: ImportInput, fileName: string): Promise<void> {
+  const started = Date.now()
+  try {
+    const converted = await convertSource(input)
+    const fallbackTitle = fileName.replace(/\.(docx|pdf)$/i, '').replace(/[_-]+/g, ' ').trim() || 'Imported skript'
+    // Formula/symbol pictures the model didn't transcribe (or all, if cleanup
+    // failed) stay images; size them to the text line instead of full width.
+    const markdown = converted.markdown.replace(
+      /!\[[^\]]*\]\(((?:formula|symbol)-\d+\.png)\)/g,
+      '<img src="$1" alt="" inline="true" style="height: 1.4em; vertical-align: middle" />'
     )
     const { title, pages } = splitIntoPages(markdown, fallbackTitle)
     // Formula images the model transcribed are no longer referenced; don't keep them.
     const allContent = pages.map((p) => p.content).join('\n')
     const assets = converted.assets.filter((a) => allContent.includes(`](${a.name})`) || allContent.includes(`"${a.name}"`))
     const untranscribed = assets.filter((a) => a.name.startsWith('formula-')).length // still referenced as <img>
-    const formulasInDoc = new Set(converted.markdown.match(/formula-\d+\.png/g) ?? []).size
+    const formulasInDoc = new Set(converted.raw.match(/formula-\d+\.png/g) ?? []).size
     const warnings: ImportWarnings = {
+      source: input.kind,
       formulasTranscribed: Math.max(formulasInDoc - untranscribed, 0),
       formulasAsImages: untranscribed,
-      imagesDropped: converted.unsupportedImages,
-      drawingsDropped: converted.drawings,
-      drawingsRendered: converted.drawingsRendered,
-      chunksUncleaned: cleaned.fallbacks,
+      ...converted.warnings,
     }
 
     await prisma.$transaction([
@@ -109,13 +171,13 @@ export async function processImport(id: string, docx: Buffer, fileName: string):
           title: title.slice(0, 200),
           pages: pages as unknown as Prisma.InputJsonValue,
           warnings: warnings as unknown as Prisma.InputJsonValue,
-          costUsd: cleaned.costUsd,
+          costUsd: converted.costUsd,
         },
       }),
     ])
     console.log(
       `[script-import] ${id} ready in ${Date.now() - started} ms: ${pages.length} pages, ${assets.length} images, ` +
-        `$${cleaned.costUsd.toFixed(3)}, ${JSON.stringify(warnings)}`
+        `$${converted.costUsd.toFixed(3)}, ${JSON.stringify(warnings)}`
     )
   } catch (err) {
     console.error(`[script-import] ${id} failed:`, err)
@@ -124,7 +186,7 @@ export async function processImport(id: string, docx: Buffer, fileName: string):
         where: { id },
         data: {
           status: 'failed',
-          error: err instanceof ImportError ? err.message : 'The document could not be converted. Is it a valid Word (.docx) file?',
+          error: err instanceof ImportError ? err.message : FAILURE[input.kind],
         },
       })
       .catch(() => {})

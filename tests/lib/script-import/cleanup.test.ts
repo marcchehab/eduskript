@@ -57,3 +57,10 @@ describe('keptContent with sized images', () => {
     expect(keptContent(orig, orig)).toBe(true)
   })
 })
+
+describe('symbol images', () => {
+  it('may be replaced by text like formula images', () => {
+    const orig = 'Gleichung SO<sub>2</sub> + H<sub>2</sub>O ![](symbol-1.png) H<sub>2</sub>SO<sub>3</sub> im Wein.'
+    expect(keptContent(orig, 'Gleichung $\\ce{SO2 + H2O <=> H2SO3}$ im Wein.')).toBe(true)
+  })
+})
