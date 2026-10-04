@@ -2375,9 +2375,9 @@ const CodeMirrorEditor = function CodeMirrorEditor({
             icon: <Wand2 className="w-4 h-4" />,
             align: 'right' as const,
             accent: {
-              active: 'border-violet-500 text-violet-600 dark:text-violet-400',
-              fill: 'from-violet-500/15 to-violet-500/[0.02]',
-              idle: 'text-violet-600/80 dark:text-violet-400/80',
+              active: 'border-blue-500 text-blue-600 dark:text-blue-400',
+              fill: 'from-blue-500/15 to-blue-500/[0.02]',
+              idle: 'text-blue-600/80 dark:text-blue-400/80',
             },
             content: (
               <AIEditPanel

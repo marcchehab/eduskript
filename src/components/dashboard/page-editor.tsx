@@ -687,7 +687,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
               size="sm"
               onClick={() => setSkriptAiOpen(true)}
               title="AI Edit for the whole skript (several pages, new pages)"
-              className="gap-1.5 text-violet-600 hover:text-violet-700 dark:text-violet-400"
+              className="gap-1.5 text-blue-600 hover:text-blue-700 dark:text-blue-400"
             >
               <Wand2 className="w-4 h-4" />
               <span className="hidden sm:inline text-xs">AI Edit</span>
