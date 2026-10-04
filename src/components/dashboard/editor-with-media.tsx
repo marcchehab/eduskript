@@ -134,6 +134,11 @@ export interface EditorWithMediaProps {
 }
 
 const DEFAULT_EDITOR_HEIGHT = 500
+const MIN_EDITOR_HEIGHT = 240
+/** Lowest auto-fit height; below this small screens scroll the page instead. */
+const MIN_FIT_HEIGHT = 420
+/** App bar (≈73px) + status row and margins below the editor box. */
+const FIT_HEIGHT_RESERVE = 130
 const EDITOR_HEIGHT_STORAGE_KEY = 'eduskript:editor-height'
 
 /** Derive an image file extension from a pasted blob.
@@ -237,29 +242,49 @@ export function EditorWithMedia({
 
   const [aiEditModalOpen, setAiEditModalOpen] = useState(false)
 
-  const [editorHeight, setEditorHeight] = useState(() => {
-    if (typeof window === 'undefined') return DEFAULT_EDITOR_HEIGHT
-    const saved = localStorage.getItem(EDITOR_HEIGHT_STORAGE_KEY)
-    return saved ? parseInt(saved, 10) : DEFAULT_EDITOR_HEIGHT
+  // Editor box height (ribbon + editor/preview). Default: fit the window —
+  // window height minus the app bar and the status row below, so that once
+  // the page is scrolled to the editor it fills the screen. Dragging the bar
+  // sets a manual height (kept per browser); double-click returns to "fit".
+  const [manualHeight, setManualHeight] = useState<number | null>(() => {
+    if (typeof window === 'undefined') return null
+    try {
+      const saved = parseInt(localStorage.getItem(EDITOR_HEIGHT_STORAGE_KEY) ?? '', 10)
+      return Number.isFinite(saved) && saved >= MIN_EDITOR_HEIGHT ? saved : null
+    } catch {
+      return null
+    }
   })
+  const [fitHeight, setFitHeight] = useState(DEFAULT_EDITOR_HEIGHT)
+  useEffect(() => {
+    const update = () => setFitHeight(Math.max(MIN_FIT_HEIGHT, window.innerHeight - FIT_HEIGHT_RESERVE))
+    update()
+    window.addEventListener('resize', update)
+    return () => window.removeEventListener('resize', update)
+  }, [])
+  const editorHeight = manualHeight ?? fitHeight
 
   const handleEditorResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
     const startY = e.clientY
     const startHeight = editorHeight
-    const onMouseMove = (e: MouseEvent) => {
-      const newHeight = Math.max(200, startHeight + e.clientY - startY)
-      setEditorHeight(newHeight)
-    }
+    const heightAt = (y: number) => Math.max(MIN_EDITOR_HEIGHT, startHeight + y - startY)
+    const onMouseMove = (e: MouseEvent) => setManualHeight(heightAt(e.clientY))
     const onMouseUp = (e: MouseEvent) => {
-      const finalHeight = Math.max(200, startHeight + e.clientY - startY)
-      localStorage.setItem(EDITOR_HEIGHT_STORAGE_KEY, String(finalHeight))
+      try { localStorage.setItem(EDITOR_HEIGHT_STORAGE_KEY, String(heightAt(e.clientY))) } catch { /* private mode */ }
+      document.body.style.cursor = ''
       document.removeEventListener('mousemove', onMouseMove)
       document.removeEventListener('mouseup', onMouseUp)
     }
+    document.body.style.cursor = 'row-resize'
     document.addEventListener('mousemove', onMouseMove)
     document.addEventListener('mouseup', onMouseUp)
   }, [editorHeight])
+
+  const resetEditorHeight = useCallback(() => {
+    setManualHeight(null)
+    try { localStorage.removeItem(EDITOR_HEIGHT_STORAGE_KEY) } catch { /* private mode */ }
+  }, [])
 
   const handleTabClick = useCallback((tab: string) => {
     setActiveTab(prev => {
@@ -723,16 +748,21 @@ export function EditorWithMedia({
           </div>
           {!fullscreen && (
             <div
+              role="separator"
+              aria-orientation="horizontal"
+              aria-label="Resize editor"
+              title={manualHeight ? 'Drag to resize · double-click to fit the window' : 'Drag to resize (currently fits the window)'}
               onMouseDown={handleEditorResizeStart}
-              className="h-2 cursor-row-resize flex items-center justify-center hover:bg-muted/50 transition-colors -mb-4 mt-1"
+              onDoubleClick={resetEditorHeight}
+              className="group mt-1 flex h-3 w-full cursor-row-resize items-center justify-center rounded transition-colors hover:bg-muted/60"
             >
-              <div className="w-12 h-1 rounded-full bg-muted-foreground/20" />
+              <div className="h-1 w-16 rounded-full bg-muted-foreground/35 transition-colors group-hover:bg-primary/60" />
             </div>
           )}
         </CardContent>
       </Card>
       {!fullscreen && footerSlot && (
-        <div className="p-3 border-t border-border">
+        <div className="px-3 py-1.5 border-t border-border">
           {footerSlot}
         </div>
       )}

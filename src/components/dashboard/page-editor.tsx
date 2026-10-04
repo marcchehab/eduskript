@@ -8,7 +8,6 @@ import { Input } from '@/components/ui/input'
 import { AlertDialogModal } from '@/components/ui/alert-dialog-modal'
 import { useAlertDialog } from '@/hooks/use-alert-dialog'
 import { useUnsavedChangesGuard } from '@/components/dashboard/unsaved-changes-guard'
-import { CollapsibleDrawer } from '@/components/ui/collapsible-drawer'
 import { PublishToggle } from '@/components/dashboard/publish-toggle'
 import { VersionHistory } from '@/components/dashboard/version-history'
 import { EditModal } from '@/components/dashboard/edit-modal'
@@ -18,7 +17,8 @@ import { SkriptAccessManager } from '@/components/permissions/SkriptAccessManage
 import { EditorWithMedia, type ExtraManageTab } from '@/components/dashboard/editor-with-media'
 import { AIEditChatModal } from '@/components/ai/ai-edit-chat-modal'
 import { useIsFreeTeacher } from '@/hooks/use-billing'
-import { AlertCircle, ArrowLeft, ArrowRightLeft, Save, History, Eye, EyeOff, Check, Shield, Globe, Maximize2, Minimize2, BookA, BookOpen, FileText, FilePenLine, GripVertical, Trash2, Users, Loader2, CircleCheckBig, CircleMinus, Presentation, Link2, GraduationCap, Wand2 } from 'lucide-react'
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
+import { AlertCircle, ArrowLeft, ArrowRightLeft, Save, History, Eye, EyeOff, Check, Shield, Globe, Maximize2, Minimize2, BookA, BookOpen, FileText, FilePenLine, GripVertical, Trash2, Users, Loader2, CircleCheckBig, CircleMinus, Presentation, Link2, GraduationCap, Wand2, Settings2, ChevronDown } from 'lucide-react'
 import { ExamStateStepper } from '@/components/exam/exam-state-stepper'
 import type { ExamLifecycleState } from '@/lib/exam-state'
 import {
@@ -114,6 +114,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
   // Whole-skript AI Edit chat (skript header). Per-page editing is the
   // AI Edit ribbon tab inside the editor.
   const [skriptAiOpen, setSkriptAiOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const isFreePlan = useIsFreeTeacher()
 
   const [isSaving, setIsSaving] = useState(false)
@@ -647,16 +648,16 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
   // skript-scoped, unlike the page-specific editor further down).
   const skriptHeaderContent = (
     <div>
-      <div className="flex items-center gap-2 px-3 py-2">
+      <div className="flex items-center gap-2 px-3 py-1.5">
         <Link href="/dashboard/page-builder" className="shrink-0">
           <Button variant="ghost" size="sm">
             <ArrowLeft className="w-4 h-4" />
           </Button>
         </Link>
         <div className="flex flex-col min-w-0 flex-1">
-          <span className="text-3xl font-semibold truncate leading-tight">{skript.title}</span>
+          <span className="text-xl font-semibold truncate leading-tight">{skript.title}</span>
           {skript.description && (
-            <span className="text-sm text-muted-foreground line-clamp-2 leading-snug">{skript.description}</span>
+            <span className="text-xs text-muted-foreground truncate leading-snug">{skript.description}</span>
           )}
         </div>
         {canEdit && (
@@ -804,7 +805,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
         fullscreen={isFullscreen}
         pageLabel={pageLabelContent}
         metadataSlot={
-          <div className="space-y-4">
+          <div className="space-y-3">
             {/* Page title row — always visible (Save/Fullscreen toggle live here). */}
             <div className="space-y-1">
               <div className="flex items-center gap-2">
@@ -816,9 +817,56 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                     setHasUnsavedChanges(true)
                   }}
                   placeholder="Page title"
-                  className="flex-1 min-w-0 text-2xl font-semibold border-transparent hover:border-border focus:border-border"
+                  className="flex-1 min-w-0 h-9 text-xl font-semibold border-transparent hover:border-border focus:border-border"
                 />
                 <div className="flex gap-2 items-center shrink-0">
+                  {!isFullscreen && (
+                    // Description + slug: edited rarely, so they live behind a
+                    // settings button instead of taking a full row above the
+                    // editor (≈84px measured in the layout test, 2026-10-04).
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="ghost" size="sm" title="Page settings: description and URL" className="gap-1.5">
+                          <Settings2 className="w-4 h-4" />
+                          <span className="hidden lg:inline text-xs">Settings</span>
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent align="end" className="w-96 space-y-3">
+                        <div className="space-y-1">
+                          <Label htmlFor="page-description" className="text-xs">Description <span className="text-muted-foreground font-normal">(optional, shown in search results and link previews)</span></Label>
+                          <Input
+                            id="page-description"
+                            type="text"
+                            value={description}
+                            onChange={(e) => {
+                              setDescription(e.target.value)
+                              setHasUnsavedChanges(true)
+                            }}
+                            placeholder="One sentence about this page"
+                            className="text-sm"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="page-slug" className="text-xs">URL slug</Label>
+                          <Input
+                            id="page-slug"
+                            type="text"
+                            value={slug}
+                            onChange={(e) => {
+                              setSlug(e.target.value)
+                              setHasUnsavedChanges(true)
+                            }}
+                            placeholder="page-slug"
+                            className="text-sm font-mono"
+                          />
+                          <p className="text-xs text-muted-foreground break-all">
+                            …/{skript.slug}/<span className="font-mono text-foreground">{slug || 'page-slug'}</span>
+                          </p>
+                        </div>
+                        <p className="text-xs text-muted-foreground">Changes are saved with the page (Save / Ctrl+S).</p>
+                      </PopoverContent>
+                    </Popover>
+                  )}
                   <Select
                     value={pageType}
                     onValueChange={(value) => {
@@ -922,30 +970,6 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                 </div>
               </div>
 
-              {!isFullscreen && (
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="text"
-                    value={description}
-                    onChange={(e) => {
-                      setDescription(e.target.value)
-                      setHasUnsavedChanges(true)
-                    }}
-                    placeholder="Description (optional)"
-                    className="flex-1 min-w-0 text-sm border-transparent hover:border-border focus:border-border"
-                  />
-                  <Input
-                    type="text"
-                    value={slug}
-                    onChange={(e) => {
-                      setSlug(e.target.value)
-                      setHasUnsavedChanges(true)
-                    }}
-                    placeholder="page-slug"
-                    className="text-sm font-mono border-transparent hover:border-border focus:border-border w-[200px] shrink-0"
-                  />
-                </div>
-              )}
             </div>
 
             {pageType === 'exam' && !isFullscreen && (
@@ -1053,30 +1077,32 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
         }
         footerSlot={
           <>
-            <p className="text-xs text-muted-foreground mb-2">
-              Drag files or videos from the drawers to insert them. Ctrl+S to save.
-            </p>
-            <CollapsibleDrawer
-              title={
-                <div className="flex items-center gap-2">
-                  <span>Version history</span>
-                  {lastSaved && (
-                    <span className="text-xs text-muted-foreground font-normal">
-                      Last saved {lastSaved.toLocaleTimeString()}
-                    </span>
-                  )}
-                </div>
-              }
-              icon={<History className="w-5 h-5" />}
-              defaultOpen={false}
-            >
-              <VersionHistory
-                pageId={page.id}
-                versions={versions}
-                currentContent={content}
-                onRestoreVersion={handleRestoreVersion}
-              />
-            </CollapsibleDrawer>
+            {/* One slim status row instead of a hint paragraph + a big
+                collapsible card: Version history is the rarest action here. */}
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <span className="truncate">Ctrl+S to save · Drop files from Files/Videos into the editor</span>
+              <button
+                type="button"
+                onClick={() => setHistoryOpen(o => !o)}
+                aria-expanded={historyOpen}
+                className="ml-auto flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 hover:bg-muted hover:text-foreground"
+              >
+                <History className="w-3.5 h-3.5" />
+                <span>Version history{versions.length ? ` (${versions.length})` : ''}</span>
+                {lastSaved && <span className="hidden sm:inline">· Last saved {lastSaved.toLocaleTimeString()}</span>}
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${historyOpen ? 'rotate-180' : ''}`} />
+              </button>
+            </div>
+            {historyOpen && (
+              <div className="mt-2">
+                <VersionHistory
+                  pageId={page.id}
+                  versions={versions}
+                  currentContent={content}
+                  onRestoreVersion={handleRestoreVersion}
+                />
+              </div>
+            )}
           </>
         }
       />

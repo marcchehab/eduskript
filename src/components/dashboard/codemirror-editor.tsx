@@ -2395,7 +2395,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
       />
 
       {/* Editor and Preview */}
-      <div ref={containerRef} className="flex flex-1 min-h-[400px] relative overflow-hidden">
+      <div ref={containerRef} className="flex flex-1 min-h-[160px] relative overflow-hidden">
         {/* Drag overlay */}
         {dragOver && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-primary/10 border-2 border-dashed border-primary rounded">

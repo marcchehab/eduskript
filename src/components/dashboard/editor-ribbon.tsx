@@ -61,7 +61,7 @@ export function Ribbon({ tabs, tabBarRight }: RibbonProps) {
   return (
     <div className="border-b border-border select-none">
       {/* Tab bar */}
-      <div className="flex items-center gap-0.5 px-2 pt-1 text-sm">
+      <div className="flex items-center gap-0.5 overflow-x-auto whitespace-nowrap px-2 pt-1 text-sm">
         {[...tabs.filter(t => t.align !== 'right'), null, ...tabs.filter(t => t.align === 'right')].map(tab => tab === null ? (
           <div key="__spacer" className="flex-1" />
         ) : (
