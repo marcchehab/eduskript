@@ -87,8 +87,9 @@ export function AIEditPanel({
           </div>
         )}
         {chat.turns.length === 0 && !chat.error && (
-          <div className="flex flex-1 flex-wrap content-start items-center gap-1.5 text-xs text-muted-foreground">
+          <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center text-xs text-muted-foreground">
             <span>Ask the AI to change this page. Changes appear in the editor below, marked for review.</span>
+            <div className="flex flex-wrap justify-center gap-1.5">
             {EXAMPLE_PROMPTS.map(p => (
               <button
                 key={p}
@@ -99,6 +100,7 @@ export function AIEditPanel({
                 {p}
               </button>
             ))}
+            </div>
           </div>
         )}
         <div className="flex items-end gap-2">
