@@ -1357,4 +1357,77 @@ function Option({ children }: OptionProps) {
 // Attach Option as static property
 Question.Option = Option
 
-export { Question, Option }
+/**
+ * Non-interactive rendering of a question, for contexts without a page to
+ * store answers against (AI Edit change preview, dashboard previews without
+ * page context). Shows the prompt, the options with the correct ones marked,
+ * or a placeholder for the free answer types. No state, no autosave.
+ */
+function StaticQuestion({
+  children,
+  type = 'single',
+  minValue,
+  maxValue,
+  expected,
+}: {
+  children: ReactNode
+  type?: QuestionProps['type']
+  minValue?: number
+  maxValue?: number
+  expected?: string
+}) {
+  const prompt = extractPrompt(children)
+  const options = Children.toArray(children).filter(isAnswerElement)
+  const range = minValue !== undefined && maxValue !== undefined ? ` (${minValue} to ${maxValue})` : ''
+  return (
+    <div className="space-y-3 border rounded-lg p-4 shadow-xs bg-card my-4" aria-disabled="true">
+      {prompt && <div className={PROMPT_CLASS}>{prompt}</div>}
+      {(type === 'single' || type === 'multiple') && (
+        <ul className="space-y-2">
+          {options.map((el, index) => {
+            const { label } = splitAnswerContent(el.props)
+            const correct = isCorrect(el.props.correct)
+            return (
+              <li
+                key={index}
+                className={cn(
+                  'flex items-start gap-3 p-3 border rounded-lg',
+                  correct && 'border-green-600/50 dark:border-green-500/50'
+                )}
+              >
+                <span
+                  className={cn(
+                    'mt-0.5 w-4 h-4 shrink-0 border-2 border-muted-foreground/40',
+                    type === 'single' ? 'rounded-full' : 'rounded'
+                  )}
+                />
+                <span className="flex-1">{label}</span>
+                {correct && (
+                  <span className="flex items-center gap-1 text-xs text-green-700 dark:text-green-400">
+                    <Check className="w-3.5 h-3.5" />
+                    correct
+                  </span>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      )}
+      {type === 'text' && (
+        <div className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
+          Text answer{expected ? ' · auto-checked' : ''}
+        </div>
+      )}
+      {(type === 'number' || type === 'range') && (
+        <div className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
+          {type === 'number' ? 'Number slider' : 'Range slider'}
+          {range}
+          {expected ? ` · expected ${expected}` : ''}
+        </div>
+      )}
+      <div className="text-xs text-muted-foreground">Preview — students answer this on the page.</div>
+    </div>
+  )
+}
+
+export { Question, Option, StaticQuestion }

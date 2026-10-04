@@ -20,7 +20,7 @@ import { ExcalidrawImage } from '@/components/markdown/excalidraw-image'
 import { ContentSpacer, type SpacerPattern } from '@/components/markdown/content-spacer'
 import { MuxVideoOptions } from '@/components/markdown/mux-video-options'
 import { ContentImage } from '@/components/markdown/content-image'
-import { Question, Option } from '@/components/markdown/quiz'
+import { Question, Option, StaticQuestion } from '@/components/markdown/quiz'
 import { Survey } from '@/components/markdown/survey'
 import { Callout } from '@/components/markdown/callout'
 import { CodeBlock } from '@/components/markdown/code-block'
@@ -760,12 +760,18 @@ export function createMarkdownComponents(
     const ignoreCase = props['ignore-case'] === 'true' || props['ignorecase'] === 'true'
     const ignoreWhitespace = props['ignore-whitespace'] === 'true' || props['ignorewhitespace'] === 'true'
 
-    // Don't render quiz if pageId is missing (e.g., in dashboard preview without context)
+    // No page to store answers against (AI Edit change preview, dashboard
+    // previews without context): render the question statically.
     if (!pageId) {
       return (
-        <div className="border rounded-lg p-4 bg-muted/50 text-muted-foreground text-sm">
-          Quiz preview unavailable (no page context)
-        </div>
+        <StaticQuestion
+          type={type}
+          minValue={minValue}
+          maxValue={maxValue}
+          expected={type === 'text' ? expected : plainExpected}
+        >
+          {children}
+        </StaticQuestion>
       )
     }
 
