@@ -9,7 +9,9 @@ interface ForkAttributionProps {
 }
 
 /**
- * Displays "Forked from [Author]/[Page]" attribution on public pages.
+ * Displays "Forked from [Site]" attribution on public pages, naming the site
+ * (pageName, e.g. "informatikgarten.ch") the original skript is published on,
+ * else the original author's name.
  * Degrades gracefully when the original page or author has been deleted.
  */
 export async function ForkAttribution({
@@ -28,6 +30,11 @@ export async function ForkAttribution({
           skript: {
             select: {
               slug: true,
+              // The site the original is published on (first collection placing it).
+              collectionSkripts: {
+                take: 1,
+                select: { collection: { select: { site: { select: { slug: true, pageName: true } } } } },
+              },
               authors: {
                 where: { permission: 'author' },
                 orderBy: { createdAt: 'asc' as const },
@@ -53,14 +60,18 @@ export async function ForkAttribution({
 
   // Build attribution content
   const pageAuthor = originalPage?.skript.authors[0]?.user
-  const authorName = pageAuthor?.name || originalAuthor?.name
-  const authorSlug = pageAuthor?.sites[0]?.slug || originalAuthor?.sites[0]?.slug
+  // Name: the site the original skript is published on, else the teacher.
+  // The primary site is only a link target, never the name — it may be an
+  // unrelated site of the same teacher.
+  const site = originalPage?.skript.collectionSkripts[0]?.collection.site
+  const authorSlug = site?.slug || pageAuthor?.sites[0]?.slug || originalAuthor?.sites[0]?.slug
+  const authorName = site?.pageName || pageAuthor?.name || originalAuthor?.name
 
   if (!authorName && !originalPage) return null
 
   return (
     <div className="flex items-center gap-1 text-[10px] leading-tight text-muted-foreground/60">
-      <GitFork className="h-2.5 w-2.5 shrink-0" />
+      <GitFork className="h-2.5 w-2.5 shrink-0 rotate-90" />
       {originalPage && authorSlug ? (
         <Link
           href={`/${authorSlug}/${originalPage.skript.slug}/${originalPage.slug}`}

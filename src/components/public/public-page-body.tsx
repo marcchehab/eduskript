@@ -66,14 +66,6 @@ export function PublicPageBody({ page, skriptId, publicAnnotations, publicSnaps,
       )}
       <div id="paper" className="paper-responsive py-24 bg-card paper-shadow border border-border relative">
         <ReflowWidthHandle />
-        {(page.forkedFromPageId || page.forkedFromAuthorId) && (
-          <div className="absolute top-16 right-16">
-            <ForkAttribution
-              forkedFromPageId={page.forkedFromPageId}
-              forkedFromAuthorId={page.forkedFromAuthorId}
-            />
-          </div>
-        )}
         <article className="prose-theme">
           <ReflowGate
             pageId={page.id}
@@ -94,6 +86,19 @@ export function PublicPageBody({ page, skriptId, publicAnnotations, publicSnaps,
             />
           </ReflowGate>
         </article>
+        {(page.forkedFromPageId || page.forkedFromAuthorId) && (
+          // Outside the paper's right edge, top-aligned, reading top to bottom
+          // (vertical-rl = text turned 90° clockwise). Hidden below md, where the
+          // paper spans the screen and there is no margin to hold it. Padding,
+          // not margin: padding counts toward the scrollable width, so when the
+          // paper is zoomed past the viewport the label keeps a gap to the edge.
+          <div className="absolute top-12 left-full pl-2 pr-6 hidden md:block [writing-mode:vertical-rl]">
+            <ForkAttribution
+              forkedFromPageId={page.forkedFromPageId}
+              forkedFromAuthorId={page.forkedFromAuthorId}
+            />
+          </div>
+        )}
       </div>
     </>
   )
