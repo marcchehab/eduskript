@@ -322,8 +322,38 @@ async function gatedTeacher(request: NextRequest, pageSlug: string) {
 }
 
 async function gatedOrg(request: NextRequest, orgSlug: string, slug: string) {
+  const moved = await redirectOldSiteSlug(request, slug)
+  if (moved) return moved
   const gated = await maybeRewriteForLockdown(request, slug)
   return gated ?? rewriteToOrg(request, orgSlug)
+}
+
+// Old slugs of renamed sites → current slug (src/lib/site-slugs.ts). Kept in
+// process and refreshed at most once a minute from /api/internal/slug-aliases,
+// which answers from the Next data cache — no per-request lookup, and the
+// refresh doesn't wake the database. A rename takes up to a minute to show
+// up here; the teacher routes' own redirect covers that window.
+const SLUG_ALIAS_TTL_MS = 60 * 1000
+let slugAliases: Record<string, string> = {}
+let slugAliasesFetchedAt = 0
+
+async function redirectOldSiteSlug(request: NextRequest, firstSegment: string) {
+  if (!firstSegment || (request.method !== 'GET' && request.method !== 'HEAD')) return null
+  if (Date.now() - slugAliasesFetchedAt > SLUG_ALIAS_TTL_MS) {
+    slugAliasesFetchedAt = Date.now()
+    try {
+      const port = process.env.PORT || '3000'
+      const res = await fetch(`http://localhost:${port}/api/internal/slug-aliases`)
+      if (res.ok) slugAliases = await res.json()
+    } catch (error) {
+      console.error('Slug alias refresh failed:', error) // keep the previous map
+    }
+  }
+  const current = slugAliases[firstSegment]
+  if (!current) return null
+  const url = request.nextUrl.clone()
+  url.pathname = `/${current}${url.pathname.slice(firstSegment.length + 1)}`
+  return NextResponse.redirect(url, 308)
 }
 
 function rewriteToOrg(request: NextRequest, orgSlug: string) {

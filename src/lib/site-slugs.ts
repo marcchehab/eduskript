@@ -13,10 +13,41 @@
  *   someone else could claim it and take over those references.
  *
  * Aliases are never expired. Renaming back to an old slug drops that alias.
+ *
+ * Public old-slug URLs are redirected in the proxy (src/proxy.ts) from an
+ * in-process copy of getSlugAliasMap(), refreshed at most once a minute via
+ * /api/internal/slug-aliases. The page-level redirect in the teacher routes
+ * stays as a fallback for that minute; on its own it sent a doubled Location
+ * header on the first (uncached) render in prod (`/a,/a`), so the first
+ * visitor of an old URL got a 404.
  */
 
+import { revalidateTag, unstable_cache } from 'next/cache'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+
+const SLUG_ALIASES_TAG = 'site-slug-aliases'
+
+/**
+ * Every old slug → current slug. Served from the Next data cache, so the
+ * proxy's once-a-minute refresh doesn't keep the database awake; only a
+ * rename (invalidateSlugAliases) makes it query again. Small: one row per
+ * rename ever made.
+ */
+export const getSlugAliasMap = unstable_cache(
+  async (): Promise<Record<string, string>> => {
+    const rows = await prisma.siteSlugAlias.findMany({ select: { slug: true, site: { select: { slug: true } } } })
+    return Object.fromEntries(rows.map(r => [r.slug, r.site.slug]))
+  },
+  ['site-slug-alias-map'],
+  { tags: [SLUG_ALIASES_TAG], revalidate: false }
+)
+
+/** Call after a rename has committed. */
+export function invalidateSlugAliases(): void {
+  // expire: 0 — the entry uses revalidate: false (same as invalidateDomainCache).
+  revalidateTag(SLUG_ALIASES_TAG, { expire: 0 })
+}
 
 // The extended client's transaction type (same pattern as exam-recovery.ts).
 type TransactionClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]

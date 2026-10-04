@@ -6,7 +6,7 @@ import { invalidateSitemaps } from '@/lib/sitemap-cache'
 import { invalidateTenantConfig } from '@/lib/tenant'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { isSiteSlugTaken, recordSiteSlugRename } from '@/lib/site-slugs'
+import { invalidateSlugAliases, isSiteSlugTaken, recordSiteSlugRename } from '@/lib/site-slugs'
 import { resolveOwnedSite } from '@/lib/sites'
 import { withDatabaseConnection } from '@/lib/db-connection'
 import { CACHE_TAGS } from '@/lib/cached-queries'
@@ -343,6 +343,7 @@ export async function PATCH(request: NextRequest) {
       revalidatePath(`/${oldPageSlug}`)
     }
     if (newPageSlug && newPageSlug !== oldPageSlug) {
+      if (oldPageSlug) invalidateSlugAliases()
       revalidateTag(CACHE_TAGS.user(newPageSlug), { expire: 0 })
       revalidateTag(CACHE_TAGS.teacherContent(newPageSlug), { expire: 0 })
       revalidatePath(`/${newPageSlug}`)

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/admin-auth'
 import { prisma } from '@/lib/prisma'
-import { isSiteSlugTaken, recordSiteSlugRename } from '@/lib/site-slugs'
+import { invalidateSlugAliases, isSiteSlugTaken, recordSiteSlugRename } from '@/lib/site-slugs'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import bcrypt from 'bcryptjs'
 import { createTrialSubscription } from '@/lib/trial'
@@ -294,6 +294,10 @@ export async function PATCH(
         throw err
       }
     }
+
+    // A slug change adds an alias (src/lib/site-slugs.ts); refresh the map the
+    // proxy redirects from. Cheap and harmless when nothing changed.
+    if (pageSlug) invalidateSlugAliases()
 
     // Public pages cache billingPlan (paid gates, supporter badge)
     if (billingPlan !== undefined || grantTrial || pioneerResult) {

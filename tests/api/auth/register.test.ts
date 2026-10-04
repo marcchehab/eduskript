@@ -69,6 +69,7 @@ vi.mock('bcryptjs', () => ({
 vi.mock('next/cache', () => ({
   revalidateTag: vi.fn(),
   revalidatePath: vi.fn(),
+  unstable_cache: (fn: unknown) => fn,
 }))
 
 import { POST } from '@/app/api/auth/register/route'
