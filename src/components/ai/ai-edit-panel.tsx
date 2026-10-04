@@ -58,11 +58,11 @@ export function AIEditPanel({
   }
 
   return (
-    <div className="flex w-full min-w-0 gap-3 py-1">
+    <div className="flex w-full min-w-0 gap-3 py-1.5 min-h-[220px]">
       {/* Conversation + composer */}
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         {(chat.turns.length > 0 || chat.error) && (
-          <div ref={scrollRef} className="max-h-32 overflow-y-auto space-y-1 text-sm pr-1">
+          <div ref={scrollRef} className="flex-1 min-h-0 max-h-72 overflow-y-auto space-y-1.5 text-sm pr-1">
             {chat.turns.map(t => (
               <div key={t.id} className={t.role === 'user' ? 'text-right' : ''}>
                 <span
@@ -87,7 +87,7 @@ export function AIEditPanel({
           </div>
         )}
         {chat.turns.length === 0 && !chat.error && (
-          <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+          <div className="flex flex-1 flex-wrap content-start items-center gap-1.5 text-xs text-muted-foreground">
             <span>Ask the AI to change this page. Changes appear in the editor below, marked for review.</span>
             {EXAMPLE_PROMPTS.map(p => (
               <button
@@ -111,16 +111,16 @@ export function AIEditPanel({
                 void send()
               }
             }}
-            placeholder={pendingChanges > 0 ? 'Review the marked changes first, or ask for a different version…' : 'Describe the change you want… (Enter to send)'}
-            rows={1}
-            className="min-h-[38px] resize-none bg-background text-sm"
+            placeholder={pendingChanges > 0 ? 'Review the marked changes first, or ask for a different version…' : 'Describe the change you want… (Enter to send, Shift+Enter for a new line)'}
+            rows={3}
+            className="min-h-[76px] resize-y bg-background text-sm"
           />
           {chat.isBusy ? (
-            <Button variant="destructive" size="icon" onClick={chat.stop} title="Stop" className="h-[38px] w-[38px] shrink-0">
+            <Button variant="destructive" size="icon" onClick={chat.stop} title="Stop" className="h-[76px] w-[44px] shrink-0">
               <Square className="h-4 w-4 fill-current" />
             </Button>
           ) : (
-            <Button size="icon" onClick={() => void send()} disabled={!input.trim()} title="Send (Enter)" className="h-[38px] w-[38px] shrink-0">
+            <Button size="icon" onClick={() => void send()} disabled={!input.trim()} title="Send (Enter)" className="h-[76px] w-[44px] shrink-0">
               <Send className="h-4 w-4" />
             </Button>
           )}
