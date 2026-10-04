@@ -1455,3 +1455,15 @@ model MailMessage {
   @@index([hookId, createdAt])
   @@map("mail_messages")
 }
+
+/// Key/value store for maintenance scripts. Today only scripts/sync-docs.mjs
+/// uses it (key `docs_content_hash`, so unchanged docs skip the sync on boot).
+/// The script created it with raw SQL before it was in the schema, which made
+/// every `prisma migrate dev` report drift; the migration therefore uses
+/// CREATE TABLE IF NOT EXISTS.
+model SyncMetadata {
+  key   String @id
+  value String
+
+  @@map("_sync_metadata")
+}
