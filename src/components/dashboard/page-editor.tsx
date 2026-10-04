@@ -16,7 +16,9 @@ import { ExportSkriptModal } from '@/components/dashboard/export-skript-modal'
 import { CreatePageModal } from '@/components/dashboard/create-page-modal'
 import { SkriptAccessManager } from '@/components/permissions/SkriptAccessManager'
 import { EditorWithMedia, type ExtraManageTab } from '@/components/dashboard/editor-with-media'
-import { AlertCircle, ArrowLeft, ArrowRightLeft, Save, History, Eye, EyeOff, Check, Shield, Globe, Maximize2, Minimize2, BookA, BookOpen, FileText, FilePenLine, GripVertical, Trash2, Users, Loader2, CircleCheckBig, CircleMinus, Presentation, Link2, GraduationCap } from 'lucide-react'
+import { AIEditChatModal } from '@/components/ai/ai-edit-chat-modal'
+import { useIsFreeTeacher } from '@/hooks/use-billing'
+import { AlertCircle, ArrowLeft, ArrowRightLeft, Save, History, Eye, EyeOff, Check, Shield, Globe, Maximize2, Minimize2, BookA, BookOpen, FileText, FilePenLine, GripVertical, Trash2, Users, Loader2, CircleCheckBig, CircleMinus, Presentation, Link2, GraduationCap, Wand2 } from 'lucide-react'
 import { ExamStateStepper } from '@/components/exam/exam-state-stepper'
 import type { ExamLifecycleState } from '@/lib/exam-state'
 import {
@@ -109,6 +111,10 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
   const [slug, setSlug] = useState(page.slug || '')
   const [description, setDescription] = useState(page.description || '')
   const [content, setContent] = useState(page.content || '')
+  // Whole-skript AI Edit chat (skript header). Per-page editing is the
+  // AI Edit ribbon tab inside the editor.
+  const [skriptAiOpen, setSkriptAiOpen] = useState(false)
+  const isFreePlan = useIsFreeTeacher()
 
   const [isSaving, setIsSaving] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -676,6 +682,16 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                 <BookA className="w-4 h-4" />
               </Button>
             </Link>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSkriptAiOpen(true)}
+              title="AI Edit for the whole skript (several pages, new pages)"
+              className="gap-1.5 text-violet-600 hover:text-violet-700 dark:text-violet-400"
+            >
+              <Wand2 className="w-4 h-4" />
+              <span className="hidden sm:inline text-xs">AI Edit</span>
+            </Button>
             <ExportSkriptModal skriptId={skript.id} skriptTitle={skript.title} />
             <Button
               variant="ghost"
@@ -773,6 +789,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
           targetTitle: page.title,
           targetSubtitle: skript.title,
         }}
+        onAIInlineAccepted={() => completeStep('use_ai_edit')}
         onAIEditApplied={async (newContent) => {
           completeStep('use_ai_edit')
           if (newContent !== undefined) {
@@ -1078,6 +1095,29 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
       />
 
       {unsavedGuard.dialog}
+
+      {/* Whole-skript AI Edit chat (several pages / new pages). Writes pages
+          directly, unlike the in-editor AI Edit tab. */}
+      <AIEditChatModal
+        open={skriptAiOpen}
+        onOpenChange={setSkriptAiOpen}
+        target={{ mode: 'page', skriptId: skript.id, pageId: page.id }}
+        targetTitle={skript.title}
+        targetSubtitle={skript.title}
+        currentContent={content}
+        locked={isFreePlan}
+        skriptScope={{ openPageTitle: page.title }}
+        onEditsApplied={async (newContent) => {
+          completeStep('use_ai_edit')
+          if (newContent !== undefined) {
+            setContent(newContent)
+            setHasUnsavedChanges(false)
+            setLastSaved(new Date())
+          }
+          await loadVersions()
+          router.refresh()
+        }}
+      />
 
       {/* Move page to another skript dialog */}
       <Dialog open={movePageId !== null} onOpenChange={(open) => { if (!open) setMovePageId(null) }}>

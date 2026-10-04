@@ -74,7 +74,7 @@ const TOOLS = [
   },
 ]
 
-function buildSystemPrompt(ctx: SkriptContext, orgPrompt: string | undefined, focusedPageId?: string): string {
+function buildSystemPrompt(ctx: SkriptContext, orgPrompt: string | undefined, focusedPageId?: string, pageOnly = false): string {
   const pageLines = ctx.pages
     .map(p => `- ID: ${p.id} | "${p.title}" (slug: ${p.slug})${p.id === focusedPageId ? ' [currently open]' : ''}`)
     .join('\n')
@@ -91,7 +91,9 @@ Guidelines:
 - LANGUAGE: write EVERYTHING the teacher reads — your message content AND every \`note\` — in the same language the teacher is writing in (and that the skript content / site guidelines use). Never switch to English for the notes while chatting in another language; keep one consistent language across the whole reply.
 - For each tool call, write a short natural lead-in in \`note\` ("Now I'll tighten the intro." — but in the conversation's language). These are shown in order with the edit cards, so your message + notes should read as one flowing explanation.
 - Use the EXACT pageId from the context for edit_page. Do not invent IDs.
-- You may call multiple tools in one turn (e.g. edit two pages).
+${pageOnly
+  ? `- You are embedded in the page editor and can ONLY edit the currently open page (pageId ${focusedPageId}). Call edit_page at most once, with that pageId. If the teacher asks to change other pages or create pages, explain in prose that this works with the AI Edit button in the skript header, and make no tool call.`
+  : '- You may call multiple tools in one turn (e.g. edit two pages).'}
 ${orgPrompt ? `\n${orgPrompt}\n` : ''}
 ## Skript: "${ctx.skript.title}"${ctx.skript.description ? ` — ${ctx.skript.description}` : ''}
 Pages (in order):
@@ -126,8 +128,12 @@ export async function POST(request: Request): Promise<Response> {
     frontPageId?: string
     currentContent?: string
     messages?: ChatMsg[]
+    // 'page': in-editor AI Edit — only the open page may be edited, and the
+    // page editor (not this route) owns saving. Default: whole skript.
+    scope?: 'page' | 'skript'
   }
   const { skriptId, pageId, frontPageId, currentContent } = body
+  const pageOnly = body.scope === 'page' && !!pageId
   const messages = Array.isArray(body.messages) ? body.messages.filter(m => m?.content?.trim()) : []
 
   if (messages.length === 0) {
@@ -205,7 +211,7 @@ export async function POST(request: Request): Promise<Response> {
     defaultHeaders: { 'HTTP-Referer': 'https://eduskript.org', 'X-Title': 'Eduskript' },
   })
 
-  const systemPrompt = buildSystemPrompt(skriptContext, orgPrompt, pageId)
+  const systemPrompt = buildSystemPrompt(skriptContext, orgPrompt, pageId, pageOnly)
 
   let content = ''
   let toolCalls: Array<{ name: string; args: Record<string, unknown> }> = []
@@ -218,7 +224,7 @@ export async function POST(request: Request): Promise<Response> {
         { role: 'system', content: systemPrompt },
         ...messages.map(m => ({ role: m.role, content: m.content })),
       ],
-      tools: TOOLS,
+      tools: pageOnly ? TOOLS.filter(t => t.function.name === 'edit_page') : TOOLS,
       tool_choice: 'auto',
       ...(openrouterRouting(model) as Record<string, unknown>),
     })
@@ -255,6 +261,9 @@ export async function POST(request: Request): Promise<Response> {
       return null
     })
     .filter((p): p is NonNullable<typeof p> => p !== null)
+    // Page scope: drop anything the model proposed for other pages despite the prompt.
+    .filter(p => !pageOnly || p.pageId === pageId)
+    .slice(0, pageOnly ? 1 : undefined)
 
   // Pure conversation — no edits.
   if (pages.length === 0) {

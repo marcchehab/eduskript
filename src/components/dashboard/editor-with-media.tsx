@@ -108,6 +108,8 @@ export interface EditorWithMediaProps {
    *  is passed; for frontpage mode, the rewritten frontpage content. Parent is
    *  responsible for actually persisting the new content via its own save flow. */
   onAIEditApplied?: (newContent?: string) => void | Promise<void>
+  /** Page mode: an in-editor AI proposal was fully accepted (not yet saved). */
+  onAIInlineAccepted?: () => void
 
   // Permissions
   /** Surfaces the admin-only "manual add video" form in the VideoBrowser. */
@@ -159,6 +161,7 @@ export function EditorWithMedia({
   tabStorageKey,
   aiEdit,
   onAIEditApplied,
+  onAIInlineAccepted,
   isAdmin,
   fullscreen = false,
   metadataSlot,
@@ -711,6 +714,9 @@ export function EditorWithMedia({
               fileListLoading={fileListLoading}
               onFileUpload={refreshFileList}
               onAIEdit={aiEdit ? () => setAiEditModalOpen(true) : undefined}
+              // Page mode: AI Edit is a ribbon tab working in this editor; the
+              // whole-skript chat dialog lives in the skript header (page-editor).
+              aiInline={aiEdit?.target.mode === 'page' ? { locked: isFreePlan, onAccepted: onAIInlineAccepted } : undefined}
               aiEditLocked={Boolean(aiEdit) && isFreePlan}
               onExcalidrawEdit={(filename, fileId) => handleExcalidrawEdit({ id: fileId, name: filename })}
             />
@@ -1054,8 +1060,8 @@ export function EditorWithMedia({
         </div>
       )}
 
-      {/* AI Edit modal */}
-      {aiEdit && (
+      {/* AI Edit modal — front pages only; page mode uses the ribbon tab */}
+      {aiEdit && aiEdit.target.mode !== 'page' && (
         <AIEditChatModal
           open={aiEditModalOpen}
           onOpenChange={setAiEditModalOpen}

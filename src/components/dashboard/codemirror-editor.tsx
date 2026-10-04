@@ -32,10 +32,15 @@ import { Ribbon, RibbonGroup, RibbonBigButton, RibbonSmallButton, RibbonSmallSta
 import { createMarkdownCompletions, pageLinkCompletions, phetSimCompletions } from './markdown-completions'
 import type { EditorView } from '@codemirror/view'
 import type { ViewUpdate } from '@codemirror/view'
+import type { Compartment, Extension } from '@codemirror/state'
 import { toggleInline, toggleStrikethrough, insertLink as insertLinkEdit, type FormatEdit } from './markdown-format-commands'
 import type { VideoInfo } from '@/lib/skript-files'
 import { classifyPaste, type PasteMenuOption } from '@/lib/paste-rules'
 import { planBlockInsert } from '@/lib/block-insert'
+import { AIEditPanel } from '@/components/ai/ai-edit-panel'
+import { useInlineAIEdit } from '@/hooks/use-inline-ai-edit'
+import type { ContentModel } from '@/hooks/use-ai-edit-chat'
+import { normalizeContent } from '@/lib/ai/normalize-content'
 
 interface CodeMirrorEditorProps {
   content: string
@@ -64,6 +69,13 @@ interface CodeMirrorEditorProps {
    *  (free teachers). The click still fires onAIEdit — the parent routes it
    *  to billing. */
   aiEditLocked?: boolean
+  /**
+   * In-editor AI Edit as a ribbon tab (page editor). Proposals land in this
+   * editor as an inline diff with per-change accept/reject; saving is the
+   * normal page Save. Needs skriptId + pageId. When set, the tab-bar AI Edit
+   * button (onAIEdit) is not shown.
+   */
+  aiInline?: { locked: boolean; onAccepted?: () => void }
 }
 
 /**
@@ -163,7 +175,8 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   onPasteImageUpload,
   onExcalidrawEdit: onExcalidrawEditProp,
   onAIEdit,
-  aiEditLocked = false
+  aiEditLocked = false,
+  aiInline,
 }: CodeMirrorEditorProps) {
   const { data: session } = useSession()
   const paywall = PAYWALL_COPY[useUiLocale()]
@@ -206,6 +219,100 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   const { resolvedTheme } = useTheme()
   const isDark = resolvedTheme === 'dark'
   const alert = useAlertDialog()
+
+  // --- In-editor AI Edit -------------------------------------------------
+  // Compartments + @codemirror/merge helpers, filled in when CodeMirror is
+  // initialized (all CM modules are imported dynamically there).
+  const aiCmRef = useRef<{
+    merge: Compartment
+    readOnly: Compartment
+    unifiedMergeView: typeof import('@codemirror/merge').unifiedMergeView
+    getChunks: typeof import('@codemirror/merge').getChunks
+    rejectChunk: typeof import('@codemirror/merge').rejectChunk
+    readOnlyExt: Extension
+    EditorView: typeof import('@codemirror/view').EditorView
+  } | null>(null)
+  // True while an AI proposal is shown as a diff in the editor.
+  const aiMergeActiveRef = useRef(false)
+  const [aiPendingChunks, setAiPendingChunks] = useState(0)
+  const [aiContentModel, setAiContentModelState] = useState<ContentModel>(() => {
+    try { return localStorage.getItem('eduskript:ai-edit-content-model') === 'thinking' ? 'thinking' : 'flash' } catch { return 'flash' }
+  })
+  const setAiContentModel = useCallback((m: ContentModel) => {
+    setAiContentModelState(m)
+    try { localStorage.setItem('eduskript:ai-edit-content-model', m) } catch { /* private mode */ }
+  }, [])
+  const aiOnAcceptedRef = useRef(aiInline?.onAccepted)
+  aiOnAcceptedRef.current = aiInline?.onAccepted
+
+  const clearAIMerge = useCallback((accepted: boolean) => {
+    const view = editorViewRef.current
+    const cm = aiCmRef.current
+    aiMergeActiveRef.current = false
+    setAiPendingChunks(0)
+    if (view && cm) view.dispatch({ effects: cm.merge.reconfigure([]) })
+    if (accepted) aiOnAcceptedRef.current?.()
+  }, [])
+
+  // Show an AI proposal in the editor: the doc becomes the proposed text, the
+  // merge view diffs it against what the AI worked on (`original`). Each
+  // change gets Accept/Reject buttons; nothing is saved until the page Save.
+  const showAIProposal = useCallback((original: string, proposed: string) => {
+    const view = editorViewRef.current
+    const cm = aiCmRef.current
+    if (!view || !cm) return
+    const next = normalizeContent(proposed)
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: next }, userEvent: 'input.ai' })
+    view.dispatch({
+      effects: cm.merge.reconfigure(cm.unifiedMergeView({
+        original: normalizeContent(original),
+        mergeControls: true,
+        highlightChanges: true,
+        gutter: true,
+        diffConfig: { scanLimit: 10_000 },
+      })),
+    })
+    const chunks = cm.getChunks(view.state)?.chunks ?? []
+    if (chunks.length === 0) {
+      clearAIMerge(false)
+      return
+    }
+    aiMergeActiveRef.current = true
+    setAiPendingChunks(chunks.length)
+    view.dispatch({ effects: cm.EditorView.scrollIntoView(chunks[0].fromB, { y: 'center' }) })
+  }, [clearAIMerge])
+
+  const rejectAllAI = useCallback(() => {
+    const view = editorViewRef.current
+    const cm = aiCmRef.current
+    if (!view || !cm) return
+    // Same non-progress guard as MergeEditor's "Revert all".
+    let last = -1
+    for (let safety = 1000; safety > 0; safety--) {
+      const chunks = cm.getChunks(view.state)?.chunks ?? []
+      if (chunks.length === 0 || chunks.length === last) break
+      last = chunks.length
+      if (!cm.rejectChunk(view, chunks[0].fromB)) break
+    }
+    clearAIMerge(false)
+  }, [clearAIMerge])
+
+  const aiEdit = useInlineAIEdit({
+    skriptId: skriptId ?? '',
+    pageId: pageId ?? '',
+    contentModel: aiContentModel,
+    getContent: () => editorViewRef.current?.state.doc.toString() ?? lastEmittedContentRef.current,
+    onProposal: showAIProposal,
+  })
+
+  // Freeze the editor while the AI writes, so the proposal can't clobber
+  // edits typed in the meantime.
+  useEffect(() => {
+    const view = editorViewRef.current
+    const cm = aiCmRef.current
+    if (!view || !cm) return
+    view.dispatch({ effects: cm.readOnly.reconfigure(aiEdit.isBusy ? cm.readOnlyExt : []) })
+  }, [aiEdit.isBusy])
 
   // Track current heading/paragraph (refs to avoid re-renders on every keystroke/click)
   const currentHeadingRef = useRef<string>('')
@@ -690,7 +797,10 @@ const CodeMirrorEditor = function CodeMirrorEditor({
         // Try to import CodeMirror modules one by one with better error handling
         const { basicSetup } = await import('codemirror')
         const { EditorView, keymap } = await import('@codemirror/view')
-        const { EditorState, Prec } = await import('@codemirror/state')
+        const { EditorState, Prec, Compartment } = await import('@codemirror/state')
+        const mergeMod = await import('@codemirror/merge')
+        const aiMergeCompartment = new Compartment()
+        const aiReadOnlyCompartment = new Compartment()
         const { indentWithTab } = await import('@codemirror/commands')
 
         // Toggle "> " prefix on all selected lines (Ctrl/Cmd+Shift+.)
@@ -779,7 +889,16 @@ const CodeMirrorEditor = function CodeMirrorEditor({
               maxRenderedOptions: 15,
             }),
             ...(isDark ? [vsCodeDark] : [vsCodeLight]),
+            aiMergeCompartment.of([]),
+            aiReadOnlyCompartment.of([]),
             EditorView.updateListener.of((update: ViewUpdate) => {
+              // AI proposal diff: track open changes; once every change is
+              // accepted or rejected, drop the merge view.
+              if (aiMergeActiveRef.current) {
+                const open = mergeMod.getChunks(update.state)?.chunks.length ?? 0
+                setAiPendingChunks(open)
+                if (open === 0) setTimeout(() => { if (aiMergeActiveRef.current) clearAIMerge(true) }, 0)
+              }
               if (update.docChanged) {
                 const newContent = update.state.doc.toString()
                 lastEmittedContentRef.current = newContent
@@ -934,6 +1053,17 @@ const CodeMirrorEditor = function CodeMirrorEditor({
         })
 
         editorViewRef.current = view
+        aiCmRef.current = {
+          merge: aiMergeCompartment,
+          readOnly: aiReadOnlyCompartment,
+          unifiedMergeView: mergeMod.unifiedMergeView,
+          getChunks: mergeMod.getChunks,
+          rejectChunk: mergeMod.rejectChunk,
+          readOnlyExt: [EditorState.readOnly.of(true), EditorView.editable.of(false)],
+          EditorView,
+        }
+        aiMergeActiveRef.current = false
+        setAiPendingChunks(0)
         clearTimeout(fallbackTimeout)
 
         return () => {
@@ -1850,7 +1980,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
           simple-textarea fallback, Home and Layout are hidden (their commands
           need the CodeMirror view). */}
       <Ribbon
-        tabBarRight={onAIEdit ? (
+        tabBarRight={onAIEdit && !aiInline ? (
           aiEditLocked ? (
             <button
               type="button"
@@ -2235,6 +2365,25 @@ const CodeMirrorEditor = function CodeMirrorEditor({
               </>
             ),
           },
+          ...(aiInline && !useSimpleEditor && skriptId && pageId ? [{
+            id: 'ai',
+            label: 'AI Edit',
+            accent: {
+              active: 'border-violet-500 text-violet-600 dark:text-violet-400',
+              idle: 'text-violet-600/80 dark:text-violet-400/80',
+            },
+            content: (
+              <AIEditPanel
+                locked={aiInline.locked}
+                chat={aiEdit}
+                contentModel={aiContentModel}
+                onContentModelChange={setAiContentModel}
+                pendingChanges={aiPendingChunks}
+                onAcceptAll={() => clearAIMerge(true)}
+                onRejectAll={rejectAllAI}
+              />
+            ),
+          }] : []),
         ]}
       />
 

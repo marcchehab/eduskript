@@ -34,6 +34,7 @@ interface MarkdownEditorProps {
   onExcalidrawEdit?: (filename: string, fileId: string) => void
   onAIEdit?: () => void
   aiEditLocked?: boolean
+  aiInline?: { locked: boolean; onAccepted?: () => void }
 }
 
 // Create a client-only version using dynamic import

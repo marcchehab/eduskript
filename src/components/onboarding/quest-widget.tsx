@@ -87,7 +87,7 @@ const STEP_LABELS: Record<UiLocale, Record<QuestStep, string>> = {
     edit_page_content: "Bearbeite eine Seite",
     view_via_eye_icon: "Seite mit dem Augen-Symbol ansehen",
     return_via_edit_link: "Zurück zum Seiten-Editor",
-    use_ai_edit: "Mit AI Edit eine Seite hinzufügen",
+    use_ai_edit: "Mit AI Edit eine Seite ändern",
   },
   en: {
     place_skript: "Place your first skript",
@@ -99,7 +99,7 @@ const STEP_LABELS: Record<UiLocale, Record<QuestStep, string>> = {
     edit_page_content: "Edit a page",
     view_via_eye_icon: "Preview a page with the eye icon",
     return_via_edit_link: "Return to page editor",
-    use_ai_edit: "Use AI edit to add a page",
+    use_ai_edit: "Use AI Edit to change a page",
   },
 };
 
@@ -140,7 +140,7 @@ const STEP_DESCRIPTIONS: Record<UiLocale, Record<QuestStep, React.ReactNode>> = 
     return_via_edit_link:
       "Mit diesem Bearbeiten-Knopf kommst du direkt zurück in den Editor dieser Seite.",
     use_ai_edit:
-      'Lass jetzt mit "AI Edit" die KI eine neue Seite für dich hinzufügen. Wünsch dir, was du willst, und teste die Grenzen!',
+      'Öffne oben im Editor den Reiter "AI Edit" und wünsch dir eine Änderung, z.B. eine Übung mit Lösung. Die KI markiert ihre Änderungen im Editor, du nimmst sie an und speicherst.',
   },
   en: {
     place_skript:
@@ -162,7 +162,7 @@ const STEP_DESCRIPTIONS: Record<UiLocale, Record<QuestStep, React.ReactNode>> = 
     return_via_edit_link:
       "You can directly edit this page, by clicking on this edit button.",
     use_ai_edit:
-      'Now use "AI Edit" to tell the AI to add a new page for you. Request whatever you like — push the limits!',
+      'Open the "AI Edit" tab above the editor and ask for a change, e.g. an exercise with a solution. The AI marks its changes in the editor; accept them and save.',
   },
 };
 

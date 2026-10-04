@@ -80,6 +80,8 @@ interface AIEditChatModalProps {
   onEditsApplied?: (newContent?: string) => void
   /** Free plan: show what AI Edit does and an upgrade link instead of the chat. */
   locked?: boolean
+  /** Opened from the skript header (several pages) — only changes the wording. */
+  skriptScope?: { openPageTitle: string }
   /** Lets the rendered preview resolve images / videos like the editor preview. */
   fileList?: Array<{ id: string; name: string; url?: string; updatedAt?: string | Date; width?: number; height?: number }>
   videoList?: React.ComponentProps<typeof MarkdownRenderer>['videoList']
@@ -95,6 +97,7 @@ export function AIEditChatModal(props: AIEditChatModalProps) {
 }
 
 function ChatContent({
+  skriptScope,
   target,
   targetTitle,
   targetSubtitle,
@@ -224,7 +227,9 @@ function ChatContent({
   const subtitle =
     target.mode === 'frontpage'
       ? 'Edits this front page. Each message is turned into a proposed change.'
-      : `Edits this page. Can also add new pages to ${targetSubtitle ? `“${targetSubtitle}”` : 'this skript'}.`
+      : skriptScope
+        ? `Can change several pages of this skript and add new ones. Open page: “${skriptScope.openPageTitle}”.`
+        : `Edits this page. Can also add new pages to ${targetSubtitle ? `“${targetSubtitle}”` : 'this skript'}.`
 
   return (
     <>
