@@ -127,6 +127,9 @@ export interface EditorWithMediaProps {
    *  editor) — mirrors headerContent's relationship to the manage tab strip.
    *  Only rendered when metadataSlot is also provided, and hidden in fullscreen. */
   pageLabel?: React.ReactNode
+  /** Label for the skript/frontpage header card (e.g. "Skript"), shown as a
+   *  folder-tab notch at the top of that card. */
+  headerLabel?: React.ReactNode
   /** Rendered after the editor card, inside the same bordered card as
    *  metadataSlot (e.g. version history) — it's part of the page too, not a
    *  separate scope. Hidden in fullscreen. */
@@ -172,6 +175,7 @@ export function EditorWithMedia({
   fullscreen = false,
   metadataSlot,
   pageLabel,
+  headerLabel,
   footerSlot,
 }: EditorWithMediaProps) {
   const alert = useAlertDialog()
@@ -596,6 +600,13 @@ export function EditorWithMedia({
           there's no skriptId (no file storage to manage) — the editor below
           still renders either way, so the user can type and use AI edit. */}
       {!fullscreen && (headerContent || skriptId) && (
+      // Wrapper so the folder tab isn't a child of the divide-y section
+      // (it would get a divider line under it).
+      <div className="relative">
+      {/* belowBorder: the wrapper's top edge IS the card border, so shift the
+          tab down 1px to keep the border line visible (the page card's tab
+          sits inside its border box and needs no offset). */}
+      {headerLabel && <FolderTab tone={headerScope === 'neutral' ? 'neutral' : 'blue'} belowBorder>{headerLabel}</FolderTab>}
       <section className={`rounded-lg overflow-hidden divide-y divide-border ${
         headerScope === 'neutral' ? 'border' : 'border border-blue-400/70 dark:border-blue-500/60'
       }`}>
@@ -680,6 +691,7 @@ export function EditorWithMedia({
         </div>
         )}
       </section>
+      </div>
       )}
 
       {/* Page label + metadata + editor share one bordered card — same
@@ -689,14 +701,14 @@ export function EditorWithMedia({
           metadataSlot is still always rendered — the parent decides what's
           visible in fullscreen, since some controls (e.g. the fullscreen
           toggle itself) need to stay reachable. */}
-      {!fullscreen && pageLabel}
       <div className={
         fullscreen
           ? 'flex-1 min-h-0 flex flex-col'
           : hasPageCard
-            ? 'border border-orange-400/70 dark:border-orange-500/60 rounded-lg overflow-hidden'
+            ? 'relative border border-orange-400/70 dark:border-orange-500/60 rounded-lg overflow-hidden'
             : ''
       }>
+        {!fullscreen && pageLabel && <FolderTab tone="orange">{pageLabel}</FolderTab>}
         {metadataSlot && (
           <div className={fullscreen ? '' : 'p-3'}>
             {metadataSlot}
@@ -1120,5 +1132,40 @@ export function EditorWithMedia({
         message={alert.message}
       />
     </>
+  )
+}
+
+/**
+ * Scope label as a folder-tab notch hanging from the top edge of a card,
+ * centered: a trapezoid (slanted sides, wider at the top) with a light tint
+ * of the card's border color. Replaces the separate label row above each card
+ * to save vertical space. Decorative — doesn't take pointer events.
+ */
+function FolderTab({ tone, belowBorder = false, children }: { tone: 'blue' | 'orange' | 'neutral'; belowBorder?: boolean; children: React.ReactNode }) {
+  // The trapezoid is a bordered, bottom-rounded box tilted back with a
+  // perspective transform (top edge fixed): that gives slanted sides AND
+  // rounded corners AND a real border, which a clip-path can't. The label
+  // sits on top, untransformed. No top border: the tab hangs from the card's.
+  const shape =
+    tone === 'blue'
+      ? 'border-blue-400/70 dark:border-blue-500/60 bg-blue-50 dark:bg-blue-950'
+      : tone === 'orange'
+        ? 'border-orange-400/70 dark:border-orange-500/60 bg-orange-50 dark:bg-orange-950'
+        : 'border-border bg-muted'
+  const text =
+    tone === 'blue' ? 'text-blue-700 dark:text-blue-300' : tone === 'orange' ? 'text-orange-700 dark:text-orange-300' : 'text-muted-foreground'
+  return (
+    <div className={`pointer-events-none absolute left-1/2 z-10 -translate-x-1/2 ${belowBorder ? 'top-px' : 'top-0'}`}>
+      <div className="relative px-6">
+        <div
+          aria-hidden
+          className={`absolute inset-0 rounded-b-lg border border-t-0 ${shape}`}
+          style={{ transform: 'perspective(20px) rotateX(-7deg)', transformOrigin: 'top' }}
+        />
+        <div className={`relative flex items-center gap-1.5 pb-0.5 text-xs font-medium leading-5 ${text}`}>
+          {children}
+        </div>
+      </div>
+    </div>
   )
 }

@@ -403,10 +403,10 @@ export function FrontPageEditor({
   // "Front page" label above the editor card — orange, the page scope, since
   // the front page is the content being edited here.
   const pageLabel = (
-    <div className="flex items-center gap-1.5 px-1 mb-1">
-      <BookA className="w-4 h-4 text-orange-600 dark:text-orange-400" />
-      <span className="text-sm font-medium text-orange-600 dark:text-orange-400">Front page</span>
-    </div>
+    <>
+      <BookA className="w-3.5 h-3.5" />
+      Front page
+    </>
   )
 
   // File-storage CTA — only for user/org frontpages that haven't enabled

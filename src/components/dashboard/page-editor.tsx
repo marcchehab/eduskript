@@ -736,14 +736,20 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
     </div>
   )
 
-  // "Page" label, handed to EditorWithMedia as `pageLabel` — sits above the
-  // metadata+editor card in orange, distinct from the blue "Skript" label
-  // above the header+tabs card, so the two scopes read apart at a glance.
+  // Scope labels, rendered by EditorWithMedia as folder-tab notches at the top
+  // of the blue skript card and the orange page card, so the two scopes read
+  // apart at a glance without a label row above each card.
   const pageLabelContent = (
-    <div className="flex items-center gap-1.5 px-1 mb-1">
-      <FilePenLine className="w-4 h-4 text-orange-600 dark:text-orange-400" />
-      <span className="text-sm font-medium text-orange-600 dark:text-orange-400">Page</span>
-    </div>
+    <>
+      <FilePenLine className="w-3.5 h-3.5" />
+      Page
+    </>
+  )
+  const skriptLabelContent = (
+    <>
+      <BookOpen className="w-3.5 h-3.5" />
+      Skript
+    </>
   )
 
   return (
@@ -755,19 +761,9 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
           // (CodeMirror scroller + preview pane) handle their own scroll.
           // No `overflow-auto` here — that would push the toolbar offscreen.
           ? 'fixed inset-0 z-50 bg-background p-6 flex flex-col gap-4'
-          : 'space-y-6'
+          : 'space-y-4'
       }
     >
-
-      {/* "Skript" label sits above the bordered card (rather than inside its
-          header row) to signal that everything inside — header AND manage
-          tabs — belongs to the skript, not the page being edited below. */}
-      {!isFullscreen && (
-        <div className="flex items-center gap-1.5 px-1 mb-1">
-          <BookOpen className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-          <span className="text-sm font-medium text-blue-600 dark:text-blue-400">Skript</span>
-        </div>
-      )}
 
       {/* Shared editor shell — owns the skript header + manage tabs
           (Files/Videos + Pages/Access via extraTabs) in one card, the
@@ -781,6 +777,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
         pageId={page.id}
         domain={(session?.user as { pageSlug?: string })?.pageSlug || undefined}
         headerContent={skriptHeaderContent}
+        headerLabel={skriptLabelContent}
         description={null}
         manageLabel="Manage:"
         extraTabs={extraTabs}
