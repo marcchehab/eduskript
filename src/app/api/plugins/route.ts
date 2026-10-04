@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { siteHasOrHadSlug } from '@/lib/site-slugs'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { createPluginForUser } from '@/lib/services/plugins'
 import { ConflictError, ValidationError } from '@/lib/services/pages'
@@ -17,7 +18,7 @@ export async function GET(request: NextRequest) {
 
     const pluginsRaw = await prisma.plugin.findMany({
       where: authorFilter
-        ? { author: { sites: { some: { slug: authorFilter } } } }
+        ? { author: { sites: { some: siteHasOrHadSlug(authorFilter) } } }
         : undefined,
       include: {
         author: {

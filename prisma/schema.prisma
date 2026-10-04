@@ -254,6 +254,8 @@ model Site {
   collections Collection[]
   pageLayout  PageLayout?
   frontPage   FrontPage?
+  // Slugs this site used before a rename (src/lib/site-slugs.ts)
+  slugAliases SiteSlugAlias[]
   teacherCustomDomains TeacherCustomDomain[]
 
   @@index([userId])
@@ -1466,4 +1468,18 @@ model SyncMetadata {
   value String
 
   @@map("_sync_metadata")
+}
+
+/// A slug a Site used before it was renamed. Keeps old references working:
+/// plugin srcs (`<old>/<plugin>`) resolve through it and old public URLs
+/// redirect to the current slug. The slug stays reserved for that site so no
+/// one else can claim it and take over the references. See src/lib/site-slugs.ts.
+model SiteSlugAlias {
+  slug      String   @id
+  siteId    String   @map("site_id")
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([siteId])
+  @@map("site_slug_aliases")
 }

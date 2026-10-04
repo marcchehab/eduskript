@@ -37,6 +37,9 @@ const mockPrisma = {
     findUnique: vi.fn().mockResolvedValue(null),
     create: vi.fn().mockResolvedValue({ id: 'site-1', slug: 'placeholder' }),
   },
+  siteSlugAlias: {
+    findUnique: vi.fn().mockResolvedValue(null),
+  },
   // Required for autoJoinOrgByEmailDomain
   organization: {
     findMany: vi.fn().mockResolvedValue([]),

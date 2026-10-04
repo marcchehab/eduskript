@@ -9,6 +9,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { siteHasOrHadSlug } from '@/lib/site-slugs'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import { ConflictError, NotFoundError, PermissionDeniedError, ValidationError } from '@/lib/services/pages'
 
@@ -87,7 +88,7 @@ export async function updatePluginForUser(
     },
     include: {
       author: ownerSlug
-        ? { select: { id: true, name: true, image: true, sites: { where: { slug: ownerSlug }, take: 1, select: { slug: true, pageName: true } } } }
+        ? { select: { id: true, name: true, image: true, sites: { where: siteHasOrHadSlug(ownerSlug), take: 1, select: { slug: true, pageName: true } } } }
         : authorInclude,
     },
   })

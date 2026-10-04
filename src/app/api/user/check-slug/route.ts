@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { isSiteSlugTaken } from '@/lib/site-slugs'
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,13 +19,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Check if the slug is already taken by any Site (user OR organization)
-    // owned by anyone other than the current user.
-    const existingSite = await prisma.site.findUnique({
-      where: { slug },
-      select: { userId: true }
-    })
-
-    const available = !existingSite || existingSite.userId === session.user.id
+    // owned by anyone other than the current user, as its current slug or one
+    // it used before a rename (src/lib/site-slugs.ts).
+    const available = !(await isSiteSlugTaken(slug, { userId: session.user.id }))
 
     return NextResponse.json({ available })
   } catch (error) {

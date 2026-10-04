@@ -118,22 +118,19 @@ function generateUsernameFromEmail(email: string): string {
 async function findUniquePageSlug(prisma: PrismaClient, baseSlug: string): Promise<string> {
   // URL slugs live on Site (global uniqueness across users + orgs). Probe
   // by site.slug rather than user.pageSlug.
-  const existing = await prisma.site.findUnique({
-    where: { slug: baseSlug },
-    select: { id: true }
-  })
+  // Old slugs of renamed sites count as taken (src/lib/site-slugs.ts). Probed
+  // through the injected client, not isSiteSlugTaken (global client).
+  const isTaken = async (slug: string) =>
+    !!(await prisma.site.findUnique({ where: { slug }, select: { id: true } })) ||
+    !!(await prisma.siteSlugAlias.findUnique({ where: { slug }, select: { slug: true } }))
 
-  if (!existing) {
+  if (!(await isTaken(baseSlug))) {
     return baseSlug
   }
 
   for (let i = 2; i <= 100; i++) {
     const candidateSlug = `${baseSlug}-${i}`
-    const exists = await prisma.site.findUnique({
-      where: { slug: candidateSlug },
-      select: { id: true }
-    })
-    if (!exists) {
+    if (!(await isTaken(candidateSlug))) {
       return candidateSlug
     }
   }

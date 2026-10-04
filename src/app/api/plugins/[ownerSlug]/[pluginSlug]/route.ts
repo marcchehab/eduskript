@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { siteHasOrHadSlug } from '@/lib/site-slugs'
 import { updatePluginForUser } from '@/lib/services/plugins'
 import { NotFoundError, PermissionDeniedError } from '@/lib/services/pages'
 
@@ -20,11 +21,11 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     const pluginRaw = await prisma.plugin.findFirst({
       where: {
         slug: pluginSlug,
-        author: { sites: { some: { slug: ownerSlug } } },
+        author: { sites: { some: siteHasOrHadSlug(ownerSlug) } },
       },
       include: {
         author: {
-          select: { id: true, name: true, sites: { where: { slug: ownerSlug }, take: 1, select: { slug: true, pageName: true } } },
+          select: { id: true, name: true, sites: { where: siteHasOrHadSlug(ownerSlug), take: 1, select: { slug: true, pageName: true } } },
         },
       },
     })
@@ -66,7 +67,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     const plugin = await prisma.plugin.findFirst({
       where: {
         slug: pluginSlug,
-        author: { sites: { some: { slug: ownerSlug } } },
+        author: { sites: { some: siteHasOrHadSlug(ownerSlug) } },
       },
     })
 
@@ -105,7 +106,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
     const plugin = await prisma.plugin.findFirst({
       where: {
         slug: pluginSlug,
-        author: { sites: { some: { slug: ownerSlug } } },
+        author: { sites: { some: siteHasOrHadSlug(ownerSlug) } },
       },
     })
 
