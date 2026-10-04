@@ -10,6 +10,11 @@ import type { useInlineAIEdit } from '@/hooks/use-inline-ai-edit'
 import type { ContentModel } from '@/hooks/use-ai-edit-chat'
 import { Sparkles, Send, Square, Loader2, Check, X, Zap, BrainCircuit, Lock, RotateCcw } from 'lucide-react'
 
+const HEIGHT_KEY = 'eduskript:ai-edit-panel-height'
+const DEFAULT_HEIGHT = 230
+const MIN_HEIGHT = 150
+const MAX_HEIGHT = 640
+
 const EXAMPLE_PROMPTS = [
   'Add a practice exercise with a collapsible solution',
   'Simplify the language for 14-year-olds',
@@ -41,6 +46,35 @@ export function AIEditPanel({
 }) {
   const [input, setInput] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
+  // Panel height, adjustable with the drag handle at its bottom edge; kept
+  // per browser.
+  const [height, setHeight] = useState(() => {
+    try {
+      const saved = Number(localStorage.getItem(HEIGHT_KEY))
+      return saved >= MIN_HEIGHT && saved <= MAX_HEIGHT ? saved : DEFAULT_HEIGHT
+    } catch {
+      return DEFAULT_HEIGHT
+    }
+  })
+  const startDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    const startY = e.clientY
+    const startHeight = height
+    let latest = startHeight
+    const onMove = (ev: PointerEvent) => {
+      latest = Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, startHeight + ev.clientY - startY))
+      setHeight(latest)
+    }
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      document.body.style.cursor = ''
+      try { localStorage.setItem(HEIGHT_KEY, String(latest)) } catch { /* private mode */ }
+    }
+    document.body.style.cursor = 'row-resize'
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+  }
 
   useEffect(() => {
     const el = scrollRef.current
@@ -58,11 +92,12 @@ export function AIEditPanel({
   }
 
   return (
-    <div className="flex w-full min-w-0 gap-3 py-1.5 min-h-[220px]">
+    <div className="flex w-full min-w-0 flex-col" style={{ height }}>
+    <div className="flex min-h-0 flex-1 gap-3 py-1.5">
       {/* Conversation + composer */}
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         {(chat.turns.length > 0 || chat.error) && (
-          <div ref={scrollRef} className="flex-1 min-h-0 max-h-72 overflow-y-auto space-y-1.5 text-sm pr-1">
+          <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto space-y-1.5 text-sm pr-1">
             {chat.turns.map(t => (
               <div key={t.id} className={t.role === 'user' ? 'text-right' : ''}>
                 <span
@@ -173,6 +208,18 @@ export function AIEditPanel({
         ) : (
           <p className="text-muted-foreground">Only this page is changed. For several pages, use AI Edit in the skript header.</p>
         )}
+      </div>
+    </div>
+      {/* Drag handle: resize the chat strip (and with it the editor below). */}
+      <div
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="Resize AI Edit panel"
+        title="Drag to resize"
+        onPointerDown={startDrag}
+        className="group flex h-2.5 shrink-0 cursor-row-resize items-center justify-center"
+      >
+        <div className="h-1 w-12 rounded-full bg-border transition-colors group-hover:bg-primary/60" />
       </div>
     </div>
   )
