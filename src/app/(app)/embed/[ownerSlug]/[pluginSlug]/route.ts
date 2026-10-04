@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { siteHasOrHadSlug } from '@/lib/site-slugs'
 import { buildStandaloneEmbedHtml } from '@/lib/plugin-sdk'
 
 interface RouteParams {
@@ -22,7 +23,7 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
   const { ownerSlug, pluginSlug } = await params
 
   const plugin = await prisma.plugin.findFirst({
-    where: { slug: pluginSlug, author: { sites: { some: { slug: ownerSlug } } } },
+    where: { slug: pluginSlug, author: { sites: { some: siteHasOrHadSlug(ownerSlug) } } },
     select: { entryHtml: true, name: true },
   })
 

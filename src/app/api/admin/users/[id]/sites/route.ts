@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/admin-auth'
 import { prisma } from '@/lib/prisma'
+import { isSiteSlugTaken } from '@/lib/site-slugs'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 
 // Slugs that would collide with app routes. Mirrors the reserved list used at
@@ -64,8 +65,8 @@ export async function POST(
   }
 
   // Site.slug is globally unique across all user + org sites.
-  const taken = await prisma.site.findUnique({ where: { slug: rawSlug }, select: { id: true } })
-  if (taken) {
+  // Also counts slugs a site used before a rename (src/lib/site-slugs.ts).
+  if (await isSiteSlugTaken(rawSlug)) {
     return NextResponse.json({ error: 'Slug already taken' }, { status: 409 })
   }
 

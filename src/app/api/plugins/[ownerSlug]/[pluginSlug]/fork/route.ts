@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { siteHasOrHadSlug } from '@/lib/site-slugs'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 
 interface RouteParams {
@@ -25,7 +26,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     const source = await prisma.plugin.findFirst({
       where: {
         slug: pluginSlug,
-        author: { sites: { some: { slug: ownerSlug } } },
+        author: { sites: { some: siteHasOrHadSlug(ownerSlug) } },
       },
     })
 

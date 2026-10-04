@@ -1,4 +1,5 @@
-import { notFound, redirect } from 'next/navigation'
+import { notFound, permanentRedirect, redirect } from 'next/navigation'
+import { currentSlugForAlias } from '@/lib/site-slugs'
 import { PublicSiteLayout } from '@/components/public/layout'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
 import { ReflowGate } from '@/components/public/reflow-gate'
@@ -68,6 +69,9 @@ export default async function OrgTeacherContentPage({ params }: PageProps) {
   const data = await getOrgTeacherContentPage(orgSlug, pageSlug, skriptSlug, contentPageSlug)
 
   if (!data) {
+    // Old slug of a renamed site → its current slug (src/lib/site-slugs.ts).
+    const currentSlug = await currentSlugForAlias(pageSlug)
+    if (currentSlug) permanentRedirect(`/${currentSlug}/${skriptSlug}/${contentPageSlug}`)
     notFound()
   }
 

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/admin-auth'
 import { prisma } from '@/lib/prisma'
+import { isSiteSlugTaken, recordSiteSlugRename } from '@/lib/site-slugs'
 import { PRIMARY_SITE_ORDER } from '@/lib/sites'
 import bcrypt from 'bcryptjs'
 import { createTrialSubscription } from '@/lib/trial'
@@ -163,12 +164,9 @@ export async function PATCH(
     }
 
     // Check if pageSlug is taken (URL slugs are unique across all sites).
+    // Old slugs of other users' sites count as taken (src/lib/site-slugs.ts).
     if (pageSlug) {
-      const taken = await prisma.site.findFirst({
-        where: { slug: pageSlug, NOT: { userId: id } },
-      })
-
-      if (taken) {
+      if (await isSiteSlugTaken(pageSlug, { userId: id })) {
         return NextResponse.json(
           { error: 'Page slug already taken by another user' },
           { status: 409 }
@@ -219,6 +217,9 @@ export async function PATCH(
             data: { slug: pageSlug },
           })
           siteSlug = updated.slug
+          if (primarySite.slug !== updated.slug) {
+            await recordSiteSlugRename(tx, { siteId: primarySite.id, userId: id, oldSlug: primarySite.slug, newSlug: updated.slug })
+          }
         } else {
           const created = await tx.site.create({
             data: { slug: pageSlug, userId: id },

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { revalidateTag, revalidatePath } from 'next/cache'
 import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/prisma'
+import { isSiteSlugTaken } from '@/lib/site-slugs'
 import { generateSlug } from '@/lib/markdown'
 import { sendEmail, generateVerificationEmailContent, notifyAdminsOfNewTeacher } from '@/lib/email'
 import { randomBytes } from 'crypto'
@@ -41,24 +42,15 @@ function generatePageSlugFromEmail(email: string): string {
  * Finds a unique page slug, adding numeric suffix if needed (e.g., john-doe, john-doe-2, john-doe-3)
  */
 async function findUniquePageSlug(baseSlug: string): Promise<string> {
-  // URL slugs live on Site; uniqueness is global across user/org sites.
-  const existing = await prisma.site.findUnique({
-    where: { slug: baseSlug },
-    select: { id: true }
-  })
-
-  if (!existing) {
+  // URL slugs live on Site; uniqueness is global across user/org sites,
+  // including slugs a site used before a rename (src/lib/site-slugs.ts).
+  if (!(await isSiteSlugTaken(baseSlug))) {
     return baseSlug
   }
 
   for (let i = 2; i <= 100; i++) {
     const candidateSlug = `${baseSlug}-${i}`
-    const exists = await prisma.site.findUnique({
-      where: { slug: candidateSlug },
-      select: { id: true }
-    })
-
-    if (!exists) {
+    if (!(await isSiteSlugTaken(candidateSlug))) {
       return candidateSlug
     }
   }
@@ -140,11 +132,7 @@ export async function POST(request: NextRequest) {
     let pageSlug: string
     if (requestedPageSlug) {
       const normalizedPageSlug = generateSlug(requestedPageSlug)
-      const existingPageSlug = await prisma.site.findUnique({
-        where: { slug: normalizedPageSlug }
-      })
-
-      if (existingPageSlug) {
+      if (await isSiteSlugTaken(normalizedPageSlug)) {
         return NextResponse.json(
           { error: 'This page slug is already taken' },
           { status: 400 }

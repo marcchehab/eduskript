@@ -6,6 +6,7 @@ import { invalidateSitemaps } from '@/lib/sitemap-cache'
 import { invalidateTenantConfig } from '@/lib/tenant'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { isSiteSlugTaken, recordSiteSlugRename } from '@/lib/site-slugs'
 import { resolveOwnedSite } from '@/lib/sites'
 import { withDatabaseConnection } from '@/lib/db-connection'
 import { CACHE_TAGS } from '@/lib/cached-queries'
@@ -190,15 +191,9 @@ export async function PATCH(request: NextRequest) {
       // global across every site. Exclude the target site itself so re-saving
       // its own slug isn't a false conflict; any OTHER site (including the
       // caller's other sites) sharing the slug is a real collision.
+      // Old slugs of other sites are taken too (src/lib/site-slugs.ts).
       if (validatedData.pageSlug) {
-        const conflict = await prisma.site.findFirst({
-          where: {
-            slug: validatedData.pageSlug,
-            ...(targetSite ? { NOT: { id: targetSite.id } } : {}),
-          },
-          select: { id: true },
-        })
-        if (conflict) {
+        if (await isSiteSlugTaken(validatedData.pageSlug, { siteId: targetSite?.id })) {
           throw new Error('This page slug is already taken')
         }
       }
@@ -282,13 +277,22 @@ export async function PATCH(request: NextRequest) {
         // Fall back to keeping whatever's there if no slug was provided.
         if (hasNewSlug || newSlug) {
           if (primarySiteId) {
-            siteRow = await prisma.site.update({
-              where: { id: primarySiteId },
-              data: {
-                ...(hasNewSlug ? { slug: validatedData.pageSlug } : {}),
-                ...siteUpdate,
-              },
-              select: siteSelect,
+            const oldSlug = targetSite?.slug ?? null
+            siteRow = await prisma.$transaction(async (tx) => {
+              const row = await tx.site.update({
+                where: { id: primarySiteId },
+                data: {
+                  ...(hasNewSlug ? { slug: validatedData.pageSlug } : {}),
+                  ...siteUpdate,
+                },
+                select: siteSelect,
+              })
+              // Keep the old slug as an alias so plugin srcs and links using it
+              // keep working (src/lib/site-slugs.ts).
+              if (oldSlug && row.slug !== oldSlug) {
+                await recordSiteSlugRename(tx, { siteId: primarySiteId, userId: session.user.id, oldSlug, newSlug: row.slug })
+              }
+              return row
             })
           } else {
             siteRow = await prisma.site.create({

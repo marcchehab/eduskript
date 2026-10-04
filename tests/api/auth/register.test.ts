@@ -20,6 +20,9 @@ vi.mock('@/lib/prisma', () => ({
       findUnique: vi.fn(),
       create: vi.fn(),
     },
+    siteSlugAlias: {
+      findUnique: vi.fn().mockResolvedValue(null),
+    },
     organization: {
       findUnique: vi.fn(),
     },

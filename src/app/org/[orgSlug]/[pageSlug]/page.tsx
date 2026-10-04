@@ -1,4 +1,5 @@
-import { notFound } from 'next/navigation'
+import { notFound, permanentRedirect } from 'next/navigation'
+import { currentSlugForAlias } from '@/lib/site-slugs'
 import type { Metadata } from 'next'
 import { PublicSiteLayout } from '@/components/public/layout'
 import { ServerMarkdownRenderer } from '@/components/markdown/markdown-renderer.server'
@@ -152,6 +153,9 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
   const teacherSite = teacher?.sites[0]
 
   if (!teacher) {
+    // Old slug of a renamed site → its current slug (src/lib/site-slugs.ts).
+    const currentSlug = await currentSlugForAlias(pageSlug)
+    if (currentSlug) permanentRedirect(`/${currentSlug}`)
     notFound()
   }
   const teacherPageLayout = teacherSite?.pageLayout
