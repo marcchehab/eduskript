@@ -130,6 +130,12 @@ export interface EditorWithMediaProps {
   /** Label for the skript/frontpage header card (e.g. "Skript"), shown as a
    *  folder-tab notch at the top of that card. */
   headerLabel?: React.ReactNode
+  /**
+   * Page editor: the page card fills the remaining height of its (flex
+   * column, h-full) parent — no manual resize bar. Without it the editor
+   * box uses the fit-to-window / dragged height (front-page editor).
+   */
+  fillHeight?: boolean
   /** Rendered after the editor card, inside the same bordered card as
    *  metadataSlot (e.g. version history) — it's part of the page too, not a
    *  separate scope. Hidden in fullscreen. */
@@ -176,6 +182,7 @@ export function EditorWithMedia({
   metadataSlot,
   pageLabel,
   headerLabel,
+  fillHeight = false,
   footerSlot,
 }: EditorWithMediaProps) {
   const alert = useAlertDialog()
@@ -602,7 +609,7 @@ export function EditorWithMedia({
       {!fullscreen && (headerContent || skriptId) && (
       // Wrapper so the folder tab isn't a child of the divide-y section
       // (it would get a divider line under it).
-      <div className="relative">
+      <div className={fillHeight ? 'relative shrink-0' : 'relative'}>
       {/* belowBorder: the wrapper's top edge IS the card border, so shift the
           tab down 1px to keep the border line visible (the page card's tab
           sits inside its border box and needs no offset). */}
@@ -655,6 +662,7 @@ export function EditorWithMedia({
           {/* Tab content — built-in panels rendered here, extras render their own JSX */}
           {activeTab === 'files' && (
             <div className="border-t">
+              <p className="px-3 pt-2 text-xs text-muted-foreground">Drag an item into the editor to insert it, or click it to insert at the cursor.</p>
               <FileBrowser
                 skriptId={skriptId}
                 files={fileList}
@@ -672,6 +680,7 @@ export function EditorWithMedia({
 
           {activeTab === 'videos' && (
             <div className="border-t">
+              <p className="px-3 pt-2 text-xs text-muted-foreground">Drag an item into the editor to insert it, or click it to insert at the cursor.</p>
               <VideoBrowser
                 videos={videoList}
                 loading={fileListLoading}
@@ -704,13 +713,13 @@ export function EditorWithMedia({
       <div className={
         fullscreen
           ? 'flex-1 min-h-0 flex flex-col'
-          : hasPageCard
-            ? 'relative border border-orange-400/70 dark:border-orange-500/60 rounded-lg overflow-hidden'
-            : ''
+          : `${hasPageCard ? 'relative border border-orange-400/70 dark:border-orange-500/60 rounded-lg overflow-hidden' : ''} ${
+              fillHeight ? 'flex-1 min-h-0 flex flex-col' : ''
+            }`
       }>
         {!fullscreen && pageLabel && <FolderTab tone="orange">{pageLabel}</FolderTab>}
         {metadataSlot && (
-          <div className={fullscreen ? '' : 'p-3'}>
+          <div className={fullscreen ? '' : 'px-3 pt-3 pb-1 shrink-0'}>
             {metadataSlot}
           </div>
         )}
@@ -725,7 +734,7 @@ export function EditorWithMedia({
             // Inside the page card the editor's own rounded border is enough:
             // no card background, and p-3 matches the footer (version history)
             // width.
-            : hasPageCard ? 'border-0 rounded-none shadow-none bg-transparent' : ''
+            : `${hasPageCard ? 'border-0 rounded-none shadow-none bg-transparent' : ''} ${fillHeight ? 'flex-1 min-h-0 flex flex-col' : ''}`
         }>
         {!fullscreen && (description !== null) && (
           <CardHeader className="pb-2">
@@ -734,10 +743,16 @@ export function EditorWithMedia({
             </CardDescription>
           </CardHeader>
         )}
-        <CardContent className={fullscreen ? 'flex-1 overflow-hidden' : hasPageCard ? 'p-3' : ''}>
+        <CardContent className={
+          fullscreen
+            ? 'flex-1 overflow-hidden'
+            // fillHeight (page editor): editor runs edge to edge inside the
+            // page card — no gap to the card border left, right, bottom.
+            : `${hasPageCard ? (fillHeight ? 'p-0 pt-1' : 'px-3 pb-3 pt-1') : ''} ${fillHeight ? 'flex-1 min-h-0 flex flex-col' : ''}`
+        }>
           <div
-            style={{ height: fullscreen ? '100%' : `${editorHeight}px` }}
-            className={fullscreen ? '' : 'overflow-hidden'}
+            style={fullscreen || fillHeight ? (fullscreen ? { height: '100%' } : undefined) : { height: `${editorHeight}px` }}
+            className={fullscreen ? '' : fillHeight ? 'flex-1 min-h-[300px] overflow-hidden' : 'overflow-hidden'}
           >
             <MarkdownEditor
               content={content}
@@ -762,9 +777,10 @@ export function EditorWithMedia({
               aiInline={aiEdit?.target.mode === 'page' ? { locked: isFreePlan, onAccepted: onAIInlineAccepted } : undefined}
               aiEditLocked={Boolean(aiEdit) && isFreePlan}
               onExcalidrawEdit={(filename, fileId) => handleExcalidrawEdit({ id: fileId, name: filename })}
+              flush={fillHeight && !fullscreen}
             />
           </div>
-          {!fullscreen && (
+          {!fullscreen && !fillHeight && (
             <div
               role="separator"
               aria-orientation="horizontal"
@@ -780,7 +796,7 @@ export function EditorWithMedia({
         </CardContent>
       </Card>
       {!fullscreen && footerSlot && (
-        <div className="px-3 py-1.5 border-t border-border">
+        <div className="shrink-0 px-3 py-1.5 border-t border-border">
           {footerSlot}
         </div>
       )}

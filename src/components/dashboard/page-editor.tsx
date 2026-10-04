@@ -18,7 +18,7 @@ import { EditorWithMedia, type ExtraManageTab } from '@/components/dashboard/edi
 import { AIEditChatModal } from '@/components/ai/ai-edit-chat-modal'
 import { useIsFreeTeacher } from '@/hooks/use-billing'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
-import { AlertCircle, ArrowLeft, ArrowRightLeft, Save, History, Eye, EyeOff, Check, Shield, Globe, Maximize2, Minimize2, BookA, BookOpen, FileText, FilePenLine, GripVertical, Trash2, Users, Loader2, CircleCheckBig, CircleMinus, Presentation, Link2, GraduationCap, Wand2, Settings2, ChevronDown } from 'lucide-react'
+import { AlertCircle, ArrowLeft, ArrowRightLeft, Save, History, Eye, EyeOff, Check, Shield, Globe, Maximize2, Minimize2, BookA, BookOpen, FileText, FilePenLine, GripVertical, Trash2, Users, Loader2, CircleCheckBig, CircleMinus, Presentation, Link2, GraduationCap, Wand2, Settings2 } from 'lucide-react'
 import { ExamStateStepper } from '@/components/exam/exam-state-stepper'
 import type { ExamLifecycleState } from '@/lib/exam-state'
 import {
@@ -761,7 +761,9 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
           // (CodeMirror scroller + preview pane) handle their own scroll.
           // No `overflow-auto` here — that would push the toolbar offscreen.
           ? 'fixed inset-0 z-50 bg-background p-6 flex flex-col gap-4'
-          : 'space-y-4'
+          // Fills the dashboard's scroll area so the page card (and its
+          // editor) take all remaining height — no page scroll, no resize bar.
+          : 'flex h-full flex-col gap-4'
       }
     >
 
@@ -778,6 +780,7 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
         domain={(session?.user as { pageSlug?: string })?.pageSlug || undefined}
         headerContent={skriptHeaderContent}
         headerLabel={skriptLabelContent}
+        fillHeight
         description={null}
         manageLabel="Manage:"
         extraTabs={extraTabs}
@@ -941,6 +944,28 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   )}
+                  {!isFullscreen && (
+                    <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          title={`Version history${versions.length ? ` (${versions.length})` : ''}${lastSaved ? ` · Last saved ${lastSaved.toLocaleTimeString()}` : ''}`}
+                          className={historyOpen ? 'bg-blue-500/15 text-blue-700 hover:bg-blue-500/20 dark:text-blue-300' : ''}
+                        >
+                          <History className="w-4 h-4" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent align="end" className="w-[min(640px,90vw)] max-h-[70vh] overflow-y-auto border-blue-400/70 p-2 shadow-lg dark:border-blue-500/60">
+                        <VersionHistory
+                          pageId={page.id}
+                          versions={versions}
+                          currentContent={content}
+                          onRestoreVersion={handleRestoreVersion}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  )}
                   <QuestSpotlight step="edit_page_content" label="Try this!">
                     <Button
                       onClick={handleSave}
@@ -1071,36 +1096,6 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
             )}
 
           </div>
-        }
-        footerSlot={
-          <>
-            {/* One slim status row instead of a hint paragraph + a big
-                collapsible card: Version history is the rarest action here. */}
-            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              <span className="truncate">Ctrl+S to save · Drop files from Files/Videos into the editor</span>
-              <button
-                type="button"
-                onClick={() => setHistoryOpen(o => !o)}
-                aria-expanded={historyOpen}
-                className="ml-auto flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 hover:bg-muted hover:text-foreground"
-              >
-                <History className="w-3.5 h-3.5" />
-                <span>Version history{versions.length ? ` (${versions.length})` : ''}</span>
-                {lastSaved && <span className="hidden sm:inline">· Last saved {lastSaved.toLocaleTimeString()}</span>}
-                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${historyOpen ? 'rotate-180' : ''}`} />
-              </button>
-            </div>
-            {historyOpen && (
-              <div className="mt-2">
-                <VersionHistory
-                  pageId={page.id}
-                  versions={versions}
-                  currentContent={content}
-                  onRestoreVersion={handleRestoreVersion}
-                />
-              </div>
-            )}
-          </>
         }
       />
 

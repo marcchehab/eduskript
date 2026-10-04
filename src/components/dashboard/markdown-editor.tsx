@@ -35,6 +35,7 @@ interface MarkdownEditorProps {
   onAIEdit?: () => void
   aiEditLocked?: boolean
   aiInline?: { locked: boolean; onAccepted?: () => void }
+  flush?: boolean
 }
 
 // Create a client-only version using dynamic import

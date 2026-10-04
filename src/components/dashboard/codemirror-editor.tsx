@@ -76,6 +76,8 @@ interface CodeMirrorEditorProps {
    * button (onAIEdit) is not shown.
    */
   aiInline?: { locked: boolean; onAccepted?: () => void }
+  /** Edge-to-edge inside a parent card: no own side/bottom border or rounding. */
+  flush?: boolean
 }
 
 /**
@@ -177,6 +179,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
   onAIEdit,
   aiEditLocked = false,
   aiInline,
+  flush = false,
 }: CodeMirrorEditorProps) {
   const { data: session } = useSession()
   const paywall = PAYWALL_COPY[useUiLocale()]
@@ -1966,7 +1969,7 @@ const CodeMirrorEditor = function CodeMirrorEditor({
 
   return (
     <div
-      className={`border border-border rounded-lg bg-card h-full flex flex-col ${
+      className={`${flush ? 'border-t border-border' : 'border border-border rounded-lg'} bg-card h-full flex flex-col ${
         dragOver ? 'border-primary bg-primary/10' : ''
       }`}
       onDragOver={handleDragOver}
