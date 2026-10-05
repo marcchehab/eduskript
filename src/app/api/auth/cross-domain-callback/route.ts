@@ -152,7 +152,7 @@ export async function GET(request: NextRequest) {
   })
 
   // Build redirect response using the domain from the token
-  // (request.url may be internal container URL on platforms like Koyeb)
+  // (request.url may be the internal container URL behind the reverse proxy)
   const redirectUrl = `https://${crossDomainToken.domain}${returnPath}`
   const response = NextResponse.redirect(redirectUrl)
 

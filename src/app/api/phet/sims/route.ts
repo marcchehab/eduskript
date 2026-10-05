@@ -6,7 +6,7 @@ import { compactPhetCatalogue, PHET_METADATA_URL, type PhetSimSummary } from '@/
  *
  * Public data, no auth. PhET's raw metadata is ~6.6 MB, so it's fetched
  * server-side and kept in this process's memory for a day. Per-instance cache
- * only (each Koyeb instance fetches once a day); on a failed refresh the stale
+ * only (each app instance fetches once a day); on a failed refresh the stale
  * copy is served rather than an error.
  */
 

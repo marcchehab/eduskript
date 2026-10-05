@@ -52,8 +52,8 @@ export function canonicalUrl(args: CanonicalArgs): string {
 // `metadataBase` in Next.js generateMetadata. Anchoring metadataBase to the
 // tenant's public host (custom domain when present, else eduskript.org) makes
 // the file-based opengraph-image URL resolve to a host crawlers can actually
-// reach — without this, Next.js falls back to the request host, which on
-// Koyeb is the internal `http://localhost:8000`.
+// reach — without this, Next.js falls back to the request host, which behind
+// the reverse proxy can be an internal address.
 export function canonicalBase(args: Omit<CanonicalArgs, 'path'>): URL {
   return new URL(new URL(canonicalUrl(args)).origin)
 }

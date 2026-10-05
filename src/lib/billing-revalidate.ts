@@ -7,9 +7,10 @@
  * Server-only (next/cache) — kept out of src/lib/billing.ts, which client
  * components import.
  *
- * Koyeb caveat: revalidateTag only reaches THIS instance's ISR cache; other
- * instances serve stale HTML until their own revalidation. Same limitation as
- * every settings write (see src/app/api/user/sidebar-preference/route.ts).
+ * Multi-instance caveat: revalidateTag only reaches THIS instance's ISR cache.
+ * Production runs one app container (config/deploy.yml), so this is exact;
+ * during a deploy's ~30 s overlap the old container may keep stale HTML until
+ * it stops. Same limitation as every settings write.
  */
 
 import { revalidateTag } from 'next/cache'

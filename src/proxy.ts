@@ -74,12 +74,12 @@ export async function proxy(request: NextRequest) {
   const hostname = request.headers.get('host') || ''
   const { pathname } = request.nextUrl
 
-  // http → https. Custom domains are DNS-only CNAMEs to Koyeb (a Cloudflare
-  // proxy would block Koyeb's certificate issuance, see domain-diagnostics.ts),
-  // so a zone-level "Always Use HTTPS" never applies and plain http was served
-  // with 200. http and https are separate origins, so a student who landed on
-  // http saw none of the IndexedDB work saved on https. Relies on Koyeb's edge
-  // setting x-forwarded-proto; if the header is absent nothing happens.
+  // http → https. http and https are separate origins, so a student who landed
+  // on http saw none of the IndexedDB work saved on https. In production Caddy
+  // already answers every plain-http request with a 308 (config/Caddyfile), so
+  // this is a second line of defence for other deployments. Relies on the
+  // reverse proxy setting x-forwarded-proto; if the header is absent nothing
+  // happens.
   // GET/HEAD only — a 301 on a POST would drop the body. Paths excluded by the
   // matcher below (static files, /api/internal) are not redirected.
   if (
@@ -421,10 +421,11 @@ export const config = {
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      * - public files (public folder)
-     * - api/health: Koyeb's HTTP health check requests it with the instance
-     *   IP as Host, which the proxy treated as a custom domain and answered
-     *   with a 301 — the check failed and every deploy was stopped
-     *   (2026-09-30). The liveness probe must not depend on host routing.
+     * - api/health: platform health checks (kamal-proxy now, Koyeb before)
+     *   request it with an internal IP as Host, which the proxy treated as a
+     *   custom domain and answered with a 301 — the check failed and every
+     *   deploy was stopped (2026-09-30). The liveness probe must not depend on
+     *   host routing.
      */
     '/((?!_next/static|_next/image|favicon.ico|.*\\..*|api/internal|api/health).*)',
   ],

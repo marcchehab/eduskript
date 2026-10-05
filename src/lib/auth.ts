@@ -233,7 +233,7 @@ export const authOptions: NextAuthOptions = {
   session: {
     strategy: 'jwt',
   },
-  // Cookie configuration for production behind reverse proxy (Koyeb)
+  // Cookie configuration for production behind the reverse proxy (Caddy → kamal-proxy)
   cookies: process.env.NODE_ENV === 'production' ? {
     sessionToken: {
       name: `__Secure-next-auth.session-token`,

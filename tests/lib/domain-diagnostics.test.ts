@@ -94,10 +94,11 @@ describe('diagnoseDomain', () => {
     expect(byId(checks).routing.status).toBe('ok')
   })
 
-  it('warns about the proxy when no CNAME is visible and HTTPS does not serve the app', async () => {
+  it('warns about the proxy when no CNAME is visible and the addresses are not ours', async () => {
     resolveCname.mockRejectedValue(dnsError('ENODATA'))
-    resolve4.mockResolvedValue(['104.20.31.27'])
-    mockFetch(() => new Response('', { status: 403 }))
+    resolve4.mockImplementation(async (host: string) =>
+      host === CUSTOM_DOMAIN_TARGET ? ['179.237.126.129'] : ['104.20.31.27'])
+    mockFetch(() => new Response('', { status: 404 }))
 
     const { checks } = await diagnoseDomain({
       domain: 'example.com',
@@ -108,9 +109,24 @@ describe('diagnoseDomain', () => {
     const results = byId(checks)
     expect(results.routing.status).toBe('warn')
     expect(results.routing.hint).toContain('DNS only')
-    // 403 from the edge = TLS terminates but no route exists for the hostname
+    // 404 after a successful TLS handshake = reached us, but no site mapping
     expect(results.https.status).toBe('warn')
-    expect(results.https.hint).toContain('activation')
+    expect(results.https.hint).toContain('not linked to a site')
+  })
+
+  it('accepts a root domain whose flattened CNAME or A record resolves to our server', async () => {
+    resolveTxt.mockResolvedValue([[TOKEN]])
+    resolveCname.mockRejectedValue(dnsError('ENODATA'))
+    resolve4.mockResolvedValue(['179.237.126.129'])
+    mockFetch(() => healthyResponse())
+
+    const { checks } = await diagnoseDomain({
+      domain: 'example.com',
+      verificationToken: TOKEN,
+      isVerified: true,
+    })
+
+    expect(byId(checks).routing.status).toBe('ok')
   })
 
   it('fails routing and HTTPS when the domain does not resolve', async () => {

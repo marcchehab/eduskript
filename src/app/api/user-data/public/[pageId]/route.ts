@@ -8,11 +8,11 @@
  * src/lib/public-page-data.ts; this is the client-side recovery path for anon
  * and non-author viewers when the SSR/ISR seed is stale.
  *
- * Why this exists: ISR (`revalidate = false`) on /[domain]/.../[pageSlug] +
- * Koyeb's multi-instance deploy means revalidatePath only clears the cache on
- * the instance that received the write. A sibling instance can serve stale
- * empty SSR indefinitely, so client layers refresh from this endpoint on
- * mount and on visibilitychange/focus.
+ * Why this exists: ISR (`revalidate = false`) on /[domain]/.../[pageSlug]
+ * means revalidatePath only clears the cache on the instance that received
+ * the write. With several instances (Koyeb until 2026-10-05; a deploy overlap
+ * on the VPS) a sibling can serve stale empty SSR, so client layers refresh
+ * from this endpoint on mount and on visibilitychange/focus.
  *
  * Multi-author note: annotations and snaps are findMany (one row per author);
  * /api/user-data/[adapter]/[itemId]?targetType=page only returns findFirst,

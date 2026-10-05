@@ -77,10 +77,12 @@ async function checkOwnership(domain: string, token: string | null, isVerified: 
 }
 
 /**
- * CNAME pointing at our Koyeb target. A Cloudflare orange-cloud proxy hides the
- * CNAME and answers with Cloudflare A records instead — indistinguishable from
- * apex CNAME flattening at the DNS level, so both land on the same warning and
- * the HTTPS check decides whether it actually works.
+ * CNAME pointing at CUSTOM_DOMAIN_TARGET (sites.eduskript.org). Without a
+ * visible CNAME, the domain's A/AAAA addresses are compared with the target's:
+ * a match means CNAME flattening/ALIAS at the root, or A/AAAA records set to
+ * the server directly — both route correctly. Other addresses are usually a
+ * Cloudflare orange-cloud proxy, which hides the CNAME and blocks Caddy's
+ * certificate issuance; the HTTPS check then decides whether it works anyway.
  */
 async function checkRouting(domain: string): Promise<DomainCheck> {
   const label = 'Routing record (CNAME)'
@@ -122,12 +124,26 @@ async function checkRouting(domain: string): Promise<DomainCheck> {
     }
   }
 
+  const targetAddresses = new Set<string>()
+  await Promise.all([
+    dns.resolve4(CUSTOM_DOMAIN_TARGET).then(a => a.forEach(x => targetAddresses.add(x))).catch(() => {}),
+    dns.resolve6(CUSTOM_DOMAIN_TARGET).then(a => a.forEach(x => targetAddresses.add(x))).catch(() => {}),
+  ])
+  if (addresses.every(a => targetAddresses.has(a))) {
+    return {
+      id: 'routing',
+      label,
+      status: 'ok',
+      detail: `${domain} resolves to our server (${addresses.slice(0, 2).join(', ')}).`,
+    }
+  }
+
   return {
     id: 'routing',
     label,
     status: 'warn',
     detail: `${domain} resolves to ${addresses.slice(0, 3).join(', ')} but publishes no CNAME.`,
-    hint: 'Normal for a root domain with CNAME flattening. On Cloudflare it also means the proxy (orange cloud) is on — switch the record to "DNS only", otherwise no certificate can be issued.',
+    hint: 'These are not our server\'s addresses. On Cloudflare this means the proxy (orange cloud) is on — switch the record to "DNS only", otherwise no certificate can be issued. Elsewhere, set the CNAME (or the A/AAAA fallback) shown above.',
   }
 }
 
@@ -154,7 +170,7 @@ async function checkHttps(domain: string): Promise<DomainCheck> {
         ? `TLS handshake failed (${code}).`
         : `Could not reach https://${domain} (${code || 'timeout'}).`,
       hint: certError
-        ? 'No valid certificate for this domain yet. On Cloudflare, turn the proxy off (DNS only) so the certificate can be issued; otherwise wait until we finish activation.'
+        ? 'No certificate yet. It is issued automatically on the first visit, but only once the domain is verified and its DNS points to us. On Cloudflare, turn the proxy off (DNS only).'
         : 'Check the CNAME record. If DNS was changed recently, give it a few minutes.',
     }
   }
@@ -171,16 +187,16 @@ async function checkHttps(domain: string): Promise<DomainCheck> {
   }
 
   if (!response.ok) {
-    // 403/404 straight from the edge is what an un-attached domain looks like:
-    // TLS terminates, but no route exists for that hostname yet.
-    const unattached = response.status === 403 || response.status === 404
+    // TLS worked, so the request reached our server; a 404 then means the app
+    // did not map the hostname to a site (domain deleted or not verified).
+    const unmapped = response.status === 404
     return {
       id: 'https',
       label,
       status: 'warn',
       detail: `https://${domain} answered with HTTP ${response.status}.`,
-      hint: unattached
-        ? 'Typical for a domain whose activation on our side is not finished yet. If the DNS records above are correct and this persists for more than a day, mail kontakt@luzmedia.ch.'
+      hint: unmapped
+        ? 'The domain reaches Eduskript but is not linked to a site. Check that it is verified above; if it is and this persists, mail kontakt@luzmedia.ch.'
         : undefined,
     }
   }

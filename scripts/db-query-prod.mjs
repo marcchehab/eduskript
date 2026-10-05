@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * READ-ONLY prod query helper. Uses DATABASE_URL_PROD from .env with SSL
- * (Koyeb requires it). Mirrors scripts/db-query.mjs but for prod.
+ * (the former Koyeb DB required it; the VPS DB is only reachable via SSH tunnel). Mirrors scripts/db-query.mjs but for prod.
  * Usage: node scripts/db-query-prod.mjs "SELECT ..."
  * Only run SELECTs here — this points at the production database.
  */

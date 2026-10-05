@@ -11,7 +11,7 @@
  *
  * Enable logging:
  *   Browser: localStorage.setItem('debug', 'annotations:*')
- *   Server:  DEBUG=annotations:* (env var, works with Koyeb)
+ *   Server:  DEBUG=annotations:* (env var in config/deploy.yml)
  *
  * Patterns:
  *   'annotations:*'           - All annotation logs
@@ -110,7 +110,7 @@ export function createLogger(namespace: string): Logger {
       // Browser: use colored output
       console.log(`%c[${namespace}]`, `color: ${color}; font-weight: bold`, message, ...args)
     } else {
-      // Server: plain text (Koyeb logs)
+      // Server: plain text (container logs: bin/kamal app logs)
       console.log(`[${namespace}]`, message, ...args)
     }
   }

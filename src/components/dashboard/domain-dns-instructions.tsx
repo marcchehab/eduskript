@@ -12,7 +12,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { AlertTriangle, Check, Copy, RefreshCw, XCircle } from 'lucide-react'
-import { CUSTOM_DOMAIN_TARGET, VERIFICATION_HOST_PREFIX } from '@/lib/custom-domains'
+import { CUSTOM_DOMAIN_IPV4, CUSTOM_DOMAIN_IPV6, CUSTOM_DOMAIN_TARGET, VERIFICATION_HOST_PREFIX } from '@/lib/custom-domains'
 import type { DomainCheck } from '@/lib/domain-diagnostics'
 
 export { CUSTOM_DOMAIN_TARGET, VERIFICATION_HOST_PREFIX }
@@ -75,10 +75,9 @@ function CheckResults({ checks }: { checks: DomainCheck[] }) {
  * src/lib/domain-diagnostics.ts) — DNS records, activation state, and whether
  * the domain actually serves the app over HTTPS.
  *
- * Caveat: adding the CNAME is not sufficient on its own — the domain also has
- * to be attached to the Koyeb app so a TLS certificate is issued. That step is
- * still manual (no Koyeb API integration), hence the "we finish the setup"
- * wording below.
+ * Nothing is manual on our side: once the TXT record is verified and the CNAME
+ * points to us, Caddy issues the certificate on the first HTTPS request
+ * (on-demand TLS gated by /api/internal/tls-allowed, config/Caddyfile).
  */
 export function DomainDnsInstructions({
   open,
@@ -169,6 +168,10 @@ export function DomainDnsInstructions({
             <p className="text-xs text-muted-foreground mt-2">
               For a root domain (no subdomain) your provider must support CNAME flattening
               or ALIAS/ANAME records. Cloudflare flattens CNAMEs at the root automatically.
+              If your provider supports neither, use these address records instead:{' '}
+              <code className="font-mono">A {CUSTOM_DOMAIN_IPV4}</code> and{' '}
+              <code className="font-mono">AAAA {CUSTOM_DOMAIN_IPV6}</code>. Unlike the CNAME,
+              these would need updating if our server ever moves; we would tell you.
             </p>
             <p className="text-xs text-muted-foreground mt-1">
               To serve <code className="font-mono">www.{host.replace(/^www\./, '')}</code> as well,
@@ -187,8 +190,9 @@ export function DomainDnsInstructions({
 
           <p className="text-sm text-muted-foreground">
             After adding the records, click &quot;Verify&quot;. DNS changes usually apply within
-            minutes but can take up to 48 hours. Once verified we finish the setup on our side
-            and issue the certificate; if your domain is still not reachable after a day, mail{' '}
+            minutes but can take up to 48 hours. Once the domain is verified and points to us,
+            the HTTPS certificate is set up automatically on the first visit. If it still does
+            not work, run &quot;Check configuration&quot; above or mail{' '}
             <a href="mailto:kontakt@luzmedia.ch" className="underline">
               kontakt@luzmedia.ch
             </a>

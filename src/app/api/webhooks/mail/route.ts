@@ -22,7 +22,7 @@ import { PARSERS, type RawMail } from '@/lib/mail-hooks/parsers'
 import { purgeExpired } from '@/lib/mail-hooks/store'
 import { createLogger } from '@/lib/logger'
 
-// Enable with DEBUG=mail:* (env on Koyeb, or localStorage in browser — server here).
+// Enable with DEBUG=mail:* (env in config/deploy.yml, or localStorage in browser — server here).
 // log.error always prints; log()/log.warn only when the namespace is enabled.
 const log = createLogger('mail:webhook')
 

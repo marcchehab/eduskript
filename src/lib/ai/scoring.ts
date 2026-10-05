@@ -522,7 +522,7 @@ export async function scoreSubmission(
     const parsed = parseAiScore(text, aiCriteria)
     if ('error' in parsed) {
       const debug = aiDebug('score', text, diag)
-      // Server log (Koyeb) without `raw`; the raw text only with DEBUG=ai:scoring.
+      // Server log without `raw`; the raw text only with DEBUG=ai:scoring.
       // The full detail rides back to the browser console when the teacher
       // enables the `ai:*` debug namespace (see the route + panel).
       console.error('[scoring] parse failed', { ...debug, raw: undefined })

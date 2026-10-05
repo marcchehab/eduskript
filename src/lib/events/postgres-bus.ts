@@ -10,7 +10,7 @@
  * - PostgreSQL broadcasts to all listening connections
  *
  * Reconnection:
- * Managed PostgreSQL services (Koyeb, etc.) periodically kill long-lived
+ * PostgreSQL restarts (container updates, managed services' maintenance) kill long-lived
  * connections for maintenance. We handle this with exponential backoff
  * (1s → 2s → 4s → ... → 30s max) and deduplicated reconnect attempts.
  *

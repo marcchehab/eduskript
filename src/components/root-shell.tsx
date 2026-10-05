@@ -42,7 +42,7 @@ const headingFont = Barlow_Condensed({
 
 // Global default for resolving relative metadata URLs (file-based opengraph-image
 // is the main case). Without this, Next.js falls back to the request host —
-// which on Koyeb is `http://localhost:8000` (internal port), producing OG image
+// which behind the reverse proxy is an internal address (e.g. `http://localhost:3000`), producing OG image
 // URLs no external crawler can fetch.
 //
 // Public tenant routes override this in their own generateMetadata with the

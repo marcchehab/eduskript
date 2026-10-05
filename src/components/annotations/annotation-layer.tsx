@@ -226,7 +226,8 @@ export function AnnotationLayer({ pageId, content, children, publicAnnotations: 
   // Public layers (page-broadcast annotations + snaps) for non-author viewers.
   // SSR prop seeds first paint; we always reconcile with the server on mount
   // and on visibility/focus, since revalidatePath() only clears the receiving
-  // Koyeb instance's ISR cache — a sibling can serve stale empty SSR forever.
+  // instance's ISR cache — with more than one app instance (Koyeb before
+  // 2026-10-05; a deploy overlap now) a sibling can serve stale empty SSR.
   //
   // Page authors are excluded: they load the same data via the live-sync
   // pageBroadcastData hook (see ~line 692), which is authoritative for them.

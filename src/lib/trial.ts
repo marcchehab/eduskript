@@ -36,7 +36,7 @@ export async function createTrialSubscription(
   if (!plan) {
     // Signups silently got no trial when this happened. console.warn, not the
     // logger from @/lib/logger — its warn level is gated behind DEBUG, and
-    // this must be visible in the Koyeb logs by default.
+    // this must be visible in the server logs by default.
     console.warn(
       `[trial] No trial created for user ${userId}: ` +
         (planId
