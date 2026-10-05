@@ -1034,7 +1034,6 @@ export const getOrgHomepageContent = (
  * for the [domain] route. Until 2026-09-24 it did not, so drafts were
  * reachable by direct URL on eduskript.org while custom domains 404'd them.
  * Unlisted is not checked on either route (URL works, hidden from sidebar).
- * The dashboard's visibility badge (src/lib/visibility.ts) assumes this.
  *
  * Tag set is a superset of what page/skript/collection saves invalidate
  * (teacherContent + orgContent), so edits show up without a deploy.

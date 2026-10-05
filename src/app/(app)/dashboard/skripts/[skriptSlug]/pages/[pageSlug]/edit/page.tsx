@@ -72,7 +72,21 @@ async function getPageData(skriptSlug: string, pageSlug: string, userId: string,
 
   const permissions = checkSkriptPermissions(userId, skript.authors, isAdmin)
 
-  return { skript, page, permissions }
+  // Placed = the skript, or a collection containing it, is in some site's
+  // PageLayout (anyone's: a co-author's skript counts if the owner placed it).
+  // Unplaced skripts are missing from the public sidebar; the URL still works.
+  const collectionIds = skript.collectionSkripts.map((cs) => cs.collectionId)
+  const placement = await prisma.pageLayoutItem.findFirst({
+    where: {
+      OR: [
+        { type: 'skript', contentId: skript.id },
+        ...(collectionIds.length ? [{ type: 'collection', contentId: { in: collectionIds } }] : []),
+      ],
+    },
+    select: { id: true },
+  })
+
+  return { skript, page, permissions, placed: !!placement }
 }
 
 export default async function PageEditPage({
@@ -95,7 +109,7 @@ export default async function PageEditPage({
     return notFound()
   }
 
-  const { skript, page, permissions } = data
+  const { skript, page, permissions, placed } = data
 
   return (
     <PageEditor
@@ -115,6 +129,7 @@ export default async function PageEditPage({
         examSettings: page.examSettings as { requireSEB?: boolean } | null
       }}
       canEdit={permissions.canEdit}
+      placed={placed}
       userPermissions={permissions}
       currentUserId={session.user.id}
     />

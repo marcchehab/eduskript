@@ -106,13 +106,15 @@ interface PageEditorProps {
   canEdit: boolean
   userPermissions: UserPermissions
   currentUserId: string
+  /** Skript is on some site's page (directly or via a collection); see edit/page.tsx. */
+  placed: boolean
 }
 
 // The whole-skript AI Edit chat (skript header) is hidden for now — the
 // in-editor AI Edit tab covers the page. Kept, not deleted (2026-10-04).
 const SHOW_SKRIPT_AI_EDIT = false
 
-export function PageEditor({ skript, page, canEdit, userPermissions, currentUserId }: PageEditorProps) {
+export function PageEditor({ skript, page, canEdit, userPermissions, currentUserId, placed }: PageEditorProps) {
   const [title, setTitle] = useState(page.title || '')
   const [slug, setSlug] = useState(page.slug || '')
   const [description, setDescription] = useState(page.description || '')
@@ -745,6 +747,20 @@ export function PageEditor({ skript, page, canEdit, userPermissions, currentUser
               size="sm"
             />
           )}
+        </div>
+      )}
+      {/* Published but not placed: reachable by URL, but missing from the
+          site's sidebar, so students don't find it. Shown only once the
+          skript is published, so it never stacks with the banner above. */}
+      {skript.isPublished && !placed && (
+        <div className="mt-3 mx-3 mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
+          <AlertCircle className="h-4 w-4 shrink-0 text-amber-600" />
+          <span>
+            The skript <strong>{skript.title}</strong> is not on your site yet — students only reach it with a direct link.
+          </span>
+          <Link href="/dashboard/page-builder" className="underline underline-offset-2">
+            Place it in the page builder
+          </Link>
         </div>
       )}
     </div>
