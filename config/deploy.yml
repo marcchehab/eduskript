@@ -73,6 +73,10 @@ env:
     S3_PUBLIC_BASE_URL: https://s3.pub1.infomaniak.cloud/object/v1/AUTH_0545793e6966429094ae4a572cd0e156
     SCW_TEACHER_BUCKET: eduskript-teacher-files
     SCW_IMPORT_BUCKET: eduskript-imports
+    # Anonymous script import (src/lib/script-import/limits.ts). A school is
+    # usually one public IP, so the per-IP cap is generous; the global daily
+    # count + USD budget (code defaults 100 / $25) are the cost cap.
+    SCRIPT_IMPORT_PER_IP_PER_DAY: "20"
   secret:
     - DATABASE_URL
     - NEXTAUTH_SECRET

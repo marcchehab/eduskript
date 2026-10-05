@@ -17,7 +17,7 @@ export const MAX_FILE_BYTES = 20 * 1024 * 1024
 export const MAX_WORD_PAGES = Number(process.env.SCRIPT_IMPORT_MAX_PAGES ?? 30)
 /** ~30 pages of dense text; bounds the model cost of one job. */
 export const MAX_MARKDOWN_CHARS = Number(process.env.SCRIPT_IMPORT_MAX_CHARS ?? 150_000)
-export const PER_IP_PER_DAY = Number(process.env.SCRIPT_IMPORT_PER_IP_PER_DAY ?? 3)
+export const PER_IP_PER_DAY = Number(process.env.SCRIPT_IMPORT_PER_IP_PER_DAY ?? 20)
 export const GLOBAL_PER_DAY = Number(process.env.SCRIPT_IMPORT_PER_DAY ?? 100)
 export const BUDGET_USD_PER_DAY = Number(process.env.SCRIPT_IMPORT_BUDGET_USD_PER_DAY ?? 25)
 export const RETENTION_DAYS = 7
