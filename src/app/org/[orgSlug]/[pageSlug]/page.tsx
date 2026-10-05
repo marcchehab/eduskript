@@ -347,9 +347,15 @@ export default async function OrgTeacherPage({ params }: OrgTeacherPageProps) {
         {frontPage?.content ? (
           <article className="prose-theme">
             <ReflowGate pageId={frontPage.id} content={frontPage.content} publicAnnotations={publicAnnotations} publicSnaps={publicSnaps} publicStickyNotes={publicStickyNotes}>
+              {/* Same props as the custom-domain route ([domain]/(site)/page.tsx):
+                  without skriptId the frontpage's uploaded images resolve to
+                  "Missing: <file>" on eduskript.org/<slug>. */}
               <ServerMarkdownRenderer
                 content={frontPage.content}
                 pageId={frontPage.id}
+                skriptId={frontPage.fileSkriptId || undefined}
+                ownerPageSlug={pageSlug}
+                pageLanguage={teacherSite?.pageLanguage}
               />
             </ReflowGate>
           </article>
