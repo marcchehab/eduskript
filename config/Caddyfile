@@ -1,0 +1,51 @@
+# Edge for eduskript-prod. Accessory "caddy" in config/deploy.yml (host network,
+# image from config/caddy). Everything is proxied to kamal-proxy on
+# 127.0.0.1:8080, which switches between app containers on deploy.
+#
+# Certificates:
+# - Our own domains (Cloudflare zones eduskript.org, informatikgarten.ch,
+#   luz.to): DNS-01 via the Cloudflare API, so they exist before DNS points
+#   here. Add new own domains to the first site block.
+# - Any other host (customer custom domains): on-demand HTTP-01, issued only
+#   if /api/internal/tls-allowed answers 200 (verified domain in the DB).
+#
+# /api/internal/* is never served publicly; those routes are for the app's own
+# localhost calls (src/proxy.ts) and for the ask check above.
+# No Caddy access log: request logging stays with the app (bounded Docker logs).
+# X-Forwarded-For: without trusted_proxies Caddy replaces any client-sent value,
+# so the first XFF entry the app sees is the real client IP.
+
+{
+	email ops@eduskript.org
+	on_demand_tls {
+		ask http://127.0.0.1:8080/api/internal/tls-allowed
+	}
+}
+
+(app) {
+	@internal path /api/internal/*
+	respond @internal 404
+	reverse_proxy 127.0.0.1:8080
+}
+
+(own_dns_cert) {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+}
+
+eduskript.org, www.eduskript.org, sites.eduskript.org, informatikgarten.ch, www.informatikgarten.ch, luz.to {
+	import own_dns_cert
+	import app
+}
+
+https:// {
+	tls {
+		on_demand
+	}
+	import app
+}
+
+http:// {
+	redir https://{host}{uri} 308
+}

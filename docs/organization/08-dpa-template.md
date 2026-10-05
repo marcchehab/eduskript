@@ -80,7 +80,7 @@ UID CHE-261.508.926, operator of eduskript.org
 
 ## 8. Place of processing and transfer abroad
 
-8.1 Primary data is stored in the EU: the database in Frankfurt (Germany), uploaded files in Paris (France); email delivery takes place in the EU. Under Annex 1 of the Swiss Data Protection Ordinance (DPO/DSV), the EU provides an adequate level of data protection. Koyeb runs the database on infrastructure of US companies (Neon, Amazon Web Services); the data remains in Frankfurt.
+8.1 The database is stored in Switzerland (Infomaniak). Uploaded files and encrypted database backups are stored in Paris (France); email delivery takes place in the EU. Under Annex 1 of the Swiss Data Protection Ordinance (DPO/DSV), the EU provides an adequate level of data protection.
 
 8.2 For AI features (section 9), content is transferred to providers in the USA, exclusively without identifying information as described in section 9.2. Google LLC is certified under the Swiss-U.S. Data Privacy Framework. For OpenRouter, which is not certified and only forwards the requests, the transfer relies on the content not being attributable to any person for this recipient.
 
@@ -113,7 +113,7 @@ Eduskript notifies the School of data security breaches (e.g. data loss, attack,
 
 12.1 Teachers can export their content at any time as Markdown files including attachments. An account's personal data can be downloaded in the settings as a JSON file. On termination, Eduskript transfers the School's data on request, free of charge and without delay, in these formats, even if there is a dispute between the parties.
 
-12.2 After termination, Eduskript deletes the personal data of the School's students within 30 days, unless the School has requested its return beforehand. Backups are overwritten in the hosting provider's regular rotation cycle. Deletion is confirmed in writing on request; the School may verify it itself or have it verified by third parties.
+12.2 After termination, Eduskript deletes the personal data of the School's students within 30 days, unless the School has requested its return beforehand. Deleted data remains in encrypted backups for at most 6 months and is then removed there as well. Deletion is confirmed in writing on request; the School may verify it itself or have it verified by third parties.
 
 12.3 Teaching materials published by teachers remain online in accordance with the terms of service until the teacher deletes them; they contain no student data.
 
@@ -169,7 +169,7 @@ No sensitive personal data within the meaning of Art. 5 lit. c FADP is intended.
 - Pseudonymisation of students at sign-in; no storage of student email addresses
 - Roles and permissions: teachers see only their own classes; students only released content; data of different schools and teachers is logically separated
 - Access to production systems only by the operator, with two-factor authentication (passkey or TOTP)
-- Regular backups according to the hosting provider's retention
+- Daily encrypted backups, kept for at most 6 months
 - No third-party analytics, no tracking, no advertising
 - Source code publicly available (open source, AGPL v3) – security review by third parties possible
 - Rate limiting against abuse
@@ -181,9 +181,8 @@ As at signature. The current, dated list is in the [privacy policy](https://edus
 
 | Provider | Purpose | Location | Student data? |
 |---|---|---|---|
-| Koyeb SAS | Application hosting, PostgreSQL database | Frankfurt, Germany | yes |
-| Neon, Inc. and Amazon Web Services (on behalf of Koyeb) | Database infrastructure | Frankfurt, Germany | yes |
-| Scaleway SAS | File storage | Paris, France | yes (uploads) |
+| Infomaniak Network SA | Server for application and PostgreSQL database | Switzerland | yes |
+| Scaleway SAS | File storage, encrypted database backups | Paris, France | yes (uploads, backups) |
 | Brevo (Sendinblue SAS) | Email delivery to teachers | EU | no |
 | Payrexx AG | Payment processing | Switzerland | no |
 | Mux, Inc. | Video hosting (videos uploaded by teachers) | USA | no |

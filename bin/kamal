@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Kamal without a local Ruby: runs the official image, pinned.
+# - host network: the local registry (localhost:5555) and Kamal's SSH port
+#   forward must see the same "localhost" as the host's Docker daemon
+# - SSH agent forwarded (Bitwarden agent holds the eduskript-prod key)
+# - prod.env mounted read-only for .kamal/secrets
+set -euo pipefail
+cd "$(dirname "$0")/.."
+: "${SSH_AUTH_SOCK:?SSH agent not running (Bitwarden SSH agent?)}"
+export GIT_SHA="$(git rev-parse HEAD)$(git diff --quiet HEAD -- . ':!MIGRATION-VPS.md' || echo -dirty)"
+export GIT_MESSAGE="$(git log -1 --format=%s)"
+export BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+tty=(); [ -t 0 ] && tty=(-it)
+exec docker run --rm "${tty[@]}" \
+  --network host \
+  -v "$PWD:/workdir" \
+  -v "$SSH_AUTH_SOCK:/ssh-agent" -e SSH_AUTH_SOCK=/ssh-agent \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v "$HOME/.config/eduskript:/secrets:ro" \
+  -e GIT_SHA -e GIT_MESSAGE -e BUILD_TIME \
+  ghcr.io/basecamp/kamal:v2.12.0 "$@"

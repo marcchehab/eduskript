@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Build the Postgres+pgBackRest image (config/db) directly on the VPS.
+# Re-run after changing config/db, then `bin/reboot-db`
+# (restarts Postgres — short outage).
+set -euo pipefail
+cd "$(dirname "$0")/.."
+DOCKER_HOST=ssh://deploy@179.237.126.129 docker build -t eduskript-db:18.6 config/db

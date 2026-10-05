@@ -1,0 +1,163 @@
+# Kamal deployment: eduskript.org on the Infomaniak VPS (eduskript-prod).
+# Plan and rationale: MIGRATION-VPS.md. Run via bin/kamal (Kamal in Docker) or
+# bin/deploy (checks + deploy). Secrets: .kamal/secrets ← ~/.config/eduskript/prod.env.
+#
+# Traffic: Caddy (:80/:443, TLS incl. on-demand certs for custom domains)
+#   → kamal-proxy (127.0.0.1:8080, health-gated zero-downtime switch)
+#   → app container (:3000) → Postgres accessory (eduskript-db:5432, docker net "kamal").
+
+service: eduskript
+image: eduskript
+
+servers:
+  web:
+    hosts:
+      - 179.237.126.129
+    options:
+      # 2 × 2.5g during the deploy overlap + 2g db + 0.25g caddy < 8 GB host.
+      # A leaking Node heap kills this container, not Postgres.
+      memory: 2500m
+
+ssh:
+  user: deploy
+
+proxy:
+  ssl: false                 # Caddy terminates TLS
+  app_port: 3000
+  response_timeout: 120      # AI routes use maxDuration 120
+  healthcheck:
+    path: /api/health
+    interval: 3
+    timeout: 3
+  run:
+    http_port: 8080
+    https_port: 8443
+    bind_ips:
+      - 127.0.0.1            # Docker-published ports bypass ufw → loopback only
+
+deploy_timeout: 240          # migrate + seeds + sync-docs run before the server listens
+drain_timeout: 30
+
+registry:
+  server: localhost:5555     # Kamal-run local registry; the VPS pulls through an SSH port forward
+
+builder:
+  arch: amd64
+  context: .                 # build the working tree (not a git clone); .dockerignore applies
+  driver: docker
+  args:
+    NEXTAUTH_URL: https://eduskript.org
+    NEXT_PUBLIC_CUSTOM_DOMAIN_TARGET: sites.eduskript.org
+    NEXT_PUBLIC_KARA_TILESET_URL: https://s3.fr-par.scw.cloud/eduskript-teacher-files/kara/scifi-v1
+    NEXT_PUBLIC_GIT_COMMIT_SHA: <%= ENV["GIT_SHA"] %>
+    NEXT_PUBLIC_GIT_COMMIT_MESSAGE: <%= ENV["GIT_MESSAGE"] %>
+    NEXT_PUBLIC_BUILD_TIME: <%= ENV["BUILD_TIME"] %>
+  secrets:
+    - NEXT_SERVER_ACTIONS_ENCRYPTION_KEY
+
+env:
+  clear:
+    NODE_ENV: production
+    PORT: 3000
+    NODE_HEAP_MB: 1536
+    NEXTAUTH_URL: https://eduskript.org
+    NEXT_PUBLIC_CUSTOM_DOMAIN_TARGET: sites.eduskript.org
+    BUILTIN_PLUGIN_OWNER: informatikgarten
+    DEBUG: "auth:*,ai:*,mail:*"
+    EMAIL_FROM_NAME: Eduskript Verification
+    WARM_ON_BOOT: "0"
+  secret:
+    - DATABASE_URL
+    - NEXTAUTH_SECRET
+    - NEXT_SERVER_ACTIONS_ENCRYPTION_KEY
+    - STUDENT_PSEUDONYM_SECRET
+    - AZURE_AD_CLIENT_ID
+    - AZURE_AD_CLIENT_SECRET
+    - AZURE_AD_TENANT_ID
+    - BREVO_API_KEY
+    - BREVO_TEACHER_LIST_DE
+    - BREVO_TEACHER_LIST_EN
+    - CLOUDMAILIN_INBOX_ADDRESS
+    - CLOUDMAILIN_SECRET
+    - CRON_SECRET
+    - EMAIL_FROM
+    - MUX_TOKEN_ID
+    - MUX_TOKEN_SECRET
+    - MUX_WEBHOOK_SECRET
+    - OPENROUTER_API_KEY
+    - PAYREXX_API_SECRET
+    - PAYREXX_INSTANCE
+    - PAYREXX_WEBHOOK_SECRET
+    - SCW_ACCESS_KEY
+    - SCW_SECRET_KEY
+    - SCW_DEFAULT_ORGANIZATION_ID
+    - SCW_DEFAULT_PROJECT_ID
+    - SCW_IMPORT_BUCKET
+    - SCW_TEACHER_BUCKET
+
+accessories:
+  db:
+    # Built on the VPS from config/db (postgres + pgBackRest): bin/build-db-image.
+    # Not pulled from a registry.
+    image: eduskript-db:18.6
+    host: 179.237.126.129
+    port: "127.0.0.1:5432:5432"
+    env:
+      clear:
+        POSTGRES_DB: eduskript
+        POSTGRES_USER: eduskript
+        # pgBackRest repo2: Scaleway S3, encrypted, retention per MIGRATION-VPS.md §5
+        # (26 weekly fulls = 6 months, 14 daily diffs, PITR for the last 2 weeks).
+        PGBACKREST_REPO2_TYPE: s3
+        PGBACKREST_REPO2_PATH: /pgbackrest
+        PGBACKREST_REPO2_S3_BUCKET: eduskript-backups
+        PGBACKREST_REPO2_S3_ENDPOINT: s3.fr-par.scw.cloud
+        PGBACKREST_REPO2_S3_REGION: fr-par
+        PGBACKREST_REPO2_S3_URI_STYLE: path
+        PGBACKREST_REPO2_CIPHER_TYPE: aes-256-cbc
+        PGBACKREST_REPO2_RETENTION_FULL: "26"
+        PGBACKREST_REPO2_RETENTION_DIFF: "14"
+        PGBACKREST_REPO2_RETENTION_ARCHIVE: "2"
+      secret:
+        - POSTGRES_PASSWORD
+        # Currently the app's Scaleway key (no IAM rights to mint a scoped one).
+        - PGBACKREST_REPO2_S3_KEY
+        - PGBACKREST_REPO2_S3_KEY_SECRET
+        - PGBACKREST_REPO2_CIPHER_PASS
+    directories:
+      - /var/lib/eduskript/pg:/var/lib/postgresql              # pg18 PGDATA = /var/lib/postgresql/18/docker
+      - /var/lib/eduskript/pgbackrest:/var/lib/pgbackrest      # pgBackRest repo1 (local PITR)
+    options:
+      memory: 2g
+      shm-size: 256m
+      stop-timeout: 60
+    cmd: >-
+      postgres
+      -c max_connections=100
+      -c shared_buffers=512MB
+      -c effective_cache_size=1536MB
+      -c work_mem=16MB
+      -c maintenance_work_mem=128MB
+      -c random_page_cost=1.1
+      -c idle_in_transaction_session_timeout=5min
+      -c log_autovacuum_min_duration=0
+      -c wal_level=replica
+      -c archive_mode=on
+      -c archive_timeout=60
+      -c archive_command='pgbackrest --stanza=eduskript archive-push %p'
+
+  caddy:
+    # Built on the VPS from config/caddy (Cloudflare DNS module): bin/build-caddy-image.
+    # Restart with bin/reboot-caddy (kamal's reboot would try to pull this image).
+    image: eduskript-caddy:2.10
+    host: 179.237.126.129
+    network: host
+    env:
+      secret:
+        - CLOUDFLARE_API_TOKEN   # DNS-01 for our own domains; currently the broad local token
+    options:
+      memory: 256m
+    files:
+      - config/Caddyfile:/etc/caddy/Caddyfile
+    directories:
+      - /var/lib/eduskript/caddy:/data                         # certificates; keep across reboots (LE rate limits)

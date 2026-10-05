@@ -2,7 +2,7 @@ import Link from 'next/link'
 
 /** Revision label shown next to every "Terms" link. Bump it whenever the terms
  *  or the privacy policy change (terms §12 promises the date is in the footer). */
-export const TERMS_DATE = 'Sep 2026'
+export const TERMS_DATE = 'Oct 2026'
 
 /** Footer of the legal pages (/impressum, /terms, /datenschutz). The app-wide
  *  footers (dashboard sidebar, public layout) render the same three links inline. */

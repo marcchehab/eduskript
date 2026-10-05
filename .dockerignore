@@ -50,10 +50,25 @@ Thumbs.db
 deployment
 .github
 
-# Documentation
+# Documentation (docs/ and demo-content/ are synced into the DB at container start)
 *.md
 !README.md
+!docs/**
+!demo-content/**
 
 # Cache
 .cache
 .parcel-cache
+
+# Local-only / test artefacts (Kamal builds with context "." — see config/deploy.yml)
+.bench-data
+.kamal
+onboarding-videos
+playwright-report
+test-results
+e2e
+tests
+tsconfig.tsbuildinfo
+or.json
+QUEUE*.md
+MIGRATION-VPS.md

@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Restart the Caddy accessory with the current config/Caddyfile and env.
+# `kamal accessory reboot caddy` would try to pull the VPS-built image.
+# Certificates persist in /var/lib/eduskript/caddy. ~5 s outage.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+ssh -o IdentitiesOnly=yes -i ~/.ssh/eduskript-prod.pub deploy@179.237.126.129 \
+  'docker stop eduskript-caddy && docker rm eduskript-caddy'
+exec bin/kamal accessory boot caddy

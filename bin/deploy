@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Validate, then deploy to eduskript-prod. Kamal's own hooks run inside the
+# Kamal container (no node/pnpm there), so the checks live here instead.
+#   bin/deploy            full checks (type-check, lint, tests) + deploy
+#   bin/deploy --quick    skip tests (type-check + lint only)
+set -euo pipefail
+cd "$(dirname "$0")/.."
+if [ "${1:-}" = "--quick" ]; then
+  pnpm db:generate && pnpm type-check && pnpm lint
+else
+  pnpm pre-push
+fi
+exec bin/kamal deploy

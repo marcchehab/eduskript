@@ -77,7 +77,7 @@ UID CHE-261.508.926, Betreiberin von eduskript.org
 
 ## 8. Ort der Datenbearbeitung und Bekanntgabe ins Ausland
 
-8.1 Die Primärdaten werden in der EU gespeichert: die Datenbank in Frankfurt (Deutschland), hochgeladene Dateien in Paris (Frankreich), der E-Mail-Versand erfolgt in der EU. Die EU gilt nach Anhang 1 der Datenschutzverordnung (DSV) als Staat mit angemessenem Datenschutz. Die Datenbank betreibt Koyeb auf Infrastruktur von US-Unternehmen (Neon, Amazon Web Services); die Daten verbleiben in Frankfurt.
+8.1 Die Datenbank wird in der Schweiz gespeichert (Infomaniak). Hochgeladene Dateien und verschlüsselte Datenbank-Sicherungen liegen in Paris (Frankreich), der E-Mail-Versand erfolgt in der EU. Die EU gilt nach Anhang 1 der Datenschutzverordnung (DSV) als Staat mit angemessenem Datenschutz.
 
 8.2 Für KI-Funktionen (Ziffer 9) werden Inhalte an Anbieter in den USA übermittelt, ausschliesslich ohne Identifikationsmerkmale gemäss Ziffer 9.2. Google LLC ist unter dem Swiss-U.S. Data Privacy Framework zertifiziert. Für OpenRouter, das nicht zertifiziert ist und die Anfragen nur weiterleitet, stützt sich die Übermittlung darauf, dass die Inhalte für diesen Empfänger keiner Person zuordenbar sind.
 
@@ -110,7 +110,7 @@ Eduskript meldet der Schule Verletzungen der Datensicherheit (z. B. Datenverlust
 
 12.1 Lehrpersonen können ihre Inhalte jederzeit als Markdown-Dateien samt Anhängen exportieren. Personendaten eines Kontos lassen sich in den Einstellungen als JSON-Datei herunterladen. Bei Vertragsende überträgt Eduskript die Daten der Schule auf Verlangen unentgeltlich und umgehend in diesen Formaten, auch wenn zwischen den Parteien Streitigkeiten bestehen.
 
-12.2 Nach Vertragsende löscht Eduskript die Personendaten von Schülerinnen und Schülern der Schule innert 30 Tagen, sofern die Schule nicht vorher eine Rückgabe verlangt. Backups werden im regulären Rotationszyklus des Hosting-Anbieters überschrieben. Die Löschung wird auf Verlangen schriftlich bestätigt; die Schule kann sie selbst oder durch Dritte überprüfen lassen.
+12.2 Nach Vertragsende löscht Eduskript die Personendaten von Schülerinnen und Schülern der Schule innert 30 Tagen, sofern die Schule nicht vorher eine Rückgabe verlangt. Gelöschte Daten bleiben höchstens 6 Monate in den verschlüsselten Sicherungen und werden dann auch dort entfernt. Die Löschung wird auf Verlangen schriftlich bestätigt; die Schule kann sie selbst oder durch Dritte überprüfen lassen.
 
 12.3 Von Lehrpersonen veröffentlichte Unterrichtsmaterialien bleiben gemäss Nutzungsbedingungen online, solange die Lehrperson sie nicht selbst löscht; sie enthalten keine Schülerdaten.
 
@@ -166,7 +166,7 @@ Keine besonders schützenswerten Personendaten im Sinne von Art. 5 lit. c DSG vo
 - Pseudonymisierung der Schülerinnen und Schüler bei der Anmeldung; keine Speicherung von Schüler-E-Mails
 - Rollen- und Berechtigungskonzept: Lehrpersonen sehen nur eigene Klassen; Schüler nur freigegebene Inhalte; Daten verschiedener Schulen und Lehrpersonen sind logisch getrennt
 - Zugriff auf Produktivsysteme nur durch Betreiber, mit Zwei-Faktor-Authentifizierung (Passkey bzw. TOTP)
-- Regelmässige Backups gemäss Aufbewahrung des Hosting-Anbieters
+- Tägliche verschlüsselte Sicherungen, höchstens 6 Monate aufbewahrt
 - Keine Drittanbieter-Analytics, kein Tracking, keine Werbung
 - Quellcode öffentlich einsehbar (open source, AGPL v3) – Sicherheitsprüfung durch Dritte möglich
 - Rate-Limiting gegen Missbrauch
@@ -178,9 +178,8 @@ Stand bei Unterzeichnung. Die jeweils aktuelle, datierte Liste steht in der [Dat
 
 | Anbieter | Zweck | Standort | Schülerdaten? |
 |---|---|---|---|
-| Koyeb SAS | Anwendungs-Hosting, PostgreSQL-Datenbank | Frankfurt, Deutschland | ja |
-| Neon, Inc. und Amazon Web Services (im Auftrag von Koyeb) | Infrastruktur der Datenbank | Frankfurt, Deutschland | ja |
-| Scaleway SAS | Dateispeicher | Paris, Frankreich | ja (Uploads) |
+| Infomaniak Network SA | Server für Anwendung und PostgreSQL-Datenbank | Schweiz | ja |
+| Scaleway SAS | Dateispeicher, verschlüsselte Datenbank-Sicherungen | Paris, Frankreich | ja (Uploads, Sicherungen) |
 | Brevo (Sendinblue SAS) | E-Mail-Versand an Lehrpersonen | EU | nein |
 | Payrexx AG | Zahlungsabwicklung | Schweiz | nein |
 | Mux, Inc. | Video-Hosting (von Lehrpersonen hochgeladene Videos) | USA | nein |

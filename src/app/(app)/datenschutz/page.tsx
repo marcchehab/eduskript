@@ -25,14 +25,14 @@ export const metadata: Metadata = {
  * this section.
  */
 
-// Sources (checked 2026-09-23): Koyeb API (app fra1, DB service type
-// neon_postgres in region fra, host *.eu-central-1.pg.koyeb.app), src/lib/s3.ts
-// (fr-par), OpenRouter provider list (retention/training flags). AI providers
-// must match openrouterRouting() in src/lib/ai/openrouter.ts.
+// Sources (checked 2026-10-05): config/deploy.yml (app + Postgres on one
+// Infomaniak VPS, Switzerland; backups via pgBackRest to Scaleway, retention in
+// config/db/pgbackrest.conf), src/lib/s3.ts (fr-par), OpenRouter provider list
+// (retention/training flags). AI providers must match openrouterRouting() in
+// src/lib/ai/openrouter.ts.
 const SUBPROCESSORS: { name: string; purpose: string; location: string; studentData: string }[] = [
-  { name: 'Koyeb SAS (Frankreich)', purpose: 'Hosting der Anwendung und der PostgreSQL-Datenbank', location: 'Frankfurt, Deutschland', studentData: 'ja' },
-  { name: 'Neon, Inc. und Amazon Web Services (USA), im Auftrag von Koyeb', purpose: 'Infrastruktur der Datenbank (verschlüsselt gespeichert)', location: 'Frankfurt, Deutschland', studentData: 'ja' },
-  { name: 'Scaleway SAS (Frankreich)', purpose: 'Dateispeicher (hochgeladene Dateien, Bilder)', location: 'Paris, Frankreich', studentData: 'ja (Uploads)' },
+  { name: 'Infomaniak Network SA (Schweiz)', purpose: 'Server für Anwendung und PostgreSQL-Datenbank', location: 'Schweiz', studentData: 'ja' },
+  { name: 'Scaleway SAS (Frankreich)', purpose: 'Dateispeicher (hochgeladene Dateien, Bilder) und verschlüsselte Datenbank-Sicherungen', location: 'Paris, Frankreich', studentData: 'ja (Uploads, Sicherungen)' },
   { name: 'Brevo / Sendinblue SAS (Frankreich)', purpose: 'E-Mail-Versand an Lehrpersonen (Bestätigung, Benachrichtigungen)', location: 'EU', studentData: 'nein' },
   { name: 'Payrexx AG (Schweiz)', purpose: 'Zahlungsabwicklung', location: 'Schweiz', studentData: 'nein' },
   { name: 'Mux, Inc. (USA)', purpose: 'Video-Hosting für von Lehrpersonen hochgeladene Videos', location: 'USA', studentData: 'nein' },
@@ -45,6 +45,7 @@ const CHANGELOG: { date: string; change: string }[] = [
   { date: 'September 2026', change: 'Erste veröffentlichte Liste.' },
   { date: 'September 2026', change: 'DeepInfra entfernt; KI-Bewertung nur noch über DigitalOcean.' },
   { date: 'September 2026', change: 'DigitalOcean entfernt; KI-Bewertung über Google Vertex AI. KI-Unterstützung der Lehrperson nur noch über Anbieter ohne Datenspeicherung.' },
+  { date: 'Oktober 2026', change: 'Koyeb und Neon/AWS (Frankfurt) ersetzt durch einen eigenen Server bei Infomaniak in der Schweiz. Datenbank-Sicherungen verschlüsselt bei Scaleway (Paris).' },
 ]
 
 const h2 = 'text-xl font-semibold mt-6 mb-2'
@@ -74,8 +75,8 @@ export default function DatenschutzPage() {
                 E-Mail-Adressen liegt nur im Browser der Lehrperson.
               </li>
               <li>
-                Datenbank und Dateien liegen in der <strong>EU</strong>
-                (Frankfurt und Paris).
+                Die Datenbank liegt in der <strong>Schweiz</strong>, Dateien
+                und Sicherungen in der <strong>EU</strong> (Paris).
               </li>
               <li>
                 KI-Anfragen enthalten <strong>keine Namen, Pseudonyme,
@@ -250,10 +251,10 @@ export default function DatenschutzPage() {
               5. Unterauftragsbearbeiter und Standorte
             </h2>
             <p>
-              Datenbank, Dateien und E-Mail-Versand liegen in der EU. Die EU
-              gilt nach Schweizer Recht als Staat mit angemessenem
-              Datenschutz. Die Datenbank läuft in Frankfurt auf Infrastruktur
-              von US-Unternehmen (Neon, AWS). Für die KI-Funktionen und das
+              Anwendung und Datenbank laufen auf einem Server in der Schweiz
+              (Infomaniak). Dateien, verschlüsselte Datenbank-Sicherungen und
+              E-Mail-Versand liegen in der EU, die nach Schweizer Recht als
+              Staat mit angemessenem Datenschutz gilt. Für die KI-Funktionen und das
               Video-Hosting gehen Daten in die USA, bei der KI ohne
               Identifikationsmerkmale (siehe Abschnitt 4).
             </p>
@@ -315,7 +316,8 @@ export default function DatenschutzPage() {
                 Lehrperson sieht sie danach nicht mehr.
               </li>
               <li>
-                Datensicherungen werden im regulären Zyklus überschrieben.
+                Gelöschte Daten bleiben noch höchstens 6 Monate in den
+                Datensicherungen und verschwinden dann auch dort.
               </li>
               <li>
                 Server-Protokolle enthalten keine Inhalte von Schülerinnen und

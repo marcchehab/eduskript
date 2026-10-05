@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Build Caddy + Cloudflare DNS module (config/caddy) directly on the VPS, then
+# restart the accessory. Same pull issue as bin/reboot-db: Kamal's reboot pulls,
+# so stop/rm + boot instead. ~5 s without TLS termination.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+DOCKER_HOST=ssh://deploy@179.237.126.129 docker build -t eduskript-caddy:2.10 config/caddy

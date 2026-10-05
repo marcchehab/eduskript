@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Restart the Postgres accessory with the current config/deploy.yml (env, cmd).
+# Needed because `kamal accessory reboot db` first pulls the image, and
+# eduskript-db:18.6 exists only on the VPS (bin/build-db-image) → pull fails.
+# `kamal accessory boot` does not pull, so: stop (60 s grace) + remove the
+# container, then boot. Data lives in /var/lib/eduskript/{pg,pgbackrest} and is
+# untouched. NEVER use `kamal accessory remove db` — it deletes those directories.
+# Short DB outage; the app reconnects on its own.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+ssh -o IdentitiesOnly=yes -i ~/.ssh/eduskript-prod.pub deploy@179.237.126.129 \
+  'docker stop -t 60 eduskript-db && docker rm eduskript-db'
+exec bin/kamal accessory boot db
