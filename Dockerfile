@@ -55,8 +55,20 @@ RUN --mount=type=secret,id=NEXT_SERVER_ACTIONS_ENCRYPTION_KEY,env=NEXT_SERVER_AC
     DATABASE_URL=postgresql://dummy:dummy@localhost:5432/dummy pnpm build
 
 FROM node:${NODE_VERSION}-bookworm-slim AS runtime
+# Script import (src/lib/script-import/): native pandoc (the .deb from the
+# pandoc releases, pinned + checksummed; Debian's 2.17 is too old) and
+# LibreOffice headless for .doc/.odt/.rtf → .docx. Both run as child processes
+# only during an import. LibreOffice adds ~700 MB to the image; the layer only
+# changes when these versions change.
+ARG PANDOC_VERSION=3.12
+ARG PANDOC_SHA256=91903ff19f1b1d4db4129797c7e18f71212990d7394fcff1787719aebf04e372
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates fonts-dejavu-core tini \
+ && apt-get install -y --no-install-recommends ca-certificates curl fonts-dejavu-core tini \
+      libreoffice-writer-nogui libreoffice-math-nogui \
+ && curl -fsSL -o /tmp/pandoc.deb https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-1-amd64.deb \
+ && echo "${PANDOC_SHA256}  /tmp/pandoc.deb" | sha256sum -c - \
+ && dpkg -i /tmp/pandoc.deb && rm /tmp/pandoc.deb \
+ && apt-get purge -y curl && apt-get autoremove -y \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 # Docker sets HOSTNAME to the container id; Next standalone binds to it, which

@@ -1,6 +1,7 @@
 /**
  * POST /api/script-import — anonymous import (no account).
- * multipart/form-data: either `file` (.docx or .pdf) or `text` (+ optional
+ * multipart/form-data: either `file` (.docx, .pdf, or .doc/.odt/.rtf via
+ * LibreOffice) or `text` (+ optional
  * `html`, the clipboard's HTML flavour), plus challenge (JSON of
  * PowChallenge), nonce, website (honeypot, must be empty). Returns { token } immediately; the
  * conversion runs after the response (next/server after()) and the preview
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest) {
     if (text.length > MAX_MARKDOWN_CHARS) return bad(`The text is longer than ${MAX_MARKDOWN_CHARS.toLocaleString('en')} characters.`)
     if (typeof html === 'string' && html.length > MAX_FILE_BYTES) return bad('The pasted content is too large.')
   } else if (file instanceof File) {
-    if (!/\.(docx|pdf)$/i.test(file.name)) return bad('Only Word (.docx) and PDF files are supported.')
+    if (!/\.(docx|pdf|doc|odt|rtf)$/i.test(file.name)) return bad('Supported: Word (.docx, .doc), OpenDocument (.odt), RTF and PDF files.')
     if (file.size > MAX_FILE_BYTES) return bad(`The file is larger than ${MAX_FILE_BYTES / 1024 / 1024} MB.`)
   }
 
@@ -61,9 +62,21 @@ export async function POST(request: NextRequest) {
     const upload = file as File
     const buffer = Buffer.from(await upload.arrayBuffer())
     fileName = upload.name
-    if (/\.pdf$/i.test(upload.name)) {
-      if (buffer.subarray(0, 5).toString('latin1') !== '%PDF-') return bad('This is not a valid PDF file.')
+    const ext = upload.name.split('.').pop()!.toLowerCase()
+    // Magic bytes per format, checked before any converter sees the file.
+    const head = buffer.subarray(0, 8)
+    if (ext === 'pdf') {
+      if (head.subarray(0, 5).toString('latin1') !== '%PDF-') return bad('This is not a valid PDF file.')
       input = { kind: 'pdf', buf: buffer }
+    } else if (ext === 'doc') {
+      if (head.toString('hex') !== 'd0cf11e0a1b11ae1') return bad('This is not a valid Word (.doc) file.')
+      input = { kind: 'office', buf: buffer, ext }
+    } else if (ext === 'odt') {
+      if (head.subarray(0, 2).toString('latin1') !== 'PK') return bad('This is not a valid OpenDocument (.odt) file.')
+      input = { kind: 'office', buf: buffer, ext }
+    } else if (ext === 'rtf') {
+      if (head.subarray(0, 5).toString('latin1') !== '{\\rtf') return bad('This is not a valid RTF file.')
+      input = { kind: 'office', buf: buffer, ext }
     } else {
       // .docx is a zip: reject anything without the PK signature before pandoc sees it.
       if (buffer.subarray(0, 2).toString('latin1') !== 'PK') return bad('This is not a valid Word (.docx) file.')

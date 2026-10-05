@@ -6,7 +6,7 @@
  * Markdown by its line syntax, else the clipboard's HTML flavour if the
  * browser sent one (copied from Word, Google Docs, a website), else HTML tags
  * in the text, else plain text (treated as Markdown). LaTeX and HTML go
- * through pandoc-wasm with the same writer options as .docx, so $…$ math
+ * through native pandoc (pandoc.ts) with the same writer options as .docx, so $…$ math
  * survives. Order matters: an editor like VS Code also puts syntax-coloured
  * HTML on the clipboard, so recognisable LaTeX/Markdown text wins over it.
  *
@@ -15,6 +15,7 @@
  * points at local temp files) can't be fetched and become a note.
  */
 import { PANDOC_TO, removeTocText, type ImportAsset } from './convert-docx'
+import { runPandoc } from './pandoc'
 
 export type TextFormat = 'latex' | 'html' | 'markdown'
 
@@ -65,7 +66,6 @@ export async function convertText(text: string, html?: string | null): Promise<T
   const format = detectTextFormat(text, html)
   if (format === 'markdown') return { markdown: text.trim(), assets: [], format, unsupportedImages: 0 }
 
-  const { convert } = await import('pandoc-wasm')
   let source = text
   let assets: ImportAsset[] = []
   let dropped = 0
@@ -75,8 +75,7 @@ export async function convertText(text: string, html?: string | null): Promise<T
     assets = extracted.assets
     dropped = extracted.dropped
   }
-  const result = await convert({ from: format, to: PANDOC_TO, wrap: 'none' }, source, {})
-  if (!result.stdout.trim() && result.stderr) throw new Error(`pandoc: ${result.stderr.slice(0, 500)}`)
+  const result = await runPandoc({ from: format, to: PANDOC_TO, input: source })
   const markdown = removeTocText(result.stdout.replace(/MISSINGIMAGE/g, MISSING_CLIPBOARD_IMAGE_NOTE)).trim()
   return { markdown, assets, format, unsupportedImages: dropped }
 }

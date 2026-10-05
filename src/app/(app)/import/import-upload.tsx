@@ -30,14 +30,12 @@ type Locale = 'de' | 'en'
 type Hint = { title: string; body: string; steps: string[]; proceed?: boolean }
 
 /**
- * Friendly explanations for formats we don't import (yet). Only .docx is
- * converted; there is deliberately no server-side LibreOffice (image size),
- * so the teacher re-saves the file themselves. Formula note (checked locally
- * 2026-09-23 with LibreOffice 26.8 on a 1999 .doc): LibreOffice turns old
- * Equation Editor formulas into Word formulas when saving as .docx, but
- * Symbol-font glyphs come out wrong (∞ → ¥, ² → ´; cleanup.ts asks the model
- * to fix these). Word was NOT tested (no Word here); it is assumed to keep
- * them as OLE objects with a WMF picture, which the import transcribes.
+ * Hints per file extension. .docx/.odt/.rtf: none. .doc and .pdf: accepted,
+ * with a non-blocking hint (proceed). .pages and anything else: rejected with
+ * instructions. .doc/.odt/.rtf are converted to .docx server-side by
+ * LibreOffice (src/lib/script-import/libreoffice.ts), which also turns old
+ * Equation Editor formulas into Word formulas (some Symbol-font glyphs come
+ * out wrong; cleanup.ts asks the model to fix them).
  */
 function formatHint(ext: string, locale: Locale): Hint | null {
   const de = locale === 'de'
@@ -52,35 +50,25 @@ function formatHint(ext: string, locale: Locale): Hint | null {
         'LibreOffice: File → Save As → type "Word 2007–365 (.docx)"',
         'Pages: File → Export To → Word',
       ]
-  const formulas = de
-    ? 'Formeln aus dem alten Formel-Editor gehen dabei nicht verloren: wir lesen sie beim Import automatisch ab.'
-    : "Formulas from the old equation editor aren't lost: the import reads them automatically."
   switch (ext) {
     case 'doc':
+      // Accepted (LibreOffice converts it server-side); the hint is just a smile.
       return de
         ? {
             title: 'Oh, eine .doc-Datei – die ist älter als manche Ihrer Schülerinnen und Schüler 😄',
-            body: `Öffnen Sie sie kurz und speichern Sie sie als .docx, dann klappt's. ${formulas}`,
-            steps: resave,
+            body: 'Kein Problem, wir wandeln sie um. Formeln aus dem alten Formel-Editor werden dabei zu echten Formeln; bitte danach kurz prüfen.',
+            steps: [],
+            proceed: true,
           }
         : {
             title: 'Oh, a .doc file – older than some of your students 😄',
-            body: `Open it and save it as .docx, then it works. ${formulas}`,
-            steps: resave,
+            body: "No problem, we'll convert it. Formulas from the old equation editor become real formulas along the way; please check them afterwards.",
+            steps: [],
+            proceed: true,
           }
     case 'odt':
-    case 'ott':
-      return de
-        ? {
-            title: 'Eine LibreOffice-Datei – sympathisch! Wir lesen aber (noch) nur Word.',
-            body: 'Speichern Sie sie in LibreOffice kurz als .docx. Formeln werden dabei zu echten Word-Formeln.',
-            steps: [resave[1]],
-          }
-        : {
-            title: 'A LibreOffice file – nice! We only read Word (for now).',
-            body: 'Save it as .docx in LibreOffice. Formulas become real Word formulas along the way.',
-            steps: [resave[1]],
-          }
+    case 'rtf':
+      return null
     case 'pages':
       return de
         ? { title: 'Pages-Dateien können wir (noch) nicht lesen.', body: 'Exportieren Sie sie als Word-Datei:', steps: [resave[2]] }
@@ -225,8 +213,8 @@ export function ImportUpload() {
         </h1>
         <p className="mt-4 text-muted-foreground text-lg">
           {t(
-            'Laden Sie ein Arbeitsblatt oder Skript als Word-Datei oder PDF hoch, oder fügen Sie Text ein. Nach etwa einer Minute sehen Sie es als Eduskript-Skript: mit Formeln, Tabellen, Bildern und Aufgaben. Ohne Account.',
-            'Upload a worksheet or script as a Word file or PDF, or paste text. After about a minute you see it as an Eduskript skript: with formulas, tables, images and exercises. No account needed.'
+            'Laden Sie ein Arbeitsblatt oder Skript als Word-Datei (auch .doc, .odt) oder PDF hoch, oder fügen Sie Text ein. Nach etwa einer Minute sehen Sie es als Eduskript-Skript: mit Formeln, Tabellen, Bildern und Aufgaben. Ohne Account.',
+            'Upload a worksheet or script as a Word file (also .doc, .odt) or PDF, or paste text. After about a minute you see it as an Eduskript skript: with formulas, tables, images and exercises. No account needed.'
           )}
         </p>
 
@@ -306,13 +294,13 @@ export function ImportUpload() {
               {file ? file.name : t('Word-Datei oder PDF hierher ziehen oder klicken', 'Drop a Word file or PDF here or click')}
             </span>
             <span className="text-sm text-muted-foreground">
-              {t(`.docx oder .pdf, bis ${MAX_MB} MB, bis 30 Seiten`, `.docx or .pdf, up to ${MAX_MB} MB, up to 30 pages`)}
+              {t(`.docx, .doc, .odt, .rtf oder .pdf, bis ${MAX_MB} MB, bis 30 Seiten`, `.docx, .doc, .odt, .rtf or .pdf, up to ${MAX_MB} MB, up to 30 pages`)}
             </span>
             <input
               ref={inputRef}
               type="file"
               // Old/other formats are selectable on purpose: picking one shows formatHint.
-              accept=".docx,.doc,.odt,.pdf,.pages,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              accept=".docx,.doc,.odt,.rtf,.pdf,.pages,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
               className="hidden"
               onChange={(e) => pickFile(e.target.files?.[0])}
             />

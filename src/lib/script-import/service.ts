@@ -20,6 +20,7 @@ import { createPageForUser, ConflictError } from '@/lib/services/pages'
 import { convertDocx } from './convert-docx'
 import { convertPdf } from './convert-pdf'
 import { convertText } from './convert-text'
+import { officeToDocx, type OfficeExtension } from './libreoffice'
 import { cleanupMarkdown } from './cleanup'
 import { pageSlug, splitIntoPages, type ImportPage } from './split'
 import { ImportError, MAX_MARKDOWN_CHARS, MAX_WORD_PAGES, RETENTION_DAYS } from './limits'
@@ -36,6 +37,8 @@ export interface ImportWarnings {
   pagesAsImages?: number
   /** PDF: figures cut out of the pages. */
   pdfFigures?: number
+  /** .doc/.odt/.rtf converted to .docx by LibreOffice first. */
+  convertedFrom?: OfficeExtension
   /** Legacy (Equation Editor/MathType) formulas read from their picture by the model. */
   formulasTranscribed: number
   /** Legacy formulas the model couldn't read; kept as pictures. */
@@ -71,34 +74,55 @@ export async function createImport(opts: { fileName: string; ipHash: string; pow
 /** What was uploaded: a Word file, a PDF, or pasted text (+ the clipboard's HTML flavour). */
 export type ImportInput =
   | { kind: 'docx'; buf: Buffer }
+  | { kind: 'office'; buf: Buffer; ext: OfficeExtension }
   | { kind: 'pdf'; buf: Buffer }
   | { kind: 'text'; text: string; html?: string | null }
 
 /** Source-specific conversion → Markdown + assets; all sources then share split/save below. */
-async function convertSource(input: ImportInput) {
-  if (input.kind === 'docx') {
-    const converted = await convertDocx(input.buf)
-    if (converted.pageCount && converted.pageCount > MAX_WORD_PAGES) {
-      throw new ImportError(`The document has ${converted.pageCount} pages; the limit is ${MAX_WORD_PAGES}.`)
+async function convertSource(input: ImportInput): Promise<Awaited<ReturnType<typeof convertDocxSource>>> {
+  if (input.kind === 'office') {
+    // .doc/.odt/.rtf: LibreOffice → .docx, then the Word path (libreoffice.ts).
+    let docx: Buffer
+    try {
+      docx = await officeToDocx(input.buf, input.ext)
+    } catch (err) {
+      console.error('[script-import] libreoffice conversion failed:', err)
+      throw new ImportError(`The .${input.ext} file could not be opened. Please save it as .docx and try again.`)
     }
-    checkSize(converted.markdown)
-    const formulaImages = new Map(
-      converted.assets.filter((a) => /^(formula|symbol)-/.test(a.name)).map((a) => [a.name, a.data])
-    )
-    const cleaned = await cleanupMarkdown(converted.markdown, formulaImages, 'docx')
-    return {
-      raw: converted.markdown,
-      markdown: cleaned.markdown,
-      assets: converted.assets,
-      costUsd: cleaned.costUsd,
-      warnings: {
-        imagesDropped: converted.unsupportedImages,
-        drawingsDropped: converted.drawings,
-        drawingsRendered: converted.drawingsRendered,
-        chunksUncleaned: cleaned.fallbacks,
-      },
-    }
+    const converted = await convertDocxSource(docx)
+    return { ...converted, warnings: { ...converted.warnings, convertedFrom: input.ext } }
   }
+  if (input.kind === 'docx') return convertDocxSource(input.buf)
+  return convertOtherSource(input)
+}
+
+async function convertDocxSource(buf: Buffer) {
+  const converted = await convertDocx(buf)
+  if (converted.pageCount && converted.pageCount > MAX_WORD_PAGES) {
+    throw new ImportError(`The document has ${converted.pageCount} pages; the limit is ${MAX_WORD_PAGES}.`)
+  }
+  checkSize(converted.markdown)
+  const formulaImages = new Map(
+    converted.assets.filter((a) => /^(formula|symbol)-/.test(a.name)).map((a) => [a.name, a.data])
+  )
+  const cleaned = await cleanupMarkdown(converted.markdown, formulaImages, 'docx')
+  return {
+    raw: converted.markdown,
+    markdown: cleaned.markdown,
+    assets: converted.assets,
+    costUsd: cleaned.costUsd,
+    warnings: {
+      imagesDropped: converted.unsupportedImages,
+      drawingsDropped: converted.drawings,
+      drawingsRendered: converted.drawingsRendered,
+      chunksUncleaned: cleaned.fallbacks,
+    } as ImportWarningsPart,
+  }
+}
+
+type ImportWarningsPart = Partial<ImportWarnings> & Pick<ImportWarnings, 'imagesDropped' | 'chunksUncleaned'>
+
+async function convertOtherSource(input: Extract<ImportInput, { kind: 'text' | 'pdf' }>) {
   if (input.kind === 'text') {
     const converted = await convertText(input.text, input.html)
     checkSize(converted.markdown)
@@ -108,7 +132,7 @@ async function convertSource(input: ImportInput) {
       markdown: cleaned.markdown,
       assets: converted.assets,
       costUsd: cleaned.costUsd,
-      warnings: { imagesDropped: converted.unsupportedImages, chunksUncleaned: cleaned.fallbacks, textFormat: converted.format },
+      warnings: { imagesDropped: converted.unsupportedImages, chunksUncleaned: cleaned.fallbacks, textFormat: converted.format } as ImportWarningsPart,
     }
   }
   // PDF: the model reads the pages and already applies the cleanup rules (convert-pdf.ts).
@@ -119,7 +143,7 @@ async function convertSource(input: ImportInput) {
     markdown: converted.markdown,
     assets: converted.assets,
     costUsd: converted.costUsd,
-    warnings: { imagesDropped: 0, chunksUncleaned: 0, pagesAsImages: converted.failedPages, pdfFigures: converted.figures },
+    warnings: { imagesDropped: 0, chunksUncleaned: 0, pagesAsImages: converted.failedPages, pdfFigures: converted.figures } as ImportWarningsPart,
   }
 }
 
@@ -132,6 +156,7 @@ function checkSize(markdown: string) {
 
 const FAILURE: Record<ImportInput['kind'], string> = {
   docx: 'The document could not be converted. Is it a valid Word (.docx) file?',
+  office: 'The document could not be converted. Please save it as .docx and try again.',
   pdf: 'The PDF could not be converted.',
   text: 'The text could not be converted.',
 }
@@ -140,7 +165,7 @@ export async function processImport(id: string, input: ImportInput, fileName: st
   const started = Date.now()
   try {
     const converted = await convertSource(input)
-    const fallbackTitle = fileName.replace(/\.(docx|pdf)$/i, '').replace(/[_-]+/g, ' ').trim() || 'Imported skript'
+    const fallbackTitle = fileName.replace(/\.(docx|pdf|doc|odt|rtf)$/i, '').replace(/[_-]+/g, ' ').trim() || 'Imported skript'
     // Formula/symbol pictures the model didn't transcribe (or all, if cleanup
     // failed) stay images; size them to the text line instead of full width.
     const markdown = converted.markdown.replace(

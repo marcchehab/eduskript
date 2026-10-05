@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest'
 import JSZip from 'jszip'
+import { execFileSync } from 'child_process'
 import { convertDocx, inlineTextboxes, readDocxInfo, removeToc, removeTocText, rewriteImages, UNSUPPORTED_IMAGE_NOTE, widthPercent } from '@/lib/script-import/convert-docx'
 
 describe('rewriteImages', () => {
@@ -22,14 +23,12 @@ describe('rewriteImages', () => {
   })
 })
 
-describe('convertDocx (pandoc-wasm round trip)', () => {
+describe('convertDocx (pandoc round trip)', () => {
   it('keeps math, tables and sub/sup from a real docx', async () => {
     // Build a .docx with pandoc itself (math becomes Word OMML), then import it.
-    const { convert } = await import('pandoc-wasm')
     const src = '# Titel\n\nWasser: H~2~O\n\n$$E = mc^2$$\n\n| a | b |\n|---|---|\n| 1 | 2 |\n'
-    const made = await convert({ from: 'markdown', to: 'docx', 'output-file': 'out.docx' }, src, {})
-    const blob = made.files['out.docx'] as Blob
-    const { markdown, pageCount } = await convertDocx(Buffer.from(await blob.arrayBuffer()))
+    const docx = execFileSync(process.env.PANDOC_PATH || 'pandoc', ['-f', 'markdown', '-t', 'docx', '-o', '-'], { input: src })
+    const { markdown, pageCount } = await convertDocx(docx)
     expect(markdown).toContain('H<sub>2</sub>O')
     expect(markdown).toMatch(/\$\$E = mc\^\{?2\}?\$\$/)
     expect(markdown).toMatch(/\| a +\| b +\|/)

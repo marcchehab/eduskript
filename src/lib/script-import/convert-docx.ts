@@ -1,10 +1,9 @@
 /**
  * .docx → Markdown, deterministic step of the anonymous skript import.
  *
- * Uses the official pandoc WASM build (npm `pandoc-wasm`, pandoc 3.x) instead
- * of a system binary because the Koyeb buildpack image has no pandoc. The WASM
- * module (~58 MB) is instantiated on first use and stays in memory for the
- * process lifetime. A 30-page docx converts in well under a second.
+ * Runs native pandoc (≥ 3.x) as a child process (pandoc.ts; the Dockerfile
+ * installs it). A 30-page docx converts in well under a second. .doc/.odt/.rtf
+ * arrive here after LibreOffice turned them into .docx (libreoffice.ts).
  *
  * Why pandoc and not mammoth (used by the editor's docx drop,
  * codemirror-editor.tsx): mammoth drops Word equations (OMML) silently and
@@ -27,6 +26,7 @@
  *   files from other tools may lack it (then only the size/char limits apply).
  */
 import JSZip from 'jszip'
+import { runPandoc } from './pandoc'
 
 export interface ImportAsset {
   name: string
@@ -194,22 +194,7 @@ async function preprocess(docx: Buffer): Promise<{ docx: Buffer; textboxes: numb
 
 export async function convertDocx(original: Buffer): Promise<DocxConversion> {
   const { docx, textboxes, drawings, rendered } = await preprocess(original)
-  // Dynamic import: the module instantiates the WASM binary at import time.
-  const { convert } = await import('pandoc-wasm')
-  const result = await convert(
-    {
-      from: 'docx',
-      to: PANDOC_TO,
-      'extract-media': 'media',
-      'input-files': ['in.docx'],
-      wrap: 'none',
-    },
-    null,
-    { 'in.docx': new Blob([new Uint8Array(docx)]) }
-  )
-  if (!result.stdout && result.stderr) {
-    throw new Error(`pandoc: ${result.stderr.slice(0, 500)}`)
-  }
+  const result = await runPandoc({ from: 'docx', to: PANDOC_TO, input: docx, inputName: 'in.docx', extractMedia: true })
   const info = await readDocxInfo(docx)
 
   // pandoc names media after the docx part (media/media/image3.wmf) or the
@@ -220,9 +205,15 @@ export async function convertDocx(original: Buffer): Promise<DocxConversion> {
   let formulas = 0
   let symbols = 0
   let unsupported = 0
-  for (const [path, blob] of Object.entries(result.mediaFiles as Record<string, Blob>)) {
+  // Number images in order of first appearance in the text (unreferenced last).
+  const firstUse = (p: string) => {
+    const i = result.stdout.indexOf(p)
+    return i < 0 ? Number.MAX_SAFE_INTEGER : i
+  }
+  const mediaPaths = [...result.media.keys()].sort((a, b) => firstUse(a) - firstUse(b))
+  for (const path of mediaPaths) {
     const ext = path.split('.').pop()?.toLowerCase() ?? ''
-    let data: Buffer | null = Buffer.from(await blob.arrayBuffer())
+    let data: Buffer | null = result.media.get(path)!
     let contentType = WEB_IMAGE_TYPES[ext]
     let outExt = ext === 'jpeg' ? 'jpg' : ext
     if (!contentType) {

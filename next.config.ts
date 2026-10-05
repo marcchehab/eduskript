@@ -161,7 +161,6 @@ const nextConfig: NextConfig = {
   },
   serverExternalPackages: [
     '@prisma/client',
-    'pandoc-wasm', // loads its .wasm via fs relative to the module; don't bundle
     'pdfjs-dist', // PDF import renders pages in Node (legacy build + worker file)
     '@napi-rs/canvas', // native .node binary (WMF rendering, src/lib/script-import/wmf-render.ts)
     'sql.js', // SQL.js uses Node.js 'fs' module which should not be bundled for server
