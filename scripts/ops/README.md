@@ -10,6 +10,23 @@ Plan and rationale: `MIGRATION-VPS.md`. Deployment config: `config/deploy.yml`.
 - Secrets: `~/.config/eduskript/prod.env` (+ copy in Bitwarden). Read by
   `.kamal/secrets`.
 
+## Secrets
+
+`~/.config/eduskript/prod.env` is mirrored to the Bitwarden secure note
+"eduskript prod.env" by `bin/sync-secrets` (asks for the master password).
+Run it after every change to prod.env.
+
+## File storage
+
+Teacher uploads: Infomaniak Public Cloud object storage (project
+`PCP-XAUZCPS`, region dc3-a, endpoint `s3.pub1.infomaniak.cloud`), buckets
+`eduskript-teacher-files` (public read via Swift container ACL, CORS `*`) and
+`eduskript-imports` (private). Credentials in prod.env (`INFOMANIAK_*`).
+Swift quirks are documented at the top of `src/lib/s3.ts`. Container ACL/CORS
+are Swift metadata (`X-Container-Read`, `X-Container-Meta-Access-Control-*`),
+set once with a Keystone token — not via the S3 API. The old Scaleway bucket
+`eduskript-teacher-files` (fr-par) is kept read-only as a fallback for now.
+
 ## Everyday
 
 | Task | Command |
