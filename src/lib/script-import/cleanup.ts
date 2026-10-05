@@ -20,14 +20,14 @@
  * Model access: OpenRouter via the OpenAI SDK, like the other AI routes.
  * Model: SCRIPT_IMPORT_MODEL, default google/gemini-3.8-flash (vision needed
  * for the formula pictures; same model as AI feedback). Routed like AI
- * feedback (OPENROUTER_GEMINI_STUDENT_DATA: Vertex only, zero retention):
+ * feedback (openrouterRouting: Gemini → Vertex only, zero retention):
  * the upload UI asks for no student data, but a document may contain some
- * anyway. A non-Google SCRIPT_IMPORT_MODEL would find no endpoint under that
- * routing.
+ * anyway. Another SCRIPT_IMPORT_MODEL gets openrouterRouting's ZDR pool, which
+ * /datenschutz does not list for student data.
  */
 import OpenAI from 'openai'
 import { getCondensedSyntaxReference } from '@/lib/ai/syntax-reference'
-import { OPENROUTER_GEMINI_STUDENT_DATA } from '@/lib/ai/openrouter'
+import { openrouterRouting } from '@/lib/ai/openrouter'
 
 export const CHUNK_CHARS = 8000
 export const MAX_IMAGES_PER_CHUNK = 40
@@ -202,7 +202,7 @@ export async function callImportModel(
         ],
         // OpenRouter extras: cost in the usage block; Vertex-only zero-retention routing.
         // Low reasoning: this is a markup rewrite, not a reasoning task (cost + latency).
-        ...({ usage: { include: true }, reasoning: { effort: 'low' }, ...OPENROUTER_GEMINI_STUDENT_DATA } as Record<string, unknown>),
+        ...({ usage: { include: true }, reasoning: { effort: 'low' }, ...openrouterRouting(model()) } as Record<string, unknown>),
       })
       const choice = res.choices[0]
       cost += (res.usage as { cost?: number } | undefined)?.cost ?? 0

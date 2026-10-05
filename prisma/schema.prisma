@@ -1522,9 +1522,11 @@ model SiteSlugAlias {
 
   @@index([siteId])
   @@map("site_slug_aliases")
+}
 
 /// Anonymous "what would my skript look like on Eduskript?" import: a .docx
-/// uploaded without an account, converted (pandoc → Claude cleanup) into
+/// .docx / .pdf / pasted text uploaded without an account, converted (pandoc or
+/// page reading → model cleanup, see src/lib/script-import/) into
 /// pages, previewed at /import/<token>, and moved into the uploader's account
 /// after signup (claim). Unclaimed rows are deleted by the daily cron once
 /// expiresAt (created + 7 days) passes; assets cascade. On claim, assets and
