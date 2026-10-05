@@ -311,7 +311,7 @@ Same language set as \`editor\`/fenced code blocks: python, javascript/js, types
   // Flag icons
   sections.push(`## Flag Icons
 
-\`:flag-en-gb:\` or \`:flag-de-ch:\` drops an inline flag icon anywhere in text, e.g. a heading: \`## User Manual :flag-en-gb:\`. Only these two codes exist (matching the signup page's language picker); any other code is left as literal text.`)
+\`:flag-ch:\` (Swiss flag), \`:flag-en-gb:\` or \`:flag-de-ch:\` (German/Swiss language flag) drops an inline flag icon anywhere in text, e.g. a heading: \`## User Manual :flag-en-gb:\`. Only these three codes exist; any other code is left as literal text.`)
 
   // Math
   sections.push(`## Math (KaTeX)
@@ -937,7 +937,7 @@ export function getCondensedSyntaxReference(): string {
 
 **YouTube:** \`![caption](https://youtu.be/VIDEO_ID?t=120)\` is the simplest form (alt becomes caption). Or \`<youtube id="VIDEO_ID" startTime={120} caption="..." />\`, or the underlying \`<youtube-embed data-id="VIDEO_ID" data-start-time="120" data-caption="..."></youtube-embed>\`. Use \`playlist\`/\`data-playlist\` for playlists, \`thumbnail\`/\`data-thumbnail\` (filename or URL) for a custom teaser image.
 
-**Flag icons:** \`:flag-en-gb:\` / \`:flag-de-ch:\` inline anywhere in text, e.g. \`## User Manual :flag-en-gb:\`. Only these two codes exist.
+**Flag icons:** \`:flag-ch:\` / \`:flag-en-gb:\` / \`:flag-de-ch:\` inline anywhere in text, e.g. \`## User Manual :flag-en-gb:\`. Only these three codes exist.
 
 **GeoGebra:** \`<geogebra material-id="dNPHaqgb" [show-toolbar="true"] [correct-when="correct"] />\` — embeds an interactive GeoGebra applet by material id (from a geogebra.org share link); auto-fits height by default (add \`height="450"\` to pin). \`correct-when\` captures per-student correctness for the teacher's class tally.
 

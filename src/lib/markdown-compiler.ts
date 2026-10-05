@@ -90,7 +90,7 @@ export const sanitizeSchema = {
     'tabs-container',
     'tab-item',
     'youtube-embed',
-    'flag-icon', // :flag-en-gb: / :flag-de-ch: inline icon (remarkFlagIcon)
+    'flag-icon', // :flag-ch: / :flag-en-gb: / :flag-de-ch: inline icon (remarkFlagIcon)
     'muxvideo',
     'excalidraw-image',
     'question',

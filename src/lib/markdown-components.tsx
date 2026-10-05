@@ -658,15 +658,18 @@ export function createMarkdownComponents(
   // Flag icon component - :flag-en-gb: / :flag-de-ch:, extension hardcoded
   // per code since only these two files exist in /public/flags/ (see
   // src/app/(app)/auth/signup/page.tsx, the FLAG_CODES source of truth).
-  const FLAG_ICON_EXT: Record<string, string> = { 'de-ch': 'png', 'en-gb': 'svg' }
+  const FLAG_ICON_EXT: Record<string, string> = { 'ch': 'svg', 'de-ch': 'png', 'en-gb': 'svg' }
+  // The Swiss flag is square; the others are 10:7.
+  const SQUARE_FLAGS = new Set(['ch'])
   function FlagIconComponent({ ...props }: React.HTMLAttributes<HTMLElement> & Record<string, unknown>) {
     const code = (props['data-code'] as string) || (props['dataCode'] as string) || ''
     const ext = FLAG_ICON_EXT[code]
     if (!ext) return null
 
     // `!`: `.prose-theme img { block mx-auto rounded-lg }` would put the flag on its own line.
+    const square = SQUARE_FLAGS.has(code)
     // eslint-disable-next-line @next/next/no-img-element -- tiny static SVG/PNG flag icon; Next's image optimizer refuses local SVGs without dangerouslyAllowSVG
-    return <img src={`/flags/${code}.${ext}`} alt="" width={20} height={14} className="inline-block! mx-0! align-[-0.15em] rounded-xs! object-cover" />
+    return <img src={`/flags/${code}.${ext}`} alt="" width={square ? 14 : 20} height={14} className={`inline-block! mx-0! align-[-0.15em] object-cover ${square ? 'rounded-[3px]!' : 'rounded-xs!'}`} />
   }
 
   // Tabs container component - renders tabs UI directly from HTML children

@@ -1,12 +1,14 @@
 import { visit } from 'unist-util-visit'
 import type { Root, Text, Parent } from 'mdast'
 
-// Only these two exist in /public/flags/ (see src/app/(app)/auth/signup/page.tsx).
-const FLAG_CODES = ['de-ch', 'en-gb']
+// Files in /public/flags/. de-ch/en-gb match the signup page's language picker
+// (src/app/(app)/auth/signup/page.tsx); ch is the plain (square) Swiss flag.
+// Rendered by FlagIconComponent in src/lib/markdown-components.tsx.
+const FLAG_CODES = ['ch', 'de-ch', 'en-gb']
 const FLAG_PATTERN = new RegExp(`:flag-(${FLAG_CODES.join('|')}):`, 'g')
 
 /**
- * `:flag-en-gb:` / `:flag-de-ch:` — inline flag icon usable anywhere in
+ * `:flag-ch:` / `:flag-en-gb:` / `:flag-de-ch:` — inline flag icon usable anywhere in
  * markdown text, e.g. a heading like "User Manual :flag-en-gb:". Splices a
  * matched text node into text/html siblings, mirroring how
  * remarkYoutubeImage rewrites a node into a custom raw-HTML element.
