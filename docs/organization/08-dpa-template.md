@@ -80,7 +80,7 @@ UID CHE-261.508.926, operator of eduskript.org
 
 ## 8. Place of processing and transfer abroad
 
-8.1 The database is stored in Switzerland (Infomaniak). Uploaded files and encrypted database backups are stored in Paris (France); email delivery takes place in the EU. Under Annex 1 of the Swiss Data Protection Ordinance (DPO/DSV), the EU provides an adequate level of data protection.
+8.1 The database and uploaded files are stored in Switzerland (Infomaniak). Encrypted database backups are stored in Paris (France); email delivery takes place in the EU. Under Annex 1 of the Swiss Data Protection Ordinance (DPO/DSV), the EU provides an adequate level of data protection.
 
 8.2 For AI features (section 9), content is transferred to providers in the USA, exclusively without identifying information as described in section 9.2. Google LLC is certified under the Swiss-U.S. Data Privacy Framework. For OpenRouter, which is not certified and only forwards the requests, the transfer relies on the content not being attributable to any person for this recipient.
 
@@ -131,7 +131,7 @@ Eduskript names the School as a reference or in publications only with the Schoo
 
 Eduskript is a small provider. It does not meet, or only partially meets, the following requirements of the AGB Auslagerung Informatikleistungen:
 
-- **Place of processing (cl. 12):** The data is in the EU, not in Switzerland. AI requests go to the USA without identifying information (section 8).
+- **Place of processing (cl. 12):** Database and files are in Switzerland; encrypted backups and email delivery are in the EU. AI requests go to the USA without identifying information (section 8).
 - **Security management under ISO 27000 and external audits (cl. 8a, 9a):** Eduskript has no certification of its own and does not commission periodic audits. The hosting providers' data centres are ISO 27001 certified; the source code is publicly reviewable.
 - **Access logging (cl. 8d):** Read access is not logged individually. Exam events are logged (start, hand-in, return).
 - **Contractual penalty (cl. 16):** Not included. The School may agree one.
@@ -181,8 +181,8 @@ As at signature. The current, dated list is in the [privacy policy](https://edus
 
 | Provider | Purpose | Location | Student data? |
 |---|---|---|---|
-| Infomaniak Network SA | Server for application and PostgreSQL database | Switzerland | yes |
-| Scaleway SAS | File storage, encrypted database backups | Paris, France | yes (uploads, backups) |
+| Infomaniak Network SA | Server for application and PostgreSQL database, file storage | Switzerland | yes |
+| Scaleway SAS | Encrypted database backups | Paris, France | yes (encrypted only) |
 | Brevo (Sendinblue SAS) | Email delivery to teachers | EU | no |
 | Payrexx AG | Payment processing | Switzerland | no |
 | Mux, Inc. | Video hosting (videos uploaded by teachers) | USA | no |

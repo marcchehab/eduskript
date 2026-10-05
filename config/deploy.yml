@@ -48,7 +48,7 @@ builder:
   args:
     NEXTAUTH_URL: https://eduskript.org
     NEXT_PUBLIC_CUSTOM_DOMAIN_TARGET: sites.eduskript.org
-    NEXT_PUBLIC_KARA_TILESET_URL: https://s3.fr-par.scw.cloud/eduskript-teacher-files/kara/scifi-v1
+    NEXT_PUBLIC_KARA_TILESET_URL: https://s3.pub1.infomaniak.cloud/object/v1/AUTH_0545793e6966429094ae4a572cd0e156/eduskript-teacher-files/kara/scifi-v1
     NEXT_PUBLIC_GIT_COMMIT_SHA: <%= ENV["GIT_SHA"].to_s.to_json %>
     NEXT_PUBLIC_GIT_COMMIT_MESSAGE: <%= ENV["GIT_MESSAGE"].to_s.to_json %>
     NEXT_PUBLIC_BUILD_TIME: <%= ENV["BUILD_TIME"].to_s.to_json %>
@@ -66,6 +66,13 @@ env:
     DEBUG: "auth:*,ai:*,mail:*"
     EMAIL_FROM_NAME: Eduskript Verification
     WARM_ON_BOOT: "0"
+    # Object storage: Infomaniak Public Cloud (Swift + S3 API), see src/lib/s3.ts.
+    S3_ENDPOINT: https://s3.pub1.infomaniak.cloud
+    S3_REGION: us-east-1
+    S3_FORCE_PATH_STYLE: "true"
+    S3_PUBLIC_BASE_URL: https://s3.pub1.infomaniak.cloud/object/v1/AUTH_0545793e6966429094ae4a572cd0e156
+    SCW_TEACHER_BUCKET: eduskript-teacher-files
+    SCW_IMPORT_BUCKET: eduskript-imports
   secret:
     - DATABASE_URL
     - NEXTAUTH_SECRET
@@ -88,12 +95,8 @@ env:
     - PAYREXX_API_SECRET
     - PAYREXX_INSTANCE
     - PAYREXX_WEBHOOK_SECRET
-    - SCW_ACCESS_KEY
-    - SCW_SECRET_KEY
-    - SCW_DEFAULT_ORGANIZATION_ID
-    - SCW_DEFAULT_PROJECT_ID
-    - SCW_IMPORT_BUCKET
-    - SCW_TEACHER_BUCKET
+    - S3_ACCESS_KEY            # Infomaniak EC2 credential
+    - S3_SECRET_KEY
 
 accessories:
   db:

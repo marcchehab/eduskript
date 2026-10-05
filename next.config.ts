@@ -94,6 +94,12 @@ const nextConfig: NextConfig = {
         pathname: '/eduskript-teacher-files/**',
       },
       {
+        // Infomaniak Swift public URLs (production storage since 2026-10-05)
+        protocol: 'https',
+        hostname: 's3.pub1.infomaniak.cloud',
+        pathname: '/object/v1/**',
+      },
+      {
         protocol: 'https',
         hostname: 'img.youtube.com',
         pathname: '/vi/**',

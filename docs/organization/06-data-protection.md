@@ -6,20 +6,20 @@ Eduskript is built for use in schools, where the data being handled belongs to t
 
 ## Legal Framework
 
-Eduskript is operated under the **Swiss Federal Act on Data Protection (revFADP / revDSG)**. Because files and backups are hosted in the EU, processing is also aligned with the **EU General Data Protection Regulation (GDPR)**.
+Eduskript is operated under the **Swiss Federal Act on Data Protection (revFADP / revDSG)**. Because backups and email delivery are in the EU, processing is also aligned with the **EU General Data Protection Regulation (GDPR)**.
 
-Application and database run on a dedicated server at Infomaniak in Switzerland (a Swiss company, not subject to the US CLOUD Act). Files and encrypted database backups are in the EU, which counts as a country with adequate data protection under Swiss law.
+Application, database and uploaded files are at Infomaniak in Switzerland (a Swiss company, not subject to the US CLOUD Act). Encrypted database backups are in the EU, which counts as a country with adequate data protection under Swiss law.
 
 > For school leadership and IT there is a [one-page overview](07-for-school-leadership-and-it.md) and a [data processing agreement template](08-dpa-template.md).
 
 ## Where Data Is Stored
 
-The database is stored in Switzerland, uploaded files and encrypted backups in the EU. The authoritative, dated list of all sub-processors (including payments, video and AI providers) is in the [privacy policy](https://eduskript.org/datenschutz#unterauftragsbearbeiter) (German).
+The database and uploaded files are stored in Switzerland, encrypted backups in the EU. The authoritative, dated list of all sub-processors (including payments, video and AI providers) is in the [privacy policy](https://eduskript.org/datenschutz#unterauftragsbearbeiter) (German).
 
 | Sub-processor | Purpose | Location | Company |
 |---------------|---------|----------|---------|
-| Infomaniak | Server for application and PostgreSQL database | Switzerland | Infomaniak Network SA (Switzerland) |
-| Scaleway | Object storage (uploaded files, images) and encrypted database backups | Paris (`fr-par`) | Scaleway SAS (France) |
+| Infomaniak | Server for application and PostgreSQL database, object storage (uploaded files, images) | Switzerland | Infomaniak Network SA (Switzerland) |
+| Scaleway | Encrypted database backups | Paris (`fr-par`) | Scaleway SAS (France) |
 | Brevo | Transactional email (verification, notifications) | EU | Sendinblue SAS / Brevo (France) |
 
 Transactional emails are sent with tracking disabled.
@@ -85,4 +85,4 @@ For data-protection questions or requests, contact the instance operator. For th
 
 ## Summary
 
-Eduskript stores the minimum personal data needed to function. Teacher identities are conventional; student identities are pseudonymised and contain no email. Core data is hosted in Switzerland (Infomaniak) and the EU (Scaleway, Brevo) under Swiss and EU data-protection law. Third-party US identity providers are optional and user-initiated, and no analytics or tracking is used.
+Eduskript stores the minimum personal data needed to function. Teacher identities are conventional; student identities are pseudonymised and contain no email. Core data is hosted in Switzerland (Infomaniak); encrypted backups and email delivery in the EU (Scaleway, Brevo) under Swiss and EU data-protection law. Third-party US identity providers are optional and user-initiated, and no analytics or tracking is used.

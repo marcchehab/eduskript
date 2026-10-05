@@ -77,7 +77,7 @@ UID CHE-261.508.926, Betreiberin von eduskript.org
 
 ## 8. Ort der Datenbearbeitung und Bekanntgabe ins Ausland
 
-8.1 Die Datenbank wird in der Schweiz gespeichert (Infomaniak). Hochgeladene Dateien und verschlüsselte Datenbank-Sicherungen liegen in Paris (Frankreich), der E-Mail-Versand erfolgt in der EU. Die EU gilt nach Anhang 1 der Datenschutzverordnung (DSV) als Staat mit angemessenem Datenschutz.
+8.1 Datenbank und hochgeladene Dateien werden in der Schweiz gespeichert (Infomaniak). Verschlüsselte Datenbank-Sicherungen liegen in Paris (Frankreich), der E-Mail-Versand erfolgt in der EU. Die EU gilt nach Anhang 1 der Datenschutzverordnung (DSV) als Staat mit angemessenem Datenschutz.
 
 8.2 Für KI-Funktionen (Ziffer 9) werden Inhalte an Anbieter in den USA übermittelt, ausschliesslich ohne Identifikationsmerkmale gemäss Ziffer 9.2. Google LLC ist unter dem Swiss-U.S. Data Privacy Framework zertifiziert. Für OpenRouter, das nicht zertifiziert ist und die Anfragen nur weiterleitet, stützt sich die Übermittlung darauf, dass die Inhalte für diesen Empfänger keiner Person zuordenbar sind.
 
@@ -128,7 +128,7 @@ Eduskript nennt die Schule nur mit deren schriftlicher Zustimmung als Referenz o
 
 Eduskript ist ein kleiner Anbieter. Folgende Anforderungen der AGB Auslagerung Informatikleistungen erfüllt Eduskript nicht oder nur teilweise:
 
-- **Ort der Datenbearbeitung (Ziff. 12):** Die Daten liegen in der EU, nicht in der Schweiz. KI-Anfragen gehen ohne Identifikationsmerkmale in die USA (Ziffer 8).
+- **Ort der Datenbearbeitung (Ziff. 12):** Datenbank und Dateien liegen in der Schweiz; verschlüsselte Sicherungen und E-Mail-Versand in der EU. KI-Anfragen gehen ohne Identifikationsmerkmale in die USA (Ziffer 8).
 - **Sicherheitsmanagement nach ISO 27000 und externe Audits (Ziff. 8a, 9a):** Eduskript hat keine eigene Zertifizierung und lässt keine periodischen Audits durchführen. Die Rechenzentren der Hosting-Anbieter sind nach ISO 27001 zertifiziert; der Quellcode ist öffentlich prüfbar.
 - **Protokollierung von Zugriffen (Ziff. 8d):** Lesezugriffe werden nicht einzeln protokolliert. Protokolliert werden Ereignisse bei Prüfungen (Start, Abgabe, Rückgabe).
 - **Konventionalstrafe (Ziff. 16):** Nicht enthalten. Die Schule kann eine vereinbaren.
@@ -178,8 +178,8 @@ Stand bei Unterzeichnung. Die jeweils aktuelle, datierte Liste steht in der [Dat
 
 | Anbieter | Zweck | Standort | Schülerdaten? |
 |---|---|---|---|
-| Infomaniak Network SA | Server für Anwendung und PostgreSQL-Datenbank | Schweiz | ja |
-| Scaleway SAS | Dateispeicher, verschlüsselte Datenbank-Sicherungen | Paris, Frankreich | ja (Uploads, Sicherungen) |
+| Infomaniak Network SA | Server für Anwendung und PostgreSQL-Datenbank, Dateispeicher | Schweiz | ja |
+| Scaleway SAS | Verschlüsselte Datenbank-Sicherungen | Paris, Frankreich | ja (nur verschlüsselt) |
 | Brevo (Sendinblue SAS) | E-Mail-Versand an Lehrpersonen | EU | nein |
 | Payrexx AG | Zahlungsabwicklung | Schweiz | nein |
 | Mux, Inc. | Video-Hosting (von Lehrpersonen hochgeladene Videos) | USA | nein |

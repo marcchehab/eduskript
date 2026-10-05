@@ -1,8 +1,20 @@
 /**
- * Scaleway Object Storage (S3-compatible) client
+ * S3-compatible object storage client (Infomaniak Public Cloud in production
+ * since 2026-10-05, Scaleway before; local dev still uses Scaleway -dev buckets).
  *
  * Used for storing user-generated content like snaps (screenshots)
  * that would be too large/expensive to store in PostgreSQL.
+ *
+ * Infomaniak's object storage is OpenStack Swift with an S3 API, which differs
+ * from Scaleway/AWS in ways this file has to accommodate:
+ *  - no virtual-hosted buckets → S3_FORCE_PATH_STYLE=true
+ *  - per-object `ACL: public-read` is ignored; the teacher bucket is made
+ *    public at container level (Swift `X-Container-Read: .r:*`) and public
+ *    objects are served from the Swift URL → S3_PUBLIC_BASE_URL
+ *  - DeleteObjects requires Content-MD5 (the SDK sends a CRC32 checksum
+ *    instead) → middleware in getS3Client()
+ *  - bucket CORS is set via Swift metadata, not PutBucketCors
+ * Verified with a throwaway bucket on 2026-10-05; see scripts/ops/README.md.
  */
 
 import {
@@ -14,6 +26,7 @@ import {
   ListObjectsV2Command,
 } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { createHash } from 'crypto'
 
 // Scaleway Object Storage configuration
 // Supports both SCW_* (Scaleway CLI convention) and SCALEWAY_* naming
@@ -21,13 +34,20 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 //   SCW_REGION, SCW_USER_BUCKET, SCW_ACCESS_KEY, SCW_SECRET_KEY
 //   SCW_IMPORT_BUCKET (optional, for large file imports)
 //   SCW_TEACHER_BUCKET (for teacher-uploaded files like images, databases)
-const SCALEWAY_REGION = process.env.SCALEWAY_REGION || process.env.SCW_REGION || 'fr-par'
-const SCALEWAY_ENDPOINT = process.env.SCALEWAY_ENDPOINT || `https://s3.${SCALEWAY_REGION}.scw.cloud`
+//   S3_ENDPOINT / S3_REGION / S3_FORCE_PATH_STYLE / S3_PUBLIC_BASE_URL override
+//   the Scaleway defaults for other providers (production: Infomaniak, see
+//   config/deploy.yml).
+const SCALEWAY_REGION = process.env.S3_REGION || process.env.SCALEWAY_REGION || process.env.SCW_REGION || 'fr-par'
+const SCALEWAY_ENDPOINT = process.env.S3_ENDPOINT || process.env.SCALEWAY_ENDPOINT || `https://s3.${SCALEWAY_REGION}.scw.cloud`
+const FORCE_PATH_STYLE = process.env.S3_FORCE_PATH_STYLE === 'true'
+// Base for public (unsigned) object URLs: `${base}/${bucket}/${key}`. Same as
+// the endpoint on Scaleway; the Swift URL (…/object/v1/AUTH_<project>) on Infomaniak.
+const PUBLIC_BASE_URL = process.env.S3_PUBLIC_BASE_URL || SCALEWAY_ENDPOINT
 const SCALEWAY_BUCKET = process.env.SCALEWAY_BUCKET || process.env.SCW_USER_BUCKET
 const SCALEWAY_IMPORT_BUCKET = process.env.SCW_IMPORT_BUCKET
 const SCALEWAY_TEACHER_BUCKET = process.env.SCW_TEACHER_BUCKET
-const SCALEWAY_ACCESS_KEY = process.env.SCALEWAY_ACCESS_KEY_ID || process.env.SCW_ACCESS_KEY
-const SCALEWAY_SECRET_KEY = process.env.SCALEWAY_SECRET_ACCESS_KEY || process.env.SCW_SECRET_KEY
+const SCALEWAY_ACCESS_KEY = process.env.S3_ACCESS_KEY || process.env.SCALEWAY_ACCESS_KEY_ID || process.env.SCW_ACCESS_KEY
+const SCALEWAY_SECRET_KEY = process.env.S3_SECRET_KEY || process.env.SCALEWAY_SECRET_ACCESS_KEY || process.env.SCW_SECRET_KEY
 
 // Check if S3 credentials are configured (needed for any S3 operation)
 function hasS3Credentials(): boolean {
@@ -75,8 +95,21 @@ function getS3Client(): S3Client {
         accessKeyId: SCALEWAY_ACCESS_KEY!,
         secretAccessKey: SCALEWAY_SECRET_KEY!,
       },
-      forcePathStyle: false, // Use virtual-hosted style for Scaleway
+      // Virtual-hosted on Scaleway; Infomaniak (Swift) only supports path style.
+      forcePathStyle: FORCE_PATH_STYLE,
     })
+    // Swift's S3 API rejects DeleteObjects without Content-MD5; SDK v3 only
+    // sends a CRC32 checksum. Scaleway accepts the extra header as well.
+    s3Client.middlewareStack.add(
+      (next, context) => async (args) => {
+        const request = args.request as { headers?: Record<string, string>; body?: unknown }
+        if (context.commandName === 'DeleteObjectsCommand' && request?.headers && typeof request.body === 'string') {
+          request.headers['content-md5'] = createHash('md5').update(request.body).digest('base64')
+        }
+        return next(args)
+      },
+      { step: 'build', name: 'deleteObjectsContentMd5' }
+    )
   }
   return s3Client
 }
@@ -374,7 +407,7 @@ export async function deleteTeacherFile(key: string): Promise<void> {
  * @returns Public URL
  */
 export function getTeacherFileUrl(key: string): string {
-  return `${SCALEWAY_ENDPOINT}/${SCALEWAY_TEACHER_BUCKET}/${key}`
+  return `${PUBLIC_BASE_URL}/${SCALEWAY_TEACHER_BUCKET}/${key}`
 }
 
 /**

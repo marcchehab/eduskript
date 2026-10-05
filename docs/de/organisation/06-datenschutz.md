@@ -2,24 +2,24 @@
 
 Eduskript ist für den Einsatz in Schulen gebaut, wo die verarbeiteten Daten Lehrpersonen und — vor allem — Minderjährigen gehören. Datenschutz ist deshalb eine Designvorgabe, kein nachträglicher Gedanke. Diese Seite dokumentiert, welche Daten Eduskript speichert, wo sie gespeichert werden und wer sie verarbeitet.
 
-> **Kurz gesagt**: E-Mail-Adressen von Schülern werden nie gespeichert. Die Datenbank liegt in der Schweiz, Dateien und Sicherungen in der EU (Paris). KI-Anfragen enthalten keine Identifikationsmerkmale. Keine Drittanbieter-Analytics, kein Werbe-Tracking.
+> **Kurz gesagt**: E-Mail-Adressen von Schülern werden nie gespeichert. Datenbank und Dateien liegen in der Schweiz, verschlüsselte Sicherungen in der EU (Paris). KI-Anfragen enthalten keine Identifikationsmerkmale. Keine Drittanbieter-Analytics, kein Werbe-Tracking.
 >
 > Die verbindliche Fassung ist die [Datenschutzerklärung](https://eduskript.org/datenschutz). Für Schulleitung und ICT gibt es eine [Übersicht](07-fuer-schulleitung-und-ict.md) und eine [Vorlage für den Auftragsbearbeitungsvertrag](08-avv-vorlage.md).
 
 ## Rechtlicher Rahmen
 
-Eduskript wird unter dem **Schweizer Bundesgesetz über den Datenschutz (revDSG)** betrieben. Da Dateien und Sicherungen in der EU liegen, ist die Verarbeitung auch an der **EU-Datenschutz-Grundverordnung (DSGVO)** ausgerichtet.
+Eduskript wird unter dem **Schweizer Bundesgesetz über den Datenschutz (revDSG)** betrieben. Da Sicherungen und E-Mail-Versand in der EU liegen, ist die Verarbeitung auch an der **EU-Datenschutz-Grundverordnung (DSGVO)** ausgerichtet.
 
-Anwendung und Datenbank laufen auf einem eigenen Server bei Infomaniak in der Schweiz (Schweizer Unternehmen, nicht dem US CLOUD Act unterstellt). Dateien und verschlüsselte Datenbank-Sicherungen liegen in der EU, die nach Schweizer Recht als Staat mit angemessenem Datenschutz gilt.
+Anwendung, Datenbank und hochgeladene Dateien liegen bei Infomaniak in der Schweiz (Schweizer Unternehmen, nicht dem US CLOUD Act unterstellt). Verschlüsselte Datenbank-Sicherungen liegen in der EU, die nach Schweizer Recht als Staat mit angemessenem Datenschutz gilt.
 
 ## Wo Daten gespeichert werden
 
-Die Datenbank liegt in der Schweiz, hochgeladene Dateien und verschlüsselte Sicherungen in der EU.
+Datenbank und hochgeladene Dateien liegen in der Schweiz, verschlüsselte Sicherungen in der EU.
 
 | Auftragsverarbeiter | Zweck | Standort | Unternehmen |
 |---------------|---------|----------|---------|
-| Infomaniak | Server für Anwendung und PostgreSQL-Datenbank | Schweiz | Infomaniak Network SA (Schweiz) |
-| Scaleway | Objektspeicher (hochgeladene Dateien, Bilder) und verschlüsselte Datenbank-Sicherungen | Paris (`fr-par`) | Scaleway SAS (Frankreich) |
+| Infomaniak | Server für Anwendung und PostgreSQL-Datenbank, Objektspeicher (hochgeladene Dateien, Bilder) | Schweiz | Infomaniak Network SA (Schweiz) |
+| Scaleway | Verschlüsselte Datenbank-Sicherungen | Paris (`fr-par`) | Scaleway SAS (Frankreich) |
 | Brevo | Transaktions-E-Mails (Verifizierung, Benachrichtigungen) | EU | Sendinblue SAS / Brevo (Frankreich) |
 
 Die vollständige Liste inklusive Zahlungsabwicklung, Video-Hosting und KI-Anbietern steht in der [Datenschutzerklärung](https://eduskript.org/datenschutz#unterauftragsbearbeiter).
@@ -91,4 +91,4 @@ Für Fragen oder Anfragen zum Datenschutz: Luz Media GmbH, [kontakt@luzmedia.ch]
 
 ## Zusammenfassung
 
-Eduskript speichert das Minimum an personenbezogenen Daten, das für den Betrieb nötig ist. Identitäten von Lehrpersonen sind konventionell; Identitäten von Schülern sind pseudonymisiert und enthalten keine E-Mail. Die Kerndaten liegen in der Schweiz (Infomaniak) und der EU (Scaleway in Paris, Brevo). KI-Anfragen enthalten keine Identifikationsmerkmale. US-Identitätsanbieter sind optional und werden vom Nutzer selbst gewählt; Analytics oder Tracking werden nicht eingesetzt.
+Eduskript speichert das Minimum an personenbezogenen Daten, das für den Betrieb nötig ist. Identitäten von Lehrpersonen sind konventionell; Identitäten von Schülern sind pseudonymisiert und enthalten keine E-Mail. Die Kerndaten liegen in der Schweiz (Infomaniak); verschlüsselte Sicherungen und E-Mail-Versand in der EU (Scaleway in Paris, Brevo). KI-Anfragen enthalten keine Identifikationsmerkmale. US-Identitätsanbieter sind optional und werden vom Nutzer selbst gewählt; Analytics oder Tracking werden nicht eingesetzt.
