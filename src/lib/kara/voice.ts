@@ -22,7 +22,7 @@ let current: { el: HTMLAudioElement; stop: () => void } | null = null
 // pulse with it (aurora-mark.tsx).
 let analyser: AnalyserNode | null = null
 let levelBuf: Float32Array<ArrayBuffer> | null = null
-/** Upper-case speaker of the line playing right now, null when silent. */
+/** `SPEAKER|text` of the line playing right now (text = as passed to playVoice), null when silent. */
 let speakingNow: string | null = null
 const speakingListeners = new Set<() => void>()
 function setSpeaking(s: string | null) {
@@ -31,8 +31,11 @@ function setSpeaking(s: string | null) {
   speakingListeners.forEach(cb => cb())
 }
 
-/** Speaker of the line playing right now (upper-case), null when silent. */
+/** `SPEAKER|text` of the line playing right now, null when silent (see speakingKey). */
 export function voiceSpeaker(): string | null { return speakingNow }
+
+/** Key of a line for voiceSpeaker(): upper-case speaker and the text as written. */
+export function speakingKey(speaker: string, text = ''): string { return `${speaker.toUpperCase()}|${text}` }
 export function onVoiceSpeakerChange(cb: () => void): () => void {
   speakingListeners.add(cb)
   return () => { speakingListeners.delete(cb) }
@@ -189,7 +192,7 @@ export async function playVoice(url: string, speaker?: string, onEnded?: () => v
   current = { el, stop }
   await el.play()
   if (token === seq) {
-    setSpeaking(speaker?.toUpperCase() ?? '')
+    setSpeaking(speakingKey(speaker ?? '', text))
     if (text) scheduleAd(el, text, gain)
   }
 }

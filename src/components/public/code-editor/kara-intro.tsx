@@ -12,11 +12,11 @@
  * already solved (saved stars > 0, src/lib/kara/progress.ts) or the page is muted.
  */
 
-import { displayText } from '@/lib/kara/voice-directions'
+import { displayText, isAd } from '@/lib/kara/voice-directions'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Pencil, Square, Volume2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { KaraPortrait } from './kara-portrait'
+import { AdMark, KaraPortrait } from './kara-portrait'
 import { KaraVoiceEditor } from './kara-voice-editor'
 import { usePageCanEdit } from '@/hooks/use-page-can-edit'
 import { loadKaraProgress } from '@/lib/kara/progress'
@@ -151,10 +151,12 @@ export function KaraIntro({ lines, assets, levelId, skriptId, autoplayRef, block
               <div
                 className={cn(
                   'relative min-w-0 max-w-[85%] rounded-2xl rounded-tl-sm border bg-background px-3.5 py-2 text-[1rem] leading-normal shadow-sm transition-colors',
-                  speaking === i && 'border-amber-400 bg-amber-50 dark:bg-amber-950/30',
+                  speaking === i && (isAd(line.text) ? 'kara-ad-disco' : 'border-amber-400 bg-amber-50 dark:bg-amber-950/30'),
                 )}
               >
-                <div className="whitespace-pre-wrap break-words">{displayText(line.text)}</div>
+                {isAd(line.text)
+                  ? <AdMark><div className="whitespace-pre-wrap break-words">{displayText(line.text)}</div></AdMark>
+                  : <div className="whitespace-pre-wrap break-words">{displayText(line.text)}</div>}
               </div>
             </div>
           )

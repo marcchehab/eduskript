@@ -100,3 +100,8 @@ export function adSpan(text: string): { from: number; to: number } | null {
   const to = endAt === -1 ? 1 : displayText(body.slice(0, endAt)).length / total
   return { from: Math.min(1, from), to: Math.max(from, Math.min(1, to)) }
 }
+
+/** True when the line contains an ad (`{werbung}`): screens set it apart (italic, «Werbung» label). */
+export function isAd(text: string): boolean {
+  return /\{werbung\}/i.test(text)
+}

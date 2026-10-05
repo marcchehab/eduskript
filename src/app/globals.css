@@ -2791,3 +2791,44 @@ mark.text-highlight-orange {
 @media (prefers-reduced-motion: reduce) {
   .toolbox-flash { animation: none; box-shadow: 0 0 0 2px rgb(245 158 11 / 0.85); }
 }
+
+/* ===== Kara ad block «disco» (kara-portrait.tsx AdMark) =====
+   While an ad line is spoken, coloured spotlights sweep over the block and
+   the edge glow cycles through colours. Spotlights sit in ::before behind the
+   text (z-index -1 inside an isolated stacking context). */
+.kara-ad-disco {
+  position: relative;
+  isolation: isolate;
+  animation: kara-disco-glow 1.2s linear infinite;
+}
+.kara-ad-disco::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  opacity: 0.45;
+  background:
+    radial-gradient(circle at 20% 30%, #ff2bd6 0, transparent 35%),
+    radial-gradient(circle at 80% 20%, #22d3ee 0, transparent 35%),
+    radial-gradient(circle at 50% 80%, #facc15 0, transparent 35%),
+    radial-gradient(circle at 10% 90%, #4ade80 0, transparent 30%);
+  background-size: 200% 200%;
+  animation: kara-disco-sweep 2.4s ease-in-out infinite alternate, kara-disco-hue 1.6s linear infinite;
+}
+@keyframes kara-disco-sweep {
+  0%   { background-position: 0% 0%, 100% 0%, 50% 100%, 0% 100%; }
+  50%  { background-position: 100% 50%, 0% 100%, 0% 0%, 100% 0%; }
+  100% { background-position: 50% 100%, 50% 0%, 100% 50%, 50% 50%; }
+}
+@keyframes kara-disco-hue {
+  to { filter: hue-rotate(360deg); }
+}
+@keyframes kara-disco-glow {
+  0%, 100% { box-shadow: 0 0 0.6rem #ff2bd6aa; }
+  33%      { box-shadow: 0 0 0.6rem #22d3eeaa; }
+  66%      { box-shadow: 0 0 0.6rem #facc15aa; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kara-ad-disco, .kara-ad-disco::before { animation: none; }
+}

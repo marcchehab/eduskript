@@ -12,7 +12,7 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { cn } from '@/lib/utils'
 import { karaPortrait } from '@/lib/kara/portraits'
-import { onVoiceSpeakerChange, voiceLevel, voiceSpeaker } from '@/lib/kara/voice'
+import { onVoiceSpeakerChange, speakingKey, voiceLevel, voiceSpeaker } from '@/lib/kara/voice'
 
 const ARC_COLOURS = ['#f25022', '#7fba00', '#00a4ef', '#ffb900']
 
@@ -63,10 +63,10 @@ function AuroraMark({ speaking, className }: { speaking: boolean; className?: st
   )
 }
 
-/** True while `speaker`'s line is playing (any Kara voice on the page). */
-export function useSpeaking(speaker: string | undefined): boolean {
+/** True while this exact line (speaker + text as written) is playing; other lines of the same speaker do not count. */
+export function useSpeaking(speaker: string | undefined, text: string | undefined): boolean {
   const now = useSyncExternalStore(onVoiceSpeakerChange, voiceSpeaker, () => null)
-  return !!speaker && now === speaker.toUpperCase()
+  return !!speaker && text !== undefined && now === speakingKey(speaker, text)
 }
 
 export function KaraPortrait({ speaker, assets, speaking, className }: { speaker: string; assets?: Record<string, string>; speaking?: boolean; className?: string }) {
@@ -77,4 +77,27 @@ export function KaraPortrait({ speaker, assets, speaking, className }: { speaker
     // eslint-disable-next-line @next/next/no-img-element -- skript file URL, sized by CSS
     ? <img src={portrait} alt={speaker} className={cn('shrink-0 rounded-md object-cover', className)} />
     : <div className={cn('flex shrink-0 items-center justify-center rounded-md bg-muted text-lg font-bold', className)}>{speaker[0]}</div>
+}
+
+/**
+ * Marks a whole line that contains an ad (`{werbung}`, voice-directions.ts
+ * isAd): the wrapped text is italic and a vertical «Werbung» label runs down
+ * the right edge, so students see it is not meant seriously. The label text
+ * is German on purpose (the teacher asked for it; it is part of the course
+ * fiction, not app UI). While the line is spoken, callers put
+ * `.kara-ad-disco` (globals.css) on the surrounding box so the disco
+ * spotlights fill all of it.
+ */
+export function AdMark({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-stretch gap-3" title="Werbung, nicht ernst gemeint">
+      <div className="min-w-0 flex-1 italic">{children}</div>
+      <span
+        aria-hidden
+        className="flex shrink-0 select-none items-center justify-center border-l border-dashed pl-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground [writing-mode:vertical-rl]"
+      >
+        Werbung
+      </span>
+    </div>
+  )
 }
