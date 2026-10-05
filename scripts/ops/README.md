@@ -50,9 +50,10 @@ for ~30 s, and `kamal rollback` runs old code against the new schema).
      `docker exec -u postgres eduskript-db pgbackrest --stanza=eduskript stanza-create`
      and `… check`, then set `BACKUP_REPOS="1 2"` in `/etc/eduskript-ops.env`
      and run `systemctl start eduskript-backup@full`.
-- Heartbeats: set `BACKUP_HEARTBEAT_URL` and `HEALTH_HEARTBEAT_URL`
-  (healthchecks.io or Better Stack) in `/etc/eduskript-ops.env` on the VPS.
-  Until then nobody is alerted.
+- Heartbeats: healthchecks.io project "eduskript" (API key in prod.env),
+  checks `eduskript-backup` (daily) and `eduskript-health` (hourly). Ping URLs
+  are in `/etc/eduskript-ops.env` on the VPS (`BACKUP_HEARTBEAT_URL`,
+  `HEALTH_HEARTBEAT_URL`). Alerts go to the project's email integration.
 - Timers are installed by `install-ops.sh` (see its header).
 
 ## Restore
